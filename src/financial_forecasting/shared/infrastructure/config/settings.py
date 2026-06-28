@@ -57,7 +57,10 @@ def get_settings() -> Settings:
     O cache é mantido pelo functools.lru_cache do Python — uma única instância
     por processo. Em testes, sobrescreva via:
 
-        from financial_forecasting.shared.infrastructure.config.settings import get_settings, Settings
+        from financial_forecasting.shared.infrastructure.config.settings import (
+            Settings,
+            get_settings,
+        )
 
         get_settings.cache_clear()
         # então monkeypatch ou substitua via dependency_overrides do FastAPI

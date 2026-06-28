@@ -39,13 +39,21 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
 
     Template típico de wiring (descomente e adapte conforme as features chegarem):
 
-        from financial_forecasting.features.<feature>.adapters.out.postgres.<entity>_repository import (
+        from financial_forecasting.features.<feature>.adapters.out.postgres import (
             Postgres<Entity>Repository,
         )
-        from financial_forecasting.features.<feature>.application.use_cases.<use_case> import <UseCase>
-        from financial_forecasting.shared.infrastructure.clock.system_clock import SystemClock
-        from financial_forecasting.shared.infrastructure.database.connection import build_engine
-        from financial_forecasting.shared.infrastructure.uuid_generator.uuid4_generator import Uuid4Generator
+        from financial_forecasting.features.<feature>.application.use_cases import (
+            <UseCase>,
+        )
+        from financial_forecasting.shared.infrastructure.clock.system_clock import (
+            SystemClock,
+        )
+        from financial_forecasting.shared.infrastructure.database.connection import (
+            build_engine,
+        )
+        from financial_forecasting.shared.infrastructure.uuid_generator.uuid4_generator import (
+            Uuid4Generator,
+        )
 
         cfg = settings or get_settings()
         engine = build_engine()

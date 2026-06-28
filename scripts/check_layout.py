@@ -11,7 +11,7 @@ Verifica:
    (libs de framework idem).
 3. Adapters de uma feature não importam adapters de outras features nem de uma
    subcamada irmã da mesma feature (in não importa out, out não importa in).
-4. `financial_forecasting/shared/` não importa de `financial_forecasting.features` (acoplamento inverso).
+4. `shared/` não importa de `features/` (acoplamento inverso é proibido).
 5. Cada feature tem os diretórios obrigatórios (`domain/`, `application/`, `adapters/`).
 
 Limitação conhecida: o script não valida que apenas `composition_root.py` faz

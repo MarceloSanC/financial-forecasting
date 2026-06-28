@@ -117,9 +117,11 @@ def check_worktree_registered(wt_path: Path) -> bool:
         capture_output=True, text=True, check=False,
     )
     for line in cp.stdout.splitlines():
-        if line.startswith("worktree "):
-            if Path(line.split(" ", 1)[1]).resolve() == wt_path.resolve():
-                return True
+        if (
+            line.startswith("worktree ")
+            and Path(line.split(" ", 1)[1]).resolve() == wt_path.resolve()
+        ):
+            return True
     return False
 
 
@@ -200,8 +202,8 @@ def find_containers_for_worktree(wt_path: Path) -> list[dict]:
                  "--format", "{{json .}}"],
                 capture_output=True, text=True, check=False,
             )
-            for line in cp.stdout.splitlines():
-                line = line.strip()
+            for raw_line in cp.stdout.splitlines():
+                line = raw_line.strip()
                 if not line:
                     continue
                 try:
@@ -239,7 +241,7 @@ def _confirm(prompt: str, expected: str) -> bool:
     return answer == expected
 
 
-def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:
+def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:  # noqa: PLR0912, PLR0915
     if not _docker_available():
         _warn("Docker não está rodando ou não está instalado — pulando limpeza Docker.")
         return
@@ -282,23 +284,22 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:
 
             if dry_run:
                 _info(f"[dry-run] {len(all_volumes)} volume(s) seriam removidos após confirmação")
+            elif _confirm(
+                "ATENÇÃO: volumes contêm dados persistentes (banco, venv, etc.).\n"
+                "  Apagar é irreversível.",
+                "apagar volumes",
+            ):
+                for vol in sorted(all_volumes):
+                    cp = subprocess.run(
+                        ["docker", "volume", "rm", vol],
+                        capture_output=True, text=True, check=False,
+                    )
+                    if cp.returncode == 0:
+                        _info(f"volume removido: {vol}")
+                    else:
+                        _warn(f"falha ao remover {vol}: {cp.stderr.strip()}")
             else:
-                if _confirm(
-                    "ATENÇÃO: volumes contêm dados persistentes (banco, venv, etc.).\n"
-                    "  Apagar é irreversível.",
-                    "apagar volumes",
-                ):
-                    for vol in sorted(all_volumes):
-                        cp = subprocess.run(
-                            ["docker", "volume", "rm", vol],
-                            capture_output=True, text=True, check=False,
-                        )
-                        if cp.returncode == 0:
-                            _info(f"volume removido: {vol}")
-                        else:
-                            _warn(f"falha ao remover {vol}: {cp.stderr.strip()}")
-                else:
-                    _info("volumes mantidos (confirmação não fornecida)")
+                _info("volumes mantidos (confirmação não fornecida)")
 
     # Imagem — requer confirmação explícita.
     image = "erp_intel-app:dev"
@@ -313,21 +314,20 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:
 
         if dry_run:
             _info(f"[dry-run] imagem {image} seria removida após confirmação")
-        else:
-            if _confirm(
-                "Deseja remover a imagem Docker? Precisará rebuildar na próxima vez.",
-                "apagar imagens",
-            ):
-                cp = subprocess.run(
-                    ["docker", "rmi", image],
-                    capture_output=True, text=True, check=False,
-                )
-                if cp.returncode == 0:
-                    _info(f"imagem removida: {image}")
-                else:
-                    _warn(f"falha ao remover imagem (em uso?): {cp.stderr.strip()}")
+        elif _confirm(
+            "Deseja remover a imagem Docker? Precisará rebuildar na próxima vez.",
+            "apagar imagens",
+        ):
+            cp = subprocess.run(
+                ["docker", "rmi", image],
+                capture_output=True, text=True, check=False,
+            )
+            if cp.returncode == 0:
+                _info(f"imagem removida: {image}")
             else:
-                _info("imagem mantida (confirmação não fornecida)")
+                _warn(f"falha ao remover imagem (em uso?): {cp.stderr.strip()}")
+        else:
+            _info("imagem mantida (confirmação não fornecida)")
 
 
 # ---------------------------------------------------------------------------
