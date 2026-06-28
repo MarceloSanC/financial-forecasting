@@ -1,0 +1,37 @@
+# Hooks mínimos que espelham `make check` (ruff + mypy) e validam a
+# mensagem de commit contra docs/CONVENTIONS.md §4 e docs/GIT-WORKFLOW.md.
+#
+# Instalação (uma vez por clone — automatizada em `make setup`):
+#     uv run pre-commit install --install-hooks --hook-type pre-commit --hook-type commit-msg
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff-format
+      - id: ruff
+        args: [--fix]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.2
+    hooks:
+      - id: mypy
+        files: ^src/
+        args: [--strict]
+        additional_dependencies:
+          - fastapi>=0.111
+          - uvicorn[standard]>=0.29
+          - sqlalchemy>=2.0
+          - alembic>=1.13
+          - pydantic>=2.7
+          - pydantic-settings>=2.3
+
+  - repo: local
+    hooks:
+      - id: check-commit-msg
+        name: check-commit-msg (Conventional Commits + reserved gates)
+        entry: python scripts/check_commit_msg.py
+        language: system
+        stages: [commit-msg]
+        # Validates the subject of the commit message file passed by git.
+        # Rules: docs/CONVENTIONS.md §4(a)/§4(b), docs/GIT-WORKFLOW.md §Commits.

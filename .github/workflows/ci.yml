@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  # Gate de origem de PRs para main:
+  # Como GitHub Free não dá branch protection em repos privados, replicamos a
+  # restrição "PRs para main só vêm de develop ou hotfix/*" como required check
+  # no CI. Configure este job como Required Status Check em main quando o repo
+  # estiver no plano que suportar — ou aceite como gate apenas observacional
+  # no Free.
+  guard-main-source:
+    if: github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bloquear se origem não for develop ou hotfix/*
+        run: |
+          head="${{ github.event.pull_request.head.ref }}"
+          if [[ "$head" == "develop" || "$head" == hotfix/* ]]; then
+            echo "OK: PR para main vindo de '$head'"
+          else
+            echo "PRs para main só são aceitos de 'develop' ou 'hotfix/*'. Origem: $head" >&2
+            exit 1
+          fi
+
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run gate completo (lint + typecheck + layout-check + tests)
+        run: make check

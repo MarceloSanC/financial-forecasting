@@ -1,0 +1,100 @@
+# docker-compose.yml — Financial Forecasting
+#
+# Servico `app`: ativo por default. Sobe a stage `builder` do Dockerfile com
+# bind mount do codigo (host -> /app) e venv persistente em volume nomeado.
+#
+# Servicos externos (postgres, redis): definidos abaixo COMENTADOS. O
+# scripts/init-project.py descomenta o bloco postgres automaticamente quando
+# o projeto escolhe `banco=postgres` no bootstrap. Redis fica sempre
+# comentado por default — descomente manualmente quando precisar.
+#
+# Markers `# === BEGIN: <nome> ===` / `# === END: <nome> ===` sao usados
+# pelo init-project para localizar os blocos. Nao remover.
+#
+# Uso comum:
+#   docker compose up -d                # sobe tudo (app + deps ativos)
+#   docker compose up app                # sobe so a app em foreground
+#   docker compose exec app bash         # shell no container
+#   docker compose down                  # derruba tudo
+#
+# O devcontainer (.devcontainer/devcontainer.json) usa este compose para
+# subir o ambiente de dev no VS Code.
+#
+# Worktrees paralelas (git worktree): este compose foi desenhado para
+# rodar simultaneamente em mais de uma worktree do mesmo projeto sem
+# conflito. Duas decisoes garantem isso:
+#   1. NAO usamos `container_name:` — o Compose prefixa nomes com o
+#      `--project-name` (= nome da pasta da worktree), gerando
+#      `<worktree>-app-1`, `<worktree>-postgres-1`, etc. Cada worktree
+#      tem nome unico automaticamente.
+#   2. Portas do host sao parametrizadas via APP_PORT/POSTGRES_PORT/
+#      REDIS_PORT (defaults 8000/5432/6379). O script
+#      `scripts/worktree-new.py` gera um `.env` na worktree paralela
+#      com portas incrementadas, evitando conflito de bind.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder      # devcontainer/CI; troque para `runtime` em prod
+    image: financial_forecasting-app:dev
+    working_dir: /app
+    command: uvicorn financial_forecasting.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      DEBUG: "true"
+      HOST: "0.0.0.0"
+      PORT: "8000"
+      LOG_LEVEL: INFO
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # Bind mount: editar codigo no host reflete no container imediato.
+      - .:/app
+      # Venv vive em volume nomeado (nao no host) para evitar conflito
+      # entre wheels Linux do container e ferramentas Windows/macOS no host.
+      - app-venv:/app/.venv
+    # === BEGIN: app-depends-postgres (managed by init-project.py) ===
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    # === END: app-depends-postgres ===
+
+  # === BEGIN: postgres (managed by init-project.py) ===
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: ${POSTGRES_USER:-user}
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
+  #     POSTGRES_DB: ${POSTGRES_DB:-financial_forecasting}
+  #   ports:
+  #     - "${POSTGRES_PORT:-5432}:5432"
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-user} -d $${POSTGRES_DB:-financial_forecasting}"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 10
+  # === END: postgres ===
+
+  # === BEGIN: redis (descomente manualmente quando precisar) ===
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "${REDIS_PORT:-6379}:6379"
+  #   volumes:
+  #     - redis-data:/data
+  # === END: redis ===
+
+volumes:
+  app-venv:
+  # === BEGIN: postgres-volume (managed by init-project.py) ===
+  # postgres-data:
+  # === END: postgres-volume ===
+  # === BEGIN: redis-volume (descomente junto com o servico redis) ===
+  # redis-data:
+  # === END: redis-volume ===

@@ -1,0 +1,34 @@
+# Versionamento
+.git/
+
+# Artefatos Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# Caches de teste e qualidade
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# IDE e tooling local
+.idea/
+.vscode/
+
+# Env files (injetar via env_file no compose ou --env-file no docker run)
+.env
+.env.local
+.env.*.local
+
+# Outros artefatos locais
+*.log
+tree.txt
