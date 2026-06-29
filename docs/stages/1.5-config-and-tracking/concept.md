@@ -347,8 +347,9 @@ implementação.
   D2→1.5.0002)
 - [x] Dependências de Stages anteriores estão satisfeitas? (1.4 `done`; Hasher
   disponível)
-- [x] Stage cabe em ~3–8 Tasks? (9 Tasks no technical, incluindo a Task-01 de
-  docs/gate — dentro da faixa operacional declarada no brief)
+- [x] Stage cabe em ~3–8 Tasks? (8 Tasks no technical: deps → Settings →
+  port+fake → adapter+contract → wiring → coverage-omit → import-linter →
+  env+gate — dentro da faixa)
 - [x] Riscos críticos têm mitigação plausível? (§10)
 - [x] O port não vaza tipos do `mlflow` e o domínio permanece puro? (I4, I5)
 
