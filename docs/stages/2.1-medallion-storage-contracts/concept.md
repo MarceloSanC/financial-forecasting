@@ -481,7 +481,7 @@ Layout em disco: `<root>/bronze/<table>/asset=<asset>/year=<year>/<table>.parque
   justificado in-loco)
 - [x] Dependências de Stages anteriores estão satisfeitas? (1.5 `done`; `Settings`
   disponível)
-- [x] Stage cabe em ~3–8 Tasks? (11 Tasks no technical, dentro do teto
+- [x] Stage cabe em ~3–8 Tasks? (10 Tasks no technical, dentro do teto
   `ROADMAP-1` de ~12–15 — decisões já tomadas, menos ambiguidade por Task)
 - [x] Riscos críticos têm mitigação plausível? (§10)
 - [x] O port não vaza libs de storage e o domínio permanece puro? (I3, I4)
