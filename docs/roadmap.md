@@ -62,7 +62,7 @@ graph LR
 | ID | Step | Resultado de negócio | Status | Stages |
 |---|---|---|---|---|
 | 1 | Fundação e fitness arquitetural | Repo hexagonal com fronteiras enforçadas (import-linter, mypy strict, cobertura ≥90%), identidade determinística, config e tracking — a base que faltava | done | 1.1–1.5 |
-| 2 | Camada bronze + calendário | Dados brutos expostos por adapters limpos; calendário de pregão; contratos de storage medalhão | not_started | 2.1–2.4 |
+| 2 | Camada bronze + calendário | Dados brutos expostos por adapters limpos; calendário de pregão; contratos de storage medalhão | in_progress | 2.1–2.4 |
 | 3 | Feature engineering e dataset | Dataset TFT reconstruído com features causais (indicadores validados, sentimento, fundamentos as-of, derivadas) + contratos anti-leakage | not_started | 3.1–3.5 |
 | 4 | Analytics store (silver) | Silver modular (schema por tabela), repositório append-only, persister único de predições multi-horizonte | not_started | 4.1–4.3 |
 | 5 | Modelagem, baselines e treino | TFT re-treinado + GBM quantílico + baselines naive/estatísticos sobre walk-forward purgado/embargoado; cohort confirmatório AAPL | not_started | 5.1–5.5 |
@@ -81,7 +81,7 @@ graph LR
 | `1.3-architecture-contracts` | shared | bootstrap (import-linter) | mono | done | 1.2 |
 | `1.4-identity-and-fingerprints` | shared | domain + application | vertical | done | 1.3 |
 | `1.5-config-and-tracking` | shared | shared/infrastructure + bootstrap | mono | done | 1.4 |
-| `2.1-medallion-storage-contracts` | shared | adapters/out + shared | vertical | draft | 1.5 |
+| `2.1-medallion-storage-contracts` | shared | adapters/out + shared | vertical | done | 1.5 |
 | `2.2-market-data-ingestion` | market_data | multi (application + adapters/out) | vertical | draft | 2.1 |
 | `2.3-news-fundamentals-ingestion` | market_data | multi (application + adapters/out) | vertical | draft | 2.2 |
 | `2.4-trading-calendar` | shared | domain + adapters/out | vertical | draft | 2.1 |
