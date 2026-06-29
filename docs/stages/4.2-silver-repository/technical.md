@@ -550,4 +550,52 @@ task-04/05 ───────────────────────
 - `[finding]` — gap/observação a tratar em **próxima Stage** (+ Stage candidata).
 - `[deviation]` — ajuste pequeno vs. o plano original.
 
+### 2026-06-29 — [decision] escopo 4.2 (task-04) — flag `allow_upsert` + reuso de `DuplicateKeyError` (D4)
+**Contexto:** o concept §7 D4 antecipou `allow_upsert: bool = False` no `write` e o
+reuso de `DuplicateKeyError(ApplicationError)` (sem ADR isolado).
+**Decisão/Razão:** materializado como previsto — `write(*, ..., allow_upsert=False)`;
+upsert acontece quando `allow_upsert=True` **ou** `meta.update_policy == "upsert"`
+(`dim_run`); colisão sem flag levanta o MESMO `DuplicateKeyError` do
+`ParquetMedallionStore`, com mensagem `pk_columns`/`collisions`/`path`. Nenhum tipo
+novo de exceção. Decisão de baixo risco confirmada na execução.
+
+### 2026-06-29 — [decision] escopo 4.2 (task-05) — `read` com pruning + round-trip `__none__` → `None` (D5)
+**Contexto:** o concept §7 D5 antecipou a leitura (ausente no old) com pruning,
+projeção do schema e round-trip do sentinel (sem ADR isolado).
+**Decisão/Razão:** implementado via DuckDB com `hive_partitioning=false` —
+**divergência consciente vs `ParquetMedallionStore` (que usa `hive_partitioning=true`)**:
+no silver as colunas de partição (`asset`/`parent_sweep_id`/`feature_set_name`/`year`)
+são **físicas no Parquet** (não derivadas de âncora), então o hive partitioning
+duplicaria colunas; ler as colunas físicas + projetar o schema basta. O `WHERE` nas
+colunas de `partition_by` vindas de `filters` faz o pruning; `parent_sweep_id`/`NaN`/
+`__none__` voltam como `None`.
+
+### 2026-06-29 — [decision] escopo 4.2 (task-05) — sentinel `__none__` materializado na coluna física (não só no path)
+**Contexto:** ao implementar o `read`, uma partição com `parent_sweep_id=None`
+gravava a coluna física como `NULL`; o DuckDB tipava a coluna toda-NULL como
+`"NULL"` e o `WHERE parent_sweep_id = ?` (VARCHAR) falhava com `ConversionException`.
+**Decisão/Razão:** no `write`, após a validação `pandera`, materializo o sentinel
+`__none__` também na **coluna física** das partições nullable (`parent_sweep_id`),
+não só no path — path e coluna passam a concordar e a coluna é sempre VARCHAR. O
+`read` reconverte `__none__` → `None` (round-trip I6/C6 preservado). Não altera o
+contrato observável (testado em contract `[fake, real]` + integration).
+
+### 2026-06-29 — [decision] escopo 4.2 (task-06) — `created_at_utc` write-time também no caminho genérico do `write`
+**Contexto:** o contract `[fake, real]` escreve rows dict-like de `dim_run` SEM
+`created_at_utc` (o fake preenche em `_prepare`). O adapter real validava `pandera`
+ANTES de preencher, então o caminho genérico (`write` de um dict de `dim_run`)
+reprovava por `created_at_utc` ausente — quebrando a paridade fake↔real.
+**Decisão/Razão:** o `write` do adapter passa a preencher `created_at_utc` via o
+`Clock` injetado (`_fill_write_time`) para `dim_run` quando a coluna falta, ANTES da
+validação — espelhando o fake e fechando a paridade do contrato genérico. O mapper
+`run_record_to_row` segue como caminho tipado para `RunRecord`; o preenchimento é
+idempotente (se o mapper já preencheu, o `write` não sobrescreve). Coerente com a
+intenção de ADR 4.2.0002 (write-time concern via `Clock`, nunca `datetime.now()`).
+
+### 2026-06-29 — [deviation] escopo 4.2 (task-05) — remoção do teste provisório `NotImplementedError`
+**Contexto:** o task-04 deixou `read` provisório com um teste
+`test_read_is_not_implemented_yet`; o task-05 implementou `read`.
+**Decisão/Razão:** removi esse teste no task-05 (o `read` agora é coberto por
+`test_..._read.py`); ajuste pequeno e esperado pelo plano inside-out.
+
 <!-- END: post-execution -->
