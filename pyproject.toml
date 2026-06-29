@@ -34,6 +34,11 @@ dependencies = [
     # `calendar-no-exchange-calendars-leak` reprova se vazar para application/domain.
     # Pinado por minor (sessões históricas podem mudar entre versões); uv.lock trava o patch.
     "exchange-calendars>=4.5,<5.0",
+    # Origem de candles NÃO-default (live) — Stage 2.2 / ADR 2.2.0002
+    # Vive SÓ no adapter features/market_data/adapters/out/yfinance/. Não exige
+    # chave de API; o teste de integração usa monkeypatch (nunca rede, I13). A
+    # origem default reusa o raw existente (ParquetRawCandleFetcher).
+    "yfinance>=0.2",
 ]
 
 [project.optional-dependencies]

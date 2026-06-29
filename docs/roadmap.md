@@ -82,7 +82,7 @@ graph LR
 | `1.4-identity-and-fingerprints` | shared | domain + application | vertical | done | 1.3 |
 | `1.5-config-and-tracking` | shared | shared/infrastructure + bootstrap | mono | done | 1.4 |
 | `2.1-medallion-storage-contracts` | shared | adapters/out + shared | vertical | done | 1.5 |
-| `2.2-market-data-ingestion` | market_data | multi (application + adapters/out) | vertical | draft | 2.1 |
+| `2.2-market-data-ingestion` | market_data | multi (application + adapters/out) | vertical | done | 2.1 |
 | `2.3-news-fundamentals-ingestion` | market_data | multi (application + adapters/out) | vertical | draft | 2.2 |
 | `2.4-trading-calendar` | shared | domain + adapters/out | vertical | done | 2.1 |
 | `3.1-technical-indicators` | feature_engineering | multi (domain + adapters/out) | vertical | draft | 2.2, 2.4 |

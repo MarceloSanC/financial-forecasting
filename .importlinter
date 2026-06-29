@@ -50,6 +50,7 @@ layers =
     domain
 containers =
     financial_forecasting.shared
+    financial_forecasting.features.market_data
 exhaustive = False
 
 # -----------------------------------------------------------------------------
@@ -58,12 +59,19 @@ exhaustive = False
 # dados/ML (pandas/pyarrow/torch) e de framework (pydantic/sqlalchemy/fastapi).
 # É a regra cuja ausência apodreceu o repo antigo (23/36 arquivos de domínio
 # importavam pandas/numpy/torch). `numpy` incluído por defesa em profundidade.
+# Stage 2.2 (finding F2.2 / concept 2.2 D1): estende a `features.market_data.domain`
+# — o `type=layers` prova só a DIREÇÃO (domain não importa application/adapters),
+# NÃO a pureza de lib externa do domain de feature. Sem esta linha, `import pandas`
+# no domain de market_data passaria silenciosamente (verificado por quebra intencional
+# que NÃO reprovava). Cada NOVA feature com domain entra aqui (mesma postura do
+# `shared.domain`). Concept 2.2 A8.
 # -----------------------------------------------------------------------------
 [importlinter:contract:domain-purity]
 name = Domain puro — sem pandas/pyarrow/torch/pydantic/sqlalchemy/fastapi
 type = forbidden
 source_modules =
     financial_forecasting.shared.domain
+    financial_forecasting.features.market_data.domain
 forbidden_modules =
     pandas
     pyarrow
@@ -152,12 +160,19 @@ type = forbidden
 source_modules =
     financial_forecasting.shared.application
     financial_forecasting.shared.domain
+    financial_forecasting.features.market_data.application
+    financial_forecasting.features.market_data.domain
 forbidden_modules =
     pandas
     pyarrow
     duckdb
     pandera
 allow_indirect_imports = False
+# Stage 2.2 (concept 2.2 D1/I8): estende a `features.market_data.{application,domain}`.
+# O use case `IngestCandles` produz `Row` com float/int Python e delega a coerção de
+# dtype ao adapter de escrita (ParquetMedallionStore) — NUNCA importa pandas/pyarrow;
+# o adapter `ParquetRawCandleFetcher` é a ÚNICA porta de entrada dessas libs no BC.
+# Cada NOVA feature com application/domain que consome o MedallionStore entra aqui.
 
 # -----------------------------------------------------------------------------
 # Contrato 7 — calendar-no-exchange-calendars-leak (type = forbidden) — Stage 2.4 (I3)
