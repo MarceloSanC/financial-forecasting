@@ -62,6 +62,34 @@ def _candle_row(asset: str, ts: datetime, close: float) -> Row:
     }
 
 
+def _news_row(asset_id: str, article_id: str, ts: datetime) -> Row:
+    return {
+        "asset_id": asset_id,
+        "article_id": article_id,
+        "published_at": ts,
+        "headline": "h",
+        "summary": "s",
+        "source": "src",
+        "url": "http://x",
+        "language": "en",
+    }
+
+
+def _fundamental_row(asset_id: str, ts: datetime) -> Row:
+    return {
+        "asset_id": asset_id,
+        "report_type": "quarterly",
+        "fiscal_date_end": ts,
+        "reported_date": ts,
+        "revenue": 1.0,
+        "net_income": 2.0,
+        "operating_cash_flow": 3.0,
+        "total_shareholder_equity": 4.0,
+        "total_liabilities": 5.0,
+        "source": "src",
+    }
+
+
 def _build_fake(_tmp_path: Path) -> MedallionStore:
     return FakeMedallionStore()
 
@@ -86,11 +114,15 @@ def store(request: pytest.FixtureRequest, tmp_path: Path) -> MedallionStore:
 def test_write_then_read_round_trip(store: MedallionStore) -> None:
     """Round-trip: o que foi gravado é lido de volta (filtrando pelo asset)."""
     ts = datetime(2024, 1, 2, tzinfo=UTC)
-    store.write(layer="bronze", table="candle", rows=[_candle_row("AAPL", ts, 100.0)])
+    written = _candle_row("AAPL", ts, 100.0)
+    store.write(layer="bronze", table="candle", rows=[written])
 
     rows = store.read(layer="bronze", table="candle", filters={"asset": "AAPL"})
 
     assert len(rows) == 1
+    # Conjunto EXATO de chaves = schema escrito (sem coluna fantasma de partição):
+    # fecha I6 (paridade fake↔real) e a fidelidade de schema do read (A5/A6).
+    assert set(rows[0]) == set(written)
     assert rows[0]["asset"] == "AAPL"
     assert rows[0]["volume"] == _VOLUME
 
@@ -218,20 +250,36 @@ def test_read_filters_by_year(store: MedallionStore) -> None:
 
 @pytest.mark.contract
 def test_news_round_trip_with_string_columns(store: MedallionStore) -> None:
-    """Round-trip de uma tabela com PK distinta (news: asset_id/article_id)."""
-    row: Row = {
-        "asset_id": "AAPL",
-        "article_id": "a-1",
-        "published_at": datetime(2024, 3, 1, tzinfo=UTC),
-        "headline": "h",
-        "summary": "s",
-        "source": "src",
-        "url": "http://x",
-        "language": "en",
-    }
-    store.write(layer="bronze", table="news", rows=[row])
+    """Round-trip de uma tabela com PK distinta (news: asset_id/article_id).
+
+    A coluna lógica é `asset_id`, mas a partição em disco é `asset`: o read NÃO
+    pode devolver um `asset` fantasma. O assert de conjunto EXATO de chaves fecha
+    o buraco de I6 (paridade fake↔real) que o teste antigo (só `len`/`article_id`)
+    deixava passar.
+    """
+    written = _news_row("AAPL", "a-1", datetime(2024, 3, 1, tzinfo=UTC))
+    store.write(layer="bronze", table="news", rows=[written])
 
     rows = store.read(layer="bronze", table="news", filters={"asset": "AAPL"})
 
     assert len(rows) == 1
+    assert set(rows[0]) == set(written)  # sem `asset` fantasma
     assert rows[0]["article_id"] == "a-1"
+
+
+@pytest.mark.contract
+def test_fundamental_round_trip_no_phantom_partition(store: MedallionStore) -> None:
+    """Round-trip de fundamental (coluna lógica `asset_id`, partição `asset`).
+
+    Igual a news: o read não pode reintroduzir a coluna de partição `asset`, que
+    não pertence ao schema fundamental. Assert de conjunto EXATO de chaves em
+    [fake, real] (I6/A5/A6).
+    """
+    written = _fundamental_row("AAPL", datetime(2024, 3, 31, tzinfo=UTC))
+    store.write(layer="bronze", table="fundamental", rows=[written])
+
+    rows = store.read(layer="bronze", table="fundamental", filters={"asset": "AAPL"})
+
+    assert len(rows) == 1
+    assert set(rows[0]) == set(written)  # sem `asset` fantasma
+    assert rows[0]["report_type"] == "quarterly"
