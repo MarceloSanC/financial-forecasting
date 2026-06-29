@@ -521,6 +521,40 @@ task-02 (forecast) ──┴─► task-03 (use case + fake) ─► task-04 (__i
   inclui "direção sugerida" e Stage candidata.
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original.
 
-<!-- preencher quando aplicável; remover este placeholder se vazio -->
+### 2026-06-29 — [deviation] task-04 absorvida em task-01/task-03 — Claude (overnight)
+**Contexto:** os `__init__.py` de `domain/services/` e `application/use_cases/`
+eram pré-condição de import dos módulos das task-01/task-03; criá-los só na task-04
+deixaria os commits anteriores sem build verde.
+**Decisão:** criei `domain/services/__init__.py` junto da task-01 (commit task-01) e
+`application/use_cases/__init__.py` junto da task-03 (commit task-03). A task-04
+virou no-op e não recebeu commit próprio.
+**Razão:** o technical §2 task-04 já previa essa absorção ("Pode ser feito junto às
+Tasks 01/03 se a ferramenta exigir o pacote para import; se já criados ali, esta Task
+vira no-op"). Mantém cada commit anterior verde e a slice com os pacotes fechados.
+
+### 2026-06-29 — [finding] import-linter já cobre `analytics_store.domain/application` — Claude (overnight)
+**Contexto:** o technical §2 task-05 e o risco em §5 previam estender o contrato
+import-linter caso `domain/services/` da `analytics_store` não estivesse coberto.
+**Decisão:** nenhuma extensão necessária. Os contratos `domain-purity` e
+`store-no-storage-leak` (`.importlinter`) já listam
+`financial_forecasting.features.analytics_store.domain` e `.application` como
+`source_modules` desde a Stage 4.1 — e `forbidden` cobre `source_modules` recursivamente,
+então `domain/services/` e `application/use_cases/` herdam a proteção. `lint-imports`
+fecha verde com 8/8 contratos KEPT; grep de `pandas`/`numpy` nos dois módulos de domínio
+retorna vazio.
+**Razão:** registro para fechar o item de risco como verificado (não houve gap).
+
+### 2026-06-29 — [decision] horizonte incompleto pula a grade inteira do horizonte — Claude (overnight)
+**Contexto:** o concept/technical descrevem o skip de "linha" em janela incompleta,
+mas a unidade real de skip precisava ser definida (uma `QuantileForecast` por
+`(decision, horizon)` expande para N níveis/linhas LONG).
+**Decisão:** em `IncompletePredictionWindowError`, o use case pula **todos os níveis
+daquele horizonte** (a janela temporal é a mesma para todos os níveis de um horizonte)
+e incrementa `rows_skipped` por **nível** (`len(forecast.levels)`), refletindo quantas
+linhas LONG deixaram de ser gravadas. Verificado por teste: h=1 válido grava 3 linhas,
+h=2 incompleto pula 3.
+**Razão:** o alinhamento temporal depende só de `(decision_idx, horizon)`, não do
+nível; logo a borda é por horizonte. Contar por linha (nível) mantém `rows_skipped`
+comparável a `rows_written` (ambos em linhas LONG), sem fabricar `y_true`.
 
 <!-- END: post-execution -->
