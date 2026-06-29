@@ -474,4 +474,14 @@ de ser inerte (corrige F3 / I2): baixar a cobertura **efetivamente** deixa o CI 
 `ci.yml` válido (YAML OK), dois jobs com `timeout-minutes` (5 / 15), `guard-main-source` intacto.
 `.importlinter` e `tests/architecture/` **não** criados (non_goal 1.2 / I6 respeitado).
 
+### 2026-06-29 — [deviation] task-01-extra (boundary page_size=1) — orquestrador (finding F1)
+**Contexto:** Após `stage 1.2: complete` (`8381b96`), a auditoria de testes acrescentou o commit
+`5340b26 [1.2/task-01]` com `test_accepts_page_size_at_lower_boundary`, fechando um mutante
+sobrevivente do limite inferior (`1 <= page_size` → `1 < page_size`) no VO `Pagination`.
+**Razão:** Reforço de cobertura de mutação in-scope, surgido na auditoria de testes; restrito a
+`tests/.../test_pagination.py`, `make check` permanece verde (100%). Registro posterior ao
+`complete` por ter surgido na auditoria (rastreabilidade — finding F1 da stage-audit). Correção de
+raiz aplicada no harness: a partir da Stage 1.3 o fechamento (`stage N.M: complete` + roadmap
+`done`) passa a ser o **último** passo, feito pelo orquestrador após a auditoria independente.
+
 <!-- END: post-execution -->
