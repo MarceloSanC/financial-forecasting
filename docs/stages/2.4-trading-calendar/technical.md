@@ -419,4 +419,52 @@ Task 04 (port) ─────────────────────�
 > `status: done`.** Registrar `[decision]`/`[finding]`/`[deviation]` em ordem
 > cronológica conforme o formato do template.
 
+### Task 03 — `[decision]` semântica "ancora-e-conta" do `shift_trading_days`
+
+`shift_trading_days` resolve a âncora ANTES de contar os `n` pregões: se `day` já
+é sessão, a âncora é `day`; caso contrário, a âncora é a primeira sessão no
+sentido `direction` (`next_session` se `forward`, `prev_session` se `backward`).
+Em seguida dá `n` passos a partir da âncora. Consequência intencional: para
+`day` não-sessão, `n=0` devolve a sessão de fronteira e `n=k` devolve k sessões
+além dela — não há assimetria-bug, é a regra documentada (e a única que dá um
+significado estável a `n=0` sobre um feriado). `n<0` é `ValueError` (a direção é
+expressa por `direction`, não pelo sinal — C3). Cobre o uso do embargo da Stage
+5.1 (que precisa recuar `H` pregões de pregão a partir de uma data qualquer).
+
+### Task 06 — `[finding]` `uv sync` remove os dev-deps; o projeto usa `uv pip install -e ".[dev]"`
+
+Ao travar a dependência nova rodei `uv lock && uv sync` (como sugeria o comando
+de verificação da Task 06). `uv sync` instala SÓ as deps principais e **removeu**
+o toolchain de dev (`pytest`/`ruff`/`mypy`/`pre-commit`...), porque o projeto não
+declara um dependency-group e o `Makefile` instala via `uv pip install -e
+".[dev]"` (extra `dev`), não via `uv sync`. Restaurado com `uv pip install -e
+".[dev]"`. **Aprendizado para Stages futuras:** depois de mexer em deps, re-rodar
+`uv pip install -e ".[dev]"` (ou `make setup`), não `uv sync`, senão o ambiente
+de teste fica sem ferramentas. O `uv.lock` em si ficou correto (contém
+`exchange-calendars` 4.13.2 + transitive `korean-lunar-calendar`/`pyluach`/
+`toolz`).
+
+### Task 06 — `[finding]` `exchange-calendars` 4.13.2; XNYS 2023 = 250 sessões; paridade fake↔real byte-idêntica
+
+A lib resolveu para `4.13.2` (dentro do pin `>=4.5,<5.0`). Sanity check do adapter
+real: XNYS 2023 tem **250 sessões** (1ª `2023-01-03`, última `2023-12-29`), com os
+10 feriados de fechamento total ausentes e os vizinhos de feriado presentes; cada
+elemento devolvido é `datetime.date` puro (sem `pd.Timestamp` vazando). O conjunto
+de 2023 do fake (dias úteis menos os 10 feriados hard-coded) é **byte-idêntico** ao
+do real — confirmado por `test_fake_and_real_produce_identical_sessions_2023` e por
+verificação manual (`real == fake`, n=250 nos dois). A invariante de não-leak foi
+provada por quebra intencional revertida (`import exchange_calendars` no port →
+`calendar-no-exchange-calendars-leak` BROKEN; revertido → 7 kept).
+
+### Task 07 — `[decision]` adapter real entra direto em `_FACTORIES` (sem marcador extra)
+
+O contract test parametriza `[fake, real]` sem um `@pytest.mark.integration`
+adicional além do `@pytest.mark.contract` já presente, espelhando exatamente o
+`test_medallion_store_contract.py` da Stage 2.1. Justificativa: `exchange-calendars`
+é uma lib **offline e determinística** (não faz rede, calendário cacheado em
+processo), então o "real" roda rápido e estável no mesmo passo de `make check` —
+não há custo de I/O externo que justifique separar. Avisos de `DeprecationWarning`
+(numpy timedelta) vêm de dentro da lib, não do código da Stage, e não falham o CI
+(o projeto não configura `filterwarnings = error`).
+
 <!-- END: post-execution -->
