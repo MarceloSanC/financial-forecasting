@@ -136,6 +136,22 @@ def test_insufficient_temporal_coverage_raises_c6() -> None:
         )
 
 
+def test_empty_dataset_fails_coverage() -> None:
+    """Cobertura — dataset vazio tem span 0 dia < mínimo → `DatasetQualityError` (I5d).
+
+    Exercita o branch de `timestamps` vazio (`coverage_days = 0`); uma mutação que
+    retornasse cobertura default não-zero deixaria passar um dataset vazio.
+    """
+    gate = DatasetQualityGate()
+    with pytest.raises(DatasetQualityError, match="Temporal coverage insufficient"):
+        gate.validate(
+            timestamps=[],
+            rows=[],
+            feature_cols=["rsi_14"],
+            config=DatasetQualityGateConfig(min_temporal_coverage_days=1),
+        )
+
+
 def test_length_mismatch_raises() -> None:
     """timestamps e rows de tamanhos diferentes levanta erro de domínio."""
     gate = DatasetQualityGate()
