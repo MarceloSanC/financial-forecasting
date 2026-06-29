@@ -19,6 +19,9 @@ from financial_forecasting.composition_root import (
     _LazyFinbertSentimentModel,
     wire_dependencies,
 )
+from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
+    ParquetAnalyticsRepository,
+)
 from financial_forecasting.features.feature_engineering.adapters.out.duckdb.asof_join_adapter import (  # noqa: E501
     AsofJoinDuckdbAdapter,
 )
@@ -38,6 +41,7 @@ from financial_forecasting.shared.adapters.out.mlflow.mlflow_tracker import Mlfl
 from financial_forecasting.shared.adapters.out.parquet.parquet_medallion_store import (
     ParquetMedallionStore,
 )
+from financial_forecasting.shared.infrastructure.clock.system_clock import SystemClock
 from financial_forecasting.shared.infrastructure.config.settings import Settings
 
 
@@ -119,3 +123,19 @@ def test_lazy_finbert_proxy_exposes_metadata_without_torch() -> None:
     assert proxy.model_name == "ProsusAI/finbert"
     assert isinstance(proxy.revision, str)
     assert proxy._delegate is None  # ainda não construiu o FinBERT (sem torch)
+
+
+@pytest.mark.unit
+def test_wire_dependencies_wires_analytics_repository(tmp_path: Path) -> None:
+    """Stage 4.2 A11: o adapter Parquet silver é wirado com data_root + SystemClock.
+
+    Exposto em `ApplicationDependencies.analytics_repository`, tipado pelo port; o
+    `data_root` vem do Settings injetado (I9/I10) e o `Clock` é o `SystemClock`.
+    """
+    settings = Settings(_env_file=None, data_root=tmp_path)
+
+    deps = wire_dependencies(settings=settings)
+
+    assert isinstance(deps.analytics_repository, ParquetAnalyticsRepository)
+    assert deps.analytics_repository._data_root == tmp_path
+    assert isinstance(deps.analytics_repository._clock, SystemClock)
