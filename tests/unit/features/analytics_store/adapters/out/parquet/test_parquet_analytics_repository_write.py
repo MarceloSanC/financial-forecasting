@@ -317,10 +317,3 @@ def test_dim_run_upserts_by_policy_without_flag(tmp_path: Path) -> None:
     df = pd.read_parquet(path)
     assert len(df) == 1
     assert df.iloc[0]["model_version"] == "v2"
-
-
-def test_read_is_not_implemented_yet(tmp_path: Path) -> None:
-    """A leitura chega na task-05; aqui o método é provisório (NotImplementedError)."""
-    repo = _repo(tmp_path)
-    with pytest.raises(NotImplementedError):
-        repo.read(layer=_SILVER, table="dim_run", filters={"asset": "AAPL"})

@@ -31,6 +31,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import duckdb
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -56,12 +57,31 @@ _COLLISION_SAMPLE_SIZE = 5
 _UPSERT_POLICY = "upsert"
 
 
+# Colunas de partição que armazenam o sentinel `__none__` e devem voltar `None`.
+_NULLABLE_PARTITION_COLS = frozenset({"parent_sweep_id"})
+
+
 def _safe_partition(value: object) -> str:
     """Sanitiza um valor de partição (None/vazio → sentinela estável, como o old)."""
     if value is None:
         return _PARTITION_NONE
     text = str(value).strip()
     return text if text else _PARTITION_NONE
+
+
+def _quote_ident(name: str) -> str:
+    """Cita um identificador SQL (DuckDB) escapando aspas duplas embutidas."""
+    escaped = name.replace('"', '""')
+    return f'"{escaped}"'
+
+
+def _restore_value(key: str, value: object) -> object:
+    """`NaN`/`__none__` → `None` (round-trip do sentinel de partição, I6/C6)."""
+    if value is None or (not isinstance(value, str) and pd.isna(value)):
+        return None
+    if key in _NULLABLE_PARTITION_COLS and value == _PARTITION_NONE:
+        return None
+    return value
 
 
 def _write_parquet(df: pd.DataFrame, path: Path) -> None:
@@ -131,6 +151,14 @@ class ParquetAnalyticsRepository:
         upsert = allow_upsert or meta.update_policy == _UPSERT_POLICY
         part_cols = meta.partition_by
 
+        # Materializa o sentinel `__none__` na COLUNA FÍSICA das partições nullable
+        # (após validar) para que path e coluna concordem e a coluna nunca seja
+        # toda-NULL (DuckDB tiparia como NULL e o `WHERE col = ?` falharia). O
+        # `read` reconverte `__none__` → `None` (round-trip I6/C6).
+        for col in part_cols:
+            if col in _NULLABLE_PARTITION_COLS:
+                incoming[col] = incoming[col].map(_safe_partition)
+
         # Bucket por partição (colunas literais) — batch-por-partição (I7).
         part_series = [incoming[col].map(_safe_partition) for col in part_cols]
         incoming = incoming.assign(**{f"_part_{i}": series for i, series in enumerate(part_series)})
@@ -191,6 +219,64 @@ class ParquetAnalyticsRepository:
     ) -> Sequence[Row]:
         """Lê o dataset filtrado por partição (`filters`); inexistente → vazio.
 
-        Implementado na task-05 (pruning + projeção + round-trip `__none__`).
+        Empurra `WHERE` para as colunas de `partition_by` vindas de `filters`
+        (partition pruning, I8), projeta SÓ as colunas do schema na ordem do
+        schema (não `SELECT *`), e reconverte o sentinel `__none__`/`NaN` de
+        `parent_sweep_id` para `None` no round-trip (I6/C6). `(layer, table)`
+        inexistente ou `asset` sem dados → sequência vazia (C4).
         """
-        raise NotImplementedError
+        meta = self._table(layer, table)
+        table_dir = self._table_dir(layer, table)
+
+        # Dataset ainda não gravado → vazio (C4), sem tocar DuckDB.
+        if not any(table_dir.rglob("*.parquet")):
+            return []
+
+        glob = str(table_dir / "**" / "*.parquet")
+        predicates, params = self._build_predicates(meta, filters)
+        where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
+        # As colunas de partição silver são FÍSICAS no Parquet (diferença vs
+        # bronze, que as deriva): `hive_partitioning=false` evita coluna dupla;
+        # projetar o schema garante a ordem/conjunto exato (fidelidade A7/A9).
+        projection = ", ".join(_quote_ident(col) for col in meta.schema.columns)
+        source = f"read_parquet('{glob}', hive_partitioning=false)"
+        sql = f"SELECT {projection} FROM {source}{where}"
+
+        con = duckdb.connect()
+        try:
+            con.execute("SET TimeZone='UTC'")  # timestamps tz-aware em UTC (D5)
+            result_df = con.execute(sql, params).fetch_df()
+        finally:
+            con.close()
+
+        return [self._restore_row(record) for record in result_df.to_dict(orient="records")]
+
+    @staticmethod
+    def _build_predicates(
+        meta: SilverTable, filters: Mapping[str, object] | None
+    ) -> tuple[list[str], list[object]]:
+        """Monta o predicado de pruning a partir das colunas de partição em `filters`.
+
+        Só colunas de `SilverTable.partition_by` viram `WHERE` (pruning); demais
+        chaves de `filters` são ignoradas. `parent_sweep_id=None` casa com o
+        sentinel `__none__` gravado no path/coluna.
+        """
+        wanted = dict(filters or {})
+        predicates: list[str] = []
+        params: list[object] = []
+        for col in meta.partition_by:
+            if col not in wanted:
+                continue
+            value = wanted[col]
+            if value is None and col in _NULLABLE_PARTITION_COLS:
+                predicates.append(f"({_quote_ident(col)} = ? OR {_quote_ident(col)} IS NULL)")
+                params.append(_PARTITION_NONE)
+            else:
+                predicates.append(f"{_quote_ident(col)} = ?")
+                params.append(value)
+        return predicates, params
+
+    @staticmethod
+    def _restore_row(record: Mapping[str, object]) -> dict[str, object]:
+        """`NaN`/`__none__` → `None` (round-trip do sentinel de partição, I6/C6)."""
+        return {key: _restore_value(key, value) for key, value in record.items()}
