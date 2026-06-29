@@ -117,6 +117,13 @@ known-first-party = ["financial_forecasting"]
 "src/financial_forecasting/features/feature_engineering/adapters/out/finbert/finbert_sentiment_model.py" = [
     "PLC0415",
 ]
+# Stage 3.5: o composition root wira o SentimentModel por um proxy lazy
+# (`_LazyFinbertSentimentModel`) que importa o FinBERT (torch/transformers) DE
+# PROPÓSITO dentro de `_ensure`, adiando o carregamento ao 1º uso — mesmo design
+# justificado do adapter finbert. PLC0415 ignorado só neste arquivo (lazy import).
+"src/financial_forecasting/composition_root.py" = [
+    "PLC0415",
+]
 
 # ---------------------------------------------------------------------------
 # Mypy — checagem estática de tipos
