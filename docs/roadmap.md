@@ -86,7 +86,7 @@ graph LR
 | `2.3-news-fundamentals-ingestion` | market_data | multi (application + adapters/out) | vertical | done | 2.2 |
 | `2.4-trading-calendar` | shared | domain + adapters/out | vertical | done | 2.1 |
 | `3.1-technical-indicators` | feature_engineering | multi (domain + adapters/out) | vertical | done | 2.2, 2.4 |
-| `3.2-sentiment-finbert` | feature_engineering | multi (application + adapters/out) | vertical | draft | 2.3 |
+| `3.2-sentiment-finbert` | feature_engineering | multi (application + adapters/out) | vertical | done | 2.3 |
 | `3.3-fundamentals-asof-join` | feature_engineering | multi (domain + adapters/out) | vertical | draft | 2.3, 2.4 |
 | `3.4-feature-registry-and-derived` | feature_engineering | domain | mono | draft | 3.1 |
 | `3.5-dataset-builder-and-contracts` | feature_engineering | multi (application + adapters/out) | vertical | draft | 3.1, 3.2, 3.3, 3.4 |
