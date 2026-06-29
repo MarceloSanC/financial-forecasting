@@ -628,4 +628,12 @@ inspecionava a mensagem — esvaziá-la passaria silenciosamente.
 três marcadores + o nome da coluna de PK na mensagem. Mutação (mensagem trocada
 por `"collision"`) confirmada como capturada (C1, diagnóstico).
 
+### 2026-06-29 — [deviation] commit off-task [4.2/--] (round-trip nullable None) — orquestrador (F1)
+**Contexto:** O commit `bf1bd3d [4.2/--]` adicionou `test_read_round_trips_nullable_column_none`
+(coluna `fold=None` → NaN no Parquet → `None` na leitura, cobrindo o branch NaN→None de
+`_restore_value`), levando o adapter a 100%.
+**Decisão/Razão:** Hardening de cobertura do gate de saída; mudança restrita ao teste de leitura,
+`make check` verde. Registrado aqui por consistência com as entradas `-extra` (finding F1 da
+stage-audit; a justificativa também consta no body do commit, CONVENTIONS §3.4 regra 2).
+
 <!-- END: post-execution -->
