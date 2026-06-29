@@ -706,4 +706,37 @@ lint-imports + docs-check + test) verde — 907 passed, 7 skipped, cobertura tot
 98.33%. Cobertura do BC `analytics_store` isolado = **100%** (77 statements, 0
 missed). `lint-imports`: 8 contratos kept, 0 broken.
 
+### Auditoria de testes — 2026-06-29 (gate de testes, pós-execução)
+
+Releitura do `concept.md` + testes contra as 6 perguntas do gate. Gaps reais
+fechados (cada um com teste adicionado, commit `test(...)[4.1/task-NN-extra]`):
+
+**[deviation] C2 (`schema_version` mismatch) só existia em `dim_run`; A8 exige
+para as 5 tabelas.** O concept A8/C2 enumera o mismatch de `schema_version` como
+caso obrigatório para **cada uma** das 5 tabelas, mas só `test_dim_run_schema`
+o cobria. Adicionei `test_schema_version_mismatch_detectable` (mesmo estilo do
+`dim_run`: payload com `schema_version=99` é detectável comparando com
+`TABLE.schema_version`, já que o mismatch é regra de aplicação da 4.2, não
+constraint `pandera`) a `fact_config`, `fact_split_metrics`, `fact_failures` e
+`fact_oos_predictions`. Sem isto, baixar `schema_version` de uma constante de
+tabela passaria silencioso (mutação não detectada).
+
+**[deviation] Null-PK só cobria UMA coluna das PKs compostas.** Os testes de PK
+nula em `fact_split_metrics` (só `split`), `fact_failures` (só `stage`) e
+`fact_oos_predictions` (só `quantile_level`) não exercitavam as demais colunas
+da PK composta — uma mutação tornando `run_id`/`failed_at_utc` `nullable=True`
+passaria. Adicionei `test_null_first_pk_column_raises` (run_id em
+`fact_split_metrics`), `test_null_other_pk_columns_raise` (run_id +
+failed_at_utc em `fact_failures`) e `test_null_string_pk_column_raises` (run_id
+em `fact_oos_predictions`), fechando o `nullable=False` de cada coluna de PK.
+
+Demais perguntas do gate já cobertas antes da auditoria: caminho feliz (valid
+payload por tabela + VOs instanciáveis + registry com 5 chaves); C1/C3/C4/C5 por
+tabela; H-1 (ausência de `quantile_p*` no VO e no schema, `quantile_level` na PK);
+boundaries — não há port/use case nesta Stage (4.2); integração via
+`SILVER_REGISTRY` (importa os 5 módulos, chaves/políticas) + gates import-linter
+(`tests/architecture/test_import_contracts.py`, 2 casos reais de violação para o
+BC); erro de adapter (`KeyError` para par/layer inexistente no registry, C6).
+`make check` verde após as adições.
+
 <!-- END: post-execution -->

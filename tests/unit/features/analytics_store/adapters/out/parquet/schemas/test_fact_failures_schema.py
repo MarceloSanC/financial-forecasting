@@ -86,6 +86,25 @@ def test_null_pk_raises() -> None:
 
 
 @pytest.mark.unit
+def test_null_other_pk_columns_raise() -> None:
+    """C5: run_id e failed_at_utc (demais colunas da PK composta) nulos reprovam."""
+    for pk_col in ("run_id", "failed_at_utc"):
+        df = _valid_df()
+        df[pk_col] = pd.array([None], dtype="string")
+        with pytest.raises(pa.errors.SchemaError):
+            FACT_FAILURES.schema.validate(df)
+
+
+@pytest.mark.unit
+def test_schema_version_mismatch_detectable() -> None:
+    """C2: schema_version do payload != schema_version do contrato é detectável (A8)."""
+    df = _valid_df()
+    df["schema_version"] = pd.array([99], dtype="int64")
+
+    assert (df["schema_version"] != FACT_FAILURES.schema_version).all()
+
+
+@pytest.mark.unit
 def test_metadata_matches_contract() -> None:
     """A4/A6: metadata bate com o concept §4 — partição (asset,), append-only."""
     assert FACT_FAILURES.name == "fact_failures"

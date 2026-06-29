@@ -88,6 +88,15 @@ def test_null_pk_raises() -> None:
 
 
 @pytest.mark.unit
+def test_schema_version_mismatch_detectable() -> None:
+    """C2: schema_version do payload != schema_version do contrato é detectável (A8)."""
+    df = _valid_df()
+    df["schema_version"] = pd.array([99], dtype="int64")
+
+    assert (df["schema_version"] != FACT_CONFIG.schema_version).all()
+
+
+@pytest.mark.unit
 def test_metadata_matches_contract() -> None:
     """A4/A6: metadata bate com o concept §4 — fact_config é append-only."""
     assert FACT_CONFIG.name == "fact_config"

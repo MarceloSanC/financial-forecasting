@@ -99,6 +99,25 @@ def test_null_pk_raises() -> None:
 
 
 @pytest.mark.unit
+def test_null_string_pk_column_raises() -> None:
+    """C5: run_id (coluna string da PK longa, nullable=False) nulo reprova."""
+    df = _valid_df()
+    df["run_id"] = pd.array([None, "r-1", "r-1"], dtype="string")
+
+    with pytest.raises(pa.errors.SchemaError):
+        FACT_OOS_PREDICTIONS.schema.validate(df)
+
+
+@pytest.mark.unit
+def test_schema_version_mismatch_detectable() -> None:
+    """C2: schema_version do payload != schema_version do contrato é detectável (A8)."""
+    df = _valid_df()
+    df["schema_version"] = pd.array([99, 99, 99], dtype="int64")
+
+    assert (df["schema_version"] != FACT_OOS_PREDICTIONS.schema_version).all()
+
+
+@pytest.mark.unit
 def test_no_per_quantile_columns_in_schema() -> None:
     """A5/I5 (H-1): NENHUMA coluna quantile_p* no schema (anti-regressao do layout largo)."""
     columns = set(FACT_OOS_PREDICTIONS.schema.columns)

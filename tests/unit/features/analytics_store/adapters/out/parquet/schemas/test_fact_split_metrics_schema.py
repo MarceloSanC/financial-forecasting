@@ -91,6 +91,25 @@ def test_null_pk_raises() -> None:
 
 
 @pytest.mark.unit
+def test_null_first_pk_column_raises() -> None:
+    """C5: run_id (1ª coluna da PK composta, nullable=False) nulo reprova."""
+    df = _valid_df()
+    df["run_id"] = pd.array([None, "r-1"], dtype="string")
+
+    with pytest.raises(pa.errors.SchemaError):
+        FACT_SPLIT_METRICS.schema.validate(df)
+
+
+@pytest.mark.unit
+def test_schema_version_mismatch_detectable() -> None:
+    """C2: schema_version do payload != schema_version do contrato é detectável (A8)."""
+    df = _valid_df()
+    df["schema_version"] = pd.array([99, 99], dtype="int64")
+
+    assert (df["schema_version"] != FACT_SPLIT_METRICS.schema_version).all()
+
+
+@pytest.mark.unit
 def test_metadata_matches_contract() -> None:
     """A4/A6: metadata bate com o concept §4 — append-only, PK composta."""
     assert FACT_SPLIT_METRICS.name == "fact_split_metrics"
