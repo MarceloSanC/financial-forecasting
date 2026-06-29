@@ -55,6 +55,8 @@ Row = Mapping[str, object]
 _PARTITION_NONE = "__none__"
 _COLLISION_SAMPLE_SIZE = 5
 _UPSERT_POLICY = "upsert"
+_DIM_RUN_TABLE = "dim_run"
+_CREATED_AT_UTC = "created_at_utc"
 
 
 # Colunas de partição que armazenam o sentinel `__none__` e devem voltar `None`.
@@ -141,7 +143,8 @@ class ParquetAnalyticsRepository:
         if not rows:
             return
 
-        incoming = pd.DataFrame([dict(r) for r in rows])
+        prepared = [self._fill_write_time(table, row) for row in rows]
+        incoming = pd.DataFrame(prepared)
         # pandera ANTES do disco (I4/C3): schema/dtype/PK inválido → SchemaError
         # (coluna extra sob strict=True levanta SchemaErrors — ambos são erros
         # pandera que abortam o write antes de tocar o Parquet). Espelha o
@@ -170,6 +173,19 @@ class ParquetAnalyticsRepository:
             self._write_partition(
                 meta, layer, table, partition_values, part_cols, bucket, upsert=upsert
             )
+
+    def _fill_write_time(self, table: str, row: Row) -> dict[str, object]:
+        """Preenche `created_at_utc` write-time em `dim_run` via `Clock` (I5/OBS-1).
+
+        O VO `RunRecord` não carrega `created_at_utc` (`nullable=False` no schema);
+        o mapper `run_record_to_row` já o injeta para o caminho tipado, e aqui
+        cobrimos o caminho genérico (`write` de uma row dict-like de `dim_run` sem
+        a coluna) — paridade com o fake. NUNCA `datetime.now()` hardcoded.
+        """
+        prepared = dict(row)
+        if table == _DIM_RUN_TABLE and prepared.get(_CREATED_AT_UTC) is None:
+            prepared[_CREATED_AT_UTC] = self._clock.now().isoformat()
+        return prepared
 
     def _write_partition(  # noqa: PLR0913 — args coesos de uma partição alvo
         self,

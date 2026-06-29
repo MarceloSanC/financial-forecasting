@@ -27,6 +27,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
+    ParquetAnalyticsRepository,
+)
 from financial_forecasting.features.analytics_store.application.ports.out.analytics_repository import (  # noqa: E501
     AnalyticsRepository,
     Row,
@@ -114,9 +117,13 @@ def _build_fake(_tmp_path: Path) -> AnalyticsRepository:
     return FakeAnalyticsRepository(clock=FakeClock())
 
 
-# Mesmo contrato sobre fake (e o adapter real a partir da Task 06; I9/ADR 0.0.0021).
-_FACTORIES: list[Callable[[Path], AnalyticsRepository]] = [_build_fake]
-_IDS = ["fake"]
+def _build_real(tmp_path: Path) -> AnalyticsRepository:
+    return ParquetAnalyticsRepository(data_root=tmp_path, clock=FakeClock())
+
+
+# Mesmo contrato sobre fake E adapter real (paridade fake↔real, I9/ADR 0.0.0021).
+_FACTORIES: list[Callable[[Path], AnalyticsRepository]] = [_build_fake, _build_real]
+_IDS = ["fake", "real"]
 
 
 @pytest.fixture(params=_FACTORIES, ids=_IDS)
