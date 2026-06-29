@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-06-22
-last_reviewed_at: 2026-06-22
+updated_at: 2026-06-29
+last_reviewed_at: 2026-06-29
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -76,7 +76,7 @@ graph LR
 
 | Stage | BC | Camada-alvo | Tipo | Status | Depende de |
 |---|---|---|---|---|---|
-| `1.1-bootstrap` | shared | bootstrap | mono | draft | — |
+| `1.1-bootstrap` | shared | bootstrap | mono | done | — |
 | `1.2-ci-coverage` | shared | bootstrap (ci) | mono | draft | 1.1 |
 | `1.3-architecture-contracts` | shared | bootstrap (import-linter) | mono | draft | 1.2 |
 | `1.4-identity-and-fingerprints` | shared | domain + application | vertical | draft | 1.3 |

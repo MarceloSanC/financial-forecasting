@@ -368,4 +368,21 @@ Task 04 (README, dep. fraca de 01) ─┘
 - `[finding]` — gap/observação a tratar em **próxima Stage**; inclui direção sugerida + Stage candidata.
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original.
 
+### 2026-06-29 — [deviation] Task 01 (ADRs de fundação) — agente autônomo
+**Contexto:** Os 5 ADRs (`0_0_0002`/`0019`/`0020`/`0021` + `1_1_0001`) já tinham sido
+autorados e **commitados** no gate da Fase 3A (`9d8152c stage 1.1: conceptual approved`),
+completos e com frontmatter válido (`status: accepted`, `adr_id` no formato `"N.N.NNNN"`,
+`context_stage: 1.1-bootstrap`, corpo Context/Decision/Alternatives/Consequences em inglês).
+**Razão:** A própria Task 01 prevê o caso "se já válidos, registrar a verificação sem diff de
+conteúdo". Como não há diff a commitar (committar nada falharia), a Task 01 ficou sem commit
+próprio: a verificação está registrada aqui. `0_0_0000`/`0_0_0001`/`0_0_0050` permanecem
+intactos (A7). Nenhuma ação adicional necessária — os ADRs satisfazem A1/A2/I5.
+
+### 2026-06-29 — [deviation] Task 02 (docstrings de camada) — agente autônomo
+**Contexto:** As docstrings de uma linha de `shared/domain` e `shared/application` estouraram
+o `line-length = 100` do ruff (E501) na primeira redação.
+**Razão:** Encurtei o texto mantendo a responsabilidade da camada legível (domain → "serviços/VOs
+puros stdlib-only (sem libs)"; application → "use cases e ports que trafegam DTOs, nunca
+entidades"), em vez de adicionar `# noqa`. Ajuste cosmético, sem impacto no contrato.
+
 <!-- END: post-execution -->
