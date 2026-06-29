@@ -27,9 +27,19 @@ _OVERRIDDEN_PORT = 9100
 
 
 @pytest.fixture(autouse=True)
-def _clear_settings_cache() -> None:
-    """Limpa o `lru_cache` de `get_settings` antes e depois de cada teste."""
+def _clean_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isola o ambiente: limpa o `lru_cache` e remove env vars relevantes.
+
+    `MlflowTracker.__init__` chama `mlflow.set_tracking_uri`, que muta
+    `os.environ["MLFLOW_TRACKING_URI"]` no processo. Como `Settings(_env_file=
+    None)` ainda lê `os.environ`, esse efeito de OUTROS testes (ex.: o contract
+    test do tracker) vazaria para os casos de default/validação aqui. Remover as
+    env vars que estes testes asseguram (mais o `PORT`) antes de cada caso
+    garante isolamento; `monkeypatch` restaura ao fim.
+    """
     get_settings.cache_clear()
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    monkeypatch.delenv("PORT", raising=False)
     yield
     get_settings.cache_clear()
 
