@@ -103,7 +103,7 @@ class FundamentalsAsofPolicy:
 
     @staticmethod
     def _safe_ratio(numerator: float | None, denominator: float | None) -> float | None:
-        """Divisão segura (porta verbatim de `_safe_ratio` `:256-263`).
+        """Divisão segura: porta corrigida de `_safe_ratio` `:256-263` (`NaN`→`None`, I4).
 
         Numerador `None`/`NaN` **ou** denominador `None`/`0`/`NaN` → `None` (nunca
         `ZeroDivisionError`, nunca `inf`/`NaN` propagado como número válido — I4/C3).
