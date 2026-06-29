@@ -19,6 +19,9 @@ from datetime import date
 
 import pytest
 
+from financial_forecasting.shared.adapters.out.calendar.exchange_calendars_provider import (
+    ExchangeCalendarsProvider,
+)
 from financial_forecasting.shared.application.ports.out.exchange_calendar_provider import (
     ExchangeCalendarProvider,
 )
@@ -39,9 +42,15 @@ def _build_fake() -> ExchangeCalendarProvider:
     return FakeExchangeCalendarProvider()
 
 
-# Na Task 07 acrescenta-se `_build_real`; o contrato roda sobre `[fake, real]`.
-_FACTORIES: list[Callable[[], ExchangeCalendarProvider]] = [_build_fake]
-_IDS = ["fake"]
+def _build_real() -> ExchangeCalendarProvider:
+    return ExchangeCalendarsProvider()
+
+
+# Mesmo contrato sobre fake e real (paridade fake↔real, I8/A9/ADR 0.0.0021): o
+# real exercita `exchange-calendars` de verdade; os feriados XNYS 2023 conhecidos
+# e o recorte de janela devem bater nos dois.
+_FACTORIES: list[Callable[[], ExchangeCalendarProvider]] = [_build_fake, _build_real]
+_IDS = ["fake", "real"]
 
 
 @pytest.fixture(params=_FACTORIES, ids=_IDS)
@@ -118,3 +127,16 @@ def test_single_holiday_window_is_empty(provider: ExchangeCalendarProvider) -> N
     """Janela legítima sem sessões (só um feriado) devolve VO vazio, não erro."""
     sessions = provider.sessions(start=date(2023, 7, 4), end=date(2023, 7, 4))
     assert sessions.sessions == ()
+
+
+@pytest.mark.contract
+def test_fake_and_real_produce_identical_sessions_2023() -> None:
+    """Paridade fake↔real (I8/A9): mesmas sessões XNYS para o ano de 2023 inteiro.
+
+    Gate central da Task 07: o fake in-memory contra o qual a aplicação testa é
+    garantidamente idêntico ao XNYS real (`exchange-calendars`) — sem drift.
+    """
+    start, end = date(2023, 1, 1), date(2023, 12, 31)
+    fake = _build_fake().sessions(start=start, end=end)
+    real = _build_real().sessions(start=start, end=end)
+    assert fake.sessions == real.sessions
