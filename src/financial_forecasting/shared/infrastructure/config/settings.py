@@ -11,6 +11,7 @@ Uso em qualquer módulo:
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -57,6 +58,16 @@ class Settings(BaseSettings):
     # Trocável por env (`MLFLOW_TRACKING_URI`) para Postgres/servidor sem tocar
     # código. Em testes, usa-se `sqlite:///<tmp_path>/mlruns.db` para isolamento.
     mlflow_tracking_uri: str = "sqlite:///mlruns.db"
+
+    # ---------------------------------------------------------------------------
+    # Medallion storage (Stage 2.1)
+    # ---------------------------------------------------------------------------
+    # Raiz dos dados medalhão (bronze/silver/gold). O `ParquetMedallionStore`
+    # recebe este `data_root` e aplica o sufixo `bronze/<table>/...` por dentro
+    # (concept 2.1 D4). Default relativo `data/` mantém os dados junto ao
+    # repo/worktree. Override por env (`DATA_ROOT`) sem tocar código (12-factor);
+    # em testes, aponta para `tmp_path` para isolamento.
+    data_root: Path = Path("data")
 
 
 @lru_cache
