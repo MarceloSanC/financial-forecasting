@@ -3,7 +3,7 @@ title: Concept — Stage 1.5 — Config tipada e tracking de experimentos
 description: Evoluir Settings com tracking URI, introduzir o port ExperimentTracker + adapter MLflow (SQLite local) e evoluir o composition root para wirar Settings, Hasher e MlflowTracker
 when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; revisar antes de executar config/tracking/wiring
 keywords: [concept, config-and-tracking, settings, pydantic-settings, mlflow, experiment-tracker, composition-root, wiring, sqlite]
-status: done
+status: draft
 created_at: 2026-06-29
 updated_at: 2026-06-29
 stage_id: 1.5-config-and-tracking
@@ -208,10 +208,13 @@ implementação.
   Operação sobre o run ativo sem `start_run` prévio → erro (o adapter propaga o
   erro de "no active run" do `mlflow`; o fake levanta o mesmo tipo de erro de
   estado). O contrato declara que essas operações exigem um run ativo.
-- **C3 — `start_run` com `run_id` inexistente no backend.** Tratado como abrir
-  um run novo identificado por aquele `run_id` (não é erro); a idempotência é
-  sobre *não duplicar* quando o mesmo `run_id` é reaberto, não sobre exigir
-  pré-existência.
+- **C3 — `start_run` com `run_id` inexistente no backend.** Levanta `LookupError`
+  — o `run_id` é atribuído pelo backend ao criar o run, **não** é escolhido pelo
+  chamador; reabrir um id não registrado é erro. A idempotência (I2) cobre apenas
+  *não duplicar* ao reabrir um run **existente**, não criar a partir de id
+  arbitrário. (Contrato endurecido na execução: port docstring, `FakeExperimentTracker`,
+  `MlflowTracker` e o contract test `test_start_run_with_unknown_run_id_raises` todos
+  levantam `LookupError`.)
 - **C4 — `log_artifact` com path inexistente.** Propaga o erro de I/O da
   implementação subjacente (não silencia). Borda fora do happy-path do contract
   test obrigatório; documentada no contrato.
