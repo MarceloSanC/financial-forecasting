@@ -79,7 +79,7 @@ graph LR
 | `1.1-bootstrap` | shared | bootstrap | mono | done | — |
 | `1.2-ci-coverage` | shared | bootstrap (ci) | mono | done | 1.1 |
 | `1.3-architecture-contracts` | shared | bootstrap (import-linter) | mono | done | 1.2 |
-| `1.4-identity-and-fingerprints` | shared | domain + application | vertical | draft | 1.3 |
+| `1.4-identity-and-fingerprints` | shared | domain + application | vertical | done | 1.3 |
 | `1.5-config-and-tracking` | shared | shared/infrastructure + bootstrap | mono | draft | 1.4 |
 | `2.1-medallion-storage-contracts` | shared | adapters/out + shared | vertical | draft | 1.5 |
 | `2.2-market-data-ingestion` | market_data | multi (application + adapters/out) | vertical | draft | 2.1 |
