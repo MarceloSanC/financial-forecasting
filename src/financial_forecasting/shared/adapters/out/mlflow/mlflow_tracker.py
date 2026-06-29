@@ -27,6 +27,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 import mlflow
+from mlflow.exceptions import MlflowException
 
 _NO_ACTIVE_RUN = "no active run"
 
@@ -44,10 +45,20 @@ class MlflowTracker:
         """Abre/reabre um run e o torna ativo; retorna o `run_id` (ver port).
 
         Aponta o tracking_uri (idempotente) e delega a `mlflow.start_run`, que
-        resume o run quando `run_id` é fornecido (I2) ou cria um novo.
+        resume o run quando `run_id` é de um run EXISTENTE (I2) ou cria um novo
+        (id gerado pelo backend) quando `run_id is None`.
+
+        `run_id` fornecido mas inexistente no backend é caso de erro (C3): o
+        `mlflow` levanta `MlflowException` ("Run ... not found") — o id de um run
+        é atribuído pelo backend, não pelo chamador. O adapter re-levanta como
+        `LookupError` (o MESMO tipo observável que o fake) para o contract test
+        provar a paridade sem conhecer a API do `mlflow`.
         """
         mlflow.set_tracking_uri(self._tracking_uri)
-        active = mlflow.start_run(run_id=run_id, run_name=run_name)
+        try:
+            active = mlflow.start_run(run_id=run_id, run_name=run_name)
+        except MlflowException as exc:
+            raise LookupError(str(exc)) from exc
         return str(active.info.run_id)
 
     def log_params(self, params: Mapping[str, object]) -> None:

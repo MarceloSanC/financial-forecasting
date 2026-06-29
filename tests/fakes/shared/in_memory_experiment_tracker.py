@@ -3,7 +3,9 @@
 `FakeExperimentTracker` aplica a MESMA semântica observável do adapter real
 (`MlflowTracker`): mantém runs num dict keyed por `run_id`, gera `run_id` via
 `uuid4().hex` quando não fornecido, REABRE o mesmo run ao receber um `run_id` já
-registrado (idempotência por `run_id`, I2), exige run ativo para
+registrado (idempotência por `run_id`, I2), recusa um `run_id` fornecido mas
+inexistente (C3, `LookupError` — o id é atribuído pelo backend, não pelo
+chamador, espelhando o `mlflow`), exige run ativo para
 `log_*`/`set_tags`/`log_artifact`/`end_run` (C2, levantando `RuntimeError` — o
 mesmo TIPO observável que o adapter real re-levanta do `mlflow`) e propaga erro
 de I/O em `log_artifact` com path inexistente (C4, espelhando o real).
@@ -46,18 +48,27 @@ class FakeExperimentTracker:
     # -- contrato ------------------------------------------------------------
 
     def start_run(self, *, run_name: str | None = None, run_id: str | None = None) -> str:
-        """Abre/reabre um run e o torna ativo; retorna o `run_id` (ver port)."""
-        resolved_id = run_id if run_id is not None else uuid4().hex
-        run = self._runs.get(resolved_id)
+        """Abre/reabre um run e o torna ativo; retorna o `run_id` (ver port).
+
+        `run_id is None` cria um run novo com id gerado (`uuid4().hex`). Um
+        `run_id` fornecido REABRE o run existente (I2); fornecer um `run_id`
+        ainda não registrado é erro (C3) — espelha o `mlflow`, em que o id é
+        atribuído pelo backend e não pelo chamador (levanta `LookupError`, o
+        mesmo tipo observável que o adapter real).
+        """
+        if run_id is None:
+            resolved_id = uuid4().hex
+            self._runs[resolved_id] = _RunState(run_id=resolved_id, run_name=run_name)
+            self._active_run_id = resolved_id
+            return resolved_id
+        run = self._runs.get(run_id)
         if run is None:
-            # run_id novo (ou gerado): cria. C3 — id inexistente não é erro.
-            run = _RunState(run_id=resolved_id, run_name=run_name)
-            self._runs[resolved_id] = run
-        elif run_name is not None:
+            raise LookupError(f"Run with id={run_id} not found")
+        if run_name is not None:
             # reabertura nomeada: atualiza o nome sem duplicar o run (I2).
             run.run_name = run_name
-        self._active_run_id = resolved_id
-        return resolved_id
+        self._active_run_id = run_id
+        return run_id
 
     def log_params(self, params: Mapping[str, object]) -> None:
         """Registra params no run ativo (C2)."""

@@ -3,8 +3,9 @@
 Um ÚNICO contrato parametrizado sobre `[FakeExperimentTracker, MlflowTracker]`
 prova que ambas as implementações honram a MESMA semântica observável
 (invariantes I2/I3, critérios A3/A4): start/end de run, log de
-params/metrics(step)/tags/artifact, erro de estado sem run ativo (C2) e
-**idempotência por `run_id`** (I2: reabrir o mesmo `run_id` não cria run novo).
+params/metrics(step)/tags/artifact, erro de estado sem run ativo (C2),
+**idempotência por `run_id`** (I2: reabrir o mesmo `run_id` não cria run novo) e
+recusa de `run_id` desconhecido (C3: `LookupError` em ambas as implementações).
 
 O `MlflowTracker` recebe `tracking_uri = sqlite:///<tmp_path>/mlruns.db` para
 isolar cada execução (D4) — sem servidor, sem rede. A idempotência é verificada
@@ -131,6 +132,54 @@ def test_end_run_without_active_run_raises(tracker: ExperimentTracker) -> None:
     """C2: end_run sem run ativo levanta RuntimeError."""
     with pytest.raises(RuntimeError):
         tracker.end_run()
+
+
+@pytest.mark.contract
+def test_log_metrics_without_step_on_active_run(tracker: ExperimentTracker) -> None:
+    """log_metrics SEM `step` (default None) no run ativo não levanta.
+
+    Exercita o caminho do `step` default (None) no happy-path — distinto do caso
+    de erro sem run ativo, que também omite `step`. Garante que a métrica é
+    aceita com o passo implícito em ambas as implementações.
+    """
+    tracker.start_run(run_name="metrics-no-step")
+
+    tracker.log_metrics({"loss": _FIRST_LOSS})
+
+    tracker.end_run()
+
+
+@pytest.mark.contract
+def test_start_run_with_unknown_run_id_raises(tracker: ExperimentTracker) -> None:
+    """C3: `start_run(run_id=...)` com id nunca registrado levanta `LookupError`.
+
+    O id de um run é atribuído pelo backend ao criar (`start_run()` sem
+    `run_id`); reabrir por `run_id` exige um run pré-existente. Fornecer um id
+    arbitrário desconhecido é erro — o adapter real (`mlflow`) re-levanta como
+    `LookupError` e o fake levanta o mesmo tipo, mantendo a paridade (I3). Sem
+    este caso, fake e real divergiam silenciosamente (o fake criava o run; o
+    `mlflow` falhava com "Run ... not found").
+    """
+    with pytest.raises(LookupError):
+        tracker.start_run(run_id="0" * 32)
+
+
+@pytest.mark.contract
+def test_resume_with_run_name_keeps_same_run(tracker: ExperimentTracker) -> None:
+    """I2: reabrir por `run_id` informando também `run_name` devolve o MESMO id.
+
+    Cobre o caminho de reabertura nomeada (atualizar o nome sem duplicar o run),
+    distinto do resume sem nome em `test_idempotent_resume_by_run_id`. Um log
+    subsequente prova que o run reaberto está ativo (não foi criado um novo).
+    """
+    original_id = tracker.start_run(run_name="first-name")
+    tracker.end_run()
+
+    resumed_id = tracker.start_run(run_id=original_id, run_name="second-name")
+
+    assert resumed_id == original_id
+    tracker.log_params({"resumed": True})
+    tracker.end_run()
 
 
 @pytest.mark.contract

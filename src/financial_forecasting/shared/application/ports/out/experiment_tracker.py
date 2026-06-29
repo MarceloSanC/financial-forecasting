@@ -20,10 +20,12 @@ Semântica garantida por qualquer implementação deste contrato:
   `start_run` prévio é caso de erro de estado (o adapter propaga o "no active
   run" do `mlflow`; o fake levanta o mesmo tipo de erro observável —
   `RuntimeError`).
-- **`run_id` inexistente no backend (C3).** `start_run(run_id=...)` com um id
-  ainda não registrado abre um run NOVO identificado por aquele id (não é erro);
-  a idempotência é sobre não duplicar ao reabrir, não sobre exigir
-  pré-existência.
+- **`run_id` inexistente no backend (C3).** O id de um run é atribuído pela
+  implementação ao CRIAR (`start_run()` sem `run_id`). `start_run(run_id=...)`
+  serve só para REABRIR um run já existente; fornecer um `run_id` ainda não
+  registrado é caso de erro (`LookupError`) — o chamador não escolhe ids. A
+  idempotência (I2) é sobre não duplicar ao reabrir, e o erro de id desconhecido
+  protege contra reabrir um run que nunca existiu.
 - **`log_artifact` com path inexistente (C4).** Propaga o erro de I/O da
   implementação subjacente (não silencia).
 
@@ -41,10 +43,11 @@ class ExperimentTracker(Protocol):
     def start_run(self, *, run_name: str | None = None, run_id: str | None = None) -> str:
         """Abre (ou REABRE) um run e o torna o run ativo; retorna o `run_id`.
 
-        Com `run_id` de um run já existente, reabre o MESMO run em vez de criar
-        outro (idempotência por `run_id`, I2). Com `run_id` inexistente, abre um
-        run novo com aquele id (C3). `run_name` nomeia um run novo. Retorna o
-        `run_id` (string) do run ativo.
+        Sem `run_id`, cria um run novo (id atribuído pela implementação) e
+        `run_name` o nomeia. Com `run_id` de um run já existente, reabre o MESMO
+        run em vez de criar outro (idempotência por `run_id`, I2). Com `run_id`
+        inexistente, levanta `LookupError` (C3 — o chamador não escolhe ids).
+        Retorna o `run_id` (string) do run ativo.
         """
         ...
 
