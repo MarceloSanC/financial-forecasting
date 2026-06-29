@@ -776,7 +776,60 @@ Task 02 (FundamentalReport)┤
   e Stage candidata).
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original.
 
-### YYYY-MM-DD — [tag] <Task NN ou escopo> — <Autor>
-<!-- preencher quando aplicável; remover este placeholder se vazio -->
+### 2026-06-29 — [decision] Task 02 — entity FundamentalReport — Claude (corrida autônoma)
+**Contexto:** o old (`fundamental_report.py:48-56`) valida os numéricos com
+`isinstance(value, (int, float))`, que aceita `bool` (subclasse de `int`) como
+numérico válido — um `revenue=True` passaria silenciosamente.
+**Decisão:** endurecer a invariante I2 — `bool` nos cinco numéricos levanta
+`TypeError` (`isinstance(value, bool) or not isinstance(value, int | float)`),
+mantendo `int` aceito como float (espelhando o old). Coberto por
+`test_bool_numeric_field_raises`.
+**Razão:** reversível e barato; fecha um caminho de corrupção silenciosa (bool→1.0)
+sem custo no caminho legítimo. Não muda o contrato observável dos dados reais (os 81
+fundamentos são floats/None). Sem ADR próprio — endurecimento local de invariante.
+
+### 2026-06-29 — [decision] Tasks 08/09 — adapters Alpha Vantage — Claude (corrida autônoma)
+**Contexto:** o old usa `requests` (não está em `[project].dependencies`); o plano
+(technical §1 / §5) já antecipava o porte para `httpx`.
+**Decisão:** os adapters `AlphaVantageNewsFetcher`/`AlphaVantageFundamentalFetcher`
+usam `httpx.Client` (já em deps, `>=0.27`) no lugar de `requests`. O cliente é
+injetável no construtor (`client: httpx.Client | None`) para teste offline; sem
+`client`, um `httpx.Client` é criado na construção (sem rede até o primeiro `get`).
+**Razão:** sem nova dependência, sem tocar `uv.lock`; mantém o adapter trocável e
+testável sem rede (I13). Sem ADR próprio — porte de biblioteca dentro do escopo do
+adapter, decisão já declarada no concept/technical.
+
+### 2026-06-29 — [deviation] Tasks 06/07 — adapters parquet de reuso — Claude (corrida autônoma)
+**Contexto:** `arquivos_a_criar` do roadmap/technical lista só os adapters Alpha
+Vantage; `ParquetRawNewsFetcher`/`ParquetFundamentalFetcher` (origem default) foram
+adicionados conforme concept §1/§7 D2 e ADR 2.3.0002.
+**Razão:** a DoD exige reuso do parquet existente como origem de produção; sem o
+adapter de reuso, o reuso só existiria em fixture e a paridade fake↔real do contract
+test ficaria sem o "real". Adição justificada e já prevista no concept (ADR
+2.3.0002) — `[deviation]` registrado por completude.
+
+### 2026-06-29 — [deviation] Task 10 — testes read-all vs parquet real — Claude (corrida autônoma)
+**Contexto:** o plano da Task 10 (technical §2) previa estabilizar os contract tests
+contra os parquet reais; os contract tests (Tasks 06/07) ficaram herméticos
+(parquet sintético em `tmp_path`).
+**Decisão:** criar dois testes de integração `read-all` dedicados
+(`tests/integration/.../parquet/test_parquet_raw_news_fetcher.py` e
+`test_parquet_fundamental_fetcher.py`), espelhando `test_parquet_raw_candle_fetcher`
+da 2.2, com `skipif` se o parquet real estiver ausente. Provam 6921 news válidas
+(UTC, `article_id` non-null) e 81 fundamentos (17 `NaT` → `None`).
+**Razão:** mantém os contract tests rápidos/herméticos e isola a leitura completa do
+real num teste de integração marcado — mesma postura já adotada na 2.2. Zero linha
+legítima reprovou; os 17 `NaT` confirmados como `None`.
+
+### 2026-06-29 — [finding] campos opcionais de news non-null no schema bronze — Claude
+**Contexto:** confirmado em execução (concept §7 D5): a entity `NewsArticle` declara
+`url`/`article_id`/`language` opcionais, mas o schema bronze `NEWS` exige as 8
+colunas `nullable=False`. O `IngestNews` resolve com fallback non-null no row-mapper
+(`url`/`summary`/`language` vazio → `""`; `article_id` via ID estável). O parquet
+real de AAPL, porém, já vem com as 8 colunas todas non-null (0 nulos verificados).
+**Direção sugerida:** quando a 3.2 (`sentiment-finbert`, `depends_on: 2.3`) ler a
+bronze `news`, tratar `url`/`language` `""` como "ausente" (não confundir com URL
+vazia legítima); o `article_id` é sempre uma chave estável, não necessariamente uma
+URL. Stage candidata: 3.2.
 
 <!-- END: post-execution -->
