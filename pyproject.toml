@@ -21,6 +21,14 @@ dependencies = [
     "pydantic-settings>=2.3",
     # Tracking de experimentos (backend SQLite local) — ADR 1.5.0001
     "mlflow>=2.14",
+    # Storage medalhão (Parquet) — Stage 2.1 / ADR 2.1.0001/2.1.0002
+    # pandas/pyarrow: escrita Parquet particionada Hive (batch-por-partição).
+    # duckdb: leitura com partition pruning (overview §11 / ADR 0.0.0022).
+    # pandera: contrato declarativo de schema/dtype bronze no write.
+    "pandas>=2.2",
+    "pyarrow>=16.0",
+    "duckdb>=1.0",
+    "pandera>=0.20",
 ]
 
 [project.optional-dependencies]
