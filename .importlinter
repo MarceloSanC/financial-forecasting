@@ -51,6 +51,11 @@ layers =
 containers =
     financial_forecasting.shared
     financial_forecasting.features.market_data
+    # Stage 3.1 (concept 3.1 D1 / ADR 2.2.0001 / LAYOUT §3): cada NOVA feature com
+    # domain/application vira container ao ganhar layers. feature_engineering tem só
+    # domain/application/adapters/out nesta Stage (sem adapters/in/ports/in) — daí
+    # `(adapters)` opcional e `exhaustive = False` continuam cobrindo a ausência.
+    financial_forecasting.features.feature_engineering
 exhaustive = False
 
 # -----------------------------------------------------------------------------
@@ -72,6 +77,11 @@ type = forbidden
 source_modules =
     financial_forecasting.shared.domain
     financial_forecasting.features.market_data.domain
+    # Stage 3.1 (concept 3.1 D1/I1 / LAYOUT §3): o domain de feature_engineering
+    # (IndicatorSpec + registry + hash) é stdlib-only; `import pandas`/`pandas_ta_classic`
+    # aqui REPROVA — provado por quebra intencional revertida (Task 08 / A9). Cada NOVA
+    # feature com domain entra aqui (mesma postura do shared.domain / market_data.domain).
+    financial_forecasting.features.feature_engineering.domain
 forbidden_modules =
     pandas
     pyarrow
@@ -162,11 +172,20 @@ source_modules =
     financial_forecasting.shared.domain
     financial_forecasting.features.market_data.application
     financial_forecasting.features.market_data.domain
+    # Stage 3.1 (concept 3.1 D1/I5/I12): estende a
+    # `features.feature_engineering.{application,domain}`. O port-out IndicatorCalculator
+    # (Protocol) troca só `collections.abc`/primitivos + a entity Candle; pandas e
+    # pandas_ta_classic vivem APENAS no adapter `adapters/out/pandas_ta/`. `pandas_ta_classic`
+    # entra em forbidden_modules abaixo (não coberto por domain-purity) para fechar o I12.
+    financial_forecasting.features.feature_engineering.application
+    financial_forecasting.features.feature_engineering.domain
 forbidden_modules =
     pandas
     pyarrow
     duckdb
     pandera
+    # Stage 3.1 (I12): lib de indicadores confinada ao adapter; vazar p/ application/domain reprova.
+    pandas_ta_classic
 allow_indirect_imports = False
 # Stage 2.2 (concept 2.2 D1/I8): estende a `features.market_data.{application,domain}`.
 # O use case `IngestCandles` produz `Row` com float/int Python e delega a coerção de

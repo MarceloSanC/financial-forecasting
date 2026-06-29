@@ -39,6 +39,15 @@ dependencies = [
     # chave de API; o teste de integração usa monkeypatch (nunca rede, I13). A
     # origem default reusa o raw existente (ParquetRawCandleFetcher).
     "yfinance>=0.2",
+    # Indicadores técnicos (RSI-Wilder/MACD/EMA) — Stage 3.1 / ADR 0.0.0024
+    # Sucessor MANTIDO do pandas-ta==0.4.71b0 (beta, fonte apagada — risco
+    # supply-chain, overview §10/§11). Vive SÓ no adapter
+    # features/feature_engineering/adapters/out/pandas_ta/; o gate import-linter
+    # `domain-purity`/`store-no-storage-leak` reprova se pandas/pandas_ta_classic
+    # vazar para application/domain (Task 08). A paridade de fórmula com o old é
+    # validada pela fixture-oráculo (a lib é só a origem, não a fonte da verdade).
+    # Pinado por minor; uv.lock trava o patch (mesma postura de exchange-calendars/yfinance).
+    "pandas-ta-classic>=0.6,<0.7",
 ]
 
 [project.optional-dependencies]
