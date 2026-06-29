@@ -197,7 +197,7 @@ behavior.
   before `json.dumps(..., allow_nan=False)`).
 - The `Hasher` port docstring
   (`shared/application/ports/out/hasher.py`) states the canonical semantics so the
-  `FakeHasher` (`tests/fakes/shared/hasher.py`) implements the *same* rounding and
+  `FakeHasher` (`tests/fakes/shared/in_memory_hasher.py`) implements the *same* rounding and
   NaN/inf rejection; the contract test
   (`tests/contract/shared/test_hasher_contract.py`) parametrizes over both.
 - The value objects (`shared/domain/value_objects/*.py`) stay stdlib-only: they

@@ -646,4 +646,12 @@ implementado (`DatasetFingerprint`). Registro como finding para as Stages que
 portarem o `run_baselines` (Step 5.2): NÃO reintroduzir o segundo esquema; usar
 `DatasetFingerprint.compute` como fonte única do fingerprint de dataset.
 
+### 2026-06-29 — [deviation] task-07-extra (mutação recursiva de floats) — orquestrador (F2)
+**Contexto:** Após as 8 Tasks, a auditoria de testes adicionou o commit `4bad6ae [1.4/task-07-extra]`
+com 3 contract tests cobrindo a canonicalização **recursiva** de floats aninhados (mapping/list),
+fechando um mutante sobrevivente (`_canonicalize` que não recursa em estruturas aninhadas).
+**Razão:** Reforço de cobertura de mutação in-scope, surgido na auditoria de testes; restrito a
+`tests/contract/shared/test_hasher_contract.py`, `make check` verde (100%). Registrado aqui por
+rastreabilidade (finding F2 da stage-audit).
+
 <!-- END: post-execution -->
