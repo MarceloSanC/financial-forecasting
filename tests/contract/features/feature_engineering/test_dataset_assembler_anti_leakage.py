@@ -18,6 +18,7 @@ from __future__ import annotations
 import math
 from datetime import UTC, date, datetime, timedelta
 
+import pyarrow.parquet as pq
 import pytest
 
 from financial_forecasting.features.feature_engineering.adapters.out.pandas.dataset_assembler import (  # noqa: E501
@@ -218,3 +219,60 @@ def test_persist_without_assemble_raises() -> None:
     assembler = DatasetAssembler()
     with pytest.raises(ValueError, match="no assembled dataset retained"):
         assembler.persist("AAPL")
+
+
+def test_persist_writes_parquet_with_62_columns(tmp_path: object) -> None:
+    """`persist` grava o Parquet processed com as 62 colunas do dataset montado."""
+    assembler = DatasetAssembler(dataset_root=tmp_path)  # type: ignore[arg-type]
+    assembler.assemble(_build_inputs())
+    assembler.persist("AAPL")
+
+    path = tmp_path / "AAPL" / "dataset_tft_AAPL.parquet"  # type: ignore[operator]
+    assert path.exists()
+    schema = pq.read_schema(path)
+    expected_cols = 62
+    assert len(schema.names) == expected_cols
+    assert schema.names[0] == "timestamp"
+    assert schema.names[-1] == "time_idx"
+
+
+def test_sentiment_merge_path_populates_columns() -> None:
+    """O merge de sentimento por dia preenche sentiment_score/news_volume/has_news."""
+    inputs = _build_inputs()
+    days = list(inputs.grid_days)
+    daily_sentiment = [
+        {"day": day, "sentiment_score": 0.3, "news_volume": 2, "sentiment_std": 0.1}
+        for day in days[:50]  # sentimento só nos primeiros 50 dias
+    ]
+    populated = DatasetAssemblyInputs(
+        asset=inputs.asset,
+        candles=inputs.candles,
+        indicators=inputs.indicators,
+        daily_sentiment=daily_sentiment,
+        asof_rows=inputs.asof_rows,
+        grid_days=inputs.grid_days,
+    )
+    assembler = DatasetAssembler()
+    assembler.assemble(populated)
+    frame = assembler._assembled["AAPL"]
+
+    # Onde houve sentimento, has_news=1 e news_volume>0; onde não, fillna(0).
+    assert (frame["news_volume"] >= 0).all()
+    assert set(frame["has_news"].unique()) <= {0, 1}
+    assert (frame["sentiment_score"].abs() > 0).any()
+
+
+def test_indicators_misaligned_raises() -> None:
+    """Indicadores com contagem != candles levanta erro de alinhamento (1:1)."""
+    inputs = _build_inputs()
+    misaligned = DatasetAssemblyInputs(
+        asset=inputs.asset,
+        candles=inputs.candles,
+        indicators=list(inputs.indicators)[:-3],  # 3 a menos
+        daily_sentiment=inputs.daily_sentiment,
+        asof_rows=inputs.asof_rows,
+        grid_days=inputs.grid_days,
+    )
+    assembler = DatasetAssembler()
+    with pytest.raises(ValueError, match="must align 1:1 with candles"):
+        assembler.assemble(misaligned)

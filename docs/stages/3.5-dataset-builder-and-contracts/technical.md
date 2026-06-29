@@ -523,4 +523,102 @@ Task 04 (schema pandera)   ─┘
 - `[finding]` — gap/observação a tratar em **próxima Stage**; inclui Stage candidata.
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original.
 
+### 2026-06-29 — [decision] DatasetAssembler — Autonomous overnight agent
+**Contexto:** o D3 manda re-derivar cada feature via o oráculo puro `DerivedFeatures`
+e **não** re-implementar a fórmula inline em pandas. Restava decidir como o adapter
+COMPUTA as derivadas na montagem sem cair na dupla-fórmula do old.
+**Decisão:** o `DatasetAssembler` usa o **próprio `DerivedFeatures` (3.4) como engine
+de cálculo** das ~33 derivadas (extrai as séries close/volume/etc. do frame, chama as
+funções puras, escreve as colunas). O validador anti-leakage re-deriva pelo MESMO
+oráculo e confere posição-a-posição (`atol 1e-9`) **antes** do drop da 1ª linha, e
+verifica o invariante causal (anexar barra futura não muda o prefixo). A segunda
+implementação independente exigida por ADR 0.0.0021 continua sendo o par
+pandas-ta (3.1) ↔ oráculo puro (3.4) para os indicadores; as derivadas têm uma única
+implementação testada (a do 3.4) reusada, eliminando a dupla-fórmula do old.
+**Razão:** cumpre D3 ("não inline em pandas"), evita divergência por dupla-fórmula e
+mantém o oráculo puro como fonte única — simples e correto.
+
+### 2026-06-29 — [decision] Ordem de colunas: registry vs oráculo — Autonomous overnight agent
+**Contexto:** o oráculo (`dataset_tft_AAPL.parquet`) tem as 62 colunas numa ordem
+**legada arbitrária** (ex.: `candle_body` antes de `candle_range`, indicadores fora
+da ordem do registry). I7 manda o `FeatureRegistry` ser a fonte única de set **e
+ordem**; A6 pede bater "set + ordem + contagem" com o oráculo — tensão real.
+**Decisão:** o dataset montado usa a **ordem do registry** para o bloco de feature
+(I7 é o invariante arquitetural não-negociável); o teste de integração compara
+**set + contagem (62)** contra o oráculo (regressão por colunas/contagem, como o
+concept §"Fora do escopo" já declara — "não bit-identidade") e assere que a ordem do
+bloco de feature segue o registry. A ordem legada do oráculo não é contrato.
+**Razão:** I7 governa a ordem; o oráculo é regressão de set/contagem, não de ordem
+byte-idêntica. Layout final: `timestamp, asset_id, <55 features registry>,
+fundamentals_effective_date, day_of_week, month, target_return, time_idx`.
+
+### 2026-06-29 — [decision] Persistência no DatasetAssembler (MedallionStore é bronze-only) — Autonomous overnight agent
+**Contexto:** o technical/concept dizem "persiste via `MedallionStore`", mas o
+`MedallionStore`/`ParquetMedallionStore` desta base só conhece o layer `bronze` e as
+tabelas `candle`/`news`/`fundamental` (`BRONZE_REGISTRY`); o dataset TFT é um artefato
+`processed` de 62 colunas que o store rejeitaria ("Unknown medallion (layer, table)").
+**Decisão:** a persistência do dataset montado é responsabilidade do
+`DatasetAssemblerPort.persist` (o adapter pandas, que já é a única casa de
+pandas/pyarrow), gravando `data_root/processed/dataset_tft/<asset>/dataset_tft_<asset>.parquet`
+— mesma postura dos outros writers `processed` da base (ex.
+`parquet_fundamental_fetcher.py`). O `MedallionStore` é usado pelo use case só para
+**LER** a bronze (candles/news/fundamentals). O use case continua dependendo só de
+ports e DTOs.
+**Razão:** evita inflar a Stage 2.1 com um schema `processed` (out-of-scope) e
+modelar o dataset como tabela bronze (errado); simples-e-trocável (trocar o destino é
+um campo do construtor). Sem alternativa real melhor dentro do escopo.
+
+### 2026-06-29 — [decision] Gate de qualidade sobre primitivos expostos pelo result — Autonomous overnight agent
+**Contexto:** o `DatasetQualityGate` (domain) precisa dos valores das features +
+timestamps para medir NaN-ratio pós-warmup, mas o frame vive no adapter (pandas não
+pode cruzar a fronteira, I6).
+**Decisão:** o `DatasetAssemblyResult` carrega `timestamps` + `feature_rows`
+(`Sequence[Mapping]` de primitivos, NaN→None), e o use case roda o gate de domínio
+sobre eles. Nenhum `DataFrame` cruza a fronteira; o gate permanece como serviço de
+domínio stdlib-only exercido na `application`.
+**Razão:** mantém o gate no domínio (não migra regra para o adapter), respeita I6
+(só primitivos na fronteira) e deixa o use case efetivamente aplicando o gate (D4).
+
+### 2026-06-29 — [decision] Proxy lazy do FinBERT no composition root — Autonomous overnight agent
+**Contexto:** o `FinbertSentimentModel.__init__` carrega torch/transformers e baixa os
+pesos ansiosamente; wirá-lo direto em `wire_dependencies` forçaria download a cada
+startup e quebraria o teste de wiring no CI (sem o extra `sentiment`).
+**Decisão:** o composition root wira o `SentimentModel` por um proxy lazy
+`_LazyFinbertSentimentModel` que adia a construção do FinBERT real ao 1º
+`score_articles`; expõe `model_name`/`revision` estáticos sem importar torch. PLC0415
+ignorado para `composition_root.py` no `pyproject` (mesmo precedente do adapter
+finbert, ADR 3.2.0002).
+**Razão:** mantém o wiring leve, eager-safe e testável sem GPU/torch, preservando a
+rastreabilidade do modelo. Reversível (basta wirar o concreto direto quando torch for
+parte do runtime padrão).
+
+### 2026-06-29 — [decision] Coexistência IndicatorSpec ↔ FeatureSpec (D6) — Autonomous overnight agent
+**Contexto:** ADR 3.4.0002 deferiu a unificação física `IndicatorSpec`/`FeatureSpec`
+para a integração 3.5.
+**Decisão:** mantida a coexistência; a 3.5 deriva set/ordem/warmup de `FeatureSpec`
+(`FeatureRegistry`) e não toca em `IndicatorSpec`. A unificação fica como débito
+consciente.
+**Razão:** o ganho é cosmético e o custo (refactor de blast radius amplo) não
+justifica inflar a Stage de integração; simples-e-trocável depois (concept D6).
+
+### 2026-06-29 — [deviation] Ordem de execução: assembler (Task 03) antes do use case (Task 05) — Autonomous overnight agent
+**Contexto:** o default inside-out poria a `application` antes do `adapters/out`.
+**Razão:** o `DatasetAssembler` é a engine física que hospeda os validadores e produz
+o frame; ele é dado ao use case via `DatasetAssemblerPort`. Os ports consumidos pelo
+use case já existiam de 3.1/3.2/3.3 com fakes, então o use case (Task 05) já nasceu
+testável com fakes. Desvio já declarado no preâmbulo do §1 e seguido como planejado;
+nenhuma Task misturou criação de port com seu adapter (exceto a exceção declarada da
+Task 03, port+fake+adapter coesos pelo contrato anti-leakage).
+
+### 2026-06-29 — [finding] news_volume: registry float64 vs dataset int64 — Autonomous overnight agent
+**Contexto:** o `FeatureRegistry` declara `news_volume` como `float64`, mas o oráculo
+e o assembler armazenam `int64` (contagem inteira de artigos, paridade old
+`.astype("int64")`). É a MESMA classe de inconsistência lógico-vs-armazenamento que a
+ADR 3.5.0002 documentou para os regimes/flags, mas para `news_volume` no sentido
+inverso (registry float, storage int).
+**Stage candidata:** a Stage futura de reconciliação `dtype lógico vs armazenamento`
+(a mesma indicada pela ADR 3.5.0002). O `dataset_schema` registra os 3 dtypes int64
+(`news_volume`/`has_news`/`volume_spike_flag`) como fonte de armazenamento; sem churn
+do `feature_set_hash` (3.4 está `done`).
+
 <!-- END: post-execution -->
