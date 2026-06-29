@@ -31,6 +31,14 @@ repos:
           - alembic>=1.13
           - pydantic>=2.7
           - pydantic-settings>=2.3
+          # Storage medalhão (Stage 2.1): mantém o hook mypy alinhado ao
+          # `make check` (uv run mypy no venv do projeto). Sem pyarrow no env
+          # isolado do hook, `pq.write_table` vira `Any` e o hook acusaria o
+          # `# type: ignore[no-untyped-call]` (necessário no venv) como unused.
+          - pandas>=2.2
+          - pyarrow>=16.0
+          - duckdb>=1.0
+          - pandera>=0.20
 
   - repo: local
     hooks:

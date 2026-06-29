@@ -25,6 +25,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from financial_forecasting.shared.adapters.out.parquet.parquet_medallion_store import (
+    ParquetMedallionStore,
+)
 from financial_forecasting.shared.application.ports.out.medallion_store import (
     MedallionStore,
     Row,
@@ -56,9 +59,13 @@ def _build_fake(_tmp_path: Path) -> MedallionStore:
     return FakeMedallionStore()
 
 
-# `_build_real` é adicionado na Task 07 (ParquetMedallionStore). Até lá, só fake.
-_FACTORIES: list[Callable[[Path], MedallionStore]] = [_build_fake]
-_IDS = ["fake"]
+def _build_real(tmp_path: Path) -> MedallionStore:
+    return ParquetMedallionStore(tmp_path)
+
+
+# Mesmo contrato sobre fake e real (paridade fake↔real, I6/ADR 0.0.0021).
+_FACTORIES: list[Callable[[Path], MedallionStore]] = [_build_fake, _build_real]
+_IDS = ["fake", "real"]
 
 
 @pytest.fixture(params=_FACTORIES, ids=_IDS)
