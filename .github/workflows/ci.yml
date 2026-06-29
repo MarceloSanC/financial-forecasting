@@ -44,5 +44,13 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Run gate completo (lint + typecheck + layout-check + docs-check + tests + coverage)
+      # Contrato de arquitetura explícito (Stage 1.3): import-linter (.importlinter)
+      # espelha docs/LAYOUT.md §3/§6 e quebra o build se o domínio importar
+      # pandas/pyarrow/torch ou se a direção de dependência for violada. Roda
+      # como step dedicado (visibilidade no log do CI) E dentro de `make check`
+      # (gate bloqueante) — o que falha aqui também falha o gate completo.
+      - name: Verificar contratos de arquitetura (import-linter)
+        run: uv run lint-imports
+
+      - name: Run gate completo (lint + typecheck + layout-check + import-linter + docs-check + tests + coverage)
         run: make check

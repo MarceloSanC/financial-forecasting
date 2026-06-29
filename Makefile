@@ -5,7 +5,7 @@
 # Requer: uv instalado (https://docs.astral.sh/uv/)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup install run migrate check lint fmt typecheck layout-check docs-check test test-fast test-cov clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
+.PHONY: help setup install run migrate check lint fmt typecheck layout-check lint-imports docs-check test test-fast test-cov clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
 
 # Tag das imagens Docker. Mesmo nome usado em docker-compose.yml `image:` para
 # reusar o cache de layer (`make docker-build` e `make docker-up` produzem a
@@ -30,11 +30,12 @@ help:
 	@printf "%b\n" "  $(GREEN)make install$(RESET)    Reinstala dependências (após mudar pyproject.toml)"
 	@printf "%b\n" "  $(GREEN)make run$(RESET)        Sobe o servidor de desenvolvimento com hot-reload"
 	@printf "%b\n" "  $(GREEN)make migrate$(RESET)    Aplica migrations pendentes (alembic upgrade head)"
-	@printf "%b\n" "  $(GREEN)make check$(RESET)      Lint + typecheck + layout + docs + testes c/ cobertura ≥90% (gate completo — usado no CI)"
+	@printf "%b\n" "  $(GREEN)make check$(RESET)      Lint + typecheck + layout + import-linter + docs + testes c/ cobertura ≥90% (gate completo — usado no CI)"
 	@printf "%b\n" "  $(GREEN)make lint$(RESET)       Roda ruff check (apenas reporta)"
 	@printf "%b\n" "  $(GREEN)make fmt$(RESET)        Formata o código com ruff format + ruff check --fix"
 	@printf "%b\n" "  $(GREEN)make typecheck$(RESET)  Roda mypy strict"
 	@printf "%b\n" "  $(GREEN)make layout-check$(RESET) Valida regras de dependência via scripts/check_layout.py"
+	@printf "%b\n" "  $(GREEN)make lint-imports$(RESET) Valida contratos de arquitetura (import-linter / .importlinter)"
 	@printf "%b\n" "  $(GREEN)make docs-check$(RESET)  Valida §7 post-exec dos technical.md (CONVENTIONS §3.4)"
 	@printf "%b\n" "  $(GREEN)make test$(RESET)       Roda todos os testes medindo cobertura (gate ≥ 90%)"
 	@printf "%b\n" "  $(GREEN)make test-fast$(RESET)  Roda testes sem cobertura, pulando os slow (loop local rápido)"
@@ -88,10 +89,12 @@ migrate:
 
 # ---------------------------------------------------------------------------
 # check — gate completo (bloqueante no CI): lint + typecheck + layout-check +
-# docs-check + test (com cobertura ≥ 90% via --cov no alvo `test`). É a fonte
-# única da verdade do veredito: o que o dev roda local == o que o CI roda (I7).
+# lint-imports + docs-check + test (com cobertura ≥ 90% via --cov no alvo
+# `test`). É a fonte única da verdade do veredito: o que o dev roda local == o
+# que o CI roda (I7). `lint-imports` roda antes de `test` para falhar cedo e
+# barato (Stage 1.3): viola a fronteira hexagonal => build vermelho.
 # ---------------------------------------------------------------------------
-check: lint typecheck layout-check docs-check test
+check: lint typecheck layout-check lint-imports docs-check test
 
 # ---------------------------------------------------------------------------
 # lint — verifica estilo e regras sem modificar arquivos
@@ -117,6 +120,15 @@ typecheck:
 # ---------------------------------------------------------------------------
 layout-check:
 	uv run python scripts/check_layout.py
+
+# ---------------------------------------------------------------------------
+# lint-imports — fitness function de arquitetura (docs/LAYOUT.md §3/§6 via
+# .importlinter). COMPLEMENTA `layout-check` (não substitui): cobre direção de
+# camadas e a fronteira indireta do composition_root que o check_layout.py não
+# enxerga. Exit != 0 em violação => `make check`/CI vermelhos (Stage 1.3).
+# ---------------------------------------------------------------------------
+lint-imports:
+	uv run lint-imports
 
 # ---------------------------------------------------------------------------
 # docs-check — valida (1) que technical.md `done` só mudou dentro da §7
