@@ -655,4 +655,27 @@ código novo do adapter `parquet_medallion_store.py` = 99% (1 linha defensiva
   caminho da **Task 08** (plano executável): `tests/integration/shared/
   test_parquet_medallion_store.py`. Sem impacto funcional.
 
+#### [deviation] Auditoria de testes — cobertura de C3 no ADAPTER (não só no schema isolado)
+
+- **Gap fechado (HIGH value):** C3/I5 ("write com dado fora do schema bronze →
+  rejeitado pelo `pandera` no ADAPTER; não grava Parquet inválido") não tinha
+  teste no nível do adapter. O contract test roda sobre `[fake, real]`, mas o fake
+  não tem `pandera` (não pode enforçar dtype), então C3 ficava fora do contrato
+  compartilhado; e `test_bronze_schemas.py` validava o `DataFrameSchema` em
+  ISOLAMENTO, nunca pelo caminho `ParquetMedallionStore.write()`. **Mutação
+  provada:** comentar `meta.schema.validate(incoming)` (linha 131) NÃO quebrava
+  nenhum teste antes — a linha tinha cobertura de execução (99%) mas zero
+  cobertura comportamental.
+- **Adicionado** em `tests/integration/shared/test_parquet_medallion_store.py`:
+  - `test_write_rejects_row_outside_schema_and_writes_no_parquet` — linha com
+    coluna extra (`strict=True`) é rejeitada por `pandera` no adapter E nenhum
+    Parquet é gravado (atomicidade de C3). Confirmado que mata a mutação acima.
+  - `test_write_rejects_missing_required_column` — linha sem coluna obrigatória
+    (`close`) é rejeitada (caminho de coluna FALTANTE, distinto do extra).
+- **Por que integration (não unit/contract):** C3 é comportamento do adapter
+  concreto (pandera + não-escrita-em-disco); não cabe no contract test
+  compartilhado (fake é stdlib-only por design) nem no unit do schema (que testa
+  o schema, não o adapter). A asserção `not list((tmp_path/"bronze").rglob(...))`
+  prova a invariante "não grava Parquet inválido".
+
 <!-- END: post-execution -->

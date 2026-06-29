@@ -18,6 +18,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pandera.pandas as pa
 import pytest
 
 from financial_forecasting.shared.adapters.out.parquet.parquet_medallion_store import (
@@ -161,3 +162,42 @@ def _fundamental_row_with_pk(reported: datetime | None) -> dict[str, object]:
     row = _fundamental_row(reported)
     row["report_type"] = "10-Q"
     return row
+
+
+@pytest.mark.integration
+def test_write_rejects_row_outside_schema_and_writes_no_parquet(tmp_path: Path) -> None:
+    """C3/I5: o ADAPTER (não só o schema isolado) valida `write` com `pandera`.
+
+    Uma linha com coluna fora do schema bronze (`strict=True`) é rejeitada por
+    `meta.schema.validate(...)` ANTES de tocar o Parquet — e nenhum arquivo é
+    gravado (concept C3: "não grava Parquet inválido"). Sem este teste, remover a
+    chamada `meta.schema.validate(incoming)` do adapter não quebraria nenhum teste
+    (o contract test roda sobre o fake, que não tem `pandera`; os unit tests
+    validam o schema em ISOLAMENTO, não pelo caminho do adapter).
+    """
+    store = ParquetMedallionStore(tmp_path)
+    row = _candle_row("AAPL", datetime(2024, 1, 2, tzinfo=UTC), 100.0)
+    row["unexpected_column"] = "x"  # fora do schema strict=True
+
+    with pytest.raises((pa.errors.SchemaError, pa.errors.SchemaErrors)):
+        store.write(layer="bronze", table="candle", rows=[row])
+
+    assert not list((tmp_path / "bronze").rglob("*.parquet"))
+
+
+@pytest.mark.integration
+def test_write_rejects_missing_required_column(tmp_path: Path) -> None:
+    """C3: `write` de linha sem uma coluna obrigatória do schema é rejeitado.
+
+    `close` ausente: o adapter falha ao coagir/validar (não grava Parquet
+    parcial). Cobre o caminho de validação para colunas FALTANTES, distinto da
+    coluna EXTRA acima.
+    """
+    store = ParquetMedallionStore(tmp_path)
+    row = _candle_row("AAPL", datetime(2024, 1, 2, tzinfo=UTC), 100.0)
+    del row["close"]
+
+    with pytest.raises(Exception, match=r"close|SchemaError"):
+        store.write(layer="bronze", table="candle", rows=[row])
+
+    assert not list((tmp_path / "bronze").rglob("*.parquet"))
