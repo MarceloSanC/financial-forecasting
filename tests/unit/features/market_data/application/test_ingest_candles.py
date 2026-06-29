@@ -127,6 +127,23 @@ def test_naive_start_raises() -> None:
 
 
 @pytest.mark.unit
+def test_naive_end_raises() -> None:
+    """C5: `end` naive (com `start` aware) → ValueError, antes de qualquer fetch/write.
+
+    Mutação coberta: remover `require_tz_aware(request.end, "end")` deixaria
+    passar um `end` naive — só o `start` naive era testado (gap fechado na auditoria).
+    """
+    use_case = IngestCandles(FakeCandleFetcher([]), FakeMedallionStore())
+    request = IngestCandlesRequest(
+        asset="AAPL",
+        start=_START,
+        end=datetime(2024, 12, 31),  # naive
+    )
+    with pytest.raises(ValueError, match="timezone-aware"):
+        use_case.execute(request)
+
+
+@pytest.mark.unit
 def test_start_after_end_raises() -> None:
     """C5: `start > end` → ValueError."""
     use_case = IngestCandles(FakeCandleFetcher([]), FakeMedallionStore())

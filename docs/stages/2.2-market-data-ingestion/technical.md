@@ -664,4 +664,23 @@ Nenhuma tolerância arbitrária foi necessária — as invariantes canônicas pa
 estão. Risco fechado; a Task 08 foi confirmação (não exigiu ajuste de invariante).
 **Razão:** Concept 2.2 §10 / A6; valida o caminho default real sem rede.
 
+### 2026-06-29 — [deviation] tests — auditoria de testes: 3 gaps de mutação fechados — code assistant
+**Contexto:** Gate de auditoria de testes (mutation-mental do prompt, item 3). A
+cobertura de linha já era 100%, mas a análise por mutação/branch revelou 3 gaps
+reais que nenhum teste pegava:
+1. **`end` naive no `IngestCandles`** — só `start` naive era testado; remover
+   `require_tz_aware(request.end, "end")` passaria silenciosamente. Adicionado
+   `test_naive_end_raises` em `tests/unit/.../application/test_ingest_candles.py`.
+2. **Coluna single-level no `YfinanceCandleFetcher`** — só o caminho `MultiIndex`
+   (nlevels>1) era exercitado; o caso comum single-ticker (colunas planas) nunca
+   provava sucesso. Adicionado `test_maps_single_level_columns_with_aware_index`
+   em `tests/integration/.../yfinance/test_yfinance_candle_fetcher.py`.
+3. **Índice já tz-aware em `_index_to_datetime`** (branch `135->137`, único
+   `BrPart` do BC) — só o índice naive (relocaliza) era testado. O mesmo teste do
+   item 2 usa índice já tz-aware UTC, fechando o branch-false.
+**Decisão:** Adicionados os 2 testes acima. Branch coverage do BC passou de 1
+`BrPart` (`135->137`) para 0; mutações dos 3 pontos agora falham um teste.
+**Razão:** Item 3 do gate de auditoria (trocar/remover validação deve falhar um
+teste); evita falso-verde da cobertura de linha. `make check` verde.
+
 <!-- END: post-execution -->

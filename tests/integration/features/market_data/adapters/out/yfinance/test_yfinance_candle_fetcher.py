@@ -45,6 +45,26 @@ def _multiindex_naive_frame() -> pd.DataFrame:
     return pd.DataFrame(data, index=index, columns=columns)
 
 
+def _single_level_aware_frame() -> pd.DataFrame:
+    """DataFrame yfinance single-ticker: colunas planas (1 nível) + índice JÁ tz-aware UTC.
+
+    Exercita o caminho COMPLEMENTAR ao MultiIndex/naive: `nlevels == 1` (sem
+    achatar colunas) e índice já tz-aware (`_index_to_datetime` NÃO relocaliza —
+    branch `135->137` do adapter).
+    """
+    index = pd.to_datetime(["2024-01-02", "2024-01-03"], utc=True)  # já tz-aware
+    return pd.DataFrame(
+        {
+            "Open": [100.0, 101.0],
+            "High": [105.0, 106.0],
+            "Low": [99.0, 100.0],
+            "Close": [104.0, 105.0],
+            "Volume": [1_000_000, 1_100_000],
+        },
+        index=index,
+    )
+
+
 @pytest.mark.integration
 def test_maps_and_normalizes_multiindex_naive(monkeypatch: pytest.MonkeyPatch) -> None:
     """Normaliza MultiIndex + índice naive → Candles UTC 00:00 com asset injetado."""
@@ -59,6 +79,28 @@ def test_maps_and_normalizes_multiindex_naive(monkeypatch: pytest.MonkeyPatch) -
         assert candle.timestamp.tzinfo == UTC
         assert candle.timestamp.hour == 0
     assert candles[0].timestamp == datetime(2024, 1, 2, tzinfo=UTC)
+    assert candles[0].close == pytest.approx(104.0)
+
+
+@pytest.mark.integration
+def test_maps_single_level_columns_with_aware_index(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Colunas planas (nlevels==1) + índice já tz-aware → Candles UTC 00:00 corretos.
+
+    Complemento do teste MultiIndex/naive: cobre o branch-false de
+    `nlevels > 1` (não achata) e o branch-false de `_index_to_datetime`
+    (índice já aware, sem relocalizar — `135->137`). Gaps fechados na auditoria.
+    """
+    monkeypatch.setattr(module.yf, "download", lambda *a, **k: _single_level_aware_frame())
+
+    candles = YfinanceCandleFetcher().fetch_candles("AAPL", _START, _END)
+
+    assert len(candles) == len(["d2", "d3"])
+    for candle in candles:
+        assert candle.asset == "AAPL"
+        assert candle.timestamp.tzinfo == UTC
+        assert candle.timestamp.hour == 0
+    assert candles[0].timestamp == datetime(2024, 1, 2, tzinfo=UTC)
+    assert candles[1].timestamp == datetime(2024, 1, 3, tzinfo=UTC)
     assert candles[0].close == pytest.approx(104.0)
 
 
