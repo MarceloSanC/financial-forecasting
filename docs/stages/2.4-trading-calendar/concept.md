@@ -40,6 +40,8 @@ depends_on: [2.1-medallion-storage-contracts]
   (`get_calendar("XNYS")`) — **único lugar** onde a lib vive; converte sessões
   para `date` puro e materializa o VO.
 - **Dependência nova** `exchange-calendars` pinada no `pyproject.toml` (+ `uv.lock`).
+- **Novo contrato import-linter** `calendar-no-exchange-calendars-leak` em
+  `.importlinter` (enforce de I3, espelha `tracker-no-mlflow-leak`/`store-no-storage-leak`).
 - **Testes:** unit do VO e do domain-service contra fixtures determinísticas
   (feriados NYSE 2023 conhecidos); contract test paritário fake↔real.
 - **ADR** resolvendo a direção inward-only (`2.4.0001`).
@@ -180,7 +182,11 @@ semântica de sessões.
 - **I3 — Lib só no adapter.** `exchange-calendars` vive SÓ em
   `shared/adapters/out/calendar/`; não cruza para `application`/`domain` (mesma
   postura de `pyarrow`/`duckdb`/`mlflow` das Stages 1.5/2.1; gate de
-  no-library-leak verde).
+  no-library-leak verde). **Enforce:** novo contrato import-linter
+  `calendar-no-exchange-calendars-leak` (`type = forbidden`,
+  `source_modules = shared.application + shared.domain`,
+  `forbidden_modules = exchange_calendars`), espelhando `tracker-no-mlflow-leak`
+  (1.5) e `store-no-storage-leak` (2.1). `.importlinter` é modificado nesta Stage.
 - **I4 — Determinismo.** Sessões/feriados XNYS são reprodutíveis e testados contra
   fixtures de feriados NYSE conhecidos — `2023-01-02` (Ano Novo observado),
   `2023-07-04`, `2023-11-23` (Thanksgiving), `2023-12-25` — **ausentes** do
@@ -324,8 +330,9 @@ semântica de sessões.
   `exchange-calendars`/`pandas`/`numpy` para a `application` (I3).
 - [ ] **A8** — Adapter `ExchangeCalendarsProvider` implementa o port via
   `get_calendar("XNYS")`, materializa `TradingSessions` com `date` puro;
-  `exchange-calendars` pinada no `pyproject` e `uv.lock` atualizado; lib NÃO vaza
-  (lint-imports verde) (I3).
+  `exchange-calendars` pinada no `pyproject` e `uv.lock` atualizado; contrato
+  `calendar-no-exchange-calendars-leak` adicionado ao `.importlinter` e a lib NÃO
+  vaza para `application`/`domain` (lint-imports verde) (I3).
 - [ ] **A9** — Fake in-memory satisfaz o Protocol; o MESMO contract test roda
   verde contra fake E adapter real; feriados NYSE 2023 batem nos dois (I8).
 - [ ] **A10** — `make check` (ruff + mypy --strict + lint-imports) e `make test-cov`
