@@ -467,4 +467,24 @@ não há custo de I/O externo que justifique separar. Avisos de `DeprecationWarn
 (numpy timedelta) vêm de dentro da lib, não do código da Stage, e não falham o CI
 (o projeto não configura `filterwarnings = error`).
 
+### Auditoria de testes — `[deviation]` fronteira `==` close_hour não estava coberta
+
+A regra de `trading_day_from_timestamp` é `ts.time() > close_hour` (estritamente
+maior — A3/I5). Os testes existentes cobriam só *antes* (15:00) e *depois* (22:00)
+do close, deixando a fronteira `==` (exatamente no close) sem pin: mutar `>`→`>=`
+passava verde. Adicionado `test_trading_day_exactly_at_close_is_same_session`
+(21:00:00 UTC numa sessão → mesmo dia). Mutação `>`→`>=` confirmada: o teste falha
+sob o mutante e passa no código limpo.
+
+### Auditoria de testes — `[deviation]` normalização `astimezone(UTC)` não estava coberta
+
+I5 exige que a conversão seja **sempre** via `astimezone(UTC)`. Todos os testes de
+`trading_day_from_timestamp` usavam `tzinfo=UTC`, então `astimezone(UTC)` era um
+no-op observável: remover a linha não quebrava nenhum teste (mutante sobrevivente).
+Adicionado `test_trading_day_non_utc_timestamp_is_normalized_to_utc` — timestamp
+UTC-5 às 20:30 de sexta 24/11 que, convertido, vira sábado 25/11 01:30 UTC
+(não-sessão) e rola para segunda 27/11; sem a conversão, a base seria a sexta
+(< close) e o resultado errado seria 24/11. Mutação `ts.astimezone(UTC)`→`ts`
+confirmada: o teste falha sob o mutante e passa no código limpo.
+
 <!-- END: post-execution -->

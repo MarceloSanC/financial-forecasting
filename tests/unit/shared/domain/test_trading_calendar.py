@@ -11,7 +11,7 @@ quais o serviço é validado deterministicamente (I4/A5). Os feriados-âncora us
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta, timezone
 
 import pytest
 
@@ -171,6 +171,25 @@ def test_trading_day_after_close_overflow_raises() -> None:
     ts = datetime(2023, 12, 29, 22, 0, tzinfo=UTC)
     with pytest.raises(ValueError, match="No trading session after"):
         _calendar().trading_day_from_timestamp(ts, _MARKET_CLOSE)
+
+
+def test_trading_day_exactly_at_close_is_same_session() -> None:
+    # Fronteira `==` close_hour: a regra é `ts.time() > close_hour` (estritamente
+    # maior). Exatamente no close (21:00:00 UTC), numa sessão, NÃO rola -> mesmo dia.
+    # Pin do `>` vs `>=` (A3/I5): mutar para `>=` faria este caso rolar e falhar.
+    ts = datetime(2023, 11, 24, 21, 0, 0, tzinfo=UTC)
+    assert _calendar().trading_day_from_timestamp(ts, _MARKET_CLOSE) == date(2023, 11, 24)
+
+
+def test_trading_day_non_utc_timestamp_is_normalized_to_utc() -> None:
+    # I5: a normalização é SEMPRE via astimezone(UTC). Um timestamp em UTC-5 às
+    # 20:30 da sexta 24/11 vira 01:30 UTC do sábado 25/11 (não-sessão) -> rola para
+    # a próxima sessão (segunda 27/11). Sem a conversão para UTC, a base seria a
+    # sexta 24/11 às 20:30 (< close 21:00) e o resultado errado seria 24/11.
+    # Pin de astimezone(UTC): remover a conversão faz este teste falhar.
+    eastern = timezone(timedelta(hours=-5))
+    ts = datetime(2023, 11, 24, 20, 30, tzinfo=eastern)
+    assert _calendar().trading_day_from_timestamp(ts, _MARKET_CLOSE) == date(2023, 11, 27)
 
 
 # --- shift_trading_days (Task 03) ------------------------------------------
