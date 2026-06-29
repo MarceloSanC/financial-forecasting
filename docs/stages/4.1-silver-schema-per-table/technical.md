@@ -618,4 +618,92 @@ Task 01 (scaffold) ─► Task 02 (gate) ─► Task 03 (RunRecord) ─► Task 
 > razão), gaps para próxima Stage viram `[finding]`, ajustes pequenos viram
 > `[deviation]`.
 
+### Execução — 2026-06-29 (todas as 9 Tasks, build verde)
+
+**[decision] Task 01 — `application/` criado no scaffold.** O `scripts/check_layout.py`
+(`REQUIRED_FEATURE_DIRS`, linhas 84/155-169) exige que **toda** feature tenha
+`domain/`, `application/` **e** `adapters/`. O concept/technical previam só
+`domain/` + `adapters/`. Criei `features/analytics_store/application/__init__.py`
+vazio (placeholder das Stages 4.2/4.3). É reversível e alinha com a Task 02, que já
+adiciona `analytics_store.application` ao `store-no-storage-leak` (defesa em
+profundidade — source sem imports não reprova). Sem isto, o `layout-check` do
+`make check` reprovaria.
+
+**[decision] Task 02 — extensão do `.importlinter` sem ADR próprio (concept D4).**
+Adicionei `analytics_store` ao `hexagonal-layers` (container layered), `.domain` ao
+`domain-purity` e `.{application,domain}` ao `store-no-storage-leak`. É aplicação
+direta dos ADRs vigentes `1.3.0001` (import-linter como fitness function) e
+`2.1.0002` (`store-no-storage-leak`) — mesma postura já aplicada a `market_data`/
+`feature_engineering`. Provado verde com código inexistente e por quebra intencional
+revertida (ver A9 abaixo).
+
+**[deviation] Escopo e tamanho do subject de commit vs sugestões do technical.**
+O hook `check_commit_msg.py` aceita escopo só em `[a-z0-9._-]+` (sem `/`) e subject
+≤ 100 chars. Os "Commit sugerido" deste technical usavam `/` no escopo
+(`analytics-store/domain`) e um subject longo na Task 06. Usei o separador `.`
+(`analytics-store.domain`, `analytics-store.adapters-out` — consistente com o
+exemplo `payment.retry` do CONVENTIONS §4) e encurtei o subject da Task 06 para
+"schemas silver das 4 tabelas upsert/fact". Conteúdo idêntico ao planejado.
+
+**[decision] Tasks 06/07 — recorte de colunas do old com julgamento (não cópia cega).**
+O old (`analytics_store_schema.py`) carregava colunas operacionais e especulativas.
+Reduzi cada tabela ao contrato confirmatório dos Steps 1-4:
+- `dim_run`: campos alinhados ao VO `RunRecord` + `created_at_utc` (descartados
+  `execution_id`, `git_commit`, `library_versions_json`, `hardware_info_json`,
+  `checkpoint_path_*`, `duration_*`, `eta_*`, `retries`, `feature_set_hash`,
+  `feature_list_ordered_json`, `pipeline_version`, `trial_number`, `status` — ou são
+  da 4.2/5.x, ou são as 8 tabelas deferidas; `status` derivava de lógica que não é
+  schema). Mantida a PK/partição/`upsert` do old.
+- `fact_config`: núcleo de modo/loss/horizontes + os 3 JSONs canônicos
+  (`quantile_levels_json`/`evaluation_horizons_json`/`training_config_json`); os
+  hiperparâmetros individuais do TFT (hidden_size, dropout, …) ficam dentro do
+  `training_config_json` (coerente com H-1: grade/hparams = dado, não coluna).
+- `fact_split_metrics`: só as métricas pontuais descritivas do old (rmse/mae/mape/
+  smape/directional_accuracy/n_samples); as métricas probabilísticas confirmatórias
+  (pinball/CRPS/calibração) são gold (Step 6), fora do escopo.
+- `fact_failures`: núcleo auditável (error_type/message/trace_hash/excerpt);
+  descartadas colunas de captura de processo (`cmdline`/`stdout_truncated`/
+  `stderr_truncated`/`execution_id`/`entrypoint`).
+- `fact_oos_predictions`: **formato LONGO** (H-1) — `quantile_level` na PK +
+  `value_raw`/`value_guardrail`/`guardrail_applied`; **removidas** as 7 colunas
+  `quantile_p*`/`_post_guardrail`/`quantile_guardrail_applied` do old. Removidas
+  também `y_true`/`y_pred`/`error`/`abs_error`/`sq_error` (são erro/alvo derivados
+  no domínio de avaliação do Step 6, não predição bruta); `seed`/`fold` ficam em
+  `dim_run` (PK lógica `run_id` resolve). Mantidos `decision_idx`/`timestamp_utc`/
+  `target_timestamp_utc` como contrato (I11), `year` para partição.
+Decisão reversível: adicionar coluna a uma tabela é mudança local + `schema_version`
+bump — exatamente o que a decomposição por módulo habilita.
+
+**[finding] PK lógica validada por `pandera unique=[...]` no schema (C5), mas a
+dedup-no-write é da 4.2.** `pandera` 0.32 suporta `unique` composto no
+`DataFrameSchema` e reprova PK duplicada; `nullable=False` nas colunas de PK reprova
+PK nula. Isso valida um payload já montado, mas **não** substitui a política
+`append-only`/`upsert` no momento da escrita — a Stage 4.2 (`AnalyticsRepository`)
+deve aplicar a dedup operationally-latest/upsert ao gravar. Registro para a 4.2 não
+assumir que o schema sozinho garante unicidade entre escritas.
+
+**[decision] Task 09 — prova automatizada além do manual.** Além da quebra
+intencional revertida manual (pandas no domínio → `domain-purity` e
+`store-no-storage-leak` vermelhos, exit=1; domínio→adapters → `hexagonal-layers`
+vermelho; todos revertidos com `lint-imports` exit=0), adicionei 2 casos
+parametrizados a `_REAL_VIOLATION_CASES` em
+`tests/architecture/test_import_contracts.py`
+(`domain-purity:analytics-store-domain-imports-pandas` e
+`store-no-storage-leak:analytics-store-domain-imports-pandera`). Eles injetam o
+import proibido na árvore real e exigem o contrato `broken`, travando o "contrato
+míope" (drift de `source_modules`) para o BC novo. Custo baixo, proteção de
+regressão alta — coerente com a postura do próprio teste (modo de falha 3).
+
+**[finding] dtype `string` literal (`pa.Column(str, ...)`) aceita `pandas` StringDtype
+e `object`-string sem atrito.** Espelhei o `bronze_schemas.py` usando `pa.Column(str)`
+para colunas string; os testes usam `pd.array(..., dtype="string")`/`"Int64"` e
+validam sem coerção. Sem o atrito previsto no risco §5 (não foi preciso o literal
+`"string"`). `seed` opcional usa `Int64` nullable no payload de teste; a coluna no
+schema é `int64` com `nullable=True` — `pandera` aceita o `Int64` nullable do pandas.
+
+**Gates de saída (verdes):** `make check` (ruff + mypy --strict + layout-check +
+lint-imports + docs-check + test) verde — 907 passed, 7 skipped, cobertura total
+98.33%. Cobertura do BC `analytics_store` isolado = **100%** (77 statements, 0
+missed). `lint-imports`: 8 contratos kept, 0 broken.
+
 <!-- END: post-execution -->
