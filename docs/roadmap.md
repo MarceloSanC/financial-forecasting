@@ -63,7 +63,7 @@ graph LR
 |---|---|---|---|---|
 | 1 | Fundação e fitness arquitetural | Repo hexagonal com fronteiras enforçadas (import-linter, mypy strict, cobertura ≥90%), identidade determinística, config e tracking — a base que faltava | done | 1.1–1.5 |
 | 2 | Camada bronze + calendário | Dados brutos expostos por adapters limpos; calendário de pregão; contratos de storage medalhão | done | 2.1–2.4 |
-| 3 | Feature engineering e dataset | Dataset TFT reconstruído com features causais (indicadores validados, sentimento, fundamentos as-of, derivadas) + contratos anti-leakage | not_started | 3.1–3.5 |
+| 3 | Feature engineering e dataset | Dataset TFT reconstruído com features causais (indicadores validados, sentimento, fundamentos as-of, derivadas) + contratos anti-leakage | in_progress | 3.1–3.5 |
 | 4 | Analytics store (silver) | Silver modular (schema por tabela), repositório append-only, persister único de predições multi-horizonte | not_started | 4.1–4.3 |
 | 5 | Modelagem, baselines e treino | TFT re-treinado + GBM quantílico + baselines naive/estatísticos sobre walk-forward purgado/embargoado; cohort confirmatório AAPL | not_started | 5.1–5.5 |
 | 6 | Núcleo estatístico confirmatório | Pipeline gold confirmatória: pinball/CRPS/DM/MCS/Holm/PICP-Christoffersen + gates + scorecard pré-registrado, no domínio e validada por oráculo | not_started | 6.1–6.5 |
@@ -85,7 +85,7 @@ graph LR
 | `2.2-market-data-ingestion` | market_data | multi (application + adapters/out) | vertical | done | 2.1 |
 | `2.3-news-fundamentals-ingestion` | market_data | multi (application + adapters/out) | vertical | done | 2.2 |
 | `2.4-trading-calendar` | shared | domain + adapters/out | vertical | done | 2.1 |
-| `3.1-technical-indicators` | feature_engineering | multi (domain + adapters/out) | vertical | draft | 2.2, 2.4 |
+| `3.1-technical-indicators` | feature_engineering | multi (domain + adapters/out) | vertical | done | 2.2, 2.4 |
 | `3.2-sentiment-finbert` | feature_engineering | multi (application + adapters/out) | vertical | draft | 2.3 |
 | `3.3-fundamentals-asof-join` | feature_engineering | multi (domain + adapters/out) | vertical | draft | 2.3, 2.4 |
 | `3.4-feature-registry-and-derived` | feature_engineering | domain | mono | draft | 3.1 |
