@@ -114,3 +114,22 @@ ignore_imports =
 # verbatim (LAYOUT §6, 222-229) documenta a exceção desde já; reentra como erro
 # quando o caminho existir e quisermos detectar exceção morta.
 unmatched_ignore_imports_alerting = none
+
+# -----------------------------------------------------------------------------
+# Contrato 5 — tracker-no-mlflow-leak (type = forbidden) — Stage 1.5 (I4)
+# LAYOUT §3: a `application` (e o `domain`) nunca importam libs externas — elas
+# vivem só em adapters/infrastructure. Esta é a extensão a `mlflow` do mesmo
+# princípio que `domain-purity` aplica a pandas/pyarrow/torch: o port-out
+# `ExperimentTracker` (Protocol) troca só primitivos/Mapping; o `mlflow` vive
+# APENAS no adapter `shared/adapters/out/mlflow/`. `domain` entra por defesa em
+# profundidade (já é stdlib-only, mas blinda contra import futuro). ADR 1.5.0002.
+# -----------------------------------------------------------------------------
+[importlinter:contract:tracker-no-mlflow-leak]
+name = Application/domain não importam mlflow (só o adapter)
+type = forbidden
+source_modules =
+    financial_forecasting.shared.application
+    financial_forecasting.shared.domain
+forbidden_modules =
+    mlflow
+allow_indirect_imports = False

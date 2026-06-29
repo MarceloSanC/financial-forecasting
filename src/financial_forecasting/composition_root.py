@@ -2,68 +2,56 @@
 
 Este módulo é o ÚNICO lugar que conhece as implementações concretas. Ele instancia
 cada dependência de infraestrutura e injeta nas camadas de aplicação. Se você
-precisar trocar uma implementação (ex: Postgres → DynamoDB), mude APENAS aqui.
-Nenhuma regra de negócio deve ser alterada.
+precisar trocar uma implementação (ex: Postgres → DynamoDB, MlflowTracker → outro
+tracker), mude APENAS aqui. Nenhuma regra de negócio deve ser alterada.
 
 Regra: nenhum outro módulo deve instanciar diretamente classes de `infrastructure/`
 ou de `adapters/out/`. Sempre receba dependências via construtor (injeção explícita).
-
-Este arquivo nasce vazio no template — adicione campos a `ApplicationDependencies`
-e wiring em `wire_dependencies()` conforme as features forem sendo criadas.
+Os campos de `ApplicationDependencies` são tipados pelos PORTS (`ExperimentTracker`,
+`Hasher`), não pelos concretos — wiring centralizado, contrato exposto.
 """
 
 from dataclasses import dataclass
 
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
+from financial_forecasting.shared.adapters.out.mlflow.mlflow_tracker import MlflowTracker
+from financial_forecasting.shared.application.ports.out.experiment_tracker import (
+    ExperimentTracker,
+)
+from financial_forecasting.shared.application.ports.out.hasher import Hasher
 from financial_forecasting.shared.infrastructure.config.settings import Settings, get_settings
 
 
 @dataclass
 class ApplicationDependencies:
-    """Contêiner com os use cases montados e prontos para uso.
+    """Contêiner com as dependências montadas e prontas para uso.
 
-    Exponha aqui apenas o que os adapters primários (ex: routers HTTP) precisam.
-    Dependências de infraestrutura (engine, clock) ficam encapsuladas — não vazam.
+    Exponha aqui apenas o que as camadas superiores (use cases, adapters
+    primários) precisam. Os campos são tipados pelos PORTS — os concretos
+    (`CanonicalJsonHasher`, `MlflowTracker`) são detalhe do wiring abaixo.
 
-    Adicione campos conforme as features forem criadas, por exemplo:
-
-        create_payment: CreatePaymentUseCase
+    Adicione campos conforme as features forem criadas (use cases, etc.).
     """
+
+    hasher: Hasher
+    tracker: ExperimentTracker
 
 
 def wire_dependencies(settings: Settings | None = None) -> ApplicationDependencies:
-    """Monta o grafo de dependências completo e retorna os use cases prontos.
+    """Monta o grafo de dependências completo e retorna o contêiner pronto.
 
     Chamado uma única vez na inicialização da aplicação (dentro de `create_app()`).
-    Em testes, pode ser chamado com um `Settings` fake apontando para um banco
-    in-memory ou de teste.
+    Em testes, pode ser chamado com um `Settings` fake apontando o
+    `mlflow_tracking_uri` para um SQLite em `tmp_path` (sem depender do
+    `lru_cache` global de `get_settings`).
 
-    Template típico de wiring (descomente e adapte conforme as features chegarem):
-
-        from financial_forecasting.features.<feature>.adapters.out.postgres import (
-            Postgres<Entity>Repository,
-        )
-        from financial_forecasting.features.<feature>.application.use_cases import (
-            <UseCase>,
-        )
-        from financial_forecasting.shared.infrastructure.clock.system_clock import (
-            SystemClock,
-        )
-        from financial_forecasting.shared.infrastructure.database.connection import (
-            build_engine,
-        )
-        from financial_forecasting.shared.infrastructure.uuid_generator.uuid4_generator import (
-            Uuid4Generator,
-        )
-
-        cfg = settings or get_settings()
-        engine = build_engine()
-        clock = SystemClock()
-        id_gen = Uuid4Generator()
-        repo = Postgres<Entity>Repository(engine)
-        use_case = <UseCase>(repo=repo, id_gen=id_gen, clock=clock)
-        return ApplicationDependencies(use_case=use_case)
+    Resolve `cfg = settings or get_settings()` e instancia os concretos AQUI
+    (único lugar): `CanonicalJsonHasher` (1.4) e
+    `MlflowTracker(cfg.mlflow_tracking_uri)` (1.5).
     """
-    # `settings` é resolvido aqui (sem efeito até a primeira feature usar) para
-    # validar configuração no boot mesmo num composition root vazio.
-    _ = settings or get_settings()
-    return ApplicationDependencies()
+    cfg = settings or get_settings()
+    hasher = CanonicalJsonHasher()
+    tracker = MlflowTracker(tracking_uri=cfg.mlflow_tracking_uri)
+    return ApplicationDependencies(hasher=hasher, tracker=tracker)

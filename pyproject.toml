@@ -19,6 +19,8 @@ dependencies = [
     # Validação e configuração
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
+    # Tracking de experimentos (backend SQLite local) — ADR 1.5.0001
+    "mlflow>=2.14",
 ]
 
 [project.optional-dependencies]
@@ -96,14 +98,18 @@ source = ["src/financial_forecasting"]
 # Stage 1.2 (ADR 1.2.0010 D2). `adapters/*` NUNCA entra aqui: adapters têm
 # contract test (ADR 0.0.0021) e devem contar.
 omit = [
-    # entrypoint e wiring DI — __main__, não lógica de domínio/application
+    # entrypoint — __main__, não lógica de domínio/application
     "*/main.py",
-    "*/composition_root.py",
+    # CARRY 1.2 RESOLVIDO na Stage 1.5: `composition_root.py` e
+    # `shared/infrastructure/config/*` (Settings) SAÍRAM do omit — agora têm
+    # consumidor real (wire_dependencies instancia Hasher+MlflowTracker;
+    # Settings ganhou mlflow_tracking_uri) e teste real exercitando-os
+    # (tests/unit/shared/test_composition_root.py, .../config/test_settings.py),
+    # contando cobertura ≥90%. Ver concept/technical 1.5 (I7, Task 06).
     # wiring FastAPI — consumido só no Step de API (7.4)
     "*/shared/infrastructure/http/*",
-    # boot/config de infra, não lógica de domínio
+    # boot/config de infra (logging) — não lógica de domínio
     "*/shared/infrastructure/logging/*",
-    "*/shared/infrastructure/config/*",
     # adapters de infra diferidos — ainda sem consumidor nesta Stage;
     # reentram (saem do omit) quando uma feature os injetar
     "*/shared/infrastructure/clock/*",

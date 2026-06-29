@@ -49,6 +49,7 @@ _EXPECTED_CONTRACTS = (
     "domain-purity",
     "inward-only",
     "shared-no-features",
+    "tracker-no-mlflow-leak",
 )
 
 
@@ -193,6 +194,11 @@ _REAL_VIOLATION_CASES = (
             ),
         },
         id="shared-no-features:shared-imports-feature",
+    ),
+    pytest.param(
+        "tracker-no-mlflow-leak",
+        {"shared/application/_arch_audit_taint.py": "import mlflow  # violação temporária\n"},
+        id="tracker-no-mlflow-leak:application-imports-mlflow",
     ),
 )
 

@@ -49,6 +49,15 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------------------
     log_level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
+    # ---------------------------------------------------------------------------
+    # MLflow / Experiment tracking
+    # ---------------------------------------------------------------------------
+    # Backend store do MLflow (ADR 1.5.0001). Default relativo `sqlite:///mlruns.db`
+    # mantém o tracking junto ao repo/worktree, sem servidor remoto nem SaaS.
+    # Trocável por env (`MLFLOW_TRACKING_URI`) para Postgres/servidor sem tocar
+    # código. Em testes, usa-se `sqlite:///<tmp_path>/mlruns.db` para isolamento.
+    mlflow_tracking_uri: str = "sqlite:///mlruns.db"
+
 
 @lru_cache
 def get_settings() -> Settings:
