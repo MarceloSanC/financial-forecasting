@@ -91,7 +91,7 @@ graph LR
 | `3.4-feature-registry-and-derived` | feature_engineering | domain | mono | done | 3.1 |
 | `3.5-dataset-builder-and-contracts` | feature_engineering | multi (application + adapters/out) | vertical | done | 3.1, 3.2, 3.3, 3.4 |
 | `4.1-silver-schema-per-table` | analytics_store | infrastructure/schemas + domain | vertical | done | 1.4, 2.1 |
-| `4.2-silver-repository` | analytics_store | adapters/out | vertical | draft | 4.1 |
+| `4.2-silver-repository` | analytics_store | adapters/out | vertical | done | 4.1 |
 | `4.3-prediction-persister` | analytics_store | domain + application | vertical | draft | 4.2 |
 | `5.1-walk-forward-harness` | modeling | domain + application | vertical | draft | 3.5, 4.3 |
 | `5.2-baselines-naive-statistical` | modeling | multi (domain + application + adapters/out) | vertical | draft | 5.1 |

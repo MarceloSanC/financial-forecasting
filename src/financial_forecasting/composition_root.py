@@ -23,6 +23,12 @@ carregam no PRIMEIRO `score_articles`, mantendo o wiring leve e testável sem GP
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
+    ParquetAnalyticsRepository,
+)
+from financial_forecasting.features.analytics_store.application.ports.out.analytics_repository import (  # noqa: E501
+    AnalyticsRepository,
+)
 from financial_forecasting.features.feature_engineering.adapters.out.duckdb.asof_join_adapter import (  # noqa: E501
     AsofJoinDuckdbAdapter,
 )
@@ -73,6 +79,7 @@ from financial_forecasting.shared.application.ports.out.hasher import Hasher
 from financial_forecasting.shared.application.ports.out.medallion_store import (
     MedallionStore,
 )
+from financial_forecasting.shared.infrastructure.clock.system_clock import SystemClock
 from financial_forecasting.shared.infrastructure.config.settings import Settings, get_settings
 
 # Revisão pinada do FinBERT (espelha o default do adapter; ADR 0.0.0017).
@@ -132,6 +139,8 @@ class ApplicationDependencies:
     dataset_assembler: DatasetAssemblerPort
     calendar_provider: ExchangeCalendarProvider
     build_dataset: BuildDataset
+    # BC analytics_store (Stage 4.2, A11): adapter Parquet silver tipado pelo port.
+    analytics_repository: AnalyticsRepository
 
 
 def wire_dependencies(settings: Settings | None = None) -> ApplicationDependencies:
@@ -174,6 +183,10 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
         assembler=dataset_assembler,
     )
 
+    # BC analytics_store (Stage 4.2, A11): adapter Parquet silver com data_root do
+    # Settings + SystemClock injetado (created_at_utc write-time de dim_run, I5/I10).
+    analytics_repository = ParquetAnalyticsRepository(data_root=cfg.data_root, clock=SystemClock())
+
     return ApplicationDependencies(
         hasher=hasher,
         tracker=tracker,
@@ -184,4 +197,5 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
         dataset_assembler=dataset_assembler,
         calendar_provider=calendar_provider,
         build_dataset=build_dataset,
+        analytics_repository=analytics_repository,
     )
