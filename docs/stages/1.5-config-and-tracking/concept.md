@@ -3,7 +3,7 @@ title: Concept — Stage 1.5 — Config tipada e tracking de experimentos
 description: Evoluir Settings com tracking URI, introduzir o port ExperimentTracker + adapter MLflow (SQLite local) e evoluir o composition root para wirar Settings, Hasher e MlflowTracker
 when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; revisar antes de executar config/tracking/wiring
 keywords: [concept, config-and-tracking, settings, pydantic-settings, mlflow, experiment-tracker, composition-root, wiring, sqlite]
-status: draft
+status: done
 created_at: 2026-06-29
 updated_at: 2026-06-29
 stage_id: 1.5-config-and-tracking
