@@ -123,6 +123,22 @@ def test_article_id_fallback_to_url_then_time_title() -> None:
 
 
 @pytest.mark.unit
+def test_article_id_has_priority_over_url() -> None:
+    """`article_id` explícito tem PRIORIDADE sobre `url` no ID estável (I6/D5).
+
+    Quando a entity traz `article_id` E `url` distintos, a PK lógica deve usar o
+    `article_id` (ID da origem), não o `url`. Inverter a ordem do fallback (url antes
+    de article_id) é mutação detectada por este teste.
+    """
+    store = FakeMedallionStore()
+    IngestNews(
+        FakeNewsFetcher([_article(article_id="src-id-123", url="https://example.com/other")]),
+        store,
+    ).execute(IngestNewsRequest(_SYMBOL, _START, _END))
+    assert _stored_news(store)[0]["article_id"] == "src-id-123"
+
+
+@pytest.mark.unit
 def test_writes_to_bronze_news_append_only() -> None:
     """Grava em `(bronze, news)`; segundo write da MESMA PK → `DuplicateKeyError` (C3/I8)."""
     fetcher = FakeNewsFetcher([_article()])

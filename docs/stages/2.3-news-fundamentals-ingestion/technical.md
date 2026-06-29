@@ -832,4 +832,31 @@ bronze `news`, tratar `url`/`language` `""` como "ausente" (não confundir com U
 vazia legítima); o `article_id` é sempre uma chave estável, não necessariamente uma
 URL. Stage candidata: 3.2.
 
+### 2026-06-29 — [deviation] Auditoria de testes — bound não-UTC em `IngestFundamentals` — Claude
+**Contexto:** mutação mental na auditoria de testes (gate explícito): remover o
+`start/end.astimezone(UTC)` de `IngestFundamentals._validated_bounds` passava em
+todos os testes — o filtro de intervalo (I10) só era exercitado com bounds já em UTC,
+deixando a normalização de fuso sem asserção comportamental (100% de linha, 0% de
+mutação naquele ramo).
+**Decisão:** adicionado
+`test_non_utc_bound_is_normalized_to_utc_before_filtering`
+(`tests/unit/.../application/test_ingest_fundamentals.py`): `end = 2022-12-31 22:00
+-05:00` (⇒ `2023-01-01` em UTC) com report `fiscal_date_end = 2023-01-01` que DEVE
+entrar; sem a conversão o bound cai em `2022-12-31` e o report é descartado. O teste
+mata a mutação (confirmado: falha sem `astimezone(UTC)`).
+**Razão:** fecha o gap de fronteira de fuso na regra C5/I10; rastreabilidade do
+achado (evita finding "Rastro perdido" da stage-audit).
+
+### 2026-06-29 — [deviation] Auditoria de testes — prioridade `article_id > url` no ID estável — Claude
+**Contexto:** mutação mental: inverter a ordem do fallback de `_stable_article_id`
+(`url` antes de `article_id`) passava em todos os testes do `IngestNews` — em todos
+os casos existentes `article_id == url`, então a precedência da PK lógica (I6/D5)
+não estava asseverada.
+**Decisão:** adicionado `test_article_id_has_priority_over_url`
+(`tests/unit/.../application/test_ingest_news.py`) com `article_id="src-id-123"` e
+`url` distinto, assertando que a Row usa `src-id-123`. O teste mata a mutação
+(confirmado: falha com a ordem invertida).
+**Razão:** garante que a PK lógica `(asset_id, article_id)` usa o identificador da
+origem quando disponível, não o `url` — invariante de dedup correta (I6/D5/I8).
+
 <!-- END: post-execution -->

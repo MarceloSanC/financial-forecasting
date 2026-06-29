@@ -11,7 +11,7 @@ colunas na Row; `Result.ingested` == nº gravado; retorno é
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
@@ -181,6 +181,24 @@ def test_end_only_filters_upper_bound() -> None:
     store = FakeMedallionStore()
     result = IngestFundamentals(fetcher, store).execute(
         IngestFundamentalsRequest(_SYMBOL, end=datetime(2022, 1, 1, tzinfo=UTC))
+    )
+    assert result.ingested == 1
+
+
+@pytest.mark.unit
+def test_non_utc_bound_is_normalized_to_utc_before_filtering() -> None:
+    """Bound tz-aware não-UTC é convertido a UTC ANTES de comparar `.date()` (C5/I10).
+
+    `end = 2022-12-31 22:00 -05:00` ⇒ em UTC = `2023-01-01 03:00`, logo `end.date()`
+    correto é `2023-01-01`. Um report com `fiscal_date_end = 2023-01-01` DEVE entrar
+    (limite superior inclusivo após normalização). Sem o `astimezone(UTC)` o bound
+    cairia em `2022-12-31` e o report seria descartado por engano — mutação detectada.
+    """
+    fetcher = FakeFundamentalFetcher([_report(fiscal_date_end=date(2023, 1, 1))])
+    store = FakeMedallionStore()
+    minus_five = timezone(timedelta(hours=-5))
+    result = IngestFundamentals(fetcher, store).execute(
+        IngestFundamentalsRequest(_SYMBOL, end=datetime(2022, 12, 31, 22, 0, tzinfo=minus_five))
     )
     assert result.ingested == 1
 
