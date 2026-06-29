@@ -26,10 +26,14 @@ from __future__ import annotations
 
 import bisect
 from datetime import UTC, date, datetime, time
+from typing import Literal
 
 from financial_forecasting.shared.domain.value_objects.trading_sessions import (
     TradingSessions,
 )
+
+Direction = Literal["forward", "backward"]
+"""Sentido do deslocamento de pregões: `"forward"` (futuro) ou `"backward"` (passado)."""
 
 
 class TradingCalendar:
@@ -87,3 +91,39 @@ class TradingCalendar:
         if ts_utc.time() > close_hour or not self.is_session(base):
             return self.next_session(base)
         return base
+
+    def shift_trading_days(
+        self,
+        day: date,
+        n: int,
+        *,
+        direction: Direction = "forward",
+    ) -> date:
+        """Desloca `n` pregões a partir de `day`, no sentido `direction`.
+
+        Usado pelo embargo/purga do walk-forward (Stage 5.1), que precisa de
+        deslocamento em **ambas** as direções — por isso o sentido é explícito e
+        não herda o roll-forward-only do old (ADR 2.4.0001 §Implementation).
+
+        Regras (concept §6 I6/C2/C3/D5):
+
+        - `n < 0` → `ValueError` (C3): o sinal não expressa direção; use
+          `direction`. A magnitude é sempre não-negativa.
+        - `n == 0` ancora: retorna `day` se for sessão; caso contrário, a primeira
+          sessão no sentido `direction` (próxima se `forward`, anterior se
+          `backward`).
+        - `n > 0`: avança/recua `n` pregões reusando `next_session`/`prev_session`,
+          pulando feriados e fins de semana (I6/A6).
+        - Resultado além de `[start, end]` → `ValueError` (C2/D5), propagado dos
+          lookups — sem clamp.
+        """
+        if n < 0:
+            raise ValueError(
+                f"shift_trading_days magnitude must be non-negative; got n={n}. "
+                "Use direction='backward' to go to the past."
+            )
+        step = self.next_session if direction == "forward" else self.prev_session
+        current = day if self.is_session(day) else step(day)
+        for _ in range(n):
+            current = step(current)
+        return current

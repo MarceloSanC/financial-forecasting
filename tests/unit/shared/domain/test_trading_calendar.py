@@ -171,3 +171,65 @@ def test_trading_day_after_close_overflow_raises() -> None:
     ts = datetime(2023, 12, 29, 22, 0, tzinfo=UTC)
     with pytest.raises(ValueError, match="No trading session after"):
         _calendar().trading_day_from_timestamp(ts, _MARKET_CLOSE)
+
+
+# --- shift_trading_days (Task 03) ------------------------------------------
+
+
+def test_shift_forward_skips_holiday() -> None:
+    # Forward 2 pregões a partir de qua 22/11: 24 (sex, pula feriado 23), 27 (seg).
+    assert _calendar().shift_trading_days(date(2023, 11, 22), 2) == date(2023, 11, 27)
+
+
+def test_shift_backward_skips_holiday_thanksgiving() -> None:
+    # Backward 1 pregão a partir de sex 24/11 -> qua 22 (pula o feriado de 23).
+    result = _calendar().shift_trading_days(date(2023, 11, 24), 1, direction="backward")
+    assert result == date(2023, 11, 22)
+
+
+def test_shift_backward_crosses_july_fourth() -> None:
+    # Backward 1 pregão a partir de qua 05/07 -> seg 03/07 (pula feriado 04).
+    result = _calendar().shift_trading_days(date(2023, 7, 5), 1, direction="backward")
+    assert result == date(2023, 7, 3)
+
+
+def test_shift_backward_crosses_christmas() -> None:
+    # Backward 1 pregão a partir de ter 26/12 -> sex 22/12 (pula feriado 25 e fds).
+    result = _calendar().shift_trading_days(date(2023, 12, 26), 1, direction="backward")
+    assert result == date(2023, 12, 22)
+
+
+def test_shift_zero_on_session_is_identity() -> None:
+    assert _calendar().shift_trading_days(date(2023, 11, 24), 0) == date(2023, 11, 24)
+
+
+def test_shift_zero_on_non_session_anchors_forward() -> None:
+    # n=0 a partir do feriado de Thanksgiving (23/11), forward -> próxima sessão 24.
+    assert _calendar().shift_trading_days(date(2023, 11, 23), 0) == date(2023, 11, 24)
+
+
+def test_shift_zero_on_non_session_anchors_backward() -> None:
+    # n=0 a partir do feriado (23/11), backward -> sessão anterior 22.
+    result = _calendar().shift_trading_days(date(2023, 11, 23), 0, direction="backward")
+    assert result == date(2023, 11, 22)
+
+
+def test_shift_forward_from_non_session_anchor_then_steps() -> None:
+    # A partir do feriado 23/11 forward com n=1: âncora=24, +1 pregão = 27.
+    assert _calendar().shift_trading_days(date(2023, 11, 23), 1) == date(2023, 11, 27)
+
+
+def test_shift_negative_n_raises() -> None:
+    with pytest.raises(ValueError, match="non-negative"):
+        _calendar().shift_trading_days(date(2023, 11, 24), -1)
+
+
+def test_shift_forward_overflow_raises() -> None:
+    # 100 pregões forward estouram a janela materializada -> ValueError (C2/D5).
+    with pytest.raises(ValueError, match="No trading session after"):
+        _calendar().shift_trading_days(date(2023, 11, 24), 100)
+
+
+def test_shift_backward_overflow_raises() -> None:
+    with pytest.raises(ValueError, match="No trading session before"):
+        _calendar().shift_trading_days(date(2023, 11, 24), 100, direction="backward")
