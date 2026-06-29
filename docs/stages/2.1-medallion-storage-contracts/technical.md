@@ -585,4 +585,74 @@ Task 07 ─► Task 10
 > razão), gaps para próxima Stage viram `[finding]`, ajustes pequenos viram
 > `[deviation]`.
 
+### Execução — Stage 2.1 (10 Tasks, todas commitadas, gates verdes)
+
+Resultado: `make check` verde (195 testes, cobertura total 99.67%); contract
+test parametrizado `[fake, real]` (22 casos) verde — paridade fake↔real provada;
+integration test (5 casos) verde; `lint-imports` 6 contratos `kept`/0 `broken`
+(novo `store-no-storage-leak`); `uv lock --check` sincronizado. Cobertura no
+código novo do adapter `parquet_medallion_store.py` = 99% (1 linha defensiva
+`_safe_partition(None)` não exercitada; > 90%); `bronze_schemas.py` 100%; port
+`medallion_store.py` 100%; `composition_root.py` 100%; `settings.py` 100%.
+
+#### [decision] Nome do campo de raiz de dados = `data_root` (Task 09 / concept D4)
+
+- **Opções:** (a) `data_root`; (b) `medallion_root`.
+- **Escolha:** `data_root` (`Path`, default `Path("data")`).
+- **Razão:** é a raiz de TODAS as camadas medalhão; o sufixo `bronze/<table>/…`
+  é aplicado pelo `ParquetMedallionStore` por dentro (não pelo `Settings`), então
+  o campo descreve a raiz de dados genérica e não amarra a config à camada
+  bronze. Pré-declarado no concept §13; segue a fundação 1.5 (override por
+  `DATA_ROOT`, 12-factor) — sem ADR próprio.
+
+#### [decision] Detecção de colisão de PK lê a partição com `pandas`, não DuckDB (Task 07)
+
+- **Opções:** (a) ler o Parquet da partição alvo com `pd.read_parquet` e comparar
+  tuplas de PK (como o old `_write_with_overwrite_policy`); (b) consultar as PKs
+  existentes via DuckDB no caminho de escrita.
+- **Escolha:** (a) — `pandas` no write; DuckDB fica só no `read` (pruning).
+- **Razão:** o caminho de colisão precisa carregar o conteúdo da partição alvo de
+  qualquer forma para fazer o merge/substituição; `pd.read_parquet(path)` é
+  direto, espelha a semântica validada do old e mantém o write sem montar SQL. O
+  custo é a leitura da partição (não do dataset todo) — barato no piloto
+  single-asset, otimizável depois sem mudar o contrato (risco já mapeado em §5).
+
+#### [deviation] pre-commit mypy ganhou `pandas/pyarrow/duckdb/pandera` em `additional_dependencies` (Task 07)
+
+- **O quê:** o hook `mypy` do `.pre-commit-config.yaml` roda num venv isolado com
+  `additional_dependencies` próprias. Sem as libs de storage lá, `pq.write_table`
+  vira `Any` e o hook acusava o `# type: ignore[no-untyped-call]` (NECESSÁRIO no
+  venv do projeto, onde `make check`/`uv run mypy` veem o pyarrow tipado) como
+  `unused-ignore` — divergência entre os dois mypy.
+- **Ajuste:** adicionadas `pandas>=2.2`/`pyarrow>=16.0`/`duckdb>=1.0`/`pandera>=0.20`
+  ao `additional_dependencies` do hook, alinhando-o ao `make check` (o hook é um
+  espelho do gate, não um gate distinto). Reversível e de baixo risco.
+
+#### [finding] Fidelidade `float32` vive no Parquet em disco, não no `Row` escalar (Tasks 07/08)
+
+- `read` devolve `Sequence[Mapping[str, object]]`; `DataFrame.to_dict(orient=
+  "records")` converte escalares numpy para tipos Python nativos, então um
+  `float32` lido vira `float` (float64) NO ESCALAR do `Row`. A fidelidade de
+  dtype que 2.2/2.3 precisam está PRESERVADA no arquivo Parquet (relido como
+  `DataFrame` mantém `float32`/`int64`/UTC) — o integration test asserta o dtype
+  no Parquet em disco, não no escalar. **Para 2.2/2.3:** consumir o store por
+  leitura de DataFrame quando o dtype exato importar; o `Row` é uma view
+  dict-like agnóstica de dtype (esperado pelo contrato do port).
+
+#### [finding] DuckDB devolve `datetime64[us, UTC]` (resolução `us`, não `ns`) (Task 07)
+
+- Com `SET TimeZone='UTC'`, o `read` via DuckDB devolve timestamps tz-aware em
+  UTC mas com resolução `us` (microssegundo) em vez de `ns`. O INSTANTE é
+  idêntico (UTC preservado); só a resolução do dtype difere do `datetime64[ns,
+  UTC]` gravado. Aceitável — o integration test asserta tz-aware-UTC e o mesmo
+  instante, não a resolução literal. Se uma Stage futura exigir `ns` no read,
+  basta um `CAST`/conversão no adapter (sem mudar o contrato do port).
+
+#### [deviation] Local do integration test = `tests/integration/shared/test_parquet_medallion_store.py`
+
+- O bloco §1 (estrutura) e o roadmap (`arquivos_a_criar`) divergiam levemente do
+  caminho (`.../shared/adapters/out/parquet/...` vs `.../shared/...`). Seguido o
+  caminho da **Task 08** (plano executável): `tests/integration/shared/
+  test_parquet_medallion_store.py`. Sem impacto funcional.
+
 <!-- END: post-execution -->
