@@ -122,6 +122,55 @@ def test_mapper_fills_created_at_utc_via_clock() -> None:
 # -- dispatch ----------------------------------------------------------------
 
 
+def test_write_does_not_clobber_existing_created_at_utc(tmp_path: Path) -> None:
+    """I5 (idempotência): `dim_run` com `created_at_utc` já presente NÃO é sobrescrito.
+
+    Mutação-guarda: o `_fill_write_time` só preenche quando a coluna falta
+    (`is None`); se preenchesse sempre (remover o guard / inverter `is None`), um
+    `created_at_utc` produzido upstream (ex.: pelo mapper) seria clobberado pelo
+    `clock.now()`. Os demais testes usam um valor IGUAL ao do clock, então não
+    distinguem; aqui o valor pré-existente é DIFERENTE do `FakeClock`.
+    """
+    repo = _repo(tmp_path)
+    preexisting = "2000-01-01T00:00:00+00:00"  # != _FIXED_NOW
+    row = run_record_to_row(_run_record(), clock=FakeClock())
+    row["created_at_utc"] = preexisting
+
+    repo.write(layer=_SILVER, table="dim_run", rows=[row])
+
+    path = (
+        tmp_path
+        / "silver"
+        / "dim_run"
+        / "asset=AAPL"
+        / "parent_sweep_id=sweep-1"
+        / "dim_run.parquet"
+    )
+    df = pd.read_parquet(path)
+    assert df.iloc[0]["created_at_utc"] == preexisting
+
+
+def test_collision_message_carries_pk_columns_and_path(tmp_path: Path) -> None:
+    """C1 (diagnóstico): a `DuplicateKeyError` cita `pk_columns`, `collisions` e `path`.
+
+    Mutação-guarda: a mensagem diagnóstica é parte do contrato C1; sem este
+    assert, alterar/esvaziar a mensagem passaria silenciosamente.
+    """
+    repo = _repo(tmp_path)
+    repo.write(layer=_SILVER, table="fact_oos_predictions", rows=[_fact_oos_row()])
+
+    with pytest.raises(DuplicateKeyError) as excinfo:
+        repo.write(
+            layer=_SILVER, table="fact_oos_predictions", rows=[_fact_oos_row(value_raw=0.99)]
+        )
+
+    message = str(excinfo.value)
+    assert "pk_columns=" in message
+    assert "collisions=" in message
+    assert "path=" in message
+    assert "run_id" in message  # nome de coluna da PK lógica
+
+
 def test_unknown_layer_table_raises(tmp_path: Path) -> None:
     """C2: `(layer, table)` fora do `SILVER_REGISTRY` → `ApplicationError`."""
     repo = _repo(tmp_path)

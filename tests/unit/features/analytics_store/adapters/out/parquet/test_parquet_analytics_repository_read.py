@@ -208,3 +208,19 @@ def test_read_round_trips_nullable_column_none(tmp_path: Path) -> None:
 
     assert len(rows) == 1
     assert rows[0]["fold"] is None
+
+
+def test_read_preserves_real_parent_sweep_id_value(tmp_path: Path) -> None:
+    """I6/C6 (lado positivo): um `parent_sweep_id` real volta como a string literal.
+
+    Mutação-guarda: se o round-trip do sentinel (`_restore_value`) nulasse um
+    valor não-`__none__` (inverter o teste do sentinel), este teste falha — o
+    `test_read_round_trips_parent_sweep_id_none` só cobre o lado `None`.
+    """
+    repo = _repo(tmp_path)
+    repo.write(layer=_SILVER, table="dim_run", rows=[_dim_run_row(parent_sweep_id="sweep-1")])
+
+    rows = repo.read(layer=_SILVER, table="dim_run", filters={"asset": "AAPL"})
+
+    assert len(rows) == 1
+    assert rows[0]["parent_sweep_id"] == "sweep-1"

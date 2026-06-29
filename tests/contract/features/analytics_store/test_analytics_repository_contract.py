@@ -245,6 +245,27 @@ def test_parent_sweep_id_none_round_trip(repo: AnalyticsRepository) -> None:
 
 
 @pytest.mark.contract
+def test_parent_sweep_id_real_value_round_trip(repo: AnalyticsRepository) -> None:
+    """I6/C6 (lado positivo): um `parent_sweep_id` real volta como a string literal.
+
+    Paridade fake↔real do lado NÃO-`None` do round-trip: se o restore do sentinel
+    nulasse valores legítimos (inverter a guarda do sentinel em qualquer das duas
+    implementações), este caso falha — `test_parent_sweep_id_none_round_trip` só
+    cobre o lado `None`.
+    """
+    repo.write(
+        layer=_SILVER,
+        table="dim_run",
+        rows=[_dim_run_row("run-1", parent_sweep_id="sweep-42")],
+    )
+
+    rows = repo.read(layer=_SILVER, table="dim_run", filters={"asset": "AAPL"})
+
+    assert len(rows) == 1
+    assert rows[0]["parent_sweep_id"] == "sweep-42"
+
+
+@pytest.mark.contract
 def test_read_filters_by_asset(repo: AnalyticsRepository) -> None:
     """I8: `read({"asset": A})` num dataset com dois assets devolve só A."""
     repo.write(layer=_SILVER, table="dim_run", rows=[_dim_run_row("run-aapl", asset="AAPL")])

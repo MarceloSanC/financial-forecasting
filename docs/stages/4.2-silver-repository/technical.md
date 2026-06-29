@@ -598,4 +598,34 @@ intenção de ADR 4.2.0002 (write-time concern via `Clock`, nunca `datetime.now(
 **Decisão/Razão:** removi esse teste no task-05 (o `read` agora é coberto por
 `test_..._read.py`); ajuste pequeno e esperado pelo plano inside-out.
 
+### 2026-06-29 — [deviation] escopo 4.2 (task-05-extra) — teste do lado positivo do round-trip de `parent_sweep_id`
+**Contexto:** auditoria de testes (mutation-mental). A cobertura de linha estava
+em 100%, mas o round-trip do sentinel só tinha o lado `None` coberto
+(`test_read_round_trips_parent_sweep_id_none`). Inverter a guarda do sentinel em
+`_restore_value` (`value == _PARTITION_NONE` → `!=`) nulaava um `parent_sweep_id`
+real e NENHUM teste falhava.
+**Decisão/Razão:** adicionados `test_read_preserves_real_parent_sweep_id_value`
+(unit read) e `test_parent_sweep_id_real_value_round_trip` (contract `[fake, real]`)
+que asseguram que um `parent_sweep_id` legítimo (`"sweep-1"`/`"sweep-42"`) volta
+como a string literal. Mutação confirmada como capturada (I6/C6 lado positivo).
+
+### 2026-06-29 — [deviation] escopo 4.2 (task-04-extra) — idempotência do `created_at_utc` write-time
+**Contexto:** auditoria de testes (mutation-mental). Todos os testes de `dim_run`
+fixavam `created_at_utc == FakeClock.now()`, então o guard
+`prepared.get(_CREATED_AT_UTC) is None` em `_fill_write_time` era indistinguível
+de "preencher sempre" — remover o guard (clobber) passava silenciosamente,
+contrariando a idempotência registrada na entrada [decision] do task-06.
+**Decisão/Razão:** adicionado `test_write_does_not_clobber_existing_created_at_utc`
+com um `created_at_utc` pré-existente DIFERENTE do clock; o write deve preservá-lo.
+Mutação (drop do guard) confirmada como capturada (I5).
+
+### 2026-06-29 — [deviation] escopo 4.2 (task-04-extra) — conteúdo diagnóstico da `DuplicateKeyError`
+**Contexto:** auditoria de testes (mutation-mental). O contrato C1 exige que a
+`DuplicateKeyError` cite `pk_columns`/`collisions`/`path`, mas nenhum teste
+inspecionava a mensagem — esvaziá-la passaria silenciosamente.
+**Decisão/Razão:** adicionado
+`test_collision_message_carries_pk_columns_and_path` (unit write) asseverando os
+três marcadores + o nome da coluna de PK na mensagem. Mutação (mensagem trocada
+por `"collision"`) confirmada como capturada (C1, diagnóstico).
+
 <!-- END: post-execution -->
