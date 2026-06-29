@@ -18,11 +18,15 @@ from __future__ import annotations
 import math
 from datetime import UTC, date, datetime, timedelta
 
+import pandera.pandas as pa
 import pyarrow.parquet as pq
 import pytest
 
 from financial_forecasting.features.feature_engineering.adapters.out.pandas.dataset_assembler import (  # noqa: E501
     DatasetAssembler,
+)
+from financial_forecasting.features.feature_engineering.adapters.out.parquet.schemas.dataset_schema import (  # noqa: E501
+    DATASET_TFT_SCHEMA,
 )
 from financial_forecasting.features.feature_engineering.application.ports.out.dataset_assembler import (  # noqa: E501
     DatasetAssemblyInputs,
@@ -212,6 +216,55 @@ def test_regime_flag_columns_are_float64() -> None:
     frame = assembler._assembled["AAPL"]
     for col in ("volatility_regime", "trend_regime", "stress_tail_return_flag"):
         assert str(frame[col].dtype) == "float64"
+
+
+def test_assembled_frame_conforms_to_pandera_schema() -> None:
+    """C7/A5 — o frame REAL montado satisfaz `DATASET_TFT_SCHEMA` (não só um frame
+    hand-built conforme). Fecha o gap: antes a validação pandera nunca tocava a saída
+    do assembler, mascarando divergências de dtype (asset_id object, flags float64).
+    """
+    assembler = DatasetAssembler()
+    assembler.assemble(_build_inputs())
+    frame = assembler._assembled["AAPL"]
+    # Não levanta — o assembler já validou em `assemble`; re-validar prova a paridade.
+    DATASET_TFT_SCHEMA.validate(frame)
+
+
+def test_assembled_storage_dtypes_match_oracle_contract() -> None:
+    """C7/A5 — dtypes de armazenamento batem o contrato físico/oráculo: asset_id
+    `string`, news_volume/has_news/volume_spike_flag `int64` (sem NaN nas retidas).
+    """
+    assembler = DatasetAssembler()
+    assembler.assemble(_build_inputs())
+    frame = assembler._assembled["AAPL"]
+    assert str(frame["asset_id"].dtype) == "string"
+    for col in ("news_volume", "has_news", "volume_spike_flag"):
+        assert str(frame[col].dtype) == "int64", col
+
+
+def test_assemble_rejects_frame_violating_schema() -> None:
+    """C7 (mutation guard) — se a montagem produzisse um dtype fora do contrato, o
+    schema pandera invocado DENTRO de `assemble` rejeita antes de reter/persistir.
+
+    Corrompe `target_return` para `string` após a montagem, antes da validação,
+    provando que o branch de validação de schema NÃO é dead-code (inverter/pular a
+    validação faria este teste falhar).
+    """
+    assembler = DatasetAssembler()
+    inputs = _build_inputs()
+    real_finalize = assembler._finalize_storage_dtypes
+
+    def corrupt_dtype(frame: object) -> object:
+        out = real_finalize(frame)  # type: ignore[arg-type]
+        out["target_return"] = out["target_return"].astype("string")  # type: ignore[index]
+        return out
+
+    assembler._finalize_storage_dtypes = corrupt_dtype  # type: ignore[method-assign]
+
+    with pytest.raises(pa.errors.SchemaError):
+        assembler.assemble(inputs)
+    # Frame corrompido NÃO foi retido (validação barrou antes do `self._assembled[...]`).
+    assert "AAPL" not in assembler._assembled
 
 
 def test_persist_without_assemble_raises() -> None:

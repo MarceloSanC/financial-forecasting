@@ -48,6 +48,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from financial_forecasting.features.feature_engineering.adapters.out.parquet.schemas.dataset_schema import (  # noqa: E501
+    DATASET_TFT_SCHEMA,
+    INT64_STORAGE_FEATURES,
+)
 from financial_forecasting.features.feature_engineering.application.ports.out.dataset_assembler import (  # noqa: E501
     DatasetAssemblyInputs,
     DatasetAssemblyResult,
@@ -120,6 +124,12 @@ class DatasetAssembler:
         self._validate_anti_leakage(frame)
         self._apply_target_and_drop(frame)
         ordered = self._order_columns(frame)
+        # Contrato físico (C7/A5): coage os dtypes de armazenamento ao schema (asset_id
+        # string; news_volume/has_news/volume_spike_flag int64 — paridade oráculo) e
+        # VALIDA contra o `DATASET_TFT_SCHEMA` ANTES de reter/persistir; coluna ausente,
+        # extra, dtype divergente ou ordem trocada ⇒ `SchemaError` na fronteira do adapter.
+        ordered = self._finalize_storage_dtypes(ordered)
+        DATASET_TFT_SCHEMA.validate(ordered)
         self._assembled[inputs.asset] = ordered
 
         feature_columns = tuple(spec.name for spec in list_feature_specs())
@@ -363,6 +373,25 @@ class DatasetAssembler:
         if extra:
             raise ValueError(f"assembled frame has unexpected extra columns: {extra}")
         return frame[ordered_cols].copy()
+
+    @staticmethod
+    def _finalize_storage_dtypes(frame: pd.DataFrame) -> pd.DataFrame:
+        """Coage os dtypes de ARMAZENAMENTO ao contrato físico do schema (C7/A5).
+
+        - `asset_id` → pandas `string` (oráculo grava `string`, não `object`);
+        - `news_volume`/`has_news`/`volume_spike_flag` → `int64` (contagens/flags
+          inteiras; sem `NaN` nas linhas retidas — paridade oráculo, D2 só vale para
+          os regimes/flags `float64`).
+
+        A coerção é a contraparte do `dataset_schema` (fonte única `INT64_STORAGE_FEATURES`):
+        garante que o frame montado satisfaça `DATASET_TFT_SCHEMA` em vez de divergir
+        silenciosamente do contrato físico.
+        """
+        out = frame.copy()
+        out["asset_id"] = out["asset_id"].astype("string")
+        for col in INT64_STORAGE_FEATURES:
+            out[col] = out[col].astype("int64")
+        return out
 
 
 def _to_float_column(values: Sequence[float | int | None]) -> list[float]:

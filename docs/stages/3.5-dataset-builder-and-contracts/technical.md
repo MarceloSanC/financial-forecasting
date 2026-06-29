@@ -610,6 +610,45 @@ testável com fakes. Desvio já declarado no preâmbulo do §1 e seguido como pl
 nenhuma Task misturou criação de port com seu adapter (exceto a exceção declarada da
 Task 03, port+fake+adapter coesos pelo contrato anti-leakage).
 
+### 2026-06-29 — [deviation] Schema pandera não estava wirado no assembler — Auditoria de testes 3.5
+**Contexto:** o concept §4 (C7), §11 (A5) e o docstring do `DatasetAssemblerPort`
+exigem que o `DATASET_TFT_SCHEMA` (pandera) valide o frame **antes de devolver/
+persistir**. A auditoria de testes constatou que o schema era exercido SÓ pelo seu
+contract test isolado (`test_dataset_schema.py`) sobre um frame hand-built conforme;
+o `DatasetAssembler` NUNCA o invocava — schema efetivamente dead-code como gate de
+runtime. Pior: ao probar o frame REAL contra o schema, ele FALHAVA
+(`volume_spike_flag` montado `float64` vs schema/oráculo `int64`; `asset_id` `object`
+vs `string`) — divergência silenciosa entre assembler↔schema↔oráculo mascarada pelo
+teste isolado.
+**Gap fechado:** (1) `dataset_assembler._finalize_storage_dtypes` coage `asset_id`→
+`string` e `news_volume`/`has_news`/`volume_spike_flag`→`int64` (sem NaN nas linhas
+retidas, confirmado); (2) `assemble` agora chama `DATASET_TFT_SCHEMA.validate(...)`
+antes de reter/persistir (C7 na fronteira do adapter); (3) `dataset_schema` expõe
+`INT64_STORAGE_FEATURES` como fonte única do conjunto int64, consumida pelo assembler
+(sem lista paralela). Testes adicionados em `test_dataset_assembler_anti_leakage.py`:
+`test_assembled_frame_conforms_to_pandera_schema` (frame real passa o schema),
+`test_assembled_storage_dtypes_match_oracle_contract` (dtypes batem o oráculo) e
+`test_assemble_rejects_frame_violating_schema` (mutation guard: corrompe `target_return`
+→ `SchemaError`, e o frame inválido NÃO é retido). Branch de validação deixou de ser
+dead-code.
+
+### 2026-06-29 — [deviation] Cobertura de branches defensivos (gate/coerção/guards) — Auditoria de testes 3.5
+**Contexto:** a auditoria de testes (mutation-mental, Q3) identificou branches de erro
+não cobertos que uma mutação silenciaria: coerções de fronteira do `BuildDataset`
+(`_row_to_candle`/`_as_date`/`_as_optional_date`/`_as_float`/`_as_optional_float` —
+linhas 227/259-261/267/270-272/278/285), o branch de cobertura temporal de dataset
+vazio no `DatasetQualityGate` (linha 126) e os guards internos do `DatasetAssembler`
+(`_order_columns` missing/extra, `_validate_anti_leakage` length-mismatch,
+`_validate_asof_guard` early-return, `_close`, `_to_date` — 332/347/371/374/413/421).
+**Gap fechado:** novos testes
+`tests/unit/features/feature_engineering/application/test_build_dataset_row_coercion.py`
+(coerções de fronteira) e
+`tests/contract/features/feature_engineering/test_dataset_assembler_guards.py` (guards
+internos), além de `test_empty_dataset_fails_coverage` no gate. Resultado:
+`build_dataset.py` e `dataset_quality_gate.py` a 100%; `dataset_assembler.py` a 99%
+(resta só a L280 `not enough rows` pós-drop, inalcançável porque `compute_target_return`
+já levanta antes com <2 closes — guard belt-and-suspenders).
+
 ### 2026-06-29 — [finding] news_volume: registry float64 vs dataset int64 — Autonomous overnight agent
 **Contexto:** o `FeatureRegistry` declara `news_volume` como `float64`, mas o oráculo
 e o assembler armazenam `int64` (contagem inteira de artigos, paridade old

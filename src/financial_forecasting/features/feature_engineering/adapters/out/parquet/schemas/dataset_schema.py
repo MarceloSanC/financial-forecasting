@@ -35,7 +35,10 @@ from financial_forecasting.features.feature_engineering.domain.services.feature_
 _UTC_DT = "datetime64[ns, UTC]"
 
 # Features de armazenamento int64 (contagens/flags inteiras — paridade oráculo).
-_INT64_FEATURES: frozenset[str] = frozenset({"news_volume", "has_news", "volume_spike_flag"})
+# Exposta (pública) para o `DatasetAssembler` casar a montagem ao contrato físico
+# (fonte única do conjunto de features int64; evita lista paralela divergente).
+INT64_STORAGE_FEATURES: frozenset[str] = frozenset({"news_volume", "has_news", "volume_spike_flag"})
+_INT64_FEATURES: frozenset[str] = INT64_STORAGE_FEATURES
 # Features que o registry declara int64 mas o dataset armazena float64 (D2 / ADR
 # 3.5.0002): regimes/flags carregam `NaN` no warmup → promoção a float.
 _FLOAT64_OVERRIDE: frozenset[str] = frozenset(
