@@ -558,4 +558,19 @@ precisa estar instalado. Nenhuma mudança de produção permaneceu (`git status`
 limpo fora desta §7). A mesma prova roda automatizada no caso (b) de
 `tests/architecture/test_import_contracts.py` (sem mutar a árvore real).
 
+### 2026-06-29 — [deviation] task-06 — Claude (autonomous run)
+**Contexto:** a Task 06 manda confirmar o ADR `1.3.0001` em `accepted`,
+commitando só se houver mudança real.
+**O que mudou:** nada — o ADR já estava `status: accepted`, com frontmatter
+conforme `docs/templates/adr.md` (todos os campos: `adr_id`, `decision`,
+`context_stage` etc.), cobrindo **D1** (`.importlinter` standalone vs
+`[tool.importlinter]`, Alternative A) e **D2** (`layers` + `forbidden` vs
+`independence`, Alternatives B/C) com razão concreta (repo antigo 23/36
+arquivos, LAYOUT §3/§6/§7, roadmap). Consistente com `concept.md` §7 (D1/D2).
+**Razão:** o ADR foi autorado na Fase 3 e não precisou de retoque; o `numpy`
+adicionado ao `domain-purity` (decision task-02 acima) é defesa em profundidade
+aditiva que não contradiz o ADR (que lista o conjunto como exemplos de "data/ML
+libs" e "framework libs"). Sem mudança real => commit da Task 06 pulado (A7
+satisfeito sem edição).
+
 <!-- END: post-execution -->
