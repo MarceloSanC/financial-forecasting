@@ -124,12 +124,18 @@ class DatasetAssembler:
 
         feature_columns = tuple(spec.name for spec in list_feature_specs())
         timestamps = ordered["timestamp"].tolist()
+        feature_rows = tuple(
+            {col: _none_if_nan(row[col]) for col in feature_columns}
+            for _, row in ordered[list(feature_columns)].iterrows()
+        )
         return DatasetAssemblyResult(
             n_rows=len(ordered),
             columns=tuple(ordered.columns),
             feature_columns=feature_columns,
             start=_to_date(timestamps[0]),
             end=_to_date(timestamps[-1]),
+            timestamps=tuple(timestamps),
+            feature_rows=feature_rows,
         )
 
     def persist(self, asset: str) -> None:
@@ -384,3 +390,10 @@ def _to_date(value: object) -> date:
     if isinstance(value, datetime):
         return value.date()
     raise TypeError(f"cannot coerce {type(value).__name__} to date")
+
+
+def _none_if_nan(value: object) -> object:
+    """Normaliza `NaN`→`None` para o gate de domínio (primitivos, sem `DataFrame`)."""
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    return value

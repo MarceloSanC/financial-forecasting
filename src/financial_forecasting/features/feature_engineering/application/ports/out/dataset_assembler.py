@@ -60,12 +60,15 @@ class DatasetAssemblyInputs:
 
 @dataclass(frozen=True)
 class DatasetAssemblyResult:
-    """Resultado da montagem (sem vazar `DataFrame`): contagens + ordem de colunas.
+    """Resultado da montagem (sem vazar `DataFrame`): contagens + dados p/ o gate.
 
     - `n_rows`: linhas do dataset montado (após dropar a 1ª linha do alvo).
     - `columns`: ordem final das colunas (base + features do registry + alvo/idx).
     - `feature_columns`: subset de colunas de feature (set/ordem do `FeatureRegistry`).
     - `start`/`end`: 1ª e última `date` do dataset (do `timestamp` normalizado).
+    - `timestamps`: 1 timestamp por linha (para o `DatasetQualityGate` de domínio).
+    - `feature_rows`: 1 `Row` por linha com SÓ as colunas de feature (primitivos,
+      sem `DataFrame`), consumida pelo gate de domínio na `application` (I6/I7).
     """
 
     n_rows: int
@@ -73,6 +76,8 @@ class DatasetAssemblyResult:
     feature_columns: tuple[str, ...]
     start: date
     end: date
+    timestamps: tuple[object, ...]
+    feature_rows: tuple[Row, ...]
 
 
 class DatasetAssemblerPort(Protocol):

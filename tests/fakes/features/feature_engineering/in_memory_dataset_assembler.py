@@ -52,13 +52,18 @@ class InMemoryDatasetAssembler:
         days = list(inputs.grid_days)
         if len(days) < 2:  # noqa: PLR2004 — precisa de >=2 dias para 1 alvo backward
             raise ValueError("not enough rows to compute target_return")
-        n_rows = len(days) - 1  # drop da 1ª linha (alvo backward)
+        retained = days[1:]  # drop da 1ª linha (alvo backward)
+        n_rows = len(retained)
+        # Feature rows finitas (0.0) — o fake não calcula features; só dá forma ao gate.
+        feature_rows = tuple({name: 0.0 for name in feature_columns} for _ in retained)
         return DatasetAssemblyResult(
             n_rows=n_rows,
             columns=columns,
             feature_columns=feature_columns,
-            start=days[1],  # 1ª linha cai → começa no 2º dia
-            end=days[-1],
+            start=retained[0],  # começa no 2º dia
+            end=retained[-1],
+            timestamps=tuple(retained),
+            feature_rows=feature_rows,
         )
 
     def persist(self, asset: str) -> None:
