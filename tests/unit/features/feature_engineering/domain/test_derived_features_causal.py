@@ -603,3 +603,56 @@ def test_shift_is_never_negative_in_derived_helpers() -> None:
             fn(_CLOSE, 0)
         with pytest.raises(ValueError, match="n > 0"):
             fn(_CLOSE, -3)
+
+
+# =============================================================================
+# Task 08 — ramos defensivos e bordas (cobertura dos guards)
+# =============================================================================
+
+
+@pytest.mark.unit
+def test_pct_change_none_when_prev_is_zero() -> None:
+    """C6 — `_pct_change` devolve `None` quando o valor base é 0 (divisão protegida)."""
+    out = df._pct_change((0.0, 5.0, 10.0), 1)
+    assert out[0] is None  # warmup
+    assert out[1] is None  # prev == 0
+    assert out[2] == pytest.approx(1.0)
+
+
+@pytest.mark.unit
+def test_quantile_linear_exact_position_no_interpolation() -> None:
+    """`_quantile_linear` devolve o ponto exato quando `h` cai sobre um índice."""
+    # [10,20,30]: q=0.5 → h=1.0 → ordered[1] = 20 (lo==hi).
+    assert df._quantile_linear((30.0, 10.0, 20.0), 0.5) == pytest.approx(20.0)
+
+
+@pytest.mark.unit
+def test_ewm_holds_last_value_on_intermediate_missing() -> None:
+    """`_ewm` mantém o último `y` quando há faltante intermediário (paridade adjust=False)."""
+    out = df._ewm((2.0, None, 4.0), 10)
+    assert out[0] == pytest.approx(2.0)  # seed
+    assert out[1] == pytest.approx(2.0)  # faltante → mantém prev
+    alpha = 2.0 / 11.0
+    assert out[2] == pytest.approx(alpha * 4.0 + (1.0 - alpha) * 2.0)
+
+
+@pytest.mark.unit
+def test_ewm_rejects_non_positive_span() -> None:
+    """`_ewm` rejeita `span <= 0`."""
+    with pytest.raises(ValueError, match="span > 0"):
+        df._ewm(_CLOSE, 0)
+
+
+@pytest.mark.unit
+def test_length_mismatch_guards_raise() -> None:
+    """Os guards de comprimento desalinhado levantam `ValueError` (defesa)."""
+    with pytest.raises(ValueError, match="length mismatch"):
+        df.amihud_illiquidity_proxy((1.0, 2.0), (1.0,))
+    with pytest.raises(ValueError, match="length mismatch"):
+        df.volatility_parkinson((1.0, 2.0), (1.0,))
+    with pytest.raises(ValueError, match="length mismatch"):
+        df.sentiment_x_volume((0.1, 0.2), (1.0,))
+    with pytest.raises(ValueError, match="length mismatch"):
+        df.net_margin((1.0, 2.0), (1.0,))
+    with pytest.raises(ValueError, match="length mismatch"):
+        df.trend_regime((1.0, 2.0), (1.0,))

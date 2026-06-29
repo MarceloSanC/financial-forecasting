@@ -570,4 +570,39 @@ Task 03 + Task 06  ─► Task 07 (bateria transversal)  ─► Task 08 (gate)
 - `[finding]` — gap/observação a tratar em **próxima Stage** (inclui direção + Stage candidata).
 - `[deviation]` — ajuste pequeno vs. o plano original (o que mudou e por quê).
 
+### 2026-06-29 — [decision] feature-registry (Task 03) — Claude (autonomous)
+**Contexto:** o old taggeava `sentiment_lag_1/3/5` como `trailing_window_causal`, mas
+o vocabulário 3.4 ganhou a tag nova `lagged_causal`, criada precisamente para features
+que são puro `shift(n>0)` (sem janela trailing). `sentiment_lag_*` são exatamente isso.
+**Decisão:** promover `sentiment_lag_1/3/5` para `anti_leakage_tag="lagged_causal"`
+(os demais sentimento dinâmico — `sentiment_ema`/`sentiment_surprise` — seguem
+`trailing_window_causal`, pois usam janela/EWM). Teste de tag ajustado
+(`test_sentiment_lags_are_tagged_lagged_causal`).
+**Razão:** a tag descreve a semântica de causalidade com mais precisão (shift puro ≠
+janela trailing); era a opção explicitamente sugerida pela §2 Task 03 / §5 do technical.
+Reversível (só metadado; muda o `feature_set_hash`, ancorado por snapshot no teste).
+
+### 2026-06-29 — [deviation] feature-registry (Task 02) — Claude (autonomous)
+**Contexto:** a §2 Task 02 sugeria `from ..value_objects.feature_spec import FeatureSpec`
+(import relativo de pacote-pai). O ruff do projeto proíbe isso (regra `TID252`,
+flake8-tidy-imports) e reprovaria o gate.
+**Razão:** trocado por import absoluto
+(`from financial_forecasting.features.feature_engineering.domain.value_objects.feature_spec import FeatureSpec`),
+alinhado à convenção do repo. Sem efeito de runtime; mantém a pureza (mesmo módulo de domínio).
+
+### 2026-06-29 — [deviation] commits (Tasks 01-06) — Claude (autonomous)
+**Contexto:** os "Commit sugerido" do technical para várias Tasks excediam o limite de
+100 chars do subject validado pelo hook `check_commit_msg.py`.
+**Razão:** descrições encurtadas mantendo tipo/escopo/tag `[3.4/task-NN]`; conteúdo
+preservado no body em bullets. Sem mudança de semântica.
+
+### 2026-06-29 — [deviation] gate (Task 08) — Claude (autonomous)
+**Contexto:** após Tasks 04-07 a cobertura dos 3 módulos novos já era 97,5% (acima do
+gate de 90%); restavam 8 ramos defensivos descobertos (guards de comprimento
+desalinhado, `_ewm` span<=0, `pct_change` com base 0, quantil em índice exato, `_ewm`
+com faltante intermediário).
+**Razão:** adicionei um bloco de testes de borda/defensivo em
+`test_derived_features_causal.py` (Task 08) cobrindo esses ramos → 100% nos 3 módulos.
+Fortalece o oráculo; nenhum código de produção novo.
+
 <!-- END: post-execution -->
