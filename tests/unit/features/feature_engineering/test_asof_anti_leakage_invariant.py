@@ -79,6 +79,42 @@ def test_policy_allows_visible_effective_date() -> None:
     _POLICY.validate_not_future(date(2024, 1, 1), date(2024, 1, 15))
 
 
+class _RaisingPolicy(FundamentalsAsofPolicy):
+    """Policy stub que reprova SEMPRE o re-check (prova de delegação defense-in-depth)."""
+
+    def validate_not_future(self, effective_date: date, sample_date: date) -> None:
+        raise AntiLeakageError("forced re-check failure (defense-in-depth)")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "factory",
+    [InMemoryAsofJoinAdapter, AsofJoinDuckdbAdapter],
+    ids=["fake", "duckdb"],
+)
+def test_both_adapters_delegate_recheck_to_policy(
+    factory: Callable[[FundamentalsAsofPolicy], AsofJoinAdapter],
+) -> None:
+    """Paridade fake↔real (A6/I1): ambos delegam o re-check à policy e propagam o
+    `AntiLeakageError`.
+
+    O caminho do join nunca materializa linha futura (filtro `day >= effective_date`),
+    então a única forma de provar que o re-check está realmente CABLADO (e não passa
+    por sorte) é injetar uma policy que reprova — fake e real precisam levantar igual.
+    """
+    report: dict[str, object] = {
+        "effective_date": date(2024, 1, 5),
+        "revenue": 100.0,
+        "net_income": 20.0,
+        "operating_cash_flow": 30.0,
+        "total_shareholder_equity": 50.0,
+        "total_liabilities": 25.0,
+    }
+    adapter = factory(_RaisingPolicy())
+    with pytest.raises(AntiLeakageError):
+        adapter.asof_join_backward(grid_days=[date(2024, 1, 10)], reports=[report])
+
+
 # --- frente 2: invariante no caminho do as-of (parametrizado fake↔real) -------
 
 

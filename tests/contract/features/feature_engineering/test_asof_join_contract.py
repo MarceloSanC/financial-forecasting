@@ -188,6 +188,27 @@ def test_no_reports_yields_all_empty_rows(adapter: AsofJoinAdapter) -> None:
 
 
 @pytest.mark.contract
+def test_input_report_order_does_not_affect_result(adapter: AsofJoinAdapter) -> None:
+    """A ordem dos `reports` na entrada NÃO altera o backward (último `eff <= day`).
+
+    Guarda a ordenação interna do fake (`sorted` + `break` no primeiro report futuro):
+    com os reports invertidos, cada dia ainda recebe o de MAIOR `effective_date <= day`
+    — e o real DuckDB concorda (paridade).
+    """
+    reversed_reports: Sequence[Row] = [_R2, _R1]  # ordem invertida na entrada
+    by_day = {
+        _as_date(row["day"]): row
+        for row in adapter.asof_join_backward(grid_days=_GRID, reports=reversed_reports)
+    }
+    # 2024-01-10: ainda escolhe r1 (eff 01-05), r2 (eff 01-15) ainda invisível.
+    assert by_day[date(2024, 1, 10)]["fundamentals_effective_date"] == date(2024, 1, 5)
+    assert by_day[date(2024, 1, 10)]["revenue"] == _R1["revenue"]
+    # 2024-01-20: o MAIOR elegível é r2 (não o primeiro da lista).
+    assert by_day[date(2024, 1, 20)]["fundamentals_effective_date"] == date(2024, 1, 15)
+    assert by_day[date(2024, 1, 20)]["revenue"] == _R2["revenue"]
+
+
+@pytest.mark.contract
 def test_fallback_45d_applied_upstream(adapter: AsofJoinAdapter) -> None:
     """Reports chegam com `effective_date` da policy (fallback a montante — c/I2)."""
     # report sem reported_date → effective_date = fiscal_date_end + 45d (Fri->Mon).

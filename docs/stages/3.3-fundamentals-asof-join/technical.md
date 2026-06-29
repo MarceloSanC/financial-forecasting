@@ -558,4 +558,43 @@ não-`date`) não eram exercitados pelo contract test de forma compartilhada.
 forma compartilhada fake↔real). O caminho "futura → erro" do invariante fica provado no
 unit da policy (Task 01) e no teste-foco (Task 05).
 
+### 2026-06-29 — [deviation] auditoria de testes: re-check defense-in-depth não provado — Claude (autonomous run)
+**Gap fechado:** A cláusula A5/A6 exige que o adapter levante `AntiLeakageError` para
+`effective_date` futura (I1, defense-in-depth). Porém o `ASOF LEFT JOIN`
+(`g.day >= r.effective_date`) NUNCA materializa uma linha com data futura (verificado:
+retorna `NULL`), então a linha `self._policy.validate_not_future(...)` no adapter — e a
+correspondente no fake — apareciam "100% cobertas" mas **nunca eram exercitadas no caminho
+de raise**: removê-las não quebrava nenhum teste (mutação sobrevivia). O invariante só
+estava provado chamando a policy diretamente, não provando que adapter/fake DELEGAM a ela.
+**Correção:** Adicionados `test_adapter_delegates_anti_leakage_recheck_to_policy` (unit do
+adapter) e `test_both_adapters_delegate_recheck_to_policy[fake|duckdb]` (teste-foco,
+parametrizado) que injetam uma `_RaisingPolicy` stub e exigem propagação do
+`AntiLeakageError` — única forma de provar o cablamento, já que o join não produz linha
+futura. Mutação confirmada: remover o re-check do adapter agora derruba ambos os testes.
+Commit `test(feature-engineering): provar re-check anti-leakage delegado a policy [3.3/task-05-extra]`.
+
+### 2026-06-29 — [deviation] auditoria de testes: dia vazio não deve acionar re-check — Claude (autonomous run)
+**Gap fechado:** O ramo C4 (dia sem fundamento elegível → `effective is None` → return
+antecipado, sem chamar `validate_not_future`) não tinha asserção provando que o re-check
+NÃO é chamado no caminho vazio. Mutação que movesse o re-check para antes do guard `None`
+passaria despercebida.
+**Correção:** Adicionado `test_empty_day_does_not_invoke_policy_recheck` (injeta
+`_RaisingPolicy`; dia vazio não levanta → prova o short-circuit C4). Commit junto à
+Task 04-extra.
+
+### 2026-06-29 — [deviation] auditoria de testes: coerção de `bool` não coberta — Claude (autonomous run)
+**Gap fechado:** `_as_float` guarda `isinstance(value, bool)` porque `bool` é subclasse de
+`int` (sem o guard, `True` viraria `1.0` e poluiria os ratios). Nenhum teste passava `bool`;
+remover o guard sobrevivia.
+**Correção:** Adicionado `test_bool_fundamental_coerced_to_none` (campo fundamental `True`
+→ `None`, ratio dependente `None`). Commit `[3.3/task-04-extra]`.
+
+### 2026-06-29 — [deviation] auditoria de testes: independência da ordem de entrada — Claude (autonomous run)
+**Gap fechado:** O contract test alimentava os reports já ordenados (`[_R1, _R2]`), então a
+ordenação interna do fake (`sorted` + `break` no primeiro report futuro) não era provada:
+um fake que dependesse da ordem de entrada (ou um `break` mal colocado) passaria.
+**Correção:** Adicionado `test_input_report_order_does_not_affect_result` (contract,
+parametrizado fake↔real) com reports invertidos (`[_R2, _R1]`), exigindo que cada dia ainda
+escolha o MAIOR `effective_date <= day` — paridade fake↔DuckDB. Commit `[3.3/task-08-extra]`.
+
 <!-- END: post-execution -->
