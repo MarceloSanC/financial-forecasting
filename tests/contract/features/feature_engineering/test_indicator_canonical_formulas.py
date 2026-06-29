@@ -227,6 +227,40 @@ def test_finite_after_effective_warmup(adapter_rows: list[dict[str, float]]) -> 
 
 
 @pytest.mark.contract
+@pytest.mark.parametrize(
+    ("name", "last_nan_index"),
+    [
+        ("ema_10", 8),  # EMA_N: NaN até N-2, primeiro finito em N-1
+        ("ema_50", 48),
+        ("ema_100", 98),
+        ("ema_200", 198),
+        ("macd", 24),  # MACD seedado pela EMA26: NaN até 24, finito em 25
+        ("volatility_20d", 19),  # janela de 20 sobre pct_change: NaN dentro da janela
+    ],
+)
+def test_warmup_region_is_nan_before_first_finite(
+    adapter_rows: list[dict[str, float]], name: str, last_nan_index: int
+) -> None:
+    """O warmup PRODUZ `NaN` antes do primeiro valor finito (I6/I7/D6) — não só finito depois.
+
+    As outras asserções de finitude provam só o lado pós-warmup; um cálculo que
+    seedasse o indicador cedo demais (seed não-causal/look-ahead a partir da barra 0)
+    passaria nelas. Este teste prende o LADO `NaN`: a barra imediatamente anterior ao
+    primeiro finito ainda é `NaN`, e a primeira barra (índice 0) também — provando que
+    a região de aquecimento existe de fato e na posição esperada (boundary estável,
+    verificado contra o adapter real).
+    """
+    produced = _column(adapter_rows, name)
+    assert math.isnan(produced[0]), f"{name} deveria ser NaN na barra 0 (warmup)"
+    assert math.isnan(
+        produced[last_nan_index]
+    ), f"{name} deveria ser NaN na barra {last_nan_index} (última do warmup)"
+    assert math.isfinite(
+        produced[last_nan_index + 1]
+    ), f"{name} deveria ser finito na barra {last_nan_index + 1} (primeira pós-warmup)"
+
+
+@pytest.mark.contract
 def test_rsi_diverges_from_sma_variant() -> None:
     """Sanidade: a variante SMA do RSI difere de Wilder (a fixture pegaria a troca)."""
     closes = np.array(_closes(), dtype=float)

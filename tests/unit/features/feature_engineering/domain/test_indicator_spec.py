@@ -189,3 +189,29 @@ def test_registry_hash_changes_when_tag_changes() -> None:
         perturbed["candle_range"], anti_leakage_tag="trailing_window_causal"
     )
     assert indicator_registry_hash(perturbed) != indicator_registry_hash()
+
+
+@pytest.mark.unit
+def test_registry_hash_changes_when_family_changes() -> None:
+    """Perturbar a `family` de um spec MUDA o hash (I10).
+
+    Fecha o buraco de mutação: sem este teste, remover `family` da string canônica
+    do `indicator_registry_hash` deixaria os testes de `warmup`/`tag` verdes (o hash
+    continuaria "determinístico") — `family` faz parte da identidade do spec (I10:
+    "qualquer mudança de spec muda o hash").
+    """
+    perturbed = dict(INDICATOR_SPECS)
+    perturbed["ema_10"] = dataclasses.replace(perturbed["ema_10"], family="momentum")
+    assert indicator_registry_hash(perturbed) != indicator_registry_hash()
+
+
+@pytest.mark.unit
+def test_registry_hash_changes_when_source_cols_changes() -> None:
+    """Perturbar `source_cols` de um spec MUDA o hash (I10).
+
+    Mesma rede do teste de `family`: sem ele, dropar `source_cols` da serialização
+    canônica do hash passaria batido. `source_cols` é parte da identidade do spec.
+    """
+    perturbed = dict(INDICATOR_SPECS)
+    perturbed["ema_10"] = dataclasses.replace(perturbed["ema_10"], source_cols=("open",))
+    assert indicator_registry_hash(perturbed) != indicator_registry_hash()

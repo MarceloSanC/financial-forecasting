@@ -740,4 +740,32 @@ montagem/persistência: ela consome `IndicatorCalculator`, define o `dataset_sch
 (pandera) e grava em `processed` via `MedallionStore`. Nenhuma ação nesta Stage; o
 contrato float32 já está pronto para 3.5 consumir.
 
+### 2026-06-29 — [deviation] Auditoria de testes — sensibilidade do hash a `family`/`source_cols` (I10) — code assistant
+**Contexto:** O `test_indicator_spec.py` cobria a sensibilidade de
+`indicator_registry_hash()` só a `warmup` e `anti_leakage_tag`. A serialização canônica
+do hash junta **6 campos** (`name`/`family`/`source_cols`/`warmup`/`anti_leakage_tag`/
+`dtype`); uma mutação que removesse `family` ou `source_cols` da string canônica deixaria
+o hash ainda "determinístico" e os dois testes existentes **verdes** — o buraco
+sobreviveria, violando I10 ("qualquer mudança de spec muda o hash").
+**Razão:** Adicionados `test_registry_hash_changes_when_family_changes` e
+`test_registry_hash_changes_when_source_cols_changes` (perturbam `family`/`source_cols`
+de um spec e exigem hash diferente). Fecha o gap de mutação em I10. Sem mudança no código
+de produção.
+
+### 2026-06-29 — [deviation] Auditoria de testes — lado `NaN` do warmup (I6/I7/D6) — code assistant
+**Contexto:** As asserções de finitude (`test_finite_after_*`) provavam só o **lado
+pós-warmup** (valores finitos a partir de `[warmup:]`). Um cálculo que seedasse o
+indicador cedo demais (seed não-causal/look-ahead a partir da barra 0) passaria nelas —
+o lado `NaN` da região de aquecimento (I6/I7/D6) não era verificado, apesar de a docstring
+de `test_finite_after_effective_warmup` afirmar "NaN só antes".
+**Razão:** Adicionado `test_warmup_region_is_nan_before_first_finite` (parametrizado) em
+`test_indicator_canonical_formulas.py`, ancorado em boundaries estáveis verificados contra
+o adapter real: `ema_N` NaN em `N-2`/finito em `N-1`; `macd` NaN até 24/finito em 25
+(seed da EMA26); `volatility_20d` NaN na barra 19 (dentro da janela). Prova que a região
+de aquecimento existe e está na posição esperada (barra 0 + última barra do warmup = NaN).
+Nota: os warmups declarados são **limites superiores conservadores** — `rsi_14` e o
+`volatility_20d` na barra 20 já são finitos no adapter real, por isso o teste mira só os
+boundaries estáveis (EMA/MACD/vol-19), não um "NaN imediatamente antes do warmup declarado"
+genérico (que seria frágil). Sem mudança no código de produção.
+
 <!-- END: post-execution -->
