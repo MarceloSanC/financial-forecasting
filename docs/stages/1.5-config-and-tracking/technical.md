@@ -563,4 +563,35 @@ Task 01 (dep mlflow) ─► Task 02 (Settings) ─► Task 03 (port+fake) ─►
 - `[finding]` — gap/observação a tratar em **próxima Stage**.
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original.
 
+### 2026-06-29 — [decision] Task 04 — verificação de idempotência agnóstica de backend — Claude (autonomous)
+**Contexto:** O contract test precisa provar I2 (idempotência por `run_id`) em `[fake, real]` sem acoplar o teste à API de contagem de runs de cada backend (risco previsto em §5).
+**Pergunta:** Como verificar idempotência sem contar runs no backend?
+**Opções:**
+- A — contar runs via `MlflowClient.search_runs` (real) e `len(dict)` (fake): acopla o contrato à impl, exige hook de inspeção por backend.
+- B — verificar pela IDENTIDADE do `run_id`: `start_run(run_id=r)` devolve `r` e um `log_metrics` no run reaberto não falha (prova run ativo/resumido). ✅ recomendada
+**Decisão:** B
+**Razão:** Mantém o contract test agnóstico (só usa o port), satisfeito identicamente por fake e real; o `mlflow.start_run(run_id=...)` resume o run (não cria outro) e o id devolvido idêntico + log sem erro provam o resume. Alinhado ao fallback pré-declarado na §5.
+
+### 2026-06-29 — [decision] Task 04 — mapear "no active run" para `RuntimeError` no adapter — Claude (autonomous)
+**Contexto:** C2 exige que `log_*`/`set_tags`/`log_artifact`/`end_run` sem run ativo falhem com o MESMO tipo observável no fake e no real, para o `pytest.raises` do contrato casar em ambos.
+**Pergunta:** Como casar o tipo de erro entre `mlflow` e o fake?
+**Opções:**
+- A — deixar o `mlflow` decidir (abre run implícito em algumas chamadas; tipo divergente do fake).
+- B — o adapter checa `mlflow.active_run() is None` ANTES de delegar e levanta `RuntimeError` (o fake levanta o mesmo). ✅ recomendada
+**Decisão:** B
+**Razão:** Pré-checar evita o comportamento implícito do `mlflow` (abrir run novo) e garante paridade C2. Simplificou o adapter (removido um context-manager guard que mapeava `MlflowException`), levando o módulo a 100% de cobertura sem branch defensivo morto.
+
+### 2026-06-29 — [deviation] Task 03 — `.pre-commit-config.yaml`: ignorar ANN101/ANN102 no hook ruff pinado — Claude (autonomous)
+**Contexto:** O hook `ruff-pre-commit` está pinado em `v0.6.9`, que ainda enforça `ANN101`/`ANN102` (anotação de `self`/`cls`) — regras DEPRECADAS e removidas no ruff corrente (`>=0.15`) que o projeto resolve em `make check`/`make lint` (gate autoritativo). Sem ajuste, o hook reprova o `FakeExperimentTracker` (e o `FakeHasher` já commitado na 1.4), divergindo do gate e do estilo já versionado.
+**Razão:** Adicionado `args: [--fix, --extend-ignore, "ANN101,ANN102"]` SÓ ao hook pinado. Não toquei o pin (bumpar para 0.15 arrastaria reformatação de ~10 arquivos fora do escopo desta Stage, via `ruff-format` — churn indevido). `make check` (ruff local) permanece sem warning. Reversível: cai quando o pin for atualizado numa Stage de manutenção dedicada. Commit próprio (`build(pre-commit): ...`), fora da contagem de Tasks.
+
+### 2026-06-29 — [finding] Task 06 — `mlflow.set_tracking_uri` muta `os.environ` (pollution entre testes) — Claude (autonomous)
+**Contexto:** Ao tirar `config/*` do omit e rodar a suíte inteira, `test_defaults_include_mlflow_tracking_uri` falhou: `MlflowTracker.__init__` chama `mlflow.set_tracking_uri`, que escreve `os.environ["MLFLOW_TRACKING_URI"]` no processo; como `Settings(_env_file=None)` ainda lê `os.environ`, o `tracking_uri` em `tmp_path` do contract test vazava para o caso de default.
+**Tratamento nesta Stage:** A fixture autouse dos testes de `Settings` passou a `monkeypatch.delenv("MLFLOW_TRACKING_URI"/"PORT")` antes de cada caso, isolando o ambiente. Em RUNTIME isso é inócuo: `Settings` é lido uma vez no boot (antes de qualquer tracker ser construído).
+**A tratar adiante:** Quando a Stage 5.4 (`TrainTft`) ou testes de integração construírem `MlflowTracker` no mesmo processo que recarrega `Settings`, reavaliar se vale encapsular a leitura de `os.environ` (ex.: `Settings` com `env_ignore_empty`/origem explícita) — não bloqueante agora.
+
+### 2026-06-29 — [decision] Task 04/Gitignore — ignorar `mlruns/` e `mlruns.db` — Claude (autonomous)
+**Contexto:** O default `sqlite:///mlruns.db` cria `mlruns.db` na worktree; o `mlflow` materializa artefatos em `./mlruns/` (artifact root default) mesmo com o backend store em `tmp_path` (o contract test loga um artifact).
+**Decisão:** Adicionados `mlruns.db` e `mlruns/` ao `.gitignore` (commit `chore(gitignore): ...`, fora da contagem de Tasks). Tracking é local e reconstruível (ADR 1.5.0001) — nada disso é versionado.
+
 <!-- END: post-execution -->
