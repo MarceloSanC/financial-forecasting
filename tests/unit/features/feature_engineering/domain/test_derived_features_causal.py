@@ -644,6 +644,95 @@ def test_ewm_rejects_non_positive_span() -> None:
 
 
 @pytest.mark.unit
+def test_volume_zscore_matches_known_value() -> None:
+    """`volume_zscore[t]` bate com `(v_t - mean(v_t-20..t-1))/std_pop` (witness, não só range).
+
+    Fecha o buraco de mutação: o teste de warmup só prova `None`; sem este, uma mutação
+    que sempre devolvesse `None` no ramo de valor passaria (cobertura sem asserção).
+    """
+    volume = [10.0, 12.0] * 10 + [30.0]  # 20 trailing (t-20..t-1) + corrente em t=20
+    window = volume[0:20]
+    mu = sum(window) / 20
+    sd = (sum((x - mu) ** 2 for x in window) / 20) ** 0.5
+    z = df.volume_zscore(volume)
+    assert z[20] == pytest.approx((30.0 - mu) / sd)
+
+
+@pytest.mark.unit
+def test_volume_spike_flag_fires_on_real_spike() -> None:
+    """`volume_spike_flag` produz `1` num spike genuíno (witness do ramo `> 3`).
+
+    O teste de range admite tudo-zero; sem este, uma mutação que devolvesse sempre `0`
+    sobreviveria.
+    """
+    volume = [100.0 + (1.0 if i % 2 else -1.0) for i in range(60)]
+    volume[55] = 100_000.0  # spike muito acima do limiar de z-score 3
+    flags = df.volume_spike_flag(volume)
+    assert flags[55] == 1
+    assert sum(flags) == 1  # só o spike dispara
+
+
+@pytest.mark.unit
+def test_volatility_regime_produces_all_three_buckets_with_known_value() -> None:
+    """`volatility_regime` emite 0/1/2 e bate com a comparação ao tercil shiftado (A6).
+
+    O teste de range sobrevive a uma mutação que devolva sempre `0`; aqui exigimos os
+    três buckets presentes e fixamos um valor conhecido contra os quantis trailing.
+    """
+    n = 120
+    vol20 = tuple(0.1 + 0.2 * abs(math.sin(i / 2.0)) for i in range(n))
+    out = df.volatility_regime(vol20)
+    assert {v for v in out if v is not None} == {0, 1, 2}
+    # witness pontual em t=63: comparar vol20[63] aos tercis de vol20[0..62] (shift+window 63)
+    window = list(vol20[0:63])
+    q33 = df._quantile_linear(window, 1.0 / 3.0)
+    q66 = df._quantile_linear(window, 2.0 / 3.0)
+    v = vol20[63]
+    expected = 0 if v <= q33 else (1 if v <= q66 else 2)
+    assert out[63] == expected
+
+
+@pytest.mark.unit
+def test_trend_regime_produces_all_three_states() -> None:
+    """`trend_regime` emite -1/0/1 (witness; range sozinho sobrevive a constante)."""
+    n = 120
+    ema10 = tuple(100.0 + 3.0 * math.sin(i / 4.0) for i in range(n))
+    ema50 = tuple(99.0 + 0.2 * math.sin(i / 7.0) for i in range(n))
+    out = df.trend_regime(ema10, ema50)
+    assert {v for v in out if v is not None} == {-1, 0, 1}
+
+
+@pytest.mark.unit
+def test_trend_regime_zero_inside_deadband() -> None:
+    """`trend_regime` = 0 quando o spread fica dentro do deadband (ramo central).
+
+    Spread constante → deadband std = 0 → `s > 0`/`s < 0` decidem; usamos spread
+    exatamente 0 num trecho para pinar o bucket 0 (fronteira `<=`/`>` do deadband).
+    """
+    n = 80
+    # ema_10 == ema_50 em todo lugar → spread 0, deadband 0 → regime 0 (s não > 0 nem < 0)
+    ema = tuple(100.0 + math.sin(i) for i in range(n))
+    out = df.trend_regime(ema, ema)
+    assert all(v in (0, None) for v in out)
+    assert out[63] == 0  # fora do warmup, spread 0 → bucket central
+
+
+@pytest.mark.unit
+def test_stress_tail_return_flag_fires_on_tail_drop() -> None:
+    """`stress_tail_return_flag` = 1 num retorno de cauda inferior (witness do ramo `<=`).
+
+    O range sozinho sobrevive a tudo-zero; aqui forçamos uma queda abrupta após uma
+    janela calma e exigimos a flag `1` exatamente na queda.
+    """
+    n = 80
+    close = [100.0 + 0.01 * math.sin(i) for i in range(n)]  # janela quase plana
+    close[70] = close[69] * 0.80  # -20% (cauda inferior óbvia)
+    out = df.stress_tail_return_flag(tuple(close))
+    assert out[70] == 1
+    assert 1 in {v for v in out if v is not None}
+
+
+@pytest.mark.unit
 def test_length_mismatch_guards_raise() -> None:
     """Os guards de comprimento desalinhado levantam `ValueError` (defesa)."""
     with pytest.raises(ValueError, match="length mismatch"):

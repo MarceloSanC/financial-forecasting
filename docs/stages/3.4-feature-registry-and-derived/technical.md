@@ -605,4 +605,21 @@ com faltante intermediário).
 `test_derived_features_causal.py` (Task 08) cobrindo esses ramos → 100% nos 3 módulos.
 Fortalece o oráculo; nenhum código de produção novo.
 
+### 2026-06-29 — [deviation] testes (auditoria de testes) — Claude (autonomous)
+**Contexto:** auditoria de testes (mutation-mental) achou gaps de *asserção* (não de
+cobertura — os 3 módulos já estavam 100%): vários ramos de regime/flag executavam mas
+nenhum teste *testemunhava* o valor não-default. Mutações sobreviventes detectadas:
+(a) `volume_zscore` devolver sempre `None` no ramo de valor (só havia teste de warmup→`None`);
+(b) `volume_spike_flag`/`stress_tail_return_flag` devolverem sempre `0` (o teste de range
+admitia tudo-zero, e a fixture do spike nem disparava `1`); (c) `volatility_regime`/
+`trend_regime` devolverem uma constante dentro do range (testes só checavam `v in {...}`).
+**Razão:** adicionei 6 testes-witness em `test_derived_features_causal.py` que pinam valores
+conhecidos contra a fórmula/threshold trailing: `test_volume_zscore_matches_known_value`,
+`test_volume_spike_flag_fires_on_real_spike`,
+`test_volatility_regime_produces_all_three_buckets_with_known_value`,
+`test_trend_regime_produces_all_three_states`, `test_trend_regime_zero_inside_deadband`
+(fronteira `<=`/`>` do deadband, spread 0), `test_stress_tail_return_flag_fires_on_tail_drop`.
+Nenhum código de produção novo; fortalece o oráculo causal e fecha os ramos que as mutações
+de "retornar default / pular branch" exploravam. Gates seguem verdes (100% cobertura mantida).
+
 <!-- END: post-execution -->
