@@ -862,4 +862,26 @@ fórmula é coberta pela função pura (Task 03) e a forma pelo contract test (T
 02/06). Nenhuma ação pendente — registrado para a auditoria não confundir o 0% do
 bloco lazy com gap de teste.
 
+### 2026-06-29 — [deviation] Auditoria de testes — cobrir `_resolve_canonical_order` sem torch — Claude (autonomous overnight)
+**Contexto:** A auditoria de testes (mutation-mental) achou um gap real: o método
+`FinbertSentimentModel._resolve_canonical_order(id2label)` é lógica PURA stdlib-only
+e carrega a [decision] da Task 06 (remapeamento de rótulos por NOME — a correção do
+sinal invertido do SHA pinado `{0:positive,1:negative,2:neutral}`), mais uma guarda
+`ValueError` para revisão com rótulos inesperados. Mas o único teste que o exercitava
+era o integration live (Task 08), **SKIPPED no CI** (torch ausente) — o módulo do
+adapter nem era importado no CI (0%/never-imported). Mutação (inverter a ordem
+canônica, dropar a guarda de label faltante, trocar índices) NÃO reprovava nenhum
+teste do CI: gap de cobertura sobre código de decisão.
+**Ajuste:** novo `tests/unit/.../adapters/test_finbert_label_order.py` (9 testes,
+torch-free — o método é estático e o import de torch é lazy no `__init__`) cobrindo:
+remapeamento do SHA pinado `(1,2,0)`, ordem-já-canônica identidade `(0,1,2)`,
+case-insensitive, permutação arbitrária resolvida por nome, e `ValueError` para 5
+casos de rótulo faltante/inesperado. Adapter sai de never-imported para 44% (todo o
+restante descoberto é o bloco lazy de torch — `__init__`/forward/batches —, esperado
+sob `skipif`, I8/D3). Commit `test(feature-engineering.adapters): cobrir remap de
+rótulos por nome sem torch [3.2/task-08-extra]`.
+**Razão:** O remap por nome é a correção de um bug latente de sinal invertido
+([decision] Task 06) — deixá-lo sem rede torch-free contradiz I8/D3 (a lógica pura do
+adapter deve ser coberta sem torch) e era o achado de "rastro perdido" da stage-audit.
+
 <!-- END: post-execution -->
