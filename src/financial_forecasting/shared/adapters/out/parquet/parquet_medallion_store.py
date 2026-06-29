@@ -10,10 +10,15 @@ se vazar para `application`/`domain`). Implementa o contrato `MedallionStore`:
   (`asset=<asset>/year=<year>`); para cada partição alvo, lê as PKs lógicas já
   gravadas, detecta colisão (sem `overwrite` → `DuplicateKeyError`, C1; com
   `overwrite=True` substitui as colididas, I2) e grava o Parquet da partição.
-- **read** (`duckdb`): monta um `SELECT` sobre o glob Hive da tabela com `WHERE`
-  nas colunas de partição vindas de `filters` (partition pruning, I7); dataset/
-  asset inexistente → sequência vazia (C4). Sessão DuckDB com `TimeZone='UTC'`
-  para devolver timestamps tz-aware em UTC (fidelidade temporal, I5).
+- **read** (`duckdb`): monta um `SELECT` das colunas DECLARADAS no schema bronze
+  (não `SELECT *`) sobre o glob Hive da tabela, com `WHERE` nas colunas de
+  partição vindas de `filters` (partition pruning, I7); dataset/asset inexistente
+  → sequência vazia (C4). Projetar só o schema dropa as colunas de partição que o
+  `hive_partitioning` materializa mas não pertencem ao schema (o `asset` em news/
+  fundamental, cuja coluna lógica é `asset_id`) — sem isso o `read` devolveria uma
+  coluna fantasma, quebrando a paridade fake↔real (I6) e a fidelidade de schema
+  (A5/A6). Sessão DuckDB com `TimeZone='UTC'` para devolver timestamps tz-aware em
+  UTC (fidelidade temporal, I5).
 
 A raiz de dados (`data_root`) é INJETADA (não hardcoded, I8); o adapter é
 instanciado só no `composition_root` (I9). Layout em disco (ADR 2.1.0001):
@@ -51,6 +56,16 @@ def _safe_partition(value: object) -> str:
         return _PARTITION_NONE
     text = str(value).strip()
     return text if text else _PARTITION_NONE
+
+
+def _quote_ident(name: str) -> str:
+    """Cita um identificador SQL (DuckDB) escapando aspas duplas embutidas.
+
+    Projetar colunas do schema por nome no `read` exige citar para tolerar nomes
+    que colidem com keywords (ex.: `open`) sem depender da heurística do parser.
+    """
+    escaped = name.replace('"', '""')
+    return f'"{escaped}"'
 
 
 def _write_parquet(df: pd.DataFrame, path: Path) -> None:
@@ -200,10 +215,16 @@ class ParquetMedallionStore:
 
         predicates, params = self._build_predicates(meta, filters)
         where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
-        sql = (
-            f"SELECT * EXCLUDE (year) FROM "  # `year` é artefato de partição
-            f"read_parquet('{glob}', hive_partitioning=true){where}"
-        )
+        # Projeta SÓ as colunas declaradas no schema bronze (não `SELECT *`): o
+        # `hive_partitioning` materializa as colunas de partição `asset` e `year`,
+        # e para news/fundamental (coluna lógica `asset_id`) o `asset` da partição
+        # NÃO está no schema — seria uma coluna fantasma no `read`, quebrando a
+        # paridade fake↔real (I6) e a fidelidade de schema (A5/A6). Projetar as
+        # colunas do schema dropa o fantasma e mantém `WHERE asset = ?` válido
+        # (a partição segue disponível para pruning, só não é selecionada).
+        projection = ", ".join(_quote_ident(col) for col in meta.schema.columns)
+        source = f"read_parquet('{glob}', hive_partitioning=true)"
+        sql = f"SELECT {projection} FROM {source}{where}"
 
         con = duckdb.connect()
         try:

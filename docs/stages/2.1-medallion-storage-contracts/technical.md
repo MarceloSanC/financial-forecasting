@@ -678,4 +678,39 @@ código novo do adapter `parquet_medallion_store.py` = 99% (1 linha defensiva
   o schema, não o adapter). A asserção `not list((tmp_path/"bronze").rglob(...))`
   prova a invariante "não grava Parquet inválido".
 
+#### [finding] (blocker F1) `read` devolvia coluna de partição fantasma `asset` para news/fundamental — corrigido
+
+- **Blocker (auditoria independente, severidade `blocker`, dentro da Stage).** O
+  `read` montava `SELECT * EXCLUDE (year)`. Com `hive_partitioning=true`, o DuckDB
+  materializa AMBAS as colunas de partição (`asset` **e** `year`). O `EXCLUDE`
+  removia só `year`. Para `candle` não havia problema (a coluna de partição
+  `asset` é literalmente a coluna do schema). Mas `news`/`fundamental` têm coluna
+  lógica `asset_id` — o `asset` da partição NÃO pertence ao schema bronze. O
+  `read` real devolvia 9 chaves (`asset` fantasma duplicando `asset_id`), o fake
+  devolvia 8. **Viola I6** (paridade fake↔real — "mesmo contract test em [fake,
+  real]") e a **fidelidade de schema do read** (A5/A6) que 2.2/2.3 consomem.
+- **Causa do falso-verde.** O contract test que existia para PROVAR I6 era míope:
+  só checava `len(rows)` e uma chave (`rows[0]["article_id"]`), nunca o conjunto
+  de chaves. O `test_news_round_trip_with_string_columns` passava verde em
+  `[fake, real]` apesar de key-sets divergentes (verificação assimétrica;
+  estrutural ≠ semântico).
+- **Correção (Opção A da recomendação).** No `read`, projetar SÓ as colunas
+  declaradas no schema bronze do registry (`SELECT "<col>", ... FROM
+  read_parquet(..., hive_partitioning=true) WHERE ...`) em vez de `SELECT *
+  EXCLUDE (year)`. Isso dropa QUALQUER coluna de partição que não esteja no
+  schema (o `asset` fantasma) e mantém `WHERE asset = ?` válido (a partição segue
+  disponível para pruning, só não é selecionada). Identificadores citados (helper
+  `_quote_ident`, escape de `"`) para tolerar nomes que colidem com keywords (ex.:
+  `open`). Para `candle` o resultado é idêntico (o DuckDB funde a coluna de dado
+  `asset` com a de partição de mesmo nome; verificado).
+- **Buraco de I6 fechado (escopo da Stage).** Adicionado ao contract test
+  (rodando em `[fake, real]`) o assert de conjunto EXATO de chaves
+  `set(rows[0]) == set(written)`: reforçado em `test_write_then_read_round_trip`
+  (candle) e `test_news_round_trip_with_string_columns` (news), e criado
+  `test_fundamental_round_trip_no_phantom_partition` (fundamental, que antes só
+  tinha cobertura integration real, sem paridade). **Mutação provada:** com o
+  `SELECT * EXCLUDE (year)` antigo restaurado, os dois asserts de news/fundamental
+  falham (`Extra items in the left set: 'asset'`); com a projeção por schema,
+  todos passam.
+
 <!-- END: post-execution -->
