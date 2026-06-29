@@ -413,6 +413,65 @@ Task 02 (podar)      ─┼─► Task 03 (config coverage) ─► Task 04 (cov 
 > aqui como `[decision]`/`[deviation]`/`[finding]` e seguir. As 4 quebras intencionais revertidas (A5)
 > são registradas aqui como evidência do gate.
 
-<!-- preencher na Fase 4; remover este placeholder se vazio -->
+### Execução — 2026-06-29 (autônoma, ADR 0.0.0050)
+
+Baseline F3 reconfirmado ao vivo antes de tocar nada:
+`pytest --cov` → `FAIL Required test coverage of 90.0% not reached. Total coverage: 33.01%`.
+As 6 Tasks foram executadas em ordem; cada commit deixou o subcheck relevante verde.
+
+#### [decision] Disposição do excedente herdado (Task 03) — confirmada
+Aplicada a tabela de disposição da §1 (ADR 1.2.0010 D2): **testar** `pagination.py` (Task 01,
+0%→100%); **podar** `database/connection.py` (Task 02); **omit** wiring/entrypoint/infra-diferida
+(Task 03). Verificado por AST que o `omit` não contém nenhum glob `adapters/*` (anti-precedente do
+repo antigo). Cobertura final do código vivo = **100%** (`exceptions/base.py` + `pagination.py`),
+gate `fail_under=90` satisfeito honestamente.
+
+#### [deviation] Ports-out stub `clock.py`/`id_generator.py`: `omit` em vez de só `exclude_lines`
+A §1 (tabela de disposição) previa tratar os dois Protocol stubs **só** por `exclude_lines = ["\\.\\.\\."]`
+(corpo de stub). Na execução medi que isso era **insuficiente**: o módulo nunca é importado por
+nenhum teste (não há consumidor nesta Stage), então as linhas de `import`, `class ...(Protocol):` e
+a **assinatura** do método contam como `miss` (4 stmts cada → 8 missed → cobertura travava em 71%).
+`exclude_lines '...'` exclui apenas a linha do corpo `...`, não o import/assinatura de um módulo
+não-importado. **Decisão:** adicionar `*/shared/application/ports/out/clock.py` e
+`*/shared/application/ports/out/id_generator.py` ao `omit` como **infra diferida** — mesma categoria
+e mesmo tratamento dos adapters infra `clock`/`uuid_generator` já omitidos (sem consumidor nesta
+Stage). Não é `adapters/*` (continua proibido). Coerente com I3: a alternativa — um "teste" que só
+importa o Protocol para subir o número — seria inflar cobertura sobre código sem lógica (o anti-pattern
+que I3 proíbe). Quando uma feature consumir esses ports (fake + contract test, hex), eles **saem do
+omit** e passam a contar. Registrado também como comentário auditável no `pyproject.toml`.
+
+#### [finding] Comando de verificação da Task 01 mede 0% (forma `--cov=<arquivo.py>`)
+O comando sugerido na Task 01 usa `--cov=src/.../pagination.py` (caminho de **arquivo**). `coverage`
+mede por **módulo importado**, e essa forma não casa com o nome do módulo importado → emite
+`CoverageWarning: module-not-imported` e reporta 0%. A forma correta é a de **módulo**:
+`--cov=financial_forecasting.shared.domain.value_objects.pagination` (ou `--cov=src/financial_forecasting`,
+como o gate real usa). Verificado por essa forma: `pagination.py` 17 stmts, 0 miss, **100%**. Sem
+impacto no gate (o `make test`/CI usa `--cov=src/financial_forecasting`); fica a nota para futuras Tasks
+não usarem `--cov=<arquivo>`.
+
+#### [decision] `composition_root.py` docstring-template não tocada (Task 02, escopo)
+A Task 02 manda **não tocar** `composition_root.py`. O grep de `build_engine` casava só dentro da
+**docstring-template** de `wire_dependencies()` (confirmado por AST: 0 imports executáveis). A docstring
+ainda cita `database.connection.build_engine` como exemplo, mas `composition_root.py` está em `omit`
+(wiring), o import é exemplo textual (não executável) e tocá-lo violaria o escopo estrito da Task.
+Deixado como está; sem efeito sobre gate/lint/mypy/layout.
+
+#### Validação do gate por quebra intencional revertida (A5, DoD) — 4 quebras, todas RED→GREEN
+Nenhuma quebra foi commitada; cada uma foi revertida e o estado final é `make check` **VERDE**.
+
+| Quebra | Como | Resultado RED | Após reverter |
+|---|---|---|---|
+| (a) **lint** | `import os` não usado no `test_pagination.py` | `make lint` → `F401`/`E402`, `Error 1` (exit 2) | `make lint` exit 0 |
+| (b) **tipo mypy** | `bad: str = (page-1)*page_size` em `pagination.py` | `make typecheck` → 2× `[assignment]`/`[return-value]`, `Error 1` (exit 2) | `make typecheck` exit 0 |
+| (c) **import/layout** | `domain/pagination.py` importa `infrastructure.config.settings` | `make layout-check` → `VIOLAÇÃO ... proibido para camada 'domain'`, `Error 1` (exit 2) | `make layout-check` exit 0 |
+| (d) **cobertura < 90%** | `test_pagination.py` esvaziado (VO descoberto) | `pytest --cov` → `FAIL Required test coverage of 90.0% not reached. Total coverage: 15.00%`; `make check` aborta em `test` (exit 2) | `make check` exit 0 |
+
+As quebras (a)–(d) cobrem C2/C3/C4/C1 do concept §6. A quebra (d) prova que o `fail_under=90` deixou
+de ser inerte (corrige F3 / I2): baixar a cobertura **efetivamente** deixa o CI vermelho.
+
+#### Estado final
+`make check` **VERDE** (lint + typecheck + layout-check + docs-check + test c/ cobertura **100%** ≥ 90%).
+`ci.yml` válido (YAML OK), dois jobs com `timeout-minutes` (5 / 15), `guard-main-source` intacto.
+`.importlinter` e `tests/architecture/` **não** criados (non_goal 1.2 / I6 respeitado).
 
 <!-- END: post-execution -->
