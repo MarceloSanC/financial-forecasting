@@ -375,3 +375,38 @@ def test_hash_is_stable_snapshot() -> None:
     digest = feature_set_hash()
     assert digest == feature_set_hash()
     assert digest == _REGISTRY_HASH_SNAPSHOT
+
+
+# =============================================================================
+# Task 07 — bateria transversal: A7 (tft_typing) + reafirmação de A2/A5
+# =============================================================================
+
+_CALENDAR_FEATURES = {"day_of_week", "month", "time_idx"}
+
+
+@pytest.mark.unit
+def test_tft_typing_rule_known_for_calendar_unknown_otherwise() -> None:
+    """A7/I3 — calendário = known; preço/indicador/sentimento/fundamento = unknown.
+
+    Hoje o registry não tem features de calendário (entram na 3.5 ao montar o dataset
+    TFT), então toda spec deve ser `unknown`; qualquer feature de calendário que venha
+    a entrar precisa ser `known`. A regra é afirmada sobre o conjunto INTEIRO.
+    """
+    for name, spec in FEATURE_SPECS.items():
+        expected = "known" if name in _CALENDAR_FEATURES else "unknown"
+        assert spec.tft_typing == expected, name
+    # Nenhuma feature de calendário no registry de 3.4 (todas unknown).
+    assert _CALENDAR_FEATURES.isdisjoint(FEATURE_SPECS)
+
+
+@pytest.mark.unit
+def test_every_spec_has_nonempty_formula_desc() -> None:
+    """A2 — toda spec documenta a fórmula (formula_desc não-vazio)."""
+    assert all(spec.formula_desc for spec in FEATURE_SPECS.values())
+
+
+@pytest.mark.unit
+def test_yoy_specs_warmup_252_reaffirmed_in_battery() -> None:
+    """A5 — reafirma na bateria que os YoY têm warmup 252."""
+    for name in ("revenue_yoy_growth", "net_income_yoy_growth"):
+        assert FEATURE_SPECS[name].warmup_count == 252  # noqa: PLR2004

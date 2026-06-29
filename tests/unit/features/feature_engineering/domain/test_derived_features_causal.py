@@ -474,3 +474,132 @@ def test_appending_future_bars_does_not_change_prefix_sentiment_and_yoy() -> Non
     rev = tuple(100.0 + i for i in range(300))
     rev_f = (*rev, 9999.0, 1.0)
     assert df.revenue_yoy_growth(rev_f)[:300] == df.revenue_yoy_growth(rev)
+
+
+# =============================================================================
+# Task 07 — bateria transversal de causalidade (TODAS as derivadas)
+# =============================================================================
+#
+# A6/I6 — "anexar barras futuras não altera o passado" provado UMA vez para CADA
+# derivada pública de `DerivedFeatures`. Cada entrada é uma fixture de sequências
+# alinhadas + o invocador da função; o teste anexa barras futuras arbitrárias e
+# afirma que o prefixo é idêntico. Fecha o invariante global de causalidade.
+
+_PREFIX_N = 300  # cobre o maior warmup (YoY 252)
+
+
+def _wavy(base: float, amp: float, n: int = _PREFIX_N) -> tuple[float, ...]:
+    """Sequência ondulada determinística e estritamente positiva (para logs/ratios)."""
+    return tuple(base + amp * math.sin(i / 3.0) for i in range(n))
+
+
+# name -> (invocador sobre sequências-base, invocador sobre sequências+futuro).
+# Cada par usa as MESMAS sequências-base; o segundo só anexa barras futuras.
+_FUTURE = (999.0, -999.0, 1.0)
+
+
+def _call_all_derived(extra: tuple[float, ...] | None) -> dict[str, tuple[object, ...]]:
+    """Invoca TODA derivada pública sobre fixtures comuns (+ `extra` barras futuras).
+
+    Devolve {name: saída}. Quando `extra` é dado, as sequências de entrada recebem
+    barras futuras anexadas; o prefixo das saídas deve coincidir com `extra=None`.
+    """
+    tail = extra if extra is not None else ()
+    close = (*_wavy(100.0, 5.0), *tail)
+    high = (*_wavy(101.0, 5.0), *([t + 1.0 for t in tail]))
+    low = (*_wavy(99.0, 4.0), *([abs(t) + 0.5 for t in tail]))
+    open_ = (*_wavy(100.0, 3.0), *([abs(t) + 0.6 for t in tail]))
+    volume = (*_wavy(1000.0, 100.0), *([abs(t) + 1.0 for t in tail]))
+    vol20 = (*_wavy(0.2, 0.05), *([abs(t) / 1000.0 + 0.01 for t in tail]))
+    ema10 = (*_wavy(100.0, 1.0), *([abs(t) + 0.1 for t in tail]))
+    ema50 = (*_wavy(99.5, 0.5), *([abs(t) + 0.2 for t in tail]))
+    sent = (*_wavy(0.1, 0.3), *([math.tanh(t) for t in tail]))
+    revenue = (*tuple(100.0 + i for i in range(_PREFIX_N)), *([abs(t) + 1.0 for t in tail]))
+    net_income = (*tuple(10.0 + 0.5 * i for i in range(_PREFIX_N)), *([abs(t) + 1.0 for t in tail]))
+    liabilities = (*_wavy(50.0, 5.0), *([abs(t) + 1.0 for t in tail]))
+    equity = (*_wavy(80.0, 5.0), *([abs(t) + 2.0 for t in tail]))
+    ocf = (*_wavy(30.0, 3.0), *([abs(t) + 1.0 for t in tail]))
+
+    return {
+        "log_return_1d": df.log_return_1d(close),
+        "log_return_5d": df.log_return_5d(close),
+        "log_return_21d": df.log_return_21d(close),
+        "momentum_5d": df.momentum_5d(close),
+        "momentum_21d": df.momentum_21d(close),
+        "momentum_63d": df.momentum_63d(close),
+        "reversal_1d": df.reversal_1d(close),
+        "reversal_5d": df.reversal_5d(close),
+        "drawdown_lookback": df.drawdown_lookback(close),
+        "amihud_illiquidity_proxy": df.amihud_illiquidity_proxy(close, volume),
+        "volume_zscore": df.volume_zscore(volume),
+        "volume_spike_flag": df.volume_spike_flag(volume),
+        "volatility_parkinson": df.volatility_parkinson(high, low),
+        "volatility_garman_klass": df.volatility_garman_klass(open_, high, low, close),
+        "downside_semivolatility": df.downside_semivolatility(close),
+        "vol_of_vol": df.vol_of_vol(vol20),
+        "volatility_regime": df.volatility_regime(vol20),
+        "trend_regime": df.trend_regime(ema10, ema50),
+        "stress_tail_return_flag": df.stress_tail_return_flag(close),
+        "sentiment_lag_1": df.sentiment_lag_1(sent),
+        "sentiment_lag_3": df.sentiment_lag_3(sent),
+        "sentiment_lag_5": df.sentiment_lag_5(sent),
+        "sentiment_ema": df.sentiment_ema(sent),
+        "sentiment_surprise": df.sentiment_surprise(sent),
+        "sentiment_x_volatility": df.sentiment_x_volatility(sent, vol20),
+        "sentiment_x_volume": df.sentiment_x_volume(sent, volume),
+        "net_margin": df.net_margin(net_income, revenue),
+        "leverage_ratio": df.leverage_ratio(liabilities, equity),
+        "cashflow_efficiency": df.cashflow_efficiency(ocf, revenue),
+        "revenue_yoy_growth": df.revenue_yoy_growth(revenue),
+        "net_income_yoy_growth": df.net_income_yoy_growth(net_income),
+    }
+
+
+# As 31 derivadas computadas pelo oráculo (espelha as derivadas do FEATURE_SPECS).
+_ALL_DERIVED_NAMES = sorted(_call_all_derived(None).keys())
+_EXPECTED_DERIVED_FN_COUNT = 31
+
+
+@pytest.mark.unit
+def test_battery_covers_all_31_derived_functions() -> None:
+    """A bateria cobre exatamente as 31 derivadas computadas (sanidade da malha)."""
+    assert len(_ALL_DERIVED_NAMES) == _EXPECTED_DERIVED_FN_COUNT
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", _ALL_DERIVED_NAMES)
+def test_global_causality_appending_future_bars_keeps_prefix(name: str) -> None:
+    """A6/I6 GLOBAL — para TODA derivada, anexar barras futuras não altera o prefixo."""
+    base = _call_all_derived(None)[name]
+    with_future = _call_all_derived(_FUTURE)[name]
+    assert with_future[: len(base)] == base
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", _ALL_DERIVED_NAMES)
+def test_global_flag_and_regime_ranges(name: str) -> None:
+    """A6 GLOBAL — flags/regimes ficam nos ranges esperados; volatilidades >= 0."""
+    out = _call_all_derived(None)[name]
+    if name in {"volume_spike_flag", "stress_tail_return_flag"}:
+        assert all(v in (0, 1, None) for v in out)
+    elif name == "volatility_regime":
+        assert all(v in (0, 1, 2, None) for v in out)
+    elif name == "trend_regime":
+        assert all(v in (-1, 0, 1, None) for v in out)
+    elif name in {
+        "volatility_parkinson",
+        "volatility_garman_klass",
+        "downside_semivolatility",
+        "vol_of_vol",
+    }:
+        assert all(v is None or (isinstance(v, float) and v >= 0.0) for v in out)
+
+
+@pytest.mark.unit
+def test_shift_is_never_negative_in_derived_helpers() -> None:
+    """I6 — `_shift`/`_pct_change`/`log_return` rejeitam `n<=0` (nunca shift negativo)."""
+    for fn in (df._shift, df._pct_change, df.log_return):
+        with pytest.raises(ValueError, match="n > 0"):
+            fn(_CLOSE, 0)
+        with pytest.raises(ValueError, match="n > 0"):
+            fn(_CLOSE, -3)
