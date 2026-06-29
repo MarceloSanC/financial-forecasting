@@ -74,6 +74,13 @@ Thumbs.db
 # migrations/versions/*.py  # descomente se preferir não versionar migrations
 
 # ---------------------------------------------------------------------------
+# Dados (medalhão) — nunca versionar datasets/artefatos pesados
+# ---------------------------------------------------------------------------
+# Convenção de storage definida na Stage 2.1 (MedallionStore). Dados de
+# bronze/silver/gold, raw, processed e modelos ficam fora do git.
+data/
+
+# ---------------------------------------------------------------------------
 # Logs e arquivos temporários
 # ---------------------------------------------------------------------------
 *.log
