@@ -263,3 +263,115 @@ def test_spec_without_valid_tft_typing_is_rejected() -> None:
             warmup_count=0,
             tft_typing="static",
         )
+
+
+# =============================================================================
+# Task 03 — specs das ~38 derivadas (metadados verbatim do old)
+# =============================================================================
+
+# Derivadas esperadas, name -> (family, warmup_count, dtype).
+_EXPECTED_DERIVED: dict[str, tuple[str, int, str]] = {
+    "log_return_1d": ("price", 1, "float64"),
+    "log_return_5d": ("price", 5, "float64"),
+    "log_return_21d": ("price", 21, "float64"),
+    "momentum_5d": ("price", 5, "float64"),
+    "momentum_21d": ("price", 21, "float64"),
+    "momentum_63d": ("price", 63, "float64"),
+    "reversal_1d": ("price", 1, "float64"),
+    "reversal_5d": ("price", 5, "float64"),
+    "drawdown_lookback": ("price", 63, "float64"),
+    "amihud_illiquidity_proxy": ("price", 1, "float64"),
+    "volume_zscore": ("price", 20, "float64"),
+    "volume_spike_flag": ("price", 20, "int64"),
+    "volatility_parkinson": ("technical", 20, "float64"),
+    "volatility_garman_klass": ("technical", 20, "float64"),
+    "downside_semivolatility": ("technical", 20, "float64"),
+    "vol_of_vol": ("technical", 40, "float64"),
+    "volatility_regime": ("technical", 63, "int64"),
+    "trend_regime": ("technical", 63, "int64"),
+    "stress_tail_return_flag": ("technical", 63, "int64"),
+    "sentiment_lag_1": ("sentiment", 1, "float64"),
+    "sentiment_lag_3": ("sentiment", 3, "float64"),
+    "sentiment_lag_5": ("sentiment", 5, "float64"),
+    "sentiment_ema": ("sentiment", 1, "float64"),
+    "sentiment_surprise": ("sentiment", 5, "float64"),
+    "sentiment_x_volatility": ("sentiment", 20, "float64"),
+    "sentiment_x_volume": ("sentiment", 0, "float64"),
+    "net_margin": ("fundamental", 0, "float64"),
+    "leverage_ratio": ("fundamental", 0, "float64"),
+    "cashflow_efficiency": ("fundamental", 0, "float64"),
+    "revenue_yoy_growth": ("fundamental", 252, "float64"),
+    "net_income_yoy_growth": ("fundamental", 252, "float64"),
+}
+
+# Total = 24 base + 31 derivadas.
+_EXPECTED_TOTAL = len(_EXPECTED_BASE) + len(_EXPECTED_DERIVED)
+
+
+@pytest.mark.unit
+def test_registry_covers_all_features_base_and_derived() -> None:
+    """`FEATURE_SPECS` cobre as features base + todas as derivadas (A2)."""
+    assert set(FEATURE_SPECS) == set(_EXPECTED_BASE) | set(_EXPECTED_DERIVED)
+    assert len(FEATURE_SPECS) == _EXPECTED_TOTAL
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", sorted(_EXPECTED_DERIVED))
+def test_each_derived_spec_matches_family_warmup_dtype(name: str) -> None:
+    """Cada derivada tem family/warmup/dtype verbatim do old (A2/A5/I7)."""
+    family, warmup, dtype = _EXPECTED_DERIVED[name]
+    spec = FEATURE_SPECS[name]
+    assert spec.family == family
+    assert spec.warmup_count == warmup
+    assert spec.dtype == dtype
+
+
+@pytest.mark.unit
+def test_yoy_features_are_fundamental_with_warmup_252() -> None:
+    """`*_yoy_growth` estão na família fundamental com warmup 252 (A5/I7)."""
+    yoy = list_feature_specs(family="fundamental")
+    names = {s.name for s in yoy}
+    assert {"revenue_yoy_growth", "net_income_yoy_growth"} <= names
+    for name in ("revenue_yoy_growth", "net_income_yoy_growth"):
+        assert get_feature_spec(name).warmup_count == 252  # noqa: PLR2004
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "name",
+    ["volume_spike_flag", "volatility_regime", "trend_regime", "stress_tail_return_flag"],
+)
+def test_flags_and_regimes_are_int64(name: str) -> None:
+    """Flags e regimes têm dtype int64 (A2)."""
+    assert get_feature_spec(name).dtype == "int64"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", ["sentiment_lag_1", "sentiment_lag_3", "sentiment_lag_5"])
+def test_sentiment_lags_are_tagged_lagged_causal(name: str) -> None:
+    """`sentiment_lag_*` (puro shift) usa a tag `lagged_causal` (decision §7)."""
+    assert get_feature_spec(name).anti_leakage_tag == "lagged_causal"
+
+
+@pytest.mark.unit
+def test_vol_of_vol_effective_warmup_is_40() -> None:
+    """`vol_of_vol` tem warmup efetivo 40 = 20 (volatility_20d) + 20 (std) (I7)."""
+    assert get_feature_spec("vol_of_vol").warmup_count == 40  # noqa: PLR2004
+
+
+# Snapshot ancorado do hash do registry completo (base + 31 derivadas). Canário
+# contra mudança acidental: alterar QUALQUER spec muda este valor. Atualizar
+# conscientemente ao mudar o registry de propósito (regenerar via feature_set_hash()).
+_REGISTRY_HASH_SNAPSHOT = "bb34d43689fb570d7de5cf2b62735fe1477fa3bb3b906db93239510f9026884b"
+
+
+@pytest.mark.unit
+def test_hash_is_stable_snapshot() -> None:
+    """`feature_set_hash` bate com o snapshot ancorado e é estável (I5).
+
+    Serve de canário: qualquer alteração de spec (campo, derivada nova) muda o
+    digest e este teste fica vermelho, forçando atualização consciente.
+    """
+    digest = feature_set_hash()
+    assert digest == feature_set_hash()
+    assert digest == _REGISTRY_HASH_SNAPSHOT

@@ -298,13 +298,328 @@ def _base_specs() -> dict[str, FeatureSpec]:
     }
 
 
-def _build_registry() -> dict[str, FeatureSpec]:
-    """Monta o dicionário completo de specs (base + derivadas).
+def _derived_specs() -> dict[str, FeatureSpec]:
+    """Specs das ~38 derivadas (metadados, NÃO computação — Task 03).
 
-    Nesta Task entram só as features base; as ~38 derivadas são adicionadas na
-    Task 03 via `_derived_specs()`.
+    Replica `formula_desc`/`warmup_count`/`anti_leakage_tag`/`dtype` verbatim do
+    `FEATURE_REGISTRY` do old, com a taxonomia desta Stage (concept 3.4 §5):
+
+    Família da derivada (I4): preço/retorno/liquidez/volatilidade/regime →
+    `price`/`technical` (derivada de indicador como `vol_of_vol`/`volatility_regime`
+    de `volatility_20d`, `trend_regime` de `ema_*` → `technical`); sentimento
+    dinâmico → `sentiment`; fundamento derivado/YoY → `fundamental`.
+
+    Tags: derivadas de OHLCV/preço → `trailing_window_causal`; `sentiment_lag_*`
+    (puro `shift`) → `lagged_causal` (promovido vs o old, que usava
+    `trailing_window_causal` — `lagged_causal` é a tag nova precisa para shift puro;
+    [decision] technical §7); demais sentimento dinâmico → `trailing_window_causal`;
+    fundamento derivado/YoY → `reported_date_asof` (verbatim old).
+
+    Warmup efetivo (I7) documentado quando difere da janela nominal: `vol_of_vol`=40
+    (20 da `volatility_20d` consumidos + 20 da janela `std`); `volume_zscore`=20
+    (estatística trailing `t-20..t-1` + numerador corrente `volume_t`); YoY=252.
     """
+    return {
+        # -- price: log-returns, momentum, reversal, drawdown, liquidez -------
+        "log_return_1d": FeatureSpec(
+            name="log_return_1d",
+            family="price",
+            source_cols=("close",),
+            formula_desc="log(close_t / close_t-1)",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=1,
+            tft_typing=_UNKNOWN,
+        ),
+        "log_return_5d": FeatureSpec(
+            name="log_return_5d",
+            family="price",
+            source_cols=("close",),
+            formula_desc="log(close_t / close_t-5)",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=5,
+            tft_typing=_UNKNOWN,
+        ),
+        "log_return_21d": FeatureSpec(
+            name="log_return_21d",
+            family="price",
+            source_cols=("close",),
+            formula_desc="log(close_t / close_t-21)",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=21,
+            tft_typing=_UNKNOWN,
+        ),
+        "momentum_5d": FeatureSpec(
+            name="momentum_5d",
+            family="price",
+            source_cols=("close",),
+            formula_desc="close_t / close_t-5 - 1",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=5,
+            tft_typing=_UNKNOWN,
+        ),
+        "momentum_21d": FeatureSpec(
+            name="momentum_21d",
+            family="price",
+            source_cols=("close",),
+            formula_desc="close_t / close_t-21 - 1",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=21,
+            tft_typing=_UNKNOWN,
+        ),
+        "momentum_63d": FeatureSpec(
+            name="momentum_63d",
+            family="price",
+            source_cols=("close",),
+            formula_desc="close_t / close_t-63 - 1",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=63,
+            tft_typing=_UNKNOWN,
+        ),
+        "reversal_1d": FeatureSpec(
+            name="reversal_1d",
+            family="price",
+            source_cols=("close",),
+            formula_desc="-1 * return_1d",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=1,
+            tft_typing=_UNKNOWN,
+        ),
+        "reversal_5d": FeatureSpec(
+            name="reversal_5d",
+            family="price",
+            source_cols=("close",),
+            formula_desc="-1 * momentum_5d",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=5,
+            tft_typing=_UNKNOWN,
+        ),
+        "drawdown_lookback": FeatureSpec(
+            name="drawdown_lookback",
+            family="price",
+            source_cols=("close",),
+            formula_desc="close_t / rolling_max(close,63)_t - 1",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=63,
+            tft_typing=_UNKNOWN,
+        ),
+        "amihud_illiquidity_proxy": FeatureSpec(
+            name="amihud_illiquidity_proxy",
+            family="price",
+            source_cols=("close", "volume"),
+            formula_desc="abs(return_1d) / volume_t",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=1,
+            tft_typing=_UNKNOWN,
+        ),
+        "volume_zscore": FeatureSpec(
+            name="volume_zscore",
+            family="price",
+            source_cols=("volume",),
+            # warmup efetivo 20: estatistica trailing t-20..t-1 + numerador corrente.
+            formula_desc="(volume_t - mean(volume_t-20..t-1)) / std(volume_t-20..t-1)",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=20,
+            tft_typing=_UNKNOWN,
+        ),
+        "volume_spike_flag": FeatureSpec(
+            name="volume_spike_flag",
+            family="price",
+            source_cols=("volume",),
+            formula_desc="1 if volume_zscore > 3 else 0",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=20,
+            tft_typing=_UNKNOWN,
+            dtype="int64",
+        ),
+        # -- technical: volatilidades + regimes -------------------------------
+        "volatility_parkinson": FeatureSpec(
+            name="volatility_parkinson",
+            family="technical",
+            source_cols=("high", "low"),
+            formula_desc="sqrt(rolling_mean((ln(high/low)^2),20)/(4*ln(2)))",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=20,
+            tft_typing=_UNKNOWN,
+        ),
+        "volatility_garman_klass": FeatureSpec(
+            name="volatility_garman_klass",
+            family="technical",
+            source_cols=("open", "high", "low", "close"),
+            formula_desc="sqrt(rolling_mean(0.5*ln(h/l)^2-(2ln2-1)*ln(c/o)^2,20))",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=20,
+            tft_typing=_UNKNOWN,
+        ),
+        "downside_semivolatility": FeatureSpec(
+            name="downside_semivolatility",
+            family="technical",
+            source_cols=("close",),
+            formula_desc="sqrt(rolling_mean(min(return_1d,0)^2,20))",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=20,
+            tft_typing=_UNKNOWN,
+        ),
+        "vol_of_vol": FeatureSpec(
+            name="vol_of_vol",
+            family="technical",
+            source_cols=("volatility_20d",),
+            # warmup efetivo 40 = 20 (volatility_20d ja consumidos) + 20 (janela std).
+            formula_desc="rolling_std(volatility_20d,20)",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=40,
+            tft_typing=_UNKNOWN,
+        ),
+        "volatility_regime": FeatureSpec(
+            name="volatility_regime",
+            family="technical",
+            source_cols=("volatility_20d",),
+            formula_desc=(
+                "Regime 0/1/2 from trailing terciles of volatility_20d (window 63, shifted)"
+            ),
+            anti_leakage_tag=_TRAILING,
+            warmup_count=63,
+            tft_typing=_UNKNOWN,
+            dtype="int64",
+        ),
+        "trend_regime": FeatureSpec(
+            name="trend_regime",
+            family="technical",
+            source_cols=("ema_10", "ema_50"),
+            formula_desc=(
+                "Regime -1/0/1 from EMA spread with trailing deadband (window 63, shifted)"
+            ),
+            anti_leakage_tag=_TRAILING,
+            warmup_count=63,
+            tft_typing=_UNKNOWN,
+            dtype="int64",
+        ),
+        "stress_tail_return_flag": FeatureSpec(
+            name="stress_tail_return_flag",
+            family="technical",
+            source_cols=("close",),
+            formula_desc="Flag 1 when return_1d <= trailing q10(return_1d) over 63, shifted",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=63,
+            tft_typing=_UNKNOWN,
+            dtype="int64",
+        ),
+        # -- sentiment: lags, ema, surprise, interacoes -----------------------
+        "sentiment_lag_1": FeatureSpec(
+            name="sentiment_lag_1",
+            family="sentiment",
+            source_cols=("sentiment_score",),
+            formula_desc="sentiment_score shifted by 1",
+            anti_leakage_tag=_LAGGED,
+            warmup_count=1,
+            tft_typing=_UNKNOWN,
+        ),
+        "sentiment_lag_3": FeatureSpec(
+            name="sentiment_lag_3",
+            family="sentiment",
+            source_cols=("sentiment_score",),
+            formula_desc="sentiment_score shifted by 3",
+            anti_leakage_tag=_LAGGED,
+            warmup_count=3,
+            tft_typing=_UNKNOWN,
+        ),
+        "sentiment_lag_5": FeatureSpec(
+            name="sentiment_lag_5",
+            family="sentiment",
+            source_cols=("sentiment_score",),
+            formula_desc="sentiment_score shifted by 5",
+            anti_leakage_tag=_LAGGED,
+            warmup_count=5,
+            tft_typing=_UNKNOWN,
+        ),
+        "sentiment_ema": FeatureSpec(
+            name="sentiment_ema",
+            family="sentiment",
+            source_cols=("sentiment_score",),
+            formula_desc="EMA(span=10) over sentiment_score",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=1,
+            tft_typing=_UNKNOWN,
+        ),
+        "sentiment_surprise": FeatureSpec(
+            name="sentiment_surprise",
+            family="sentiment",
+            source_cols=("sentiment_score",),
+            formula_desc="sentiment_score - trailing_mean(sentiment_score,5, shifted)",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=5,
+            tft_typing=_UNKNOWN,
+        ),
+        "sentiment_x_volatility": FeatureSpec(
+            name="sentiment_x_volatility",
+            family="sentiment",
+            source_cols=("sentiment_score", "volatility_20d"),
+            formula_desc="sentiment_score * volatility_20d",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=20,
+            tft_typing=_UNKNOWN,
+        ),
+        "sentiment_x_volume": FeatureSpec(
+            name="sentiment_x_volume",
+            family="sentiment",
+            source_cols=("sentiment_score", "volume"),
+            formula_desc="sentiment_score * volume",
+            anti_leakage_tag=_TRAILING,
+            warmup_count=0,
+            tft_typing=_UNKNOWN,
+        ),
+        # -- fundamental derivado + YoY ---------------------------------------
+        "net_margin": FeatureSpec(
+            name="net_margin",
+            family="fundamental",
+            source_cols=("net_income", "revenue"),
+            formula_desc="net_income / revenue",
+            anti_leakage_tag=_REP_ASOF,
+            warmup_count=0,
+            tft_typing=_UNKNOWN,
+        ),
+        "leverage_ratio": FeatureSpec(
+            name="leverage_ratio",
+            family="fundamental",
+            source_cols=("total_liabilities", "total_shareholder_equity"),
+            formula_desc="total_liabilities / total_shareholder_equity",
+            anti_leakage_tag=_REP_ASOF,
+            warmup_count=0,
+            tft_typing=_UNKNOWN,
+        ),
+        "cashflow_efficiency": FeatureSpec(
+            name="cashflow_efficiency",
+            family="fundamental",
+            source_cols=("operating_cash_flow", "revenue"),
+            formula_desc="operating_cash_flow / revenue",
+            anti_leakage_tag=_REP_ASOF,
+            warmup_count=0,
+            tft_typing=_UNKNOWN,
+        ),
+        "revenue_yoy_growth": FeatureSpec(
+            name="revenue_yoy_growth",
+            family="fundamental",
+            source_cols=("revenue",),
+            formula_desc="pct_change(revenue, 252) on as-of merged daily series",
+            anti_leakage_tag=_REP_ASOF,
+            warmup_count=252,
+            tft_typing=_UNKNOWN,
+        ),
+        "net_income_yoy_growth": FeatureSpec(
+            name="net_income_yoy_growth",
+            family="fundamental",
+            source_cols=("net_income",),
+            formula_desc="pct_change(net_income, 252) on as-of merged daily series",
+            anti_leakage_tag=_REP_ASOF,
+            warmup_count=252,
+            tft_typing=_UNKNOWN,
+        ),
+    }
+
+
+def _build_registry() -> dict[str, FeatureSpec]:
+    """Monta o dicionário completo de specs (base + ~38 derivadas)."""
     specs = _base_specs()
+    specs.update(_derived_specs())
     return specs
 
 
