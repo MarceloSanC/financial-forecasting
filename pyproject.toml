@@ -86,12 +86,53 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src"]
-omit = ["*/migrations/*", "*/scripts/*"]
+# Fixa a medição no pacote de produção (não em "src" genérico).
+source = ["src/financial_forecasting"]
+# `omit` é a lista AUDITÁVEL do que a cobertura NÃO mede: wiring/DI, entrypoint
+# (__main__), e infra herdada do template ainda SEM consumidor (reentra quando
+# uma feature a injetar — então passa a contar). Cada entrada é justificada na
+# Stage 1.2 (ADR 1.2.0010 D2). `adapters/*` NUNCA entra aqui: adapters têm
+# contract test (ADR 0.0.0021) e devem contar.
+omit = [
+    # entrypoint e wiring DI — __main__, não lógica de domínio/application
+    "*/main.py",
+    "*/composition_root.py",
+    # wiring FastAPI — consumido só no Step de API (7.4)
+    "*/shared/infrastructure/http/*",
+    # boot/config de infra, não lógica de domínio
+    "*/shared/infrastructure/logging/*",
+    "*/shared/infrastructure/config/*",
+    # adapters de infra diferidos — ainda sem consumidor nesta Stage;
+    # reentram (saem do omit) quando uma feature os injetar
+    "*/shared/infrastructure/clock/*",
+    "*/shared/infrastructure/uuid_generator/*",
+    # ports-out stub (Protocol sem corpo) ainda SEM consumidor nesta Stage:
+    # módulo nunca importado por teste, então import+assinatura contam como
+    # missed (exclude_lines `...` só cobre o corpo). Diferidos, NÃO adapters —
+    # reentram (saem do omit) quando uma feature os injetar com fake+contract
+    # test (hex). Ver [deviation] na §7 do technical 1.2.
+    "*/shared/application/ports/out/clock.py",
+    "*/shared/application/ports/out/id_generator.py",
+    # fora do pacote de domínio
+    "*/migrations/*",
+    "*/scripts/*",
+]
 
 [tool.coverage.report]
 # Gate de cobertura — falha o pytest se < 90%. Vale para qualquer invocação
-# de pytest --cov (test-cov, CI). Alinha com CLAUDE.md, README e GIT-WORKFLOW.
+# de pytest --cov (make test, make test-cov, CI). Alinha com CLAUDE.md, README
+# e GIT-WORKFLOW.
 fail_under = 90
 show_missing = true
 skip_covered = false
+# Linhas defensivas excluídas da contagem (precedente repo antigo, validado):
+# não são lógica testável de domínio/application.
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "raise AssertionError",
+    "if TYPE_CHECKING:",
+    # corpo de stub de Protocol (ports out clock.py/id_generator.py): `...`
+    "\\.\\.\\.",
+]
