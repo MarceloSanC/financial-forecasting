@@ -690,4 +690,54 @@ Esta Stage apenas **confere** que estão `status: accepted` (Task 09 / A12), sem
 recriá-los. Sem efeito no escopo entregue — só a redação "criar" do concept fica
 imprecisa; o as-built é "já criados, conferir status".
 
+### 2026-06-29 — [decision] Task 01 — registry tem **10 chaves** (não 11) — code assistant
+**Contexto:** O concept §1/§4 e o technical Task 01 falam em "**11 indicadores**" e
+o critério de aceite chegou a escrever "**Exatamente 11 chaves**". Mas a própria §4
+nota do concept esclarece "10 nomes na tabela" e o set autoritativo do old
+(`technical_indicators_schema.py::TECHNICAL_INDICATORS`, H-2 = replicar o EXATO) tem
+**10 entradas**: `rsi_14`, `macd`, `macd_signal`, `ema_10/50/100/200`, `volatility_20d`,
+`candle_range`, `candle_body`.
+**Decisão:** `INDICATOR_SPECS` declara **10 chaves** (= colunas produzidas), idêntico
+ao set do old. O "11º" do discurso é a contagem do par `macd`/`macd_signal` como saída
+de UMA chamada `ta.macd` (vira 2 colunas). O teste assere `len == 10` e
+`set == TECHNICAL_INDICATORS` do old.
+**Razão:** H-2 (decisão humana fechada) manda replicar o set EXATO do old, sem
+expansão. O old tem 10 colunas. "11" é fraseado do concept, não contrato — a autoridade
+é o set do old. Documentado no docstring do `indicator_spec.py` e no teste.
+
+### 2026-06-29 — [decision] Task 05/06 — Q1 confirmado: `pandas-ta-classic` 0.6.52 = semântica do old — code assistant
+**Contexto:** Q1 (concept §13) pedia confirmar na execução que o `pandas-ta-classic`
+expõe `ta.rsi`/`ta.macd`/`ta.ema` com os nomes de coluna e a semântica do `pandas-ta`
+do old.
+**Decisão:** Confirmado por probe e pela fixture-oráculo (Task 06): `ta.rsi(close,
+length=14)` → Series `RSI_14` (smoothing de **Wilder/RMA**, casa com o oráculo
+recursivo dentro de ~1e-14 em float64 pós-warmup 14); `ta.macd(close)` → DataFrame com
+`MACD_12_26_9`/`MACDs_12_26_9` (defaults 12/26/9 = EMA12-EMA26 e EMA9(MACD)); `ta.ema(
+close, length=N)` → `EMA_N` (recursiva, seed SMA, `alpha=2/(N+1)`). **Nenhum** cálculo
+manual de fallback foi necessário — a chamada do concept §4 vale como escrita.
+**Razão:** A lib mantida (0.6.52) preserva a semântica do beta do old; a fixture-oráculo
+é a rede que prova a paridade independentemente da lib (a `test_rsi_diverges_from_sma_variant`
+garante que a fixture discrimina Wilder de SMA).
+
+### 2026-06-29 — [deviation] Task 09 — teste de guard do set (I8/C2) p/ cobrir o ramo de erro — code assistant
+**Contexto:** O contract test (Task 05, caminho feliz) não atinge o ramo de erro de
+`_require_complete_set` (linhas do `raise` quando o set diverge), deixando a cobertura
+do adapter em 94% (3 linhas do `missing`/`extra`/`raise` descobertas).
+**Razão:** I8/C2 é invariante load-bearing (endurece o `RuntimeError` do old para
+igualdade de conjunto). Adicionado `tests/unit/features/feature_engineering/adapters/
+test_indicator_set_guard.py` exercitando os dois lados da divergência (coluna faltando
+e coluna sobrando) + o caminho feliz, levando a cobertura do BC novo a **100%**. Teste
+`unit` que importa `pandas` (vive em `tests/`, fora do gate import-linter; adapters são
+testados com a lib real). Sem mudança no código de produção.
+
+### 2026-06-29 — [finding] `processed` schema + use case de gravação — Stage 3.5 — code assistant
+**Contexto:** A DoD do roadmap diz "valores em float32 gravados em bronze->processed",
+mas esta Stage entrega só o **cálculo** (`IndicatorCalculator` → `Sequence[Mapping]`
+float32), sem schema `processed` no `MedallionStore` nem use case de gravação (concept
+§1/§7 D5: "bronze→processed" = direção de fluxo, não wiring).
+**Direção sugerida:** A **Stage 3.5** (`3.5-dataset-builder-and-contracts`) é dona da
+montagem/persistência: ela consome `IndicatorCalculator`, define o `dataset_schema`
+(pandera) e grava em `processed` via `MedallionStore`. Nenhuma ação nesta Stage; o
+contrato float32 já está pronto para 3.5 consumir.
+
 <!-- END: post-execution -->
