@@ -17,6 +17,21 @@
 
 ---
 
+## Decisões de fundação
+
+Quatro decisões científico-arquiteturais foram fixadas no bootstrap (Stage 1.1) e são consumidas por todas as Stages seguintes. Cada uma vive como ADR `accepted` em [docs/adr/](docs/adr/):
+
+| ADR | Decisão |
+|-----|---------|
+| [0.0.0002](docs/adr/0_0_0002-probabilistic-calibration-framing.md) | Enquadramento = calibração probabilística (distribuição preditiva + contribuição de features), nunca acurácia pontual do retorno médio. |
+| [0.0.0019](docs/adr/0_0_0019-hexagonal-enforced.md) | Fronteiras hexagonais enforçadas por ferramenta que quebra o build (`scripts/check_layout.py` desde a 1.1), não por code review. |
+| [0.0.0020](docs/adr/0_0_0020-statistics-in-domain-over-value-objects.md) | Estatística confirmatória como serviços de domínio puros sobre value objects; bibliotecas numéricas atrás de ports, em adapters. |
+| [0.0.0021](docs/adr/0_0_0021-per-unit-contract-tests-with-oracle.md) | Correção verificada por unidade contra oráculo (fixture analítica + lib/R), nunca snapshot global byte-idêntico. |
+
+> O excedente herdado do template (infra web/DB, composition root, ports stub) é mantido como débito declarado — ver [ADR 1.1.0001](docs/adr/1_1_0001-template-surplus-handling.md).
+
+---
+
 ## Setup local
 
 Três caminhos suportados: **devcontainer (recomendado)** via VS Code, **Docker Compose direto** (sem IDE), ou **host nativo** (Python local sem Docker).
