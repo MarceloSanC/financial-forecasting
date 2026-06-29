@@ -385,4 +385,16 @@ o `line-length = 100` do ruff (E501) na primeira redação.
 puros stdlib-only (sem libs)"; application → "use cases e ports que trafegam DTOs, nunca
 entidades"), em vez de adicionar `# noqa`. Ajuste cosmético, sem impacto no contrato.
 
+### 2026-06-29 — [deviation] Task 02-extra (guard de I4/A5) — agente autônomo
+**Contexto:** Após `stage 1.1: complete` (`ffaccf6`), a auditoria de testes identificou que a
+invariante I4 / critério A5 (docstring de responsabilidade em cada `__init__.py` de camada) não
+tinha gate automatizado — o ruff não seleciona `pydocstyle (D)`. O commit
+`2753f08 [1.1/task-02-extra]` adicionou `test_layer_has_responsibility_docstring` (parametrizado
+nos 6 pacotes de camada enumerados em A5) e reforçou `test_hexagonal_skeleton_imports` com assert
+explícito (mutation-safe).
+**Razão:** Fechar o gap de cobertura da invariante I4/A5 com teste dedicado, em vez de depender de
+inspeção manual. Mudança restrita a `tests/test_smoke.py`; `make check` permanece verde. Registro
+posterior ao `complete` por ter surgido na auditoria de testes (rastreabilidade — finding F1 da
+stage-audit).
+
 <!-- END: post-execution -->
