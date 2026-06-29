@@ -213,3 +213,27 @@ source_modules =
 forbidden_modules =
     exchange_calendars
 allow_indirect_imports = False
+
+# -----------------------------------------------------------------------------
+# Contrato 8 — sentiment-no-ml-leak (type = forbidden) — Stage 3.2 (I5/D2)
+# LAYOUT §3: a `application` (e o `domain`) nunca importam libs de ML — elas vivem
+# só em adapters. Mesma postura que `domain-purity`/`store-no-storage-leak`/
+# `calendar-no-exchange-calendars-leak`: o port-out `SentimentModel` (Protocol) troca
+# só `Sequence[float]` + a entity `NewsArticle`; `torch`/`transformers` vivem APENAS
+# no adapter `features/feature_engineering/adapters/out/finbert/`, com import LAZY
+# (extra opcional `sentiment`, fora do `dev`). `domain` entra por defesa em
+# profundidade (já stdlib-only, blinda contra import futuro). Novidade vs
+# `domain-purity` (que já lista `torch`): este contrato cobre a camada `application`
+# do BC feature_engineering (não coberta por domain-purity) e adiciona `transformers`.
+# Provado por quebra intencional revertida (Task 07/A9). Concept 3.2 I5/D2 / ADR 3.2.0002.
+# -----------------------------------------------------------------------------
+[importlinter:contract:sentiment-no-ml-leak]
+name = Application/domain não importam torch/transformers (só o adapter finbert)
+type = forbidden
+source_modules =
+    financial_forecasting.features.feature_engineering.application
+    financial_forecasting.features.feature_engineering.domain
+forbidden_modules =
+    torch
+    transformers
+allow_indirect_imports = False
