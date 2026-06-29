@@ -201,6 +201,30 @@ _REAL_VIOLATION_CASES = (
         {"shared/application/_arch_audit_taint.py": "import mlflow  # violação temporária\n"},
         id="tracker-no-mlflow-leak:application-imports-mlflow",
     ),
+    # Stage 4.1 (A9): o domínio do novo BC analytics_store importando pandas precisa
+    # reprovar domain-purity. Automatiza a prova manual da Task 09 e trava o drift de
+    # source_modules (contrato míope: se alguém esquecer de incluir
+    # `analytics_store.domain` em domain-purity, este caso fica verde e o teste falha).
+    pytest.param(
+        "domain-purity",
+        {
+            "features/analytics_store/domain/_arch_audit_taint.py": (
+                "import pandas  # violação temporária\n"
+            )
+        },
+        id="domain-purity:analytics-store-domain-imports-pandas",
+    ),
+    # Stage 4.1 (A9): o mesmo import também precisa reprovar store-no-storage-leak
+    # (que cobre pandas/pyarrow/duckdb/pandera em application+domain do BC).
+    pytest.param(
+        "store-no-storage-leak",
+        {
+            "features/analytics_store/domain/_arch_audit_taint.py": (
+                "import pandera  # violação temporária\n"
+            )
+        },
+        id="store-no-storage-leak:analytics-store-domain-imports-pandera",
+    ),
 )
 
 

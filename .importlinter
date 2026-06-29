@@ -56,6 +56,11 @@ containers =
     # domain/application/adapters/out nesta Stage (sem adapters/in/ports/in) — daí
     # `(adapters)` opcional e `exhaustive = False` continuam cobrindo a ausência.
     financial_forecasting.features.feature_engineering
+    # Stage 4.1 (concept 4.1 I8/D4 / ADR 4.1.0001 / LAYOUT §3): novo BC analytics_store
+    # entra como container layered. Nesta Stage tem só domain (VOs) e adapters/out/parquet
+    # (schemas pandera); a camada application existe vazia (placeholder p/ 4.2/4.3) — daí
+    # `(adapters)` opcional + `exhaustive = False` toleram as camadas ainda esparsas.
+    financial_forecasting.features.analytics_store
 exhaustive = False
 
 # -----------------------------------------------------------------------------
@@ -82,6 +87,12 @@ source_modules =
     # aqui REPROVA — provado por quebra intencional revertida (Task 08 / A9). Cada NOVA
     # feature com domain entra aqui (mesma postura do shared.domain / market_data.domain).
     financial_forecasting.features.feature_engineering.domain
+    # Stage 4.1 (concept 4.1 I1/D4 / ADR 4.1.0001): o domain de analytics_store
+    # (RunRecord + PredictionRow, VOs frozen) é stdlib-only; `import pandas`/`pandera`
+    # aqui REPROVA — provado por quebra intencional revertida (Task 09 / A9). Corrige na
+    # origem o apodrecimento do old (multi_horizon_prediction_persister.py importava pandas
+    # em arquivo de domínio). Cada NOVA feature com domain entra aqui.
+    financial_forecasting.features.analytics_store.domain
 forbidden_modules =
     pandas
     pyarrow
@@ -179,6 +190,14 @@ source_modules =
     # entra em forbidden_modules abaixo (não coberto por domain-purity) para fechar o I12.
     financial_forecasting.features.feature_engineering.application
     financial_forecasting.features.feature_engineering.domain
+    # Stage 4.1 (concept 4.1 I2/D4 / ADR 4.1.0001 e 2.1.0002): estende a
+    # `features.analytics_store.{application,domain}`. Os schemas `pandera` silver vivem
+    # SÓ no adapter `adapters/out/parquet/schemas/`; os VOs de domínio (RunRecord/
+    # PredictionRow) e a futura application (4.2/4.3) NUNCA importam pandas/pandera. A
+    # camada application existe vazia nesta Stage (defesa em profundidade — source sem
+    # imports não reprova). Provado por quebra intencional revertida (Task 09 / A9).
+    financial_forecasting.features.analytics_store.application
+    financial_forecasting.features.analytics_store.domain
 forbidden_modules =
     pandas
     pyarrow
