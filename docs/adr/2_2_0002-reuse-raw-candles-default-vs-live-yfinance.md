@@ -132,8 +132,12 @@ addition driven by the DoD + ledger + overnight finding, flagged as a
 
 - The default path reads the raw file on each call (O(file)); accepted for a
   single-asset, low-volume pilot — swappable later without touching the port.
-- The raw lacks an `asset` column; injecting `asset` is the use case's
-  responsibility (concept §7 D4), independent of which fetcher is the source.
+- The raw lacks an `asset` column. As built (see technical §7, finding F1): the
+  fetcher adapter sets `asset=symbol` on the `Candle` entity (entity identity I5,
+  with `symbol=request.asset`); the use case then materializes the Row `asset`
+  column from `candle.asset` (== `request.asset`). The rejected option was
+  injecting `asset` in the `ParquetMedallionStore` (which receives ready rows).
+  Invariant I9 (`Row.asset == request.asset`) holds either way.
 
 ## Implementation notes
 

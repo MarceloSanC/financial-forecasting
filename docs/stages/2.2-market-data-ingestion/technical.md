@@ -683,4 +683,17 @@ reais que nenhum teste pegava:
 **Razão:** Item 3 do gate de auditoria (trocar/remover validação deve falhar um
 teste); evita falso-verde da cobertura de linha. `make check` verde.
 
+### 2026-06-29 — [deviation] D4 — `asset` setado na fronteira do adapter (identidade I5) — orquestrador (F1)
+**Contexto:** D4/I9 descrevem o use case "injetando `asset` (derivado do `request.asset`)" ao montar
+a Row. O as-built é mais preciso: cada adapter de `CandleFetcher` (`ParquetRawCandleFetcher`,
+`YfinanceCandleFetcher`) é chamado com `symbol=request.asset` e seta `asset=symbol` na entity
+`Candle` (parte da identidade I5); o use case `_candle_to_row` então **materializa a coluna `asset`
+da Row a partir de `candle.asset`** — igual a `request.asset` por construção. O alvo rejeitado por
+D4 (injetar `asset` no `ParquetMedallionStore`, que recebe rows prontas) **não** foi feito.
+**Razão:** Design coerente — `asset` é identidade da entity (I5) e flui adapter→entity→Row, em vez
+de o use case re-derivar do request. O invariante I9 (`Row.asset == request.asset`, pandera `strict`)
+**permanece satisfeito e testado** (`row['asset']=='AAPL'` nos contract/integration tests). Sem
+mudança de contrato/AC — só a redação "derivado do request" de D4/I9 fica imprecisa; o fluxo exato é
+este registro (finding F1 da stage-audit; ADR 2.2.0002 amendado).
+
 <!-- END: post-execution -->
