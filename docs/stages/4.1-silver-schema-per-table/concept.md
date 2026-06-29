@@ -397,8 +397,9 @@ erDiagram
 - [x] Decisões com alternativa real descartada têm ADR escrito? (D1→4.1.0001,
   D2→4.1.0002; D4/D5 derivam de ADRs vigentes, registradas como `[decision]`)
 - [x] Dependências de Stages anteriores estão satisfeitas? (1.4 e 2.1 `done`)
-- [x] Stage cabe em ~3–8 Tasks? (12 Tasks no `technical.md` — recorte fino de
-  scaffold + 1 módulo/tabela; cada uma trivial, build verde a cada commit)
+- [x] Stage cabe em ~3–8 Tasks? (9 Tasks no `technical.md` — recorte fino de
+  scaffold + gate + 2 VOs + SilverTable + schemas por grupo + registry + prova
+  de gate; cada uma trivial, build verde a cada commit)
 - [x] Riscos críticos têm mitigação plausível? (§10)
 - [x] H-1 (long) e lista das 8 tabelas deferidas estão registradas? (I5, D2,
   D3, ADR 4.1.0001/4.1.0002)
