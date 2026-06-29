@@ -332,7 +332,7 @@ puro como oráculo causal testado (invariância a barras futuras, shift positivo
 - [x] Decisões com alternativa real descartada têm ADR escrito? (D1→3.4.0001,
   D2/D4→3.4.0002, D4→0.0.0016; D3 sem ADR pois sem alternativa nova)
 - [x] Dependências de Stages anteriores estão satisfeitas (`done`)? (3.1 `done`)
-- [x] Stage cabe em ~3–8 Tasks? (11 Tasks no technical, das quais ~9 de
+- [x] Stage cabe em ~3–8 Tasks? (8 Tasks no technical, das quais 7 de
   código/testes; derivadas fatiadas por família — dentro da faixa por coesão)
 - [x] Riscos críticos têm mitigação plausível? (§10)
 - [x] O `feature_set_hash` é genuinamente função pura do conteúdo? (I5, D3)
