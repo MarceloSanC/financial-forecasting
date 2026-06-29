@@ -158,3 +158,24 @@ forbidden_modules =
     duckdb
     pandera
 allow_indirect_imports = False
+
+# -----------------------------------------------------------------------------
+# Contrato 7 — calendar-no-exchange-calendars-leak (type = forbidden) — Stage 2.4 (I3)
+# LAYOUT §3: a `application` (e o `domain`) nunca importam libs externas — elas
+# vivem só em adapters. Mesma postura que `domain-purity`/`store-no-storage-leak`/
+# `tracker-no-mlflow-leak`: o port-out `ExchangeCalendarProvider` (Protocol) troca
+# só `date`/o VO de domínio `TradingSessions`; a lib `exchange_calendars` (que
+# arrasta pandas/numpy) vive APENAS no adapter `shared/adapters/out/calendar/`. O
+# serviço de domínio `TradingCalendar` opera sobre o VO injetado e NUNCA importa a
+# lib nem o port — a direção inward-only fica intacta (ADR 2.4.0001). `domain`
+# entra por defesa em profundidade (já stdlib-only, blinda contra import futuro).
+# -----------------------------------------------------------------------------
+[importlinter:contract:calendar-no-exchange-calendars-leak]
+name = Application/domain não importam exchange_calendars (só o adapter)
+type = forbidden
+source_modules =
+    financial_forecasting.shared.application
+    financial_forecasting.shared.domain
+forbidden_modules =
+    exchange_calendars
+allow_indirect_imports = False
