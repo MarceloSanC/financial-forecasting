@@ -782,7 +782,84 @@ Task 01..08 ─► Task 09 (gate agregado)
   e Stage candidata).
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original.
 
-### YYYY-MM-DD — [tag] <Task NN ou escopo> — <Autor>
-<!-- preencher quando aplicável; remover este placeholder se vazio -->
+### 2026-06-29 — [decision] Task 06 — revisão HF pinada + mapeamento de labels por nome — Claude (autonomous overnight)
+**Contexto:** O `concept`/`ADR 3.2.0001`/`old` assumiam a ordem de rótulos
+`[negative, neutral, positive]` (índices 0/1/2) e o old fazia `probs[:,2]−probs[:,0]`
+por **índice fixo**. Ao resolver o SHA da `revision` de `ProsusAI/finbert` via
+**metadados HF** (`https://huggingface.co/api/models/ProsusAI/finbert` →
+`sha = 4556d13015211d73dccd3fdd39d39232506f3e43`) e ler o `config.json` desse commit
+(sem baixar pesos), o `id2label` desse SHA é `{0: positive, 1: negative, 2: neutral}`
+— ordem **diferente** da assumida. Usar índice fixo produziria o score com sinal
+trocado (`P(neg)−P(pos)`).
+**Decisão:** (a) pinar `revision = "4556d13015211d73dccd3fdd39d39232506f3e43"` (SHA
+resolvido por metadados, sem download — fluxo unattended preservado); (b) o adapter
+`FinbertSentimentModel` mapeia os rótulos **por NOME** via `model.config.id2label`,
+reordenando a saída crua do modelo para a ordem canônica `[neg, neu, pos]` **antes**
+de chamar `scores_from_probs` (que permanece pura e validada por oráculo). O fallback
+estava **pré-declarado** em §5 (riscos) e §13/Q1 do concept — logo NÃO requer ADR
+novo; fica dentro do envelope já aceito (`3.2.0001`/`0.0.0017`).
+**Razão:** Corrige um bug latente (sinal invertido) e torna o adapter robusto a
+revisões com rótulos reordenados; mantém a fórmula pura simples e a fronteira do port
+inalterada. `_resolve_canonical_order` levanta `ValueError` se um rótulo esperado
+faltar (defesa contra revisão inesperada).
+
+### 2026-06-29 — [decision] Task 05 — regressão diária contra oráculo por dia civil==pregão — Claude (autonomous overnight)
+**Contexto:** O oráculo `daily_sentiment_AAPL.parquet` do old usa **dias civis** com
+**fill de dias-zero** (`n_articles=0`, `score=0.0` em feriados/fins de semana), ao
+passo que o contrato desta Stage é por **dia de pregão** só com `n>=1` (D7, fill
+deferido à 3.5). Comparar 1:1 ao oráculo diário não bate por construção (o oráculo
+tem milhares de dias n=0 e dias com rolagem de cutoff).
+**Decisão:** A regressão end-to-end (`test_daily_aggregation_matches_oracle_on_verifiable_days`)
+alimenta os scores per-article do oráculo `scored_news_AAPL.parquet` no use case com
+`close_hour = 21:00 UTC` (fechamento NYSE em EST = 16:00 ET, inferido dos timestamps
+de 2023-01-12, onde o artigo das 22:43 UTC rolou para a sessão seguinte no oráculo) e
+compara `Result.daily` ao oráculo diário **só nos dias do 1º trimestre/2023 em que o
+dia civil coincide com a sessão de pregão e o oráculo registra `n>=1`** — **21 dias
+verificáveis** (2 multi-artigo). Os dias com rolagem de cutoff (n diverge) ficam fora
+do conjunto verificável por construção.
+**Razão:** O contrato (mean/pstdev/n por dia de pregão) é fixo; o oráculo é **rede de
+regressão**, não fonte. A precisão de construção de teste não muda contrato/fronteira
+(premissa §1 do technical). 21 dias verificáveis dão teeth reais à regressão.
+
+### 2026-06-29 — [deviation] Tasks 02/06/08 — import dinâmico/lazy e per-file-ignore PLC0415 — Claude (autonomous overnight)
+**Contexto:** O hook `pre-commit` pina `ruff v0.6.9` (não conhece `PLC0415`,
+import-should-be-at-top-level), mas o `make check` autoritativo usa `ruff 0.15.20`
+(que **flagra** `PLC0415`). O hook removia o `# noqa: PLC0415` como "não usado",
+reintroduzindo a violação no gate autoritativo. O adapter precisa de import **lazy**
+de `torch`/`transformers` (extra opcional), e os testes precisam importar o adapter
+**condicionalmente** (sem torch no CI).
+**Decisão/ajuste:** (a) nos testes (`test_sentiment_model_contract.py`,
+`test_finbert_sentiment_model.py`), trocar `from ... import` lazy por
+`importlib.import_module(...)` — idioma de import dinâmico que não dispara `PLC0415`
+em nenhuma versão; (b) no adapter (lazy import obrigatório dentro do `__init__`),
+adicionar `[tool.ruff.lint.per-file-ignores]` para `PLC0415` **só** no arquivo
+`finbert_sentiment_model.py` (o lazy import é o design, não um descuido). Reversível
+quando o pin do hook subir.
+**Razão:** Mantém `make check` e o hook **ambos** verdes sem enfraquecer a regra
+globalmente; o lazy import é a condição do extra opcional (I5/I9/D2).
+
+### 2026-06-29 — [decision] Task 06 — pin de torch/transformers por minor no extra opcional — Claude (autonomous overnight)
+**Contexto:** O extra `sentiment` precisava de versões pinadas; o ambiente é CPU e o
+`uv lock` resolve wheels CUDA por default.
+**Decisão:** `torch>=2.2,<3.0` + `transformers>=4.40,<5.0` (pin por minor, mesma
+postura de `exchange-calendars`/`yfinance`); `uv lock` resolveu `torch 2.12.1` +
+`transformers 4.57.6` no `uv.lock`. Confirmado que `uv sync --extra dev` **não**
+instala torch (invariante do CI mantido: `find_spec("torch") is None`).
+**Razão:** O extra é opcional e fora do `dev`; o pin por minor evita breaking changes
+sem travar patches. Não afeta o CI `dev`.
+
+### 2026-06-29 — [finding] Task 09 — cobertura do adapter FinBERT sob skipif (esperado, aceito) — Claude (autonomous overnight)
+**Contexto:** O **código vivo torch-free** do BC (port `sentiment_model.py` + `scoring.py`
++ use case `score_and_aggregate_sentiment.py` + DTOs) está em **100%** de cobertura
+sem torch. O adapter `finbert_sentiment_model.py` (55 linhas) fica **0%** porque todo
+o corpo (`__init__`/forward) é o bloco lazy de ML, **SKIPPED** no CI (torch ausente).
+O `make check` global passa (95.62% ≥ 90%, gate verde), mas uma medição **escopada ao
+BC incluindo o adapter** mostra ~78% por causa do bloco lazy descoberto.
+**Razão/direção:** Esperado e aceito (concept/technical I8/D3): o forward do adapter
+só roda com `uv sync --extra sentiment` + download do modelo (~400 MB), fora do fluxo
+unattended; o integration `skipif` (Task 08) o exercita quando rodado manualmente. A
+fórmula é coberta pela função pura (Task 03) e a forma pelo contract test (Tasks
+02/06). Nenhuma ação pendente — registrado para a auditoria não confundir o 0% do
+bloco lazy com gap de teste.
 
 <!-- END: post-execution -->

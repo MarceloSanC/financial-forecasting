@@ -178,3 +178,22 @@ def test_score_count_mismatch_raises() -> None:
     )
     with pytest.raises(ValueError, match="one score per article"):
         use_case.execute(_request())
+
+
+def test_non_datetime_published_at_raises() -> None:
+    """Linha da bronze com `published_at` não-datetime -> `ValueError` (guarda de mapeamento)."""
+    row = _news_row("a1", datetime(2023, 1, 4, 12, 0, tzinfo=UTC))
+    row["published_at"] = "2023-01-04T12:00:00Z"  # string, não datetime
+    with pytest.raises(ValueError, match="must be a datetime"):
+        _use_case(_store_with([row]), {"a1": 0.1}).execute(_request())
+
+
+def test_optional_fields_none_are_accepted() -> None:
+    """Campos opcionais (`url`/`language`) `None` na bronze são normalizados (não quebram)."""
+    row = _news_row("a1", datetime(2023, 1, 4, 12, 0, tzinfo=UTC))
+    row["url"] = None
+    row["language"] = None
+    result = _use_case(_store_with([row]), {"a1": 0.3}).execute(_request())
+    (scored,) = result.scored
+    assert scored.score == pytest.approx(0.3)
+    assert scored.trading_day == date(2023, 1, 4)
