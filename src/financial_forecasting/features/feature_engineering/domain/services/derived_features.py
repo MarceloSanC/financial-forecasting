@@ -489,3 +489,136 @@ def stress_tail_return_flag(close: Sequence[Number]) -> tuple[int | None, ...]:
         else:
             out.append(1 if r <= thr else 0)
     return tuple(out)
+
+
+# =============================================================================
+# Grupo 3 — sentimento dinâmico + fundamento derivado + YoY (Task 06)
+# =============================================================================
+
+_SENTIMENT_EMA_SPAN = 10
+_SENTIMENT_SURPRISE_WINDOW = 5
+_YOY_WINDOW = 252
+
+
+def _ewm(seq: Sequence[Number], span: int) -> OutSeq:
+    """`seq.ewm(span=span, adjust=False).mean()` recursivo — `alpha = 2/(span+1)`.
+
+    Paridade `ewm(adjust=False)`: `y_0 = x_0`; `y_t = alpha*x_t + (1-alpha)*y_{t-1}`.
+    Propaga `None` antes do PRIMEIRO valor não-faltante (paridade do pandas com NaN
+    inicial); a partir daí a recursão segue ignorando faltantes intermediários
+    (mantém o último `y` — não há valor novo para misturar).
+    """
+    if span <= 0:
+        raise ValueError(f"_ewm requires span > 0, got {span!r}")
+    alpha = 2.0 / (span + 1.0)
+    out: list[float | None] = []
+    prev: float | None = None
+    for x in seq:
+        v = _as_float(x)
+        if prev is None:
+            # antes do 1º valor válido → None; no 1º valor válido → seed y_0 = x_0.
+            prev = v
+            out.append(v)
+        elif v is None:
+            out.append(prev)
+        else:
+            prev = alpha * v + (1.0 - alpha) * prev
+            out.append(prev)
+    return tuple(out)
+
+
+def sentiment_lag(sentiment: Sequence[Number], n: int) -> OutSeq:
+    """`sentiment_score.shift(n)` (puro shift causal — tag `lagged_causal`)."""
+    return _shift(sentiment, n)
+
+
+def sentiment_lag_1(sentiment: Sequence[Number]) -> OutSeq:
+    """`sentiment_score` deslocado 1 (warmup 1)."""
+    return _shift(sentiment, 1)
+
+
+def sentiment_lag_3(sentiment: Sequence[Number]) -> OutSeq:
+    """`sentiment_score` deslocado 3 (warmup 3)."""
+    return _shift(sentiment, 3)
+
+
+def sentiment_lag_5(sentiment: Sequence[Number]) -> OutSeq:
+    """`sentiment_score` deslocado 5 (warmup 5)."""
+    return _shift(sentiment, 5)
+
+
+def sentiment_ema(sentiment: Sequence[Number]) -> OutSeq:
+    """`ewm(span=10, adjust=False)` sobre `sentiment_score` (warmup 1, verbatim old)."""
+    return _ewm(sentiment, _SENTIMENT_EMA_SPAN)
+
+
+def sentiment_surprise(sentiment: Sequence[Number]) -> OutSeq:
+    """`sentiment_t - rolling_mean(sentiment.shift(1), 5)` (warmup 5).
+
+    A baseline usa `sentiment.shift(1)` numa janela de 5 (`t-5..t-1`); o termo
+    corrente é `sentiment_t`. `None` no warmup ou onde algum termo é faltante.
+    """
+    baseline = _rolling_mean(_shift(sentiment, 1), _SENTIMENT_SURPRISE_WINDOW)
+    out: list[float | None] = []
+    for t in range(len(sentiment)):
+        cur = _as_float(sentiment[t])
+        base = baseline[t]
+        out.append(None if cur is None or base is None else cur - base)
+    return tuple(out)
+
+
+def _elementwise_product(a: Sequence[Number], b: Sequence[Number]) -> OutSeq:
+    """Produto elemento a elemento; `None` onde qualquer fator é faltante."""
+    if len(a) != len(b):
+        raise ValueError("_elementwise_product: length mismatch")
+    out: list[float | None] = []
+    for x, y in zip(a, b, strict=True):
+        fx = _as_float(x)
+        fy = _as_float(y)
+        out.append(None if fx is None or fy is None else fx * fy)
+    return tuple(out)
+
+
+def sentiment_x_volatility(sentiment: Sequence[Number], volatility_20d: Sequence[Number]) -> OutSeq:
+    """`sentiment_score * volatility_20d` (warmup herdado de `volatility_20d`)."""
+    return _elementwise_product(sentiment, volatility_20d)
+
+
+def sentiment_x_volume(sentiment: Sequence[Number], volume: Sequence[Number]) -> OutSeq:
+    """`sentiment_score * volume` (sem warmup)."""
+    return _elementwise_product(sentiment, volume)
+
+
+def _ratio_seq(num: Sequence[Number], den: Sequence[Number]) -> OutSeq:
+    """`_safe_ratio` por posição (denom `None`/`0`/`NaN` → `None`, C6)."""
+    if len(num) != len(den):
+        raise ValueError("_ratio_seq: length mismatch")
+    return tuple(_safe_ratio(a, b) for a, b in zip(num, den, strict=True))
+
+
+def net_margin(net_income: Sequence[Number], revenue: Sequence[Number]) -> OutSeq:
+    """`net_income / revenue` (protegido, C6)."""
+    return _ratio_seq(net_income, revenue)
+
+
+def leverage_ratio(
+    total_liabilities: Sequence[Number],
+    total_shareholder_equity: Sequence[Number],
+) -> OutSeq:
+    """`total_liabilities / total_shareholder_equity` (protegido, C6)."""
+    return _ratio_seq(total_liabilities, total_shareholder_equity)
+
+
+def cashflow_efficiency(operating_cash_flow: Sequence[Number], revenue: Sequence[Number]) -> OutSeq:
+    """`operating_cash_flow / revenue` (protegido, C6)."""
+    return _ratio_seq(operating_cash_flow, revenue)
+
+
+def revenue_yoy_growth(revenue: Sequence[Number]) -> OutSeq:
+    """`pct_change(revenue, 252, fill_method=None)` (YoY; warmup 252 — ADR 3.3.0002)."""
+    return _pct_change(revenue, _YOY_WINDOW)
+
+
+def net_income_yoy_growth(net_income: Sequence[Number]) -> OutSeq:
+    """`pct_change(net_income, 252, fill_method=None)` (YoY; warmup 252)."""
+    return _pct_change(net_income, _YOY_WINDOW)

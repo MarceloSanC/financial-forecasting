@@ -347,3 +347,130 @@ def test_trend_regime_prefix_stable_on_future_bars() -> None:
     ema10_f = (*ema10, 130.0, 70.0)
     ema50_f = (*ema50, 80.0, 120.0)
     assert df.trend_regime(ema10_f, ema50_f)[:n] == df.trend_regime(ema10, ema50)
+
+
+# =============================================================================
+# Task 06 — sentimento dinâmico + fundamento derivado + YoY
+# =============================================================================
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("n", [1, 3, 5])
+def test_sentiment_lag_equals_shift(n: int) -> None:
+    """Paridade lag==shift: `sentiment_lag_n[t] == sentiment[t-n]`; `None` em t<n."""
+    sent = (0.1, 0.2, -0.3, 0.4, -0.5, 0.6, 0.7)
+    lag = df.sentiment_lag(sent, n)
+    assert all(v is None for v in lag[:n])
+    for t in range(n, len(sent)):
+        assert lag[t] == pytest.approx(sent[t - n])
+
+
+@pytest.mark.unit
+def test_sentiment_lag_helpers_match_generic() -> None:
+    """Os helpers nomeados batem com `sentiment_lag(seq, n)`."""
+    sent = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6)
+    assert df.sentiment_lag_1(sent) == df.sentiment_lag(sent, 1)
+    assert df.sentiment_lag_3(sent) == df.sentiment_lag(sent, 3)
+    assert df.sentiment_lag_5(sent) == df.sentiment_lag(sent, 5)
+
+
+@pytest.mark.unit
+def test_ewm_recursion_matches_hand_computed() -> None:
+    """`_ewm(span=10, adjust=False)` bate com a recursão calculada à mão (alpha=2/11)."""
+    out = df._ewm((1.0, 2.0, 3.0), 10)
+    alpha = 2.0 / 11.0
+    y0 = 1.0
+    y1 = alpha * 2.0 + (1.0 - alpha) * y0
+    y2 = alpha * 3.0 + (1.0 - alpha) * y1
+    assert out[0] == pytest.approx(y0)
+    assert out[1] == pytest.approx(y1)
+    assert out[2] == pytest.approx(y2)
+
+
+@pytest.mark.unit
+def test_ewm_propagates_none_before_first_valid() -> None:
+    """`_ewm` propaga `None` antes do 1º valor válido e faz seed nele."""
+    out = df._ewm((None, None, 5.0, 7.0), 10)
+    assert out[0] is None
+    assert out[1] is None
+    assert out[2] == pytest.approx(5.0)  # seed y_0 = x_0
+    alpha = 2.0 / 11.0
+    assert out[3] == pytest.approx(alpha * 7.0 + (1.0 - alpha) * 5.0)
+
+
+@pytest.mark.unit
+def test_sentiment_surprise_warmup_and_value() -> None:
+    """`sentiment_surprise = sentiment_t - mean(sentiment.shift(1), 5)`; None no warmup."""
+    sent = (1.0, 1.0, 1.0, 1.0, 1.0, 2.0)
+    out = df.sentiment_surprise(sent)
+    assert all(v is None for v in out[:5])  # warmup 5
+    # t=5: baseline = mean(sent[0..4]) = 1.0; surprise = 2 - 1 = 1.0
+    assert out[5] == pytest.approx(1.0)
+
+
+@pytest.mark.unit
+def test_sentiment_interactions() -> None:
+    """`sentiment_x_volatility`/`sentiment_x_volume` são produtos elemento a elemento."""
+    sent = (0.5, -0.2, None, 0.4)
+    vol20 = (0.1, 0.2, 0.3, None)
+    volume = (100.0, 200.0, 300.0, 400.0)
+    sxv = df.sentiment_x_volatility(sent, vol20)
+    assert sxv[0] == pytest.approx(0.05)
+    assert sxv[1] == pytest.approx(-0.04)
+    assert sxv[2] is None  # sentiment faltante
+    assert sxv[3] is None  # vol faltante
+    sxvol = df.sentiment_x_volume(sent, volume)
+    assert sxvol[0] == pytest.approx(50.0)
+    assert sxvol[2] is None
+
+
+@pytest.mark.unit
+def test_fundamental_ratios_protected_division() -> None:
+    """C6 — ratios fundamentais devolvem `None` quando o denominador é 0/None."""
+    net_income = (10.0, 20.0, 30.0, None)
+    revenue = (100.0, 0.0, None, 400.0)
+    nm = df.net_margin(net_income, revenue)
+    assert nm[0] == pytest.approx(0.1)
+    assert nm[1] is None  # revenue == 0
+    assert nm[2] is None  # revenue None
+    assert nm[3] is None  # net_income None
+    liabilities = (50.0, 80.0)
+    equity = (100.0, 0.0)
+    lev = df.leverage_ratio(liabilities, equity)
+    assert lev[0] == pytest.approx(0.5)
+    assert lev[1] is None
+    cf = df.cashflow_efficiency((30.0,), (120.0,))
+    assert cf[0] == pytest.approx(0.25)
+
+
+@pytest.mark.unit
+def test_yoy_growth_none_before_252_and_value_at_252() -> None:
+    """A5 — YoY é `None` antes de 252; em 252 bate com `seq[252]/seq[0]-1`."""
+    n = 300
+    revenue = tuple(100.0 + i for i in range(n))
+    rev_yoy = df.revenue_yoy_growth(revenue)
+    assert all(v is None for v in rev_yoy[:252])
+    assert rev_yoy[252] == pytest.approx(revenue[252] / revenue[0] - 1.0)
+    net_income = tuple(10.0 + 0.5 * i for i in range(n))
+    ni_yoy = df.net_income_yoy_growth(net_income)
+    assert all(v is None for v in ni_yoy[:252])
+    assert ni_yoy[252] == pytest.approx(net_income[252] / net_income[0] - 1.0)
+
+
+@pytest.mark.unit
+def test_appending_future_bars_does_not_change_prefix_sentiment_and_yoy() -> None:
+    """I6 — prefixo estável para sentimento dinâmico e YoY ao anexar barras futuras."""
+    n = 60
+    sent = tuple(0.1 * math.sin(i) for i in range(n))
+    sent_f = (*sent, 0.9, -0.9, 0.5)
+    for fn in (
+        df.sentiment_lag_1,
+        df.sentiment_lag_3,
+        df.sentiment_lag_5,
+        df.sentiment_ema,
+        df.sentiment_surprise,
+    ):
+        assert fn(sent_f)[:n] == fn(sent), fn.__name__
+    rev = tuple(100.0 + i for i in range(300))
+    rev_f = (*rev, 9999.0, 1.0)
+    assert df.revenue_yoy_growth(rev_f)[:300] == df.revenue_yoy_growth(rev)
