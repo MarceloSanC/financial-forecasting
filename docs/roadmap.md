@@ -77,7 +77,7 @@ graph LR
 | Stage | BC | Camada-alvo | Tipo | Status | Depende de |
 |---|---|---|---|---|---|
 | `1.1-bootstrap` | shared | bootstrap | mono | done | — |
-| `1.2-ci-coverage` | shared | bootstrap (ci) | mono | draft | 1.1 |
+| `1.2-ci-coverage` | shared | bootstrap (ci) | mono | done | 1.1 |
 | `1.3-architecture-contracts` | shared | bootstrap (import-linter) | mono | draft | 1.2 |
 | `1.4-identity-and-fingerprints` | shared | domain + application | vertical | draft | 1.3 |
 | `1.5-config-and-tracking` | shared | shared/infrastructure + bootstrap | mono | draft | 1.4 |
