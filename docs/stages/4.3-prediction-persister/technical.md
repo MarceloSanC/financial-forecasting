@@ -557,4 +557,28 @@ h=2 incompleto pula 3.
 nível; logo a borda é por horizonte. Contar por linha (nível) mantém `rows_skipped`
 comparável a `rows_written` (ambos em linhas LONG), sem fabricar `y_true`.
 
+### 2026-06-29 — [deviation] auditoria de testes: 3 testes extra na fronteira DTO→Row — Claude (overnight)
+**Contexto:** a auditoria de testes (mutação mental sobre o use case) achou três
+gaps reais que o `FakeAnalyticsRepository` não pega por NÃO validar `pandera`
+(só PK/partição): (1) nenhum teste afirmava o valor de `decision_idx` na linha
+LONG persistida — um `_to_row` que omitisse/errasse a coluna sobreviveria; (2)
+nenhum teste afirmava o conjunto EXATO de 15 colunas do schema — coluna a menos
+(ex.: `decision_idx`) ou a mais passaria silenciosa; (3) os testes só conferiam a
+PRESENÇA de `value_raw`/`value_guardrail` (chave no dict), nunca os valores — um
+mutante trocando `value_raw`↔`value_guardrail` sobreviveria; e a unicidade de PK
+só era provada para 1 horizonte.
+**Decisão:** adicionei em `test_persist_predictions.py`:
+`test_row_carries_exactly_the_fifteen_schema_columns_and_decision_idx` (conjunto
+exato de colunas + `decision_idx` materializado),
+`test_value_raw_and_value_guardrail_carry_distinct_correct_values` (raw=bruto,
+guardrail=`sorted` numa grade reordenada, com pelo menos um nível raw≠guardrail) e
+`test_multiple_valid_horizons_persist_all_rows_with_unique_pk` (h=1 e h=2 do mesmo
+decision coexistem, 2*N linhas, PK distinta, targets por sessão+1/+2). Commit
+`test(analytics-store): cobrir colunas/valores/multi-horizonte do persister
+[4.3/task-05-extra]`.
+**Razão:** fecha mutantes que matavam o mapeamento DTO→Row (coração do contrato
+LONG da Stage) sem nenhum teste falhar; cobertura dos 3 módulos já era 100% por
+linha, mas a cobertura de mutação na fronteira tinha buracos — rastreabilidade
+para a stage-audit.
+
 <!-- END: post-execution -->

@@ -230,6 +230,122 @@ def test_guardrail_applied_flag_reflects_reordering() -> None:
     assert h2_flags == {0}  # intacto
 
 
+_EXPECTED_COLUMNS = frozenset(
+    {
+        "schema_version",
+        "run_id",
+        "model_version",
+        "asset",
+        "feature_set_name",
+        "split",
+        "horizon",
+        "decision_idx",
+        "timestamp_utc",
+        "target_timestamp_utc",
+        "quantile_level",
+        "value_raw",
+        "value_guardrail",
+        "guardrail_applied",
+        "year",
+    }
+)
+
+
+@pytest.mark.unit
+def test_row_carries_exactly_the_fifteen_schema_columns_and_decision_idx() -> None:
+    """A5/A6/I6/I7: cada Row LONG tem EXATAMENTE as 15 colunas do schema e o decision_idx.
+
+    Fecha o gap em que o fake do port não valida `pandera`: uma coluna a menos
+    (ex.: `decision_idx` esquecido) ou a mais passaria silenciosamente. Trava o
+    mapeamento DTO→Row contra o schema `fact_oos_predictions` (4.1, strict=True).
+    """
+    repo = _repo()
+    use_case = PersistPredictions(repository=repo)
+
+    decision = 2
+    use_case(_command(decision_idx=decision))
+
+    rows = repo.read(layer=_LAYER, table=_TABLE, filters={"asset": "AAPL"})
+    assert rows
+    for row in rows:
+        # Conjunto EXATO de colunas — nem a menos (decision_idx) nem a mais.
+        assert set(row) == _EXPECTED_COLUMNS
+        # `decision_idx` materializado na linha LONG bate com o decision do command.
+        assert row["decision_idx"] == decision
+
+
+@pytest.mark.unit
+def test_value_raw_and_value_guardrail_carry_distinct_correct_values() -> None:
+    """A5/I5/I6: numa grade reordenada, value_raw=bruto e value_guardrail=ordenado.
+
+    Fecha o gap em que os testes só conferiam a PRESENÇA das colunas: um mutante
+    que trocasse `value_raw`↔`value_guardrail` (ou mapeasse guardrail no lugar do
+    raw) sobreviveria. Aqui os dois valores são DISTINTOS por nível e checados.
+    """
+    repo = _repo()
+    use_case = PersistPredictions(repository=repo)
+
+    raw = (0.3, 0.1, 0.5, 0.2, 0.9)
+    expected_guardrail = (0.1, 0.2, 0.3, 0.5, 0.9)  # sorted(raw)
+    forecast = QuantileForecast.from_raw(levels=_FIVE_LEVELS, raw_values=raw)
+    assert forecast.guardrail_applied is True  # pré-condição: a ordem mudou
+
+    use_case(_command(decision_idx=0, forecasts={1: forecast}))
+
+    rows = repo.read(layer=_LAYER, table=_TABLE, filters={"asset": "AAPL"})
+    by_level = {row["quantile_level"]: row for row in rows}
+    for level, raw_value, guardrail_value in zip(
+        _FIVE_LEVELS, raw, expected_guardrail, strict=True
+    ):
+        row = by_level[level]
+        assert row["value_raw"] == raw_value
+        assert row["value_guardrail"] == guardrail_value
+    # Em pelo menos um nível raw != guardrail — prova que não são a mesma coluna.
+    assert any(
+        by_level[lvl]["value_raw"] != by_level[lvl]["value_guardrail"] for lvl in _FIVE_LEVELS
+    )
+
+
+@pytest.mark.unit
+def test_multiple_valid_horizons_persist_all_rows_with_unique_pk() -> None:
+    """A5/I6: dois horizontes válidos do mesmo decision → todas as linhas, PK distinta.
+
+    Fecha o gap em que a unicidade de PK só era provada para 1 horizonte: aqui h=1 e
+    h=2 partilham (run_id, split, timestamp_utc) mas diferem em horizon E
+    target_timestamp_utc — todas as 2*N linhas coexistem sem colisão.
+    """
+    repo = _repo()
+    use_case = PersistPredictions(repository=repo)
+
+    forecasts = {
+        1: QuantileForecast.from_raw(levels=_LEVELS, raw_values=(0.1, 0.5, 0.9)),
+        2: QuantileForecast.from_raw(levels=_LEVELS, raw_values=(0.2, 0.6, 1.0)),
+    }
+    result = use_case(_command(decision_idx=0, forecasts=forecasts))
+
+    assert result.rows_written == 2 * len(_LEVELS)
+    assert result.rows_skipped == 0
+
+    rows = repo.read(layer=_LAYER, table=_TABLE, filters={"asset": "AAPL"})
+    assert len(rows) == 2 * len(_LEVELS)
+    pks = {
+        (
+            row["run_id"],
+            row["split"],
+            row["horizon"],
+            row["timestamp_utc"],
+            row["target_timestamp_utc"],
+            row["quantile_level"],
+        )
+        for row in rows
+    }
+    assert len(pks) == len(rows)  # todas distintas entre os dois horizontes
+    # h=1 e h=2 têm target_timestamp_utc distintos (sessão+1 vs sessão+2).
+    targets = {row["horizon"]: row["target_timestamp_utc"] for row in rows}
+    assert targets[1] == _TIMESTAMPS[1]
+    assert targets[_HORIZON_2] == _TIMESTAMPS[2]
+
+
 @pytest.mark.unit
 def test_duplicate_pk_propagates_without_upsert() -> None:
     """A5/C5 (f): reprocessar mesma PK sem allow_upsert → DuplicateKeyError propagado."""
