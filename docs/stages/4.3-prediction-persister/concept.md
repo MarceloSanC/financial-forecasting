@@ -460,7 +460,7 @@ erDiagram
 - [x] Decisões com alternativa real descartada têm ADR escrito? (D1/D2 →
   `4_3_0001`; D4 → `4_3_0002`; D3/D5/D6/D7 sem alternativa real → §7 technical)
 - [x] Dependências de Stages anteriores estão `done`? (4.1, 4.2, 2.4)
-- [x] Stage cabe em ~3–8 Tasks? (8 Tasks no technical)
+- [x] Stage cabe em ~3–8 Tasks? (5 Tasks no technical: 2 domain + 1 use case + pacotes + gate)
 - [x] Riscos críticos têm mitigação plausível? (§10)
 - [x] O alinhamento temporal (coração do rewrite) tem teste verbatim que prova
   zero off-by-one? (A1, A2)
