@@ -15,6 +15,7 @@ jobs:
   guard-main-source:
     if: github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Bloquear se origem não for develop ou hotfix/*
         run: |
@@ -28,6 +29,7 @@ jobs:
 
   lint-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -42,5 +44,5 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Run gate completo (lint + typecheck + layout-check + tests)
+      - name: Run gate completo (lint + typecheck + layout-check + docs-check + tests + coverage)
         run: make check

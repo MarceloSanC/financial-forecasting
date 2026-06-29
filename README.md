@@ -2,6 +2,8 @@
 
 > Calibração probabilística de previsões de retorno com TFT (piloto AAPL)
 
+![CI](https://github.com/MarceloSanC/financial-forecasting/actions/workflows/ci.yml/badge.svg)
+
 ---
 
 ## Documentação
@@ -68,7 +70,7 @@ cd Financial Forecasting
 make setup                    # cria .venv via uv e instala deps
 cp .env.example .env          # ajuste credenciais locais
 make migrate                  # alembic upgrade head
-make check                    # lint + typecheck + testes
+make check                    # gate completo: lint + typecheck + layout + docs + testes c/ cobertura ≥90%
 ```
 
 ---
@@ -81,11 +83,12 @@ make check                    # lint + typecheck + testes
 | `make install` | Reinstala dependências (após mudança no `pyproject.toml`) |
 | `make run` | Sobe o servidor de desenvolvimento com hot-reload |
 | `make migrate` | Aplica migrations pendentes (`alembic upgrade head`) |
-| `make check` | Roda lint + typecheck (falha o CI se houver erros) |
+| `make check` | Gate completo — lint + typecheck + layout-check + docs-check + testes com cobertura ≥ 90% (falha o CI se qualquer um falhar) |
 | `make lint` | Roda `ruff check` — apenas reporta |
 | `make fmt` | Roda `ruff format` + `ruff check --fix` |
-| `make typecheck` | Roda `mypy` |
-| `make test` | Roda todos os testes |
+| `make typecheck` | Roda `mypy --strict` |
+| `make test` | Roda todos os testes medindo cobertura (gate ≥ 90%) |
+| `make test-fast` | Roda testes sem cobertura, pulando os `slow` (loop local rápido) |
 | `make test-cov` | Testes com relatório de cobertura em HTML |
 | `make clean` | Remove artefatos de build, cache e `.venv` |
 | `make docker-build` | Builda a stage `builder` (devcontainer/CI) — tag `:dev` |
@@ -139,17 +142,33 @@ src/financial_forecasting/
 
 ---
 
-## CI
+## CI e gate de qualidade
 
-O pipeline de CI roda, nesta ordem:
+O CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) roda um **único job de gate**
+(`lint-and-test`) que executa `make check` em todo push para `main`/`develop` e em todo Pull
+Request. **Um PR reprova (CI vermelho) se violar qualquer uma destas cinco fronteiras:**
 
-1. `make lint` — falha em qualquer violação de estilo
-2. `make typecheck` — falha em qualquer erro de tipo
-3. `make test` com `-m "not slow"` — roda unit + integration, pula lentos
-4. Upload do relatório de cobertura
+| # | Fronteira | Ferramenta (passo de `make check`) |
+|---|-----------|------------------------------------|
+| 1 | Estilo / lint | `ruff check` (`make lint`) |
+| 2 | Tipos | `mypy --strict` (`make typecheck`) |
+| 3 | Direção de dependência hexagonal | `scripts/check_layout.py` (`make layout-check`) |
+| 4 | Suíte de testes | `pytest` (`make test`) |
+| 5 | Cobertura **< 90%** | `pytest --cov` + `fail_under=90` no `pyproject.toml` (`make test`) |
 
-Para rodar localmente o mesmo check do CI:
+> **CI verde ⟹ todas as fronteiras seguraram.** O gate de cobertura mede apenas **código vivo e em
+> escopo**: wiring/DI, entrypoint (`__main__`) e infra herdada do template ainda sem consumidor ficam
+> em `omit` (lista auditável no `pyproject.toml`); `adapters/*` **nunca** é omitido (têm contract test
+> e devem contar). Um job ortogonal `guard-main-source` garante que PRs para `main` só venham de
+> `develop`/`hotfix/*`.
+
+Para rodar **localmente o mesmo veredito do CI** (sem drift — é o mesmo comando):
 
 ```bash
-make check && make test
+make check
 ```
+
+> **Nota — contratos de import:** a direção de dependência já é gateada por
+> `scripts/check_layout.py`. Os **contratos `import-linter` formais** (`.importlinter`,
+> `tests/architecture/`) chegam na **Stage 1.3** (`1.3-architecture-contracts`); nesta Stage (1.2) o
+> "contrato de import" é o `check_layout.py`.

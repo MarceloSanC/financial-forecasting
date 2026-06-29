@@ -30,14 +30,14 @@ help:
 	@printf "%b\n" "  $(GREEN)make install$(RESET)    Reinstala dependências (após mudar pyproject.toml)"
 	@printf "%b\n" "  $(GREEN)make run$(RESET)        Sobe o servidor de desenvolvimento com hot-reload"
 	@printf "%b\n" "  $(GREEN)make migrate$(RESET)    Aplica migrations pendentes (alembic upgrade head)"
-	@printf "%b\n" "  $(GREEN)make check$(RESET)      Lint + typecheck + layout + testes (gate completo — usado no CI)"
+	@printf "%b\n" "  $(GREEN)make check$(RESET)      Lint + typecheck + layout + docs + testes c/ cobertura ≥90% (gate completo — usado no CI)"
 	@printf "%b\n" "  $(GREEN)make lint$(RESET)       Roda ruff check (apenas reporta)"
 	@printf "%b\n" "  $(GREEN)make fmt$(RESET)        Formata o código com ruff format + ruff check --fix"
 	@printf "%b\n" "  $(GREEN)make typecheck$(RESET)  Roda mypy strict"
 	@printf "%b\n" "  $(GREEN)make layout-check$(RESET) Valida regras de dependência via scripts/check_layout.py"
 	@printf "%b\n" "  $(GREEN)make docs-check$(RESET)  Valida §7 post-exec dos technical.md (CONVENTIONS §3.4)"
-	@printf "%b\n" "  $(GREEN)make test$(RESET)       Roda todos os testes"
-	@printf "%b\n" "  $(GREEN)make test-fast$(RESET)  Roda testes pulando os marcados como slow (-m 'not slow')"
+	@printf "%b\n" "  $(GREEN)make test$(RESET)       Roda todos os testes medindo cobertura (gate ≥ 90%)"
+	@printf "%b\n" "  $(GREEN)make test-fast$(RESET)  Roda testes sem cobertura, pulando os slow (loop local rápido)"
 	@printf "%b\n" "  $(GREEN)make test-cov$(RESET)   Testes com relatório de cobertura HTML + gate ≥ 90%"
 	@printf "%b\n" "  $(GREEN)make clean$(RESET)      Remove artefatos de build, cache e .venv"
 	@printf "%b\n" ""
@@ -87,7 +87,9 @@ migrate:
 	uv run alembic upgrade head
 
 # ---------------------------------------------------------------------------
-# check — lint + typecheck + layout-check + testes (gate completo, bloqueante no CI)
+# check — gate completo (bloqueante no CI): lint + typecheck + layout-check +
+# docs-check + test (com cobertura ≥ 90% via --cov no alvo `test`). É a fonte
+# única da verdade do veredito: o que o dev roda local == o que o CI roda (I7).
 # ---------------------------------------------------------------------------
 check: lint typecheck layout-check docs-check test
 
@@ -128,13 +130,17 @@ docs-check:
 	uv run python scripts/check_stage_issue.py
 
 # ---------------------------------------------------------------------------
-# test — roda toda a suite de testes
+# test — roda toda a suite de testes MEDINDO cobertura (gate ≥ 90%).
+# É o alvo que `make check` (e portanto o CI) executa: o --cov aqui faz o
+# fail_under=90 do pyproject DISPARAR (sem --cov o gate fica inerte — F3).
+# Fonte única da verdade: o que o dev roda local == o que o CI roda (I7).
 # ---------------------------------------------------------------------------
 test:
-	uv run pytest tests/ -v
+	uv run pytest tests/ -v --cov=src/financial_forecasting --cov-report=term-missing
 
 # ---------------------------------------------------------------------------
-# test-fast — pula testes marcados como slow (CI rápido / loop local)
+# test-fast — pula testes slow e NÃO mede cobertura (loop local rápido).
+# Não dispara o gate de cobertura; use `make test`/`make check` para o gate.
 # ---------------------------------------------------------------------------
 test-fast:
 	uv run pytest tests/ -v -m "not slow"
