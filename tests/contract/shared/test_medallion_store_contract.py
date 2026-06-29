@@ -41,6 +41,13 @@ from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 _F32 = np.float32
 _VOLUME = 1_000_000
 _TWO_ROWS = 2
+_YEAR_2024 = 2024
+
+
+def pd_year(value: object) -> int:
+    """Extrai o ano de um timestamp (datetime/pd.Timestamp), agnóstico de impl."""
+    assert isinstance(value, datetime)  # pd.Timestamp é subclasse de datetime
+    return value.year
 
 
 def _candle_row(asset: str, ts: datetime, close: float) -> Row:
@@ -178,6 +185,35 @@ def test_unknown_layer_table_raises(store: MedallionStore) -> None:
 
     with pytest.raises(ApplicationError):
         store.read(layer="silver", table="candle", filters={"asset": "AAPL"})
+
+
+@pytest.mark.contract
+def test_write_empty_rows_is_noop(store: MedallionStore) -> None:
+    """`write` de uma lista vazia (tabela conhecida) é no-op, não grava nada."""
+    store.write(layer="bronze", table="candle", rows=[])
+
+    rows = store.read(layer="bronze", table="candle", filters={"asset": "AAPL"})
+    assert list(rows) == []
+
+
+@pytest.mark.contract
+def test_read_filters_by_year(store: MedallionStore) -> None:
+    """I7: `read({"asset": A, "year": Y})` devolve só as linhas do ano Y."""
+    store.write(
+        layer="bronze",
+        table="candle",
+        rows=[_candle_row("AAPL", datetime(2023, 6, 1, tzinfo=UTC), 90.0)],
+    )
+    store.write(
+        layer="bronze",
+        table="candle",
+        rows=[_candle_row("AAPL", datetime(2024, 6, 1, tzinfo=UTC), 100.0)],
+    )
+
+    rows = store.read(layer="bronze", table="candle", filters={"asset": "AAPL", "year": 2024})
+
+    assert len(rows) == 1
+    assert pd_year(rows[0]["timestamp"]) == _YEAR_2024
 
 
 @pytest.mark.contract

@@ -17,10 +17,16 @@ from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher imp
     CanonicalJsonHasher,
 )
 from financial_forecasting.shared.adapters.out.mlflow.mlflow_tracker import MlflowTracker
+from financial_forecasting.shared.adapters.out.parquet.parquet_medallion_store import (
+    ParquetMedallionStore,
+)
 from financial_forecasting.shared.application.ports.out.experiment_tracker import (
     ExperimentTracker,
 )
 from financial_forecasting.shared.application.ports.out.hasher import Hasher
+from financial_forecasting.shared.application.ports.out.medallion_store import (
+    MedallionStore,
+)
 from financial_forecasting.shared.infrastructure.config.settings import Settings, get_settings
 
 
@@ -37,6 +43,7 @@ class ApplicationDependencies:
 
     hasher: Hasher
     tracker: ExperimentTracker
+    store: MedallionStore
 
 
 def wire_dependencies(settings: Settings | None = None) -> ApplicationDependencies:
@@ -48,10 +55,13 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
     `lru_cache` global de `get_settings`).
 
     Resolve `cfg = settings or get_settings()` e instancia os concretos AQUI
-    (único lugar): `CanonicalJsonHasher` (1.4) e
-    `MlflowTracker(cfg.mlflow_tracking_uri)` (1.5).
+    (único lugar): `CanonicalJsonHasher` (1.4), `MlflowTracker(
+    cfg.mlflow_tracking_uri)` (1.5) e `ParquetMedallionStore(cfg.data_root)`
+    (2.1). `ApplicationDependencies.store` é tipado pelo PORT `MedallionStore`,
+    não pelo concreto (I9).
     """
     cfg = settings or get_settings()
     hasher = CanonicalJsonHasher()
     tracker = MlflowTracker(tracking_uri=cfg.mlflow_tracking_uri)
-    return ApplicationDependencies(hasher=hasher, tracker=tracker)
+    store = ParquetMedallionStore(data_root=cfg.data_root)
+    return ApplicationDependencies(hasher=hasher, tracker=tracker, store=store)
