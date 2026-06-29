@@ -491,6 +491,71 @@ Task 01 (domain: policy) ─► Task 02 (port Protocol) ─► Task 03 (fake) �
 - `[finding]` — gap/observação a tratar em **próxima Stage**.
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original.
 
-<!-- preencher quando aplicável; remover este placeholder se vazio -->
+### 2026-06-29 — [deviation] application/ports/out/asof_join.py — Claude (autonomous run)
+**Contexto:** O roadmap §3.3 lista `AsofJoinAdapter (port-out)` em
+`contratos_introduzidos` mas **omite o arquivo** na `arquivos_a_criar` (D3/concept §7).
+**Razão:** A postura hexagonal do BC (`IndicatorCalculator`/`SentimentModel` são
+`Protocol` em `application/ports/out/`) exige o arquivo do port para honrar o contrato
+sem violar o LAYOUT §3. Criado `application/ports/out/asof_join.py` (Task 02). Desvio de
+lista, não de design — sem ADR (já previsto no concept D3).
+
+### 2026-06-29 — [deviation] .importlinter (nenhuma edição) — Claude (autonomous run)
+**Contexto:** A `arquivos_a_criar`/`arquivos_a_modificar` cogitava editar `.importlinter`
+(D5/concept §7).
+**Razão:** O contrato `store-no-storage-leak` já lista
+`feature_engineering.{application,domain}` em `source_modules` e `duckdb` em
+`forbidden_modules` (Stages 2.1/3.1) — o novo `domain`/port herda a proteção sem
+duplicação. **Nenhuma** edição em `.importlinter` foi necessária. Confirmado por quebra
+intencional revertida (Task 05/A9): `import duckdb` em `fundamentals_asof_policy.py`
+reprovou `store-no-storage-leak`/`domain-purity` e foi revertido. Sem ADR (previsto em D5).
+
+### 2026-06-29 — [decision] AntiLeakageError vs ValueError — Claude (autonomous run)
+**Contexto:** O old (`build_tft_dataset_use_case.py:530-535`) levanta `ValueError` cru no
+invariante anti-leakage (D4/concept §7).
+**Pergunta:** Manter `ValueError` ou criar erro de domínio nomeável?
+**Opções:**
+- A — manter `ValueError` genérico (paridade literal com o old).
+- B — `AntiLeakageError(DomainError)` nomeável ✅ recomendada
+**Decisão:** B — `AntiLeakageError` herda de `shared/domain/exceptions/base.DomainError`,
+alinhado ao padrão `NotFoundError`/`DuplicateKeyError` (ADR 2.1.0002).
+**Razão:** O invariante razão-de-ser da Stage merece um tipo observável e capturável; o
+projeto já tem base de erro de domínio. Aplicação de padrão estabelecido (sem alternativa
+estrutural nova) — `[decision]`, sem ADR próprio.
+
+### 2026-06-29 — [decision] Q1: sintaxe DuckDB ASOF JOIN confirmada — Claude (autonomous run)
+**Contexto:** Q1 (concept §13) deixou em aberto a sintaxe exata do ASOF JOIN na versão
+pinada (`ON d.date >= f.effective_date` vs `MATCH_CONDITION`).
+**Pergunta:** Qual sintaxe funciona na versão pinada (duckdb 1.5.4)?
+**Opções:**
+- A — `ASOF LEFT JOIN rep r ON g.day >= r.effective_date` ✅ recomendada
+- B — `ASOF JOIN ... USING (...) MATCH_CONDITION (...)`
+**Decisão:** A — `ASOF LEFT JOIN rep r ON g.day >= r.effective_date` (left join preserva
+1 linha por dia mesmo sem fundamento elegível → C4).
+**Razão:** Confirmado por prototipagem na versão pinada (duckdb 1.5.4): a semântica bate
+1:1 com `merge_asof(direction="backward")` do old (último `effective_date <= day`; dia
+sem fundamento → `NULL`). Sem desvio do contrato; o contract test parametrizado fake↔real
+(A8) é a rede de segurança e passou idêntico para ambos.
+
+### 2026-06-29 — [decision] saída wide por dia + materialização sem pandas — Claude (autonomous run)
+**Contexto:** D6/concept §7 (saída wide por dia de pregão + `fundamentals_effective_date`).
+**Decisão:** O adapter DuckDB materializa a relação via `cursor.description` + `fetchall`
+e monta `list[dict]` na fronteira (sem `pandas`/`pyarrow`), devolvendo wide (1 linha por
+dia com os 5 campos fundamentais + `fundamentals_effective_date` + 3 ratios). O nome
+interno `effective_date` nunca é exposto (I8).
+**Razão:** Mantém o port agnóstico de libs de dados (I7) sem trazer `pandas` ao caminho de
+join; espelha o old (merge_asof wide + rename na fronteira) e dá a saída consumível pela
+3.4/3.5. `[decision]`, sem ADR (previsto em D6).
+
+### 2026-06-29 — [decision] unit dedicado do adapter DuckDB — Claude (autonomous run)
+**Contexto:** O re-check anti-leakage no adapter é defense-in-depth (a `MATCH_CONDITION`
+já garante `effective_date <= day`, então a violação é inalcançável pelo join normal); e
+os ramos de coerção `_as_date`/`_as_float` (campo `None`/não-numérico, `effective_date`
+não-`date`) não eram exercitados pelo contract test de forma compartilhada.
+**Decisão:** Adicionado `tests/unit/features/feature_engineering/adapters/test_asof_join_duckdb_adapter.py`
+(escopo da Task 04) cobrindo os ramos específicos do adapter (campos `None`/não-numéricos
+→ `None`; `effective_date` não-`date` → `TypeError`).
+**Razão:** Eleva a cobertura do adapter a 100% sem inflar o contract test (que prova só a
+forma compartilhada fake↔real). O caminho "futura → erro" do invariante fica provado no
+unit da policy (Task 01) e no teste-foco (Task 05).
 
 <!-- END: post-execution -->
