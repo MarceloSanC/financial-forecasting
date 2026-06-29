@@ -82,6 +82,47 @@ def test_real_float_difference_changes_hash(hasher: Hasher) -> None:
 
 
 @pytest.mark.contract
+def test_floats_canonicalized_inside_nested_mapping(hasher: Hasher) -> None:
+    """I3 recursivo: float sub-precisão DENTRO de um mapping aninhado é arredondado.
+
+    Pina a recursão de `_canonicalize` em mappings: sem ela, o float aninhado
+    iria cru para o JSON e o ruído de último-ULP mudaria o hash (mutante
+    'não recursa' sobrevive). Top-level já é coberto; o aninhado não era.
+    """
+    base = hasher.hash_mapping({"outer": {"f": 100.0}})
+    noisy = hasher.hash_mapping({"outer": {"f": 100.000000000001}})
+
+    assert base == noisy
+
+
+@pytest.mark.contract
+def test_floats_canonicalized_inside_nested_list(hasher: Hasher) -> None:
+    """I3 recursivo: float sub-precisão DENTRO de uma lista é arredondado.
+
+    Pina a recursão de `_canonicalize` em list/tuple — análogo ao caso de
+    mapping aninhado, fechando o branch de sequência.
+    """
+    base = hasher.hash_mapping({"series": [1.0, 100.0]})
+    noisy = hasher.hash_mapping({"series": [1.0, 100.000000000001]})
+
+    assert base == noisy
+
+
+@pytest.mark.contract
+def test_nested_real_float_difference_changes_hash(hasher: Hasher) -> None:
+    """I3 recursivo: diferença real de float aninhado AINDA muda o hash.
+
+    Garante que a recursão arredonda mas não achata sinal real (não é a
+    identidade): um delta acima do piso de 1e-10 dentro de estrutura aninhada
+    continua discriminando.
+    """
+    base = hasher.hash_mapping({"outer": {"f": 100.0}, "series": [1.0]})
+    different = hasher.hash_mapping({"outer": {"f": 100.5}, "series": [1.0]})
+
+    assert base != different
+
+
+@pytest.mark.contract
 def test_nan_raises_value_error(hasher: Hasher) -> None:
     """I4: NaN no payload -> ValueError."""
     with pytest.raises(ValueError, match="não-finito"):
