@@ -26,6 +26,7 @@ import logging
 import time as sleep_time
 from datetime import datetime
 
+import pandas as pd
 import yfinance as yf
 
 from financial_forecasting.features.market_data.domain.entities.candle import Candle
@@ -126,12 +127,10 @@ class YfinanceCandleFetcher:
 def _index_to_datetime(index: object) -> datetime:
     """Converte o índice temporal (pd.Timestamp, possivelmente tz-naive) em UTC.
 
-    Importa `pandas` SÓ aqui (já é dependência do adapter via `yfinance`); naive →
-    assume UTC, para `normalize_to_utc_day` (que exige tz-aware) não falhar com
-    índices tz-naive que o yfinance às vezes devolve.
+    `pandas` vive no adapter (junto de `yfinance`); naive → assume UTC, para
+    `normalize_to_utc_day` (que exige tz-aware) não falhar com índices tz-naive que
+    o yfinance às vezes devolve.
     """
-    import pandas as pd
-
     timestamp = pd.Timestamp(index)
     if timestamp.tzinfo is None:
         timestamp = timestamp.tz_localize("UTC")

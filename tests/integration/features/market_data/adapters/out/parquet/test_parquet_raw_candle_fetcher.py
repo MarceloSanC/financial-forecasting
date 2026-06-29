@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from financial_forecasting.features.market_data.adapters.out.parquet.parquet_raw_candle_fetcher import (  # noqa: E501
@@ -69,3 +70,16 @@ def test_missing_symbol_raises_application_error() -> None:
     fetcher = ParquetRawCandleFetcher(Path("data/raw/market/candles"))
     with pytest.raises(ApplicationError, match="not found"):
         fetcher.fetch_candles("NO_SUCH_SYMBOL", _WIDE_START, _WIDE_END)
+
+
+@pytest.mark.integration
+def test_raw_missing_columns_raises_application_error(tmp_path: Path) -> None:
+    """Raw presente mas sem colunas OHLCV → ApplicationError (C4, não lista vazia)."""
+    symbol = "BADCOLS"
+    path = tmp_path / symbol / f"candles_{symbol}_1d.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Falta `volume` (e demais OHLC) — só `timestamp`.
+    pd.DataFrame({"timestamp": pd.to_datetime(["2024-01-02"], utc=True)}).to_parquet(path)
+
+    with pytest.raises(ApplicationError, match="missing columns"):
+        ParquetRawCandleFetcher(tmp_path).fetch_candles(symbol, _WIDE_START, _WIDE_END)

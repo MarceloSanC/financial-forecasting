@@ -608,4 +608,60 @@ Task 07 + Task 08 ─► Task 09 (gate agregado)
   e Stage candidata).
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original.
 
+### 2026-06-29 — [decision] import-linter — pureza do domain/application do BC novo — code assistant
+**Contexto:** A Task 07 (A8) exige que `import pandas` no domain de `market_data`
+**reprove**. Verificado por quebra intencional que, com `market_data` apenas nos
+`containers` de `hexagonal-layers`, **NÃO reprovava**: o contrato `type=layers`
+prova só a DIREÇÃO (domain não importa application/adapters), não a pureza de lib
+externa do domain de feature; `domain-purity` e `store-no-storage-leak` tinham
+`source_modules` só em `shared.*`; o `check_layout.py` não lista pandas/pyarrow
+para `/domain/`.
+**Decisão:** Estender `domain-purity` para `source_modules += features.market_data.domain`
+e `store-no-storage-leak` para `+= features.market_data.{application,domain}`. Com
+isso a quebra intencional reprova (exit 1) e foi revertida; clean build segue verde
+(7/7 KEPT). Cada nova feature com domain/application entra nestes contratos (mesma
+postura do `shared.*`).
+**Razão:** Skill `import-linter-rules` ("toda regra de LAYOUT vira contrato; não
+silenciar com noqa") + concept 2.2 D1/I8 (a 1ª feature precisa de prova mecânica de
+pureza). Antecipado em concept §7 D1 ("se o domain de feature precisar de cobertura
+forbidden explícita, registrar finding"). Custo baixo (duas linhas), fecha o gap na
+origem em vez de empurrar pra Stage de contratos. Coberto pela intenção do ADR
+`2.2.0001` (feature como container layered provado inward-only) — sem ADR novo.
+
+### 2026-06-29 — [deviation] git — escopo de commit com `.` em vez de `/` — code assistant
+**Contexto:** Os commits sugeridos em §2 usam escopo `market-data/domain`,
+`market-data/application`, `market-data/adapters`. O hook `check_commit_msg.py`
+restringe o escopo a `[a-z0-9._-]+` (sem `/`).
+**Razão:** Para preservar a informação de camada no escopo sem violar o hook, usei
+`.` no lugar de `/` (`market-data.domain`, `market-data.application`,
+`market-data.adapters`) — padrão já aceito pelo próprio hook (exemplo
+`fix(payment.retry)`). Ajuste cosmético, sem efeito na estrutura.
+
+### 2026-06-29 — [deviation] deps — `yfinance` adicionado na Task 06 (não na 07) — code assistant
+**Contexto:** O plano colocava `yfinance>=0.2` + `uv lock` na Task 07. Mas o
+`YfinanceCandleFetcher` (Task 06) faz `import yfinance`, e seu teste de integração
+(Task 06) não importa/coleta sem a lib instalada.
+**Razão:** A dependência foi adicionada ao `pyproject.toml` + `uv.lock` na Task 06
+(onde o import nasce), deixando a Task 07 só com o `.importlinter`. Mantém cada Task
+com build verde (port-antes-de-adapter intacto). Sem efeito no conteúdo entregue.
+
+### 2026-06-29 — [deviation] adapters — `ParquetRawCandleFetcher` como adição justificada — code assistant
+**Contexto:** O `roadmap.md` lista em `arquivos_a_criar` só o `yfinance_candle_fetcher.py`;
+o `ParquetRawCandleFetcher` (origem default, lê o raw existente) não está lá.
+**Razão:** Adição já justificada e ratificada no concept §7 D3 + ADR
+[`2.2.0002`](../../adr/2_2_0002-reuse-raw-candles-default-vs-live-yfinance.md)
+(reuso do raw como origem default vs yfinance live) — sem ela a DoD "reusa raw
+existente sem re-baixar por padrão" não teria implementação de produção. Registrado
+aqui conforme instrução da §2 Task 06.
+
+### 2026-06-29 — [decision] tests — risco de invariantes OHLC sobre o raw real fechado — code assistant
+**Contexto:** Risco concept §10 / Task 08: invariantes OHLC fortes poderiam rejeitar
+linhas legítimas do raw por ruído de `float32`.
+**Decisão:** Adicionado `tests/integration/.../parquet/test_parquet_raw_candle_fetcher.py`
+que lê as **4024 linhas reais** de AAPL via `ParquetRawCandleFetcher`: TODAS produzem
+`Candle` válido (zero rejeição), `asset` injetado, tz UTC a 00:00, contagem == 4024.
+Nenhuma tolerância arbitrária foi necessária — as invariantes canônicas passam como
+estão. Risco fechado; a Task 08 foi confirmação (não exigiu ajuste de invariante).
+**Razão:** Concept 2.2 §10 / A6; valida o caminho default real sem rede.
+
 <!-- END: post-execution -->
