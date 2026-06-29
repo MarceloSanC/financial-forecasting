@@ -14,6 +14,8 @@ worktree do desenvolvedor (o repo tem `.env` gitignored) — isolando o teste à
 fronteira env/defaults declarada, não ao arquivo local.
 """
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -40,6 +42,7 @@ def _clean_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
     monkeypatch.delenv("PORT", raising=False)
+    monkeypatch.delenv("DATA_ROOT", raising=False)
     yield
     get_settings.cache_clear()
 
@@ -55,6 +58,7 @@ def test_defaults_include_mlflow_tracking_uri() -> None:
     assert settings.port == _DEFAULT_PORT
     assert settings.log_level == "INFO"
     assert settings.mlflow_tracking_uri == "sqlite:///mlruns.db"
+    assert settings.data_root == Path("data")
 
 
 @pytest.mark.unit
@@ -65,6 +69,24 @@ def test_mlflow_tracking_uri_overridden_by_env(monkeypatch: pytest.MonkeyPatch) 
     settings = Settings(_env_file=None)
 
     assert settings.mlflow_tracking_uri == "sqlite:///custom/path.db"
+
+
+@pytest.mark.unit
+def test_data_root_default_is_data_dir() -> None:
+    """A7/D4: `data_root` tem default `Path("data")` (raiz dos dados medalhão)."""
+    settings = Settings(_env_file=None)
+
+    assert settings.data_root == Path("data")
+
+
+@pytest.mark.unit
+def test_data_root_overridden_by_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A7/D4: `DATA_ROOT` no ambiente resolve `data_root` como `Path`."""
+    monkeypatch.setenv("DATA_ROOT", "/srv/medallion")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.data_root == Path("/srv/medallion")
 
 
 @pytest.mark.unit

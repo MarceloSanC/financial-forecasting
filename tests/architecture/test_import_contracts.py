@@ -50,6 +50,7 @@ _EXPECTED_CONTRACTS = (
     "inward-only",
     "shared-no-features",
     "tracker-no-mlflow-leak",
+    "store-no-storage-leak",
 )
 
 
