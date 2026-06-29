@@ -603,4 +603,15 @@ a violação real correspondente, mantendo a fitness function imune a drift de
 `source_modules`. Commit: `test(arch): cobrir contrato míope via violação real
 injetada [1.3/task-04-extra]`.
 
+### 2026-06-29 — [deviation] F1 (comentário do .importlinter) — orquestrador pós-auditoria
+**Contexto:** A stage-audit (F1) verificou empiricamente que `include_external_packages = True` é
+FUNCIONALMENTE OBRIGATÓRIA — sem ela o `import-linter` aborta ("must have
+include_external_packages=True when there are external forbidden modules"), pois o contrato
+domain-purity lista forbidden_modules externos (pandas/torch/etc.). O comentário antigo (linhas
+20-22) atribuía a flag a um mecanismo de alerta de `ignore_imports` morto, que na verdade é
+governado por `unmatched_ignore_imports_alerting`.
+**Razão:** Corrigido o comentário para refletir o motivo real (conceito "Rastro perdido"), evitando
+desorientar o próximo mantenedor. Mudança de comentário apenas; `lint-imports` segue 4 kept / 0
+broken; `make check` verde.
+
 <!-- END: post-execution -->

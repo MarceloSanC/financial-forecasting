@@ -17,8 +17,11 @@
 
 [importlinter]
 root_package = financial_forecasting
-# Mostra alertas se um ignore_imports declarado não casar nenhum import real —
-# protege contra exceção que silenciosamente para de existir (fronteira C4).
+# OBRIGATÓRIO: o contrato domain-purity declara forbidden_modules EXTERNOS
+# (pandas/pyarrow/torch/numpy/pydantic/sqlalchemy/fastapi); sem esta flag o
+# import-linter ABORTA ("must have include_external_packages=True when there
+# are external forbidden modules"). A proteção contra ignore_imports morto é
+# governada por unmatched_ignore_imports_alerting (ver contrato shared-no-features).
 include_external_packages = True
 
 # -----------------------------------------------------------------------------
