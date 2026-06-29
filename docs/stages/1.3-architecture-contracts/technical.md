@@ -465,4 +465,97 @@ Task 01 (dep import-linter)
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original; corpo
   diz o que mudou e por que ficou abaixo do threshold de perguntar.
 
+### 2026-06-29 — [deviation] task-02 — Claude (autonomous run)
+**Contexto:** ao escrever o `.importlinter` (Task 02), o `ignore_imports` da
+fronteira composition_root inclui o leg futuro
+`composition_root -> features.**`, que ainda **não casa** nenhum import (o
+`features/` só tem `__init__.py`). O import-linter emite alerta de "ignored
+import não casado" para esse leg.
+**O que mudou:** adicionei `unmatched_ignore_imports_alerting = none` **apenas**
+ao contrato `shared-no-features`, e deixei o caminho verbatim da fronteira
+(LAYOUT §6, 222–229) documentado desde já.
+**Razão:** o leg só passa a casar quando a 1ª feature ganhar um adapter wireado
+pelo composition_root; até lá o alerta é ruído (não viola nada). A presença do
+caminho documenta a exceção e evita reescrever o contrato depois. Reversível e
+abaixo do threshold de perguntar (ajuste de configuração, sem mudar a regra).
+Quando o caminho existir e quisermos detectar "exceção morta", basta remover o
+`none`. Demais contratos mantêm o alerting padrão.
+
+### 2026-06-29 — [deviation] task-02 — Claude (autonomous run)
+**Contexto:** o `lint-imports` cria o diretório de cache `.import_linter_cache/`
+na raiz, não previsto em `arquivos_a_criar`.
+**O que mudou:** adicionei `.import_linter_cache/` ao `.gitignore` (junto de
+`.ruff_cache/`/`.mypy_cache/`/`.pytest_cache/`).
+**Razão:** cache de ferramenta não entra em VCS; consistente com os demais
+caches já ignorados. Mudança trivial, reversível, em suporte direto à Task 02.
+
+### 2026-06-29 — [decision] task-02 — Claude (autonomous run)
+**Contexto:** a lista `forbidden_modules` do `domain-purity` precisava cobrir o
+DoD (`pandas`/`pyarrow`/`torch`) + framework (`pydantic`/`sqlalchemy`/`fastapi`,
+LAYOUT linha 104). O repo antigo importava também `numpy` no "domínio".
+**Pergunta:** incluir `numpy` na lista de proibidos do domínio?
+**Opções:**
+- A — proibir só o conjunto literal do LAYOUT/concept (sem `numpy`)
+- B — incluir `numpy` como defesa em profundidade ✅ recomendada
+**Decisão:** B
+**Razão:** no repo de referência o apodrecimento veio de `pandas`/`numpy`/`torch`
+juntos (ex.: `holm_family_6.py:3`). `numpy` é vetor de cálculo numérico que não
+pertence ao domínio puro (a estatística vive no domínio como serviço puro sobre
+value objects, mas o cálculo numérico mora em adapters — ADR 0.0.0020). Incluir
+`numpy` é barato e fecha o vetor exato que sangrou antes; não diverge do LAYOUT
+(que lista o conjunto como exemplos não-exaustivos de "libs de framework").
+LAYOUT permanece a fonte; se um dia uma exceção legítima a `numpy` no domínio
+surgir, o contrato é afrouxado com justificativa (improvável).
+
+### 2026-06-29 — [decision] task-04 — Claude (autonomous run)
+**Contexto:** o teste de regressão precisava (a) exigir 0 broken no repo real e
+(b) provar detecção de import proibido sem mutar a árvore real. O technical
+sugeria `subprocess` OU a API pública.
+**Pergunta:** `subprocess.run(["uv","run","lint-imports"])` ou a API pública?
+**Opções:**
+- A — `subprocess` chamando o CLI
+- B — `importlinter.cli.lint_imports(config_filename=...)` (API pública) ✅
+**Decisão:** B
+**Razão:** `importlinter.api` 2.12 não expõe `lint_imports`; a função pública é
+`importlinter.cli.lint_imports`, que retorna o exit code `int` (0/1) e aceita
+`config_filename`/`limit_to_contracts`/`no_cache`. Evita dependência do PATH e
+do spawn do `uv` dentro do pytest (mais determinístico, sem flakiness de
+ambiente — risco listado em §5). O caso (b) usa um pacote-fixture sintético em
+`tmp_path` proibindo `json` (stdlib, sem instalar nada), provando que um
+`forbidden` realmente quebra.
+
+### 2026-06-29 — prova de quebra intencional revertida (DoD central A3) — Task 05
+**Contexto:** verificação manual do DoD central (concept A3 / invariante I1):
+domínio importando `pandas` deve deixar o build vermelho pelo contrato
+`domain-purity`, e a reversão deve voltar a 0 broken sem deixar lixo.
+**Procedimento:** injetei `import pandas` na linha 1 de
+`src/financial_forecasting/shared/domain/value_objects/pagination.py`, rodei
+`uv run lint-imports --no-cache`, e revertei.
+
+**Saída (resumida):**
+
+```
+=== BASELINE (antes) ===
+Contracts: 4 kept, 0 broken.
+
+=== COM 'import pandas' em shared/domain/value_objects/pagination.py ===
+Domain puro — sem pandas/pyarrow/torch/pydantic/sqlalchemy/fastapi BROKEN
+Contracts: 3 kept, 1 broken.
+financial_forecasting.shared.domain is not allowed to import pandas:
+-   financial_forecasting.shared.domain.value_objects.pagination -> pandas (l.1)
+exit = 1
+
+=== APÓS REVERTER ===
+Contracts: 4 kept, 0 broken.
+exit = 0
+git status --porcelain  ->  (vazio: nenhum código de produção alterado)
+```
+
+**Resultado:** A3 satisfeito. `domain-purity` quebra o build (exit 1) quando o
+domínio importa `pandas`; após reverter, `0 broken` (exit 0). Nota: o
+import-linter detectou `pandas` **estaticamente** pelo grafo de imports — nem
+precisa estar instalado. Nenhuma mudança de produção permaneceu (`git status`
+limpo fora desta §7). A mesma prova roda automatizada no caso (b) de
+`tests/architecture/test_import_contracts.py` (sem mutar a árvore real).
+
 <!-- END: post-execution -->
