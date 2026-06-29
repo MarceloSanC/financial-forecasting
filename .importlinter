@@ -23,6 +23,16 @@ root_package = financial_forecasting
 # are external forbidden modules"). A proteção contra ignore_imports morto é
 # governada por unmatched_ignore_imports_alerting (ver contrato shared-no-features).
 include_external_packages = True
+# Imports sob `if TYPE_CHECKING:` NÃO são dependências de runtime — existem só
+# para o type checker (mypy) e são apagados em execução. O domínio pode tipar
+# um parâmetro `hasher: Hasher` (port em application) via TYPE_CHECKING sem
+# criar acoplamento de runtime: o Protocol é satisfeito por duck-typing. Sem
+# esta flag, grimp contaria o import type-only como dependência domain->
+# application e reprovaria hexagonal-layers falsamente. Espelha LAYOUT §3 (a
+# direção de RUNTIME aponta para dentro) e a nota de ordenação do technical 1.4
+# (ADR 1.4.0001 / Stage 1.4 [decision]). Mantém a pureza: domain-purity e
+# inward-only seguem reprovando imports REAIS (runtime) de fora.
+exclude_type_checking_imports = True
 
 # -----------------------------------------------------------------------------
 # Contrato 1 — hexagonal-layers (type = layers)
