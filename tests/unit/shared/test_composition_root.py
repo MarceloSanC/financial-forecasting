@@ -16,7 +16,20 @@ import pytest
 
 from financial_forecasting.composition_root import (
     ApplicationDependencies,
+    _LazyFinbertSentimentModel,
     wire_dependencies,
+)
+from financial_forecasting.features.feature_engineering.adapters.out.duckdb.asof_join_adapter import (  # noqa: E501
+    AsofJoinDuckdbAdapter,
+)
+from financial_forecasting.features.feature_engineering.adapters.out.pandas.dataset_assembler import (  # noqa: E501
+    DatasetAssembler,
+)
+from financial_forecasting.features.feature_engineering.adapters.out.pandas_ta.pandas_ta_indicator_calculator import (  # noqa: E501
+    PandasTaIndicatorCalculator,
+)
+from financial_forecasting.features.feature_engineering.application.use_cases.build_dataset import (
+    BuildDataset,
 )
 from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
     CanonicalJsonHasher,
@@ -66,3 +79,43 @@ def test_wire_dependencies_store_uses_settings_data_root(tmp_path: Path) -> None
 
     assert isinstance(deps.store, ParquetMedallionStore)
     assert deps.store._data_root == tmp_path
+
+
+@pytest.mark.unit
+def test_wire_dependencies_wires_feature_engineering_bc(tmp_path: Path) -> None:
+    """Stage 3.5 I8/A7: os 3 adapters do BC + BuildDataset estão wirados (não fakes).
+
+    Resolve os findings F2 de wiring deferido (3.1/3.2/3.3): instanciar os concretos
+    reais atrás dos ports. O `SentimentModel` é o proxy lazy (sem torch ao wirar).
+    """
+    settings = Settings(_env_file=None, data_root=tmp_path)
+
+    deps = wire_dependencies(settings=settings)
+
+    # Campos tipados pelos ports, instanciados pelos concretos REAIS (I9).
+    assert isinstance(deps.indicator_calculator, PandasTaIndicatorCalculator)
+    assert isinstance(deps.sentiment_model, _LazyFinbertSentimentModel)
+    assert isinstance(deps.asof_join, AsofJoinDuckdbAdapter)
+    assert isinstance(deps.dataset_assembler, DatasetAssembler)
+    assert isinstance(deps.build_dataset, BuildDataset)
+
+
+@pytest.mark.unit
+def test_build_dataset_is_wired_with_real_adapters_not_fakes(tmp_path: Path) -> None:
+    """I8: `BuildDataset` consome os adapters reais wirados (não dead-code)."""
+    deps = wire_dependencies(settings=Settings(_env_file=None, data_root=tmp_path))
+
+    build_dataset = deps.build_dataset
+    # O use case usa o MESMO assembler/store reais expostos no contêiner.
+    assert build_dataset._assembler is deps.dataset_assembler
+    assert build_dataset._store is deps.store
+    assert isinstance(build_dataset._assembler, DatasetAssembler)
+
+
+@pytest.mark.unit
+def test_lazy_finbert_proxy_exposes_metadata_without_torch() -> None:
+    """O proxy lazy expõe `model_name`/`revision` sem construir o FinBERT real."""
+    proxy = _LazyFinbertSentimentModel()
+    assert proxy.model_name == "ProsusAI/finbert"
+    assert isinstance(proxy.revision, str)
+    assert proxy._delegate is None  # ainda não construiu o FinBERT (sem torch)
