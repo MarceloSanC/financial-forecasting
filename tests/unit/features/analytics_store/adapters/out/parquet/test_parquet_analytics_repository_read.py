@@ -40,6 +40,7 @@ def _dim_run_row(
     *,
     asset: str = "AAPL",
     parent_sweep_id: str | None = "sweep-1",
+    fold: str | None = "fold-0",
 ) -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -49,7 +50,7 @@ def _dim_run_row(
         "feature_set_name": "fs_all",
         "config_signature": "cfg-hash",
         "split_fingerprint": "split-hash",
-        "fold": "fold-0",
+        "fold": fold,
         "seed": 42,
         "model_version": "tft_v1",
         "created_at_utc": _FIXED_NOW.isoformat(),
@@ -196,3 +197,14 @@ def test_read_accumulated_rows(tmp_path: Path) -> None:
 
     assert len(rows) == _TWO_ROWS
     assert {float(r["quantile_level"]) for r in rows} == {0.1, 0.9}
+
+
+def test_read_round_trips_nullable_column_none(tmp_path: Path) -> None:
+    """I6: coluna nullable não-partição (`fold=None`) gravada como NaN volta como `None`."""
+    repo = _repo(tmp_path)
+    repo.write(layer=_SILVER, table="dim_run", rows=[_dim_run_row(fold=None)])
+
+    rows = repo.read(layer=_SILVER, table="dim_run", filters={"asset": "AAPL"})
+
+    assert len(rows) == 1
+    assert rows[0]["fold"] is None
