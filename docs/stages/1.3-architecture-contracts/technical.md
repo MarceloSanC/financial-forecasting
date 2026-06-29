@@ -573,4 +573,34 @@ aditiva que não contradiz o ADR (que lista o conjunto como exemplos de "data/ML
 libs" e "framework libs"). Sem mudança real => commit da Task 06 pulado (A7
 satisfeito sem edição).
 
+### 2026-06-29 — [finding] task-04-extra (auditoria de testes) — Claude (autonomous run)
+**Contexto:** na auditoria de testes da Stage, a análise por mutação revelou um
+gap real no `tests/architecture/test_import_contracts.py`. A suíte cobria
+"contrato verde por acaso" e "contrato que aprova tudo" (config sintética em
+`tmp_path`), mas **não** cobria o terceiro modo de falha de gate míope:
+**`source_modules` mirando o alvo errado**. Mutação verificada: trocar
+`source_modules` de `domain-purity` de `shared.domain` para `shared.application`
+(módulo real, mas que não importa libs proibidas). Com essa mutação aplicada e
+um módulo de domínio real importando `pandas`, **as 9 asserções originais
+continuavam verdes** — exatamente o falso-verde que a Stage existe para barrar
+(DoD central A3/C1). O caso (b) sintético prova que "um `forbidden` quebra em
+tese", mas nunca exercita o `.importlinter` de PRODUÇÃO contra a árvore real, e
+`test_real_repo_has_zero_broken_contracts` segue verde porque o repo real está
+limpo. A prova manual da A3 (Task 05) cobre isso uma vez, mas não roda no CI.
+**O que foi adicionado:** `test_production_contract_reacts_to_real_violation`
+(parametrizado em 2 casos: domínio importando `pandas` ⇒ `domain-purity` broken;
+`shared` importando um módulo real de `features` ⇒ `shared-no-features` broken).
+Injeta o módulo-violação na árvore de produção, roda o `.importlinter` REAL com
+`limit_to_contracts`, exige exit != 0, e limpa em `finally` (incluindo
+`__pycache__`). Mais `test_real_repo_clean_after_injection_fixture` como sanidade
+de que o cleanup não deixou resíduo. Verificado: as duas mutações míopes
+(`domain-purity` e `shared-no-features` apontando `source_modules` para o alvo
+errado) agora **falham** o teste novo, enquanto as demais seguem verdes —
+poder de matar mutante confirmado. Automatiza A3/C1/C3 (concept §6) no gate.
+**Direção sugerida:** ao adicionar contratos `forbidden` em Stages futuras
+(ex.: regras por bounded context na 1.4+), estender `_REAL_VIOLATION_CASES` com
+a violação real correspondente, mantendo a fitness function imune a drift de
+`source_modules`. Commit: `test(arch): cobrir contrato míope via violação real
+injetada [1.3/task-04-extra]`.
+
 <!-- END: post-execution -->

@@ -14,6 +14,16 @@ fitness function contra dois modos de falha clássicos de gate inerte/míope
    `test_forbidden_contract_detects_violation`, que monta uma config sintética
    apontando para um pacote-fixture proibido em `tmp_path` (NÃO muta a árvore
    real do repo) e exige exit != 0 / contrato `broken`.
+3. **Contrato míope (mira o alvo errado)** — o `forbidden` existe e quebra em
+   tese, mas seus `source_modules` apontam para o pacote errado, de modo que
+   uma violação REAL no domínio passa batida. Esse modo NÃO é pego pelos itens
+   acima (a config sintética nunca exercita o `.importlinter` de produção, e
+   `test_real_repo_has_zero_broken_contracts` continua verde porque o repo real
+   está limpo). Guardado por `test_production_contract_reacts_to_real_violation`,
+   que injeta TEMPORARIAMENTE um módulo real violando a regra (domínio
+   importando `pandas`; `shared` importando `features`), roda o `.importlinter`
+   de PRODUÇÃO e exige que o contrato esperado fique `broken` — automatizando a
+   prova manual da A3/C1/C3 (concept §6) e travando o drift de `source_modules`.
 
 Usa a API pública `importlinter.cli.lint_imports` (retorna o exit code int),
 evitando `subprocess` (mais determinístico, sem depender do PATH do ambiente).
@@ -159,3 +169,96 @@ def test_each_expected_contract_is_individually_checkable(contract_name: str) ->
         no_cache=True,
     )
     assert exit_code == EXIT_STATUS_SUCCESS, f"contrato '{contract_name}' não está verde"
+
+
+_SRC_ROOT = _REPO_ROOT / "src" / "financial_forecasting"
+
+# Violações REAIS expressáveis como arquivo injetado na árvore de produção.
+# Cada caso: (contrato esperado broken, arquivos {caminho relativo a _SRC_ROOT:
+# conteúdo}). O contrato de produção (.importlinter) é exercitado de ponta a
+# ponta — pega o "contrato míope" que mira `source_modules` errado.
+_REAL_VIOLATION_CASES = (
+    pytest.param(
+        "domain-purity",
+        {"shared/domain/_arch_audit_taint.py": "import pandas  # violação temporária\n"},
+        id="domain-purity:domain-imports-pandas",
+    ),
+    pytest.param(
+        "shared-no-features",
+        {
+            "features/_arch_audit_probe/__init__.py": "PROBE = 1\n",
+            "shared/_arch_audit_taint.py": (
+                "from financial_forecasting.features._arch_audit_probe import PROBE\n"
+                "\n_use = PROBE\n"
+            ),
+        },
+        id="shared-no-features:shared-imports-feature",
+    ),
+)
+
+
+@pytest.mark.parametrize(("contract_name", "files"), _REAL_VIOLATION_CASES)
+def test_production_contract_reacts_to_real_violation(
+    contract_name: str, files: dict[str, str]
+) -> None:
+    """O `.importlinter` de PRODUÇÃO fica `broken` numa violação REAL injetada.
+
+    Diferente de `test_forbidden_contract_detects_violation` (config sintética em
+    `tmp_path`), aqui exercitamos o `.importlinter` de produção contra a árvore
+    real: injetamos um módulo que viola a regra, rodamos o contrato esperado
+    isoladamente e exigimos exit != 0. Isso automatiza a prova manual da A3/C1/C3
+    e — crucial — pega o "contrato míope": se alguém apontar `source_modules` do
+    contrato para o pacote errado, a violação real passa batida e ESTE teste
+    falha (os demais continuam verdes). Cleanup garantido em `finally`.
+    """
+    created: list[Path] = []
+    try:
+        for rel_path, content in files.items():
+            target = _SRC_ROOT / rel_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # registra o diretório-pai criado (para o caso do pacote-probe), além
+            # do arquivo, garantindo remoção completa no finally.
+            if target.parent != _SRC_ROOT and not any(p == target.parent for p in created):
+                created.append(target.parent)
+            target.write_text(content, encoding="utf-8")
+            created.append(target)
+
+        exit_code = lint_imports(
+            config_filename=str(_IMPORTLINTER_PATH),
+            limit_to_contracts=(contract_name,),
+            no_cache=True,
+        )
+        assert exit_code == EXIT_STATUS_ERROR, (
+            f"o contrato de produção '{contract_name}' NÃO reagiu a uma violação "
+            f"real injetada ({sorted(files)}); exit={exit_code}. Indício de "
+            "contrato míope (source_modules mirando o alvo errado) — a fitness "
+            "function aprovaria a violação que a Stage existe para barrar."
+        )
+    finally:
+        # remove arquivos primeiro, depois diretórios criados (ordem reversa).
+        for path in reversed(created):
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                # só remove o que está vazio (não toca pastas pré-existentes).
+                pycache = path / "__pycache__"
+                if pycache.is_dir():
+                    for cached in pycache.iterdir():
+                        cached.unlink()
+                    pycache.rmdir()
+                if not any(path.iterdir()):
+                    path.rmdir()
+
+
+def test_real_repo_clean_after_injection_fixture() -> None:
+    """Sanidade: depois dos testes de injeção, o repo real volta a 0 broken.
+
+    Garante que o cleanup em `finally` de
+    `test_production_contract_reacts_to_real_violation` não deixou módulo-lixo
+    na árvore de produção (que tornaria o gate vermelho de forma espúria).
+    """
+    exit_code = lint_imports(config_filename=str(_IMPORTLINTER_PATH), no_cache=True)
+    assert exit_code == EXIT_STATUS_SUCCESS, (
+        "o repo real não voltou a 0 broken — possível resíduo de fixture de "
+        f"injeção não limpo; exit={exit_code}."
+    )
