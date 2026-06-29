@@ -133,3 +133,28 @@ source_modules =
 forbidden_modules =
     mlflow
 allow_indirect_imports = False
+
+# -----------------------------------------------------------------------------
+# Contrato 6 — store-no-storage-leak (type = forbidden) — Stage 2.1 (I4)
+# LAYOUT §3: a `application` (e o `domain`) nunca importam libs de dados — elas
+# vivem só em adapters. Mesma postura que `domain-purity` aplica a
+# pandas/pyarrow/torch e que `tracker-no-mlflow-leak` aplica a `mlflow`: o
+# port-out `MedallionStore` (Protocol) troca só `collections.abc`/primitivos; as
+# libs de storage `pandas`/`pyarrow`/`duckdb`/`pandera` vivem APENAS no adapter
+# `shared/adapters/out/parquet/`. Novidade vs `domain-purity`: este contrato
+# cobre a camada `application` (não coberta hoje) e adiciona `duckdb`/`pandera`
+# (não listados em `domain-purity`). `domain` entra por defesa em profundidade
+# (já stdlib-only, mas blinda contra import futuro). Concept 2.1 I4 / ADR 2.1.0002.
+# -----------------------------------------------------------------------------
+[importlinter:contract:store-no-storage-leak]
+name = Application/domain não importam pandas/pyarrow/duckdb/pandera (só adapters)
+type = forbidden
+source_modules =
+    financial_forecasting.shared.application
+    financial_forecasting.shared.domain
+forbidden_modules =
+    pandas
+    pyarrow
+    duckdb
+    pandera
+allow_indirect_imports = False
