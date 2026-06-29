@@ -1,0 +1,106 @@
+# =============================================================================
+# .importlinter — contratos de arquitetura (fitness function)
+# =============================================================================
+# Espelha docs/LAYOUT.md §3/§6 (FONTE DA VERDADE). Se LAYOUT e este arquivo
+# divergirem, LAYOUT vence e ESTE arquivo é corrigido (concept 1.3 I6/D4).
+#
+# Rodado por `uv run lint-imports` (exit != 0 em violação), plugado em
+# `make check` e no CI (ci.yml). Prova-se por quebra intencional revertida:
+# `import pandas` em shared/domain deixa o build vermelho (DoD central, A3).
+#
+# Camadas-alvo refletem a estrutura modular REAL (finding F2 da 1.1): o
+# esqueleto excedente do template (shared.infrastructure.{clock,http,...},
+# shared.application.ports.out.*) e o `features/` ainda vazio NÃO podem
+# reprovar — daí `exhaustive = False` e camadas opcionais entre parênteses.
+# ADR: docs/adr/1_3_0001-import-linter-as-architecture-fitness-function.md
+# =============================================================================
+
+[importlinter]
+root_package = financial_forecasting
+# OBRIGATÓRIO: o contrato domain-purity declara forbidden_modules EXTERNOS
+# (pandas/pyarrow/torch/numpy/pydantic/sqlalchemy/fastapi); sem esta flag o
+# import-linter ABORTA ("must have include_external_packages=True when there
+# are external forbidden modules"). A proteção contra ignore_imports morto é
+# governada por unmatched_ignore_imports_alerting (ver contrato shared-no-features).
+include_external_packages = True
+
+# -----------------------------------------------------------------------------
+# Contrato 1 — hexagonal-layers (type = layers)
+# LAYOUT §3: "as dependências apontam para dentro" (adapters > application >
+# domain). Camadas SUPERIORES podem importar as INFERIORES; o inverso quebra.
+# Modelado por container `shared`; camadas opcionais `(...)` toleram ausência
+# no esqueleto inerte (F2/I7/C5). Cada feature vira container ao ganhar layers.
+# -----------------------------------------------------------------------------
+[importlinter:contract:hexagonal-layers]
+name = Hexagonal layers (adapters > application > domain) por container
+type = layers
+layers =
+    (adapters)
+    application
+    domain
+containers =
+    financial_forecasting.shared
+exhaustive = False
+
+# -----------------------------------------------------------------------------
+# Contrato 2 — domain-purity (type = forbidden) — DoD CENTRAL
+# LAYOUT §3 (linha 104): domain importa só stdlib + domain. Proíbe libs de
+# dados/ML (pandas/pyarrow/torch) e de framework (pydantic/sqlalchemy/fastapi).
+# É a regra cuja ausência apodreceu o repo antigo (23/36 arquivos de domínio
+# importavam pandas/numpy/torch). `numpy` incluído por defesa em profundidade.
+# -----------------------------------------------------------------------------
+[importlinter:contract:domain-purity]
+name = Domain puro — sem pandas/pyarrow/torch/pydantic/sqlalchemy/fastapi
+type = forbidden
+source_modules =
+    financial_forecasting.shared.domain
+forbidden_modules =
+    pandas
+    pyarrow
+    torch
+    numpy
+    pydantic
+    sqlalchemy
+    fastapi
+allow_indirect_imports = False
+
+# -----------------------------------------------------------------------------
+# Contrato 3 — inward-only (type = forbidden)
+# LAYOUT §3 (linhas 94/110): a dependência aponta para DENTRO.
+#   - application NÃO importa adapters nem shared.infrastructure
+#   - domain NÃO importa application/adapters/shared.infrastructure
+# A exceção composition_root (shared.infrastructure.http.app -> composition_root
+# -> features.*.adapters) é tratada por ignore_imports abaixo (LAYOUT §6).
+# -----------------------------------------------------------------------------
+[importlinter:contract:inward-only]
+name = Direção outside-in — application/domain não importam para fora
+type = forbidden
+source_modules =
+    financial_forecasting.shared.application
+    financial_forecasting.shared.domain
+forbidden_modules =
+    financial_forecasting.shared.infrastructure
+
+# -----------------------------------------------------------------------------
+# Contrato 4 — shared-no-features (type = forbidden)
+# LAYOUT §7 (linha 244): "Shared não importa de features". O fluxo é sempre
+# features -> shared, nunca o contrário. Única exceção: o caminho INDIRETO do
+# composition_root (shared.infrastructure.http.app -> composition_root ->
+# features.*.adapters), declarado em ignore_imports (LAYOUT §6, linhas 222-229).
+# -----------------------------------------------------------------------------
+[importlinter:contract:shared-no-features]
+name = Shared não importa de features (exceto fronteira composition_root)
+type = forbidden
+source_modules =
+    financial_forecasting.shared
+forbidden_modules =
+    financial_forecasting.features
+ignore_imports =
+    financial_forecasting.shared.infrastructure.http.app -> financial_forecasting.composition_root
+    financial_forecasting.composition_root -> financial_forecasting.features.**
+# `features/` ainda está vazio: o leg `composition_root -> features.**` da
+# fronteira só passa a casar quando a 1ª feature ganhar adapter wireado. Sem
+# `none`, o ignore não-casado vira alerta/erro hoje (F2). A presença do caminho
+# verbatim (LAYOUT §6, 222-229) documenta a exceção desde já; reentra como erro
+# quando o caminho existir e quisermos detectar exceção morta.
+unmatched_ignore_imports_alerting = none
