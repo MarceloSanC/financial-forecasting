@@ -75,6 +75,19 @@ def test_rejects_page_size_above_max() -> None:
 
 
 @pytest.mark.unit
+def test_accepts_page_size_at_lower_boundary() -> None:
+    """page_size == 1 é o limite inferior aceito (inclusivo).
+
+    Boundary do lado de baixo: protege contra a mutação `1 < page_size`
+    (que rejeitaria page_size=1). Sem este teste, trocar `<=` por `<` na
+    borda inferior de `__post_init__` passa silenciosamente.
+    """
+    pagination = Pagination(page_size=1)
+
+    assert pagination.page_size == 1
+
+
+@pytest.mark.unit
 def test_accepts_page_size_at_max_boundary() -> None:
     """page_size == MAX_PAGE_SIZE é o limite superior aceito (inclusivo)."""
     pagination = Pagination(page_size=MAX_PAGE_SIZE)
