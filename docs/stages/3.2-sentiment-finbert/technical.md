@@ -884,4 +884,12 @@ rótulos por nome sem torch [3.2/task-08-extra]`.
 ([decision] Task 06) — deixá-lo sem rede torch-free contradiz I8/D3 (a lógica pura do
 adapter deve ser coberta sem torch) e era o achado de "rastro perdido" da stage-audit.
 
+### 2026-06-29 — [deviation] F3 — 3-tuple explícito em `_resolve_canonical_order` — orquestrador pós-auditoria
+**Contexto:** A stage-audit (F3) apontou `# type: ignore[return-value]` no retorno público de
+`_resolve_canonical_order` (mypy não prova o tamanho-3 do comprehension), com a justificativa
+(guarda `missing`) a algumas linhas de distância.
+**Razão:** Substituí o comprehension por um 3-tuple explícito (`_CANONICAL_LABELS` tem exatamente 3
+labels), eliminando o `type: ignore` no boundary e tornando o invariante óbvio ao leitor.
+Comportamento idêntico (coberto por `test_finbert_label_order`); `make check` permanece verde.
+
 <!-- END: post-execution -->

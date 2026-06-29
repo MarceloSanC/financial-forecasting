@@ -117,7 +117,13 @@ class FinbertSentimentModel:
                 f"FinBERT config.id2label missing expected labels {missing}; "
                 f"got {sorted(label_to_index)}"
             )
-        return tuple(label_to_index[label] for label in _CANONICAL_LABELS)  # type: ignore[return-value]
+        # A guarda `missing` acima garante que os 3 labels canônicos resolvem,
+        # então este é um 3-tuple de tamanho fixo (sem `type: ignore` no boundary).
+        return (
+            label_to_index[_CANONICAL_LABELS[0]],
+            label_to_index[_CANONICAL_LABELS[1]],
+            label_to_index[_CANONICAL_LABELS[2]],
+        )
 
     def _score_texts(self, texts: Sequence[str]) -> list[list[float]]:
         """Tokeniza + forward em batches; devolve probs na ordem canônica `[neg,neu,pos]`."""
