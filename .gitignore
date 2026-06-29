@@ -82,6 +82,15 @@ Thumbs.db
 data/
 
 # ---------------------------------------------------------------------------
+# MLflow — tracking local (backend SQLite + artefatos), Stage 1.5 / ADR 1.5.0001
+# ---------------------------------------------------------------------------
+# `Settings.mlflow_tracking_uri` default `sqlite:///mlruns.db` cria `mlruns.db`
+# na worktree; o mlflow ainda materializa artefatos em `./mlruns/` (artifact root
+# default). Nenhum dos dois é versionado — tracking é local e reconstruível.
+mlruns.db
+mlruns/
+
+# ---------------------------------------------------------------------------
 # Logs e arquivos temporários
 # ---------------------------------------------------------------------------
 *.log
