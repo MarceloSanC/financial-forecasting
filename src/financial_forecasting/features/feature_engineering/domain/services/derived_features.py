@@ -159,6 +159,33 @@ def _rolling_max(seq: Sequence[Number], n: int) -> OutSeq:
     )
 
 
+def _quantile_linear(window: Sequence[float], q: float) -> float:
+    """Quantil `q` com interpolação LINEAR (default do pandas/numpy).
+
+    Ordena a janela, calcula a posição `h = q*(n-1)` e interpola linearmente entre
+    os vizinhos `floor(h)` e `ceil(h)` — paridade `pandas.rolling(...).quantile(q)`
+    (interpolation="linear"). Janela não-vazia.
+    """
+    ordered = sorted(window)
+    if len(ordered) == 1:
+        return ordered[0]
+    h = q * (len(ordered) - 1)
+    lo = math.floor(h)
+    hi = math.ceil(h)
+    if lo == hi:
+        return ordered[lo]
+    frac = h - lo
+    return ordered[lo] * (1.0 - frac) + ordered[hi] * frac
+
+
+def _rolling_quantile(seq: Sequence[Number], n: int, q: float) -> OutSeq:
+    """`seq.rolling(n, min_periods=n).quantile(q)` (linear) → `None` no warmup."""
+    return tuple(
+        None if (w := _rolling_window(seq, t, n)) is None else _quantile_linear(w, q)
+        for t in range(len(seq))
+    )
+
+
 # =============================================================================
 # Grupo 1 — preço / retorno / liquidez (Task 04)
 # =============================================================================
@@ -300,3 +327,165 @@ def volume_spike_flag(volume: Sequence[Number]) -> tuple[int, ...]:
     """
     z = volume_zscore(volume)
     return tuple(1 if (v is not None and v > _VOLUME_SPIKE_THRESHOLD) else 0 for v in z)
+
+
+# =============================================================================
+# Grupo 2 — volatilidades + regimes (Task 05)
+# =============================================================================
+
+_LN2 = math.log(2.0)
+_GK_COEF = 2.0 * _LN2 - 1.0  # coeficiente de Garman-Klass (verbatim old)
+_TREND_DEADBAND_FACTOR = 0.10  # deadband do trend_regime (verbatim old)
+_TAIL_Q = 0.10  # quantil de cauda do stress flag (verbatim old)
+_REGIME_Q33 = 1.0 / 3.0
+_REGIME_Q66 = 2.0 / 3.0
+_VOL_WINDOW = 20
+_REGIME_WINDOW = 63
+
+
+def _log_ratio_seq(num: Sequence[Number], den: Sequence[Number]) -> OutSeq:
+    """`ln(num_t / den_t)` por posição; `None` se faltante ou qualquer termo `<= 0`.
+
+    Paridade com `np.where((num>0)&(den>0), np.log(num/den), np.nan)` do old.
+    """
+    if len(num) != len(den):
+        raise ValueError("_log_ratio_seq: length mismatch")
+    out: list[float | None] = []
+    for a, b in zip(num, den, strict=True):
+        x = _as_float(a)
+        y = _as_float(b)
+        if x is None or y is None or x <= 0.0 or y <= 0.0:
+            out.append(None)
+        else:
+            out.append(math.log(x / y))
+    return tuple(out)
+
+
+def _sqrt_clip(value: float | None) -> float | None:
+    """`sqrt(max(value, 0))` (C8 — clip antes da raiz); `None` propaga `None`."""
+    if value is None:
+        return None
+    return math.sqrt(max(value, 0.0))
+
+
+def volatility_parkinson(high: Sequence[Number], low: Sequence[Number]) -> OutSeq:
+    """`sqrt(rolling_mean(ln(h/l)^2, 20) / (4*ln2))` (warmup 20, C8)."""
+    log_hl = _log_ratio_seq(high, low)
+    sq = tuple(None if v is None else v * v for v in log_hl)
+    park_var = _rolling_mean(sq, _VOL_WINDOW)
+    return tuple(None if v is None else _sqrt_clip(v / (4.0 * _LN2)) for v in park_var)
+
+
+def volatility_garman_klass(
+    open_: Sequence[Number],
+    high: Sequence[Number],
+    low: Sequence[Number],
+    close: Sequence[Number],
+) -> OutSeq:
+    """`sqrt(rolling_mean(0.5*ln(h/l)^2 - (2ln2-1)*ln(c/o)^2, 20))` (warmup 20, C8)."""
+    log_hl = _log_ratio_seq(high, low)
+    log_co = _log_ratio_seq(close, open_)
+    term: list[float | None] = []
+    for hl, co in zip(log_hl, log_co, strict=True):
+        if hl is None or co is None:
+            term.append(None)
+        else:
+            term.append(0.5 * hl * hl - _GK_COEF * co * co)
+    gk_var = _rolling_mean(term, _VOL_WINDOW)
+    return tuple(_sqrt_clip(v) for v in gk_var)
+
+
+def downside_semivolatility(close: Sequence[Number]) -> OutSeq:
+    """`sqrt(rolling_mean(min(pct_change_1, 0)^2, 20))` (warmup 20, C8)."""
+    pct = _pct_change(close, 1)
+    downside_sq = tuple(None if v is None else min(v, 0.0) ** 2 for v in pct)
+    var = _rolling_mean(downside_sq, _VOL_WINDOW)
+    return tuple(_sqrt_clip(v) for v in var)
+
+
+def vol_of_vol(volatility_20d: Sequence[Number]) -> OutSeq:
+    """`rolling_std_pop(volatility_20d, 20)` (warmup nominal 20; efetivo 40 — I7).
+
+    `volatility_20d` chega como sequência de entrada (computada pela 3.1 na 3.5); as
+    suas próprias 20 posições de warmup somam às 20 da janela `std` → warmup efetivo
+    40 quando a entrada vem crua do preço.
+    """
+    return _rolling_std_pop(volatility_20d, _VOL_WINDOW)
+
+
+def volatility_regime(volatility_20d: Sequence[Number]) -> tuple[int | None, ...]:
+    """Regime 0/1/2 dos tercis trailing SHIFTADOS de `volatility_20d` (janela 63).
+
+    Causalidade (I6): os tercis (`q33`/`q66`) usam `volatility_20d.shift(1).rolling(63)`;
+    o valor corrente `vol_t` é comparado ao threshold de `t-1..t-63`. `None` quando
+    `vol_t` é faltante ou os quantis estão em warmup (C7). Saída em `{0, 1, 2}` ou `None`.
+    """
+    shifted = _shift(volatility_20d, 1)
+    q33 = _rolling_quantile(shifted, _REGIME_WINDOW, _REGIME_Q33)
+    q66 = _rolling_quantile(shifted, _REGIME_WINDOW, _REGIME_Q66)
+    out: list[int | None] = []
+    for t in range(len(volatility_20d)):
+        v = _as_float(volatility_20d[t])
+        lo = q33[t]
+        hi = q66[t]
+        if v is None or lo is None or hi is None:
+            out.append(None)
+        elif v <= lo:
+            out.append(0)
+        elif v <= hi:
+            out.append(1)
+        else:
+            out.append(2)
+    return tuple(out)
+
+
+def trend_regime(ema_10: Sequence[Number], ema_50: Sequence[Number]) -> tuple[int | None, ...]:
+    """Regime -1/0/1 do spread `ema_10 - ema_50` com deadband trailing (janela 63).
+
+    Causalidade (I6): `deadband = 0.10 * std_pop(spread.shift(1), 63)`; o spread
+    corrente é comparado ao deadband de `t-1..t-63`. `None` quando o spread corrente
+    é faltante ou o deadband está em warmup. Saída em `{-1, 0, 1}` ou `None`.
+    """
+    if len(ema_10) != len(ema_50):
+        raise ValueError("trend_regime: ema_10 and ema_50 length mismatch")
+    spread: list[float | None] = []
+    for a, b in zip(ema_10, ema_50, strict=True):
+        x = _as_float(a)
+        y = _as_float(b)
+        spread.append(None if x is None or y is None else x - y)
+    deadband_std = _rolling_std_pop(_shift(spread, 1), _REGIME_WINDOW)
+    out: list[int | None] = []
+    for t in range(len(spread)):
+        s = spread[t]
+        sd = deadband_std[t]
+        if s is None or sd is None:
+            out.append(None)
+            continue
+        deadband = sd * _TREND_DEADBAND_FACTOR
+        if s > deadband:
+            out.append(1)
+        elif s < -deadband:
+            out.append(-1)
+        else:
+            out.append(0)
+    return tuple(out)
+
+
+def stress_tail_return_flag(close: Sequence[Number]) -> tuple[int | None, ...]:
+    """Flag 1 quando `pct_change_1 <= trailing q10 SHIFTADO (janela 63)`.
+
+    Causalidade (I6): `tail_q10 = pct_change_1.shift(1).rolling(63).quantile(0.10)`;
+    o retorno corrente é comparado ao limiar de `t-1..t-63`. `None` quando o retorno
+    corrente é faltante ou o quantil está em warmup. Saída em `{0, 1}` ou `None`.
+    """
+    ret1 = _pct_change(close, 1)
+    tail_q10 = _rolling_quantile(_shift(ret1, 1), _REGIME_WINDOW, _TAIL_Q)
+    out: list[int | None] = []
+    for t in range(len(close)):
+        r = ret1[t]
+        thr = tail_q10[t]
+        if r is None or thr is None:
+            out.append(None)
+        else:
+            out.append(1 if r <= thr else 0)
+    return tuple(out)
