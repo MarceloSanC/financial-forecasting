@@ -38,11 +38,20 @@ def _clean_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
     test do tracker) vazaria para os casos de default/validação aqui. Remover as
     env vars que estes testes asseguram (mais o `PORT`) antes de cada caso
     garante isolamento; `monkeypatch` restaura ao fim.
+
+    `DEBUG`, `HOST` e `LOG_LEVEL` são injetadas pelo `docker-compose.yml`
+    (bloco `environment:` do serviço `app`) no devcontainer/CI containerizado —
+    `Settings(_env_file=None)` as leria de `os.environ` e o caso de defaults
+    (ex.: `debug is False`) falharia SÓ dentro do container. Limpá-las mantém o
+    teste hermético à fronteira env/defaults declarada em qualquer ambiente.
     """
     get_settings.cache_clear()
     monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
     monkeypatch.delenv("PORT", raising=False)
     monkeypatch.delenv("DATA_ROOT", raising=False)
+    monkeypatch.delenv("DEBUG", raising=False)
+    monkeypatch.delenv("HOST", raising=False)
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
     yield
     get_settings.cache_clear()
 
