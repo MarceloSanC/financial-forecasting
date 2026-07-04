@@ -41,15 +41,24 @@ class SplitFingerprint:
         train: Sequence[str],
         val: Sequence[str],
         test: Sequence[str],
+        calib: Sequence[str] | None = None,
     ) -> SplitFingerprint:
         """Calcula a impressão ordenando cada split antes do hash.
 
         Monta `{"train": sorted(train), "val": sorted(val), "test":
         sorted(test)}` e delega ao `hasher.hash_mapping`.
+
+        `calib` é opcional e retrocompatível (ADR 5.1.0003): quando fornecido
+        (split de 4 vias do walk-forward — Stage 5.1), a chave `"calib":
+        sorted(calib)` entra no payload, atestando a fronteira do calibration set
+        dedicado na identidade do split. Quando `None`, o payload é **idêntico**
+        ao de 3 vias — todo caller pré-5.1 produz exatamente a mesma impressão.
         """
-        payload = {
+        payload: dict[str, list[str]] = {
             "train": sorted(train),
             "val": sorted(val),
             "test": sorted(test),
         }
+        if calib is not None:
+            payload["calib"] = sorted(calib)
         return cls(value=hasher.hash_mapping(payload))
