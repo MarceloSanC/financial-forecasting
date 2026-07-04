@@ -1,0 +1,15 @@
+# docker-compose.override.yml — camada de dev/devcontainer (VERSIONADA)
+#
+# O Docker Compose mescla este arquivo automaticamente sobre docker-compose.yml
+# em `docker compose up`/`make docker-up`. O devcontainer também o carrega porque
+# está listado em .devcontainer/devcontainer.json (dockerComposeFile).
+#
+# Uso: reaproveita o login do Claude Code do host montando ~/.claude do usuário
+# (${USERPROFILE}) em /root/.claude do container — reusa a sessão já autenticada,
+# sem novo código de verificação. Contém só um mount (NENHUMA credencial no git;
+# as credenciais ficam no host). Windows-first: ${USERPROFILE} resolve o home do
+# usuário; em host não-Windows ajuste o path do volume.
+services:
+  app:
+    volumes:
+      - ${USERPROFILE}/.claude:/root/.claude
