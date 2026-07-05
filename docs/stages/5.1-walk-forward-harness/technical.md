@@ -318,4 +318,36 @@ Task 01 ────────────────────────
 > Preenchida durante/após a Fase 4. Apenas esta seção é editável após
 > `status: done`. Cada entrada carrega data + autor.
 
+### 2026-07-05 — [deviation] Task 01 — Claude (Opus 4.8)
+**Contexto:** `scripts/check_layout.py` exige que toda feature tenha os diretórios
+`domain/`, `application/` **e `adapters/`** (`REQUIRED_FEATURE_DIRS`). O plano
+previa só `application/__init__.py` como placeholder (para o `hexagonal-layers`),
+mas não o `adapters/`.
+**Razão:** criei também `features/modeling/adapters/__init__.py` (vazio) para
+satisfazer o gate de estrutura — boilerplate mecânico in-scope, absorvido no
+próprio commit da Task 01 (amend). Abaixo do threshold de perguntar.
+
+### 2026-07-05 — [deviation] Task 05 — Claude (Opus 4.8)
+**Contexto:** o concept §4 diz que a purga/embargo é "resolvida via
+`shift_trading_days`". A implementação resolve as fronteiras por **aritmética de
+índice** sobre a grade e **valida** o gap em dias de pregão via
+`shift_trading_days` (o `WalkForwardSplitter._assert_trading_day_gap`).
+**Razão:** `_validate_grid` já garante que a grade é um run contíguo de sessões
+(cada `sessions[i+1] == next_session(sessions[i])`), logo índice == dia de pregão
+e o cross-check via `shift_trading_days` é a resolução autoritativa em dias de
+pregão. O ramo de erro do cross-check é inalcançável dado esse invariante e ficou
+marcado `# pragma: no cover` (padrão do repo, commit `[5.1/--]`). Não muda
+contrato nem critério de aceite — segue in-scope.
+
+### 2026-07-05 — [finding] modeling.application — Claude (Opus 4.8)
+**Contexto:** nesta Stage `modeling` tem só `domain`; a `application` é um pacote
+placeholder vazio e NÃO entrou no contrato `store-no-storage-leak` (o domínio 5.1
+não consome o `MedallionStore`).
+**Direção sugerida:** quando a `application` de `modeling` nascer e consumir o
+`MedallionStore` (carregar o dataset para o splitter/treinadores), registrar
+`financial_forecasting.features.modeling.{application,domain}` em
+`store-no-storage-leak` — mesma postura de defesa-em-profundidade dos BCs
+anteriores (`.importlinter` Contrato 6). **Stage candidata: 5.2** (`RunBaselines`,
+1º use case que consome `WalkForwardSplitter` + `MedallionStore`).
+
 <!-- END: post-execution -->
