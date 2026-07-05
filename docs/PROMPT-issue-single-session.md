@@ -14,16 +14,18 @@ Variante **colapsada** do [`./RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFEC
 issues avulsas: sem Fases 3A/3B (não há `concept.md` nem `technical.md`), mas com os mesmos
 gates objetivos de execução e auditoria de testes. **Uma issue por sessão.**
 
-**Quando usar:** Issue com status `open` na tabela de issues do roadmap, cujo escopo cabe em
-até 8 sub-tasks e cujo critério de aceite é objetivamente verificável.
+**Quando usar:** Issue com status `open` na tabela de issues do roadmap, cujo **concept+technical
+cabem no corpo da issue** (litmus de forma em [`PIPELINE.md`](./PIPELINE.md) §4.5 — não carrega
+conceito novo a definir) e cujo critério de aceite é objetivamente verificável.
 
 **Quando NÃO usar:**
 - Issue com status `placeholder` — essas são marcadores de backlog sem DoD definido; implementar
   sem planejamento adequado introduz risco de contradição com o roadmap futuro.
 - Issue com status `blocked` — há dependência externa explícita não resolvida.
-- Issue cujo escopo, ao ser decomposto, resultar em > 8 sub-tasks ou exigir decisões
-  arquiteturais não documentadas — nesse caso avaliar se deve virar uma Stage própria,
-  corretamente planejada e encaixada no roadmap.
+- Issue que **carrega um conceito** (litmus [`PIPELINE.md`](./PIPELINE.md) §4.5): precisa
+  definir modelo/invariante/contrato/regra nova, tem decisão que merece ADR, toca modelo de
+  dados ou fronteira de BC, ou o corpo não segura o escopo — nesse caso deve virar uma
+  **Stage** própria (concept+technical, mesmo enxutos), encaixada no Step certo do roadmap.
 
 ---
 
@@ -132,9 +134,10 @@ Antes de decompor em sub-tasks, responda por escrito:
    `technical.md` das Stages do BC** — algum `[finding]` anterior foi escalado
    para esta issue (ou descreve exatamente este problema)? Se sim, ele é parte
    do escopo, não descoberta nova.
-5. **A issue deve virar Stage?** Se ao responder os itens acima ficou claro que o escopo
-   é maior do que parecia (> 8 sub-tasks, decisão arquitetural não documentada, impacto
-   transversal em múltiplos BCs) → **PARE** e reporte. Propor abertura de Stage.
+5. **A issue deve virar Stage?** Aplique o litmus de forma de [`PIPELINE.md`](./PIPELINE.md)
+   §4.5: se você se pegar redigindo um mini-concept (definindo modelo/invariante/contrato/regra),
+   se a issue tem decisão que merece ADR, toca modelo de dados ou fronteira de BC, ou o corpo
+   não segura o escopo → **PARE** e reporte. Propor abertura de Stage no Step certo.
 
 Se todos os itens tiverem resposta satisfatória, prossiga para a Decomposição.
 
@@ -156,8 +159,9 @@ exatos a modificar. Sua responsabilidade é ler o código e identificar o que pr
    - Checks objetivos definidos.
    - Não mistura criação de port com criação de adapter desse port.
    - Ordem respeita dependências.
-3. Listar as sub-tasks em texto antes de codar. Se > 8, declare issue grande demais e
-   PARE — propor abertura de Stage.
+3. Listar as sub-tasks em texto antes de codar. Se você se pegar redigindo um mini-concept
+   (definindo modelo/contrato/regra) ou o escopo não couber no corpo (litmus
+   [`PIPELINE.md`](./PIPELINE.md) §4.5), declare que é Stage e PARE — propor abertura de Stage.
 4. Identificar **bifurcações materiais**: decisões ausentes na issue, no roadmap e no
    código existente que afetam contrato, fronteira ou critério de aceite.
    - Se houver: usar `AskUserQuestion` antes de codar.
@@ -230,8 +234,10 @@ do fluxo — sem ele, o resto dos gates dá falso positivo.
 Todos OBRIGATÓRIOS antes do commit de fechamento:
 
 - [ ] `make check` verde localmente.
-- [ ] `make test-cov` mostra coverage ≥ 90% no código novo da issue
-      (não na média do repo — no diff da branch).
+- [ ] Coverage ≥ 90%: global (`make test-cov`, gate `fail_under`) **e**
+      nos arquivos da issue, via cobertura focada
+      (`pytest --cov=<paths tocados> --cov-report=term-missing`) —
+      a média global não substitui (gate míope).
 - [ ] Auditoria de Testes (acima) com todos os itens "sim".
 - [ ] `[finding]`s registrados como comentários na issue antes de fechá-la.
 - [ ] `docs/roadmap.md` atualizado: linha de `#<issue>` na tabela de issues
@@ -271,12 +277,20 @@ Refs #<issue>"
 - 2–4 opções com prós/contras de 1 linha cada.
 - Uma marcada como **(Recomendada)** + razão de 1 linha.
 
-# REGRA DE PR (CRÍTICA — NÃO VIOLAR)
+# REGRA DE PR
 
-**VOCÊ NUNCA ABRE PR.** Não execute `gh pr create`. Não execute `git push`.
-Não execute `gh pr merge`.
+**Você ABRE o PR ao final** (`git push` + `gh pr create`) — a sessão que
+implementou é quem abre. Antes do push, **sincronize**: `git fetch` +
+`git rebase origin/develop` (o `roadmap.md` é o conflito recorrente; ver
+GIT-WORKFLOW §Etapa 4). **Você NÃO faz merge** — o merge é do usuário, após
+auditoria, salvo pedido explícito. Não execute `gh pr merge`.
 
-Sua **saída final** é um **relatório** com a estrutura abaixo:
+**O checklist do PR é um handoff.** Marque **apenas** as caixinhas que você
+**validou com certeza**; deixe as demais **desmarcadas** e registre no corpo
+que o PR **precisa de auditoria antes de mergear** — a sessão de auditoria
+valida o resto. Não marque por otimismo.
+
+Sua **saída final** = (1) o **PR aberto** e (2) o **relatório** abaixo:
 
 ```markdown
 ## Issue #<issue> — relatório de execução
@@ -305,49 +319,33 @@ Sua **saída final** é um **relatório** com a estrutura abaixo:
 5. Integração cobre o que unit não cobre? <...>
 6. Erros do adapter mapeiam corretamente? <...>
 
-### 5. Gates de saída
-- [x] `make check` verde
-- [x] Coverage ≥ 90% no código novo
-- [x] Auditoria de testes todos os itens "sim"
-- [x] Findings registrados na issue
-- [x] `roadmap.md` atualizado (status done)
-- [x] ADRs em `accepted` (se aplicável)
+### 5. Gates que VOCÊ validou (marque só o que tem certeza)
+- [ ] `make check` verde
+- [ ] Coverage ≥ 90% no código novo
+- [ ] Auditoria de testes todos os itens "sim"
+- [ ] Findings registrados na issue
+- [ ] `roadmap.md` atualizado (status done)
+- [ ] ADRs em `accepted` (se aplicável)
 
-### 6. Recomendação de PR (você abre manualmente)
-
-**Título:**
-```
-fix: <title_humano> (#<issue>)
-```
-
-**Descrição:**
-```
-Closes #<issue>
-
-## O que foi feito
-
-<resumo de 2–3 linhas>
-
-## Decisões e achados
-<[decision] e [deviation] registrados aqui; [finding] foi para comentário na issue>
-
-## Checklist
-- [x] Sub-tasks implementadas conforme decomposição
-- [x] make check verde
-- [x] Coverage ≥ 90% no código novo
-- [x] roadmap.md atualizado (status done)
-- [x] Auditoria de testes em todos os itens "sim"
+### 6. PR aberto
+- Link: <url do PR>
+- Corpo carregado do template `.github/PULL_REQUEST_TEMPLATE.md` (fonte
+  única): `Closes #<issue>` + resumo + `[decision]`/`[deviation]` +
+  checklist com **só o que você validou** marcado + nota "⚠️ precisa de
+  auditoria antes do merge".
 ```
 
-**Comandos sugeridos para o usuário rodar:**
+**Comandos que você executa** (o merge NÃO):
 ```powershell
+git fetch origin
+git rebase origin/develop        # resolver conflito de roadmap se houver
 git push -u origin <branch>
-gh pr create --base develop --title "..." --body "..."
-```
+gh pr create --base develop --title "<tipo>(<escopo>): issue #<issue> — <title_humano>" --body-file <corpo>
+# <escopo> = BC/módulo da mudança (ASCII/kebab), NUNCA a Stage/issue — CONVENTIONS §4(c)
 ```
 
-O usuário fará o `git push`, abrirá o PR, vai esperar CI/aprovação e fará
-o merge. **Você não toca nessa parte.**
+Depois do PR aberto, a sessão de auditoria valida e completa o checklist; o
+CI roda e **o usuário faz o merge** (salvo pedido explícito).
 
 # CONTRADIÇÕES
 
@@ -372,9 +370,9 @@ fonte mais alta na hierarquia.**
 6. **Auditoria de testes:** loop até todos os itens "sim". Testes faltantes
    viram sub-tasks extras com commit dedicado.
 7. **Gate de saída:** todos os gates verdes → commit de fechamento do roadmap.
-8. **Relatório final** + recomendação de PR.
+8. **Abrir o PR** (`git fetch` + rebase + `git push` + `gh pr create`) + relatório final.
 
-**PARE aqui.** Não faça push. Não abra PR. Não merge.
+**PARE no merge.** Você faz push e abre o PR; o **merge é do usuário** (salvo pedido explícito). Não execute `gh pr merge`.
 ````
 
 ---
