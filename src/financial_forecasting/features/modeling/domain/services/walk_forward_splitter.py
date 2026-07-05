@@ -190,7 +190,10 @@ class WalkForwardSplitter:
         expected = self._calendar.shift_trading_days(
             earlier, gap + 1, direction="forward"
         )
-        if expected != later:
+        # Asserção autoritativa da purga em dias de pregão. O ramo de erro é
+        # inalcançável dado o invariante de contiguidade validado em `_validate_grid`
+        # (índice == dia de pregão), mas mantê-lo blinda contra regressões futuras.
+        if expected != later:  # pragma: no cover - defensivo dado _validate_grid
             raise ValueError(
                 f"purge+embargo gap mismatch: expected {gap} trading sessions "
                 f"between {earlier.isoformat()} and {later.isoformat()}, but "
