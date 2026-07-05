@@ -99,9 +99,11 @@ os itens "sim", §7 fiel, findings com Stage candidata, ADRs `accepted`):
 - Carregar contexto antes de agir; invocar `git-versioning-pointer` antes de operação git.
 - Pré-condições bloqueantes (working tree limpo, branch correta, issue OPEN, estrutura da Stage,
   `depends_on` **mergeado em develop** — não só `done` no roadmap).
-- Fases 3A (Concept) e 3B (Technical), critérios de Task Atômica, 3–8 (ou ROADMAP-1) Tasks.
+- Fases 3A (Concept) e 3B (Technical), critérios de Task Atômica, 3–12 (ou ROADMAP-1) Tasks.
 - Escopo estrito por Task; §7 post-execution (`[decision]`/`[finding]`/`[deviation]`).
-- **Auditoria de testes** (loop até todos "sim") — gate explícito, não pular.
+- **Checkpoints A/B/C** (revisão por agentes independentes de contexto zerado) e **auditoria de testes
+  por subagente independente** (loop até todos "sim", com mutação real nas funções críticas) — gates
+  explícitos, não pular.
 - Hierarquia de contradições e o dever de não silenciá-las.
 
 ---
