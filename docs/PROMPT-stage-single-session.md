@@ -1,26 +1,27 @@
 ---
-title: Prompt — Execução de Stage em Sessão Única (variante experimental)
+title: Prompt — Execução de Stage em Sessão Única
 description: Prompt para colar em uma nova sessão Chat IDE e rodar Fase 3A + 3B + 4 de uma Stage em uma única sessão, sem perder gates objetivos
-when-use: Stages pequenas/médias (3–6 Tasks) sobre fundação já validada, onde o overhead de re-hidratar contexto entre fases supera o benefício
-keywords: [prompt, stage, single-session, concept, technical, execucao, lifecycle]
-status: draft
+when-use: Fluxo padrão de execução de Stage (PIPELINE §11.1, implementa → audita) — Fase 3A+3B+4 em sessão única, com auditoria em sessão separada
+keywords: [prompt, stage, single-session, concept, technical, execucao, lifecycle, review, subagents, gates]
+status: done
 created_at: 2026-06-10
-updated_at: 2026-06-10
+updated_at: 2026-07-05
 ---
 
 # Prompt — Execução de Stage em Sessão Única
 
 Variante **colapsada** do [`./RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md):
 mesmo fluxo, mesmos gates objetivos, mesmos artefatos — sem as transições
-de sessão e sem o gate humano por aprovação textual entre fases.
+de sessão e sem o gate humano por aprovação textual entre fases (pausa
+opcional antes da Fase 4; ver §Fluxo).
 
-**Quando usar:** Stages pequenas/médias (3–6 Tasks), tipicamente sobre
-fundação já validada (ex.: Stage 1.2 após 1.1 mergeada). O ganho é evitar
-re-hidratar contexto entre 3A → 3B → 4.
+**Quando usar:** é o **fluxo padrão** de execução de Stage
+(PIPELINE §11.1 — sessão de implementação; a auditoria roda em sessão
+separada via `stage-audit`). O ganho é evitar re-hidratar contexto entre
+3A → 3B → 4.
 
-**Quando NÃO usar:**
-- Stage com decisões arquiteturais grandes — prefira sessão dedicada por fase.
-- Stage com `gate_mode: strict` declarado no roadmap por motivo explícito.
+**Quando NÃO usar (preferir o runbook multi-sessão, fase a fase):**
+- Stage com decisões arquiteturais grandes — sessão dedicada por fase.
 - Primeiro contato com um Bounded Context novo.
 
 ---
@@ -136,11 +137,21 @@ do fluxo. Trate como gate objetivo.
    (não escrever "N/A").
 6. Para cada decisão maior com alternativa real descartada → ADR em
    `docs/adr/<N>_<M>_NNNN-<slug>.md` (`templates/adr.md`, `status: accepted`).
-7. Autovalidar contra checklist do Passo 5 do runbook (PIPELINE §7.4):
+7. Autovalidar contra o checklist do Passo 5 do runbook (fonte única):
    escopo, decisões rastreáveis, contratos batem com roadmap, critérios
-   objetivos, §12 100% sim, ADRs `accepted`, cabe em 3–8 Tasks.
-8. Marcar `status: done` no frontmatter do concept.
-9. **Commit** (único — não passar por draft intermediário nesta variante):
+   objetivos, canal de emissão declarado se produz métrica nova (último
+   quilômetro), §12 100% sim, ADRs `accepted`, cabe em 3–12 Tasks.
+8. **Checkpoint A — revisão do concept por agentes independentes**
+   (protocolo em §Revisão por Agentes Independentes). Dois subagentes
+   com lentes distintas, em paralelo:
+   - **Conformidade:** concept × roadmap × overview × ADRs × §7 das
+     dependências — caçar contradições e escopo que vazou.
+   - **Domínio/testabilidade:** os conceitos de negócio estão corretos?
+     Os critérios de aceite são objetivamente testáveis ou são desejos
+     vagos?
+   Só seguir depois de registrar a disposição de cada achado.
+9. Marcar `status: done` no frontmatter do concept.
+10. **Commit** (único — não passar por draft intermediário nesta variante):
    ```bash
    git add docs/stages/<N.M>-<slug>/concept.md docs/adr/<N>_<M>_*.md
    git commit -m "stage <N.M>: conceptual approved
@@ -162,7 +173,7 @@ do fluxo. Trate como gate objetivo.
    - Ordem respeita dependências.
 3. Para Stages targeting domain/application/adapters, aplicar skill
    `task-ordering-hex` (TDD inside-out, cada commit deixa o build verde).
-4. Número saudável: **3–8 Tasks**. Se > 8, declare Stage grande demais e PARE.
+4. Número saudável: **3–12 Tasks**; **≥ 14** = Stage grande demais — declare e PARE (alarme do CONVENTIONS §6).
 5. Incluir §7 "Execução" com marcadores
    `<!-- BEGIN: post-execution -->` / `<!-- END: post-execution -->` (vazios).
 6. Marcar `status: done` no frontmatter do technical.
@@ -202,6 +213,18 @@ Refs #<issue>"
 # 3. Technical ajustado também, se necessário (commit único do technical aprovado)
 ```
 
+### Checkpoint B — revisão do technical por agente independente
+
+Antes do commit, um subagente (protocolo em §Revisão por Agentes
+Independentes) valida mecanicamente:
+
+- **Matriz de rastreabilidade:** todo critério de aceite do concept
+  mapeia em ≥ 1 Task com check objetivo. Critério órfão = achado.
+- Caminhos de arquivo conformes a `LAYOUT.md`.
+- Cada Task contra os 5 critérios de Task Atômica (PIPELINE §4.3).
+
+Registrar a disposição de cada achado antes de commitar.
+
 **Commit do technical aprovado:**
 
 ```bash
@@ -211,30 +234,50 @@ git commit -m "stage <N.M>: technical approved
 Refs #<issue>"
 ```
 
+### Pausa opcional de gate humano (fluxo ideal antes da Fase 4)
+
+Se houve **bifurcação material relevante** ou decisão de peso no
+concept/technical (ADR novo, contrato novo, modelo de dados), **ofereça
+a pausa** via `AskUserQuestion`: "revisar concept+technical agora" vs
+"seguir direto para a execução" — recomendada conforme o peso. Se o
+usuário pediu a pausa no kickoff, **PARE aqui** e aguarde a revisão dos
+dois artefatos. Stage sem decisão de peso: siga direto, sem perguntar.
+
 ## Fase 4 — Execução por Task
+
+**Arquivo de estado (anti-perda de contexto):** antes da primeira Task,
+criar no diretório temporário da sessão (scratchpad — **fora do repo**)
+uma tabela `Task → status → hash do commit`, atualizada após cada
+commit. Após qualquer compactação de contexto, reconstruir o estado a
+partir dela e de `git log --oneline origin/develop..HEAD` antes de
+continuar — os hashes do relatório final saem daí, não da memória.
 
 Para cada Task em ordem:
 
-1. **Escopo estrito:** só tocar nos arquivos listados em "Arquivos a
+1. **Re-hidratar:** reler a Task no `technical.md` e a seção de
+   contratos do `concept.md` antes de implementar. Nunca implementar
+   de memória — especialmente após compactação de contexto.
+2. **Escopo estrito:** só tocar nos arquivos listados em "Arquivos a
    criar/modificar" da Task. Se precisar tocar algo extra → **PARAR** e
    perguntar via `AskUserQuestion`.
-2. **Identificar lacunas** (decisão de código ausente em Concept+Technical+LAYOUT+skills):
+3. **Identificar lacunas** (decisão de código ausente em Concept+Technical+LAYOUT+skills):
    - **Reversível barato** (escolha local, trivial mudar) → IA decide, segue,
      registra justificativa de 1–2 frases no diff.
    - **Irreversível ou caro** (port shape, contrato externo, formato persistido) →
      PERGUNTA antes de codar.
-3. **Implementar** (apresentar diff ao humano antes do commit — não comitar
+4. **Implementar** (apresentar diff ao humano antes do commit — não comitar
    por iniciativa própria).
-4. **Rodar checks da Task.** Se falhar:
+5. **Rodar checks da Task.** Baseline inegociável: **`make check` verde
+   antes de todo commit**, além dos checks específicos da Task. Se falhar:
    - Ajuste menor (import faltando, type hint) → corrige.
    - Problema de design → PARA e reporta.
-5. **Registrar em §7 do technical** qualquer entrada surgida na execução,
+6. **Registrar em §7 do technical** qualquer entrada surgida na execução,
    conforme RUNBOOK Passo 8 (entre marcadores `BEGIN/END: post-execution`):
    - `[decision]` — decisão tomada com base em pergunta.
    - `[finding]` — escalado para próxima Stage.
    - `[deviation]` — ajuste pequeno claramente in-scope (continua exigindo
      pergunta).
-6. **Commit:**
+7. **Commit** (e atualizar o arquivo de estado com o hash):
    ```bash
    git add <arquivos-da-task>
    git commit -m "<type>(<scope>): <desc> [<N.M>/task-NN]
@@ -242,10 +285,56 @@ Para cada Task em ordem:
    Refs #<issue>"
    ```
 
+**Checkpoint C — revisão por bloco de Tasks:** a cada 2–3 Tasks
+commitadas (ou uma única vez ao final, se a Stage tem ≤ 4 Tasks), um
+subagente revisa o diff acumulado do bloco
+(`git diff <hash-do-último-checkpoint>..HEAD`) contra concept +
+technical + LAYOUT (protocolo em §Revisão por Agentes Independentes).
+Correções viram commit `fix(<scope>): <desc> [<N.M>/task-NN-fix]`.
+
+**Regressão mid-stage:** se uma Task revelar que Task anterior foi
+implementada errada:
+
+- Erro local (não muda design) → commit
+  `fix(<scope>): <desc> [<N.M>/task-NN-fix]` + entrada `[deviation]`
+  em §7.
+- Erro que invalida decisão de §1–§6 do technical → **PARAR** e
+  perguntar via `AskUserQuestion`; pode exigir regressão do technical.
+
+# REVISÃO POR AGENTES INDEPENDENTES (CHECKPOINTS A/B/C)
+
+Esta variante colapsou os gates humanos do runbook canônico; os
+checkpoints são o substituto do olhar externo. Sem eles, a variante
+não é "runbook colapsado" — é "runbook sem revisão". Regras:
+
+- **Contexto zerado:** cada revisor é um subagente novo (Agent tool),
+  que recebe SÓ os caminhos dos arquivos e das fontes — nunca o
+  histórico da sessão nem o raciocínio do autor. O autor não revisa o
+  próprio artefato: a sessão que escreveu vai "verificar" com o mesmo
+  raciocínio que gerou o erro.
+- **Prompt adversarial:** instruir o revisor a ENCONTRAR erros ("tente
+  refutar"), nunca a confirmar. Revisor convidado a aprovar, aprova.
+- **Filtro de severidade:** o revisor só reporta o que muda contrato,
+  comportamento ou cobertura. Estilo/cosmético não é achado.
+- **Disposição explícita para todo achado:** `corrigido` (com commit),
+  `refutado` (com evidência citada — linha/fonte que refuta), ou
+  `escalado` (vira `AskUserQuestion`). **Proibido descartar achado em
+  silêncio.** As disposições entram no relatório final.
+- **Cap de 2 rodadas por checkpoint.** Divergência persistente entre
+  autor e revisor → `AskUserQuestion`. O único loop sem cap do fluxo
+  continua sendo a Auditoria de Testes.
+- **Alívio condicional:** Stage com `gate_mode: batch` sobre fundação
+  validada pode reduzir o Checkpoint A a 1 revisor (lente de
+  conformidade). Checkpoint C e a regra de evidência dos gates NUNCA
+  são opcionais.
+
 # AUDITORIA DE TESTES (GATE EXPLÍCITO — NÃO PULAR)
 
 Depois da última Task funcional, **antes** do gate de saída da Stage,
-responda **por escrito**, em ordem:
+**delegar a auditoria a um subagente que não escreveu os testes**
+(contexto zerado; recebe código + testes + concept + este
+questionário). O autor não se autoaudita — responder "sim" de memória
+é o falso verde clássico. O subagente responde **por escrito**, em ordem:
 
 1. **Caminho feliz coberto?** Cada critério de aceite do concept tem teste
    que valida o golden path?
@@ -258,6 +347,11 @@ responda **por escrito**, em ordem:
    - Se eu inverter a ordem de validações, algum teste falharia?
    - Se eu ignorar uma branch condicional, algum teste falharia?
    "Não" em qualquer item indica cobertura insuficiente.
+   **Mutação real (não só mental):** para as 2–3 funções mais críticas
+   da Stage, não responder de memória — aplicar a mutação de verdade
+   (editar → rodar `make test` → reverter) e colar o resultado.
+   Mutação que não derruba nenhum teste = cobertura insuficiente
+   comprovada.
 4. **Boundaries (in/out ports) cobertos?** Adapters têm contract tests
    (`pytest-with-fakes` §contract)? Use cases testados com fakes dos out
    ports?
@@ -279,14 +373,35 @@ do fluxo — sem ele, o resto dos gates dá falso positivo.
 
 # GATES DE SAÍDA DA STAGE (INEGOCIÁVEIS)
 
-Todos OBRIGATÓRIOS antes de você reportar a Stage como pronta para o commit
-final `stage <N.M>: complete` (que **o usuário** fará manualmente — ver abaixo):
+**Regra de evidência:** um gate só conta como verificado se a **saída
+literal do comando** (últimas linhas + exit code) estiver colada no
+relatório final. Gate sem saída colada = gate não executado — afirmar
+"passou" sem evidência é falso verde.
+
+Todos OBRIGATÓRIOS antes do commit final `stage <N.M>: complete`:
 
 - [ ] `make check` verde localmente.
-- [ ] `make test-cov` mostra coverage ≥ 90% no código novo da Stage
-      (não na média do repo — no diff da Stage).
+- [ ] Coverage ≥ 90%: global (`make test-cov`, gate `fail_under`) **e**
+      nos arquivos da Stage, via cobertura focada
+      (`pytest --cov=<paths da Stage> --cov-report=term-missing`) —
+      a média global não substitui (gate míope). **Medição por arquivo**
+      (não existe diff-cover no projeto):
+      ```powershell
+      # arquivos de src/ tocados pela Stage
+      git diff --name-only (git merge-base origin/develop HEAD) HEAD -- src/
+      # cobertura por arquivo
+      uv run pytest tests/ --cov=src/financial_forecasting --cov-report=term-missing
+      ```
+      Cada arquivo tocado deve aparecer com ≥ 90% na tabela do
+      `term-missing`. Arquivo abaixo disso → cobrir ou justificar por
+      escrito no relatório.
 - [ ] `python scripts/check_technical_postexec.py docs/stages/<N.M>-<slug>/technical.md` verde.
 - [ ] Auditoria de Testes (acima) com todos os itens "sim".
+- [ ] Checkpoints A, B e C executados, com **todos os achados
+      dispostos** (`corrigido`/`refutado`/`escalado`).
+- [ ] **Verificação end-to-end:** fluxo da Stage exercitado pelo
+      entrypoint real (API/CLI/job) quando houver superfície de
+      runtime — testes passando não substituem executar o fluxo.
 - [ ] §7 do technical reflete o que realmente aconteceu na execução.
 - [ ] Findings escalados (`[finding]`) têm Stage candidata identificada.
 - [ ] `docs/roadmap.md` atualizado: Stage `<N.M>` com `status: done`,
@@ -295,24 +410,13 @@ final `stage <N.M>: complete` (que **o usuário** fará manualmente — ver abai
 - [ ] `concept.md` não precisa retoque retrospectivo (se precisa: abrir
       TODO ou Stage de correção; não silenciar).
 
-Comando do lint da §7 antes de reportar:
+Comando do lint da §7 antes do commit final:
 
 ```powershell
 python scripts/check_technical_postexec.py "docs/stages/<N.M>-<slug>/technical.md"
 ```
 
-**Commit final — NÃO É VOCÊ QUEM FAZ.**
-
-Você atualiza o conteúdo do `docs/roadmap.md` (status `done`, `updated_at`,
-`last_reviewed_at`), mas **deixa a mudança no working tree, sem commitar**. O
-commit final `stage <N.M>: complete` é **manual**, feito pelo usuário **depois**
-de uma auditoria humana — que tipicamente encontra fixes que precisam entrar
-antes de fechar a Stage. Comitar `complete` por iniciativa própria fecharia a
-Stage prematuramente.
-
-Deixe `git status` mostrando claramente o que está pendente de commit (inclusive
-o `docs/roadmap.md` editado) e inclua no relatório o comando sugerido para o
-usuário rodar após a auditoria:
+**Commit final:**
 
 ```bash
 git add docs/roadmap.md
@@ -350,18 +454,20 @@ critério de aceite) DEVE virar pergunta — não tratar como burocracia.
 O que evitar é **overengineering** e **refinamento cosmético**, não
 validação de gap real.
 
-# REGRA DE FECHAMENTO E PR (CRÍTICA — NÃO VIOLAR)
+# REGRA DE PR
 
-**VOCÊ NUNCA FECHA A STAGE NEM ABRE PR.** Não execute o commit final
-`stage <N.M>: complete`. Não execute `gh pr create`. Não execute `git push`.
-Não execute `gh pr merge`.
+**Você ABRE o PR ao final** (`git push` + `gh pr create`) — a sessão que
+implementou é quem abre. Antes do push, **sincronize**: `git fetch` +
+`git rebase origin/develop` (o `roadmap.md` é o conflito recorrente; ver
+GIT-WORKFLOW §Etapa 4). **Você NÃO faz merge** — o merge é do usuário, salvo
+pedido explícito. Não execute `gh pr merge`.
 
-O commit final e o PR são feitos **manualmente pelo usuário**, na mesma etapa,
-**após auditoria humana** — que normalmente encontra fixes a aplicar antes de
-fechar. Seu trabalho termina com os gates verdes, o `roadmap.md` editado no
-working tree (sem commit) e o relatório abaixo.
+**O checklist do PR é um handoff.** Marque **apenas** as caixinhas que você
+**validou com certeza**; deixe as demais **desmarcadas** e registre no corpo
+que o PR **precisa de auditoria antes de aceitar/mergear** — a sessão de
+auditoria valida o resto e completa o checklist. Não marque por otimismo.
 
-Sua **saída final** é um **relatório** com a estrutura abaixo:
+Sua **saída final** = (1) o **PR aberto** e (2) o **relatório** abaixo:
 
 ```markdown
 ## Stage <N.M>-<slug> — relatório de execução
@@ -377,69 +483,49 @@ Sua **saída final** é um **relatório** com a estrutura abaixo:
 - Entradas em §7 (`[decision]`/`[finding]`/`[deviation]`).
 - Findings escalados (com Stage candidata).
 
-### 3. Auditoria de testes
+### 3. Revisões por agentes independentes
+- Checkpoint A (concept): <achados + disposição de cada um>
+- Checkpoint B (technical): <achados + disposição de cada um>
+- Checkpoint C (blocos de Tasks): <achados + disposição de cada um>
+(disposições: `corrigido` com hash / `refutado` com evidência / `escalado`)
+
+### 4. Auditoria de testes (executada por subagente independente)
 1. Caminho feliz coberto? <sim/não + evidência>
 2. Edge cases do concept cobertos? <...>
-3. Mutation mental (bug silencioso)? <...>
+3. Mutação (mental + real nas funções críticas)? <resultado das mutações reais>
 4. Boundaries cobertos? <...>
 5. Integração cobre o que unit não cobre? <...>
 6. Erros do adapter mapeiam corretamente? <...>
 
-### 4. Gates de saída
-- [x] `make check` verde
-- [x] Coverage ≥ 90% no código novo
-- [x] `check_technical_postexec.py` verde
-- [x] §7 reflete execução real
-- [x] Findings com Stage candidata
-- [x] `roadmap.md` atualizado
-- [x] ADRs em `accepted`
+### 5. Gates que VOCÊ validou (com evidência colada — sem evidência, gate não conta)
+- [ ] `make check` verde — <últimas linhas da saída + exit code>
+- [ ] Coverage ≥ 90% por arquivo tocado — <linhas relevantes do term-missing>
+- [ ] `check_technical_postexec.py` verde — <saída>
+- [ ] Checkpoints A/B/C com achados dispostos
+- [ ] Verificação end-to-end — <o que foi exercitado + resultado>
+- [ ] §7 reflete execução real
+- [ ] Findings com Stage candidata
+- [ ] `roadmap.md` atualizado
+- [ ] ADRs em `accepted`
 
-### 5. Fechamento e PR (o usuário faz manualmente, após auditoria)
-
-**Pendências no working tree** (rodar `git status` e listar aqui o que falta
-commitar — em especial o `docs/roadmap.md` editado).
-
-**Título:**
-```
-feat: stage <N.M> — <title_humano>
-```
-
-**Descrição:**
-```
-Closes #<issue>
-
-## Stage <N.M>-<slug>
-
-<resumo de 2–3 linhas do que foi implementado>
-
-Ver `docs/stages/<N.M>-<slug>/concept.md` e `technical.md`.
-
-## Checklist
-- [x] Tasks implementadas conforme technical.md
-- [x] make check verde
-- [x] Coverage ≥ 90% no código novo
-- [x] roadmap.md atualizado (status done)
-- [x] ADRs em accepted
-- [x] Auditoria de testes em todos os itens "sim"
+### 6. PR aberto
+- Link: <url do PR>
+- Corpo carregado do template `.github/PULL_REQUEST_TEMPLATE.md` (fonte
+  única): `Closes #<issue>` + resumo + checklist com **só o que você
+  validou** marcado + nota "⚠️ precisa de auditoria antes do merge".
 ```
 
-**Comandos sugeridos para o usuário rodar (após a auditoria e eventuais fixes):**
+**Comandos que você executa** (o merge NÃO):
 ```powershell
-# 1. Commit final que fecha a Stage (manual, pós-auditoria)
-git add docs/roadmap.md
-git commit -m "stage <N.M>: complete
-
-Refs #<issue>"
-
-# 2. Push e abertura do PR
+git fetch origin
+git rebase origin/develop        # resolver conflito de roadmap se houver
 git push -u origin <branch>
-gh pr create --base develop --title "..." --body "..."
-```
+gh pr create --base develop --title "feat(<escopo>): stage <N.M> — <title_humano>" --body-file <corpo>
+# <escopo> = BC/módulo da mudança (ASCII/kebab), NUNCA a Stage — CONVENTIONS §4(c)
 ```
 
-O usuário fará a auditoria, aplicará fixes se preciso, fará o commit final
-`stage <N.M>: complete`, o `git push`, abrirá o PR, vai esperar CI/aprovação e
-fará o merge. **Você não toca em nenhuma dessas etapas.**
+Depois do PR aberto, a sessão de auditoria valida e completa o checklist; o
+CI roda e **o usuário faz o merge** (salvo pedido explícito).
 
 # CONTRADIÇÕES
 
@@ -460,19 +546,25 @@ fonte mais alta na hierarquia.**
 1. Verificar pré-condições.
 2. Carregar contexto (ler docs listados).
 3. **Fase 3A**: gerar concept (perguntas se houver bifurcação material) →
-   ADRs se aplicável → commit `stage <N.M>: conceptual approved`.
+   ADRs se aplicável → **Checkpoint A** (2 subagentes, lentes distintas) →
+   commit `stage <N.M>: conceptual approved`.
 4. **Fase 3B**: gerar technical → verificação de gap (uma passada) →
-   ajustar concept SE gap material → commit `stage <N.M>: technical approved`.
-5. **Fase 4**: para cada Task: implementar → checks → registrar §7 se
-   necessário → commit `<type>(<scope>): <desc> [<N.M>/task-NN]`.
-6. **Auditoria de testes**: loop até todos os itens "sim". Testes faltantes
-   viram Tasks extras com commit dedicado.
-7. **Gate de saída**: todos os gates verdes → atualizar `roadmap.md` no working
-   tree (**sem commitar**). O commit final `stage <N.M>: complete` é manual,
-   feito pelo usuário após auditoria.
-8. **Relatório final** + recomendação de fechamento/PR.
+   ajustar concept SE gap material → **Checkpoint B** (matriz de
+   rastreabilidade) → commit `stage <N.M>: technical approved`
+   → **pausa opcional de gate humano** (se houve decisão de peso).
+5. **Fase 4**: criar arquivo de estado; para cada Task: re-hidratar →
+   implementar → checks + `make check` → registrar §7 se necessário →
+   commit `<type>(<scope>): <desc> [<N.M>/task-NN]` → atualizar estado.
+   **Checkpoint C** a cada 2–3 Tasks.
+6. **Auditoria de testes** (subagente independente + mutação real):
+   loop até todos os itens "sim". Testes faltantes viram Tasks extras
+   com commit dedicado.
+7. **Gate de saída**: todos os gates verdes **com evidência colada** →
+   commit `stage <N.M>: complete`.
+8. **Abrir o PR** (`git fetch` + rebase + `git push` + `gh pr create`) +
+   relatório final (com disposições dos checkpoints).
 
-**PARE aqui.** Não faça o commit `complete`. Não faça push. Não abra PR. Não merge.
+**PARE no merge.** Você faz push e abre o PR; o **merge é do usuário** (salvo pedido explícito). Não execute `gh pr merge`.
 ````
 
 ---
