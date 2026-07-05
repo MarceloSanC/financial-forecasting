@@ -3,9 +3,6 @@ title: Runbook — Ciclo de vida de uma Stage
 description: Procedimento passo a passo para conduzir uma Stage do roadmap, da Fase 3A (Concept) até o merge final, com prompts e comandos prontos
 when-use: Toda vez que iniciar uma nova Stage no projeto destino
 keywords: [runbook, stage, concept, technical, execucao, lifecycle]
-status: draft
-created_at: 2026-05-14
-updated_at: 2026-05-14
 runbook_id: stage-lifecycle
 triggers:
   - Stage anterior foi mergeada e a próxima está pronta para iniciar
@@ -18,6 +15,18 @@ estimated_duration: variável (Stage S: meio dia; M: 1–2 dias; nada acima de M
 > Runbook em **português** (exceção à convenção em inglês de
 > `docs/templates/runbook.md`) por carregar prompts e conteúdo do pipeline
 > em PT.
+
+> **Modo padrão de execução:** na prática o ciclo roda via as variantes de
+> sessão única —
+> [`PROMPT-stage-single-session-autonomous.md`](./PROMPT-stage-single-session-autonomous.md)
+> (autônoma; implementa → audita → auto-merge sob o ADR 0.0.0050) e
+> [`PROMPT-stage-single-session-interactive.md`](./PROMPT-stage-single-session-interactive.md)
+> (interativa, human-in-the-loop) — que colapsam as fases deste runbook numa
+> sessão única (implementa → audita; ver PIPELINE §11.1). A execução autônoma
+> fica registrada em
+> [`autonomous-run-decision-ledger.md`](./autonomous-run-decision-ledger.md).
+> Este runbook segue sendo o **procedimento canônico por fases** e a **fonte
+> única dos checklists de gate** (Passos 5/7/10) que as variantes reusam.
 
 > **Pré-requisitos de arquivo (importante).** Este runbook assume que os
 > seguintes artefatos já existem no projeto destino:
@@ -221,7 +230,7 @@ Concept pelo `adr_id` (ex.: `2.3.0001`).
 
 ### Passo 5 — Gate humano: Concept
 
-Checklist (PIPELINE §7.4):
+Checklist (**fonte única** — PIPELINE §7.4 aponta para cá):
 
 - [ ] Escopo e Fora de Escopo correspondem à Stage do Roadmap.
 - [ ] Toda decisão em §7 do concept (Decisões técnicas) tem fonte rastreável.
@@ -229,7 +238,7 @@ Checklist (PIPELINE §7.4):
 - [ ] Critérios de aceitação são objetivos e testáveis.
 - [ ] Checklist de validação interna (§12 do concept) 100% "sim".
 - [ ] ADRs identificados como necessários foram escritos (`accepted`).
-- [ ] Stage cabe em ~3–8 Tasks (`CONVENTIONS.md` §6); se cresceu além disso, dividir antes de seguir.
+- [ ] Stage cabe em ~3–12 Tasks (`CONVENTIONS.md` §6); se cresceu além disso, dividir antes de seguir.
 - [ ] Frontmatter completo; `status: done`.
 
 **Aprovado:**
@@ -364,7 +373,7 @@ Refs #$issue"
 
 ### Passo 7 — Gate humano: Technical
 
-Checklist (PIPELINE §8.4):
+Checklist (**fonte única** — PIPELINE §8.4 aponta para cá):
 
 - [ ] Cada Task cumpre os 5 critérios de Task Atômica (§4.3).
 - [ ] Caminhos batem com `LAYOUT.md`.
@@ -372,7 +381,7 @@ Checklist (PIPELINE §8.4):
 - [ ] Ordem respeita dependências.
 - [ ] Riscos identificados são razoáveis.
 - [ ] Gate de saída da Stage definido (testes + critério funcional).
-- [ ] Número de Tasks saudável (3–8; ≥ 10 = Stage grande demais).
+- [ ] Número de Tasks saudável (3–12; ≥ 14 = Stage grande demais).
 - [ ] §7 "Execução" presente com marcadores
       `<!-- BEGIN: post-execution -->` / `<!-- END: post-execution -->`
       (vazia ou contendo apenas placeholder).
@@ -561,10 +570,23 @@ Refs #$issue"
 ### Passo 10 — Gate de saída da Stage
 
 Após a última Task, executar o checklist canônico de fechamento
-(PIPELINE §9.5 — replicado aqui na íntegra):
+(**fonte única** — PIPELINE §9.5 aponta para cá).
+
+> **Verificação end-to-end (último quilômetro).** Uma Stage que produz **dado
+> ou artefato novo** consumível por fora (endpoint HTTP, arquivo em `results/`,
+> tabela) não termina ao persistir + cobrir com teste unitário: **o merge exige
+> verificação end-to-end** — a requisição real ao endpoint retorna o código
+> esperado **com o dado presente** (ou o artefato nasce no caminho esperado com
+> o conteúdo esperado). Teste unitário **não basta** — o gate é a resposta
+> real.
 
 - [ ] `make check` verde localmente.
 - [ ] Verificações funcionais do `technical.md` §3 cumpridas.
+- [ ] **Se a Stage produz dado/artefato novo consumível por fora:** foi feita
+      **verificação end-to-end** — a requisição real ao endpoint retorna o
+      código esperado **com o dado presente**, seguindo a receita do
+      `technical.md` §3 (endpoint/artefato, campos, nomes e valores esperados).
+      Teste unitário **não basta** — o gate é a resposta real.
 - [ ] **`python scripts/check_technical_postexec.py` verde** — confirma
       que, desde `stage $N.$M: technical approved`, o diff do
       `technical.md` ficou restrito à §7 (entre os marcadores
@@ -603,28 +625,27 @@ Refs #$issue"
 
 ### Passo 11 — Abrir PR contra develop
 
+A **sessão que implementou abre o PR**. **Antes do push, sincronize**
+(GIT-WORKFLOW §Etapa 4): `git fetch` + `git rebase origin/develop` — resolve
+cedo o conflito recorrente de `roadmap.md`.
+
 ```powershell
+git fetch origin
+git rebase origin/develop        # resolver conflito de roadmap se houver
 git push -u origin "feat/$issue-$N_M_kebab-$slug"
 
-gh pr create --base develop `
-  --title "feat: stage $N.$M — $title_humano" `
-  --body @"
-Closes #$issue
-
-## Stage $N.$M-$slug
-
-Ver \`docs/stages/$N.$M-$slug/concept.md\` e \`technical.md\`.
-
-## Checklist
-- [x] Tasks implementadas conforme technical.md
-- [x] make check verde
-- [x] Coverage ≥ 90% no código novo
-- [x] roadmap.md atualizado (status done)
-- [x] ADRs em accepted
-"@
+$bc = "<escopo>"   # BC/módulo da mudança (ASCII/kebab), NUNCA a Stage — CONVENTIONS §4(c)
+gh pr create --base develop --title "feat($bc): stage $N.$M — $title_humano"
+# Corpo carregado do template .github/PULL_REQUEST_TEMPLATE.md (fonte única).
+# Preencha as seções e marque no checklist SÓ o que você validou com certeza;
+# deixe o resto desmarcado + nota "⚠️ precisa de auditoria antes do merge".
+# (Sessão headless: passar --body-file com o template preenchido.)
 ```
 
-Aguardar gates do GIT-WORKFLOW (CI verde, +1 aprovação). Após aprovação:
+**O merge é do usuário** (salvo pedido explícito) — após auditoria da Stage
+(skill `stage-audit`, que aplica fixes no PR se preciso e **registra o
+veredito no PR**: comentário + "⚠️"→"✅") + CI verde e +1
+aprovação:
 
 ```powershell
 gh pr merge <num-pr> --merge --delete-branch
@@ -671,7 +692,10 @@ Get-Content docs/roadmap.md | Select-String "$N\.$M.*done"
 
 Caminhos relativos a este arquivo (`docs/RUNBOOK-STAGE-LIFECYCLE.md` no projeto destino):
 
-- Variante em sessão única (experimental): [`./PROMPT-stage-single-session.md`](./PROMPT-stage-single-session.md)
+- Variante em sessão única — **autônoma** (implementa → audita → auto-merge, ADR 0.0.0050): [`./PROMPT-stage-single-session-autonomous.md`](./PROMPT-stage-single-session-autonomous.md)
+- Variante em sessão única — **interativa** (human-in-the-loop): [`./PROMPT-stage-single-session-interactive.md`](./PROMPT-stage-single-session-interactive.md)
+- Prompt canônico de sessão única (base das duas variantes): [`./PROMPT-stage-single-session.md`](./PROMPT-stage-single-session.md)
+- Registro da execução autônoma (decision ledger): [`./autonomous-run-decision-ledger.md`](./autonomous-run-decision-ledger.md)
 - Variante em sessão única para **issue avulsa** (sem concept/technical): [`./PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md)
 - Pipeline conceitual: [`./PIPELINE.md`](./PIPELINE.md)
 - Convenções: [`./CONVENTIONS.md`](./CONVENTIONS.md)
