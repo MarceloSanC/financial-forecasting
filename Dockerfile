@@ -52,6 +52,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         make \
     && rm -rf /var/lib/apt/lists/*
 
+# GitHub CLI (gh) — repo oficial do GitHub. curl/git ja vem do bloco acima.
+RUN mkdir -p -m 755 /etc/apt/keyrings \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
 # Cache de deps: copia pyproject + src antes do resto do codigo. Quando
 # arquivos fora desses caminhos mudam (tests, docs, scripts), o install de
 # deps reusa o layer cacheado.
