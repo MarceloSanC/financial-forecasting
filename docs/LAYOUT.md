@@ -125,7 +125,7 @@ adapters  →  application  →  domain
 > **Trocar uma dependência operacional** (provedor LLM, banco, scheduler)
 > sem quebrar o port nem perder o rastro de decisão: ver
 > [`operational-evolution-policy.md`](./operational-evolution-policy.md)
-> (3 invariantes de neutralidade do port + ADR com `supersedes`).
+> (3 invariantes de neutralidade do port + ADR antigo com `superseded_by`).
 
 ---
 
