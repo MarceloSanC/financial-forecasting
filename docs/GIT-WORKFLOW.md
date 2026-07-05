@@ -3,9 +3,6 @@ title: Git Workflow Padrão
 description: Fluxo de versionamento e CI/CD prescritivo para projetos colaborativos
 when-use: Consultar antes de qualquer mudança de código. Todos os membros do time devem seguir este fluxo.
 keywords: [git, github, workflow, ci-cd, pr, code-review, deploy]
-status: done
-created_at: 2026-05-12
-updated_at: 2026-05-15
 ---
 
 # Git Workflow Padrão
@@ -28,10 +25,15 @@ Fluxo de versionamento e CI/CD para projetos colaborativos. Garante rastreabilid
 4. **GitHub CLI (`gh`) preferencial**: usar quando disponível. Fallback para `git` puro se necessário.
 5. **Sem deploy manual**: produção só via merge em `main`. Dev só via merge em `develop`. SSH em prod é proibido.
 6. **Merge commit preserva história**: NUNCA squash, NUNCA rebase no merge. Branches trazem toda sua contexto.
-7. **Uma branch em voo por vez**: não abrir branch nova enquanto a
-   anterior estiver sem PR aberto. Ver §"Uma branch em voo por vez"
-   adiante para o procedimento de PR parcial quando precisar trocar
-   de escopo no meio.
+7. **Uma branch em voo por vez**: não abrir branch nova no **mesmo
+   checkout** enquanto a anterior estiver sem PR aberto. **Exceção:**
+   quando as branches **não têm nenhuma correlação/conflito** (escopos,
+   arquivos e dependências disjuntos), trabalhe nos dois escopos ao
+   mesmo tempo em **worktrees separadas** — cada worktree é um checkout
+   independente, então não há working tree suja nem `git stash` para
+   misturar escopos (`make worktree BRANCH=...`). Ver §"Uma branch em
+   voo por vez" adiante para o procedimento de PR parcial quando
+   precisar trocar de escopo no mesmo checkout.
 
 ---
 
@@ -242,7 +244,8 @@ fundamentais #3), com **escopo obrigatório** e o identificador da
 Stage/issue na descrição, após um travessão `—`. Dois formatos:
 
 - **PR de Stage:** `<tipo>(<escopo>): stage N.M — <descrição>`
-  - ex.: `feat(billing): stage 12.10 — relatório de inadimplência`
+  - ex.: `feat(forecasting): stage 5.1 — harness walk-forward`
+  - ex.: `feat(ingestion): stage 2.2 — ingestão de market data`
 - **PR de branch (pós-Stage / issue avulsa):** `<tipo>(<escopo>): issue #<num> — <descrição>`
   - ex.: `fix(tooling): issue #53 — corrigir gate do pre-commit`
 
@@ -252,31 +255,7 @@ O número da Stage/issue vai na descrição, depois do `—`, não no escopo.
 Não há gate de CI sobre o título de PR; a conformidade é garantida no
 code review. Detalhes e exemplos: CONVENTIONS §4(c).
 
-**Corpo:**
-```markdown
-Closes #<num-issue>
-
-## O que muda
-<resumo 2–4 frases>
-
-## Como testar
-1. <passo 1>
-2. <passo 2>
-3. <resultado esperado>
-
-## Checklist
-- [ ] Testes passando
-- [ ] Coverage ≥ 90% no código alterado
-- [ ] Lint sem erros
-- [ ] Documentação atualizada (se aplicável)
-- [ ] Migrations adicionadas (se aplicável)
-
-## Screenshots
-<se for mudança visual>
-
-## Notas para reviewer
-<pontos de atenção, decisões de design>
-```
+**Corpo:** carregado do template — **fonte única** em [`.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md), preenchido automaticamente pelo GitHub ao abrir o PR (e por `gh pr create` sem `--body`). **Não duplicar aqui** (a duplicata é o que faz os dois divergirem ao longo do tempo). Seções: `Closes #`, `## Resumo`, `## Tipo`, `## Checklist (Stage)` — inclui `roadmap.md` sincronizado (Stage marcada `done`) e `make check`/coverage — e `## Como testar`.
 
 ---
 
@@ -345,8 +324,8 @@ git checkout -b feat/42-add-google-login
 
 2. **Implementar incrementalmente, em escopo mínimo:**
    - Escrever código
-   - Rodar testes: `pytest` ou `pnpm test`
-   - Rodar lint: `ruff check` / `biome check`
+   - Rodar testes: `pytest`
+   - Rodar lint: `ruff check`
    - Commitar com **escopo mínimo**: 1 commit = 1 mudança lógica
      numa única feature/módulo/BC. Se tocou em 3 escopos diferentes,
      são 3 commits. Subject e body em **português** (ver §Princípios
@@ -358,9 +337,13 @@ git checkout -b feat/42-add-google-login
 
 3. **Verificar coverage:**
    ```bash
-   pytest --cov
+   pytest --cov                                                     # global — gate mecânico fail_under=90
+   pytest <testes da mudança> --cov=<paths tocados> --cov-report=term-missing
    ```
-   Mínimo: **90%** no código novo/alterado.
+   Mínimo: **90% global** (o pytest falha sozinho via `fail_under`). Nos
+   **arquivos tocados**, conferir a cobertura focada — a média global
+   pode mascarar arquivo novo descoberto (conceito "gate míope" da
+   skill `stage-audit`).
 
 **Gates antes de sair desta etapa:**
 - [ ] Critérios de aceite da issue atendidos
@@ -372,6 +355,12 @@ git checkout -b feat/42-add-google-login
 Se qualquer falhar: **PARAR** e corrigir antes de prosseguir.
 
 ### Etapa 4: Push e abrir PR
+
+**Sincronize sempre antes do push.** `git fetch` + `git rebase origin/<base>`
+— não só quando houver carona de outro escopo. Rebasear na base **atualizada**
+mantém as implementações sequenciais e resolve **cedo** o conflito recorrente
+de `roadmap.md` (várias Stages/issues editam a mesma tabela), em vez de ele
+estourar no merge.
 
 **Antes do push, conferir base remota.** O branch precisa carregar
 apenas commits do escopo dele — nada de "carona" de outro escopo (fix
@@ -395,7 +384,7 @@ Para a Stage `feat/42-add-google-login`, `<base>` é `develop`. Para um
   próprio. Não empurre carona junto da Stage.
 
 ```bash
-git rebase origin/<base>                    # se houver carona
+git rebase origin/<base>                    # sync sempre; obrigatório se houver carona
 ```
 
 Quando o `git log origin/<base>..HEAD` mostrar só commits do escopo:
@@ -464,8 +453,8 @@ git remote prune origin
 
 Verificar:
 - [ ] Issue fechada automaticamente
-- [ ] Deploy em dev disparado (verificar em GitHub Actions)
-- [ ] Card no project board movido para "Done"
+- [ ] Deploy em dev disparado (quando o workflow de deploy existir)
+- [ ] Linha da Stage/issue no `docs/roadmap.md` coerente com o merge
 
 ---
 
@@ -727,7 +716,7 @@ Exemplo de feedback construtivo:
 - Tentativa de push direto em `main` ou `develop`
 - Tentativa de merge **sem** CI verde
 - Tentativa de merge **sem** ≥ 1 aprovação
-- Coverage < 90% em código novo
+- Coverage global < 90%, ou arquivo tocado visivelmente descoberto na cobertura focada (ver Etapa 3)
 - Branch errada para a operação (ex: `feat/x` em vez de branch de feature)
 - Squash ou rebase no merge (deve ser merge commit)
 - Working tree com mudanças não commitadas em momento crítico
