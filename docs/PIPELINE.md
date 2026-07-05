@@ -187,7 +187,7 @@ Antes da Fase 1, o repositório precisa do substrato mínimo.
 
 - `tree.txt` (gerado por `scripts/regen_tree.py`) descreve a árvore
   vertical com hexagonal interno.
-- [`LAYOUT.md`](./boilerplate/layout-files/docs/LAYOUT.md) é contrato: mapeia tipo de artefato →
+- [`LAYOUT.md`](./LAYOUT.md) é contrato: mapeia tipo de artefato →
   caminho, regras de dependência entre camadas, nomenclatura,
   política de shared kernel. Referenciado por todos os prompts da IDE e
   validado por `scripts/check_layout.py`.
@@ -324,8 +324,11 @@ Cada Task deve:
 
 Ver [`CONVENTIONS.md`](./CONVENTIONS.md) §1 para regras completas. Resumo:
 
-- **Step** `N` — sequencial, sem zero-padding.
-- **Stage** `N.M` — `M` é ordem dentro do Step `N`.
+- **Step** `N` — **numérico**, sequencial, sem zero-padding; cresce
+  indefinidamente. **Nunca letra** — única exceção não-numérica: `X`
+  (bucket de escopo órfão; migra para um Step numerado quando planejado).
+- **Stage** `N.M` — `M` é ordem dentro do Step `N`. Ordem cronológica de
+  implementação vem do `depends_on`, não do número (identidade ≠ posição).
 - **Task** `task-NN` — zero-padded.
 - **ADR** — nome do arquivo: `N_M_NNNN-<slug>.md` (ex.:
   `2_3_0001-stream-vs-batch.md`) em `docs/adr/`; `adr_id` no
@@ -336,6 +339,40 @@ Ver [`CONVENTIONS.md`](./CONVENTIONS.md) §1 para regras completas. Resumo:
   ambiguidade entre Stages.
 - **Slug** em kebab-case inglês; o número `N.M` é prefixo de pasta/branch
   e **não conta como palavra do slug**.
+
+### 4.5 Stage ou issue avulsa? (o concept cabe no corpo?)
+
+Uma issue avulsa **é** uma Stage cujo concept+technical coube no corpo da
+issue. Mesmo processo, duas escalas. A pergunta de triagem não é *"grande
+ou pequeno?"* — é **"carrega um conceito?"**.
+
+- **Issue avulsa** — quando *todas*:
+  - o *o quê* já está claro **sem definir conceito novo** (nada de
+    entidade/VO, invariante, contrato/port ou regra de negócio a modelar);
+  - o critério de aceite é objetivamente verificável em **poucas linhas**;
+  - escopo + tasks **cabem no corpo da issue**;
+  - típico `fix`/`docs`/`chore` — mas `feat` pequena também vale.
+- **Stage** (concept+technical, mesmo enxuto — 1 página basta) — quando
+  *qualquer*:
+  - para dizer o que fazer, você precisa **antes definir um conceito**
+    (modelo, invariante, contrato, regra nova);
+  - a decisão tem **trade-off que merece ADR**;
+  - toca **modelo de dados ou fronteira de BC** de forma não-óbvia;
+  - o corpo **não segura** o escopo.
+
+**Regra adaptativa (anti-burocracia):** na dúvida, **comece avulsa**. Se,
+ao escrever o corpo, você se pegar redigindo um **mini-concept** (definindo
+modelo, ponderando alternativas), **promova a Stage** — e a coloque no Step
+certo (§4.4 + [`CONVENTIONS.md`](./CONVENTIONS.md) §1: Step existente > Step
+novo > `X` se o escopo ainda é órfão). O gatilho é o *cheiro de conceito*,
+não uma contagem de linhas.
+
+> **Litmus de bolso:** *se o corpo da issue já é o concept, é issue; se o
+> corpo pede um concept, é Stage.*
+
+> **Fonte única.** Este é o critério canônico de **forma** (issue avulsa vs
+> Stage). `GIT-WORKFLOW.md` §Etapa 1 e `PROMPT-issue-single-session.md`
+> referenciam esta seção — não redefinem.
 
 ---
 
@@ -397,7 +434,7 @@ filesystem). O `roadmap.md` gerado é persistido no mesmo diretório do
 
 A IA quebra o Overview em Steps (entregas de negócio) e Stages (unidades
 atômicas), validando contra os 5 critérios de Stage Atômica (§4.2) +
-limite de 3–8 Tasks por Stage. Inclui diagrama Mermaid de dependências
+limite de 3–12 Tasks por Stage. Inclui diagrama Mermaid de dependências
 e premissas `ROADMAP-N` numeradas.
 
 **Prompt completo para copy-paste:** [`RUNBOOK-INIT-PROJECT.md`](./RUNBOOK-INIT-PROJECT.md)
@@ -449,14 +486,15 @@ relacionadas para findings/decisões pendentes, código existente sob
 demanda). Stage trivial: declara explicitamente e gera direto.
 Contradição com Overview/Roadmap/código → para e aponta.
 
-**Prompt completo para copy-paste:** [`RUNBOOK-STAGE-LIFECYCLE.md`](./boilerplate/layout-files/docs/RUNBOOK-STAGE-LIFECYCLE.md)
+**Prompt completo para copy-paste:** [`RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md)
 §Passo 4. No projeto destino, o caminho passa a ser
 `docs/RUNBOOK-STAGE-LIFECYCLE.md` (boilerplate copia o arquivo para
 `docs/`).
 
 ### 7.4 Gate humano — Concept
 
-Checklist:
+Checklist (resumo; checklist canônico completo — fonte única — em
+`RUNBOOK-STAGE-LIFECYCLE.md` Passo 5):
 
 - [ ] Escopo e Fora de Escopo correspondem à Stage do Roadmap.
 - [ ] Toda decisão em §7 (Decisões técnicas) tem fonte rastreável.
@@ -464,7 +502,7 @@ Checklist:
 - [ ] Critérios de aceitação são objetivos e testáveis.
 - [ ] Checklist de validação interna (§12 do template) 100% "sim".
 - [ ] ADRs identificados como necessários foram escritos (`accepted`).
-- [ ] Stage cabe em ~3–8 Tasks (ver `CONVENTIONS.md` §6); se cresceu
+- [ ] Stage cabe em ~3–12 Tasks (ver `CONVENTIONS.md` §6); se cresceu
       além disso, dividir antes de seguir.
 - [ ] Frontmatter completo; `status: done`.
 
@@ -499,12 +537,13 @@ A IA traduz o Concept aprovado em sequência ordenada de Tasks
 anteriores relevantes carregados; concepts anteriores caso a caso.
 Lacuna no Concept → para e sinaliza loop reverso para 3A.
 
-**Prompt completo para copy-paste:** [`RUNBOOK-STAGE-LIFECYCLE.md`](./boilerplate/layout-files/docs/RUNBOOK-STAGE-LIFECYCLE.md)
+**Prompt completo para copy-paste:** [`RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md)
 §Passo 6.
 
 ### 8.4 Gate humano — Technical
 
-Checklist:
+Checklist (resumo; checklist canônico completo — fonte única — em
+`RUNBOOK-STAGE-LIFECYCLE.md` Passo 7):
 
 - [ ] Cada Task cumpre os 5 critérios de Task Atômica (§4.3).
 - [ ] Caminhos batem com `LAYOUT.md`.
@@ -512,7 +551,7 @@ Checklist:
 - [ ] Ordem respeita dependências.
 - [ ] Riscos identificados são razoáveis.
 - [ ] Gate de saída da Stage definido (testes + critério funcional).
-- [ ] Número de Tasks saudável (3–8; ≥ 10 = Stage grande demais).
+- [ ] Número de Tasks saudável (3–12; ≥ 14 = Stage grande demais).
 - [ ] `concept.status == done` neste momento (gate da Fase 3B exige).
 - [ ] §7 "Execução" presente com marcadores `BEGIN/END: post-execution`
       vazia ou contendo apenas placeholder.
@@ -560,7 +599,7 @@ e uma recomendada (via `AskUserQuestion`), e só então registrar a
 entrada em §7 do `technical.md` (categorias `[decision]`/`[finding]`/
 `[deviation]` — ver CONVENTIONS §3.4 e template §7).
 
-**Prompt completo para copy-paste:** [`RUNBOOK-STAGE-LIFECYCLE.md`](./boilerplate/layout-files/docs/RUNBOOK-STAGE-LIFECYCLE.md)
+**Prompt completo para copy-paste:** [`RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md)
 §Passo 8.
 
 ### 9.4 Gate humano por Task
@@ -588,7 +627,10 @@ roadmap (campo `gate_mode` em "Descrição para IA"):
   conjunto ao final da Stage (antes do gate de saída §9.5). Permitido
   apenas para Stages de implementação rotineira sobre fundação já
   validada.
-Stage sem `gate_mode` declarado → `strict`. Mudar para `batch` exige
+Stage sem `gate_mode` declarado → `strict`. **Declare `gate_mode` no
+roadmap apenas quando `batch`** (ou quando o `strict` for deliberado por
+motivo digno de nota) — `strict` é o default implícito e declará-lo como
+boilerplate em todo bloco dilui o sinal. Mudar para `batch` exige
 justificativa no `concept.md` ou ADR.
 
 Aprovado → commit `<type>(<scope>): <desc> [N.M/task-NN]` → próxima
@@ -612,7 +654,7 @@ Após a última Task, executar o checklist de fechamento do
 - [ ] Findings escalados (`[finding]`) têm Stage candidata identificada.
 - [ ] Commit final `stage N.M: complete` no branch.
 - [ ] PR contra `develop` aberto e mergeado, seguindo os
-      [gates de PR de GIT-WORKFLOW](./boilerplate/layout-files/docs/GIT-WORKFLOW.md#gates-de-pr-fonte-única)
+      [gates de PR de GIT-WORKFLOW](./GIT-WORKFLOW.md#gates-de-pr-fonte-única)
       (CI verde, coverage, aprovações, merge commit).
 - [ ] `roadmap.md` atualizado: Stage marcada `done`, `updated_at` e
       `last_reviewed_at` no **mesmo merge da Stage** (preferível) ou em
@@ -632,7 +674,7 @@ Após a última Task, executar o checklist de fechamento do
 Substrato de versionamento e gates. Sem máquina de estado paralela.
 
 **Fonte única para PR, CI, coverage, branch protection, deploy:**
-[`GIT-WORKFLOW.md`](./boilerplate/layout-files/docs/GIT-WORKFLOW.md). Esta
+[`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md). Esta
 seção descreve apenas o que é **específico do pipeline da Stage**:
 modelo issue+branch, sequência de commits dentro do branch, classes de
 commit. Regras de **nomenclatura, frontmatter, status e versionamento
@@ -726,24 +768,57 @@ formato e nomenclatura — `CONVENTIONS.md` §4.
 
 ## 11. Condução de sessões
 
-Todas as fases rodam em Chat IDE (ver §1.2). Esta seção cobre quando
-abrir nova sessão e padrões de condução.
+Todas as fases rodam em Chat IDE (ver §1.2). Esta seção define o fluxo
+padrão de sessões e os padrões de condução.
 
-### 11.1 Quando abrir nova sessão
+### 11.1 Fluxo padrão — implementa → audita (duas sessões)
 
-| Situação | Nova sessão? | Motivo |
-|---|---|---|
-| Início do projeto (Fase 1) | Sim, nova | Sessão limpa, sem viés. |
-| Iniciar Fase 2 após Fase 1 | Pode continuar | Contexto vivo é útil. |
-| Iniciar nova Stage (Fase 3A) | Sim, nova | Cada Stage é contexto fechado. |
-| Continuar Fase 3A/3B da mesma Stage no mesmo dia | Não, continua | Contexto vivo é útil. |
-| Voltar a uma Stage após dias | Sim, nova | Memória expira; recarregar artefatos. |
-| Fase 4 (execução) | 1 sessão por Stage (não por Task) | Overhead de re-iniciar contexto a cada Task é alto. |
-| Retorno de fase (loop reverso) | Sim, nova, anexando ambos artefatos | Forçar revisão limpa. |
+O modo padrão de execução de uma Stage/issue avulsa é o de **duas
+sessões** (validado na prática como o mais eficiente). Prompts canônicos:
+para Stage, [`PROMPT-stage-single-session-autonomous.md`](./PROMPT-stage-single-session-autonomous.md)
+(execução autônoma) e [`PROMPT-stage-single-session-interactive.md`](./PROMPT-stage-single-session-interactive.md)
+(execução interativa, gate humano a cada transição); para issue avulsa,
+[`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md).
 
-**Regra de bolso:** sessão com >40 turnos **ou** mudança de fase →
-abrir nova. Permitir compactação dentro da sessão antes de abrir nova
-quando faz sentido.
+1. **Sessão de implementação** — colapsa 3A → 3B → 4 em sessão única:
+   - abre com **perguntas até saturar** (bifurcações materiais via
+     `AskUserQuestion`; na variante autônoma, as decisões são registradas
+     em [`autonomous-run-decision-ledger.md`](./autonomous-run-decision-ledger.md)
+     em vez de interromper);
+   - produz `concept.md` + `technical.md`; **pausa opcional de gate
+     humano** sobre os dois artefatos antes da Fase 4 — o fluxo ideal
+     quando houve decisão de peso (o prompt oferece a pausa);
+   - executa as Tasks (1 commit cada), roda a auditoria de testes e o
+     gate de saída (RUNBOOK Passo 10);
+   - **abre o PR em estado "falta revisar"**: marca no checklist só o
+     que validou com certeza e sinaliza "⚠️ precisa de auditoria antes
+     do merge".
+2. **Sessão de auditoria** — sessão nova, contexto limpo (anti-viés):
+   - roda a skill `stage-audit`/`issue-audit` (julgamento read-only →
+     fase de aplicação);
+   - corrige o que precisar na própria branch, registra melhorias
+     futuras como issues, atualiza corpo e checklist do PR;
+   - **registra a auditoria no PR** — comentário com o veredito + a
+     sinalização "⚠️" trocada por "✅ auditoria realizada" (procedimento
+     completo na skill de auditoria);
+   - **o merge é do usuário** (salvo pedido explícito).
+
+O fluxo multi-sessão por fase (3A/3B/4 em sessões separadas, seguindo o
+RUNBOOK passo a passo com gate textual em cada transição — a variante
+interativa) permanece o **procedimento de referência** — e a escolha
+certa para Stage com decisão arquitetural pesada ou primeiro contato com
+um BC novo (critérios nos cabeçalhos dos PROMPT-stage).
+
+Casos que **sempre** pedem sessão nova, em qualquer modo:
+
+| Situação | Motivo |
+|---|---|
+| Auditoria (pós-implementação) | Contexto limpo é o anti-viés do julgamento. |
+| Voltar a uma Stage parada há dias | Memória expira; recarregar artefatos. |
+| Retorno de fase pesado (loop reverso §12.2) | Forçar revisão limpa com o artefato a montante. |
+
+**Regra de bolso:** mudança de papel (implementar ↔ auditar ↔
+replanejar) → sessão nova; dentro do mesmo papel, compactar e seguir.
 
 ### 11.2 Padrões de condução
 
@@ -856,10 +931,11 @@ Diretório `.claude/skills/<nome-kebab>/SKILL.md`. Cada skill é uma
    independente da descoberta automática.
 
 **Lifecycle.** Skills criadas durante a execução de uma Stage nascem com
-`metadata.status: draft`. Promoção a `accepted` requer que a skill seja
-referenciada em `skills_hint` de ≥ 2 Stages independentes. Skills com
-decisões imutáveis do projeto (ex.: regras de import do hexagonal)
-podem nascer `accepted`.
+`metadata.status: draft`. Promoção a `accepted` é decisão do usuário
+quando a skill se provou em uso real (tipicamente ≥ 2 usos/Stages) — o
+`status` é **informativo do grau de validação**, não um gate mecânico.
+Skills com decisões imutáveis do projeto (ex.: regras de import do
+hexagonal) podem nascer `accepted`.
 
 **Escopo.** Regras locais a um bounded context são modeladas como skill
 com `metadata.applies_when.bounded_context == X`, não como nova
@@ -875,6 +951,15 @@ categoria de doc.
 | `ddd-tactical-patterns` | Stage cuja `camada_alvo` é `domain` | Entity vs Value Object, agregados, invariantes | draft |
 | `composition-root` | Stage que adiciona wiring | Onde injetar, evitar singletons | draft |
 | `task-ordering-hex` | Fase 3B em Stage de fatia vertical (camada_alvo cobre ≥ 2 camadas em 1 BC) | Ordem default das Tasks: TDD inside-out (domain → application com fakes → adapters → bootstrap); exceções para fundação, adapter-only, bug fix, migração | draft |
+| `git-versioning-pointer` | Antes de qualquer operação git/GitHub | Navegação: aponta o trecho de GIT-WORKFLOW/CONVENTIONS que governa a operação + CHECKs e GOTCHAs | accepted |
+| `stage-audit` | Sessão de auditoria de Stage, pré-PR/merge (§11.1) | Julgamento read-only + fase de aplicação; conceitos de falso verde | accepted |
+| `issue-audit` | Sessão de auditoria de issue avulsa, pré-PR/merge | Irmã da stage-audit para issues (critério↔evidência; disciplina de escopo) | draft |
+| `skill-builder` | Criar/melhorar uma skill | Codificar de execução real (não de imaginação); loop recursivo de melhoria | draft |
+
+> Além destas, o catálogo inclui as skills de conhecimento de domínio ML
+> (`dmls-ch01`…`dmls-ch06` — fundamentos de ML em produção), carregadas por
+> discovery quando o contexto casa. Total atual: 18 skills em
+> `.claude/skills/`.
 
 ### Formato de cada skill (formato β)
 
@@ -908,6 +993,7 @@ contexto atual.>
 | `stage_kind` | string | `vertical-slice` (≥ 2 camadas em 1 BC), `mono-layer` (1 camada), `any` |
 | `bounded_context` | string | nome do BC (`payments`, `inventory`, …) ou `any` |
 | `fase` | lista YAML | `1`, `2`, `3A`, `3B`, `4` ou `any` |
+| `invoked_at` | lista YAML | opcional; momento de invocação de skill de **procedimento**: `pre-pr`, `pre-merge`, `stage-review`, `issue-review`, `epic-review` |
 
 - **Sentinela `any`:** declara explicitamente que a skill carrega independente
   do valor desse eixo. Use lista com `any` único (`[any]`) ou string `any` quando
@@ -936,11 +1022,11 @@ Pontos a confirmar com prática em projeto real:
 
 1. **Política de retry em Fase 4** (§12.5). Sugestão de 3 tentativas é
    inicial; validar.
-2. **Conteúdo definitivo das skills canônicas.** §13 lista nomes e
-   conteúdo principal; o material de cada skill ainda será escrito.
-3. **Formato de `scripts/check_layout.py`.** `LAYOUT.md` é prosa
-   estruturada. Validação por script pode exigir arquivo paralelo
-   (`layout.lock.yaml`) ou parser do MD.
+2. ~~Conteúdo definitivo das skills canônicas.~~ **Resolvido** — as
+   skills vivem em `.claude/skills/` (18 no momento); catálogo em §13.
+3. ~~Formato de `scripts/check_layout.py`.~~ **Resolvido** — script
+   implementado e rodando em `make check` (alvo `layout-check`); contratos
+   import-linter (`lint-imports`) complementam.
 4. **Multi-projeto / monorepo.** Pipeline assume um repositório por
    projeto.
 5. **Onboarding tardio.** Hipótese: leitura sequencial de `overview.md`
@@ -982,7 +1068,7 @@ do roadmap; cópia seletiva de boilerplate.
 
 ### Para cada Stage do roadmap
 
-→ Seguir [`RUNBOOK-STAGE-LIFECYCLE.md`](./boilerplate/layout-files/docs/RUNBOOK-STAGE-LIFECYCLE.md).
+→ Seguir [`RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md).
 
 Cobre: criar issue + branch `feat/<issue>-<N-M>-<slug>`; Fase 3A
 (Concept) com gate; Fase 3B (Technical) com gate; Fase 4 (Execução
