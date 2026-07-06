@@ -8,6 +8,27 @@ nomes, frontmatter, status, branches, commits, versionamento e tamanhos.
 
 ---
 
+## 0. Mapa de autoridade (fonte única por classe de regra)
+
+Cada classe de regra tem **um doc dono** — a definição completa vive só
+nele; os demais docs apenas apontam. Encontrou eco extenso divergente?
+O dono vence; corrija o eco.
+
+| Classe de regra | Doc dono (editar LÁ) |
+|---|---|
+| Nomenclatura, frontmatter, status, formato de branch/commit/título de PR, tamanhos | `CONVENTIONS.md` (este doc) |
+| Fluxo git operacional, gates de PR, hotfix/release, comportamento bloqueante | [`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) |
+| Hierarquia Step/Stage/Task, atomicidade, fases e gates conceituais, litmus issue×Stage, exceções | [`PIPELINE.md`](./PIPELINE.md) |
+| Checklists operacionais de gate (concept / technical / saída da Stage) | [`RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md) Passos 5/7/10 |
+| Arquitetura e regras de import | [`LAYOUT.md`](./LAYOUT.md) |
+| Procedimento de auditoria e falsos verdes | skills `stage-audit` / `issue-audit` |
+
+**Regra do eco:** citar uma regra fora do doc dono é permitido como
+**1 frase + ponteiro** (regra acionável no ponto de uso); o texto
+normativo completo vive só na casa dona.
+
+---
+
 ## 1. Nomenclatura
 
 ### Arquivos e pastas
@@ -50,8 +71,25 @@ Comentários e docstrings permanecem em português (conforme §4 de commits/PR).
 
 ### Numeração
 
-- **Step:** sequencial, sem zero-padding. Não recicla. Step 4 cancelado
-  fica vago — Step 5 continua sendo Step 5.
+- **Step:** identificador **numérico**, sequencial, sem zero-padding. Não
+  recicla — Step 4 cancelado fica vago, Step 5 continua sendo Step 5.
+  **Cresce indefinidamente.** Cada Step tem um **escopo temático claro**
+  (ex.: "ingestão medalhão bronze", "feature engineering", "harness
+  walk-forward", "serving de previsões quantílicas"; ver
+  [`PIPELINE.md`](./PIPELINE.md) §4.1). **Nunca use letra** para um Step —
+  não existe "Step F" para feature engineering, é o Step 3. A **única**
+  exceção é `X`.
+- **`X` — bucket de escopo órfão/futuro.** Trabalho **já definido** como
+  Stage futura, mas cujo **Step-lar ainda não foi criado/planejado**, fica
+  em stand-by sob `X` (ex.: `X.4-quantile-serving`). É o estado
+  **pré-identidade**. **Migração obrigatória:** quando o Step que comporta o
+  escopo for planejado, o item migra para lá **com o número desse Step** (se
+  o escopo se manteve) — ou se desdobra em mais Stages, podendo virar um Step
+  inteiro. Ganhar um número = achou seu Step. `X` é rótulo fixo, nunca
+  renumerado (número = identidade, não posição).
+- **Ordem de implementação = `depends_on`, não o número.** Como o número é
+  identidade e não posição, a sequência cronológica real de implementação é
+  dada pelo `depends_on` de cada Stage/issue — não pela ordem dos números.
 - **Stage:** `N.M` dentro do Step `N`. Não recicla.
 - **Task:** `task-NN` dentro do `technical.md` da Stage, zero-padded
   (`task-01`, `task-02`).
@@ -230,8 +268,9 @@ original aprovado permanece no git. Regras durante a janela de execução:
   `AskUserQuestion` ou equivalente), e só então registrar a entrada.
 - Entradas seguem três categorias: `[decision]` (decisão tomada durante
   a execução), `[finding]` (gap a tratar em próxima Stage), `[deviation]`
-  (ajuste pequeno aplicado em relação ao plano). Formato detalhado no
-  template `stage-technical.md` §7.
+  (ajuste pequeno aplicado em relação ao plano). **Tags sempre em inglês**
+  (são identificadores, como código — §1); o corpo da entrada é em PT.
+  Formato detalhado no template `stage-technical.md` §7.
 - **Durante a execução** (Stage não mergeada), mudar algo em §1–§6 do
   `technical.md` após `done` exige regressão para `draft` (§3.2). Nunca
   editar §1–§6 silenciosamente nessa janela. Pós-merge a restrição não
@@ -306,7 +345,7 @@ lifecycle expresso por `metadata.status`).
 **Uma Stage = uma issue + um branch.** O branch carrega todos os
 commits da Stage, do `conceptual draft` ao `complete`, e abre PR contra
 `develop` quando a Stage termina (premissa
-[`GIT-WORKFLOW.md`](./boilerplate/layout-files/docs/GIT-WORKFLOW.md)).
+[`GIT-WORKFLOW.md`](./GIT-WORKFLOW.md)).
 **Não há sub-PRs internos da Stage.**
 
 Formato: `<tipo>/<num-issue>-<N-M>-<slug>` — `N.M` em kebab (Stage 2.3
@@ -347,7 +386,9 @@ Há **duas classes** de mensagens de commit:
 Refs #<num-issue>
 ```
 
-Tipos: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`.
+Tipos: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`,
+`style`, `build`, `ci` (lista espelhada em `ALLOWED_TYPES` de
+`scripts/check_commit_msg.py` — o hook é o gate; mudou lá, atualizar aqui).
 
 **Escopo mínimo (regra de ouro):** o `<escopo>` é o **menor recorte
 que ainda faz sentido sozinho** — feature/módulo/bounded context da
@@ -443,6 +484,23 @@ Regras do `[N.M/--]`:
    mensagens reservadas de §4(b) (`stage N.M: ... approved`, etc.).
 5. **Frequência saudável: 0–2 por Stage.** Três ou mais é sinal de
    Stage mal recortada — escopo escapou do `technical.md`.
+
+##### Tag de issue avulsa — `[#<num>/task-NN]` e `[#<num>/--]`
+
+Commits de **issue avulsa** (sem Stage; fluxo operacional em
+[`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md)) usam a
+mesma mecânica de tag, trocando `N.M` pelo número da issue prefixado com `#`:
+
+- Sub-task da issue: `<tipo>(<escopo>): <descrição> [#68/task-01]`
+- Off-task no branch da issue: `[#68/--]` — mesmas regras do `[N.M/--]`
+  (tipo/escopo/`Refs` obrigatórios + justificativa no body)
+- Sufixo `-extra` para sub-task de teste nascida da auditoria de testes
+  (vale nas duas formas): `test(<escopo>): cobrir <X> [#68/task-03-extra]`
+  ou `[N.M/task-NN-extra]`
+
+A tag de issue avulsa e o sufixo `-extra` viajam na **descrição livre** do
+subject (UTF-8), então o hook `commit-msg` não os rejeita; a conformidade com
+o formato é garantida no code review.
 
 #### (b) Commits reservados de gate — texto fixo, não seguem Conventional Commits
 
@@ -543,9 +601,22 @@ Docs vivem no git, então o histórico é o versionamento. Mas:
   **manual** pelo dev que detectar a mudança.
 - **§7 do `technical.md` (post-execution) é exceção:** editável após
   `status: done` sem regressão nem arquivamento. Ver §3.4.
-- **ADRs nunca são editados após `accepted`.** Se a decisão muda, criar
-  novo ADR com `superseded_by` apontando para o antigo, e o antigo passa
-  a `superseded`.
+- **O *corpo da decisão* de um ADR `accepted` não é editado destrutivamente.**
+  O corpo (Context / Decision / Alternatives / Consequences) é registro
+  histórico — preserva o "porquê decidimos X no tempo T". Reescrevê-lo apaga
+  história e é **proibido**. Há **duas** formas **não-destrutivas** de manter um
+  ADR honesto sem reescrever o corpo:
+  - **A decisão mudou** → criar **novo ADR** com `superseded_by` apontando para o
+    antigo; o antigo passa a `superseded`.
+  - **A decisão se mantém, mas uma premissa/fato declarado se revelou incorreto**
+    → adicionar um **banner de errata** *append-only* no topo do ADR (logo após o
+    título), no formato
+    `> ⚠️ **Errata (YYYY-MM-DD):** <fato corrigido> — ver <auditoria/ADR>`,
+    **sem editar o corpo**. A errata **não** muda `status` (a decisão continua
+    válida) e bumpa apenas `updated_at`. Serve para **impedir que um leitor/decisão
+    futura tome a premissa errada como verdade** — preservando o registro original
+    (marcado), não o apagando. Se a premissa corrigida **derruba** a decisão,
+    então não é errata: é `superseded` (caso acima).
 - **Roadmap pode ser editado livremente**, mas `updated_at` e
   `last_reviewed_at` devem refletir a realidade.
 - **Lockfile de dependências (`uv.lock`):** **versionado** por padrão
@@ -565,11 +636,11 @@ Docs vivem no git, então o histórico é o versionamento. Mas:
 | Artefato | Tamanho saudável | Sinal de alarme |
 |---|---|---|
 | `overview.md` | 1–3 páginas | >5 páginas: ninguém lê. |
-| `roadmap.md` | 1 página + tabela de Steps + tabela de Stages | Scroll infinito = Stages pequenas demais. |
+| `roadmap.md` | 1 página + tabelas com células de **1–2 linhas + ponteiro** | Célula narrativa (história/supersessão inline): mover para ADR/stage docs/§Histórico — o histórico tem casa própria. |
 | `concept.md` (por Stage) | 2–5 páginas | >8 páginas: Stage grande demais, dividir. |
 | `technical.md` (por Stage) | 3–10 páginas | >15 páginas: Stage grande demais. |
-| Stages por Step | 1–5 | >7: quebrar o Step. |
-| Tasks por Stage | 3–8 | ≥ 10: quebrar a Stage. |
+| Stages por Step | 1–8 | ≥ 10: reexaminar o recorte — Step temático coeso pode crescer por acreção, mas conferir se não virou guarda-chuva de temas distintos. |
+| Tasks por Stage | 3–12 | ≥ 14: quebrar a Stage. |
 | ADR | 1–2 páginas | >3 páginas: decisão grande demais, dividir em ADRs menores. |
 
 Faixas são guia, não barreira rígida. Ultrapassar é sinal para

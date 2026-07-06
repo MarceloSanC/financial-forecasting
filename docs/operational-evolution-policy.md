@@ -4,8 +4,8 @@ description: Critérios e processo para substituir dependências operacionais de
 when-use: Antes de iniciar uma Stage que substitui uma dependência operacional (troca de provedor LLM, banco, scheduler); ao avaliar se uma dependência precisa ser blindada via port; ao revisar se um ADR de componente substituível está desatualizado
 keywords: [política, dependências, substituição, evolução, port, adr, runbook, llm, scheduler, database]
 status: accepted
-created_at: YYYY-MM-DD
-updated_at: YYYY-MM-DD
+created_at: 2026-06-28
+updated_at: 2026-07-05
 ---
 
 # Política de Evolução Operacional — Dependências Substituíveis
@@ -98,13 +98,13 @@ o novo adapter. A violação estará na camada `application/` ou `adapters/`, nu
 ## 5. Como documentar a decisão (ADR)
 
 Toda substituição de dependência operacional exige um **novo ADR** (não editar o anterior).
-O ADR anterior recebe `superseded_by: N.M.NNNN` e o novo é criado com:
+O **ADR antigo** recebe `superseded_by: N.M.NNNN` no frontmatter (campo canônico —
+[docs/CONVENTIONS.md](CONVENTIONS.md) §5); o **novo** cita o antigo no `Context` e é criado com:
 
 ```yaml
 ---
 title: ADR N.M.NNNN — <Substituir X por Y para Z>
 status: accepted          # ou proposed, se ainda em análise
-supersedes: "N.M.NNNN"    # id do ADR substituído (se houver)
 ---
 ```
 

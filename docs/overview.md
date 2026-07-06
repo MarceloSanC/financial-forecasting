@@ -107,15 +107,15 @@ A disciplina anti-p-hacking é estrutural: **pré-registro imutável hasheado** 
 
 ## 8. Riscos conhecidos
 
-| Risco | Impacto | Mitigação inicial |
-|---|---|---|
-| Re-treino não reproduz evidência anterior (nova stack numérica) | médio | Equivalência por **tolerância declarada** (ASSUM-4), não bit-identical; deltas documentados |
-| Libs de nicho frágeis (DM, Christoffersen, Kupiec) | médio | Wrapper próprio atrás de porta + **oráculo R** + pin de versão + ADR de proveniência |
-| Conformal frágil em série temporal (permutabilidade violada) | médio | Reportar cobertura **empírica** (não "garantida") + 4 invariantes (calib set dedicado, por fold/horizonte, embargo, linguagem) |
-| `pandas-ta` com fonte apagada / sem manutenção | alto | Migrar para `pandas-ta-classic`/TA-Lib + **validar cada indicador contra o paper** + teste de leakage |
-| Escopo inflar (multi-asset, cripto, intraday, trading) | alto | Gates de escopo; multi-asset só **ready**; cripto/microestrutura como trabalho futuro |
-| Custo de re-treino (GPU) | médio | Cohort pequeno AAPL; sweeps exploratórios separados do confirmatório |
-| Métrica reimplementada divergir do correto sem detecção | alto | Contratos por unidade + oráculo + gate de degeneração separado do guardrail |
+| Cód | Risco | Prob | Impacto | Mitigação inicial |
+|---|---|---|---|---|
+| **R-REPRO-1** | Re-treino não reproduz evidência anterior (nova stack numérica) | Média | médio | Equivalência por **tolerância declarada** (ASSUM-4), não bit-identical; deltas documentados |
+| **R-LIBS-1** | Libs de nicho frágeis (DM, Christoffersen, Kupiec) | Média | médio | Wrapper próprio atrás de porta + **oráculo R** + pin de versão + ADR de proveniência |
+| **R-CONFORMAL-1** | Conformal frágil em série temporal (permutabilidade violada) | Alta | médio | Reportar cobertura **empírica** (não "garantida") + 4 invariantes (calib set dedicado, por fold/horizonte, embargo, linguagem) |
+| **R-SUPPLY-1** | `pandas-ta` com fonte apagada / sem manutenção | Alta | alto | Migrar para `pandas-ta-classic`/TA-Lib + **validar cada indicador contra o paper** + teste de leakage |
+| **R-SCOPE-1** | Escopo inflar (multi-asset, cripto, intraday, trading) | Média | alto | Gates de escopo; multi-asset só **ready**; cripto/microestrutura como trabalho futuro |
+| **R-COST-1** | Custo de re-treino (GPU) | Baixa | médio | Cohort pequeno AAPL; sweeps exploratórios separados do confirmatório |
+| **R-METRIC-1** | Métrica reimplementada divergir do correto sem detecção | Média | alto | Contratos por unidade + oráculo + gate de degeneração separado do guardrail |
 
 ## 9. Glossário
 

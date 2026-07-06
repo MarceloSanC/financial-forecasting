@@ -36,9 +36,22 @@ seção correspondente. Cada uma traz três blocos:
   Validação programática em CI / local: `make docs-check` roda `scripts/check_stage_issue.py` (best-effort com `gh`; lê `issue_id` do frontmatter do `technical.md` de cada Stage).
 - **GOTCHA:** sem issue no backlog, **a Stage nem começa**. Não criar branch, não criar `docs/stages/N.M-<slug>/`, não rodar prompt da Fase 3A. Issue-first é Princípio fundamental #1 do `GIT-WORKFLOW.md`.
 
+## 🎫 Criar issue (`gh issue create`)
+
+- **LER:** `docs/GIT-WORKFLOW.md` §Etapa 1 (Criar issue) + §Princípios fundamentais #1 (Issue-first)
+- **CHECK (antes de criar):**
+  ```bash
+  gh issue list --search "<termos do escopo>" --state open    # já existe issue igual?
+  gh issue list --search "<termos do escopo>" --state all     # inclua closed se suspeitar que já foi resolvido
+  ```
+  Se já houver issue com o **mesmo escopo** — ou cujo escopo **comporta** este trabalho — reaproveitar em vez de abrir card concorrente. Só `gh issue create` quando nenhuma encaixa.
+- **GOTCHA:** issue duplicada fragmenta a rastreabilidade (`Refs #`/`Closes #` apontando pra cards concorrentes pelo mesmo trabalho). Buscar no backlog é **pré-requisito** do `gh issue create`. Pós-Stage exige **nova** issue (não a da Stage), mas mesmo aí cheque antes se já não existe uma cobrindo o bug/chore.
+- **GOTCHA (melhoria derivada de épico/sub-issue):** ao registrar uma melhoria/correção que **nasce auditando outra issue** (item de épico, follow-up de uma sub-issue ainda aberta), antes de abrir card de refactor/follow-up confira se já há **sub-issue aberta cujo escopo comporta** a nota — e **anexe nela** (ex.: dobrar a observação no ponto de toque correspondente) em vez de abrir issue concorrente quase-idêntica. Issue derivada de escopo sobreposto é a forma mais comum de fragmentação porque parece "nova" no calor da auditoria.
+- **GOTCHA (linha no roadmap):** `gh issue create` **não termina** sem a linha correspondente na **tabela do `docs/roadmap.md`** (BC, camada-alvo, status, depende-de). Criar a issue e registrar a linha são **um ato só** — issue criada sem a linha deixa a execução começar com pré-condição furada (vira deviation na sessão seguinte).
+
 ## 🌿 `git checkout -b` (criar branch)
 
-- **LER:** `docs/GIT-WORKFLOW.md` §Branches (incluindo "Revisões pós-Stage") + §"Uma branch em voo por vez"; `docs/CONVENTIONS.md` §1 (slug em EN) + §4 (formato de branch de Stage e pós-Stage)
+- **LER:** `docs/GIT-WORKFLOW.md` §Branches (incluindo "Revisões pós-Stage") + §"Uma branch em voo por vez" (inclui §Trabalho paralelo legítimo: `git worktree` — 2ª branch só em worktree separada via `make worktree BRANCH=...` / `scripts/worktree-new.py` quando escopos disjuntos); `docs/CONVENTIONS.md` §1 (slug em EN) + §4 (formato de branch de Stage e pós-Stage)
 - **CHECK:**
   ```bash
   git branch --show-current                        # se != develop/main, voltar
@@ -66,14 +79,16 @@ seção correspondente. Cada uma traz três blocos:
   ```bash
   git fetch --prune origin
   git log --oneline origin/<base>..HEAD        # <base> = develop (feat/fix) ou main (hotfix)
-  git rebase origin/<base>                     # se houver carona de outro escopo
+  git rebase origin/<base>                     # sync sempre na base atualizada (não só se houver carona)
   ```
-- **GOTCHA:** branch solo por > 1 sessão costuma ter commit de outro escopo perdido. Sempre cheque antes do primeiro push. Push direto em `main`/`develop` é bloqueado por branch protection.
+- **GOTCHA (carona):** branch solo por > 1 sessão costuma ter commit de outro escopo perdido. Sempre cheque antes do primeiro push. Push direto em `main`/`develop` é bloqueado por branch protection.
+- **GOTCHA (sync/roadmap):** rebase na base **atualizada** antes de **todo** push (não só quando há carona) — mantém as implementações sequenciais e resolve **cedo** o conflito recorrente de `roadmap.md` (várias Stages/issues editam a mesma tabela), em vez de estourar no merge.
 
 ## 🚀 `gh pr create`
 
 - **LER:** `docs/GIT-WORKFLOW.md` §Pull Requests + §Etapa 4 + §"Uma branch em voo por vez" (procedimento PR parcial)
 - **CHECK:** Etapa 3 fechada (testes verdes, coverage ≥ 90%, lint, working tree limpo) **E** Etapa 4 fechada (`git log origin/<base>..HEAD` sem carona).
+- **GOTCHA (título):** formato obrigatório `<tipo>(<escopo>): issue #<num> — <descrição>` (branch avulsa/pós-Stage) ou `<tipo>(<escopo>): stage N.M — <descrição>` (Stage). O identificador `issue #<num> —` / `stage N.M —` é o que mais escapa — **não montar de memória nem espelhar o título da issue**. Escopo = BC, nunca a Stage. **Sem validação programática** (o hook `commit-msg` cobre só commit, não título de PR), então só o code review pega — confira CONVENTIONS §4(c) ANTES do `gh pr create`.
 - **GOTCHA:** PR parcial em draft **só sob pedido explícito do usuário**. Título prefixado `... (parcial — checkpoint)` + flag `--draft`.
 
 ## 🔀 `gh pr merge`
@@ -111,6 +126,7 @@ seção correspondente. Cada uma traz três blocos:
 | Seção §7 post-execution do technical.md | `CONVENTIONS.md` §3.4 |
 | Gates de PR | `GIT-WORKFLOW.md` §Gates de PR |
 | PR parcial em draft (procedimento) | `GIT-WORKFLOW.md` §"Uma branch em voo por vez" |
+| Worktrees paralelas (2ª branch, escopos disjuntos) | `GIT-WORKFLOW.md` §"Uma branch em voo por vez" → §Trabalho paralelo legítimo: `git worktree`; `make worktree BRANCH=...` (`scripts/worktree-new.py` / `worktree-rm.py`) |
 | Hotfix | `GIT-WORKFLOW.md` §Hotfix |
 | Release | `GIT-WORKFLOW.md` §Release |
 | Comportamento bloqueante | `GIT-WORKFLOW.md` §Comportamento bloqueante |
@@ -118,24 +134,14 @@ seção correspondente. Cada uma traz três blocos:
 | Regex do hook commit-msg | `scripts/check_commit_msg.py` |
 | Validador "Stage exige issue" | `scripts/check_stage_issue.py` (em `make docs-check`) |
 | Iniciar Stage (passo 1: issue) | `RUNBOOK-STAGE-LIFECYCLE.md` Passo 1 + `CONVENTIONS.md` §3 |
-
----
-
-## Gotchas conhecidos (incidente erp-intel Stage 1.1, 2026-05-19)
-
-Casos reais que os docs **já cobriam**, mas o agente não consultou:
-
-1. **Dois `stage 1.1: conceptual approved` em sequência** sem `chore(concept): revert to draft — …` entre eles. → Cheque `git log --grep` antes de re-aprovar.
-2. **`fix: sync boilerplate fixes`** — commit sem escopo, sem `Refs #`, entrou como carona. → Hook agora rejeita; antes do push, cheque `git log origin/<base>..HEAD`.
-3. **Tag `[1.1/post-done]` inventada.** → Só `[N.M/task-NN]` e `[N.M/--]` são válidos no contrato.
-4. **`[1.1/post-done]` sem `stage 1.1: complete` anterior.** → Pós-`complete` é fora do branch da Stage; abrir Stage nova ou hotfix.
-5. **Subject em inglês por reflexo.** → Regra deste template: PT em commit/PR/issue, EN só em branch.
-6. **Iniciar Stage sem issue no backlog.** → CONVENTIONS §3 declara como bloqueante. `make docs-check` (via `check_stage_issue.py`) detecta `technical.md` cujo `issue_id` não existe no GitHub. Em local sem `gh` autenticado o script só avisa; em CI bloqueia.
+| Buscar issue duplicada antes de criar | `GIT-WORKFLOW.md` §Etapa 1 + esta skill §Criar issue |
 
 ---
 
 ## Loop recursivo
 
-Quando esta skill falhar em prevenir um novo desvio, adicione o caso
-em **Gotchas conhecidos** acima e cite o commit/PR que disparou — é o
-ciclo de aperto do `skill-builder`.
+Quando esta skill falhar em prevenir um novo desvio, **fortaleça o GOTCHA
+inline da operação** correspondente — coloque a regra acionável no ponto de
+uso (onde ela é lida no momento da ação). Se nenhuma seção cobre o caso, crie
+o GOTCHA na operação certa. **Não** acumular um histórico de incidentes: o que
+reforça cumprimento é a regra inline, não o relato do erro passado.

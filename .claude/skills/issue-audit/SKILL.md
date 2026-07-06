@@ -1,6 +1,6 @@
 ---
 name: issue-audit
-description: Auditoria SEGURA (read-only) de uma issue (ou grupo de issues) antes do PR/merge — confere se o que foi implementado bate com o CORPO da issue no GitHub (## Escopo + ## Critério de aceitação), se os gates passam, e classifica achados POR ESCOPO (dentro da própria issue, issue separada, ou não-issue). Invocar quando o usuário pedir "auditar issue #N", "auditoria da issue", "valida issue", "issue X está pronta pra PR?", "tem gap na issue?", "essas issues entregaram o que prometeram?", "audita o épico", "confere se a #N fechou de verdade", ou ao revisar uma issue de outra sessão/branch. Aceita uma issue ou uma lista. Triggers em PT. Skill de PROCEDIMENTO + GUARDRAIL — codifica o varredor mecânico (gh issue view, scripts de gate, cruzamento critério↔evidência) e protege contra dois falsos verdes específicos de issue: (a) marcar critério ✅ sem evidência, e (b) empurrar refino DENTRO do escopo para "melhoria futura" só porque a issue parece fechada. Lean toward triggering — custo de auditar é baixo, custo de fechar issue com gap silencioso (ou de fragmentar escopo em cards concorrentes) é alto. A SAÍDA não é só relatório de gate — sempre produz, em linguagem clara (jargão glosado entre parênteses) e com lente de valor + design escalável/responsabilidade: (1) conceitos principais, (2) tasks→arquivos (links)→o que entrega, (3) gates garantidos 100%, (4) decisões de arquitetura, (5) findings por escopo, (6) aprendizados→skills. Disparada por "Audite issue #N" / "audita a #N".
+description: Auditoria de uma issue (ou grupo de issues) antes do PR/merge — julgamento read-only do que foi implementado × o CORPO da issue no GitHub (## Escopo + ## Critério de aceitação) + fase de aplicação SEPARADA que empurra fixes ao PR existente e registra o veredito; confere se os gates passam e classifica achados POR ESCOPO (dentro da própria issue, issue separada, ou não-issue). Invocar quando o usuário pedir "auditar issue #N", "auditoria da issue", "valida issue", "issue X está pronta pra PR?", "tem gap na issue?", "essas issues entregaram o que prometeram?", "audita o épico", "confere se a #N fechou de verdade", ou ao revisar uma issue de outra sessão/branch. Aceita uma issue ou uma lista. Triggers em PT. Skill de PROCEDIMENTO + GUARDRAIL — codifica o varredor mecânico (gh issue view, scripts de gate, cruzamento critério↔evidência) e protege contra dois falsos verdes específicos de issue: (a) marcar critério ✅ sem evidência, e (b) empurrar refino DENTRO do escopo para "melhoria futura" só porque a issue parece fechada. Lean toward triggering — custo de auditar é baixo, custo de fechar issue com gap silencioso (ou de fragmentar escopo em cards concorrentes) é alto. A SAÍDA não é só relatório de gate — sempre produz, em linguagem clara (jargão glosado entre parênteses) e com lente de valor + design escalável/responsabilidade: (1) conceitos principais, (2) tasks→arquivos (links)→o que entrega, (3) gates garantidos 100%, (4) decisões de arquitetura, (5) findings por escopo, (6) aprendizados→skills. Disparada por "Audite issue #N" / "audita a #N".
 metadata:
   status: draft
   applies_when:
@@ -30,10 +30,18 @@ Combina quatro coisas:
    POR ESCOPO antes de recomendar: **dentro desta issue**, **issue
    separada**, ou **não-issue**. Esta é a parte que mais escapa.
 
-> **Read-only por design.** A skill **não edita código, testes, docs
-> nem roda commit/push/merge**. Findings viram entrada para o humano
-> decidir. Se identificar correção que pertence à issue, **proponha** —
-> não aplique direto (o usuário decide implementar agora ou registrar).
+> **Julgamento read-only; aplicação é fase separada.** A **passada de
+> auditoria** é read-only por design (anti-viés: o veredito se forma sem a
+> mão no conserto). Terminado o julgamento, a **fase de aplicação** empurra
+> os fixes para o **PR existente** (push + atualiza corpo/checklist),
+> completa as caixinhas validadas e **registra a auditoria no PR** —
+> obrigatório, não opcional: (1) comentário com o veredito (status global +
+> gates numéricos + fixes aplicados com hash) e (2) a nota de handoff
+> "⚠️ precisa de auditoria" do corpo trocada por "✅ auditoria realizada em
+> <data> — <veredito>". Auditoria sem marca no PR **não existe** para quem
+> decide o merge. **Nunca faz merge** — é do usuário, salvo
+> pedido explícito. Branch alheia: `git show` para ler; checkout + push para
+> aplicar.
 
 ---
 
@@ -139,6 +147,14 @@ confirmar que cada gate declarado em config (`fail_under`, `import-linter`,
 `mypy --strict`, `bandit`) é mesmo invocado. Config que nenhum comando
 dispara é decoração (conceito "Gate inerte ou míope").
 
+**Antes de atribuir um gate vermelho à branch** — checagem barata de
+**falso vermelho ambiental**: se o erro aponta arquivo com
+`git diff origin/develop -- <arquivo do erro>` **vazio** e o CI de
+develop está verde, a causa provável é env drift do worktree (`.venv`
+dessincronizado; deps novas em develop). `uv sync --extra dev` e
+re-rodar **antes** de registrar finding (conceito "Falso vermelho
+ambiental").
+
 ### Fase C — Cruzar implementação ↔ corpo da issue
 
 1. **Arquivos tocados vs `## Escopo`/`## Referências`.** Os pontos de
@@ -154,6 +170,12 @@ dispara é decoração (conceito "Gate inerte ou míope").
      "Verificação assimétrica").
    - **Não marcado `[ ]`** mas o escopo foi entregue = atualizar a
      issue (observação, não blocker).
+   - **Critério condicional ("quando X novo aparecer, o gate faz Y"):**
+     prove com uma **sonda untracked** — crie o artefato mínimo que
+     dispara o critério (ex.: um módulo temporário com import proibido
+     entre camadas para provar que `check_layout.py` acusa), rode o
+     gate, confirme o Y, delete a sonda. Prova em segundos, sem tocar
+     nada versionado.
 4. **Literalidade do quantificador do critério (aprendizado-chave).**
    Ler a **palavra exata** do critério e exigir que a cobertura bata
    com ela:
@@ -431,6 +453,17 @@ Sub-agente devolve OK em batch e o auditor lê só o resumo.
 - **Tratamento:** exigir verbatim das partes críticas; ler à mão;
   re-prompt se não pediu. (D-bis #9)
 
+### Falso vermelho ambiental
+O **espelho** dos falsos verdes: gate vermelho local atribuído à branch
+quando a causa é o ambiente (típico: `.venv` de worktree dessincronizado
+— mypy/lint-imports falham em arquivo **intocado**). Custo invertido:
+finding falso + investigação na branch errada.
+- **Pergunta:** "o arquivo do erro mudou nesta branch, e o CI de develop
+  está verde?" (`git diff origin/develop -- <arquivo>` vazio + CI verde
+  ⇒ ambiente, não branch.)
+- **Tratamento:** `uv sync --extra dev` e re-rodar o gate; só então
+  julgar. Registrar como **observação**, nunca como finding da branch.
+
 ---
 
 ### Casos históricos (rastreabilidade do loop recursivo)
@@ -442,6 +475,7 @@ Sub-agente devolve OK em batch e o auditor lê só o resumo.
 | `configure_logging` definido e nunca chamado no boot | Definido mas não plugado | issue #68 task-03 |
 | JSON logging proposto como parte da #68 (era transporte, não mapeamento) → vira issue separada | Escopo empurrado pra frente (lado oposto: NÃO inflar a issue) | issue #68 → issue #169 |
 | GitHub `OPEN` enquanto roadmap `done` lido como gap | (observação esperada) | issue #68 pré-merge |
+| `make check` vermelho (mypy/lint-imports) em arquivo com diff 0 vs develop — `.venv` do worktree defasado | Falso vermelho ambiental | auditoria em worktree com `.venv` defasado |
 
 Quando esta skill falhar (auditoria deu verde, reviewer/CI/produção
 pegou algo): **primeiro perguntar qual conceito existente cobre**.
@@ -460,8 +494,9 @@ mesmo conceito). Não há por que repeti-los aqui.
 
 Sobram só os anti-padrões de **procedimento** (não são conceito de falso
 verde — são regra de execução, já ancorada acima):
-- **Não editar código durante a auditoria** — read-only; findings viram
-  proposta ao humano (ver callout "Read-only por design" no topo).
+- **Não editar código na passada de julgamento** — read-only (anti-viés); a
+  correção vai para a **fase de aplicação** separada, que empurra os fixes
+  para o PR (ver callout no topo). Merge nunca — é do usuário.
 - **Não auditar sem ler o corpo da issue inteiro** — é a única fonte do
   "porquê" e do contrato (Fase A #1). Sem ele vira inspeção sem âncora.
 

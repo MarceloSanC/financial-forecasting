@@ -1,6 +1,6 @@
 ---
 name: stage-audit
-description: Auditoria SEGURA (read-only) de uma Stage do pipeline antes do PR — confere se o que foi implementado bate com `concept.md`/`technical.md`, se os gates passam e se há gaps/findings bloqueantes. Invocar quando o usuário pedir "auditar stage N.M", "auditoria da stage", "valida stage", "stage X está pronta para PR?", "tem gap na stage?", "tudo verde para abrir PR?", "confere se o stage X fechou", ou ao revisar uma stage de outra sessão. Triggers em PT. Skill de PROCEDIMENTO + GUARDRAIL — codifica o varredor mecânico (quais scripts rodar, quais arquivos cruzar) e protege contra o falso verde do checklist (anti-viés: a auditoria que só marca caixinhas perde o achado que importa). Lean toward triggering — custo de auditar é baixo, custo de mergear stage com gap silencioso é alto. A SAÍDA não é só relatório de gate — sempre produz, em linguagem clara (jargão glosado entre parênteses) e com lente de valor + design escalável/responsabilidade: (1) overview e conceitos, (2) tasks→arquivos (links)→o que entrega, (3) gates garantidos 100%, (4) decisões de arquitetura, (5) findings por escopo, (6) aprendizados→skills. Disparada por "Audite stage N.M" / "auditar stage N.M".
+description: Auditoria de uma Stage do pipeline antes do PR/merge — passada de julgamento read-only (confere se o que foi implementado bate com `concept.md`/`technical.md`, se os gates passam e se há gaps/findings bloqueantes) + fase de aplicação separada que empurra os fixes ao PR existente e registra o veredito. Invocar quando o usuário pedir "auditar stage N.M", "auditoria da stage", "valida stage", "stage X está pronta para PR?", "tem gap na stage?", "tudo verde para abrir PR?", "confere se o stage X fechou", ou ao revisar uma stage de outra sessão. Triggers em PT. Skill de PROCEDIMENTO + GUARDRAIL — codifica o varredor mecânico (quais scripts rodar, quais arquivos cruzar) e protege contra o falso verde do checklist (anti-viés: a auditoria que só marca caixinhas perde o achado que importa). Lean toward triggering — custo de auditar é baixo, custo de mergear stage com gap silencioso é alto. A SAÍDA não é só relatório de gate — sempre produz, em linguagem clara (jargão glosado entre parênteses) e com lente de valor + design escalável/responsabilidade: (1) overview e conceitos, (2) tasks→arquivos (links)→o que entrega, (3) gates garantidos 100%, (4) decisões de arquitetura, (5) findings por escopo, (6) aprendizados→skills. Disparada por "Audite stage N.M" / "auditar stage N.M".
 metadata:
   status: accepted
   applies_when:
@@ -23,11 +23,21 @@ Procedimento para **auditar uma Stage** depois que ela é declarada
    **não termine** a auditoria apenas porque o checklist deu verde.
    Auditoria que vira "marcar caixinhas" é pior que nenhuma.
 
-> **Read-only por design.** A skill **não edita código, testes, docs
-> nem roda commit/push/merge**. Findings viram entrada para o humano
-> decidir (corrigir antes do PR, registrar em §7 post-execution, ou
-> aceitar). Se a auditoria identificar correção trivial, **proponha
-> ao usuário** — não aplique direto.
+> **Julgamento read-only; aplicação é fase separada.** A **passada de
+> auditoria** (Fases A–D-bis) é read-only por design — o anti-viés depende
+> de o auditor formar o veredito **sem a mão no conserto** (senão racionaliza
+> o próprio verde). Terminado o julgamento, a **fase de aplicação** empurra
+> os fixes para o **PR existente** (push na branch + atualiza o corpo e o
+> checklist do PR), **completa as caixinhas que a auditoria validou** e
+> **registra a auditoria no PR** — obrigatório, não opcional: (1) comentário
+> com o veredito (status global + gates numéricos + fixes aplicados com
+> hash) e (2) a nota de handoff "⚠️ precisa de auditoria" do corpo trocada
+> por "✅ auditoria realizada em <data> — <veredito>". Auditoria sem marca no
+> PR **não existe** para quem decide o merge.
+> **Nunca faz merge** — é do usuário, salvo pedido explícito. O push da fase
+> de aplicação vai **apenas para a branch do PR sob auditoria** (nunca outra):
+> se for branch de outra sessão, `git show` para ler e `checkout` + `push`
+> **só nessa branch** para aplicar.
 
 ---
 
@@ -62,7 +72,7 @@ Procedimento para **auditar uma Stage** depois que ela é declarada
    §11 (critérios de aceitação A1..AN), §13 (questões em aberto Q1..QN).
 2. Ler **`docs/stages/<N.M>-<slug>/technical.md`** inteiro. Pontos-chave:
    §1 (estratégia, estrutura de pastas), §2 (Tasks), §3 (gate de saída +
-   mapping invariante↔teste), §7 (post-execution `[decisão]`/`[finding]`/`[desvio]`).
+   mapping invariante↔teste), §7 (post-execution `[decision]`/`[finding]`/`[deviation]`).
 3. Identificar **`camada_alvo`** no frontmatter — muda o checklist da
    Fase D (mono-layer domain ≠ vertical-slice multi).
 4. Ler docs referenciados apenas **sob demanda** (ex.: `LAYOUT.md` §3
@@ -100,6 +110,13 @@ do `pyproject`, `import-linter`, `mypy --strict`, `bandit`, `safety`)
 está mesmo invocado por algum comando do alvo `check`. Configuração que
 nenhum comando dispara é decoração — conceito "Gate inerte ou míope".
 
+**Antes de atribuir um gate vermelho à branch** — checagem barata de
+**falso vermelho ambiental**: se o erro aponta arquivo com
+`git diff origin/develop -- <arquivo do erro>` **vazio** e o CI de
+develop está verde, a causa provável é env drift do worktree (`.venv`
+dessincronizado; deps novas em develop). `uv sync --extra dev` e
+re-rodar **antes** de registrar finding.
+
 **Nota — pré-requisito de Stage anterior.** Stage atual pode declarar
 a anterior como pré-requisito. Pré-requisito real é "mergeada em
 `develop`", não "status `done` no roadmap local". Conferir com
@@ -133,6 +150,11 @@ sinalizar ao usuário — não é blocker da auditoria atual, é blocker da
 4. **Mapear critérios de aceitação (A1..AN) → evidência**. Cada `AN`
    tem que ter um comando ou inspeção que prova. `[ ]` não marcado
    sem evidência = finding.
+   - **Critério condicional ("quando X novo aparecer, o gate faz Y"):**
+     prove com uma **sonda untracked** — crie o artefato mínimo que
+     dispara o critério (ex.: um `technical.md` temporário), rode o
+     gate, confirme o Y, delete a sonda. Prova em segundos, sem tocar
+     nada versionado.
 5. **Verificar atualização de docs derivados** (gate clássico):
    - **5.a `docs/roadmap.md`:**
      - Status da Stage na tabela §"Stages" atualizado para `done`?
@@ -146,8 +168,8 @@ sinalizar ao usuário — não é blocker da auditoria atual, é blocker da
        `draft`/`proposed`).
      - ADR novo em `draft` ao merge = blocker — a decisão precisa
        fechar antes da Stage fechar (CONVENTIONS §3).
-6. **Verificar §7 post-execution do technical.md.** Se há `[decisão]`,
-   `[finding]` ou `[desvio]` na execução, foi registrado? Se o histórico
+6. **Verificar §7 post-execution do technical.md.** Se há `[decision]`,
+   `[finding]` ou `[deviation]` na execução, foi registrado? Se o histórico
    git mostra commits `[N.M/--]` ou `[N.M/task-NN-extra]` (off-task),
    `§7` deveria ter a entrada justificando.
 
@@ -525,7 +547,7 @@ esperada, com o mesmo handle injetado em ambos os callers.
 Decisão tomada (off-task, silenciador, refactor inesperado, doc
 parcialmente atualizado) sem registro onde o reviewer iria procurar.
 
-- Commit `[N.M/task-NN-extra]` ou `[N.M/--]` sem entrada `[desvio]`
+- Commit `[N.M/task-NN-extra]` ou `[N.M/--]` sem entrada `[deviation]`
   em technical §7 (CONVENTIONS §3.4).
 - `# type: ignore`, `cast(...)`, `: Any`, `# noqa` em ponto sensível
   (boundary de adapter, mapper DTO↔entidade, retorno público) sem
@@ -560,6 +582,25 @@ assinaturas, mappers de boundary, §7 post-execution, validators de
 invariante negativa). Ler à mão e conferir. Se não pediu verbatim,
 re-prompt antes de fechar. Codificado em Fase D-bis #9.
 
+### Falso vermelho ambiental
+
+O **espelho** dos falsos verdes: gate vermelho local atribuído à branch
+quando a causa é o ambiente (típico: `.venv` de worktree dessincronizado
+— mypy/lint-imports falham em arquivo **intocado**). Custo invertido:
+finding falso + investigação na branch errada.
+
+- Sintoma: `make check` falha em arquivo que a branch não tocou; deps
+  "sumidas" (`sqlalchemy`, `lint-imports`) num worktree criado antes de
+  develop avançar.
+
+**Pergunta:** "o arquivo do erro mudou nesta branch, e o CI de develop
+está verde?" (`git diff origin/develop -- <arquivo>` vazio + CI verde
+⇒ ambiente, não branch.)
+
+**Tratamento:** `uv sync --extra dev` e re-rodar o gate; só então
+julgar. Registrar como **observação**, nunca como finding da branch.
+Codificado na checagem barata da Fase B.
+
 ---
 
 ### Casos históricos (rastreabilidade do loop recursivo)
@@ -569,21 +610,22 @@ cobre. Cresce sem inflar a seção conceitual.
 
 | Caso | Conceito | Onde aconteceu |
 |---|---|---|
-| Refino in-scope adiado como "futuro" porque o roadmap já dizia `done` | Escopo empurrado pra frente | auditoria do #68 (sessão 2026-06; espelhado na skill issue-audit) |
+| Refino in-scope adiado como "futuro" porque o roadmap já dizia `done` | Escopo empurrado pra frente | auditoria de Stage (espelhado na skill issue-audit) |
 | `__init__.py` placeholder herdado | Literal ≠ espírito | recorrente em camadas vazias |
 | Q* "não trava" sem follow-through | Literal ≠ espírito | concept §13 |
-| §I copiado literal vs ADR de relaxamento | Literal ≠ espírito | Stages 4.2 §I3 + 5.1 §I4 (pydantic em application; ADR 4.2.0002) |
+| §I copiado literal vs ADR de relaxamento | Literal ≠ espírito | §I herdado vs ADR de relaxamento (pydantic em application) |
 | Coverage global mascara arquivo individual | Gate inerte ou míope (míope) | repetente |
-| Gate em pyproject sem invocação em `make check` | Gate inerte ou míope (inerte) | issue #40 + PR #43 (Stage 3.1) |
-| Config/validator com teste verde mas sem call-site real (ex.: `configure_logging` nunca chamado no boot) | Definido mas não plugado | auditoria do #68 (task-03) |
+| Gate em pyproject sem invocação em `make check` | Gate inerte ou míope (inerte) | recorrente |
+| Config/validator com teste verde mas sem call-site real (ex.: `configure_logging` nunca chamado no boot) | Definido mas não plugado | recorrente (peça testada, não plugada no boot) |
 | Teste cobre branch sem assertar resultado | Verificação assimétrica | repetente |
 | Invariante negativa sem `Grep` ativo | Verificação assimétrica | recorrente em camadas com PII/boundary |
 | Engine compartilhado vira 2 instâncias | Estrutural ≠ semântico | D3 da 3.1 |
 | `roadmap.md` table sem frontmatter (ou inverso) | Rastro perdido | recorrente |
 | Branch com carona de outro escopo | Rastro perdido | GIT-WORKFLOW §Etapa 4 |
 | Silenciador sem justificativa em mapper | Rastro perdido | recorrente em fronteiras async↔sync |
-| Commit off-task sem `[desvio]` em §7 | Rastro perdido | CONVENTIONS §3.4 |
+| Commit off-task sem `[deviation]` em §7 | Rastro perdido | CONVENTIONS §3.4 |
 | Sub-agente alucina `arquivo:linha` | Delegação cega | repetente em auditorias longas |
+| `make check` vermelho em arquivo com diff 0 vs develop — `.venv` do worktree defasado | Falso vermelho ambiental | worktree com `.venv` defasado (espelhado na issue-audit) |
 
 Quando esta skill falhar (auditoria deu verde, reviewer/CI/produção
 pegou algo): **primeiro perguntar qual conceito existente cobre**.
@@ -601,8 +643,9 @@ tomado como auditoria → Gate inerte; gap da própria Stage parqueado como
 
 Sobram só os anti-padrões de **procedimento** (não são conceito de falso
 verde — são regra de execução, já ancorada acima):
-- **Não editar código durante a auditoria** — read-only; findings viram
-  proposta ao humano (ver callout "Read-only por design" no topo).
+- **Não editar código na passada de julgamento** — ela é read-only (anti-viés);
+  a correção vai para a **fase de aplicação** separada, que empurra os fixes
+  para o PR (ver callout no topo). Merge nunca — é do usuário.
 - **Não usar o checklist da Fase D como única fonte** — ele é incompleto
   por definição (cada Stage tem shape novo); a Fase D-bis existe por isso.
 - **Não auditar sem ter lido `concept.md` inteiro** — é a única fonte que
@@ -621,9 +664,10 @@ verde — são regra de execução, já ancorada acima):
 | Questões em aberto (Q1..QN) | `concept.md` §13 |
 | Gate de saída + mapping invariante↔teste | `technical.md` §3 |
 | Tasks executadas | `technical.md` §2 |
-| §7 post-execution (`[decisão]`/`[finding]`/`[desvio]`) | `technical.md` §7 |
+| §7 post-execution (`[decision]`/`[finding]`/`[deviation]`) | `technical.md` §7 |
 | Regras de import / layers | `docs/LAYOUT.md` §3 + `hex-arch-python` skill |
 | Atomicidade da Stage | `docs/PIPELINE.md` §4.2 / §4.3 |
+| Stage vs issue avulsa (o concept cabe no corpo?) | `docs/PIPELINE.md` §4.5 |
 | Gates de PR (CI verde, ≥90%, aprovação) | `docs/GIT-WORKFLOW.md` §Gates de PR |
 | Convenção de commit/branch/PR | `docs/CONVENTIONS.md` §4 + `git-versioning-pointer` skill |
 | §7 post-exec — formato e regra | `docs/CONVENTIONS.md` §3.4 |
