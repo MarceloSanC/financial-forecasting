@@ -110,6 +110,29 @@ def test_omitting_calib_is_backward_compatible() -> None:
 
 
 @pytest.mark.unit
+def test_three_way_fingerprint_is_byte_identical_to_pre_calib_value() -> None:
+    """Retrocompat forte (ADR 5.1.0003): a impressão 3-vias é o valor congelado
+    de ANTES do campo `calib`, não só consistente com `calib=None`.
+
+    O golden é o sha256 do payload canônico `{"test","train","val"}` (sem a chave
+    `calib`) — pina byte-a-byte que estender o VO não regrediu callers pré-5.1. Se
+    a extensão passasse a emitir `"calib"` no payload 3-vias (ou a canonicalização
+    mudasse), este teste quebra. `FakeHasher` compartilha a canonicalização do
+    adapter real (contract test `test_hasher_contract.py`), logo o golden vale para
+    o hash de produção.
+    """
+    frozen_pre_calib = (
+        "f51e6aae8a9690cd0dca5884233cee073d90bb0811aaddb09e135e7e23edd894"
+    )
+
+    three_way = SplitFingerprint.compute(
+        hasher=FakeHasher(), train=_TRAIN, val=_VAL, test=_TEST
+    )
+
+    assert three_way.value == frozen_pre_calib
+
+
+@pytest.mark.unit
 def test_calib_changes_fingerprint() -> None:
     """Adicionar um calib dedicado muda a impressão (fronteira first-class)."""
     hasher = FakeHasher()
