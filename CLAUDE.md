@@ -100,6 +100,19 @@ make docker-shell       # bash dentro do container app
 
 `docker-compose.yml` traz `postgres` e `redis` comentados por default. `scripts/init-project.py` descomenta `postgres` automaticamente quando o projeto escolhe `banco=postgres`; `redis` é descomentado manualmente quando precisar.
 
+#### Pré-requisito: daemon do Docker no ar (host Windows)
+
+Sem daemon, `Dev Containers: Reopen/Rebuild in Container` falha **sem erro claro** (parece que "não carrega"). Se o Docker Desktop estiver com *"Start Docker Desktop when you sign in"* desligado, ele não volta sozinho após reboot:
+
+```powershell
+.\scripts\docker-start.ps1        # sobe o Docker Desktop e espera o daemon (idempotente)
+.\scripts\docker-start.ps1 -Up    # + docker compose up -d
+```
+
+Rode no terminal do **host** — dentro do devcontainer não existe daemon de onde chamar (ovo e galinha). A correção definitiva é ligar o autostart nas settings do Docker Desktop; o script é rede de segurança.
+
+`docker-compose.override.yml` (camada de dev, versionada) monta `~/.claude` do host em `/root/.claude` (reusa login e histórico de sessões do Claude) e força `WATCHFILES_FORCE_POLLING=true` — inotify não propaga em bind mount no Windows/WSL2, e sem polling o reloader do uvicorn morre e derruba o container.
+
 ---
 
 ## Notas para o Agente
