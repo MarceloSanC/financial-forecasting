@@ -4,12 +4,23 @@
 # em `docker compose up`/`make docker-up`. O devcontainer também o carrega porque
 # está listado em .devcontainer/devcontainer.json (dockerComposeFile).
 #
-# Uso: reaproveita o login do Claude Code do host montando ~/.claude do usuário
-# (${USERPROFILE}) em /root/.claude do container — reusa a sessão já autenticada,
-# sem novo código de verificação. Contém só um mount (NENHUMA credencial no git;
-# as credenciais ficam no host). Windows-first: ${USERPROFILE} resolve o home do
-# usuário; em host não-Windows ajuste o path do volume.
+# Conteúdo (NENHUMA credencial no git; as credenciais ficam no host):
+#
+# 1. Mount de ~/.claude — reaproveita o login do Claude Code do host montando
+#    ${USERPROFILE}/.claude em /root/.claude do container, reusando a sessão já
+#    autenticada, sem novo código de verificação. Windows-first: ${USERPROFILE}
+#    resolve o home do usuário; em host não-Windows ajuste o path do volume.
+#
+# 2. WATCHFILES_FORCE_POLLING — o reloader do uvicorn (--reload) usa WatchFiles,
+#    que depende de inotify. inotify NAO propaga em bind mount do Docker Desktop
+#    no Windows/WSL2: o watcher morre com
+#      WatchfilesRustInternalError: IO error ... (os error 5) about ["/app"]
+#    e derruba o uvicorn — que é o processo principal do container. Container
+#    morto = devcontainer do VS Code não anexa ("não carrega"). Forçar polling
+#    troca inotify por varredura periódica e resolve.
 services:
   app:
+    environment:
+      WATCHFILES_FORCE_POLLING: "true"
     volumes:
       - ${USERPROFILE}/.claude:/root/.claude
