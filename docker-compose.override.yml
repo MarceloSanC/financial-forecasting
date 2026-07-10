@@ -18,9 +18,20 @@
 #    e derruba o uvicorn — que é o processo principal do container. Container
 #    morto = devcontainer do VS Code não anexa ("não carrega"). Forçar polling
 #    troca inotify por varredura periódica e resolve.
+#
+# 3. NODE_EXTRA_CA_CERTS — mecanismo DOCUMENTADO do Claude Code para CA custom
+#    (https://code.claude.com/docs/en/network-config). Necessário quando um
+#    antivírus/proxy intercepta TLS e re-assina os certificados com uma raiz
+#    própria (ex.: "Avast Web/Mail Shield Root"): o Windows confia nela, o
+#    container Linux não — e `git fetch` e a API do Claude falham dentro dele.
+#    Aponta para o BUNDLE do sistema (não para o .crt direto) porque o
+#    postCreateCommand enriquece esse bundle com o que estiver em
+#    .devcontainer/certs/ — que é gitignored, por ser específico da máquina.
+#    Assim o caminho nunca fica quebrado em clone limpo.
 services:
   app:
     environment:
       WATCHFILES_FORCE_POLLING: "true"
+      NODE_EXTRA_CA_CERTS: /etc/ssl/certs/ca-certificates.crt
     volumes:
       - ${USERPROFILE}/.claude:/root/.claude

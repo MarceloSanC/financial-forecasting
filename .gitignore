@@ -55,6 +55,15 @@ coverage.xml
 # uv.lock
 
 # ---------------------------------------------------------------------------
+# Certificados de CA locais (raiz de antivirus/proxy que intercepta TLS)
+# ---------------------------------------------------------------------------
+# Especificos da maquina — o Avast, por exemplo, gera uma raiz por instalacao.
+# O postCreateCommand do devcontainer instala o que estiver aqui no trust store
+# do container (update-ca-certificates). Nunca versionar: nao serve para outra
+# maquina e e uma raiz de MITM.
+.devcontainer/certs/
+
+# ---------------------------------------------------------------------------
 # IDEs e editores
 # ---------------------------------------------------------------------------
 .idea/
