@@ -47,6 +47,7 @@ FROM base AS builder
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         libpq-dev \
+        bash-completion \
         curl \
         git \
         make \
@@ -61,6 +62,15 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
         > /etc/apt/sources.list.d/github-cli.list \
     && apt-get update && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
+
+# Completion de shell: o bloco padrao do Debian em /etc/bash.bashrc vem
+# comentado, entao instalar o pacote nao basta — o source precisa ser explicito.
+# Habilita `git br<TAB>` -> `git branch` (e make, apt, docker, ssh). O `gh` nao
+# instala arquivo de completion; gera o dele em runtime.
+RUN printf '%s\n' \
+        '[ -f /usr/share/bash-completion/bash_completion ] && . /usr/share/bash-completion/bash_completion' \
+        'command -v gh >/dev/null && eval "$(gh completion -s bash)"' \
+        >> /root/.bashrc
 
 # Cache de deps: copia pyproject + src antes do resto do codigo. Quando
 # arquivos fora desses caminhos mudam (tests, docs, scripts), o install de
