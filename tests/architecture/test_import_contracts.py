@@ -225,6 +225,19 @@ _REAL_VIOLATION_CASES = (
         },
         id="store-no-storage-leak:analytics-store-domain-imports-pandera",
     ),
+    # Stage 5.1: o domínio do novo BC modeling importando pandas precisa reprovar
+    # domain-purity. Trava o drift de source_modules (contrato míope: se alguém
+    # esquecer de incluir `modeling.domain` em domain-purity, este caso fica verde
+    # e o teste falha).
+    pytest.param(
+        "domain-purity",
+        {
+            "features/modeling/domain/_arch_audit_taint.py": (
+                "import pandas  # violação temporária\n"
+            )
+        },
+        id="domain-purity:modeling-domain-imports-pandas",
+    ),
 )
 
 

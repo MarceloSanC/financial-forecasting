@@ -61,6 +61,11 @@ containers =
     # (schemas pandera); a camada application existe vazia (placeholder p/ 4.2/4.3) — daí
     # `(adapters)` opcional + `exhaustive = False` toleram as camadas ainda esparsas.
     financial_forecasting.features.analytics_store
+    # Stage 5.1 (concept 5.1 §8 / LAYOUT §3): novo BC modeling entra como container
+    # layered. Nesta Stage tem só domain (services + value_objects) e application vazia
+    # (placeholder p/ 5.2+) — daí `(adapters)` opcional + `exhaustive = False` toleram a
+    # ausência de adapters e a application ainda vazia.
+    financial_forecasting.features.modeling
 exhaustive = False
 
 # -----------------------------------------------------------------------------
@@ -93,6 +98,12 @@ source_modules =
     # origem o apodrecimento do old (multi_horizon_prediction_persister.py importava pandas
     # em arquivo de domínio). Cada NOVA feature com domain entra aqui.
     financial_forecasting.features.analytics_store.domain
+    # Stage 5.1 (concept 5.1 §5 I10 / ADR 5.1.0001-0003): o domain de modeling
+    # (WalkForwardSplitter + FoldSplit/ScopeSpec + dedup) é stdlib-only; `import pandas`/
+    # `numpy`/`torch` aqui REPROVA — provado por quebra intencional revertida (Task 01) e
+    # pelo caso `domain-purity:modeling-domain-imports-pandas` do teste de arquitetura.
+    # A única referência a application é o tipo `Hasher` sob TYPE_CHECKING (não runtime).
+    financial_forecasting.features.modeling.domain
 forbidden_modules =
     pandas
     pyarrow
