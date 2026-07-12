@@ -39,7 +39,7 @@ com disciplina de decisão rica* e o eleva ao Step, adicionando o **gate de dom�
 Fonte: [`./roadmap.md`](./roadmap.md) (nota de legenda).
 
 - **Step** — **entrega de negócio**, sem restrição arquitetural; **agrupa Stages**
-  (ex.: *Step 13 — Agente Contas a Receber completo*, Stages 13.1–13.8).
+  (ex.: *Step 5 — Modelagem, baselines e treino*, Stages 5.1–5.5).
 - **Stage** — **unidade técnica atômica** (concept + technical + execução, 3–12 Tasks).
 
 Esta sessão vive no nível **Step**. Cada Stage por dentro ainda roda o ciclo canônico — só que
