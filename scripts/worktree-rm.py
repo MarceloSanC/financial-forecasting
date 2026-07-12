@@ -12,7 +12,7 @@ Em seguida, em ordem segura:
   4. `git branch -d <branch>` (safe-delete: só remove se mergeada)
   5. `git remote prune origin`
 
-A imagem Docker (`erp_intel-app:dev`) é compartilhada entre worktrees.
+A imagem Docker (`financial_forecasting-app:dev`) é compartilhada entre worktrees.
 O script pergunta interativamente se deseja removê-la.
 
 Uso:
@@ -302,7 +302,7 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:  # noqa: PLR0912, P
                 _info("volumes mantidos (confirmação não fornecida)")
 
     # Imagem — requer confirmação explícita.
-    image = "erp_intel-app:dev"
+    image = "financial_forecasting-app:dev"
     cp_img = subprocess.run(
         ["docker", "image", "inspect", image],
         capture_output=True, check=False,

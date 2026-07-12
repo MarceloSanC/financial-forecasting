@@ -22,6 +22,8 @@ O dono vence; corrija o eco.
 | Checklists operacionais de gate (concept / technical / saída da Stage) | [`RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md) Passos 5/7/10 |
 | Arquitetura e regras de import | [`LAYOUT.md`](./LAYOUT.md) |
 | Procedimento de auditoria e falsos verdes | skills `stage-audit` / `issue-audit` |
+| Label de status de auditoria no PR (enum + gate `audit-gate`) | `CONVENTIONS.md` (este doc) §3.6 |
+| Categorias de doc `domain/` e `audits/` (propósito, frontmatter, lifecycle) | [ADR 0.0.0003](./adr/0_0_0003-formalize-domain-and-audits-doc-categories.md) |
 
 **Regra do eco:** citar uma regra fora do doc dono é permitido como
 **1 frase + ponteiro** (regra acionável no ponto de uso); o texto
@@ -283,6 +285,40 @@ draft ──────► in_progress ──────► review ───�
   │                │                  │             │
   └─► archived ◄───┴──────────────────┴─────────────┘
 ```
+
+### 3.6 Label de status de auditoria no PR (gate `audit-gate`)
+
+O corpo de todo PR carrega **uma linha canônica** que declara o estado da
+auditoria do fluxo single-session — a máquina de estados que o workflow
+`audit-gate` (CI) lê para **travar o merge até a auditoria acontecer**
+(fecha o handoff que hoje depende de o humano lembrar). É uma máquina
+**distinta** da de status de doc (§3.1/§3.5), embora reuse os rótulos
+`review`/`complete`:
+
+```
+> **Auditoria:** `review`
+```
+
+Enum (fonte única — todo outro doc/prompt/skill **aponta** para cá, não
+redefine):
+
+| Valor | Significado | Merge |
+|---|---|---|
+| `draft` | implementação em andamento (WIP) | **bloqueado** |
+| `review` | pronto, aguardando auditoria | **bloqueado** |
+| `complete` | auditoria realizada (`stage-audit`/`issue-audit`) | **liberado** |
+
+- **Default do template** ([`.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md)):
+  `review`. Os prompts single-session **preservam** o label; **não** o
+  editam à mão.
+- **Só a sessão de auditoria** grava `complete` (fase de aplicação de
+  `stage-audit`/`issue-audit`), junto do comentário do veredito no PR.
+  Gravar `complete` à mão sem auditoria burla o gate.
+- **Gate `audit-gate`** ([`.github/workflows/audit-gate.yml`](../.github/workflows/audit-gate.yml)):
+  extrai o valor da linha canônica e passa **iff** `complete` — *fail
+  closed* (ausente/inválido → bloqueia). Lê **só** essa linha, então as
+  palavras `draft`/`review`/`complete` podem aparecer livremente na prosa
+  do corpo sem falsear o gate.
 
 ### Exceção — docs estruturais do template
 

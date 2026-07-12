@@ -1,0 +1,35 @@
+name: stage-issue-audit
+
+# O docs-check de PR/local valida só o delta da branch (rápido e
+# determinístico). Esta varredura completa agendada é a segunda metade do
+# padrão: pega drift pós-merge (issue apagada/transferida depois que a stage
+# entrou) e qualquer stage que tenha entrado por caminho não validado — fora
+# do caminho crítico de PR, onde flakiness de rede não bloqueia ninguém.
+# Roda no branch default (develop). Disparo manual: workflow_dispatch.
+on:
+  schedule:
+    - cron: "0 9 * * 1" # segundas-feiras 09:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  full-scan:
+    runs-on: ubuntu-latest
+    steps:
+      # Clone raso basta: o modo --all descobre por glob, não consulta git.
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+
+      # O script é stdlib-only — dispensa uv sync. `gh` vem no runner e
+      # autentica via GH_TOKEN.
+      - name: check_stage_issue --all (todas as stages, com rede)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/check_stage_issue.py --all

@@ -94,7 +94,7 @@ uv run python scripts/check_technical_postexec.py docs/stages/<N.M>-<slug>/techn
 
 # Testes + coverage da Stage
 uv run pytest tests/unit/features/<bc>/<camada>/ -v \
-  --cov=src/erp_intel/features/<bc>/<camada> \
+  --cov=src/financial_forecasting/features/<bc>/<camada> \
   --cov-report=term-missing --cov-fail-under=90
 
 # Gate completo (mesmo que CI vai rodar)
@@ -501,7 +501,7 @@ granularidade?"
 
 **Tratamento:** ler o target do Makefile (ou job do CI) e confirmar
 invocação. Para coverage, rodar
-`pytest --cov=src/erp_intel/features/<bc>/<camada>` focado. Gate
+`pytest --cov=src/financial_forecasting/features/<bc>/<camada>` focado. Gate
 inerte é **blocker** (configuração que ninguém roda é decoração).
 
 ### Definido mas não plugado (dead-config)

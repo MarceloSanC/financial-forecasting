@@ -1,0 +1,45 @@
+name: audit-gate
+
+# Gate mecânico da auditoria de Stage/issue: o corpo do PR carrega o label
+# canônico "> **Auditoria:** `<status>`" (CONVENTIONS §3.6), posto pelo
+# PULL_REQUEST_TEMPLATE com default `review`. Este check FALHA enquanto o
+# status não for `complete` — o merge fica bloqueado até a sessão de auditoria
+# (stage-audit / issue-audit) gravar `complete`. Substitui o handoff lembrado
+# por humano por um gate.
+#
+# Dispara em `edited` além dos eventos default de PR: quando a auditoria edita
+# o corpo do PR (troca a nota), o check re-roda e fica verde. Fica num workflow
+# próprio (não em ci.yml) justamente para NÃO re-rodar a suíte de testes a cada
+# edição de descrição.
+#
+# Como GitHub Free não dá branch protection em repo privado, configure este
+# job como Required Status Check quando o plano suportar — ou aceite como gate
+# observacional (mesma nota do guard-main-source em ci.yml).
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  audit-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bloquear enquanto a auditoria não estiver 'complete'
+        env:
+          # Passar o corpo por env evita injeção de shell via descrição do PR.
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          # Label canônico (CONVENTIONS §3.6): "> **Auditoria:** `<status>`".
+          # Lê SÓ essa linha — draft/review/complete na prosa não falseiam o gate.
+          status=$(printf '%s' "$PR_BODY" \
+            | sed -nE 's/^> \*\*Auditoria:\*\* `(draft|review|complete)`.*/\1/p' \
+            | head -1)
+          if [ "$status" != "complete" ]; then
+            echo "::error::Auditoria em status '${status:-ausente/inválido}' — merge bloqueado até 'complete'." >&2
+            echo "A sessão de auditoria (stage-audit/issue-audit) grava" >&2
+            echo "'> **Auditoria:** \`complete\`' no corpo do PR ao validar." >&2
+            exit 1
+          fi
+          echo "OK: auditoria complete."

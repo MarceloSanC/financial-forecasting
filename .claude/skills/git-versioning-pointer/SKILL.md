@@ -1,6 +1,6 @@
 ---
 name: git-versioning-pointer
-description: Skill de NAVEGAÇÃO para regras de versionamento (git + docs) — invocar ANTES de qualquer operação git/GitHub no repo (`git checkout -b`, `git commit`, `git push`, `gh pr create`, `gh pr merge`, `git rebase`, hotfix, release) ou ao revisar commit/PR alheio. Não contém regras — aponta o trecho exato de `docs/GIT-WORKFLOW.md`, `docs/CONVENTIONS.md` e `scripts/check_commit_msg.py` que governa a operação. Triggers em PT — "vou commitar", "abrir PR", "criar branch", "fazer push", "merge", "rebase", "hotfix", "release", "vou rodar git X". Lean toward triggering — custo de consultar é baixo, custo de produzir artefato fora do padrão (revert/rebase) é alto, e a Stage 1.1 do erp-intel já provou que docs sozinhos não bastam.
+description: Skill de NAVEGAÇÃO para regras de versionamento (git + docs) — invocar ANTES de qualquer operação git/GitHub no repo (`git checkout -b`, `git commit`, `git push`, `gh pr create`, `gh pr merge`, `git rebase`, hotfix, release) ou ao revisar commit/PR alheio. Não contém regras — aponta o trecho exato de `docs/GIT-WORKFLOW.md`, `docs/CONVENTIONS.md` e `scripts/check_commit_msg.py` que governa a operação. Triggers em PT — "vou commitar", "abrir PR", "criar branch", "fazer push", "merge", "rebase", "hotfix", "release", "vou rodar git X". Lean toward triggering — custo de consultar é baixo, custo de produzir artefato fora do padrão (revert/rebase) é alto, e a Stage 1.1 já provou que docs sozinhos não bastam.
 metadata:
   status: accepted
   applies_when:
@@ -20,7 +20,7 @@ seção correspondente. Cada uma traz três blocos:
 
 1. **LER** — trechos exatos a consultar antes da operação.
 2. **CHECK** — comandos pré-operação (não estão nos docs; complementam).
-3. **GOTCHA** — falha conhecida a evitar (do incidente erp-intel Stage 1.1).
+3. **GOTCHA** — falha conhecida a evitar (do incidente da Stage 1.1).
 
 ---
 

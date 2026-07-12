@@ -30,8 +30,19 @@ jobs:
   lint-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # `issues: read` habilita o `gh issue view` do check_stage_issue.py
+    # (docs-check) — sem ele o script cai no caminho best-effort e o gate
+    # issue-first passa sem verificar nada.
+    permissions:
+      contents: read
+      issues: read
     steps:
+      # fetch-depth: 0 — o modo delta-only do check_stage_issue.py precisa do
+      # merge-base com origin/develop; num clone raso ele não resolve e cai na
+      # varredura completa (fail-safe, mas paga um `gh issue view` por Stage).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -53,4 +64,8 @@ jobs:
         run: uv run lint-imports
 
       - name: Run gate completo (lint + typecheck + layout-check + import-linter + docs-check + tests + coverage)
+        env:
+          # Autentica o `gh` do check_stage_issue.py (docs-check). Sem isto o
+          # script imprime WARN e retorna 0 — o issue-first vira no-op no PR.
+          GH_TOKEN: ${{ github.token }}
         run: make check
