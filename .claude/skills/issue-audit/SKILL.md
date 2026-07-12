@@ -255,7 +255,8 @@ camada que a issue inclui (olhar os arquivos do diff). Piso, não teto.
      solto em docstring/`technical.md` tem risco de esquecimento
      permanente. Marque a incerteza explícita no corpo (`## Incerteza` +
      label `status: speculative`), declare o **momento previsto** (data
-     *ou* condição de disparo, ex.: "quando o ERP modelar multi-parcelas")
+     *ou* condição de disparo, ex.: "quando o pipeline sair do piloto AAPL
+     para multi-asset")
      e **não crave a solução** como definitiva — é ponto de partida a
      reavaliar na implementação. Regra completa em GIT-WORKFLOW §Etapa 1.
    - **NÃO-ISSUE** se: é YAGNI **e se auto-anuncia sem custo** quando
