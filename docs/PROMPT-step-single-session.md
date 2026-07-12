@@ -5,7 +5,7 @@ when-use: Conduzir um Step do roadmap do começo ao fim, quando se quer (a) trav
 keywords: [prompt, step, single-session, master, orchestration, subagents, fresh-context, domain-gate, human-in-the-loop, decisao-assistida, adr, stage-audit, bias-mitigation]
 status: accepted
 created_at: 2026-07-05
-updated_at: 2026-07-10
+updated_at: 2026-07-12
 ---
 
 # Prompt — Orquestração de Step em Sessão Mestra

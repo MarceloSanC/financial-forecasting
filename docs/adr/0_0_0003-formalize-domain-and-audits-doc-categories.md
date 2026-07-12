@@ -5,7 +5,7 @@ when-use: Reference before creating a domain-knowledge doc or an audit report, w
 keywords: [adr, documentation, domain, audits, doc-category, bounded-context, ddd, ubiquitous-language, subdomain, step-gate]
 status: accepted
 created_at: 2026-07-11
-updated_at: 2026-07-11
+updated_at: 2026-07-12
 adr_id: 0.0.0003
 decision: Formalize `docs/domain/` (canonical, cross-Stage subdomain theory) and `docs/audits/` (read-only implementation-vs-reality diagnoses) as first-class local documentation categories extending ADR 0.0.0000, in a single ADR, both nested by bounded context (`docs/<category>/<bc>/<slug>.md`) mirroring `features/<bc>/`.
 context_stage: 0.0-global
@@ -300,10 +300,11 @@ narrative docs — [CONVENTIONS.md §1](../CONVENTIONS.md)).
   (anti-leakage cross-check of the dataset-builder), when it is executed.
 - This ADR **replaces the two drafts carried over from the development template**
   (`0_0_0003-formalize-audits-doc-category.md` and
-  `0_0_0004-formalize-domain-doc-category.md`), removed in the same PR. They were
-  never accepted decisions of this project: their Context, bounded contexts,
-  examples and issue links were the template's placeholders. ADR id `0.0.0003` is
-  reused because those drafts never landed on `develop`.
+  `0_0_0004-formalize-domain-doc-category.md`), discarded before they were ever
+  committed. They were never accepted decisions of this project: their Context,
+  bounded contexts, examples and issue links were the template's placeholders.
+  ADR ids `0.0.0003`/`0.0.0004` were therefore never taken on any branch, and
+  `0.0.0003` is reused here.
 
 ## References
 
