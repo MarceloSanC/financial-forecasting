@@ -50,12 +50,13 @@ confirmatory cohort) is scattered across roadmap prose, the `5_1_*` ADRs and the
 this shape: a durable finding, with evidence, that a later Stage will consume as
 its spec. Today it lives in an issue body and dies with the ticket.
 
-Both categories were **imported from the sibling project's template** as two
-separate ADRs (`0.0.0003` for `audits/`, `0.0.0004` for `domain/`). The imported
-text records **that** project's history (accounting subdomains, ERP
-reconciliation, its bounded contexts and its issue numbers) and was never a
-decision of this project. This ADR **replaces both imported drafts** with a
-single decision taken here, for this project's reasons.
+Both categories arrived as **drafts carried over from the development template**
+this repository was bootstrapped from, as two separate ADRs (`0.0.0003` for
+`audits/`, `0.0.0004` for `domain/`). Those drafts were written against the
+template's own placeholder domain — its example subdomains, bounded contexts and
+issue numbers — and were never a decision of this project. This ADR **replaces
+both drafts** with a single decision taken here, for this project's reasons and
+with this project's bounded contexts.
 
 Forces at play:
 
@@ -197,18 +198,18 @@ narrative docs — [CONVENTIONS.md §1](../CONVENTIONS.md)).
 
 ## Alternatives considered
 
-### Alternative A — One ADR per category (the shape of the imported drafts)
+### Alternative A — One ADR per category (the shape of the template drafts)
 - **Description:** keep two ADRs, one for `domain/` and one for `audits/`, each
   rewritten for this project.
 - **Pros:** each ADR stays focused; superseding one category later touches only
-  its own ADR; it is the shape the origin project chose.
+  its own ADR; it is the shape the template drafts came in.
 - **Cons:** the two categories are being adopted **in the same act** and share the
   same rationale (extend 0.0.0000) and the same structural rule (BC nesting) —
   two ADRs duplicate that rationale and force a mutual cross-reference, which is
   exactly the "eco divergente" that [CONVENTIONS.md §0](../CONVENTIONS.md) warns
-  against. The "one ADR per category" call recorded in the imported drafts was a
-  **user decision in the origin project**, made when the two categories already
-  existed there for different historical reasons; it does not bind this project.
+  against. The template split the two ADRs because its categories were introduced
+  at different moments, for unrelated reasons — a historical accident of the
+  template, not a rule that binds a project adopting both at once.
 - **Why rejected:** user decision (2026-07-11) — synthesize into one ADR. Cheaply
   reversible: if the two categories' rules diverge materially later, split this
   ADR in two and supersede it.
@@ -297,11 +298,11 @@ narrative docs — [CONVENTIONS.md §1](../CONVENTIONS.md)).
 - **First `audits/` candidate:** issue
   [#32](https://github.com/MarceloSanC/financial-forecasting/issues/32)
   (anti-leakage cross-check of the dataset-builder), when it is executed.
-- This ADR **replaces the two drafts imported from the template**
+- This ADR **replaces the two drafts carried over from the development template**
   (`0_0_0003-formalize-audits-doc-category.md` and
   `0_0_0004-formalize-domain-doc-category.md`), removed in the same PR. They were
   never accepted decisions of this project: their Context, bounded contexts,
-  examples and issue links belonged to the origin project. ADR id `0.0.0003` is
+  examples and issue links were the template's placeholders. ADR id `0.0.0003` is
   reused because those drafts never landed on `develop`.
 
 ## References
