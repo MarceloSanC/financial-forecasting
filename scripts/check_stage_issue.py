@@ -230,7 +230,7 @@ def main() -> int:
     failures: list[tuple[Path, str]] = []
     for tech in technicals:
         ok, msg = check_one(tech)
-        status_tag = "OK   " if ok else "FAILED"
+        status_tag = "OK   " if ok else "FALHA"
         print(f"  {status_tag} {tech}: {msg}")
         if not ok:
             failures.append((tech, msg))
