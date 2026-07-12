@@ -89,12 +89,15 @@ schemas, file layouts, recompute cadences or edge cases — those belong to the
 Stage `technical.md` + code, which hold the system context.
 
 Every formula and rule that is *load-bearing* (i.e. that changes a number the
-project reports) carries a **traceable citation to an authoritative source** —
-recognized technical literature and peer-reviewed work for this domain
-(forecasting, quantile regression, proper scoring rules, statistical testing).
-Blogs, vendor marketing and unsourced forum posts do not qualify as a base; at
-most they point *to* the primary source, which is the one cited. This mirrors the
-sourcing bar of [`PROMPT-step-single-session.md`](../PROMPT-step-single-session.md) §1.
+project reports) carries a **traceable citation to a primary source**. The
+sourcing bar and its **fixed search order** live in
+[`PROMPT-step-single-session.md`](../PROMPT-step-single-session.md) §1 — this ADR
+does not restate them. In short: the sources this project has **already
+ratified** come first ([`overview.md`](../overview.md) §Referências, the
+`## References` of the relevant ADRs, the `concept.md` of Stages already `done`
+in the same BC); a new source is sought **only** for what they do not cover, must
+be primary and tied to this project's context, and is registered back in
+`overview.md` §Referências in the same PR.
 
 **Structure — nested by bounded context, no root tier:**
 

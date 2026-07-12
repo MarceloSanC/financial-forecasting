@@ -96,22 +96,36 @@ nomeado como em `features/<bc>/` (`market_data`, `feature_engineering`, `modelin
 > `stage-audit`) é a **outra** função, que roda **depois** de cada Stage (§3).
 
 **Barra de fontes (não negociável).** Cada regra, fórmula e particularidade precisa de **citação
-rastreável a fonte oficial/confiável**: normas contábeis (CPC, IFRS/IAS, CFC), legislação e órgãos
-reguladores (leis, INs da RFB, BACEN, CVM, SUSEP conforme o domínio), literatura técnica
-reconhecida (livros-texto consagrados, papers revisados). **Não** servem de base: blogs, sites
-genéricos de "dicas", marketing de software, fórum sem fonte primária — no máximo apontam *para* a
-fonte primária, que é a que se cita.
+rastreável a fonte primária**. A ordem de busca é **fixa** — e o passo 1 não é opcional:
+
+1. **As fontes que o projeto já ratificou.** Este repo **já tem** suas âncoras; não as re-descubra
+   nem as reescreva de memória. Procure, nesta ordem:
+   - **[`overview.md`](./overview.md) §Referências** — os papers-âncora e as bibliotecas do projeto
+     (é a lista canônica; toda fonte de peso do domínio deveria estar aqui);
+   - **`## References` dos ADRs** relevantes — os globais (`0_0_*`) e os do **BC do Step** (os do
+     mesmo Step e os das Stages já `done`), que carregam a citação completa (autor, ano, capítulo);
+   - **`concept.md` das Stages já `done`** do mesmo BC — trazem a fonte já aplicada ao caso de uso.
+2. **Só se o passo 1 não cobrir a teoria necessária**, procure fonte nova. Ela precisa ser
+   (a) **primária e autoritativa** — paper revisado, livro-texto consagrado, documentação oficial do
+   método/biblioteca — e (b) **diretamente ligada ao contexto deste projeto** (os objetivos
+   ratificados em [`overview.md`](./overview.md)), não literatura adjacente "que também fala do
+   tema". Toda fonte nova que entrar no doc de domínio **é registrada em `overview.md` §Referências**
+   no mesmo PR — senão o próximo Step re-pesquisa o que este já achou.
+
+**Não** servem de base: blogs, sites genéricos de "dicas", marketing de software, fórum sem fonte
+primária — no máximo apontam *para* a fonte primária, que é a que se cita.
 
 **Se o doc não existe ou não cobre o escopo**, a mestra despacha um **subagente/fan-out de
-pesquisa** (um pesquisador por classe de fonte, cego aos demais) + **verificação cética adversarial**
-(rejeita fonte não-oficial; tenta refutar cada fórmula contra a citação; default "insuficiente" se
-a citação não sustenta) + síntese do rascunho de `domain/<bc>/<subdomain>.md`. O subagente
-**retorna** o rascunho + os **forks de pesquisa** (pontos com mais de uma convenção legítima —
-fronteira de aging, base de rateio, política de provisão) para a mestra tratar por §2.
+pesquisa** + **verificação cética adversarial** (rejeita fonte não-primária; tenta refutar cada
+fórmula contra a citação; default "insuficiente" se a citação não sustenta) + síntese do rascunho de
+`domain/<bc>/<subdomain>.md`. O fan-out **começa varrendo o passo 1** (um subagente inventaria o que
+o projeto já ratificou) e só então abre busca externa para as lacunas que sobrarem. O subagente
+**retorna** o rascunho + os **forks de pesquisa** (pontos com mais de uma convenção legítima na
+literatura) para a mestra tratar por §2.
 
-**HALT de sourcing:** se uma fórmula *load-bearing* (que muda o número entregue ao usuário) não
-tiver fonte oficial que a sustente, **não invente e não use blog** — PARE e escale ao humano (pode
-ser decisão de política do negócio, que vira ADR, não achado de pesquisa). Só declare o gate
+**HALT de sourcing:** se uma fórmula *load-bearing* (que muda o número que o projeto reporta) não
+tiver fonte primária que a sustente, **não invente e não use blog** — PARE e escale ao humano (pode
+ser decisão de política do projeto, que vira ADR, não achado de pesquisa). Só declare o gate
 cumprido com o doc `accepted`.
 
 ---
