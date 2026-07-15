@@ -5,7 +5,7 @@ when-use: Consultar no início de qualquer nova sessão de detalhamento ou plane
 keywords: [overview, briefing, tft, calibracao, conformal, pinball, medalhao, clean-architecture, forecasting]
 status: draft
 created_at: 2026-06-22
-updated_at: 2026-06-22
+updated_at: 2026-07-14
 project_name: Previsão Probabilística de Retornos Financeiros (TFT)
 stakeholders:
   - Autor / Decisor / Pesquisador: Marcelo Santos (TCC, Eng. Mecatrônica — UFSC)
@@ -131,8 +131,8 @@ A disciplina anti-p-hacking é estrutural: **pré-registro imutável hasheado** 
 
 ## 10. Referências
 
-- Papers-âncora: Diebold-Mariano 1995; Harvey-Leybourne-Newbold 1997; Hansen-Lunde-Nason 2011 (MCS); Holm 1979; Koenker-Bassett 1978 + Gneiting 2011 (pinball); Gneiting-Raftery 2007 (interval/Winkler score, CRPS); Christoffersen 1998; Kupiec 1995; Khosravi et al. 2011 (PICP/MPIW); Romano-Patterson-Candès 2019 (CQR); Barber et al. 2023 (conformal sob drift); Chernozhukov et al. 2010 (rearranjo de quantis); López de Prado 2018 (purged/embargoed CV); Lim et al. 2021 (TFT); Gu-Kelly-Xiu 2020 (previsibilidade de retornos); White 2000 / Romano-Wolf 2005 (inferência seletiva).
-- Bibliotecas: `arch`, `statsmodels`, `scikit-learn`, `scoringrules`, `statsforecast`, `LightGBM`, `MAPIE`, `pandas`, `duckdb`, `pyarrow`, `pandera`, `pandas-ta-classic`/TA-Lib, `pytorch-forecasting`, `pydantic-settings`, `mlflow`, FinBERT.
+- Papers-âncora: Diebold-Mariano 1995; Harvey-Leybourne-Newbold 1997; Hansen-Lunde-Nason 2011 (MCS); Holm 1979; Koenker-Bassett 1978 + Gneiting 2011 (pinball); Gneiting-Raftery 2007 (interval/Winkler score, CRPS); Christoffersen 1998; Kupiec 1995; Khosravi et al. 2011 (PICP/MPIW); Romano-Patterson-Candès 2019 (CQR); Barber et al. 2023 (conformal sob drift); Chernozhukov et al. 2010 (rearranjo de quantis); López de Prado 2018 (purged/embargoed CV); Lim et al. 2021 (TFT); Gu-Kelly-Xiu 2020 (previsibilidade de retornos); White 2000 / Romano-Wolf 2005 (inferência seletiva); Koenker 2005 (notação ρ_τ da quantile regression); Gneiting-Ranjan 2011 (decomposição quantílica do CRPS); RiskMetrics TD 1996 (EWMA-vol); McNeil-Frey-Embrechts 2005 (QRM: VaR locação-escala, Historical Simulation); Hamilton 1994 + Box-Jenkins et al. 2015 (previsão AR e variância h-step); Hyndman-Fan 1996 (tipos de quantil amostral); Hyndman-Athanasopoulos FPP3 2021 (métodos simples e intervalos); Campbell-Lo-MacKinlay 1997 (random walk do log-preço); Friedman 2001 (gradient boosting); Makridakis et al. 2022 (M5 Uncertainty, 9 quantis); Wen et al. 2017 (MQ-RNN, grade esparsa + interpolação); Hong et al. 2016 (GEFCom2014); Prechelt 1998 + Goodfellow et al. 2016 (early stopping); Lei et al. 2018 (split conformal); Akiba et al. 2019 (Optuna) + Bergstra et al. 2011 (TPE) + Bergstra-Bengio 2012 (random search); Raschka 2018 (protocolo exploratório/confirmatório); Bouthillier et al. 2021 (variância de benchmarks); Tashman 2000 + Bergmeir-Benítez 2012 (avaliação temporal multi-origem); Nosek et al. 2018 (pré-registro); Sandve et al. 2013 (reprodutibilidade computacional); Barlow et al. 1972 / Robertson et al. 1988 (isotonização PAVA); Takeuchi et al. 2006 / Bondell et al. 2010 / Cannon 2018 (quantis não-cruzantes alternativos).
+- Bibliotecas: `arch`, `statsmodels`, `scikit-learn`, `scoringrules`, `statsforecast`, `LightGBM`, `MAPIE`, `pandas`, `duckdb`, `pyarrow`, `pandera`, `pandas-ta-classic`/TA-Lib, `pytorch-forecasting`, `PyTorch Lightning`, `NumPy`, `R (stats)`, `pydantic-settings`, `mlflow`, FinBERT.
 - Pipeline/arquitetura do template: `boilerplate/layout-files/docs/{PIPELINE,LAYOUT,CONVENTIONS,GIT-WORKFLOW}.md`.
 
 ## 11. Decisões-chave e ADRs a registrar
