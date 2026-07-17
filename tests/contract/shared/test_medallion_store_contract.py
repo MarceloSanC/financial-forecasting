@@ -18,7 +18,10 @@ real (que valida com `pandera`) aceite os mesmos dados que o fake.
 Stage 5.2 (Task 04, concept 5.2 D3): o par **read-only**
 `("processed", "dataset_tft")` entra no MESMO contrato — round-trip de leitura
 filtrada por `asset`, asset/dataset inexistente → vazio (C4), `write` no par →
-`ApplicationError` (read-only) e normalização NaN → None — com o real semeado
+`ApplicationError` (read-only), normalização NaN → None e a disciplina de
+filtro do par: `asset=None` ≡ filtro ausente (união), valor de `asset` fora de
+`^[A-Za-z0-9._-]+$` ergue `ValueError` antes de interpolar no glob/SQL e chave
+de filtro ≠ `asset` ergue (nunca ignora silenciosamente) — com o real semeado
 gravando o Parquet direto no `tmp_path` (layout físico da 3.5:
 `processed/dataset_tft/<asset>/dataset_tft_<asset>.parquet`) e o fake semeado
 pelo helper `seed_read_only` (fora do port). Os casos bronze pré-existentes
@@ -360,6 +363,46 @@ def test_dataset_tft_read_without_filter_returns_all_assets(
     rows = store.read(layer=_PROCESSED_LAYER, table=_DATASET_TFT)
 
     assert {r["asset_id"] for r in rows} == {"AAPL", "MSFT"}
+
+
+@pytest.mark.contract
+def test_dataset_tft_read_asset_none_is_absent_filter(
+    store: MedallionStore, tmp_path: Path
+) -> None:
+    """`filters={"asset": None}` equivale a filtro ausente → união (paridade fake↔real)."""
+    ts = datetime(2024, 1, 2, tzinfo=UTC)
+    _seed_dataset_tft(store, tmp_path, "AAPL", [_dataset_row("AAPL", ts, 0.01, 55.0)])
+    _seed_dataset_tft(store, tmp_path, "MSFT", [_dataset_row("MSFT", ts, -0.02, 45.0)])
+
+    rows = store.read(layer=_PROCESSED_LAYER, table=_DATASET_TFT, filters={"asset": None})
+
+    assert {r["asset_id"] for r in rows} == {"AAPL", "MSFT"}
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("bad_asset", ["../evil", "AAPL/2024", "AA PL", "*"])
+def test_dataset_tft_invalid_asset_filter_value_raises(
+    store: MedallionStore, bad_asset: str
+) -> None:
+    """Valor de `asset` fora de `^[A-Za-z0-9._-]+$` ergue ANTES de interpolar."""
+    with pytest.raises(ValueError, match="asset"):
+        store.read(layer=_PROCESSED_LAYER, table=_DATASET_TFT, filters={"asset": bad_asset})
+
+
+@pytest.mark.contract
+def test_dataset_tft_unsupported_filter_key_raises(
+    store: MedallionStore, tmp_path: Path
+) -> None:
+    """Filtro não suportado (chave ≠ `asset`) no par read-only ergue, não ignora."""
+    ts = datetime(2024, 1, 2, tzinfo=UTC)
+    _seed_dataset_tft(store, tmp_path, "AAPL", [_dataset_row("AAPL", ts, 0.01, 55.0)])
+
+    with pytest.raises(ValueError, match="year"):
+        store.read(
+            layer=_PROCESSED_LAYER,
+            table=_DATASET_TFT,
+            filters={"asset": "AAPL", "year": 2024},
+        )
 
 
 @pytest.mark.contract

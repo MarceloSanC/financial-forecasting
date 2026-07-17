@@ -33,10 +33,18 @@ com `SELECT *` sem `hive_partitioning` (não há coluna de partição fantasma),
 sessão DuckDB `TimeZone='UTC'` e normalização NaN → None como no read bronze;
 dataset/asset inexistente → vazio (C4). `write` no par ergue `ApplicationError`
 ("read-only") — a semântica de escrita bronze fica intacta.
+
+Disciplina de filtro do par read-only (paridade fake↔real no contract test):
+`filters={"asset": None}` equivale a filtro ausente (união dos assets); o valor
+de `asset` é validado contra `^[A-Za-z0-9._-]+$` ANTES de interpolar no
+glob/SQL (sem separadores de path — `ValueError` se violar); qualquer chave de
+filtro diferente de `asset` ergue `ValueError` em vez de ser ignorada
+silenciosamente.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -61,6 +69,37 @@ _COLLISION_SAMPLE_SIZE = 5
 # Registry read-only (Stage 5.2 D3): pares legíveis pelo port cujo layout físico
 # é diretório-por-asset (3.5), NÃO Hive; `write` neles ergue ApplicationError.
 _READ_ONLY_PAIRS: frozenset[tuple[str, str]] = frozenset({("processed", "dataset_tft")})
+# Valor de filtro `asset` interpolado em glob/SQL: conservador, sem separadores
+# de path (disciplina de interpolação do par read-only).
+_READ_ONLY_ASSET_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _validate_read_only_filters(
+    layer: str, table: str, filters: Mapping[str, object] | None
+) -> str | None:
+    """Valida o filtro do par read-only e devolve o `asset` (ou None ≡ união).
+
+    `asset=None` equivale a filtro ausente; chave ≠ `asset` ergue `ValueError`
+    (nunca ignora silenciosamente); valor fora de `^[A-Za-z0-9._-]+$` ergue
+    ANTES de qualquer interpolação em glob/SQL.
+    """
+    wanted = dict(filters or {})
+    unsupported = sorted(set(wanted) - {"asset"})
+    if unsupported:
+        raise ValueError(
+            f"read-only pair ({layer!r}, {table!r}) supports only the 'asset' "
+            f"filter; got unsupported keys {unsupported}"
+        )
+    asset_val = wanted.get("asset")
+    if asset_val is None:
+        return None
+    asset = str(asset_val)
+    if not _READ_ONLY_ASSET_PATTERN.fullmatch(asset):
+        raise ValueError(
+            f"read-only pair ({layer!r}, {table!r}) asset filter must match "
+            f"{_READ_ONLY_ASSET_PATTERN.pattern!r}; got {asset!r}"
+        )
+    return asset
 
 
 def _safe_partition(value: object) -> str:
@@ -269,17 +308,18 @@ class ParquetMedallionStore:
         """Lê um par read-only no layout diretório-por-asset da 3.5 (sem Hive).
 
         Com `filters={"asset": ...}` o glob é `<table>/<asset>/*.parquet`; sem
-        filtro, `<table>/**/*.parquet` (união dos assets). `SELECT *` sem
-        `hive_partitioning` (não há coluna de partição fantasma aqui); sessão
-        DuckDB `TimeZone='UTC'`; NaN → None como no read bronze; dataset/asset
-        inexistente → vazio (C4).
+        filtro (ou `asset=None` ≡ ausente), `<table>/**/*.parquet` (união dos
+        assets). O filtro passa por `_validate_read_only_filters` ANTES de
+        qualquer interpolação (chave ≠ `asset` ou valor fora do padrão ergue).
+        `SELECT *` sem `hive_partitioning` (não há coluna de partição fantasma
+        aqui); sessão DuckDB `TimeZone='UTC'`; NaN → None como no read bronze;
+        dataset/asset inexistente → vazio (C4).
         """
         table_dir = self._table_dir(layer, table)
-        wanted = dict(filters or {})
-        asset_val = wanted.get("asset")
+        asset = _validate_read_only_filters(layer, table, filters)
 
-        if asset_val is not None:
-            scope_dir = table_dir / str(asset_val)
+        if asset is not None:
+            scope_dir = table_dir / asset
             glob = str(scope_dir / "*.parquet")
             if not any(scope_dir.glob("*.parquet")):
                 return []

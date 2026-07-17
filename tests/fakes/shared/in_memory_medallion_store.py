@@ -21,11 +21,16 @@ Stage 5.2 (Task 04, concept D3): o fake também suporta o par **read-only**
 filtro), asset/dataset inexistente → vazio (C4) e `write` no par →
 `ApplicationError` ("read-only"), espelhando o registry read-only do adapter
 real. A semeadura acontece FORA do port, via o helper `seed_read_only`
-(análogo, no fake, a gravar o Parquet direto no layout da 3.5).
+(análogo, no fake, a gravar o Parquet direto no layout da 3.5). A disciplina de
+filtro do par espelha o real: `asset=None` ≡ filtro ausente (união), valor de
+`asset` fora de `^[A-Za-z0-9._-]+$` ergue `ValueError` (mesmo padrão que o real
+valida antes de interpolar em glob/SQL) e chave de filtro ≠ `asset` ergue em
+vez de ser ignorada silenciosamente.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
@@ -56,6 +61,8 @@ _ASSET_COL_BY_TABLE: dict[str, str] = {
 _SUPPORTED_LAYER = "bronze"
 # Pares read-only (Stage 5.2 D3): legíveis pelo port, write ergue ApplicationError.
 _READ_ONLY_PAIRS: frozenset[tuple[str, str]] = frozenset({("processed", "dataset_tft")})
+# Espelha o padrão de validação do adapter real (disciplina de interpolação).
+_READ_ONLY_ASSET_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 _PARTITION_NONE = "__none__"
 
 
@@ -211,9 +218,27 @@ class FakeMedallionStore:
     def _read_read_only(
         self, layer: str, table: str, filters: Mapping[str, object] | None
     ) -> Sequence[Row]:
-        """Lê um par read-only: filtro por `asset` (ou união); inexistente → vazio."""
+        """Lê um par read-only: filtro por `asset` (ou união); inexistente → vazio.
+
+        Mesma disciplina de filtro do adapter real: `asset=None` ≡ ausente;
+        chave ≠ `asset` ergue; valor fora de `^[A-Za-z0-9._-]+$` ergue.
+        """
         wanted = dict(filters or {})
-        wanted_asset = _safe_partition(wanted["asset"]) if "asset" in wanted else None
+        unsupported = sorted(set(wanted) - {"asset"})
+        if unsupported:
+            raise ValueError(
+                f"read-only pair ({layer!r}, {table!r}) supports only the 'asset' "
+                f"filter; got unsupported keys {unsupported}"
+            )
+        asset_val = wanted.get("asset")
+        wanted_asset: str | None = None
+        if asset_val is not None:
+            wanted_asset = str(asset_val)
+            if not _READ_ONLY_ASSET_PATTERN.fullmatch(wanted_asset):
+                raise ValueError(
+                    f"read-only pair ({layer!r}, {table!r}) asset filter must match "
+                    f"{_READ_ONLY_ASSET_PATTERN.pattern!r}; got {wanted_asset!r}"
+                )
 
         result: list[Row] = []
         for (p_layer, p_table, p_asset), part_rows in self._read_only.items():
