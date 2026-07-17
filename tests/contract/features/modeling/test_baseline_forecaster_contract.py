@@ -4,8 +4,12 @@ Prova o contrato SEMÂNTICO do port (concept 5.2 §4/§5/§6; A4/A7/A8) sobre as
 specs canônicas (`historical_quantiles_window=20` — override de teste sancionado
 pelo ADR 5.2.0003, para a fixture curta caber):
 
-- **I3 — causalidade por truncamento:** mutar/truncar `returns` após a decisão
-  `t` não muda a grade em `t` — todas as famílias.
+- **I3 — causalidade por truncamento, POR DECISÃO:** mutar/truncar `returns`
+  após a decisão `t` não muda a grade em `t` — todas as famílias, inclusive
+  para uma decisão INTERMEDIÁRIA de uma chamada multi-decisão (a grade em t
+  reproduz a chamada truncada em `returns[: t+1]` e é invariante a mutação em
+  `(t, decisão_seguinte]`) — mata o mutante que condiciona toda decisão em
+  `returns[: max(decision_indices)+1]`.
 - **I4 — estimação congelada no train (recorte por família — ADR 5.2.0002
   Implementation notes):** para `ar1`/`historical_mean`, mutar
   `returns[train_end_idx+1 : t]` (excluindo o r_t condicionante no caso `ar1`)
@@ -33,6 +37,12 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from financial_forecasting.features.modeling.domain.services.baseline_statistics import (
+    ewma_variance_path,
+)
+from financial_forecasting.features.modeling.domain.services.quantile_grid_emission import (
+    gaussian_grid,
+)
 from financial_forecasting.features.modeling.domain.value_objects.baseline_spec import (
     BASELINE_FAMILIES,
     BaselineSpec,
@@ -146,6 +156,52 @@ def test_i3_emission_invariant_to_truncation_at_decision(
     )
 
     assert truncated == full
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("family", BASELINE_FAMILIES)
+def test_i3_intermediate_decision_matches_truncated_call(
+    forecaster: BaselineForecaster, family: str
+) -> None:
+    """I3 POR DECISÃO: a grade numa decisão intermediária t de uma chamada
+    multi-decisão é idêntica à da chamada truncada em `returns[: t+1]`.
+
+    Mata o mutante que condiciona toda decisão em
+    `returns[: max(decision_indices)+1]` (Checkpoint C, MAJOR-1).
+    """
+    returns = _ar1_returns()
+    intermediate = _DECISIONS[0]  # 48 — NÃO é a última decisão da chamada
+    multi = _forecast(forecaster, _SPECS[family], returns)  # decisões (48, 52)
+
+    truncated = _forecast(
+        forecaster,
+        _SPECS[family],
+        returns[: intermediate + 1],
+        decisions=(intermediate,),
+    )
+
+    assert multi[intermediate] == truncated[intermediate]
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("family", BASELINE_FAMILIES)
+def test_i3_intermediate_decision_invariant_to_mutation_before_next_decision(
+    forecaster: BaselineForecaster, family: str
+) -> None:
+    """I3 POR DECISÃO: mutar `returns` em `(t, decisão_seguinte]` não muda a
+    grade na decisão intermediária t (a da decisão seguinte pode mudar)."""
+    returns = _ar1_returns()
+    intermediate = _DECISIONS[0]  # 48
+    baseline = _forecast(forecaster, _SPECS[family], returns)
+
+    mutated = (
+        returns[: intermediate + 1]
+        + tuple(_MUTATION for _ in range(intermediate + 1, _LAST_DECISION + 1))
+        + returns[_LAST_DECISION + 1 :]
+    )
+    contaminated = _forecast(forecaster, _SPECS[family], mutated)
+
+    assert contaminated[intermediate] == baseline[intermediate]
 
 
 # -- I4: estimação congelada no train (recorte por família) ---------------------
@@ -286,6 +342,35 @@ def test_shape_flat_families_are_flat_in_horizon(
     for grids in result.values():
         reference = grids[_HORIZONS[0]]
         assert all(grid == reference for grid in grids.values())
+
+
+@pytest.mark.contract
+def test_ewma_vol_decay_lambda_comes_from_spec(forecaster: BaselineForecaster) -> None:
+    """O λ do `ewma_vol` vem da spec, nunca hardcoded (freeze I4 do ADR 5.2.0002).
+
+    Com `decay_lambda=0.5`, a emissão deve casar o oráculo de domínio
+    `ewma_variance_path(..., 0.5)` + `gaussian_grid` (tolerância 1e-12) e
+    diferir da grade com o λ canônico 0.94 — mata implementação que
+    hardcodeia 0.94 (Checkpoint C, MINOR-5).
+    """
+    alt_lambda = 0.5
+    tolerance = 1e-12  # tolerância declarada (ADR 0.0.0021)
+    returns = _ar1_returns()
+    spec_alt = BaselineSpec(family="ewma_vol", decay_lambda=alt_lambda)
+
+    result = _forecast(forecaster, spec_alt, returns)
+    canonical = _forecast(forecaster, _SPECS["ewma_vol"], returns)
+
+    for decision in _DECISIONS:
+        sigma2 = ewma_variance_path(
+            returns=returns[: decision + 1], decay_lambda=alt_lambda
+        )[-1]
+        expected = gaussian_grid(mean=0.0, std=math.sqrt(sigma2), levels=_LEVELS)
+        for horizon in _HORIZONS:
+            assert result[decision][horizon] == pytest.approx(expected, abs=tolerance)
+            assert result[decision][horizon] != pytest.approx(
+                canonical[decision][horizon], abs=tolerance
+            )
 
 
 @pytest.mark.contract
