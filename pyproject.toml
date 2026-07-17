@@ -48,6 +48,19 @@ dependencies = [
     # validada pela fixture-oráculo (a lib é só a origem, não a fonte da verdade).
     # Pinado por minor; uv.lock trava o patch (mesma postura de exchange-calendars/yfinance).
     "pandas-ta-classic>=0.6,<0.7",
+    # Baselines estatísticos — estimação do AR(1) APENAS — Stage 5.2 / ADR 5.2.0001
+    # `ARIMA(order=(1,0,0), include_mean=True)` (port do `arima` do R) estima
+    # (mu, phi, sigma2_eps) atrás do seam `_fit_ar1`; TODA a emissão é fórmula de
+    # domínio stdlib-only validada por oráculo. Vive SÓ no adapter
+    # features/modeling/adapters/out/statsforecast/; o gate import-linter
+    # `modeling-no-statsforecast-leak` (Task 08) reprova se statsforecast/numba/numpy
+    # vazar para application/domain. Entra em `dependencies` (NÃO num extra) porque o
+    # extra opcional `sentiment` existe para libs de centenas de MB fora do CI (ADR
+    # 3.2.0002); aqui a perna `real` do contract test e a quebra intencional da Task 08
+    # rodam no CI (`uv sync --extra dev`) — postura exchange-calendars/pandas-ta-classic.
+    # Pinado por minor; uv.lock trava o patch. Resolvido: 2.1.1 (sem numba — a 2.x usa
+    # `coreforecast` compilado; o risco de 1ª compilação JIT do technical §5 é moot).
+    "statsforecast>=2.1,<3.0",
 ]
 
 [project.optional-dependencies]

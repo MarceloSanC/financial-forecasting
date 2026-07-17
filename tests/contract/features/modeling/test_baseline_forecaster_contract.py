@@ -37,6 +37,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from financial_forecasting.features.modeling.adapters.out.statsforecast.statsforecast_baseline_forecaster import (  # noqa: E501
+    StatsforecastBaselineForecaster,
+)
 from financial_forecasting.features.modeling.domain.services.baseline_statistics import (
     ewma_variance_path,
 )
@@ -63,10 +66,14 @@ def _build_fake() -> BaselineForecaster:
     return FakeBaselineForecaster()
 
 
-# A Task 07 adiciona `_build_real` (adapter statsforecast) com id "real" — a
-# suite é única e roda idêntica sobre as duas implementações (A7).
-_FACTORIES: list[Callable[[], BaselineForecaster]] = [_build_fake]
-_IDS = ["fake"]
+def _build_real() -> BaselineForecaster:
+    return StatsforecastBaselineForecaster()
+
+
+# Suite única rodando idêntica sobre fake e adapter real (A7) — mesma estrutura
+# do contract test do `MedallionStore` (skill `pytest-with-fakes`).
+_FACTORIES: list[Callable[[], BaselineForecaster]] = [_build_fake, _build_real]
+_IDS = ["fake", "real"]
 
 
 @pytest.fixture(params=_FACTORIES, ids=_IDS)
