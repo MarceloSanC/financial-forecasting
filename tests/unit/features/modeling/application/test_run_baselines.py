@@ -31,6 +31,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from financial_forecasting.features.modeling.application.use_cases import (
+    run_baselines as run_baselines_module,
+)
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
     RunBaselinesCommand,
@@ -414,3 +417,29 @@ def test_i6_assert_zero_removal_helper() -> None:
 
     with pytest.raises(ValueError, match=r"dedup removed 3 aligned-point entries"):
         _assert_zero_removal(before=12, after=9)
+
+
+@pytest.mark.unit
+def test_i6_wiring_lossy_dedup_raises_through_use_case(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """I6 (wiring pinado): dedup stubado que COLAPSA entradas faz o use case erguer.
+
+    Prova que `_assert_zero_removal` está de fato CHAMADO no fluxo (deletar a
+    chamada mata este teste): monkeypatch de `deduplicate_operationally_latest`
+    no namespace de `run_baselines` devolvendo menos entradas -> o `ValueError`
+    com a mensagem I6 do helper propaga pela invocação normal.
+    """
+    def _lossy_dedup(
+        records: Sequence[object], **_kwargs: object
+    ) -> tuple[object, ...]:
+        materialized = tuple(records)
+        return materialized[:-1]  # colapsa 1 entrada SILENCIOSAMENTE (o bug I6)
+
+    monkeypatch.setattr(
+        run_baselines_module, "deduplicate_operationally_latest", _lossy_dedup
+    )
+    use_case, _ = _build()
+
+    with pytest.raises(ValueError, match=r"dedup removed 1 aligned-point entries"):
+        use_case(_command(specs=(BaselineSpec(family="zero_return"),)))
