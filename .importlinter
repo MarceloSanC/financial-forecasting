@@ -209,6 +209,14 @@ source_modules =
     # imports não reprova). Provado por quebra intencional revertida (Task 09 / A9).
     financial_forecasting.features.analytics_store.application
     financial_forecasting.features.analytics_store.domain
+    # Stage 5.2 (concept 5.2 §5 I8; finding da 5.1 §7): estende a
+    # `features.modeling.{application,domain}`. O use case `RunBaselines` lê o dataset
+    # pelo port `MedallionStore` (par read-only `("processed", "dataset_tft")` — D3) e
+    # troca só primitivos/`collections.abc`; pandas/pyarrow vivem APENAS nos adapters.
+    # `domain` entra por defesa em profundidade (já stdlib-only via domain-purity).
+    # Provado por quebra intencional revertida (Task 08 / A9).
+    financial_forecasting.features.modeling.application
+    financial_forecasting.features.modeling.domain
 forbidden_modules =
     pandas
     pyarrow
@@ -266,4 +274,32 @@ source_modules =
 forbidden_modules =
     torch
     transformers
+allow_indirect_imports = False
+
+# -----------------------------------------------------------------------------
+# Contrato 9 — modeling-no-statsforecast-leak (type = forbidden) — Stage 5.2 (I8)
+# LAYOUT §3: a `application` (e o `domain`) nunca importam libs externas — elas
+# vivem só em adapters. Mesma postura que `tracker-no-mlflow-leak`/
+# `sentiment-no-ml-leak`: o port-out `BaselineForecaster` (Protocol) troca só
+# primitivos/`collections.abc` + o VO `BaselineSpec`; `statsforecast` (e o
+# `numpy` que ela usa) vive APENAS no adapter
+# `features/modeling/adapters/out/statsforecast/` (ADR 5.2.0001 — o fit do
+# AR(1) é o ÚNICO uso; toda a emissão é fórmula de domínio stdlib-only).
+# Novidade vs `domain-purity` (que já lista `numpy`): este contrato cobre a
+# camada `application` do BC modeling (não coberta por domain-purity) e adiciona
+# `statsforecast`/`numba`. `numba` entra por defesa em profundidade (a
+# statsforecast 2.x resolvida usa `coreforecast`, mas a família 1.x arrastava
+# numba — blinda contra downgrade/import futuro). `domain` idem (já stdlib-only).
+# Provado por quebra intencional revertida (Task 08 / A9). Concept 5.2 I8/§8.
+# -----------------------------------------------------------------------------
+[importlinter:contract:modeling-no-statsforecast-leak]
+name = Application/domain não importam statsforecast/numba/numpy (só o adapter)
+type = forbidden
+source_modules =
+    financial_forecasting.features.modeling.application
+    financial_forecasting.features.modeling.domain
+forbidden_modules =
+    statsforecast
+    numba
+    numpy
 allow_indirect_imports = False

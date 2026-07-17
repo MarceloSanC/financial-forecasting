@@ -51,6 +51,9 @@ _EXPECTED_CONTRACTS = (
     "shared-no-features",
     "tracker-no-mlflow-leak",
     "store-no-storage-leak",
+    # Stage 5.2 (I8/A9): statsforecast/numba/numpy confinados ao adapter
+    # features/modeling/adapters/out/statsforecast/ (ADR 5.2.0001).
+    "modeling-no-statsforecast-leak",
 )
 
 
@@ -237,6 +240,32 @@ _REAL_VIOLATION_CASES = (
             )
         },
         id="domain-purity:modeling-domain-imports-pandas",
+    ),
+    # Stage 5.2 (A9): a application do BC modeling importando statsforecast precisa
+    # reprovar o novo contrato modeling-no-statsforecast-leak. Automatiza a prova
+    # manual da Task 08 e trava o drift de source_modules (contrato míope: se alguém
+    # esquecer `modeling.application` no contrato, este caso fica verde e o teste
+    # falha).
+    pytest.param(
+        "modeling-no-statsforecast-leak",
+        {
+            "features/modeling/application/_arch_audit_taint.py": (
+                "import statsforecast  # violação temporária\n"
+            )
+        },
+        id="modeling-no-statsforecast-leak:modeling-application-imports-statsforecast",
+    ),
+    # Stage 5.2 (A9): o mesmo BC importando pandas na application precisa reprovar
+    # store-no-storage-leak (registro do finding da 5.1 §7 — o RunBaselines consome o
+    # MedallionStore trocando só primitivos; pandas vive nos adapters).
+    pytest.param(
+        "store-no-storage-leak",
+        {
+            "features/modeling/application/_arch_audit_taint.py": (
+                "import pandas  # violação temporária\n"
+            )
+        },
+        id="store-no-storage-leak:modeling-application-imports-pandas",
     ),
 )
 
