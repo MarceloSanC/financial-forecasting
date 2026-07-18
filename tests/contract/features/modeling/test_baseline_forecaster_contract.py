@@ -290,6 +290,29 @@ def test_c1_historical_quantiles_window_not_filled_raises(
 
 
 @pytest.mark.contract
+def test_c1_ar1_constant_train_raises(forecaster: BaselineForecaster) -> None:
+    """`ar1` com train constante (≠ 0, variância zero) ergue nas DUAS pernas.
+
+    Erguer, não fabricar (Checkpoint C MAJOR-1): sem o guard, o fit real numa
+    série constante devolve sigma2_eps ~ 1e-38 > 0 (passa o C4 `<= 0`) e a
+    emissão fabricaria uma escala gaussiana degenerada; o fake já erguia — a
+    paridade observável (mesma condição e mensagem) é contrato.
+    """
+    constant = 0.001  # ≠ 0: isola a variância zero do train (não a borda ewma)
+    returns = tuple(constant for _ in range(_N))
+
+    with pytest.raises(ValueError, match=r"zero variance"):
+        forecaster.forecast(
+            spec=_SPECS["ar1"],
+            returns=returns,
+            train_end_idx=_TRAIN_END_IDX,
+            decision_indices=_DECISIONS,
+            horizons=_HORIZONS,
+            quantile_levels=_LEVELS,
+        )
+
+
+@pytest.mark.contract
 def test_c1_ar1_trivially_insufficient_train_raises(
     forecaster: BaselineForecaster,
 ) -> None:

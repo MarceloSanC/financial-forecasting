@@ -143,6 +143,17 @@ class StatsforecastBaselineForecaster:
             raise ValueError(
                 f"ar1 needs at least {_MIN_AR1_TRAIN} train observations; got {len(train)} (C1)"
             )
+        # Train de variância zero ergue ANTES do fit (paridade observável exata com
+        # o fake — Checkpoint C MAJOR-1): sem este guard, o fit da lib numa série
+        # constante devolve sigma2_eps ~ 1e-38 > 0 (passa o C4 `<= 0`) e a emissão
+        # fabricaria uma escala gaussiana degenerada — erguer, não fabricar.
+        mean = fmean(train)
+        variance = sum((r - mean) ** 2 for r in train) / len(train)
+        if variance <= 0.0:
+            raise ValueError(
+                "ar1 train series has zero variance (constant returns) — "
+                "cannot estimate AR(1) moments"
+            )
         mu, phi, sigma2_eps = self._fit_ar1(train)
         if not (math.isfinite(mu) and math.isfinite(phi) and math.isfinite(sigma2_eps)):
             raise ValueError(
