@@ -599,7 +599,7 @@ skills_hint: [ddd-tactical-patterns, hex-arch-python, dmls-ch05-model-developmen
 
 #### Stage 5.2 — `5.2-baselines-naive-statistical`
 
-**Descrição humana:** Baselines naive e estatísticos via `statsforecast` (zero_return/random_walk, historical_mean, AR(1), EWMA-vol, historical_quantiles) — **todos implementados** (corrige a lacuna do projeto antigo), persistindo predições no mesmo grão/cohort do candidato.
+**Descrição humana:** Baselines naive e estatísticos via `statsforecast` (fit do AR(1)) + fórmulas canônicas no domínio validadas por oráculo (ADR 5.2.0001) (zero_return/random_walk, historical_mean, AR(1), EWMA-vol, historical_quantiles) — **todos implementados** (corrige a lacuna do projeto antigo), persistindo predições no mesmo grão/cohort do candidato.
 
 **Descrição para IA:**
 ```yaml
@@ -615,7 +615,7 @@ arquivos_a_criar:
   - tests/integration/features/modeling/test_run_baselines.py
 contratos_introduzidos: [BaselineSpec (value-object), BaselineForecaster (port-out), RunBaselines (use case)]
 contratos_consumidos: [WalkForwardSplitter (5.1), MultiHorizonPredictionPersister (4.3)]
-definition_of_done: "Os 6 baselines geram quantis (point baselines como triplet degenerado) alinhados por target_timestamp ao candidato; persistidos com `model_version='baseline_*'`; nenhum baseline documentado fica sem implementação."
+definition_of_done: "As 5 specs de baseline (`zero_return` ≡ RW sem drift) geram quantis (point baselines como grade degenerada) alinhados por target_timestamp ao candidato; persistidos com `model_version='baseline_*'`; nenhum baseline documentado fica sem implementação."
 non_goals: [GBM (5.3), TFT (5.4)]
 complexidade_estimada: M
 gate_mode: strict
@@ -686,7 +686,7 @@ arquivos_a_criar:
   - tests/integration/features/modeling/test_run_confirmatory_cohort.py
 contratos_introduzidos: [RunConfirmatoryCohort (use case)]
 contratos_consumidos: [TrainTft (5.4), TrainGbmQuantile (5.3), RunBaselines (5.2)]
-definition_of_done: "Candidato + GBM + 6 baselines treinados no cohort AAPL (seeds × folds) com mesmo `parent_sweep_id`; predições alinhadas por target_timestamp; cohort congelado e hasheado; zero seleção por OOS."
+definition_of_done: "Candidato + GBM + 5 specs de baseline (`zero_return` ≡ RW sem drift) treinados no cohort AAPL (seeds × folds) com mesmo `parent_sweep_id`; predições alinhadas por target_timestamp; cohort congelado e hasheado; zero seleção por OOS."
 non_goals: [estatística confirmatória (Step 6), outros ativos]
 complexidade_estimada: M
 gate_mode: strict
