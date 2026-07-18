@@ -86,6 +86,26 @@ def _restore_value(key: str, value: object) -> object:
     return value
 
 
+def _materialize_nullable_int(series: pd.Series) -> pd.Series:
+    """Materializa uma coluna `Int64` (nullable) SEM afrouxar o gate de escrita.
+
+    Converte apenas quando TODOS os valores são `int` genuínos ou `None` (bool
+    excluído); qualquer outro tipo (`"42"` str, `4.0` float) deixa a série
+    intacta para o pandera reprovar com `SchemaError` (dtype estrito,
+    `coerce=False`). Série já `Int64` volta intacta (idempotente).
+    """
+    if str(series.dtype) == "Int64":
+        return series
+    values = series.tolist()
+    strict_ints = all(
+        value is None or (isinstance(value, int) and not isinstance(value, bool))
+        for value in values
+    )
+    if not strict_ints:
+        return series
+    return pd.Series(pd.array(values, dtype="Int64"), index=series.index)
+
+
 def _write_parquet(df: pd.DataFrame, path: Path) -> None:
     """Grava um `DataFrame` como Parquet via pyarrow (sem índice)."""
     table = pa.Table.from_pandas(df, preserve_index=False)
@@ -145,6 +165,14 @@ class ParquetAnalyticsRepository:
 
         prepared = [self._fill_write_time(table, row) for row in rows]
         incoming = pd.DataFrame(prepared)
+        # Colunas de extensão nullable `Int64` (ex.: `seed` em dim_run):
+        # materializa ANTES do validate — só int/None genuínos convertem; tipos
+        # errados ("42" str, 4.0 float) permanecem e reprovam no pandera (gate
+        # estrito, coerce=False). Sem a materialização, `seed=None` viraria
+        # coluna object/null-type no Parquet e quebraria o merge por partição.
+        for name, column in meta.schema.columns.items():
+            if str(column.dtype) == "Int64" and name in incoming.columns:
+                incoming[name] = _materialize_nullable_int(incoming[name])
         # pandera ANTES do disco (I4/C3): schema/dtype/PK inválido → SchemaError
         # (coluna extra sob strict=True levanta SchemaErrors — ambos são erros
         # pandera que abortam o write antes de tocar o Parquet). Espelha o

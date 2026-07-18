@@ -23,10 +23,28 @@ se vazar para `application`/`domain`). Implementa o contrato `MedallionStore`:
 A raiz de dados (`data_root`) é INJETADA (não hardcoded, I8); o adapter é
 instanciado só no `composition_root` (I9). Layout em disco (ADR 2.1.0001):
     <data_root>/bronze/<table>/asset=<asset>/year=<year>/<table>.parquet
+
+Stage 5.2 (Task 04, concept D3): o par **read-only** `("processed",
+"dataset_tft")` entra num registry read-only próprio (fora do `BRONZE_REGISTRY`
+pandera — o contrato físico do dataset é da 3.5). O `read` resolve o layout já
+existente por diretório de asset (NÃO Hive):
+    <data_root>/processed/dataset_tft/<asset>/dataset_tft_<asset>.parquet
+com `SELECT *` sem `hive_partitioning` (não há coluna de partição fantasma),
+sessão DuckDB `TimeZone='UTC'` e normalização NaN → None como no read bronze;
+dataset/asset inexistente → vazio (C4). `write` no par ergue `ApplicationError`
+("read-only") — a semântica de escrita bronze fica intacta.
+
+Disciplina de filtro do par read-only (paridade fake↔real no contract test):
+`filters={"asset": None}` equivale a filtro ausente (união dos assets); o valor
+de `asset` é validado contra `^[A-Za-z0-9._-]+$` ANTES de interpolar no
+glob/SQL (sem separadores de path — `ValueError` se violar); qualquer chave de
+filtro diferente de `asset` ergue `ValueError` em vez de ser ignorada
+silenciosamente.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -48,6 +66,40 @@ Row = Mapping[str, object]
 
 _PARTITION_NONE = "__none__"
 _COLLISION_SAMPLE_SIZE = 5
+# Registry read-only (Stage 5.2 D3): pares legíveis pelo port cujo layout físico
+# é diretório-por-asset (3.5), NÃO Hive; `write` neles ergue ApplicationError.
+_READ_ONLY_PAIRS: frozenset[tuple[str, str]] = frozenset({("processed", "dataset_tft")})
+# Valor de filtro `asset` interpolado em glob/SQL: conservador, sem separadores
+# de path (disciplina de interpolação do par read-only).
+_READ_ONLY_ASSET_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _validate_read_only_filters(
+    layer: str, table: str, filters: Mapping[str, object] | None
+) -> str | None:
+    """Valida o filtro do par read-only e devolve o `asset` (ou None ≡ união).
+
+    `asset=None` equivale a filtro ausente; chave ≠ `asset` ergue `ValueError`
+    (nunca ignora silenciosamente); valor fora de `^[A-Za-z0-9._-]+$` ergue
+    ANTES de qualquer interpolação em glob/SQL.
+    """
+    wanted = dict(filters or {})
+    unsupported = sorted(set(wanted) - {"asset"})
+    if unsupported:
+        raise ValueError(
+            f"read-only pair ({layer!r}, {table!r}) supports only the 'asset' "
+            f"filter; got unsupported keys {unsupported}"
+        )
+    asset_val = wanted.get("asset")
+    if asset_val is None:
+        return None
+    asset = str(asset_val)
+    if not _READ_ONLY_ASSET_PATTERN.fullmatch(asset):
+        raise ValueError(
+            f"read-only pair ({layer!r}, {table!r}) asset filter must match "
+            f"{_READ_ONLY_ASSET_PATTERN.pattern!r}; got {asset!r}"
+        )
+    return asset
 
 
 def _safe_partition(value: object) -> str:
@@ -72,6 +124,14 @@ def _write_parquet(df: pd.DataFrame, path: Path) -> None:
     """Grava um `DataFrame` como Parquet via pyarrow (sem índice)."""
     table = pa.Table.from_pandas(df, preserve_index=False)
     pq.write_table(table, path)  # type: ignore[no-untyped-call]
+
+
+def _frame_to_rows(result_df: pd.DataFrame) -> list[Row]:
+    """Materializa o resultado DuckDB como rows dict-like, normalizando NaN → None."""
+    return [
+        {k: (None if pd.isna(v) else v) for k, v in record.items()}
+        for record in result_df.to_dict(orient="records")
+    ]
 
 
 class ParquetMedallionStore:
@@ -138,6 +198,11 @@ class ParquetMedallionStore:
         overwrite: bool = False,
     ) -> None:
         """Grava `rows` append-only, particionado por asset/year (ver port)."""
+        if (layer, table) in _READ_ONLY_PAIRS:
+            raise ApplicationError(
+                f"Medallion pair ({layer!r}, {table!r}) is read-only; "
+                "write is not supported (Stage 5.2 D3)"
+            )
         meta = self._table(layer, table)
         if not rows:
             return
@@ -205,6 +270,8 @@ class ParquetMedallionStore:
         filters: Mapping[str, object] | None = None,
     ) -> Sequence[Row]:
         """Lê o dataset filtrado por partição (`filters`); inexistente → vazio."""
+        if (layer, table) in _READ_ONLY_PAIRS:
+            return self._read_read_only(layer, table, filters)
         meta = self._table(layer, table)
         table_dir = self._table_dir(layer, table)
         glob = str(table_dir / "**" / "*.parquet")
@@ -233,10 +300,42 @@ class ParquetMedallionStore:
         finally:
             con.close()
 
-        return [
-            {k: (None if pd.isna(v) else v) for k, v in record.items()}
-            for record in result_df.to_dict(orient="records")
-        ]
+        return _frame_to_rows(result_df)
+
+    def _read_read_only(
+        self, layer: str, table: str, filters: Mapping[str, object] | None
+    ) -> Sequence[Row]:
+        """Lê um par read-only no layout diretório-por-asset da 3.5 (sem Hive).
+
+        Com `filters={"asset": ...}` o glob é `<table>/<asset>/*.parquet`; sem
+        filtro (ou `asset=None` ≡ ausente), `<table>/**/*.parquet` (união dos
+        assets). O filtro passa por `_validate_read_only_filters` ANTES de
+        qualquer interpolação (chave ≠ `asset` ou valor fora do padrão ergue).
+        `SELECT *` sem `hive_partitioning` (não há coluna de partição fantasma
+        aqui); sessão DuckDB `TimeZone='UTC'`; NaN → None como no read bronze;
+        dataset/asset inexistente → vazio (C4).
+        """
+        table_dir = self._table_dir(layer, table)
+        asset = _validate_read_only_filters(layer, table, filters)
+
+        if asset is not None:
+            scope_dir = table_dir / asset
+            glob = str(scope_dir / "*.parquet")
+            if not any(scope_dir.glob("*.parquet")):
+                return []
+        else:
+            glob = str(table_dir / "**" / "*.parquet")
+            if not any(table_dir.rglob("*.parquet")):
+                return []
+
+        con = duckdb.connect()
+        try:
+            con.execute("SET TimeZone='UTC'")  # timestamps tz-aware em UTC
+            result_df = con.execute(f"SELECT * FROM read_parquet('{glob}')").fetch_df()
+        finally:
+            con.close()
+
+        return _frame_to_rows(result_df)
 
     @staticmethod
     def _build_predicates(

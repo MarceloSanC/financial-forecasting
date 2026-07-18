@@ -12,6 +12,13 @@ contagens/`schema_version` como `int64`. `strict=True`, `coerce=False` (espelha 
 Colunas opcionais (`parent_sweep_id`, `fold`, `seed`) são `nullable=True` —
 execução avulsa pode não ter sweep/fold/seed. As colunas de PK são `nullable=False`
 e `unique` (composto) garante a unicidade da PK (C5).
+
+`seed` usa o dtype de EXTENSÃO nullable `Int64` (não o numpy `int64`): int64 numpy
+não representa NULL, então uma execução sem semente (`seed=None` — ex.: baselines
+determinísticos da 5.2, I9) reprovaria a validação (gap achado pelo e2e da Stage
+5.2 Task 09). O schema segue `coerce=False` (gate ESTRITO — `"42"` str e `4.0`
+float reprovam): quem materializa int/None genuínos como `Int64` ANTES do
+validate é o write do adapter (`_materialize_nullable_int`), nunca coerção.
 """
 
 from __future__ import annotations
@@ -34,7 +41,9 @@ _SCHEMA = pa.DataFrameSchema(
         "config_signature": pa.Column(str, nullable=False),
         "split_fingerprint": pa.Column(str, nullable=False),
         "fold": pa.Column(str, nullable=True),
-        "seed": pa.Column("int64", nullable=True),
+        # `Int64` (extensão nullable): seed=None persiste como NULL sem afrouxar
+        # o gate — a materialização estrita é do write (ver docstring do módulo).
+        "seed": pa.Column("Int64", nullable=True),
         "model_version": pa.Column(str, nullable=False),
         "created_at_utc": pa.Column(str, nullable=False),
     },

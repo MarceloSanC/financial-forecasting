@@ -130,6 +130,26 @@ def test_single_holiday_window_is_empty(provider: ExchangeCalendarProvider) -> N
 
 
 @pytest.mark.contract
+def test_real_provider_materializes_window_beyond_default_lib_bounds() -> None:
+    """A janela pedida manda, não os bounds default da lib (real-only).
+
+    O calendário default de `exchange-calendars` cobre ~hoje-20a .. hoje+1a; a
+    janela ampla FIXA do wiring do `WalkForwardSplitter` (Stage 5.2 Task 09,
+    F-T1 opção A: 1990-01-01..2035-12-31) cai fora dela. O adapter deve
+    materializar um calendário com bounds explícitos — 1995 (fora dos bounds
+    default em qualquer data de execução plausível) prova o ramo.
+    """
+    start, end = date(1995, 1, 2), date(1995, 12, 29)
+    sessions = _build_real().sessions(start=start, end=end)
+
+    assert sessions.sessions
+    assert all(start <= s <= end for s in sessions.sessions)
+    assert sessions.contains(date(1995, 5, 5))  # sexta comum de 1995
+    assert not sessions.contains(date(1995, 7, 4))  # Independence Day
+    assert not sessions.contains(date(1995, 5, 6))  # sábado
+
+
+@pytest.mark.contract
 def test_fake_and_real_produce_identical_sessions_2023() -> None:
     """Paridade fake↔real (I8/A9): mesmas sessões XNYS para o ano de 2023 inteiro.
 

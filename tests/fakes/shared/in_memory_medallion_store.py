@@ -15,10 +15,22 @@ PKs lógicas e âncoras de partição do registry `pandera` do adapter (concept 
 §9 / ADR 2.1.0001), de modo que fake e real respondam idênticos ao MESMO contract
 test (`tests/contract/shared/test_medallion_store_contract.py`, parametrizado
 sobre `[fake, real]`). Levanta o MESMO `DuplicateKeyError` do real.
+
+Stage 5.2 (Task 04, concept D3): o fake também suporta o par **read-only**
+`("processed", "dataset_tft")` — `read` filtrado por `asset` (ou união sem
+filtro), asset/dataset inexistente → vazio (C4) e `write` no par →
+`ApplicationError` ("read-only"), espelhando o registry read-only do adapter
+real. A semeadura acontece FORA do port, via o helper `seed_read_only`
+(análogo, no fake, a gravar o Parquet direto no layout da 3.5). A disciplina de
+filtro do par espelha o real: `asset=None` ≡ filtro ausente (união), valor de
+`asset` fora de `^[A-Za-z0-9._-]+$` ergue `ValueError` (mesmo padrão que o real
+valida antes de interpolar em glob/SQL) e chave de filtro ≠ `asset` ergue em
+vez de ser ignorada silenciosamente.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
@@ -47,6 +59,10 @@ _ASSET_COL_BY_TABLE: dict[str, str] = {
     "fundamental": "asset_id",
 }
 _SUPPORTED_LAYER = "bronze"
+# Pares read-only (Stage 5.2 D3): legíveis pelo port, write ergue ApplicationError.
+_READ_ONLY_PAIRS: frozenset[tuple[str, str]] = frozenset({("processed", "dataset_tft")})
+# Espelha o padrão de validação do adapter real (disciplina de interpolação).
+_READ_ONLY_ASSET_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 _PARTITION_NONE = "__none__"
 
 
@@ -77,6 +93,26 @@ class FakeMedallionStore:
     def __init__(self) -> None:
         # (layer, table, asset, year) -> lista de rows (cópias defensivas).
         self._partitions: dict[tuple[str, str, str, str], list[dict[str, object]]] = {}
+        # Pares read-only: (layer, table, asset) -> lista de rows semeadas.
+        self._read_only: dict[tuple[str, str, str], list[dict[str, object]]] = {}
+
+    # -- semeadura read-only (fora do port) -----------------------------------
+
+    def seed_read_only(
+        self, *, layer: str, table: str, asset: str, rows: Sequence[Row]
+    ) -> None:
+        """Semeia um par read-only in-memory (análogo a gravar o Parquet da 3.5).
+
+        NÃO faz parte do port `MedallionStore` — existe para os testes popularem
+        o dataset que o `write` (read-only) se recusa a gravar.
+        """
+        if (layer, table) not in _READ_ONLY_PAIRS:
+            raise ApplicationError(
+                f"seed_read_only only supports read-only pairs {sorted(_READ_ONLY_PAIRS)}; "
+                f"got ({layer!r}, {table!r})"
+            )
+        bucket = self._read_only.setdefault((layer, table, asset), [])
+        bucket.extend(dict(row) for row in rows)
 
     # -- helpers de schema ---------------------------------------------------
 
@@ -110,6 +146,11 @@ class FakeMedallionStore:
         overwrite: bool = False,
     ) -> None:
         """Grava `rows` append-only, particionado por asset/year (ver port)."""
+        if (layer, table) in _READ_ONLY_PAIRS:
+            raise ApplicationError(
+                f"Medallion pair ({layer!r}, {table!r}) is read-only; "
+                "write is not supported (Stage 5.2 D3)"
+            )
         self._require_known(layer, table)
         if not rows:
             return
@@ -148,6 +189,8 @@ class FakeMedallionStore:
         filters: Mapping[str, object] | None = None,
     ) -> Sequence[Row]:
         """Lê o dataset filtrado por partição (`filters`); inexistente → vazio."""
+        if (layer, table) in _READ_ONLY_PAIRS:
+            return self._read_read_only(layer, table, filters)
         self._require_known(layer, table)
         asset_col = _ASSET_COL_BY_TABLE[table]
         wanted = dict(filters or {})
@@ -168,6 +211,40 @@ class FakeMedallionStore:
             if wanted_asset is not None and p_asset != wanted_asset:
                 continue
             if wanted_year is not None and p_year != wanted_year:
+                continue
+            result.extend(dict(r) for r in part_rows)
+        return result
+
+    def _read_read_only(
+        self, layer: str, table: str, filters: Mapping[str, object] | None
+    ) -> Sequence[Row]:
+        """Lê um par read-only: filtro por `asset` (ou união); inexistente → vazio.
+
+        Mesma disciplina de filtro do adapter real: `asset=None` ≡ ausente;
+        chave ≠ `asset` ergue; valor fora de `^[A-Za-z0-9._-]+$` ergue.
+        """
+        wanted = dict(filters or {})
+        unsupported = sorted(set(wanted) - {"asset"})
+        if unsupported:
+            raise ValueError(
+                f"read-only pair ({layer!r}, {table!r}) supports only the 'asset' "
+                f"filter; got unsupported keys {unsupported}"
+            )
+        asset_val = wanted.get("asset")
+        wanted_asset: str | None = None
+        if asset_val is not None:
+            wanted_asset = str(asset_val)
+            if not _READ_ONLY_ASSET_PATTERN.fullmatch(wanted_asset):
+                raise ValueError(
+                    f"read-only pair ({layer!r}, {table!r}) asset filter must match "
+                    f"{_READ_ONLY_ASSET_PATTERN.pattern!r}; got {wanted_asset!r}"
+                )
+
+        result: list[Row] = []
+        for (p_layer, p_table, p_asset), part_rows in self._read_only.items():
+            if (p_layer, p_table) != (layer, table):
+                continue
+            if wanted_asset is not None and p_asset != wanted_asset:
                 continue
             result.extend(dict(r) for r in part_rows)
         return result

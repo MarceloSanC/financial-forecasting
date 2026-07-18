@@ -14,15 +14,28 @@ Na Task 05 a fixture parametriza só o fake; a Task 07 adiciona `_build_real`
 exatos do bronze (concept §9): `timestamp`/`published_at`/`fiscal_date_end` UTC,
 OHLC `float32`, `volume` `int64`, fundamentals `float64` — para que o adapter
 real (que valida com `pandera`) aceite os mesmos dados que o fake.
+
+Stage 5.2 (Task 04, concept 5.2 D3): o par **read-only**
+`("processed", "dataset_tft")` entra no MESMO contrato — round-trip de leitura
+filtrada por `asset`, asset/dataset inexistente → vazio (C4), `write` no par →
+`ApplicationError` (read-only), normalização NaN → None e a disciplina de
+filtro do par: `asset=None` ≡ filtro ausente (união), valor de `asset` fora de
+`^[A-Za-z0-9._-]+$` ergue `ValueError` antes de interpolar no glob/SQL e chave
+de filtro ≠ `asset` ergue (nunca ignora silenciosamente) — com o real semeado
+gravando o Parquet direto no `tmp_path` (layout físico da 3.5:
+`processed/dataset_tft/<asset>/dataset_tft_<asset>.parquet`) e o fake semeado
+pelo helper `seed_read_only` (fora do port). Os casos bronze pré-existentes
+seguem intactos.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from financial_forecasting.shared.adapters.out.parquet.parquet_medallion_store import (
@@ -283,3 +296,150 @@ def test_fundamental_round_trip_no_phantom_partition(store: MedallionStore) -> N
     assert len(rows) == 1
     assert set(rows[0]) == set(written)  # sem `asset` fantasma
     assert rows[0]["report_type"] == "quarterly"
+
+
+# -----------------------------------------------------------------------------
+# Par read-only ("processed", "dataset_tft") — Stage 5.2 Task 04 (concept D3).
+# -----------------------------------------------------------------------------
+
+_PROCESSED_LAYER = "processed"
+_DATASET_TFT = "dataset_tft"
+
+
+def _dataset_row(asset: str, ts: datetime, target_return: float, rsi: float | None) -> Row:
+    """Linha mínima do dataset TFT (3.5): timestamp UTC + target + feature nullable."""
+    return {
+        "timestamp": ts,
+        "asset_id": asset,
+        "rsi_14": rsi,
+        "target_return": target_return,
+    }
+
+
+def _seed_dataset_tft(
+    store: MedallionStore, tmp_path: Path, asset: str, rows: Sequence[Row]
+) -> None:
+    """Semeia o par read-only FORA do port (write no par é proibido).
+
+    Fake: helper `seed_read_only` (in-memory). Real: grava o Parquet direto no
+    `tmp_path` espelhando o layout físico da 3.5
+    (`processed/dataset_tft/<asset>/dataset_tft_<asset>.parquet`).
+    """
+    if isinstance(store, FakeMedallionStore):
+        store.seed_read_only(layer=_PROCESSED_LAYER, table=_DATASET_TFT, asset=asset, rows=rows)
+        return
+    target_dir = tmp_path / _PROCESSED_LAYER / _DATASET_TFT / asset
+    target_dir.mkdir(parents=True, exist_ok=True)
+    frame = pd.DataFrame([dict(r) for r in rows])
+    frame.to_parquet(target_dir / f"{_DATASET_TFT}_{asset}.parquet", index=False)
+
+
+@pytest.mark.contract
+def test_dataset_tft_read_filters_by_asset(store: MedallionStore, tmp_path: Path) -> None:
+    """Round-trip de leitura do par read-only filtrada por `asset` (D3)."""
+    ts = datetime(2024, 1, 2, tzinfo=UTC)
+    _seed_dataset_tft(store, tmp_path, "AAPL", [_dataset_row("AAPL", ts, 0.01, 55.0)])
+    _seed_dataset_tft(store, tmp_path, "MSFT", [_dataset_row("MSFT", ts, -0.02, 45.0)])
+
+    rows = store.read(layer=_PROCESSED_LAYER, table=_DATASET_TFT, filters={"asset": "AAPL"})
+
+    assert len(rows) == 1
+    assert rows[0]["asset_id"] == "AAPL"
+    assert float(str(rows[0]["target_return"])) == pytest.approx(0.01)
+    timestamp = rows[0]["timestamp"]
+    assert isinstance(timestamp, datetime)  # pd.Timestamp é subclasse de datetime
+    assert timestamp.tzinfo is not None  # tz-aware UTC (premissa do RunBaselines)
+
+
+@pytest.mark.contract
+def test_dataset_tft_read_without_filter_returns_all_assets(
+    store: MedallionStore, tmp_path: Path
+) -> None:
+    """Sem `filters`, o par read-only devolve a união dos assets semeados."""
+    ts = datetime(2024, 1, 2, tzinfo=UTC)
+    _seed_dataset_tft(store, tmp_path, "AAPL", [_dataset_row("AAPL", ts, 0.01, 55.0)])
+    _seed_dataset_tft(store, tmp_path, "MSFT", [_dataset_row("MSFT", ts, -0.02, 45.0)])
+
+    rows = store.read(layer=_PROCESSED_LAYER, table=_DATASET_TFT)
+
+    assert {r["asset_id"] for r in rows} == {"AAPL", "MSFT"}
+
+
+@pytest.mark.contract
+def test_dataset_tft_read_asset_none_is_absent_filter(
+    store: MedallionStore, tmp_path: Path
+) -> None:
+    """`filters={"asset": None}` equivale a filtro ausente → união (paridade fake↔real)."""
+    ts = datetime(2024, 1, 2, tzinfo=UTC)
+    _seed_dataset_tft(store, tmp_path, "AAPL", [_dataset_row("AAPL", ts, 0.01, 55.0)])
+    _seed_dataset_tft(store, tmp_path, "MSFT", [_dataset_row("MSFT", ts, -0.02, 45.0)])
+
+    rows = store.read(layer=_PROCESSED_LAYER, table=_DATASET_TFT, filters={"asset": None})
+
+    assert {r["asset_id"] for r in rows} == {"AAPL", "MSFT"}
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("bad_asset", ["../evil", "AAPL/2024", "AA PL", "*"])
+def test_dataset_tft_invalid_asset_filter_value_raises(
+    store: MedallionStore, bad_asset: str
+) -> None:
+    """Valor de `asset` fora de `^[A-Za-z0-9._-]+$` ergue ANTES de interpolar."""
+    with pytest.raises(ValueError, match="asset"):
+        store.read(layer=_PROCESSED_LAYER, table=_DATASET_TFT, filters={"asset": bad_asset})
+
+
+@pytest.mark.contract
+def test_dataset_tft_unsupported_filter_key_raises(
+    store: MedallionStore, tmp_path: Path
+) -> None:
+    """Filtro não suportado (chave ≠ `asset`) no par read-only ergue, não ignora."""
+    ts = datetime(2024, 1, 2, tzinfo=UTC)
+    _seed_dataset_tft(store, tmp_path, "AAPL", [_dataset_row("AAPL", ts, 0.01, 55.0)])
+
+    with pytest.raises(ValueError, match="year"):
+        store.read(
+            layer=_PROCESSED_LAYER,
+            table=_DATASET_TFT,
+            filters={"asset": "AAPL", "year": 2024},
+        )
+
+
+@pytest.mark.contract
+def test_dataset_tft_read_missing_dataset_and_asset_return_empty(
+    store: MedallionStore, tmp_path: Path
+) -> None:
+    """C4: dataset ainda não semeado (e depois asset inexistente) devolvem vazio."""
+    empty = store.read(layer=_PROCESSED_LAYER, table=_DATASET_TFT, filters={"asset": "AAPL"})
+    assert list(empty) == []
+
+    ts = datetime(2024, 1, 2, tzinfo=UTC)
+    _seed_dataset_tft(store, tmp_path, "AAPL", [_dataset_row("AAPL", ts, 0.01, 55.0)])
+
+    rows = store.read(layer=_PROCESSED_LAYER, table=_DATASET_TFT, filters={"asset": "NVDA"})
+    assert list(rows) == []
+
+
+@pytest.mark.contract
+def test_dataset_tft_write_raises_read_only(store: MedallionStore) -> None:
+    """`write` no par read-only ergue `ApplicationError` nas duas implementações."""
+    ts = datetime(2024, 1, 2, tzinfo=UTC)
+
+    with pytest.raises(ApplicationError, match="read-only"):
+        store.write(
+            layer=_PROCESSED_LAYER,
+            table=_DATASET_TFT,
+            rows=[_dataset_row("AAPL", ts, 0.01, 55.0)],
+        )
+
+
+@pytest.mark.contract
+def test_dataset_tft_read_normalizes_nan_to_none(store: MedallionStore, tmp_path: Path) -> None:
+    """Valor faltante numa coluna de feature volta como `None` (paridade fake↔real)."""
+    ts = datetime(2024, 1, 2, tzinfo=UTC)
+    _seed_dataset_tft(store, tmp_path, "AAPL", [_dataset_row("AAPL", ts, 0.01, None)])
+
+    rows = store.read(layer=_PROCESSED_LAYER, table=_DATASET_TFT, filters={"asset": "AAPL"})
+
+    assert len(rows) == 1
+    assert rows[0]["rsi_14"] is None

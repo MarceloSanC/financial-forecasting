@@ -10,6 +10,7 @@ de `wire_dependencies` — necessário para a cobertura ≥90% (composition_root
 do omit).
 """
 
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -17,10 +18,14 @@ import pytest
 from financial_forecasting.composition_root import (
     ApplicationDependencies,
     _LazyFinbertSentimentModel,
+    _LazyStatsforecastBaselineForecaster,
     wire_dependencies,
 )
 from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
     ParquetAnalyticsRepository,
+)
+from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
+    PersistPredictions,
 )
 from financial_forecasting.features.feature_engineering.adapters.out.duckdb.asof_join_adapter import (  # noqa: E501
     AsofJoinDuckdbAdapter,
@@ -33,6 +38,12 @@ from financial_forecasting.features.feature_engineering.adapters.out.pandas_ta.p
 )
 from financial_forecasting.features.feature_engineering.application.use_cases.build_dataset import (
     BuildDataset,
+)
+from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
+    RunBaselines,
+)
+from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
+    WalkForwardSplitter,
 )
 from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
     CanonicalJsonHasher,
@@ -139,3 +150,43 @@ def test_wire_dependencies_wires_analytics_repository(tmp_path: Path) -> None:
     assert isinstance(deps.analytics_repository, ParquetAnalyticsRepository)
     assert deps.analytics_repository._data_root == tmp_path
     assert isinstance(deps.analytics_repository._clock, SystemClock)
+
+
+@pytest.mark.unit
+def test_wire_dependencies_wires_run_baselines(tmp_path: Path) -> None:
+    """Stage 5.2 Task 09: `run_baselines` montado com os colaboradores REAIS.
+
+    Campos tipados pelos ports/contratos (concept 5.2 §4): store/hasher/repo são
+    as MESMAS instâncias expostas no contêiner (I9 — grafo único, sem duplicar
+    concretos) e o forecaster é o proxy LAZY do adapter statsforecast (fix F3 —
+    o import de ~6s é adiado ao primeiro `forecast`, precedente FinBERT).
+    """
+    deps = wire_dependencies(settings=Settings(_env_file=None, data_root=tmp_path))
+
+    run_baselines = deps.run_baselines
+    assert isinstance(run_baselines, RunBaselines)
+    assert run_baselines._store is deps.store
+    assert run_baselines._analytics_repository is deps.analytics_repository
+    assert run_baselines._hasher is deps.hasher
+    assert isinstance(run_baselines._forecaster, _LazyStatsforecastBaselineForecaster)
+    assert run_baselines._forecaster._delegate is None  # statsforecast ainda não carregou
+    assert isinstance(run_baselines._splitter, WalkForwardSplitter)
+    assert isinstance(run_baselines._persist_predictions, PersistPredictions)
+    # PersistPredictions reusa o MESMO repositório silver (ADR 4.3.0001 — dono
+    # único do target_timestamp atrás de um único adapter).
+    assert run_baselines._persist_predictions._repository is deps.analytics_repository
+
+
+@pytest.mark.unit
+def test_run_baselines_splitter_calendar_covers_wide_fixed_window(tmp_path: Path) -> None:
+    """F-T1 opção A: o calendário do splitter cobre a janela ampla fixa 1990-2035.
+
+    Sessões bem além dos bounds default da lib (~hoje-20a .. hoje+1a) devem estar
+    materializadas — prova que o wiring pediu a janela ampla, não a default.
+    """
+    deps = wire_dependencies(settings=Settings(_env_file=None, data_root=tmp_path))
+
+    calendar = deps.run_baselines._splitter._calendar
+    assert calendar.is_session(date(1995, 5, 5))  # sexta comum de 1995
+    assert calendar.is_session(date(2035, 12, 31))  # última sessão da janela
+    assert not calendar.is_session(date(1995, 7, 4))  # feriado XNYS
