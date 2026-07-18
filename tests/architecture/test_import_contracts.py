@@ -51,6 +51,11 @@ _EXPECTED_CONTRACTS = (
     "shared-no-features",
     "tracker-no-mlflow-leak",
     "store-no-storage-leak",
+    # Gap pré-existente corrigido na Stage 5.2 ([deviation] §7 do technical 5.2):
+    # os contratos das Stages 2.4 e 3.2 nunca entraram nesta lista — remoção/
+    # afrouxamento passaria batido pelo guarda anti "contrato verde por acaso".
+    "calendar-no-exchange-calendars-leak",
+    "sentiment-no-ml-leak",
     # Stage 5.2 (I8/A9): statsforecast/numba/numpy confinados ao adapter
     # features/modeling/adapters/out/statsforecast/ (ADR 5.2.0001).
     "modeling-no-statsforecast-leak",
