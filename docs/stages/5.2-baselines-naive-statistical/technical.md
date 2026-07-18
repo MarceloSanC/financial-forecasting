@@ -763,4 +763,114 @@ Task 10 (roadmap) — independente; executar por último, junto do fechamento �
 
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
+
+> Preenchida durante/após a Fase 4. Apenas esta seção é editável após
+> `status: done`. Cada entrada carrega data + autor.
+
+### 2026-07-18 — [decision] F-T1: janela ampla fixa do calendário no wiring — Claude (Fable 5)
+**Contexto:** o `WalkForwardSplitter` do wiring precisa de um `TradingCalendar`
+materializado; a janela poderia ser fixa no composition root, campo de
+`Settings` ou factory por invocação.
+**Razão:** opção A — constantes comentadas no composition root
+(`_CALENDAR_WINDOW_START/_END = 1990-01-01..2035-12-31`), cobrindo o span
+plausível de qualquer dataset do piloto sem re-materializar calendário por
+invocação. Fallback registrado no comentário e na tabela de riscos (§5): se um
+dataset futuro apertar os limites, promover a `Settings` ou factory por
+invocação — não muda o contrato do use case.
+
+### 2026-07-18 — [decision] F-T2: statsforecast em dependencies principais — Claude (Fable 5)
+**Contexto:** `statsforecast` poderia entrar como extra opcional (como o
+`sentiment` com torch/transformers) ou como dependência principal.
+**Razão:** `statsforecast >= 2.1, < 3.0` (2.1.1, pin por minor) em
+`dependencies` principais: a perna real da suite de contrato do
+`BaselineForecaster` roda no CI e precisa da lib instalada. O extra `sentiment`
+existe para libs de centenas de MB (torch); statsforecast 2.x não tem esse peso.
+
+### 2026-07-18 — [decision] F-T3: sem marker `slow` no teste do adapter — Claude (Fable 5)
+**Contexto:** o technical §5 previa marcar o teste do adapter como `slow` se a
+primeira compilação numba estourasse o tempo de CI.
+**Razão:** statsforecast 2.x não arrasta `numba`; o fit frio do AR(1) mediu
+~11s e a suite de integração do adapter ~6s — dentro do orçamento, sem marker.
+
+### 2026-07-18 — [decision] posturas de borda do bloco 2 (Tasks 05–07) — Claude (Fable 5)
+**Contexto:** bordas não fixadas letra a letra pelo concept, decididas na
+execução com paridade fake↔real assertada pela suite de contrato.
+**Razão:** (i) variância condicionante zero ergue `ValueError` no fake E no
+real com mensagem idêntica (train constante do `ar1`; série toda-zero do
+`ewma_vol` — erguer, não fabricar escala gaussiana degenerada); (ii) C5 é
+validado na **janela condicionante mais larga da chamada**
+(`returns[: max(decision_indices) + 1]`), não na série inteira; (iii) C2
+estendido no use case: `specs` vazio e `horizons` duplicados também erguem
+antes de qualquer I/O; (iv) `_MIN_AR1_TRAIN = 3` no fake e no adapter (C1 com
+o mesmo limiar observável).
+
+### 2026-07-18 — [deviation] Task 09 executada em 3 commits — Claude (Fable 5)
+**Contexto:** a regra da Stage é 1 Task = 1 commit; a Task 09 saiu em 3
+(`fix(trading-calendar)`, `fix(analytics-store)`, `feat(modeling)`).
+**Razão:** o e2e da Task expôs dois gaps em escopos alheios (calendar e
+analytics-store, abaixo); a regra "1 commit = 1 mudança lógica em UM escopo"
+(CLAUDE.md/CONVENTIONS §4) prevalece — precedente na própria Stage
+(`fix(store)` separado na Task 04). Todos tagueados `[5.2/task-09]`.
+
+### 2026-07-18 — [deviation] calendar provider: bounds explícitos além dos default móveis — Claude (Fable 5)
+**Contexto:** a F-T1 opção A era **inexecutável** contra o adapter existente: o
+calendário default do `exchange-calendars` tem bounds MÓVEIS (~hoje-20a ..
+hoje+1a) e a janela fixa 1990–2035 erguia `DateOutOfBounds`; qualquer constante
+fixa dentro dos bounds default expiraria em meses.
+**Razão:** `ExchangeCalendarsProvider.sessions` passou a obter o calendário com
+bounds explícitos derivados da janela pedida (arquivo fora da lista da Task 09
+— mudança backward-compatible provada pelo contract test fake↔real intacto +
+caso real-only novo em 1995). Fix subsequente (Checkpoint C, F2): bounds
+**ano-quantizados** com folga de 1 ano por ponta, SEM sondar o calendário
+default — a sonda derrubava o cache single-slot da lib (~1.1s/chamada); medido
+pós-fix: 2ª chamada wide ~11ms, janela curta no mesmo ano ~0.4ms.
+
+### 2026-07-18 — [deviation]+[finding] dim_run.seed: gap latente 4.1/4.2 — Claude (Fable 5)
+**Contexto:** o e2e da Task 09 reprovou ao gravar `dim_run` com `seed=None`
+(obrigatório para baselines, I9): o dtype numpy `int64` do schema 4.1 não
+representa NULL e a coluna object toda-None erguia `SchemaError` antes do disco.
+**Razão:** corrigido com `Int64` (extensão nullable) mantendo `coerce=False`
+(caminho ESTRITO do Checkpoint C, F1): o write materializa como `Int64` apenas
+int/None genuínos via `_materialize_nullable_int`; `"42"` str e `4.0` float
+seguem reprovando (pinado por teste). **Finding:** o gap escapou porque a 4.2
+só testou `seed=42` — lição para auditoria de testes: colunas `nullable=True`
+precisam de caso de round-trip com `None`, não só com valor presente.
+
+### 2026-07-18 — [deviation] _EXPECTED_CONTRACTS desatualizado (carona na Task 08) — Claude (Fable 5)
+**Contexto:** ao registrar os contratos novos da Task 08 em
+`tests/architecture/test_import_contracts.py`, dois contratos pré-existentes
+(`calendar-no-exchange-calendars-leak` da 2.4 e `sentiment-no-ml-leak` da 3.2)
+estavam ausentes de `_EXPECTED_CONTRACTS`.
+**Razão:** corrigidos de carona no MESMO arquivo da Task
+(`fix(modeling) [5.2/task-08-fix]`) — a lista existe exatamente para acusar
+drift; deixá-la incompleta anularia o gate.
+
+### 2026-07-18 — [decision] proxy lazy do forecaster no composition root (fix F3) — Claude (Fable 5)
+**Contexto:** o import eager do `StatsforecastBaselineForecaster` arrastava
+statsforecast para todo import do `composition_root` (~12.5s → ~9.6s medidos
+após o fix neste ambiente).
+**Razão:** `_LazyStatsforecastBaselineForecaster` satisfaz o port
+`BaselineForecaster` e adia o import da lib ao primeiro `forecast` — precedente
+`_LazyFinbertSentimentModel` no mesmo arquivo. O caminho real segue coberto
+pelo e2e (que roda o grafo do `wire_dependencies` de ponta a ponta).
+
+### 2026-07-18 — [finding] hash do cohort da 5.5 deve incluir quantile_levels — Claude (Fable 5)
+**Contexto:** a grade densa comum é garantida DENTRO de uma execução pelo
+comando (`RunBaselinesCommand.quantile_levels`), mas a garantia ENTRE execuções
+(I11 do concept §5) depende do congelamento do cohort confirmatório.
+**Direção sugerida:** o hash do cohort da 5.5 (DoD "cohort congelado e
+hasheado") **deve incluir `quantile_levels` no payload hasheado** — é o que
+fecha I11 entre execuções. Nota já registrada no concept §8 desta Stage;
+carregar para o concept/technical da 5.5. **Stage candidata: 5.5.**
+
+### 2026-07-18 — [nota] provas de quebra intencional da Task 08 (A9) — Claude (Fable 5)
+**Contexto:** exigência do technical (Task 08): provas por quebra intencional
+revertida dos dois contratos.
+**Registro:** (i) `import statsforecast` em `run_baselines.py` → `uv run
+lint-imports` vermelho (`modeling-no-statsforecast-leak` broken) → revertido;
+(ii) `import pandas` em `run_baselines.py` → vermelho
+(`store-no-storage-leak` broken) → revertido. Após as reversões:
+`lint-imports` verde com **9 contratos kept / 0 broken** (outputs literais no
+relatório de execução da Task 08).
+
 <!-- END: post-execution -->
