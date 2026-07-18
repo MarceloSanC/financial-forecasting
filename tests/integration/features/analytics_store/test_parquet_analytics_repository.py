@@ -202,6 +202,29 @@ def test_real_round_trip_parent_sweep_id_none(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
+def test_real_round_trip_seed_none(tmp_path: Path) -> None:
+    """`seed=None` valida (`Int64` nullable), persiste NULL e `read` devolve `None`.
+
+    Gap achado pelo e2e da Stage 5.2 (Task 09): baselines determinísticos gravam
+    `dim_run` com `seed=None` (I9 da 5.2); com o numpy `int64` do schema original
+    a coluna object toda-None reprovava o pandera antes do disco. Também cobre o
+    merge por partição (2º write na MESMA partição relê o Parquet e concatena).
+    """
+    repo = _repo(tmp_path)
+    row_a = dict(_dim_run_row("run-a"))
+    row_a["seed"] = None
+    row_b = dict(_dim_run_row("run-b"))
+    row_b["seed"] = None
+
+    repo.write(layer=_SILVER, table="dim_run", rows=[row_a])
+    repo.write(layer=_SILVER, table="dim_run", rows=[row_b])  # merge na partição
+
+    rows = repo.read(layer=_SILVER, table="dim_run", filters={"asset": "AAPL"})
+    assert len(rows) == _TWO_ROWS
+    assert all(r["seed"] is None for r in rows)
+
+
+@pytest.mark.integration
 def test_real_pandera_rejects_before_disk(tmp_path: Path) -> None:
     """A10/C3/I4: dtype divergente → `SchemaError`, nenhum arquivo escrito."""
     repo = _repo(tmp_path)

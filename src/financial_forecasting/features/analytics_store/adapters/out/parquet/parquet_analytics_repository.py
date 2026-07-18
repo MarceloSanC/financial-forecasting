@@ -148,8 +148,11 @@ class ParquetAnalyticsRepository:
         # pandera ANTES do disco (I4/C3): schema/dtype/PK inválido → SchemaError
         # (coluna extra sob strict=True levanta SchemaErrors — ambos são erros
         # pandera que abortam o write antes de tocar o Parquet). Espelha o
-        # `ParquetMedallionStore` (`.validate(incoming)` sem `lazy`).
-        meta.schema.validate(incoming)
+        # `ParquetMedallionStore` (`.validate(incoming)` sem `lazy`). O retorno
+        # é ASSINALADO: colunas com coerce localizado (ex.: `seed` → `Int64` em
+        # dim_run) devem ir ao Parquet já coagidas — sem isso, `seed=None`
+        # gravaria uma coluna object/null-type e quebraria o merge por partição.
+        incoming = meta.schema.validate(incoming)
 
         upsert = allow_upsert or meta.update_policy == _UPSERT_POLICY
         part_cols = meta.partition_by
