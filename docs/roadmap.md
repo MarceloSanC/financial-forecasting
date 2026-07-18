@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-07-05
-last_reviewed_at: 2026-07-05
+updated_at: 2026-07-18
+last_reviewed_at: 2026-07-18
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -94,7 +94,7 @@ graph LR
 | `4.2-silver-repository` | analytics_store | adapters/out | vertical | done | 4.1 |
 | `4.3-prediction-persister` | analytics_store | domain + application | vertical | done | 4.2 |
 | `5.1-walk-forward-harness` | modeling | domain + application | vertical | done | 3.5, 4.3 |
-| `5.2-baselines-naive-statistical` | modeling | multi (domain + application + adapters/out) | vertical | draft | 5.1 |
+| `5.2-baselines-naive-statistical` | modeling | multi (domain + application + adapters/out) | vertical | done | 5.1 |
 | `5.3-gbm-quantile-baseline` | modeling | multi (application + adapters/out) | vertical | draft | 5.1 |
 | `5.4-tft-trainer` | modeling | multi (application + adapters/out) | vertical | draft | 5.1 |
 | `5.5-confirmatory-retrain` | modeling | application (orquestração) | vertical | draft | 5.2, 5.3, 5.4 |
