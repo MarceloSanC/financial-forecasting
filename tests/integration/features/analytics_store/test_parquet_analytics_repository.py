@@ -27,6 +27,7 @@ from financial_forecasting.shared.domain.exceptions.base import DuplicateKeyErro
 _SILVER = "silver"
 _FIXED_NOW = datetime(2026, 6, 29, 12, 0, 0, tzinfo=UTC)
 _TWO_ROWS = 2
+_SEED = 42
 
 
 class FakeClock:
@@ -52,7 +53,7 @@ def _dim_run_row(
         "config_signature": "cfg-hash",
         "split_fingerprint": "split-hash",
         "fold": "fold-0",
-        "seed": 42,
+        "seed": _SEED,
         "model_version": "tft_v1",
         "created_at_utc": _FIXED_NOW.isoformat(),
     }
@@ -199,6 +200,26 @@ def test_real_round_trip_parent_sweep_id_none(tmp_path: Path) -> None:
     assert len(rows) == 1
     assert rows[0]["parent_sweep_id"] is None
     assert rows[0]["created_at_utc"] == _FIXED_NOW.isoformat()
+    assert rows[0]["seed"] == _SEED  # int genuíno persiste e volta como inteiro
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("bad_seed", ["42", 4.0], ids=["str", "float"])
+def test_real_seed_wrong_type_rejected_before_disk(tmp_path: Path, bad_seed: object) -> None:
+    """Gate ESTRITO preservado (fix F1 da 5.2 Task 09): `seed` não-int reprova.
+
+    A materialização `Int64` do write converte SÓ int/None genuínos; `"42"` str
+    e `4.0` float permanecem no dtype original e o pandera reprova com
+    `SchemaError` ANTES do disco — o suporte a NULL não afrouxou o gate.
+    """
+    repo = _repo(tmp_path)
+    row = dict(_dim_run_row())
+    row["seed"] = bad_seed
+
+    with pytest.raises(SchemaError):
+        repo.write(layer=_SILVER, table="dim_run", rows=[row])
+
+    assert not any(tmp_path.rglob("*.parquet"))
 
 
 @pytest.mark.integration
