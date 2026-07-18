@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import math
 import random
+from statistics import fmean
 from typing import TYPE_CHECKING
 
 import pytest
@@ -44,7 +45,9 @@ from financial_forecasting.features.modeling.domain.services.baseline_statistics
     ewma_variance_path,
 )
 from financial_forecasting.features.modeling.domain.services.quantile_grid_emission import (
+    degenerate_grid,
     gaussian_grid,
+    sample_quantiles_type7,
 )
 from financial_forecasting.features.modeling.domain.value_objects.baseline_spec import (
     BASELINE_FAMILIES,
@@ -328,6 +331,68 @@ def test_c1_ar1_trivially_insufficient_train_raises(
             horizons=_HORIZONS,
             quantile_levels=_LEVELS,
         )
+
+
+# -- Oráculos de emissão exata (auditoria 5.2 — mutantes off-by-one) ------------
+
+
+@pytest.mark.contract
+def test_historical_mean_emission_is_train_mean_oracle(
+    forecaster: BaselineForecaster,
+) -> None:
+    """`historical_mean` emite EXATAMENTE `degenerate_grid(fmean(train))` com
+    train = `returns[: train_end_idx + 1]` (I4/D2 — tolerância 1e-12).
+
+    Mata o mutante off-by-one que encurta o train (`returns[: train_end_idx]`):
+    remover o último ponto desloca a média em ~1e-4 >> tolerância.
+    """
+    tolerance = 1e-12  # tolerância declarada (ADR 0.0.0021)
+    returns = _ar1_returns()
+    expected = degenerate_grid(
+        value=fmean(returns[: _TRAIN_END_IDX + 1]), levels=_LEVELS
+    )
+
+    result = _forecast(forecaster, _SPECS["historical_mean"], returns)
+
+    for decision in _DECISIONS:
+        for horizon in _HORIZONS:
+            assert result[decision][horizon] == pytest.approx(expected, abs=tolerance)
+
+
+@pytest.mark.contract
+def test_historical_quantiles_window_ends_at_decision_oracle(
+    forecaster: BaselineForecaster,
+) -> None:
+    """`historical_quantiles` na decisão t emite EXATAMENTE
+    `sample_quantiles_type7(returns[t-W+1 : t+1])` — janela termina EM t
+    (ADR 5.2.0003, Implementation note; tolerância 1e-12).
+
+    Um outlier em `returns[t]` desloca materialmente os quantis: a janela SEM
+    r_t (`returns[t-W : t]`, o mutante off-by-one) produz grade diferente — o
+    teste asserta essa discriminação para não passar por coincidência numérica.
+    """
+    tolerance = 1e-12  # tolerância declarada (ADR 0.0.0021)
+    decision = _LAST_DECISION
+    window = _HQ_WINDOW
+    base = _ar1_returns()
+    outlier = 0.5  # implausível na série (~1e-2): desloca os ranks de todos os quantis
+    returns = (*base[:decision], outlier, *base[decision + 1 :])
+
+    expected = sample_quantiles_type7(
+        values=returns[decision - window + 1 : decision + 1], levels=_LEVELS
+    )
+    mutant_window = sample_quantiles_type7(
+        values=returns[decision - window : decision], levels=_LEVELS
+    )
+    # A fixture DISCRIMINA o mutante: sem o r_t (outlier) a grade muda materialmente.
+    assert expected != pytest.approx(mutant_window, abs=tolerance)
+
+    result = _forecast(
+        forecaster, _SPECS["historical_quantiles"], returns, decisions=(decision,)
+    )
+
+    for horizon in _HORIZONS:
+        assert result[decision][horizon] == pytest.approx(expected, abs=tolerance)
 
 
 # -- I7: dispatch exaustivo — família forjada ergue nas duas pernas -------------
