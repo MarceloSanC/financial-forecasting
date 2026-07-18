@@ -792,7 +792,7 @@ primeira compilação numba estourasse o tempo de CI.
 **Razão:** statsforecast 2.x não arrasta `numba`; o fit frio do AR(1) mediu
 ~11s e a suite de integração do adapter ~6s — dentro do orçamento, sem marker.
 
-### 2026-07-18 — [decision] posturas de borda do bloco 2 (Tasks 05–07) — Claude (Fable 5)
+### 2026-07-18 — [decision] posturas de borda (Tasks 04–07) — Claude (Fable 5)
 **Contexto:** bordas não fixadas letra a letra pelo concept, decididas na
 execução com paridade fake↔real assertada pela suite de contrato.
 **Razão:** (i) variância condicionante zero ergue `ValueError` no fake E no
@@ -802,7 +802,12 @@ validado na **janela condicionante mais larga da chamada**
 (`returns[: max(decision_indices) + 1]`), não na série inteira; (iii) C2
 estendido no use case: `specs` vazio e `horizons` duplicados também erguem
 antes de qualquer I/O; (iv) `_MIN_AR1_TRAIN = 3` no fake e no adapter (C1 com
-o mesmo limiar observável).
+o mesmo limiar observável); (v) Task 04, par read-only do medallion store
+(commit 81060e8): `filters={"asset": None}` ≡ filtro ausente (união dos
+assets), chave de filtro ≠ `asset` ergue em vez de ser ignorada
+silenciosamente, e o valor do filtro é validado por regex
+(`^[A-Za-z0-9._-]+$`) ANTES de interpolar no glob/SQL — as três posturas nas
+DUAS pernas, cobertas por casos parametrizados da suite de contrato.
 
 ### 2026-07-18 — [deviation] Task 09 executada em 3 commits — Claude (Fable 5)
 **Contexto:** a regra da Stage é 1 Task = 1 commit; a Task 09 saiu em 3
@@ -861,7 +866,12 @@ comando (`RunBaselinesCommand.quantile_levels`), mas a garantia ENTRE execuçõe
 **Direção sugerida:** o hash do cohort da 5.5 (DoD "cohort congelado e
 hasheado") **deve incluir `quantile_levels` no payload hasheado** — é o que
 fecha I11 entre execuções. Nota já registrada no concept §8 desta Stage;
-carregar para o concept/technical da 5.5. **Stage candidata: 5.5.**
+carregar para o concept/technical da 5.5. Adendo (auditoria 2026-07-18): a
+semântica de falha parcial do `RunBaselines` também deve entrar no desenho de
+replay/idempotência da orquestração do cohort — o `dim_run` é gravado ANTES
+das predições, então C8/C9 podem deixar um run registrado sem predições, e o
+rerun idêntico ergue `DuplicateKeyError` em vez de completar o run parcial.
+**Stage candidata: 5.5.**
 
 ### 2026-07-18 — [nota] provas de quebra intencional da Task 08 (A9) — Claude (Fable 5)
 **Contexto:** exigência do technical (Task 08): provas por quebra intencional
@@ -872,5 +882,20 @@ lint-imports` vermelho (`modeling-no-statsforecast-leak` broken) → revertido;
 (`store-no-storage-leak` broken) → revertido. Após as reversões:
 `lint-imports` verde com **9 contratos kept / 0 broken** (outputs literais no
 relatório de execução da Task 08).
+
+### 2026-07-18 — [nota] Task 11-extra: oráculos de emissão exata pós-auditoria de testes — Claude (Fable 5)
+**Contexto:** auditoria de testes independente da 5.2 identificou 2 mutantes
+mentais sobreviventes na suite de contrato do `BaselineForecaster`: o
+off-by-one que encurta o train do `historical_mean`
+(`returns[:train_end_idx]` em vez de `[:train_end_idx+1]`) e o deslocamento
+da janela do `historical_quantiles` (`returns[t-W:t]`, sem `r_t`, em vez de
+`[t-W+1:t+1]`).
+**Registro:** commit 97d6543 (`[5.2/task-11-extra]`) adicionou 2 oráculos de
+emissão exata à suite de contrato (grade == valor recomputado
+independentemente, com fixture cujo outlier em `returns[t]` torna o mutante
+numericamente distinguível), matando os mutantes nas DUAS pernas (fake e
+real). Sanidade mutante-morre executada e revertida nas duas pernas:
+`train[:-1]` no fake reprova a perna fake; janela `t-W:t` no adapter reprova
+a perna real; após reversão, 92 casos de contrato verdes.
 
 <!-- END: post-execution -->
