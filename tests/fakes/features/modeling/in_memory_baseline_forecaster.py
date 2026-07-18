@@ -38,6 +38,9 @@ from financial_forecasting.features.modeling.domain.services.quantile_grid_emiss
     gaussian_grid,
     sample_quantiles_type7,
 )
+from financial_forecasting.features.modeling.domain.value_objects.baseline_spec import (
+    BASELINE_FAMILIES,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -176,16 +179,23 @@ class FakeBaselineForecaster:
             grid = gaussian_grid(mean=0.0, std=math.sqrt(sigma2), levels=quantile_levels)
             return {h: grid for h in horizons}  # flat em h — RMTD [5.18]
 
-        # historical_quantiles (família restante — o VO só admite as 5 canônicas)
-        assert spec.window is not None  # garantido pelo VO (C3)
-        if decision_idx + 1 < spec.window:
-            raise ValueError(
-                f"historical_quantiles needs {spec.window} returns up to the decision; "
-                f"decision {decision_idx} has only {decision_idx + 1} (C1)"
-            )
-        window_values = returns[decision_idx - spec.window + 1 : decision_idx + 1]
-        grid = sample_quantiles_type7(values=window_values, levels=quantile_levels)
-        return {h: grid for h in horizons}  # flat em h (incondicional)
+        if spec.family == "historical_quantiles":
+            assert spec.window is not None  # garantido pelo VO (C3)
+            if decision_idx + 1 < spec.window:
+                raise ValueError(
+                    f"historical_quantiles needs {spec.window} returns up to the decision; "
+                    f"decision {decision_idx} has only {decision_idx + 1} (C1)"
+                )
+            window_values = returns[decision_idx - spec.window + 1 : decision_idx + 1]
+            grid = sample_quantiles_type7(values=window_values, levels=quantile_levels)
+            return {h: grid for h in horizons}  # flat em h (incondicional)
+
+        # I7 — dispatch exaustivo com ramo EXPLÍCITO (Checkpoint C MINOR-2): família
+        # fora do canônico ergue o MESMO ValueError do adapter real — nunca um
+        # assert (que evapora sob `python -O` e viraria TypeError downstream).
+        raise ValueError(
+            f"unknown baseline family {spec.family!r}; expected one of {BASELINE_FAMILIES} (I7)"
+        )
 
 
 def _ar1_train_moments(train: tuple[float, ...]) -> tuple[float, float, float]:

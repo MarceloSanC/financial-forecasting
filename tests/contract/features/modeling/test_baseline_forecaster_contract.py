@@ -330,6 +330,23 @@ def test_c1_ar1_trivially_insufficient_train_raises(
         )
 
 
+# -- I7: dispatch exaustivo — família forjada ergue nas duas pernas -------------
+
+
+@pytest.mark.contract
+def test_i7_unknown_family_forged_spec_raises(forecaster: BaselineForecaster) -> None:
+    """I7: spec forjada com família desconhecida (bypass do C3 do VO via
+    `object.__setattr__`) ergue o MESMO ValueError nas DUAS pernas.
+
+    Checkpoint C MINOR-2: dispatch exaustivo com ramo explícito — nunca um
+    assert (que evapora sob `python -O`)."""
+    forged_spec = BaselineSpec(family="zero_return")
+    object.__setattr__(forged_spec, "family", "arma_11")  # contorna o __post_init__
+
+    with pytest.raises(ValueError, match=r"unknown baseline family 'arma_11'"):
+        _forecast(forecaster, forged_spec, _ar1_returns())
+
+
 # -- Forma: presença, alinhamento e comportamento em h --------------------------
 
 
