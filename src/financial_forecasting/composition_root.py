@@ -22,12 +22,14 @@ carregam no PRIMEIRO `score_articles`, mantendo o wiring leve e testável sem GP
 Stage 5.2 (Task 09): o use case `RunBaselines` é montado aqui com colaboradores
 REAIS — `ParquetMedallionStore` (par read-only `("processed", "dataset_tft")`),
 `WalkForwardSplitter` sobre `TradingCalendar` materializado numa **janela ampla
-fixa** do XNYS (F-T1 opção A; constantes comentadas abaixo),
-`StatsforecastBaselineForecaster` atrás do port `BaselineForecaster`,
-`PersistPredictions` + `ParquetAnalyticsRepository` (silver) e o `Hasher` 1.4.
+fixa** do XNYS (F-T1 opção A; constantes comentadas abaixo), o
+`StatsforecastBaselineForecaster` atrás do port `BaselineForecaster` via **proxy
+lazy** (`_LazyStatsforecastBaselineForecaster` — statsforecast só carrega no
+primeiro `forecast`, precedente FinBERT), `PersistPredictions` +
+`ParquetAnalyticsRepository` (silver) e o `Hasher` 1.4.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 
@@ -70,14 +72,18 @@ from financial_forecasting.features.feature_engineering.application.use_cases.sc
 from financial_forecasting.features.market_data.domain.entities.news_article import (
     NewsArticle,
 )
-from financial_forecasting.features.modeling.adapters.out.statsforecast.statsforecast_baseline_forecaster import (  # noqa: E501
-    StatsforecastBaselineForecaster,
+from financial_forecasting.features.modeling.application.ports.out.baseline_forecaster import (
+    BaselineForecaster,
+    GridByHorizon,
 )
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
 )
 from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
     WalkForwardSplitter,
+)
+from financial_forecasting.features.modeling.domain.value_objects.baseline_spec import (
+    BaselineSpec,
 )
 from financial_forecasting.shared.adapters.out.calendar.exchange_calendars_provider import (
     ExchangeCalendarsProvider,
@@ -147,6 +153,51 @@ class _LazyFinbertSentimentModel:
     def score_articles(self, articles: Sequence[NewsArticle]) -> Sequence[float]:
         """Constrói o FinBERT real na 1ª chamada e delega o scoring (I1/I2)."""
         return self._ensure().score_articles(articles)
+
+
+class _LazyStatsforecastBaselineForecaster:
+    """Proxy lazy do `StatsforecastBaselineForecaster` (satisfaz o port `BaselineForecaster`).
+
+    Adia o import de `statsforecast` (~6s frios por processo) até o PRIMEIRO
+    `forecast`, mantendo `wire_dependencies` — e o import deste módulo — leves
+    (mesmo precedente do `_LazyFinbertSentimentModel` acima; fix F3 do
+    Checkpoint C da Stage 5.2). O contrato semântico do port (I3/I4/C1/C5) é
+    integralmente do delegate real.
+    """
+
+    def __init__(self) -> None:
+        self._delegate: BaselineForecaster | None = None
+
+    def _ensure(self) -> BaselineForecaster:
+        if self._delegate is None:
+            # Import LAZY proposital (PLC0415 ignorado no pyproject p/ este
+            # arquivo): adia statsforecast até o 1º uso.
+            from financial_forecasting.features.modeling.adapters.out.statsforecast.statsforecast_baseline_forecaster import (  # noqa: E501
+                StatsforecastBaselineForecaster,
+            )
+
+            self._delegate = StatsforecastBaselineForecaster()
+        return self._delegate
+
+    def forecast(  # noqa: PLR0913 — assinatura do port (parâmetros coesos)
+        self,
+        *,
+        spec: BaselineSpec,
+        returns: Sequence[float],
+        train_end_idx: int,
+        decision_indices: Sequence[int],
+        horizons: Sequence[int],
+        quantile_levels: Sequence[float],
+    ) -> Mapping[int, GridByHorizon]:
+        """Constrói o adapter statsforecast real na 1ª chamada e delega a emissão."""
+        return self._ensure().forecast(
+            spec=spec,
+            returns=returns,
+            train_end_idx=train_end_idx,
+            decision_indices=decision_indices,
+            horizons=horizons,
+            quantile_levels=quantile_levels,
+        )
 
 
 @dataclass
@@ -237,7 +288,7 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
     run_baselines = RunBaselines(
         store=store,
         splitter=splitter,
-        forecaster=StatsforecastBaselineForecaster(),
+        forecaster=_LazyStatsforecastBaselineForecaster(),
         persist_predictions=PersistPredictions(repository=analytics_repository),
         analytics_repository=analytics_repository,
         hasher=hasher,

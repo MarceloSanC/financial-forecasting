@@ -18,6 +18,7 @@ import pytest
 from financial_forecasting.composition_root import (
     ApplicationDependencies,
     _LazyFinbertSentimentModel,
+    _LazyStatsforecastBaselineForecaster,
     wire_dependencies,
 )
 from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
@@ -37,9 +38,6 @@ from financial_forecasting.features.feature_engineering.adapters.out.pandas_ta.p
 )
 from financial_forecasting.features.feature_engineering.application.use_cases.build_dataset import (
     BuildDataset,
-)
-from financial_forecasting.features.modeling.adapters.out.statsforecast.statsforecast_baseline_forecaster import (  # noqa: E501
-    StatsforecastBaselineForecaster,
 )
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
@@ -160,7 +158,8 @@ def test_wire_dependencies_wires_run_baselines(tmp_path: Path) -> None:
 
     Campos tipados pelos ports/contratos (concept 5.2 §4): store/hasher/repo são
     as MESMAS instâncias expostas no contêiner (I9 — grafo único, sem duplicar
-    concretos) e o forecaster é o adapter real `StatsforecastBaselineForecaster`.
+    concretos) e o forecaster é o proxy LAZY do adapter statsforecast (fix F3 —
+    o import de ~6s é adiado ao primeiro `forecast`, precedente FinBERT).
     """
     deps = wire_dependencies(settings=Settings(_env_file=None, data_root=tmp_path))
 
@@ -169,7 +168,8 @@ def test_wire_dependencies_wires_run_baselines(tmp_path: Path) -> None:
     assert run_baselines._store is deps.store
     assert run_baselines._analytics_repository is deps.analytics_repository
     assert run_baselines._hasher is deps.hasher
-    assert isinstance(run_baselines._forecaster, StatsforecastBaselineForecaster)
+    assert isinstance(run_baselines._forecaster, _LazyStatsforecastBaselineForecaster)
+    assert run_baselines._forecaster._delegate is None  # statsforecast ainda não carregou
     assert isinstance(run_baselines._splitter, WalkForwardSplitter)
     assert isinstance(run_baselines._persist_predictions, PersistPredictions)
     # PersistPredictions reusa o MESMO repositório silver (ADR 4.3.0001 — dono
