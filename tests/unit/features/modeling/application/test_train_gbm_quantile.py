@@ -660,6 +660,96 @@ def test_c6_missing_expected_feature_column_raises_naming_it() -> None:
     assert dropped in str(excinfo.value)
 
 
+# -- I7: payloads canônicos pinam o feature set (mata o mutante M4 da auditoria) ---
+
+
+class _RecordingHasher(FakeHasher):
+    """FakeHasher que captura os payloads de `hash_mapping` (prova I7)."""
+
+    def __init__(self) -> None:
+        self.payloads: list[dict[str, object]] = []
+
+    def hash_mapping(self, payload: Mapping[str, object]) -> str:
+        self.payloads.append(dict(payload))
+        return super().hash_mapping(payload)
+
+
+@pytest.mark.unit
+def test_i7_run_and_config_payloads_pin_the_ordered_feature_names() -> None:
+    """`run_id` E `config_signature` hasheiam a tupla ordenada de features.
+
+    Mata o mutante M4 da auditoria de testes: remover `feature_names` de
+    `_run_payload`/`_config_payload` passa despercebido por testes que só
+    comparam run_id com run_id — aqui o CONTEÚDO do payload é assertado.
+    """
+    hasher = _RecordingHasher()
+    repo = FakeAnalyticsRepository(clock=_FakeClock())
+    use_case = TrainGbmQuantile(
+        store=_seeded_store(),
+        splitter=_splitter(),
+        trainer=FakeQuantileModelTrainer(),
+        persist_predictions=PersistPredictions(repository=repo),
+        analytics_repository=repo,
+        hasher=hasher,
+    )
+
+    use_case(_command())
+
+    expected = list(_FEATURE_NAMES)
+    run_payloads = [p for p in hasher.payloads if "split_fingerprint" in p]
+    config_payloads = [
+        p for p in hasher.payloads if "params" in p and "split_fingerprint" not in p
+    ]
+    assert len(run_payloads) == _N_FOLDS
+    assert config_payloads
+    assert all(p.get("feature_names") == expected for p in run_payloads)
+    assert all(p.get("feature_names") == expected for p in config_payloads)
+
+
+# -- I11: feature None atravessa o port como NaN -----------------------------------
+
+
+@pytest.mark.unit
+def test_i11_none_feature_value_reaches_the_port_as_nan() -> None:
+    """Feature `None` no dataset vira `nan` na matriz passada ao port (I11)."""
+    import math  # noqa: PLC0415 — uso pontual no assert
+
+    target_session = 10  # dentro do train de ambos os folds
+    target_position = 3
+    rows = _dataset_rows(_SESSIONS, _returns())
+    rows[target_session][_FEATURE_NAMES[target_position]] = None
+    trainer = _CapturingTrainer()
+    use_case, _ = _build(store=_seeded_store(rows), trainer=trainer)
+
+    use_case(_command())
+
+    first_call_train = trainer.calls[0]["train_rows"]
+    assert isinstance(first_call_train, tuple)
+    mutated_row = first_call_train[target_session]  # train começa na sessão 0
+    assert math.isnan(mutated_row[target_position])
+    # As demais posições da mesma linha permanecem intactas.
+    assert mutated_row[target_position - 1] == _feature_value(
+        target_session, target_position - 1
+    )
+
+
+# -- I12: label além do grid é bug de chamador, nunca NaN-padding ------------------
+
+
+@pytest.mark.unit
+def test_i12_label_index_beyond_the_grid_raises() -> None:
+    """`idx + h` além do grid ergue nomeando o bug de geometria (I12)."""
+    from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (  # noqa: PLC0415
+        _labels_from_full_grid,
+    )
+
+    returns = _returns()
+    assert _labels_from_full_grid((0, 1), returns, 2) == (returns[2], returns[3])
+
+    with pytest.raises(ValueError, match=r"I12"):
+        _labels_from_full_grid((_N_SESSIONS - 1,), returns, 2)
+
+
 # -- I4/I9: determinismo -----------------------------------------------------------
 
 

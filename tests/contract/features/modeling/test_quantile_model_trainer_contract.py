@@ -209,6 +209,30 @@ def test_nan_train_labels_equal_pre_removed_pairs(
     assert with_nan.best_iteration_by_horizon == pre_removed.best_iteration_by_horizon
 
 
+# -- I11: features NaN atravessam (missing nativo) ---------------------------------
+
+
+@pytest.mark.contract
+def test_nan_feature_values_are_accepted_and_grid_stays_finite(
+    trainer: QuantileModelTrainer,
+) -> None:
+    """NaN em FEATURES não ergue (I11 — missing nativo); a grade emitida é finita."""
+    nan = float("nan")
+    holed_train = tuple(
+        (nan, *row[1:]) if position % 5 == 0 else row
+        for position, row in enumerate(_TRAIN_ROWS)
+    )
+    holed_test = ((nan, *_TEST_ROWS[0][1:]), *_TEST_ROWS[1:])
+
+    result = _train(trainer, train_rows=holed_train, test_rows=holed_test)
+
+    import math  # noqa: PLC0415 — uso pontual no assert
+
+    for by_horizon in result.grids.values():
+        for grid in by_horizon.values():
+            assert all(math.isfinite(value) for value in grid)
+
+
 # -- C3: dados insuficientes -------------------------------------------------------
 
 
@@ -277,6 +301,28 @@ def test_c4_decision_indices_length_mismatch_raises(
 ) -> None:
     with pytest.raises(ValueError, match=r"C4"):
         _train(trainer, test_decision_indices=(200,))
+
+
+@pytest.mark.contract
+def test_c4_empty_feature_names_raises(trainer: QuantileModelTrainer) -> None:
+    with pytest.raises(ValueError, match=r"C4"):
+        trainer.train_and_predict(
+            params=_params(),
+            feature_names=(),
+            train_rows=((),) * _N_TRAIN,
+            train_labels_by_horizon=_TRAIN_LABELS,
+            early_stop_rows=((),) * _N_MONITOR,
+            early_stop_labels_by_horizon=_MONITOR_LABELS,
+            test_rows=((),) * _N_TEST,
+            test_decision_indices=_DECISIONS,
+            quantile_levels=_LEVELS,
+        )
+
+
+@pytest.mark.contract
+def test_c4_empty_train_labels_mapping_raises(trainer: QuantileModelTrainer) -> None:
+    with pytest.raises(ValueError, match=r"C4"):
+        _train(trainer, train_labels={}, early_stop_labels={})
 
 
 # -- A6: oráculo de emissão sob features constantes --------------------------------
