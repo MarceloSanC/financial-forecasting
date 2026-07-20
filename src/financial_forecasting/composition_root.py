@@ -76,8 +76,16 @@ from financial_forecasting.features.modeling.application.ports.out.baseline_fore
     BaselineForecaster,
     GridByHorizon,
 )
+from financial_forecasting.features.modeling.application.ports.out.quantile_model_trainer import (
+    GbmTrainingParams,
+    QuantileModelTrainer,
+    QuantileTrainingResult,
+)
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
+)
+from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
+    TrainGbmQuantile,
 )
 from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
     WalkForwardSplitter,
@@ -200,6 +208,57 @@ class _LazyStatsforecastBaselineForecaster:
         )
 
 
+class _LazyLightgbmQuantileTrainer:
+    """Proxy lazy do `LightgbmQuantileTrainer` (satisfaz o port `QuantileModelTrainer`).
+
+    Adia o import de `lightgbm` até o PRIMEIRO `train_and_predict`, mantendo
+    `wire_dependencies` — e o import deste módulo — leves (mesmo precedente dos
+    proxies `_LazyFinbertSentimentModel`/`_LazyStatsforecastBaselineForecaster`
+    acima). O contrato semântico do port (C3/C4/C5/I4/I11 e a seleção 1-based
+    de m* — ADR 5.3.0002) é integralmente do delegate real.
+    """
+
+    def __init__(self) -> None:
+        self._delegate: QuantileModelTrainer | None = None
+
+    def _ensure(self) -> QuantileModelTrainer:
+        if self._delegate is None:
+            # Import LAZY proposital (PLC0415 ignorado no pyproject p/ este
+            # arquivo): adia lightgbm até o 1º uso.
+            from financial_forecasting.features.modeling.adapters.out.lightgbm.lightgbm_quantile_trainer import (  # noqa: E501
+                LightgbmQuantileTrainer,
+            )
+
+            self._delegate = LightgbmQuantileTrainer()
+        return self._delegate
+
+    def train_and_predict(  # noqa: PLR0913 — assinatura do port (parâmetros coesos)
+        self,
+        *,
+        params: GbmTrainingParams,
+        feature_names: Sequence[str],
+        train_rows: Sequence[Sequence[float]],
+        train_labels_by_horizon: Mapping[int, Sequence[float]],
+        early_stop_rows: Sequence[Sequence[float]],
+        early_stop_labels_by_horizon: Mapping[int, Sequence[float]],
+        test_rows: Sequence[Sequence[float]],
+        test_decision_indices: Sequence[int],
+        quantile_levels: Sequence[float],
+    ) -> QuantileTrainingResult:
+        """Constrói o adapter LightGBM real na 1ª chamada e delega o treino."""
+        return self._ensure().train_and_predict(
+            params=params,
+            feature_names=feature_names,
+            train_rows=train_rows,
+            train_labels_by_horizon=train_labels_by_horizon,
+            early_stop_rows=early_stop_rows,
+            early_stop_labels_by_horizon=early_stop_labels_by_horizon,
+            test_rows=test_rows,
+            test_decision_indices=test_decision_indices,
+            quantile_levels=quantile_levels,
+        )
+
+
 @dataclass
 class ApplicationDependencies:
     """Contêiner com as dependências montadas e prontas para uso.
@@ -226,6 +285,8 @@ class ApplicationDependencies:
     analytics_repository: AnalyticsRepository
     # BC modeling (Stage 5.2, Task 09): use case dos 5 baselines sob o harness 5.1.
     run_baselines: RunBaselines
+    # BC modeling (Stage 5.3, Task 06): GBM quantílico sob o mesmo harness/persister.
+    train_gbm_quantile: TrainGbmQuantile
 
 
 def wire_dependencies(settings: Settings | None = None) -> ApplicationDependencies:
@@ -294,6 +355,19 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
         hasher=hasher,
     )
 
+    # BC modeling (Stage 5.3, Task 06): `TrainGbmQuantile` compartilha o MESMO
+    # splitter/persister/repositório dos baselines (grão e cohort comuns — o
+    # comparador H2 persiste no mesmo canal); o trainer LightGBM entra atrás do
+    # proxy lazy (import da lib só no 1º treino).
+    train_gbm_quantile = TrainGbmQuantile(
+        store=store,
+        splitter=splitter,
+        trainer=_LazyLightgbmQuantileTrainer(),
+        persist_predictions=PersistPredictions(repository=analytics_repository),
+        analytics_repository=analytics_repository,
+        hasher=hasher,
+    )
+
     return ApplicationDependencies(
         hasher=hasher,
         tracker=tracker,
@@ -306,4 +380,5 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
         build_dataset=build_dataset,
         analytics_repository=analytics_repository,
         run_baselines=run_baselines,
+        train_gbm_quantile=train_gbm_quantile,
     )
