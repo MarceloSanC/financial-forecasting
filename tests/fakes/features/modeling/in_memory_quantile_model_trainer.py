@@ -71,7 +71,11 @@ class FakeQuantileModelTrainer:
         )
 
         grid_by_horizon: dict[int, tuple[float, ...]] = {}
-        for horizon, labels in train_labels_by_horizon.items():
+        # `sorted` espelha a ordem de iteração do adapter real — com múltiplos
+        # horizontes inválidos, fake e real erguem C3 apontando o MESMO
+        # horizonte (F1 do Checkpoint C bloco 2).
+        for horizon in sorted(train_labels_by_horizon):
+            labels = train_labels_by_horizon[horizon]
             finite = tuple(label for label in labels if math.isfinite(label))
             if len(finite) < params.min_data_in_leaf:
                 raise ValueError(

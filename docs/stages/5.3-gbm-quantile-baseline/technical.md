@@ -455,4 +455,42 @@ Sequência linear 01→06 satisfaz todas as arestas.
 > `BEGIN/END: post-execution` são rejeitadas via
 > `scripts/check_technical_postexec.py`. Cada entrada carrega data + autor.
 
+### 2026-07-20 — [deviation] refinamento C3: monitor sem par de label finito ergue — Claude (Fable 5)
+**Contexto:** o Checkpoint C do bloco 1 (F2) expôs um caso não fixado pelo
+concept: `early_stop_rows` não vazio, mas TODOS os labels de um horizonte não
+finitos — pós-filtragem I11 o monitor fica vazio e o real passaria um
+`valid_set` vazio à lib, enquanto o fake seguiria feliz.
+**Razão:** refinamento in-scope de C3 (dado insuficiente, não estrutura):
+fake e adapter erguem `ValueError` "(C3)" quando o monitor de algum horizonte
+fica sem nenhum par finito; docstring do port atualizada e caso na suite de
+contrato (commits 1b29cff/041e65b). Não muda contrato do concept — fecha uma
+borda que ele deixava ambígua (abaixo do threshold de pergunta).
+
+### 2026-07-20 — [deviation] geometria do e2e: 2 folds × h=(1,2) em vez de 1 fold × h=(1,7) — Claude (Fable 5)
+**Contexto:** a Task 06 planejava `n_folds=1, test_size=5, val/calib=10,
+horizons (1,7)`; o e2e implementado usa `n_folds=2, test_size=3, val/calib=5,
+horizons (1,2)` (F2 do Checkpoint C bloco 2).
+**Razão:** a geometria implementada é mais forte no eixo que o e2e existe para
+provar (2 linhas de `dim_run`, fingerprints POR fold, dedup cross-fold) e
+espelha o e2e da 5.2 (comparabilidade de fixtures). O salto h=7 não é
+exercitado ponta-a-ponta nesta Stage: a aritmética `idx+h` é genérica em `h`
+(provada por propriedade nos units A7 com mutação) e o fluxo real com h=7 roda
+no cohort confirmatório (5.5). Registrado em vez de perguntado por ser escolha
+de fixture de teste, não de contrato.
+
+### 2026-07-20 — [deviation] chave do histórico: `valid_names=["monitor"]` em vez de `valid_0` — Claude (Fable 5)
+**Contexto:** a Task 04 detalhava `evals_result['valid_0']['quantile']`; o
+adapter nomeia o valid explicitamente (`monitor`) e lê
+`evals["monitor"]["quantile"]` (F3 do Checkpoint C bloco 2).
+**Razão:** nome explícito elimina a dependência do default posicional da lib;
+funcionalmente equivalente e guardado pelo R3 defensivo (`_history_from` ergue
+apontando o fallback do ADR 5.3.0002 se a mecânica mudar).
+
+### 2026-07-20 — [deviation] fake itera horizontes em ordem `sorted` — Claude (Fable 5)
+**Contexto:** com múltiplos horizontes inválidos, fake (ordem de inserção) e
+real (`sorted`) erguiam C3 apontando horizontes DIFERENTES — mesma exceção e
+marcador, então a suite de contrato não discriminava (F1 do Checkpoint C
+bloco 2, provado por probe).
+**Razão:** `sorted` no fake espelha o real; paridade de mensagem restaurada.
+
 <!-- END: post-execution -->
