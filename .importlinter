@@ -303,3 +303,19 @@ forbidden_modules =
     numba
     numpy
 allow_indirect_imports = False
+
+# Contrato 10 — modeling-no-lightgbm-leak (type = forbidden) — Stage 5.3 (A9)
+# Mesma postura do contrato 9 para a lib do GBM quantílico: o port-out
+# `QuantileModelTrainer` (Protocol) troca só primitivos/`collections.abc`;
+# `lightgbm` vive APENAS no adapter features/modeling/adapters/out/lightgbm/
+# (concept 5.3 §8). Single-purpose: `numpy` já é proibido nessas camadas pelo
+# contrato 9 — aqui entra só `lightgbm`.
+[importlinter:contract:modeling-no-lightgbm-leak]
+name = Application/domain não importam lightgbm (só o adapter)
+type = forbidden
+source_modules =
+    financial_forecasting.features.modeling.application
+    financial_forecasting.features.modeling.domain
+forbidden_modules =
+    lightgbm
+allow_indirect_imports = False
