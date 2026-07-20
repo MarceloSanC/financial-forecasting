@@ -469,34 +469,88 @@ def test_a7_labels_are_target_return_shifted_exactly_by_horizon() -> None:
 
 @pytest.mark.unit
 def test_a7_label_sources_never_reach_the_next_partition() -> None:
-    """Fonte máxima de label de train/early_stop < início da partição seguinte."""
+    """Fontes de label OBSERVADAS na captura < início da partição seguinte.
+
+    Decodifica a sessão-fonte de cada label passado ao port
+    (`returns[i] = i/1000` => fonte = round(label*1000)) — inspeciona o que o
+    use case FEZ, não a aritmética do splitter (F3, Checkpoint C bloco 1).
+    """
     trainer = _CapturingTrainer()
     use_case, _ = _build(trainer=trainer)
 
     use_case(_command())
 
     index_by_session = {day.isoformat(): idx for idx, day in enumerate(_SESSIONS)}
-    max_horizon = max(_HORIZONS)
-    for fold in _folds():
-        train_indices = [index_by_session[day] for day in fold.train]
+    for call, fold in zip(trainer.calls, _folds(), strict=True):
         early_stop_start = index_by_session[fold.early_stop[0]]
-        assert max(train_indices) + max_horizon < early_stop_start
-        early_stop_indices = [index_by_session[day] for day in fold.early_stop]
         calib_start = index_by_session[fold.calib[0]]
-        assert max(early_stop_indices) + max_horizon < calib_start
+        train_labels = call["train_labels_by_horizon"]
+        early_stop_labels = call["early_stop_labels_by_horizon"]
+        assert isinstance(train_labels, dict)
+        assert isinstance(early_stop_labels, dict)
+        for horizon in _HORIZONS:
+            train_sources = [round(label * 1000) for label in train_labels[horizon]]
+            assert max(train_sources) < early_stop_start
+            monitor_sources = [
+                round(label * 1000) for label in early_stop_labels[horizon]
+            ]
+            assert max(monitor_sources) < calib_start
+
+
+@pytest.mark.unit
+def test_fake_trainer_rejects_monitor_without_finite_labels() -> None:
+    """Paridade I11/C3 do fake: monitor sem NENHUM label finito ergue (F2, Cb1)."""
+    trainer = FakeQuantileModelTrainer()
+    params = GbmTrainingParams(seed=_SEED, min_data_in_leaf=1)
+
+    with pytest.raises(ValueError, match=r"monitor.*C3|C3.*monitor|finite-label monitor"):
+        trainer.train_and_predict(
+            params=params,
+            feature_names=("f0",),
+            train_rows=((1.0,), (1.0,), (1.0,)),
+            train_labels_by_horizon={1: (0.01, 0.02, 0.03)},
+            early_stop_rows=((1.0,), (1.0,)),
+            early_stop_labels_by_horizon={1: (float("nan"), float("nan"))},
+            test_rows=((1.0,),),
+            test_decision_indices=(9,),
+            quantile_levels=(0.5,),
+        )
+
+
+def _unreachable_calib_indices() -> frozenset[int]:
+    """Sessões de calib que NENHUMA entrada do port alcança (em fold algum).
+
+    Com múltiplos folds, labels de early_stop de um fold alcançam o gap de
+    purga e podem cair DENTRO do calib de outro fold (sobreposição cross-fold
+    inerente ao walk-forward expansivo — achado F1 do Checkpoint C bloco 1).
+    A propriedade I6 verdadeira para QUALQUER trainer que honre o contrato é:
+    valores de sessões que não alimentam matriz nem label não mudam nada.
+    """
+    index_by_session = {day.isoformat(): idx for idx, day in enumerate(_SESSIONS)}
+    folds = _folds()
+    calib = {index_by_session[day] for fold in folds for day in fold.calib}
+    reachable: set[int] = set()
+    for fold in folds:
+        for partition in (fold.train, fold.early_stop, fold.test):
+            for day in partition:
+                reachable.add(index_by_session[day])  # features passadas ao port
+        for partition in (fold.train, fold.early_stop):
+            for day in partition:
+                for horizon in _HORIZONS:
+                    reachable.add(index_by_session[day] + horizon)  # fontes de label
+    unreachable = frozenset(calib - reachable)
+    assert unreachable, "geometria de teste sem sessão de calib inalcançável"
+    return unreachable
 
 
 @pytest.mark.unit
 def test_i6_calib_value_mutation_does_not_change_anything_persisted() -> None:
-    """Mutar retornos/features das sessões de calib -> mesmíssimas predições."""
-    index_by_session = {day.isoformat(): idx for idx, day in enumerate(_SESSIONS)}
-    calib_indices = frozenset(
-        index_by_session[day] for fold in _folds() for day in fold.calib
-    )
-
+    """Mutar sessões de calib inalcançáveis pelo port -> mesmíssimas predições."""
     baseline_case, baseline_repo = _build()
     baseline_case(_command())
-    mutated_rows = _dataset_rows(_SESSIONS, _returns(), mutate_indices=calib_indices)
+    mutated_rows = _dataset_rows(
+        _SESSIONS, _returns(), mutate_indices=_unreachable_calib_indices()
+    )
     mutated_case, mutated_repo = _build(store=_seeded_store(mutated_rows))
     mutated_case(_command())
 

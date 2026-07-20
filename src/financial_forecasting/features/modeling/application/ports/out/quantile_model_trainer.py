@@ -31,7 +31,9 @@ Contrato semântico (concept 5.3 §4/§5/§6; ADRs 5.3.0001-0002):
 - **I4 — determinismo:** mesma entrada (+ mesma seed em `params`) => mesma
   saída, bit a bit, inclusive `best_iteration_by_horizon`.
 - **C3 — treino insuficiente ergue:** pares de label finito de algum
-  (nível x horizonte) abaixo de `min_data_in_leaf` => `ValueError`.
+  (nível x horizonte) abaixo de `min_data_in_leaf` => `ValueError`; monitor
+  de early_stop SEM nenhum par de label finito para algum horizonte idem
+  (monitor efetivamente vazio não é "seguir sem monitor").
 - **C4 — estrutura inconsistente ergue:** largura de linha diferente de
   `len(feature_names)`, comprimento de labels diferente do nº de linhas,
   `test_decision_indices` de comprimento diferente do teste, `early_stop`

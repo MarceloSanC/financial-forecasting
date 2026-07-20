@@ -78,6 +78,14 @@ class FakeQuantileModelTrainer:
                     f"horizon {horizon}: {len(finite)} finite-label train pairs "
                     f"< min_data_in_leaf={params.min_data_in_leaf} (C3)"
                 )
+            monitor_labels = early_stop_labels_by_horizon[horizon]
+            if not any(math.isfinite(label) for label in monitor_labels):
+                # Paridade com o real (I11): monitor pós-filtragem vazio não é
+                # "seguir sem monitor" — é dado insuficiente (F2, Checkpoint C b1).
+                raise ValueError(
+                    f"horizon {horizon}: early_stop has no finite-label monitor "
+                    "pairs (C3)"
+                )
             grid_by_horizon[horizon] = sample_quantiles_type7(
                 values=finite, levels=quantile_levels
             )
