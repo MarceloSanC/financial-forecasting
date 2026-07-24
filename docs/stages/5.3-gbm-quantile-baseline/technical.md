@@ -493,4 +493,30 @@ marcador, então a suite de contrato não discriminava (F1 do Checkpoint C
 bloco 2, provado por probe).
 **Razão:** `sorted` no fake espelha o real; paridade de mensagem restaurada.
 
+### 2026-07-24 — [deviation] task-07-extra: testes derivados da auditoria de mutação real — Claude (Fable 5)
+**Contexto:** registro retroativo (apontado pela auditoria da Stage): o commit
+off-task `2e4fb0a [5.3/task-07-extra]` adicionou testes sem entrada
+correspondente nesta seção (CONVENTIONS §3.4; precedente: a 5.2 registrou o
+task-11-extra dela em §7).
+**Razão:** a auditoria de testes independente (checklist §3) rodou mutação
+REAL — M1 off-by-one do `m*`, M2 label `t+h−1`, M3 leakage de `target_return`
+como feature, M4 remoção de `feature_names` dos payloads de
+`run_id`/`config_signature`. M1–M3 morreram na suite existente; **M4
+sobreviveu** e exigiu o teste `test_i7_run_and_config_payloads_pin_the_ordered_
+feature_names` (hasher gravador assertando o CONTEÚDO do payload, não só o
+hash). O commit também cobriu I11-features (None→NaN até o port), I12 e os
+ramos C4 de `feature_names`/mapa de labels vazios nas duas pernas da suite de
+contrato. Mutações reaplicadas → testes falham → revertidas.
+
+### 2026-07-24 — [finding] A8: C5 coberto no adapter real, não nas duas pernas da suite de contrato — Claude (Fable 5)
+**Contexto:** o concept A8 pede "C3/C4/C5 nas duas pernas da suite de
+contrato", mas a suite cobre C3/C4 nas duas pernas e C5 só no adapter real
+(`_finite_grid`, teste dedicado na integração da Task 04). O mapa do gate
+(§3 deste technical, aprovado) já registrava A8→T04(C3/C4/C5)/T05(C3/C4).
+**Razão:** C5 é **inatingível na perna fake por construção** — a emissão do
+fake é o quantil tipo 7 de labels finitos, sempre finita; um caso C5 na perna
+fake seria vácuo. O espírito de A8 (emissão não finita nunca sai silenciosa)
+está provado onde o risco existe (adapter real). Errata da letra do concept
+registrada aqui em vez de retocar o concept aprovado.
+
 <!-- END: post-execution -->
