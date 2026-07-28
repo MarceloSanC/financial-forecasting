@@ -356,9 +356,10 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
     )
 
     # BC modeling (Stage 5.3, Task 06): `TrainGbmQuantile` compartilha o MESMO
-    # splitter/persister/repositório dos baselines (grão e cohort comuns — o
-    # comparador H2 persiste no mesmo canal); o trainer LightGBM entra atrás do
-    # proxy lazy (import da lib só no 1º treino).
+    # splitter e o MESMO repositório silver dos baselines (grão e cohort comuns
+    # — o comparador H2 persiste no mesmo canal); o `PersistPredictions` é
+    # instância própria, stateless, sobre esse mesmo repositório. O trainer
+    # LightGBM entra atrás do proxy lazy (import da lib só no 1º treino).
     train_gbm_quantile = TrainGbmQuantile(
         store=store,
         splitter=splitter,
