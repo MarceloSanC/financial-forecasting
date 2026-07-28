@@ -59,6 +59,9 @@ _EXPECTED_CONTRACTS = (
     # Stage 5.2 (I8/A9): statsforecast/numba/numpy confinados ao adapter
     # features/modeling/adapters/out/statsforecast/ (ADR 5.2.0001).
     "modeling-no-statsforecast-leak",
+    # Stage 5.3 (A9): lightgbm confinado ao adapter
+    # features/modeling/adapters/out/lightgbm/ (concept 5.3 §8).
+    "modeling-no-lightgbm-leak",
 )
 
 

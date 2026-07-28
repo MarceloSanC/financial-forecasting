@@ -626,6 +626,7 @@ cobre. Cresce sem inflar a seção conceitual.
 | Commit off-task sem `[deviation]` em §7 | Rastro perdido | CONVENTIONS §3.4 |
 | Sub-agente alucina `arquivo:linha` | Delegação cega | repetente em auditorias longas |
 | `make check` vermelho em arquivo com diff 0 vs develop — `.venv` do worktree defasado | Falso vermelho ambiental | worktree com `.venv` defasado (espelhado na issue-audit) |
+| Critério A* exige teste numa perna onde o comportamento é **inatingível por construção** (C5 na perna fake: emissão tipo-7 de labels finitos é sempre finita) — pergunta-guia: "esta perna CONSEGUE exibir o comportamento?" | Literal ≠ espírito | auditoria 5.3 (A8/C5); errata em §7 em vez de retocar o concept |
 
 Quando esta skill falhar (auditoria deu verde, reviewer/CI/produção
 pegou algo): **primeiro perguntar qual conceito existente cobre**.
