@@ -16,17 +16,17 @@ estimated_duration: variável (Stage S: meio dia; M: 1–2 dias; nada acima de M
 > `docs/templates/runbook.md`) por carregar prompts e conteúdo do pipeline
 > em PT.
 
-> **Modo padrão de execução:** na prática o ciclo roda via as variantes de
-> sessão única —
-> [`PROMPT-stage-single-session-autonomous.md`](./PROMPT-stage-single-session-autonomous.md)
-> (autônoma; implementa → audita → auto-merge sob o ADR 0.0.0050) e
-> [`PROMPT-stage-single-session-interactive.md`](./PROMPT-stage-single-session-interactive.md)
-> (interativa, human-in-the-loop) — que colapsam as fases deste runbook numa
-> sessão única (implementa → audita; ver PIPELINE §11.1). A execução autônoma
-> fica registrada em
-> [`autonomous-run-decision-ledger.md`](./autonomous-run-decision-ledger.md).
-> Este runbook segue sendo o **procedimento canônico por fases** e a **fonte
-> única dos checklists de gate** (Passos 5/7/10) que as variantes reusam.
+> **Modo padrão de execução:** na prática o ciclo roda via
+> [`PROMPT-stage-single-session.md`](./PROMPT-stage-single-session.md), que
+> colapsa as fases deste runbook numa sessão única (implementa → audita; ver
+> PIPELINE §11.1). Esse prompt é **autônomo por padrão** (§Princípio de
+> Autonomia): só para nos pontos objetivos, e o gate humano antes da Fase 4
+> acontece apenas sob pedido no kickoff. Execução sem humano disponível fica
+> registrada em
+> [`autonomous-run-decision-ledger.md`](./autonomous-run-decision-ledger.md);
+> auto-merge segue governado pelo ADR 0.0.0050. Este runbook segue sendo o
+> **procedimento canônico por fases** e a **fonte única dos checklists de
+> gate** (Passos 5/7/10) que o prompt reusa.
 
 > **Pré-requisitos de arquivo (importante).** Este runbook assume que os
 > seguintes artefatos já existem no projeto destino:
@@ -763,9 +763,7 @@ Get-Content docs/roadmap.md | Select-String "$N\.$M.*done"
 
 Caminhos relativos a este arquivo (`docs/RUNBOOK-STAGE-LIFECYCLE.md` no projeto destino):
 
-- Variante em sessão única — **autônoma** (implementa → audita → auto-merge, ADR 0.0.0050): [`./PROMPT-stage-single-session-autonomous.md`](./PROMPT-stage-single-session-autonomous.md)
-- Variante em sessão única — **interativa** (human-in-the-loop): [`./PROMPT-stage-single-session-interactive.md`](./PROMPT-stage-single-session-interactive.md)
-- Prompt canônico de sessão única (base das duas variantes): [`./PROMPT-stage-single-session.md`](./PROMPT-stage-single-session.md)
+- Prompt canônico de sessão única (autônomo por padrão; gate humano pré-Fase 4 sob pedido): [`./PROMPT-stage-single-session.md`](./PROMPT-stage-single-session.md)
 - Registro da execução autônoma (decision ledger): [`./autonomous-run-decision-ledger.md`](./autonomous-run-decision-ledger.md)
 - Variante em sessão única para **issue avulsa** (sem concept/technical): [`./PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md)
 - Pipeline conceitual: [`./PIPELINE.md`](./PIPELINE.md)
