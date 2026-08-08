@@ -63,19 +63,83 @@ e `docs/roadmap.md` aprovados; Stage anterior (se houver) já mergeada.
 
 ## Procedimento
 
-### Passo 1 — Criar issue no GitHub
+### Passo 1 — Issue da Stage + alinhamento de abordagem
 
-Identificar a Stage `N.M-<slug>` no roadmap. Criar issue:
+Identificar a Stage `N.M-<slug>` no roadmap. O Passo 1 tem três partes:
+**buscar** a issue (1a), fazer o **alinhamento de abordagem** com o humano
+(1b — o contato humano desta ponta do ciclo) e **criar/atualizar** a issue
+com o entendimento validado (1c).
 
 ```powershell
 $N = "<numero-step>"            # ex: 2
 $M = "<numero-stage>"           # ex: 3
 $slug = "<stage-slug>"          # ex: s3-source-adapter
 $title_humano = "<titulo>"      # ex: adicionar S3 source adapter
+```
 
+**1a. Buscar antes de criar.** A issue pode já existir (criada num
+replanejamento de roadmap ou escalada de um `[finding]`):
+
+```powershell
+gh issue list --search "stage $N.$M" --state all
+```
+
+- **Existe** → ler o corpo e conferir contra a linha atual do roadmap.
+  Corpo defasado (o escopo mudou desde a criação) é corrigido em 1c —
+  sem isso, a execução implementa o escopo antigo.
+- **Não existe** → será criada em 1c.
+
+**1b. Alinhamento de abordagem (não pular).** Antes de criar branch ou
+artefato, apresentar ao humano o quadro da Stage — estilo na skill
+`didatic-explanation`; estrutura fixa, cabendo em ~1 tela:
+
+1. **O que falta hoje** — a lacuna que a Stage fecha.
+2. **O que a Stage entrega** — o resultado, em termos de sistema/pesquisa.
+3. **A abordagem prevista** — a cadeia de raciocínio de como chegar lá,
+   não a lista de arquivos.
+4. **Fronteiras** — o que fica de fora e para onde vai.
+5. **Pontos de reflexão** (2–4), **um obrigatório — o teste da solução mais
+   direta:** existe abordagem mais simples/geral? *Sinal de captura:* criar
+   tipo/métrica/caso especial para tratar, local, um sintoma que **recorre
+   em outros consumidores** e teria tratamento mais geral ou a montante
+   (as-of/frescor, anti-leakage, identidade/fingerprint, formato de erro,
+   cache, observabilidade). Se sim, a geral é a solução; a local vira piso
+   declarado + issue. Os demais: premissas assumidas, limites com as Stages
+   vizinhas e correlações com outras partes do projeto.
+
+O objetivo é habilitar o julgamento que só o humano tem — nuance de
+domínio, correlação sutil com o resto do projeto — **reagindo** a uma
+proposta clara (barato) em vez de respondendo perguntas a frio (caro; é
+por isso que o "perguntar até saturar" caía em desuso). Decisões de forma
+de processo (dividir a Stage, rebaixar para issue avulsa) são
+operacionais: a IA as **propõe** quando os limites de PIPELINE §4.2/§4.5
+e CONVENTIONS §6 indicarem; ao humano cabe validar.
+
+Dúvidas que surgirem, em formato proporcional ao contexto:
+
+- pergunta direta, de pouco contexto → `AskUserQuestion`;
+- decisão que exige contexto rico / análise de opções → **bloco numerado**
+  (B1, B2…) dentro da própria explicação, que o humano responde
+  referenciando o bloco (mesmo padrão dos findings F1/F2/F3 das auditorias).
+
+**Escala:** Stage trivial (PIPELINE §12.3) → um parágrafo + "sem pontos de
+reflexão além do óbvio". O alinhamento não é cerimônia — se não há o que
+refletir, dizer isso e seguir.
+
+> No fluxo colapsado ([`PROMPT-stage-single-session.md`](./PROMPT-stage-single-session.md)),
+> o 1b é o **primeiro ato da sessão** quando ainda não aconteceu — as
+> partes mecânicas (1a/1c) podem precedê-lo.
+
+**1c. Criar (ou atualizar) a issue** com o entendimento validado no corpo.
+A issue é o registro durável da ideia e o ponto onde notas de outros
+momentos do desenvolvimento se acumulam:
+
+```powershell
 gh issue create `
   --title "feat: stage $N.$M — $title_humano" `
-  --body "Stage $N.$M-$slug — ver docs/roadmap.md e (após criação) docs/stages/$N.$M-$slug/concept.md"
+  --body "<ideia/abordagem validada em 1b> — ver docs/roadmap.md e (após criação) docs/stages/$N.$M-$slug/concept.md"
+# issue já existente com corpo defasado:
+# gh issue edit <num> --body "<corpo atualizado>"
 ```
 
 **Saída esperada:** URL da issue + número atribuído (ex.: `#42`).
@@ -193,7 +257,10 @@ Em blocos temáticos quando útil. Tipicamente:
 1. Escopo e fronteiras.
 2. Contratos e invariantes.
 3. Casos de erro.
-4. Decisões técnicas relevantes (alternativas reais descartadas → ADR).
+4. Decisões técnicas relevantes (alternativas reais descartadas → ADR),
+   **incluindo a alternativa mais direta/geral**: para cada mecanismo novo,
+   se há solução mais simples ou a montante (concern compartilhado capturado
+   local) e por que não foi adotada — captura → piso declarado + issue.
 5. Dependências e integração com Stages anteriores.
 6. Riscos e premissas.
 
@@ -236,7 +303,9 @@ Checklist (**fonte única** — PIPELINE §7.4 aponta para cá):
 - [ ] Toda decisão em §7 do concept (Decisões técnicas) tem fonte rastreável.
 - [ ] Contratos declarados batem com `contratos_introduzidos` do Roadmap.
 - [ ] Critérios de aceitação são objetivos e testáveis.
-- [ ] Checklist de validação interna (§12 do concept) 100% "sim".
+- [ ] Checklist de validação interna (§12 do concept) 100% "sim" — **incluindo
+      o teste da solução mais direta**, que `scripts/check_concept_directness.py`
+      cobra no `make docs-check` quando o concept toca um concern transversal.
 - [ ] ADRs identificados como necessários foram escritos (`accepted`).
 - [ ] Stage cabe em ~3–12 Tasks (`CONVENTIONS.md` §6); se cresceu além disso, dividir antes de seguir.
 - [ ] Frontmatter completo; `status: done`.
@@ -468,7 +537,9 @@ Se durante a execução você encontrar algo **não previsto** no
 4. Registre a entrada em §7 do `technical.md` (entre os marcadores
    `<!-- BEGIN: post-execution -->` e `<!-- END: post-execution -->`)
    com header `### YYYY-MM-DD — [tag] escopo — Autor`:
-   - `[decision]` — decisão tomada com base na pergunta.
+   - `[decision]` — decisão tomada com base na pergunta **ou** escolha local
+     reversível-barata sem âncora de princípio, registrada sem pergunta (ver
+     CONVENTIONS §3.4 para o carve-out).
    - `[finding]` — escalado para próxima Stage (não decidido agora).
    - `[deviation]` — ajuste pequeno claramente in-scope (continua exigindo
      pergunta; o "pequeno" não dispensa).
@@ -680,7 +751,7 @@ Get-Content docs/roadmap.md | Select-String "$N\.$M.*done"
 |---|---|---|
 | Fase 3B revela lacuna no Concept | Concept incompleto | Regredir concept para `draft` via `chore(concept): revert to draft -- revision-from-technical: <motivo>` (CONVENTIONS §3.2). Atualizar Concept. Re-aprovar com `stage N.M: conceptual approved`. Voltar a 3B. **Nova sessão não obrigatória.** |
 | Fase 4 (não iniciada) — gap no Technical | Technical precisa ajuste antes da execução | Regredir technical para `draft` via `chore(technical): revert to draft -- revision-from-execution: <motivo>`. Ajustar. Re-aprovar. |
-| Fase 4 — algo não previsto encontrado durante execução | Decisão/observação ausente nos docs | IA **pergunta** com `AskUserQuestion` (2–4 opções + recomendada). Registra entrada em §7 do `technical.md` (`[decision]`/`[finding]`/`[deviation]`). Nunca decide em silêncio. |
+| Fase 4 — algo não previsto encontrado durante execução | Decisão/observação ausente nos docs | IA **pergunta** com `AskUserQuestion` (2–4 opções + recomendada) quando **material** (contrato/fronteira/critério/dado); escolha local reversível-barata **sem âncora** decide sem pergunta e vira `[decision]` (carve-out CONVENTIONS §3.4). Registra entrada em §7 do `technical.md` (`[decision]`/`[finding]`/`[deviation]`). Nunca decide em silêncio. |
 | Fase 4 — Task estoura escopo (precisa tocar arquivo extra) | Technical incompleto | IA para e pergunta. Humano decide: regredir technical (§1–§6), aceitar exceção registrada em §7 como `[decision]`, ou abortar Task. |
 | Fase 4 revela problema **grande** no Concept | Concept tem decisão errada | Stop. Voltar à Fase 3A explicitamente em nova sessão (PIPELINE §12.2). Regressão simples não cobre. |
 | Fase 4 revela problema no Roadmap | Stage está mal recortada | Pausar. Nova sessão com Overview + Roadmap. Replanejar Stages afetadas. |
