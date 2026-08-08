@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "0.0.0017"
 decision: Sentiment is computed by FinBERT (ProsusAI/finbert) loaded with an explicitly pinned Hugging Face revision (commit SHA), exposed as config, so the model artifact is reproducible across runs and machines — the prior repo loaded the model by name only and was not reproducible
 context_stage: 3.2-sentiment-finbert
+bounded_context: transversal
 ---
 
 # ADR 0.0.0017 — FinBERT sentiment is version-pinned

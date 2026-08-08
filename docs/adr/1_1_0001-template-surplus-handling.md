@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "1.1.0001"
 decision: Retain the template's surplus scaffolding (web/db infra, composition root, stub ports) as inert, declared technical debt rather than pruning it in Stage 1.1
 context_stage: 1.1-bootstrap
+bounded_context: transversal
 ---
 
 # ADR 1.1.0001 — Keep inherited template surplus as declared technical debt

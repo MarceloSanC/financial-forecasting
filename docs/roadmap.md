@@ -13,7 +13,7 @@ last_reviewed_at: 2026-07-20
 
 > **Documento vivo.** Cada Stage ganha `concept.md` + `technical.md` próprios depois de iniciada (Fase 3A/3B). Regra dura: ao marcar uma Stage `done`, atualizar `updated_at` + `last_reviewed_at` no mesmo merge.
 >
-> **Hierarquia (ver [`PIPELINE.md`](../../boilerplate/layout-files/docs/PIPELINE.md) §4):**
+> **Hierarquia (ver [`PIPELINE.md`](./PIPELINE.md) §4):**
 > - **Step:** entrega de negócio. Sem restrição arquitetural. Agrupa Stages.
 > - **Stage:** unidade atômica concept → technical → execução. 1 foco coeso, 1 DoD testável, 1 bounded context, complexidade ≤ M. Vira branch `feat/<num-issue>-<N-M>-<slug>`.
 > - **Task:** 1 commit. Vive no `technical.md` da Stage.
@@ -1023,7 +1023,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 
 ## Premissas adotadas no Roadmap
 
-- **ROADMAP-1:** Stages podem exceder o guideline 3–8 Tasks (até ~12–15), pois as decisões já estão tomadas (overview §11) — menos ambiguidade por Task. Os 5 critérios de atomicidade permanecem; só o teto de Tasks é relaxado. Stages mais densas: `3.5`, `6.2`, `6.4`.
+- **ROADMAP-1:** Stages podem chegar ao topo do guideline 3–12 Tasks (CONVENTIONS §6), e excedê-lo pontualmente (até ~15), pois as decisões já estão tomadas (overview §11) — menos ambiguidade por Task. Os 5 critérios de atomicidade permanecem; só o teto de Tasks é relaxado. Stages mais densas: `3.5`, `6.2`, `6.4`.
 - **ROADMAP-2:** bronze **reusa o raw existente** (ASSUM-1); não há Step de re-ingestão completa — só adapters limpos sobre o raw, com re-ingestão pontual opcional.
 - **ROADMAP-3:** o BC `evaluation` força cada métrica/teste a ser **serviço de domínio sobre value object**; é o que extrai a estatística dos builders e a torna auditável.
 - **ROADMAP-4:** multi-asset é **preparado, não executado** (única execução confirmatória = AAPL).

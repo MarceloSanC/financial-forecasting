@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "0.0.0021"
 decision: Correctness is asserted per unit against an oracle (analytic fixture + library/R), never via a global byte-identical pipeline snapshot
 context_stage: 1.1-bootstrap
+bounded_context: transversal
 ---
 
 # ADR 0.0.0021 — Per-unit regression tests against an oracle, not global byte-identical snapshots

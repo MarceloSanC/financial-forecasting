@@ -9,6 +9,7 @@ updated_at: YYYY-MM-DD
 adr_id: N.M.NNNN
 decision: <One sentence summarizing what was decided>
 context_stage: N.M-<slug>
+bounded_context: <bc>          # BC do roadmap (analytics_store|evaluation|feature_engineering|inference|market_data|modeling|shared); ADR de numeração global (0_0_*/1_1_*) -> transversal. Não inventar valor fora dessa lista.
 ---
 
 # ADR N.M.NNNN — <Decision summary>

@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: 4.1.0001
 decision: Each analytics silver table gets its own schema module (SilverTable + pandera) wired through a SILVER_REGISTRY keyed by (layer, table), defining only the 5 tables consumed by Steps 1–4 and deferring 8 others.
 context_stage: 4.1-silver-schema-per-table
+bounded_context: analytics_store
 ---
 
 # ADR 4.1.0001 — Decompose the analytics silver store into one schema module per table + registry

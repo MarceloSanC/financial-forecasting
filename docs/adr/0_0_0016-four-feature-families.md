@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "0.0.0016"
 decision: Features are organized into exactly four families — price, technical, sentiment, fundamental — which is the canonical taxonomy required by the H3 relative-contribution hypothesis and reused from the bronze sources; the FeatureSpec.family field is constrained to this four-value set
 context_stage: 3.4-feature-registry-and-derived
+bounded_context: transversal
 ---
 
 # ADR 0.0.0016 — Four feature families

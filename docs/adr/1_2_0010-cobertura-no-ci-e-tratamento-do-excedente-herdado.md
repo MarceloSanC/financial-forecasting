@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "1.2.0010"
 decision: Make `make check` (the CI path) run `pytest --cov` so `fail_under=90` actually fires, treat the inherited 33%-coverage surplus by scope-guided pruning + targeted omit/pragma over wiring, and keep import-linter contracts out of Stage 1.2 (deferred to 1.3, gated meanwhile by the existing check_layout.py)
 context_stage: 1.2-ci-coverage
+bounded_context: shared
 ---
 
 # ADR 1.2.0010 — Make the coverage gate effective in CI and treat the inherited template surplus

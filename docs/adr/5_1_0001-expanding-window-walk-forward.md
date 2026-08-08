@@ -9,6 +9,7 @@ updated_at: 2026-07-04
 adr_id: "5.1.0001"
 decision: The walk-forward harness uses an expanding (anchored) training window — train grows from the first session each fold — rather than a fixed-length rolling window; rolling stays out of scope as a documented future extension
 context_stage: 5.1-walk-forward-harness
+bounded_context: modeling
 ---
 
 # ADR 5.1.0001 — Expanding (anchored) walk-forward window

@@ -9,6 +9,7 @@ updated_at: 2026-07-04
 adr_id: "5.1.0002"
 decision: Each fold's validation region is split into an early-stop block and a dedicated calibration block that is disjoint from early-stop/training, placed as the most recent block immediately before the test (separated by purge+embargo), and never consulted for model selection
 context_stage: 5.1-walk-forward-harness
+bounded_context: modeling
 ---
 
 # ADR 5.1.0002 — Dedicated calibration partition (disjoint, recent, embargoed)

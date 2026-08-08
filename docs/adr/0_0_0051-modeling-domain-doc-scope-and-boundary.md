@@ -9,6 +9,7 @@ updated_at: 2026-07-14
 adr_id: 0.0.0051
 decision: The Step 5 domain gate is satisfied by a single doc, docs/domain/modeling/quantile-model-training.md, covering the four theory blocks of Step 5 (baselines, quantile GBM, quantile TFT, confirmatory cohort) plus a short evaluation-boundary section with pointers only — no Step 6 theory (DM/MCS/Holm/backtests), which belongs to the future evaluation BC domain doc.
 context_stage: 0.0-global
+bounded_context: transversal
 ---
 
 # ADR 0.0.0051 — Single modeling domain doc covering Step 5 plus an evaluation-boundary section

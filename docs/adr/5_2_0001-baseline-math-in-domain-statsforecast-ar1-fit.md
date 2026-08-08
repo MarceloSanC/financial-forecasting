@@ -9,6 +9,7 @@ updated_at: 2026-07-15
 adr_id: 5.2.0001
 decision: The preregistered emission formulas (degenerate grid, Gaussian location-scale via statistics.NormalDist, Hyndman-Fan type-7 sample quantile, RiskMetrics EWMA recursion, AR(1) closed-form h-step mean/variance) are implemented as stdlib-only domain services validated per unit against oracles; statsforecast is kept behind the BaselineForecaster port but used ONLY to estimate the AR(1) parameters (ARIMA(1,0,0), the R arima port), because no statsforecast model implements the other preregistered conventions and its naive-model intervals follow the √h level semantics that does not match the project's 1-day-return target
 context_stage: 5.2-baselines-naive-statistical
+bounded_context: modeling
 ---
 
 # ADR 5.2.0001 — Preregistered baseline math in the domain; statsforecast for the AR(1) fit only

@@ -70,8 +70,8 @@ tests/
 
 ## 2. Tasks
 
-> Faixa saudável: **3–8 Tasks por Stage**. ≥ 10 = Stage provavelmente
-> está grande demais; reabrir Fase 3A para dividir.
+> Faixa saudável: **3–12 Tasks por Stage** (CONVENTIONS §6). ≥ 14 =
+> Stage grande demais; reabrir Fase 3A para dividir.
 
 ### Task 01 — <descrição curta>
 

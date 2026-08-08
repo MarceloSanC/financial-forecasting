@@ -9,6 +9,7 @@ updated_at: 2026-07-19
 adr_id: 5.3.0002
 decision: Train all K level-boosters of a (fold × horizon) to a fixed ceiling without stopping callbacks, record per-iteration pinball histories on the dedicated early_stop partition, and select a single best iteration m* per (fold × horizon) as the argmin of the grid-mean pinball (ties → smallest iteration); test predictions are emitted truncated at m*.
 context_stage: 5.3-gbm-quantile-baseline
+bounded_context: modeling
 ---
 
 # ADR 5.3.0002 — Early stopping by grid-mean pinball on the dedicated early_stop partition

@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "1.5.0002"
 decision: Define ExperimentTracker as a minimal structural Protocol (start_run/log_params/log_metrics(step)/set_tags/log_artifact/end_run) over primitive/Mapping types, with idempotency by run_id as a contract invariant and no mlflow types leaking into application
 context_stage: 1.5-config-and-tracking
+bounded_context: shared
 ---
 
 # ADR 1.5.0002 — ExperimentTracker as a minimal structural Protocol that does not leak mlflow types

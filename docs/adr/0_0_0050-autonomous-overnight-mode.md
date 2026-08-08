@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: 0.0.0050
 decision: Authorize an autonomous overnight run of stages 1.1→4.3 where the agent self-merges, with a clean-context audit substituting the human approval gate.
 context_stage: 0.0-global
+bounded_context: transversal
 ---
 
 # ADR 0.0.0050 — Autonomous overnight stage execution mode
@@ -84,7 +85,7 @@ For the 1.1→4.3 overnight run only:
 ## Implementation notes
 
 - Per-stage loop: issue+branch+`docs/stages/N.M/` → implementer subagent (fresh) runs the autonomous prompt variant → auditor subagent (fresh) runs `stage-audit` → main session triages findings, fixes, records ADRs/issues → `stage N.M: complete` → PR → auto-merge → `git sync` → next stage.
-- The autonomous prompt variant lives at `docs/PROMPT-stage-single-session-autonomous.md`.
+- The autonomous prompt variant lived at `docs/PROMPT-stage-single-session-autonomous.md`. Issue #55 folded autonomy into the single canonical prompt (`docs/PROMPT-stage-single-session.md`, §Princípio de Autonomia) and removed the separate variant; this decision itself is unchanged.
 
 ## References
 

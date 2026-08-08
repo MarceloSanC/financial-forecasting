@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "3.4.0002"
 decision: FeatureSpec is the rich superset value-object (adds formula_desc, null_policy, enabled_by_default, a 4-value family, and a new validated tft_typing known/unknown field) that coexists with the minimal IndicatorSpec from 3.1 rather than physically replacing it now; the known/unknown TFT typing — hardcoded in the old training use case — is promoted into the spec as a required, validated field so the registry is the single source of truth
 context_stage: 3.4-feature-registry-and-derived
+bounded_context: feature_engineering
 ---
 
 # ADR 3.4.0002 — FeatureSpec superset + tft_typing promotion

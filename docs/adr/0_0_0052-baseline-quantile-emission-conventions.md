@@ -9,6 +9,7 @@ updated_at: 2026-07-14
 adr_id: 0.0.0052
 decision: Baselines emit quantiles under four preregistered conventions — EWMA-vol uses Gaussian quantiles with μ=0 (canonical RiskMetrics); all empirical quantiles use Hyndman & Fan type 7 (the R/NumPy default); AR(1) emits parametric Gaussian quantiles from the closed-form h-step mean and variance; and zero_return ≡ driftless random walk of the log-price collapse into a single spec (5 baseline specs) — consolidated in one ADR because they were decided in the same act with the same rationale.
 context_stage: 0.0-global
+bounded_context: transversal
 ---
 
 # ADR 0.0.0052 — Baseline quantile-emission conventions

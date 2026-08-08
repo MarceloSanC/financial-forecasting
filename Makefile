@@ -132,14 +132,22 @@ lint-imports:
 
 # ---------------------------------------------------------------------------
 # docs-check — valida (1) que technical.md `done` só mudou dentro da §7
-# post-execution desde o gate da Fase 3B (CONVENTIONS §3.4) e (2) que
+# post-execution desde o gate da Fase 3B (CONVENTIONS §3.4), (2) que
 # toda Stage tem issue correspondente no backlog do GitHub (CONVENTIONS
 # §3 + GIT-WORKFLOW.md §Princípios fundamentais #1; best-effort — pula se
-# `gh` não está autenticado).
+# `gh` não está autenticado), (3) que todo ADR declara um
+# `bounded_context` do conjunto do roadmap (CONVENTIONS §2), (4) que
+# concept tocando concern transversal declara o teste da solução mais
+# direta no §12 (RUNBOOK Passo 1b/5) e (5) que os docs normativos vivos
+# (docs/ + templates + runbooks + os SKILL.md de .claude/skills/) não
+# carregam padrões conhecidos de drift (ponteiros/frases defasadas).
 # ---------------------------------------------------------------------------
 docs-check:
 	uv run python scripts/check_technical_postexec.py
 	uv run python scripts/check_stage_issue.py
+	uv run python scripts/check_adr_bounded_context.py
+	uv run python scripts/check_concept_directness.py
+	uv run python scripts/check_docs_pointers.py
 
 # ---------------------------------------------------------------------------
 # test — roda toda a suite de testes MEDINDO cobertura (gate ≥ 90%).

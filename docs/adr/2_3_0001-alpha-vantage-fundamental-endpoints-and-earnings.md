@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "2.3.0001"
 decision: AlphaVantageFundamentalFetcher fetches four endpoints (INCOME_STATEMENT + BALANCE_SHEET + CASH_FLOW + EARNINGS), merging by (report_type, fiscal_date_end); EARNINGS is kept because it is the only source of reported_date, which is nullable in the bronze schema and feeds the as-of fallback of Stage 3.3 (ledger H-3)
 context_stage: 2.3-news-fundamentals-ingestion
+bounded_context: market_data
 ---
 
 # ADR 2.3.0001 — Alpha Vantage fundamental fetcher uses four endpoints, including EARNINGS

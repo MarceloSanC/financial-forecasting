@@ -9,6 +9,7 @@ updated_at: 2026-07-19
 adr_id: 5.3.0003
 decision: The GBM consumes the enabled FeatureRegistry features plus day_of_week and month as plain ordinal integers, and excludes time_idx (and non-feature columns timestamp, asset_id, fundamentals_effective_date, target_return) from the design matrix.
 context_stage: 5.3-gbm-quantile-baseline
+bounded_context: modeling
 ---
 
 # ADR 5.3.0003 — GBM feature set: registry features + ordinal calendar, excluding `time_idx`

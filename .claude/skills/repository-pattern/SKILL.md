@@ -62,3 +62,29 @@ class SqlAlchemyUserRepository:
         self._session.merge(row)
         # commit is the caller's responsibility
 ```
+
+## Testes que pulam em silêncio (regra de gatilho — não pular)
+
+Parte dos contract/integration tests de adapter deste repo é **gated por
+disponibilidade**, não por escolha: `pytest.mark.skipif` quando o extra `ml`
+(`torch`/`transformers`) não está instalado, ou quando o oráculo/fixture de
+dado não existe no ambiente. O `make check`/CI **não os executa** — eles
+aparecem como `SKIPPED`, que lê como verde.
+
+Consequência: mudança de assinatura ou de semântica num adapter (ou no port
+dele) pode quebrar o teste gated e **ninguém vê** — ele apodrece em silêncio
+até a próxima auditoria.
+
+**Gatilho:** ao tocar adapter de persistência, port out correspondente, fake
+espelho ou schema-espelho de teste, rodar ANTES do commit da Task o
+subconjunto gated dirigido, num ambiente onde as dependências existam:
+
+```bash
+uv run --extra ml pytest tests/contract/features/<bc> \
+  tests/integration/features/<bc> -q
+```
+
+Subconjunto **dirigido**, nunca `tests/` inteiro com todos os extras (a
+suíte completa gated é lenta e tem interferências). Se o teste continuar
+skipado por falta de fixture/oráculo, isso é a resposta — registre como
+`[finding]` em vez de assumir cobertura.

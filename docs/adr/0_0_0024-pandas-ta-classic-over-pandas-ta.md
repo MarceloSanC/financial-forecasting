@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "0.0.0024"
 decision: Technical indicators are computed with pandas-ta-classic (a maintained fork) instead of the unmaintained pandas-ta 0.4.71b0 beta, with the import confined to a single out adapter and every indicator validated against its canonical formula by an analytic oracle fixture
 context_stage: 3.1-technical-indicators
+bounded_context: transversal
 ---
 
 # ADR 0.0.0024 — `pandas-ta-classic` over the unmaintained `pandas-ta` beta

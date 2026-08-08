@@ -31,8 +31,11 @@ Procedimento para **auditar uma Stage** depois que ela é declarada
 > checklist do PR), **completa as caixinhas que a auditoria validou** e
 > **registra a auditoria no PR** — obrigatório, não opcional: (1) comentário
 > com o veredito (status global + gates numéricos + fixes aplicados com
-> hash) e (2) a nota de handoff "⚠️ precisa de auditoria" do corpo trocada
-> por "✅ auditoria realizada em <data> — <veredito>". Auditoria sem marca no
+> hash) e (2) o label de auditoria do corpo (linha `> **Auditoria:** ...`,
+> CONVENTIONS §3.6) gravado como **`complete`** — o comentário do veredito é
+> quem cita a data e o veredito. Essa troca é **mecânica, não cosmética**: o
+> workflow `audit-gate` (CI) falha enquanto o status não for `complete` —
+> gravar `complete` é o que **destrava o merge**. Auditoria sem marca no
 > PR **não existe** para quem decide o merge.
 > **Nunca faz merge** — é do usuário, salvo pedido explícito. O push da fase
 > de aplicação vai **apenas para a branch do PR sob auditoria** (nunca outra):
@@ -305,6 +308,15 @@ aplicar **todas** as sub-seções cujas camadas a Stage inclui (frontmatter
      definido e nunca plugado no pipeline real. Comando útil:
      `Grep "<nome_do_validator>"` no projeto inteiro, excluindo o
      próprio arquivo de teste. Ver conceito "Definido mas não plugado".
+   - **Sub-bullet — ramo testado × ramo de produção:** se o código novo
+     ramifica por **knob de config** (`if grain == "item"`, `match
+     backend`…), abrir a **fonte de configuração real** (settings/YAML/
+     composition root) e ler o valor declarado para produção. Se o teste
+     instancia o adapter direto (pegando o **default do construtor**) e
+     esse default **diverge** do valor de produção, o comportamento novo
+     está provado no ramo errado — o default Python costuma ser fallback
+     que produção nunca usa. Exigir o valor de produção no teste (ou
+     parametrizar nos dois ramos). Ver conceito "Verificação assimétrica".
 6. **Caça ao teste preguiçoso:** abra 2-3 arquivos de teste no
    diff novo e leia os asserts. Sinais de preguiça (cada um = finding):
    - `assert result is not None` / `assert len(x) > 0` sem cobrir
@@ -395,7 +407,26 @@ Gate (concept §11 + technical §3): <comando> → <resultado numérico>
 ### 6. Aprendizados → skills
 <algum padrão novo (falso verde, decisão recorrente, jargão mal
 explicado) que vale virar/atualizar conceito numa skill? Qual skill e
-qual conceito. Se nada novo: dizer "nada novo" explicitamente.>
+qual conceito. Se nada novo: dizer "nada novo" explicitamente.
+
+Antes de propor a atualização, responda os 4 filtros — proposta que
+reprova em qualquer um NÃO entra:
+1. **Classe ou caso?** O aprendizado descreve uma CLASSE que recorre
+   (conceito) ou só este episódio (história)? História não entra —
+   skill fica afiada, não longa.
+2. **Canal de consumo real:** quem vai LER isto e quando? Regra
+   acionável de skill em `skills_hint` vira pergunta adversarial
+   obrigatória no Checkpoint C (consumo mecânico); texto que só o
+   autor leria é advisory — se o único canal é advisory, avalie se o
+   ganho justifica.
+3. **O viés generaliza?** Toda regra enviesa a atenção do revisor —
+   esse é o propósito. Formulada como conceito, o viés cobre a classe;
+   formulada como caso, faz o revisor caçar UM bug específico e cega
+   para o resto.
+4. **Já mora em outro mecanismo?** Se o conceito já vive no
+   questionário de auditoria, num script de gate ou noutra skill,
+   duplicar alonga sem afiar — aponte o mecanismo existente em vez de
+   copiar.>
 
 ### Conclusão
 <2-4 linhas: que valor a Stage entregou, quão bem modularizada
@@ -467,21 +498,39 @@ relaxamento; se sim, §I errado; se não, decisão escondida (D-bis #5).
 
 ### Verificação assimétrica
 
-Confundir presença com ausência, ou execução com asserção. O check
-prova um lado, a auditoria assume o outro.
+Confundir presença com ausência, execução com asserção, **ou o ramo
+testado com o ramo que roda em produção**. O check prova um lado, a
+auditoria assume o outro.
 
 - `assert "field_hash" in dto` prova **presença do hash**, não
   **ausência do raw** — afirmações independentes.
 - Coverage 100% prova **linha executada**, não **resultado
   verificado** (`def test_foo(): foo()` sem assert tem coverage cheio).
+- Teste que instancia o adapter **direto** pega o **default do
+  construtor**; produção o monta pelo composition root, que lê a
+  **config real**. Quando os dois divergem, o teste prova um ramo real,
+  verde e honesto — que **não é o que roda**.
 
-**Pergunta:** "este check prova o que eu queria, ou só a contrapositiva?"
+**Pergunta:** "este check prova o que eu queria, ou só a contrapositiva
+— e prova no **ramo que produção executa**?"
 
 **Tratamento:** para invariante negativa ("X NÃO em Y"), rodar
 `Grep "<X>"` em Y/ e exigir **0 matches**. `check_layout.py` cobre
 algumas estruturais (LAYOUT §3) mas **não** as específicas da Stage.
 Para coverage alto, abrir 2-3 arquivos de teste e ler asserts
-(Fase D-bis #6).
+(Fase D-bis #6). **Quando a Stage estende um enum** consumido por
+classificação em conjuntos (frozensets, whitelists, mapas de família):
+`Grep` pelo nome do enum nos **consumidores que o particionam** e
+conferir que cada valor novo caiu em exatamente uma família — o teste do
+emissor prova a **emissão** do valor, não a **agregação** dele; valor que
+não cai em família nenhuma passa verde no unitário e corrompe o agregado
+(contagem, conservação, relatório) só no ramo em que dispara. **Quando o
+código ramifica comportamento por knob de config**: abrir a fonte de
+configuração real (settings/composition root), ler o valor **declarado
+para produção** e exigir que o teste do comportamento novo use **esse**
+valor — não o default do construtor. Divergência silenciosa entre os dois
+é falso verde, e o default Python costuma ser o fallback que produção
+nunca usa. Parametrizar nos dois ramos fecha de vez.
 
 ### Gate inerte ou míope
 
@@ -514,13 +563,21 @@ do "Gate inerte", mas do lado do código: a peça roda no teste unitário e
 - Validator/guard com teste verde mas nunca registrado no router/app.
 - Config loader (ex.: `configure_logging`) definido e jamais chamado no
   boot/composition root.
+- **Em docs de processo** (RUNBOOK/PIPELINE/CONVENTIONS): item novo de
+  checklist que o prompt ou runbook **downstream** não enumera. "Fonte
+  única" declarada **não** protege contra paráfrase dessincronizada — o
+  ponto de consumo é o texto que o agente executor lê, não o que se
+  autodeclara canônico.
 
-**Pergunta:** "qual linha de produção **chama/registra** isto?"
+**Pergunta:** "qual linha de produção **chama/registra** isto?" — em doc de
+processo: "quem **enumera** este item downstream?"
 
 **Tratamento:** `Grep "<nome>"` no projeto inteiro **excluindo** o arquivo
 de teste; exigir **≥ 1 call-site real**. Zero = finding. Codificado no
 sub-bullet de uso ativo (D-bis #5). Coverage 100% num módulo prova que o
-**teste dele** roda, não que o **pipeline** o usa.
+**teste dele** roda, não que o **pipeline** o usa. Para item de checklist,
+o equivalente é `Grep` da lista vizinha nos `PROMPT-*-session.md`
+(e `scripts/check_docs_pointers.py` cobre o piso mecânico dos ponteiros).
 
 ### Estrutural ≠ semântico
 
@@ -541,6 +598,30 @@ concept prometeu, ou só a forma?"
 `composition_root.py` e **contar instanciações** de X (`Grep` por
 `create_engine(`, `httpx.AsyncClient(`, etc.) — exatamente 1
 esperada, com o mesmo handle injetado em ambos os callers.
+
+### Solução complexa onde cabia a simples (concern capturado)
+
+A especificação cria caso especial/tipo/métrica novo para tratar **local**
+um sintoma cujo tratamento direto seria uma solução **geral ou a montante** —
+tipicamente um concern **compartilhado** (anti-leakage/causalidade, as-of,
+identidade/fingerprint, calendário de pregão, fuso, tracking) capturado
+dentro de um BC. Passa em §4.2 (um BC só, coeso, atômico), nas "fronteiras"
+(nada declarado "fora") e na rastreabilidade (a decisão tem fonte) —
+invisível ao enforcement estrutural.
+
+- Sintoma: **tipo/métrica/nuance nova** + o **mesmo problema recorre** em
+  outros consumidores do dado.
+
+**Pergunta:** "há solução mais direta/geral, ou estou remendando local um
+concern compartilhado?"
+
+**Tratamento:** a geral é o conserto; a local vira **piso declarado + issue**,
+nunca solução silenciosa. Blocker se a captura corrompe a semântica para
+outros consumidores; senão non-blocker + issue transversal (buscar backlog
+antes). É o espelho, no eixo produto/design, de "Escopo empurrado pra frente".
+Se o lint `check_concept_directness.py` **não** pegou a captura, alargue o
+padrão existente (ou acrescente a keyword) no **mesmo commit** do caso —
+critério de manutenção no docstring do script.
 
 ### Rastro perdido
 
@@ -618,6 +699,8 @@ cobre. Cresce sem inflar a seção conceitual.
 | Gate em pyproject sem invocação em `make check` | Gate inerte ou míope (inerte) | recorrente |
 | Config/validator com teste verde mas sem call-site real (ex.: `configure_logging` nunca chamado no boot) | Definido mas não plugado | recorrente (peça testada, não plugada no boot) |
 | Teste cobre branch sem assertar resultado | Verificação assimétrica | repetente |
+| Teste prova o comportamento no default do construtor enquanto a config de produção declara outro valor — ramo real, verde, mas não o que roda | Verificação assimétrica | classe importada do upstream (código que ramifica por knob) |
+| Valor novo de enum entra no enum + predicado + teste do emissor, mas fica fora das famílias que particionam o enum — o agregado reprovaria em falso no ramo latente | Verificação assimétrica | classe importada do upstream |
 | Invariante negativa sem `Grep` ativo | Verificação assimétrica | recorrente em camadas com PII/boundary |
 | Engine compartilhado vira 2 instâncias | Estrutural ≠ semântico | D3 da 3.1 |
 | `roadmap.md` table sem frontmatter (ou inverso) | Rastro perdido | recorrente |
@@ -625,13 +708,18 @@ cobre. Cresce sem inflar a seção conceitual.
 | Silenciador sem justificativa em mapper | Rastro perdido | recorrente em fronteiras async↔sync |
 | Commit off-task sem `[deviation]` em §7 | Rastro perdido | CONVENTIONS §3.4 |
 | Sub-agente alucina `arquivo:linha` | Delegação cega | repetente em auditorias longas |
+| Mecanismo local para um concern que recorre em outros consumidores (validação de frescor/sincronia dentro de um BC) onde cabia uma camada geral | Solução complexa onde cabia a simples | classe importada do upstream; piso mecânico em `check_concept_directness.py` |
+| Checkbox novo numa lista "fonte única" ausente da paráfrase do `PROMPT-*-session.md` — o fluxo colapsado nunca o veria | Definido mas não plugado | classe importada do upstream; piso em `check_docs_pointers.py` |
 | `make check` vermelho em arquivo com diff 0 vs develop — `.venv` do worktree defasado | Falso vermelho ambiental | worktree com `.venv` defasado (espelhado na issue-audit) |
 | Critério A* exige teste numa perna onde o comportamento é **inatingível por construção** (C5 na perna fake: emissão tipo-7 de labels finitos é sempre finita) — pergunta-guia: "esta perna CONSEGUE exibir o comportamento?" | Literal ≠ espírito | auditoria 5.3 (A8/C5); errata em §7 em vez de retocar o concept |
 
 Quando esta skill falhar (auditoria deu verde, reviewer/CI/produção
-pegou algo): **primeiro perguntar qual conceito existente cobre**.
-Adicionar caso novo na tabela. Só criar conceito novo se for padrão
-genuinamente novo — caso contrário, refinar o conceito existente.
+pegou algo): **primeiro perguntar qual conceito existente ficou cego**.
+Se um conceito deixou o gap passar, **reformule esse conceito** para
+cobrir a classe — a tabela de casos é **rastreabilidade, não o mecanismo
+de crescimento**. Só adicione caso (ou conceito novo) quando o padrão é
+genuinamente novo e **não** força refino de um conceito existente. A
+skill deve ficar mais **afiada**, não mais **longa**.
 
 ---
 

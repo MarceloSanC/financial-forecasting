@@ -65,9 +65,11 @@ The first version of the skill will still have gaps. That's expected. When it fa
 
 1. **Don't complain — diagnose.** Ask the agent: "Why did you fail? What error did you get?" The agent will usually tell you descriptively ("I got a 500 error — insufficient credits on the API").
 2. **Pass the failure back.** Tell the agent: "You failed here. This is what went wrong. Fix it." Let it produce a fix.
-3. **Update the skill.** Once fixed, say: "Now update the skill.md so this failure doesn't happen again." The agent will append the guardrail.
+3. **Update the skill — refine the concept, don't just append a case.** Once fixed, say: "Now update the skill.md so this failure doesn't happen again." First ask: *which existing concept in the skill failed to make me consider this?* If one did, **reformulate that concept** so its reasoning now covers the whole **class** of the gap — don't bolt on a case-specific guardrail beside it. Only add a new concept when the pattern is genuinely new; keep any case list as bounded traceability, not the growth mechanism.
 
-Each failure → fix → skill-update loop makes the skill materially better. After ~5 iterations, most skills become nearly bulletproof. This is the **recursive** part of recursive skill building: the skill improves itself through use.
+Each failure → fix → skill-update loop makes the skill materially better. The health metric is **sharpness, not length**: a skill that grows one guardrail per failure gets longer and duller; a skill whose concepts get sharper stays lean and covers more (see Token Economy). This is the **recursive** part of recursive skill building: the skill improves itself through use.
+
+**Editing rule — governs every update, not just the first draft.** Improve existing text before adding new: an edit that reformulates what's there beats one that appends beside it. Judge each line by **result per token** — how much better the agent acts because of it, divided by the context it costs on every load — and cut the lines that don't clear that bar, including ones the sharper text just made redundant. Net token growth across an update is a smell to justify, not a default; a skill that only ever grows is being maintained wrong. This bar governs *maintaining* a skill exactly as it governs *writing* one — reach for a new section, concept, or file only when the reformulation genuinely can't carry the load.
 
 ## Skill Anatomy
 

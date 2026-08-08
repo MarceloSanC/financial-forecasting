@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: 4.1.0002
 decision: fact_oos_predictions stores one row per quantile level (quantile_level in the PK, with value_raw/value_guardrail/guardrail_applied), forbidding hardcoded per-quantile columns.
 context_stage: 4.1-silver-schema-per-table
+bounded_context: analytics_store
 ---
 
 # ADR 4.1.0002 — Store fact_oos_predictions in a long, grid-agnostic quantile format

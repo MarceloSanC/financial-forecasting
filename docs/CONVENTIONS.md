@@ -165,7 +165,22 @@ decision: string                 # 1 frase resumindo a decisão
 status: proposed | accepted | superseded | deprecated
 superseded_by: N.M.NNNN          # ex: 2.3.0002 — apenas se status=superseded
 context_stage: N.M-<slug>        # Stage em que a decisão foi tomada (mesmo para ADRs globais)
+bounded_context: <bc>            # BC ao qual a decisão pertence — ver regra abaixo
 ```
+
+**Regra de `bounded_context` (obrigatório em todo ADR):** o valor **deve
+pertencer ao conjunto de `bounded_context` que o `roadmap.md` declara**
+(hoje: `analytics_store`, `evaluation`, `feature_engineering`, `inference`,
+`market_data`, `modeling`, `shared`) **ou ser `transversal`** — **não se
+inventa um BC novo no ADR**. ADR de Stage herda o BC da sua `context_stage`
+(o BC dessa Stage no roadmap); ADR de **numeração global** (`0_0_*` /
+`1_1_*`) usa `transversal`, que é o único valor fora do roadmap e existe
+porque a decisão global não pertence a BC nenhum — não confundir com
+`shared`, que é o BC do código transversal (`src/*/shared/`). Esse campo
+torna "ADRs do mesmo BC" um `grep` determinístico (etapa de carga de
+contexto do fluxo de Stage) em vez de julgamento em prosa. Gate mecânico:
+`scripts/check_adr_bounded_context.py` (em `make docs-check`) exige o campo
+e valida o valor contra o conjunto extraído do roadmap.
 
 **Runbooks:**
 ```yaml
@@ -264,10 +279,16 @@ original aprovado permanece no git. Regras durante a janela de execução:
 - **`updated_at` do frontmatter não muda** com edições nessa seção. O
   metadado por entrada (data + autor no header) é o audit trail.
 - **Regra de pergunta antes da nota:** ao encontrar durante a Fase 4
-  algo não previsto em outras seções do `technical.md`, no `concept.md`
-  ou em ADRs, **pausar a execução**, levantar a pergunta para o humano
-  com 2–4 opções e uma marcada como **recomendada** + razão (via
+  algo **material** não previsto em outras seções do `technical.md`, no
+  `concept.md` ou em ADRs (afeta contrato, fronteira, critério de aceite
+  ou modelo de dados), **pausar a execução**, levantar a pergunta para o
+  humano com 2–4 opções e uma marcada como **recomendada** + razão (via
   `AskUserQuestion` ou equivalente), e só então registrar a entrada.
+  **Exceção (decisão barata sem âncora):** uma escolha local
+  **trivialmente reversível** que não se ancora num princípio
+  (concept/ADR/skill) é decidida pela IA **sem pergunta** e registrada
+  como `[decision]` — o registro existe para a auditoria pegar um
+  alinhamento errado barato, não para pedir aprovação.
 - Entradas seguem três categorias: `[decision]` (decisão tomada durante
   a execução), `[finding]` (gap a tratar em próxima Stage), `[deviation]`
   (ajuste pequeno aplicado em relação ao plano). **Tags sempre em inglês**

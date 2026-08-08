@@ -9,6 +9,7 @@ updated_at: 2026-07-12
 adr_id: 0.0.0003
 decision: Formalize `docs/domain/` (canonical, cross-Stage subdomain theory) and `docs/audits/` (read-only implementation-vs-reality diagnoses) as first-class local documentation categories extending ADR 0.0.0000, in a single ADR, both nested by bounded context (`docs/<category>/<bc>/<slug>.md`) mirroring `features/<bc>/`.
 context_stage: 0.0-global
+bounded_context: transversal
 ---
 
 # ADR 0.0.0003 — Formalize the `domain/` and `audits/` documentation categories

@@ -9,6 +9,7 @@ updated_at: 2026-05-15
 adr_id: "0.0.0000"
 decision: Adopt the multi-phase documentation-driven flow (overview → roadmap → per-Stage concept → per-Stage technical → execution by Task) as the development standard for this project
 context_stage: 1.1-bootstrap
+bounded_context: transversal
 ---
 
 # ADR 0.0.0000 — Adopt the documentation-driven development standard

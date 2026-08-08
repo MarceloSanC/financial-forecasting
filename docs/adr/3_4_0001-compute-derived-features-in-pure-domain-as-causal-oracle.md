@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "3.4.0001"
 decision: The ~38 derived features are computed in the pure stdlib-only domain service DerivedFeatures (math/sequences/tuples), replicating pandas semantics verbatim, so it doubles as the independent causal oracle that the pandas dataset-builder (Stage 3.5) is validated against — rather than being a passive spec-only registry
 context_stage: 3.4-feature-registry-and-derived
+bounded_context: feature_engineering
 ---
 
 # ADR 3.4.0001 — Compute derived features in the pure domain as a causal oracle

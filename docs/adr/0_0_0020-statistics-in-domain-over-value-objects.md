@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "0.0.0020"
 decision: Confirmatory statistics are pure domain services over typed value objects; numeric/statistical libraries live behind ports in adapters
 context_stage: 1.1-bootstrap
+bounded_context: transversal
 ---
 
 # ADR 0.0.0020 — Statistics as pure domain services over value objects

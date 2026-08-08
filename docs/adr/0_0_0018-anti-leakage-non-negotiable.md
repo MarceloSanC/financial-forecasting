@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "0.0.0018"
 decision: Temporal validity is a non-negotiable pre-condition of every feature and claim — feature timing is causal (no future information at time t), joins are as-of backward, features are typed known vs unknown, splits use purge+embargo, and the target is the log-return; the first concrete enforcement is the publication-cutoff guard on sentiment aggregation in Stage 3.2
 context_stage: 3.2-sentiment-finbert
+bounded_context: transversal
 ---
 
 # ADR 0.0.0018 — Anti-leakage is non-negotiable

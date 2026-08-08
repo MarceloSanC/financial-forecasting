@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "1.3.0001"
 decision: The hexagonal dependency rule is encoded as import-linter contracts in a standalone .importlinter (INI), using layers + forbidden + ignore_imports, complementing check_layout.py and wired into make check / CI
 context_stage: 1.3-architecture-contracts
+bounded_context: shared
 ---
 
 # ADR 1.3.0001 — Encode the hexagonal boundary as an import-linter fitness function in a standalone `.importlinter`

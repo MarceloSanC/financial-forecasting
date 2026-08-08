@@ -9,6 +9,7 @@ updated_at: 2026-07-15
 adr_id: 5.2.0002
 decision: Per fold, baseline parameters (μ̂, φ̂, σ̂_ε of AR(1); μ̂ of historical_mean) are estimated once, exclusively on the train partition; the conditioning state of the preregistered formulas (r_t for AR(1), the EWMA variance recursion, the rolling-quantile window content) advances causally up to each decision day of the test block; there is no per-origin refit inside the test block — mirroring the information protocol of the GBM/TFT so the H2 comparison is like-for-like
 context_stage: 5.2-baselines-naive-statistical
+bounded_context: modeling
 ---
 
 # ADR 5.2.0002 — Frozen train estimation, causal conditioning state

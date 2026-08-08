@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: 4.3.0001
 decision: target_timestamp_utc é dataset_timestamps[decision_idx + h] indexado pelo array de sessões (nunca timedelta de calendário nem TradingCalendar.shift), e o domain service trafega timestamps como str ISO importando só stdlib
 context_stage: 4.3-prediction-persister
+bounded_context: analytics_store
 ---
 
 # ADR 4.3.0001 — target_timestamp indexed by trading day; pure stdlib domain (no pandas)

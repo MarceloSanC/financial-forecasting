@@ -775,39 +775,43 @@ padrão de sessões e os padrões de condução.
 
 O modo padrão de execução de uma Stage/issue avulsa é o de **duas
 sessões** (validado na prática como o mais eficiente). Prompts canônicos:
-para Stage, [`PROMPT-stage-single-session-autonomous.md`](./PROMPT-stage-single-session-autonomous.md)
-(execução autônoma) e [`PROMPT-stage-single-session-interactive.md`](./PROMPT-stage-single-session-interactive.md)
-(execução interativa, gate humano a cada transição); para issue avulsa,
+para Stage, [`PROMPT-stage-single-session.md`](./PROMPT-stage-single-session.md);
+para issue avulsa,
 [`PROMPT-issue-single-session.md`](./PROMPT-issue-single-session.md).
 
 1. **Sessão de implementação** — colapsa 3A → 3B → 4 em sessão única:
-   - abre com **perguntas até saturar** (bifurcações materiais via
-     `AskUserQuestion`; na variante autônoma, as decisões são registradas
-     em [`autonomous-run-decision-ledger.md`](./autonomous-run-decision-ledger.md)
-     em vez de interromper);
-   - produz `concept.md` + `technical.md`; **pausa opcional de gate
-     humano** sobre os dois artefatos antes da Fase 4 — o fluxo ideal
-     quando houve decisão de peso (o prompt oferece a pausa);
+   - abre com o **alinhamento de abordagem** (RUNBOOK Passo 1b, se ainda
+     não feito): explica o quadro da Stage ao humano (skill
+     `didatic-explanation`) e colhe a reação; bifurcações leves via
+     `AskUserQuestion`, decisões de contexto rico em **blocos numerados**
+     respondidos por referência; o entendimento validado vai para o corpo
+     da issue. Em execução autônoma sem humano disponível, as decisões vão
+     para [`autonomous-run-decision-ledger.md`](./autonomous-run-decision-ledger.md)
+     em vez de interromper;
+   - produz `concept.md` + `technical.md`; **pausa de gate humano** sobre
+     os dois artefatos antes da Fase 4 **só se o usuário a pediu no
+     kickoff** — por padrão a sessão segue direto (os Checkpoints A/B já
+     cobriram a revisão);
    - executa as Tasks (1 commit cada), roda a auditoria de testes e o
      gate de saída (RUNBOOK Passo 10);
    - **abre o PR em estado "falta revisar"**: marca no checklist só o
-     que validou com certeza e sinaliza "⚠️ precisa de auditoria antes
-     do merge".
+     que validou com certeza e deixa o label de auditoria em `review`
+     (`> **Auditoria:** ...`, CONVENTIONS §3.6).
 2. **Sessão de auditoria** — sessão nova, contexto limpo (anti-viés):
    - roda a skill `stage-audit`/`issue-audit` (julgamento read-only →
      fase de aplicação);
    - corrige o que precisar na própria branch, registra melhorias
      futuras como issues, atualiza corpo e checklist do PR;
-   - **registra a auditoria no PR** — comentário com o veredito + a
-     sinalização "⚠️" trocada por "✅ auditoria realizada" (procedimento
-     completo na skill de auditoria);
+   - **registra a auditoria no PR** — comentário com o veredito + o label
+     de auditoria gravado como `complete` (procedimento completo na skill
+     de auditoria);
    - **o merge é do usuário** (salvo pedido explícito).
 
 O fluxo multi-sessão por fase (3A/3B/4 em sessões separadas, seguindo o
-RUNBOOK passo a passo com gate textual em cada transição — a variante
-interativa) permanece o **procedimento de referência** — e a escolha
-certa para Stage com decisão arquitetural pesada ou primeiro contato com
-um BC novo (critérios nos cabeçalhos dos PROMPT-stage).
+RUNBOOK passo a passo com gate textual em cada transição) permanece o
+**procedimento de referência** — e a escolha certa para Stage com decisão
+arquitetural pesada ou primeiro contato com um BC novo (critérios no
+cabeçalho do PROMPT-stage).
 
 Casos que **sempre** pedem sessão nova, em qualquer modo:
 
@@ -955,6 +959,7 @@ categoria de doc.
 | `stage-audit` | Sessão de auditoria de Stage, pré-PR/merge (§11.1) | Julgamento read-only + fase de aplicação; conceitos de falso verde | accepted |
 | `issue-audit` | Sessão de auditoria de issue avulsa, pré-PR/merge | Irmã da stage-audit para issues (critério↔evidência; disciplina de escopo) | draft |
 | `skill-builder` | Criar/melhorar uma skill | Codificar de execução real (não de imaginação); loop recursivo de melhoria | draft |
+| `didatic-explanation` | Sempre que explicar conceito teórico/arquitetural/de domínio ao humano (alinhamento do Passo 1b, walkthrough de concept/ADR, veredito de auditoria) | Um assunto por vez (agrupar pelo objeto); termos técnicos carregados; sem metáfora/duplo sentido; decisão rica em blocos numerados | draft |
 
 > Além destas, o catálogo inclui as skills de conhecimento de domínio ML
 > (`dmls-ch01`…`dmls-ch06` — fundamentos de ML em produção), carregadas por
@@ -1023,7 +1028,8 @@ Pontos a confirmar com prática em projeto real:
 1. **Política de retry em Fase 4** (§12.5). Sugestão de 3 tentativas é
    inicial; validar.
 2. ~~Conteúdo definitivo das skills canônicas.~~ **Resolvido** — as
-   skills vivem em `.claude/skills/` (18 no momento); catálogo em §13.
+   skills vivem em `.claude/skills/`; o catálogo vivo é a tabela do §13
+   (sem contagem literal aqui — desincroniza a cada skill nova).
 3. ~~Formato de `scripts/check_layout.py`.~~ **Resolvido** — script
    implementado e rodando em `make check` (alvo `layout-check`); contratos
    import-linter (`lint-imports`) complementam.

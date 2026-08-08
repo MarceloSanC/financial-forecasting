@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "0.0.0019"
 decision: The hexagonal dependency rule is enforced by an automated gate (check_layout.py now, import-linter from Stage 1.3) that fails the build, not by code review
 context_stage: 1.1-bootstrap
+bounded_context: transversal
 ---
 
 # ADR 0.0.0019 — Enforce hexagonal boundaries by tooling, not by review

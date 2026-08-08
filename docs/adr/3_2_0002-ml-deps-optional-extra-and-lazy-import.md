@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "3.2.0002"
 decision: torch+transformers live in a [project.optional-dependencies].sentiment extra OUTSIDE the dev group the CI installs; the FinBERT adapter imports them lazily (inside __init__/method, clear ImportError if absent); a new import-linter contract sentiment-no-ml-leak forbids torch/transformers in feature_engineering.application+domain; the live integration test is skipif-guarded so the ~400MB model is never downloaded in the unattended CI run
 context_stage: 3.2-sentiment-finbert
+bounded_context: feature_engineering
 ---
 
 # ADR 3.2.0002 — ML deps as an optional extra + lazy import + anti-leak contract
