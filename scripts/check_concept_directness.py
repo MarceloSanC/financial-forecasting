@@ -139,7 +139,9 @@ SUSPECT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     # de pregão): o que conta como "dia" é decisão de uma camada só.
     (
         "calendário de pregão",
-        re.compile(r"\b(calend[áa]rio|pregão|trading\s+(day|calendar)|sess[ãa]o\s+de\s+mercado)\b", re.I),
+        re.compile(
+            r"\b(calend[áa]rio|pregão|trading\s+(day|calendar)|sess[ãa]o\s+de\s+mercado)\b", re.I
+        ),
     ),
     # ADR 4.2.0002 (created_at UTC via clock injetado).
     ("fuso horário", re.compile(r"\b(fuso\s+hor[áa]rio|timezone|utc|tz[- ]aware)\b", re.I)),
