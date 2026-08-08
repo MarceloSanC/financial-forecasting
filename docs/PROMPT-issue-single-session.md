@@ -5,7 +5,7 @@ when-use: Issue avulsa da tabela de issues do roadmap com escopo delimitado, sob
 keywords: [prompt, issue, single-session, execucao, lifecycle]
 status: draft
 created_at: 2026-06-10
-updated_at: 2026-06-10
+updated_at: 2026-08-08
 ---
 
 # Prompt — Execução de Issue Avulsa em Sessão Única
@@ -139,7 +139,11 @@ Antes de decompor em sub-tasks, responda por escrito:
    se a issue tem decisão que merece ADR, toca modelo de dados ou fronteira de BC, ou o corpo
    não segura o escopo → **PARE** e reporte. Propor abertura de Stage no Step certo.
 
-Se todos os itens tiverem resposta satisfatória, prossiga para a Decomposição.
+Se todos os itens tiverem resposta satisfatória: **apresente ao humano um
+resumo didático** (skill `didatic-explanation`, ≤ 1 tela) do que a issue
+representa no sistema e da abordagem prevista — dúvida direta via
+`AskUserQuestion`; decisão de contexto rico como **bloco numerado** (B1,
+B2…) respondido por referência. Só então prossiga para a Decomposição.
 
 ## Decomposição de Escopo (substitui Fases 3A + 3B)
 
@@ -286,9 +290,12 @@ GIT-WORKFLOW §Etapa 4). **Você NÃO faz merge** — o merge é do usuário, ap
 auditoria, salvo pedido explícito. Não execute `gh pr merge`.
 
 **O checklist do PR é um handoff.** Marque **apenas** as caixinhas que você
-**validou com certeza**; deixe as demais **desmarcadas** e registre no corpo
-que o PR **precisa de auditoria antes de mergear** — a sessão de auditoria
-valida o resto. Não marque por otimismo.
+**validou com certeza**; deixe as demais **desmarcadas**. O corpo do PR
+(vindo do template) traz o label de auditoria em `review` (linha
+`> **Auditoria:** ...`, CONVENTIONS §3.6) — **preserve-o**: o workflow
+`audit-gate` (CI) **falha enquanto o status não for `complete`**, e é a
+sessão de auditoria (`issue-audit`) que grava `complete` ao validar o resto.
+Não marque por otimismo nem edite o label à mão.
 
 Sua **saída final** = (1) o **PR aberto** e (2) o **relatório** abaixo:
 
@@ -331,8 +338,9 @@ Sua **saída final** = (1) o **PR aberto** e (2) o **relatório** abaixo:
 - Link: <url do PR>
 - Corpo carregado do template `.github/PULL_REQUEST_TEMPLATE.md` (fonte
   única): `Closes #<issue>` + resumo + `[decision]`/`[deviation]` +
-  checklist com **só o que você validou** marcado + nota "⚠️ precisa de
-  auditoria antes do merge".
+  checklist com **só o que você validou** marcado + o label de auditoria em
+  `review` (CONVENTIONS §3.6) **preservado** (o gate `audit-gate` do CI
+  depende dele; a auditoria grava `complete`).
 ```
 
 **Comandos que você executa** (o merge NÃO):
