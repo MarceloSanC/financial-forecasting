@@ -145,7 +145,7 @@ mesmos itens reaparecem no gate de saída da Stage em `technical.md` §3.>
 - [ ] Toda integração externa tem contrato definido (interface, formato, auth)?
 - [ ] Decisões com alternativa real descartada têm ADR escrito?
 - [ ] Dependências de Stages anteriores estão satisfeitas (`done`)?
-- [ ] Stage cabe em ~3–8 Tasks (ver [`CONVENTIONS.md`](../../CONVENTIONS.md) §6)?
+- [ ] Stage cabe em ~3–12 Tasks (ver [`CONVENTIONS.md`](../../CONVENTIONS.md) §6)?
 - [ ] Riscos críticos têm mitigação plausível?
 - [ ] Cada mecanismo novo passou pelo **teste da solução mais direta**: não é caso especial/tipo/métrica novo remendando, local, um sintoma que recorre em outros consumidores e teria tratamento mais simples/geral em outra camada (concern compartilhado). Captura assim → piso declarado + issue, não solução local. Responder com justificativa (`— <por quê>`); `check_concept_directness.py` cobra esta entrada no `make docs-check` quando o concept toca um concern transversal.
 - [ ] <pergunta específica desta Stage>

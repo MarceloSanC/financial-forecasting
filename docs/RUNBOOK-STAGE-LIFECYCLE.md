@@ -709,13 +709,15 @@ $bc = "<escopo>"   # BC/módulo da mudança (ASCII/kebab), NUNCA a Stage — CON
 gh pr create --base develop --title "feat($bc): stage $N.$M — $title_humano"
 # Corpo carregado do template .github/PULL_REQUEST_TEMPLATE.md (fonte única).
 # Preencha as seções e marque no checklist SÓ o que você validou com certeza;
-# deixe o resto desmarcado + nota "⚠️ precisa de auditoria antes do merge".
+# deixe o resto desmarcado. O label de auditoria "> **Auditoria:** `review`"
+# do template (CONVENTIONS §3.6) fica em 'review' — a auditoria grava 'complete'.
 # (Sessão headless: passar --body-file com o template preenchido.)
 ```
 
 **O merge é do usuário** (salvo pedido explícito) — após auditoria da Stage
 (skill `stage-audit`, que aplica fixes no PR se preciso e **registra o
-veredito no PR**: comentário + "⚠️"→"✅") + CI verde e +1
+veredito no PR**: comentário + label de auditoria `review`→`complete`,
+CONVENTIONS §3.6) + CI verde e +1
 aprovação:
 
 ```powershell
