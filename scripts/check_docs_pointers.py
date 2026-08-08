@@ -1,8 +1,14 @@
 """Guard contra padrões conhecidos de drift na documentação normativa.
 
 Plugado em `make docs-check`. Varre os docs normativos **vivos** — a raiz
-de `docs/` (não recursivo), `docs/runbooks/` e `docs/templates/` — atrás
-de padrões que já causaram drift pelo menos uma vez.
+de `docs/` (não recursivo), `docs/runbooks/`, `docs/templates/` e os
+`SKILL.md` de `.claude/skills/` — atrás de padrões que já causaram drift
+pelo menos uma vez.
+
+As skills entram porque são documentação normativa executada: 2 dos 6
+arquivos que carregavam o handoff defasado (`"precisa de auditoria"`) eram
+`SKILL.md`, e um gate cego para eles não cobre a superfície que motivou sua
+criação (auditoria da #55, F2).
 
 Por que existe: "fonte única" declarada num doc **não** protege contra
 paráfrase dessincronizada em outro. O ponto de consumo é o texto que o
@@ -35,7 +41,12 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-SCANNED_GLOBS = ("docs/*.md", "docs/runbooks/*.md", "docs/templates/*.md")
+SCANNED_GLOBS = (
+    "docs/*.md",
+    "docs/runbooks/*.md",
+    "docs/templates/*.md",
+    ".claude/skills/*/SKILL.md",
+)
 
 # En dash (U+2013), a grafia de faixa usada nos docs. Construído via chr()
 # para não carregar unicode ambíguo no fonte (RUF001).
