@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "2.2.0001"
 decision: The market_data feature is added to the existing hexagonal-layers import-linter contract as a layered container (adapters > application > domain), proving inward-only direction for the first feature bounded context, rather than getting a separate per-feature contract or staying unmodeled
 context_stage: 2.2-market-data-ingestion
+bounded_context: market_data
 ---
 
 # ADR 2.2.0001 — Model the `market_data` feature as a layered import-linter container

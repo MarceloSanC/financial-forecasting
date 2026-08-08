@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "4.2.0001"
 decision: Define AnalyticsRepository as a generic write/read Protocol dispatching on SILVER_REGISTRY, implemented by a dedicated ParquetAnalyticsRepository that partitions by literal SilverTable.partition_by columns (1..3 levels) rather than reusing ParquetMedallionStore's anchor-derived asset/year partitioning
 context_stage: 4.2-silver-repository
+bounded_context: analytics_store
 ---
 
 # ADR 4.2.0001 — Generic AnalyticsRepository port backed by a dedicated Parquet adapter

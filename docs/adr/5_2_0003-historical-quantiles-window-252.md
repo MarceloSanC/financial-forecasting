@@ -9,6 +9,7 @@ updated_at: 2026-07-15
 adr_id: 5.2.0003
 decision: The historical_quantiles baseline computes its type-7 empirical quantiles over a rolling window of W = 252 trading sessions (~1 trading year) ending at each decision day — human-decided on 2026-07-15 (resolution of fork F1 of the Stage 5.2 concept), anchored on the regulatory Historical Simulation convention (Basel market-risk framework, ≥250-day observation floor) and on ADR 0.0.0052's n ≳ 250 note; W = 500 and the expanding window were rejected
 context_stage: 5.2-baselines-naive-statistical
+bounded_context: modeling
 ---
 
 # ADR 5.2.0003 — historical_quantiles rolling window = 252 trading sessions

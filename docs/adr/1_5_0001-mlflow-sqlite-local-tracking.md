@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "1.5.0001"
 decision: Adopt MLflow as the experiment tracker behind the ExperimentTracker port, with a local SQLite backend store (tracking_uri default sqlite:///mlruns.db from Settings), built fresh
 context_stage: 1.5-config-and-tracking
+bounded_context: shared
 ---
 
 # ADR 1.5.0001 — Experiment tracking via MLflow with a local SQLite backend store

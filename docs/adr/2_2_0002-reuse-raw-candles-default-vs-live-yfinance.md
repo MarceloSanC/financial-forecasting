@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "2.2.0002"
 decision: A ParquetRawCandleFetcher adapter that reads the existing raw candle parquet is the default ingestion source behind the CandleFetcher port; YfinanceCandleFetcher is built but non-default, and no integration test hits the live yfinance API (live only behind skipif-no-network)
 context_stage: 2.2-market-data-ingestion
+bounded_context: market_data
 ---
 
 # ADR 2.2.0002 — Reuse the existing raw candle parquet as the default ingestion source

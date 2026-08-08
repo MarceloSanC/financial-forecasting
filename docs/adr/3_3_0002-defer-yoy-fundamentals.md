@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "3.3.0002"
 decision: Stage 3.3 ships only the three point-in-time fundamental ratios (net_margin, leverage_ratio, cashflow_efficiency) as pure functions of a single report; the YoY growth features (revenue_yoy_growth, net_income_yoy_growth), which the old computed via pct_change(252) over the dense forward-filled daily grid, are deferred to Stage 3.4/3.5 where that grid exists
 context_stage: 3.3-fundamentals-asof-join
+bounded_context: feature_engineering
 ---
 
 # ADR 3.3.0002 — Defer YoY fundamental ratios to 3.4/3.5

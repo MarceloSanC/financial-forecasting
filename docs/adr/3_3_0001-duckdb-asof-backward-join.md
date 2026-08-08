@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "3.3.0001"
 decision: The point-in-time fundamentals join is implemented as a DuckDB ASOF JOIN backward (d.date >= f.effective_date) confined to an adapter behind the AsofJoinAdapter Protocol port; it mirrors the old pandas merge_asof(direction=backward), exposes a fundamentals_effective_date audit column, and the effective_date <= date anti-leakage invariant is enforced both by the join condition and by an explicit re-check in the pure domain (defense-in-depth)
 context_stage: 3.3-fundamentals-asof-join
+bounded_context: feature_engineering
 ---
 
 # ADR 3.3.0001 — Fundamentals as-of join = DuckDB ASOF JOIN backward

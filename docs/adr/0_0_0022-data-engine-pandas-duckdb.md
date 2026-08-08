@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "0.0.0022"
 decision: The data engine is pandas + DuckDB over Parquet — DuckDB provides fast columnar SQL reads (partition pruning) and as-of joins over Parquet, pandas provides interop with the model/stat libraries; there is no Postgres; both engines are confined to adapters by the store-no-storage-leak import-linter contract
 context_stage: 3.3-fundamentals-asof-join
+bounded_context: transversal
 ---
 
 # ADR 0.0.0022 — Data engine = pandas + DuckDB over Parquet

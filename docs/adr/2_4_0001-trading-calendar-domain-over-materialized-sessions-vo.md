@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "2.4.0001"
 decision: TradingCalendar is a pure stdlib-only domain service that operates over an injected TradingSessions value object; the application materializes that VO via an ExchangeCalendarProvider port-out, so the domain never imports the port at runtime
 context_stage: 2.4-trading-calendar
+bounded_context: shared
 ---
 
 # ADR 2.4.0001 — TradingCalendar as a pure domain service over a materialized TradingSessions value object

@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "1.2.0011"
 decision: Define "CI green" as a single blocking fitness function — ruff + mypy --strict + check_layout.py + pytest + coverage ≥ 90% must all pass for a PR to merge — implemented as one lint-and-test job running `make check`
 context_stage: 1.2-ci-coverage
+bounded_context: shared
 ---
 
 # ADR 1.2.0011 — Treat the CI quality gate as a single foundational fitness function

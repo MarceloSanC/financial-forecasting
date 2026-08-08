@@ -9,6 +9,7 @@ updated_at: 2026-07-04
 adr_id: "5.1.0003"
 decision: The shared SplitFingerprint value object (Stage 1.4) is extended with an optional, backward-compatible calib partition so the split identity attests the dedicated calibration boundary; a modeling-local fingerprint is rejected as duplication
 context_stage: 5.1-walk-forward-harness
+bounded_context: modeling
 ---
 
 # ADR 5.1.0003 — SplitFingerprint extended to a four-way split (optional calib)

@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: 4.3.0002
 decision: QuantileForecast é um VO frozen com levels crescentes + raw_values alinhados, e o guardrail força monotonicidade ordenando os valores ao longo dos níveis (sorted), marcando guardrail_applied quando a ordem muda; valores não-finitos/None são preservados sem aplicar
 context_stage: 4.3-prediction-persister
+bounded_context: analytics_store
 ---
 
 # ADR 4.3.0002 — QuantileForecast as a dense quantile grid with a generalized monotonic guardrail

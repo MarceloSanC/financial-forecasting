@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "2.1.0002"
 decision: Define MedallionStore as a minimal structural Protocol (write/read partitioned datasets) over stdlib/collections.abc types, with append-only + dedup-by-logical-PK + partition filtering as contract invariants and no pandas/pyarrow/duckdb/pandera types leaking into application
 context_stage: 2.1-medallion-storage-contracts
+bounded_context: shared
 ---
 
 # ADR 2.1.0002 — MedallionStore as a minimal structural Protocol that does not leak pandas/pyarrow/duckdb/pandera

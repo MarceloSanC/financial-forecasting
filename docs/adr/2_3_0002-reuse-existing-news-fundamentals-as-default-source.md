@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "2.3.0002"
 decision: ParquetRawNewsFetcher and ParquetFundamentalFetcher adapters that read the existing news/fundamentals parquet are the default ingestion sources behind the NewsFetcher/FundamentalFetcher ports; the Alpha Vantage adapters are built but non-default, and no integration test hits the live Alpha Vantage API (live only behind skipif-no-network/no-key)
 context_stage: 2.3-news-fundamentals-ingestion
+bounded_context: market_data
 ---
 
 # ADR 2.3.0002 — Reuse the existing news and fundamentals parquet as the default ingestion source

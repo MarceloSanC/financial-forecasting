@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "0.0.0002"
 decision: The scientific object is the predictive distribution (calibration and sharpness) plus feature-contribution, never point accuracy of the daily-return mean
 context_stage: 1.1-bootstrap
+bounded_context: transversal
 ---
 
 # ADR 0.0.0002 — Frame the study as probabilistic calibration, not point accuracy

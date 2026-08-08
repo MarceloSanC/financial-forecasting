@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "4.2.0002"
 decision: Fill dim_run.created_at_utc in the RunRecord->row mapper of ParquetAnalyticsRepository using a Clock injected via the constructor (SystemClock in production, FakeClock in tests), never a hardcoded datetime.now() in the adapter or the domain
 context_stage: 4.2-silver-repository
+bounded_context: analytics_store
 ---
 
 # ADR 4.2.0002 — Fill dim_run.created_at_utc at write-time via an injected Clock

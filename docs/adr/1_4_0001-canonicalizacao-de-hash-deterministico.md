@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "1.4.0001"
 decision: Replicate the old repo's canonical sha256-over-sorted-compact-JSON scheme, but harden it by rounding floats to a declared fixed precision before serialization and rejecting NaN/±inf with ValueError; strip volatile keys from config signatures
 context_stage: 1.4-identity-and-fingerprints
+bounded_context: shared
 ---
 
 # ADR 1.4.0001 — Deterministic canonical hashing scheme with hardened float canonicalization and NaN/inf rejection

@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "3.5.0001"
 decision: target_return[t] = log(close_t / close_{t-1}) computed BACKWARD; the first row is dropped; the pure domain service TargetDefinition is the single owner of the target; the convention is fixed at the source to align with the 4.3 target_timestamp (timestamp_utc = decision_day), removing the off-by-one that caused a bug in the old project
 context_stage: 3.5-dataset-builder-and-contracts
+bounded_context: feature_engineering
 ---
 
 # ADR 3.5.0001 — Backward log-return target with a single owner

@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "3.2.0001"
 decision: Per-article sentiment is P(pos)-P(neg) over FinBERT [neg,neu,pos] labels, computed by a stdlib-only pure function scores_from_probs (torch-free, oracle-validated); daily sentiment is mean/pstdev/n over trading days behind the SentimentModel Protocol port; the use case returns frozen DTOs, never entities; ProsusAI/finbert is loaded with a pinned HF revision (0.0.0017)
 context_stage: 3.2-sentiment-finbert
+bounded_context: feature_engineering
 ---
 
 # ADR 3.2.0001 — FinBERT scoring + daily aggregation + port/DTO shape

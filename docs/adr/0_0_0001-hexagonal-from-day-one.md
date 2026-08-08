@@ -9,6 +9,7 @@ updated_at: 2026-05-15
 adr_id: "0.0.0001"
 decision: Adopt hexagonal (ports-and-adapters) structure from project inception, before any business code is written
 context_stage: 1.1-bootstrap
+bounded_context: transversal
 ---
 
 # ADR 0.0.0001 — Hexagonal architecture from day one

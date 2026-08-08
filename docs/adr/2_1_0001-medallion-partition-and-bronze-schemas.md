@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "2.1.0001"
 decision: Partition bronze datasets Hive-style as asset=<asset>/<table>/year=<year>, append-only on facts with logical-PK collision detection, and define pandera bronze schemas for candle/news/fundamental that mirror the exact dtypes of the existing raw Parquet (OHLC float32, volume int64, fundamental float64, datetimes UTC, reported_date nullable)
 context_stage: 2.1-medallion-storage-contracts
+bounded_context: shared
 ---
 
 # ADR 2.1.0001 — Hive partition convention and bronze pandera schemas mirroring the real raw data

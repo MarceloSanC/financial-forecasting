@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "3.1.0001"
 decision: feature_engineering is added as a layered import-linter container; IndicatorSpec is a minimal stdlib-only domain value-object (not the rich FeatureSpec, deferred to 3.4); IndicatorCalculator is a pandas-free Protocol port returning Sequence[Mapping] of float32; and processed-layer persistence is deferred to the dataset builder (3.5)
 context_stage: 3.1-technical-indicators
+bounded_context: feature_engineering
 ---
 
 # ADR 3.1.0001 — `feature_engineering` BC and indicator contracts

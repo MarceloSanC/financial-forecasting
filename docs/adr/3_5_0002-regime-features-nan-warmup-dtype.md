@@ -9,6 +9,7 @@ updated_at: 2026-06-29
 adr_id: "3.5.0002"
 decision: volatility_regime / trend_regime / stress_tail_return_flag are persisted (and validated by the pandera dataset schema) as float64 carrying NaN on warmup rows — matching the regression oracle — rather than as Int64 nullable, even though the FeatureRegistry declares their dtype as int64; the registry/parquet mismatch inherited from the old project is recorded as conscious technical debt
 context_stage: 3.5-dataset-builder-and-contracts
+bounded_context: feature_engineering
 ---
 
 # ADR 3.5.0002 — Regime/flag features are float64 with NaN on warmup

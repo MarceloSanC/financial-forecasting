@@ -9,6 +9,7 @@ updated_at: 2026-07-19
 adr_id: 5.3.0001
 decision: The GBM baseline trains one independent LightGBM booster per (quantile level × horizon), with the label shifted to target_return[t+h]; recursion and horizon-as-feature are rejected.
 context_stage: 5.3-gbm-quantile-baseline
+bounded_context: modeling
 ---
 
 # ADR 5.3.0001 — Direct multi-horizon: one independent booster per (quantile level × horizon)
