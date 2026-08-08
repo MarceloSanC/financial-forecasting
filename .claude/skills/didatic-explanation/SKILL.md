@@ -1,5 +1,5 @@
 ---
-name: didactic-explanation
+name: didatic-explanation
 description: Como explicar conceitos teóricos, arquiteturais ou de domínio ao humano de forma clara e didática. Invocar SEMPRE que for explicar um conceito ao usuário — alinhamento de abordagem no kickoff de Stage (RUNBOOK Passo 1b), walkthrough de concept/ADR, veredito de auditoria, resposta a "me explica X", "o que é", "como funciona", "qual a ideia de" — ANTES de escrever a explicação. Não governa artefatos técnicos (concept/ADR/código mantêm precisão e nomes exatos).
 metadata:
   status: draft
