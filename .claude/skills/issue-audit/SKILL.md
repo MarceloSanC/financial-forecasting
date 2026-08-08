@@ -36,9 +36,12 @@ Combina quatro coisas:
 > os fixes para o **PR existente** (push + atualiza corpo/checklist),
 > completa as caixinhas validadas e **registra a auditoria no PR** —
 > obrigatório, não opcional: (1) comentário com o veredito (status global +
-> gates numéricos + fixes aplicados com hash) e (2) a nota de handoff
-> "⚠️ precisa de auditoria" do corpo trocada por "✅ auditoria realizada em
-> <data> — <veredito>". Auditoria sem marca no PR **não existe** para quem
+> gates numéricos + fixes aplicados com hash) e (2) o label de auditoria do
+> corpo (linha `> **Auditoria:** ...`, CONVENTIONS §3.6) gravado como
+> **`complete`** — o comentário do veredito é quem cita a data e o veredito.
+> Essa troca é **mecânica, não cosmética**: o workflow `audit-gate` (CI)
+> falha enquanto o status não for `complete` — gravar `complete` é o que
+> **destrava o merge**. Auditoria sem marca no PR **não existe** para quem
 > decide o merge. **Nunca faz merge** — é do usuário, salvo
 > pedido explícito. Branch alheia: `git show` para ler; checkout + push para
 > aplicar.
@@ -359,7 +362,26 @@ Gate: <comando> → <resultado numérico>   (ex.: `make check` → 1779 passed, 
 ### 6. Aprendizados → skills
 <algum padrão novo (falso verde, decisão recorrente, jargão mal
 explicado) que vale virar/atualizar conceito numa skill? Qual skill e
-qual conceito. Se nada novo: dizer "nada novo" explicitamente.>
+qual conceito. Se nada novo: dizer "nada novo" explicitamente.
+
+Antes de propor a atualização, responda os 4 filtros — proposta que
+reprova em qualquer um NÃO entra:
+1. **Classe ou caso?** O aprendizado descreve uma CLASSE que recorre
+   (conceito) ou só este episódio (história)? História não entra —
+   skill fica afiada, não longa.
+2. **Canal de consumo real:** quem vai LER isto e quando? Regra
+   acionável de skill em `skills_hint` vira pergunta adversarial
+   obrigatória no Checkpoint C (consumo mecânico); texto que só o
+   autor leria é advisory — se o único canal é advisory, avalie se o
+   ganho justifica.
+3. **O viés generaliza?** Toda regra enviesa a atenção do revisor —
+   esse é o propósito. Formulada como conceito, o viés cobre a classe;
+   formulada como caso, faz o revisor caçar UM bug específico e cega
+   para o resto.
+4. **Já mora em outro mecanismo?** Se o conceito já vive no
+   questionário de auditoria, num script de gate ou noutra skill,
+   duplicar alonga sem afiar — aponte o mecanismo existente em vez de
+   copiar.>
 
 ### Conclusão
 <2-4 linhas: que valor a issue entregou, quão bem modularizada
@@ -437,6 +459,28 @@ reaparece por outra porta.
   (ex.: catch-all para **qualquer** Exception, não só a do bug que
   originou a issue).
 
+### Solução complexa onde cabia a simples (concern capturado)
+O `## Escopo` cria caso especial/tipo/métrica novo para tratar **local** um
+sintoma cujo tratamento direto seria **geral ou a montante** — um concern
+**compartilhado** (anti-leakage, as-of, identidade/fingerprint, calendário,
+fuso, tracking) resolvido dentro de um consumidor só. Na issue avulsa isso
+escapa mais fácil que na Stage: não há `concept.md` §12 nem o lint
+`check_concept_directness.py` — a especificação inteira é o corpo da issue,
+e o card pequeno e coeso *parece* bem escopado justamente por ser pequeno.
+- Sintoma: **tipo/métrica/nuance nova** + o **mesmo problema recorre** em
+  outros consumidores do mesmo dado.
+- **Pergunta:** "há solução mais direta/geral, ou esta issue está remendando
+  local um concern compartilhado?"
+- **Tratamento:** a geral é o conserto; a local vira **piso declarado +
+  issue transversal** (buscar backlog antes de abrir), nunca solução
+  silenciosa. Blocker se a captura corrompe a semântica para outros
+  consumidores; senão non-blocker. Distinto de "Sintoma ≠ causa": lá a
+  solução é estreita demais **para o próprio problema da issue**; aqui ela
+  resolve o problema da issue e **erra a camada**. Se a captura veio de uma
+  Stage e o lint `check_concept_directness.py` não a pegou, alargue o padrão
+  existente (ou acrescente a keyword) no **mesmo commit** do caso — critério
+  de manutenção no docstring do script.
+
 ### Rastro perdido
 Decisão (off-task, silenciador, refactor, doc parcial) sem registro
 onde o reviewer procuraria.
@@ -477,11 +521,14 @@ finding falso + investigação na branch errada.
 | JSON logging proposto como parte da #68 (era transporte, não mapeamento) → vira issue separada | Escopo empurrado pra frente (lado oposto: NÃO inflar a issue) | issue #68 → issue #169 |
 | GitHub `OPEN` enquanto roadmap `done` lido como gap | (observação esperada) | issue #68 pré-merge |
 | `make check` vermelho (mypy/lint-imports) em arquivo com diff 0 vs develop — `.venv` do worktree defasado | Falso vermelho ambiental | auditoria em worktree com `.venv` defasado |
+| Validação local de um concern que recorre em outros consumidores do mesmo dado, onde cabia uma camada geral a montante | Solução complexa onde cabia a simples | classe importada do upstream; piso mecânico em `check_concept_directness.py` |
 
 Quando esta skill falhar (auditoria deu verde, reviewer/CI/produção
-pegou algo): **primeiro perguntar qual conceito existente cobre**.
-Adicionar caso novo na tabela. Só criar conceito novo se for padrão
-genuinamente novo.
+pegou algo): **primeiro perguntar qual conceito existente ficou cego**.
+Se um conceito deixou o gap passar, **reformule esse conceito** para
+cobrir a classe — a tabela de casos é rastreabilidade, não o mecanismo de
+crescimento. Só adicione caso (ou conceito novo) quando o padrão é
+genuinamente novo. A skill deve ficar mais **afiada**, não mais **longa**.
 
 ---
 
