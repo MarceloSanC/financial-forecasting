@@ -111,6 +111,15 @@ _DIRECTNESS_NAME_RE = re.compile(r"solu[çc][ãa]o\s+mais\s+direta", re.IGNORECA
 _RATIONALE_RE = re.compile(r"(?:—|--)\s*(?P<why>\S.*)", re.DOTALL)
 _MIN_RATIONALE_CHARS = 20
 
+# Trechos que NÃO podem contar como justificativa do autor, porque não foram
+# escritos por ele. Sem isso o gate se satisfaz com o texto do próprio
+# enunciado: a boilerplate do template cita o formato esperado (`— <por quê>`)
+# em code span, o `_RATIONALE_RE` casa com essa citação e o concept passa com
+# a caixinha marcada e zero conteúdo — exatamente o checkbox teatral que esta
+# regra existe para impedir (auditoria da #55, F1).
+_CODE_SPAN_RE = re.compile(r"`[^`]*`")
+_PLACEHOLDER_RE = re.compile(r"^<[^>]*>$")
+
 # Suspeitos transversais — concerns que recorrem em vários consumidores deste
 # projeto e cujo tratamento natural é geral ou a montante. Cada entrada nasceu
 # de evidência local (ADR/issue citada), não de imaginação — ver "Manutenção"
@@ -182,6 +191,21 @@ def suspects_touched(body: str) -> list[str]:
     return [label for label, pattern in SUSPECT_PATTERNS if pattern.search(body)]
 
 
+def author_rationale(entry_text: str) -> str:
+    """Justificativa **escrita pelo autor** na entrada, ou string vazia.
+
+    Code spans saem antes da busca: a boilerplate do template cita o formato
+    esperado em `— <por quê>`, e sem essa remoção a citação vira a própria
+    justificativa. Placeholder não substituído (`<...>`) também não conta.
+    """
+    prose = _CODE_SPAN_RE.sub(" ", entry_text)
+    rationale = _RATIONALE_RE.search(prose)
+    if rationale is None:
+        return ""
+    why = rationale.group("why").strip()
+    return "" if _PLACEHOLDER_RE.match(why) else why
+
+
 def directness_entry_status(body: str) -> tuple[bool, bool]:
     """(entrada existe e está marcada, entrada tem justificativa).
 
@@ -195,8 +219,7 @@ def directness_entry_status(body: str) -> tuple[bool, bool]:
         if not _DIRECTNESS_NAME_RE.search(text):
             continue
         checked = entry.group("mark").lower() == "x"
-        rationale = _RATIONALE_RE.search(text)
-        why = rationale.group("why").strip() if rationale is not None else ""
+        why = author_rationale(text)
         return checked, len(why) >= _MIN_RATIONALE_CHARS
     return False, False
 
