@@ -54,6 +54,12 @@ unit and contract suites import from there. Never duplicate fakes inside
 - Don't duplicate contract tests inside unit (defeats the point: the
   contract is single).
 - Don't write a test that depends on real time/IO inside `unit/`.
+- Don't let a hand-rolled double of a port violate the port's
+  **invariants** (e.g., serve a state the contract forbids). Every
+  double — canonical fake or ergonomic per-test stub — inherits the
+  contract's invariants even when the contract itself is proven
+  elsewhere; an assert built on top of a violated invariant is
+  **vacuous** (it can never fail for the reason it claims to test).
 
 ## Example
 

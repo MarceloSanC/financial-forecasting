@@ -34,7 +34,7 @@ but does not prescribe which layer to start from.
 
 - Don't create a use case before the port out it consumes exists.
 - Don't create the real adapter (Postgres, S3, HTTP client) before the in-memory fake exists and the use case is tested with the fake.
-- Don't bundle port creation + adapter creation in the same commit (already a hard rule in §4.3). Exception only when both are trivial (1 method, wrapper) and declared in `technical.md`.
+- Don't bundle port creation + adapter creation in the same commit (already a hard rule in §4.3). Exception only when both are trivial (1 method, wrapper) and declared in `technical.md`. **This rule only holds for a NEW port.** EXTENDING an existing `Protocol` forces every implementation (real adapter included) into the same commit — structural typing makes mypy reject the build until all implementers match the new shape. Plan the task radius accordingly.
 - Don't apply the default blindly to Stages that are not vertical slices (see Exceptions).
 
 ## Exceptions (default does not apply)
