@@ -57,8 +57,7 @@ help:
 # setup — primeira vez: cria o ambiente e instala tudo
 # ---------------------------------------------------------------------------
 setup:
-	uv venv .venv
-	uv pip install -e ".[dev]"
+	uv sync --locked --extra dev
 	@if [ -f .pre-commit-config.yaml ]; then \
 		uv run pre-commit install --install-hooks --hook-type pre-commit --hook-type commit-msg ; \
 		printf "%b\n" "  Pre-commit + commit-msg hooks instalados (ver .pre-commit-config.yaml)" ; \
@@ -73,7 +72,7 @@ setup:
 # install — atualiza dependências sem recriar o venv
 # ---------------------------------------------------------------------------
 install:
-	uv pip install -e ".[dev]"
+	uv sync --locked --extra dev
 
 # ---------------------------------------------------------------------------
 # run — servidor de desenvolvimento

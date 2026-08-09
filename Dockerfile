@@ -75,10 +75,13 @@ RUN printf '%s\n' \
 # Cache de deps: copia pyproject + src antes do resto do codigo. Quando
 # arquivos fora desses caminhos mudam (tests, docs, scripts), o install de
 # deps reusa o layer cacheado.
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
-RUN uv venv /app/.venv && \
-    uv pip install --python /app/.venv/bin/python -e ".[dev]"
+# `uv sync` (interface de PROJETO) e nao `uv pip install`: e o que honra
+# [tool.uv.sources], que resolve o torch do indice CPU (ADR 5.4.0003). Com
+# `uv pip install` a imagem baixaria a variante CUDA do PyPI. `--locked` exige
+# que o uv.lock esteja em dia com o pyproject — daí o COPY do lock acima.
+RUN uv sync --locked --extra dev
 
 # Resto do codigo. No devcontainer, docker-compose substitui /app via bind
 # mount do host, entao o COPY aqui so importa para CI ou execucoes isoladas.
@@ -98,10 +101,12 @@ RUN groupadd --system app && \
 
 # Install prod-only (sem [dev]) em venv proprio do runtime. Nao reusa o venv
 # do builder para garantir que ruff/mypy/pytest nao vazem para producao.
-COPY --chown=app:app pyproject.toml README.md ./
+COPY --chown=app:app pyproject.toml uv.lock README.md ./
 COPY --chown=app:app src/ ./src/
-RUN uv venv /app/.venv && \
-    uv pip install --python /app/.venv/bin/python .
+# Mesmo motivo do builder: `uv sync` honra o indice CPU do torch. `--no-dev`
+# mantem ruff/mypy/pytest fora de producao; `--no-editable` reproduz o install
+# nao-editavel que o `uv pip install .` fazia aqui.
+RUN uv sync --locked --no-dev --no-editable
 
 USER app
 
