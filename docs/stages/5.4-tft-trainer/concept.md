@@ -573,7 +573,8 @@ sessão de alinhamento de 2026-08-09 (issue #57) e com os achados do Checkpoint 
   — todas `≤ t`, e apenas nas decisões cujo offset satisfaz a condição
   paramétrica de I4. Em contrapartida, nenhuma decisão fora de `train` entra no
   ajuste, nenhuma fora de `early_stop` entra no monitor, e o normalizador é
-  estimado só sobre o bloco `train`.
+  estimado só sobre o **quadro de treino** — no sentido preciso de I4(b), que é
+  a formulação autoritativa.
 - **Por quê:** purga e embargo (López de Prado 2018 §7.4) operam sobre o
   **treino** e sobre **rótulos** — removem observações de treino cuja janela de
   formação do rótulo invade o teste. Nunca restringem a janela de features de
@@ -970,7 +971,7 @@ arquivo em disco referenciado pelo tracker (D9), fora do medalhão.
   alternativa viva)
 - [x] Dependências de Stages anteriores estão satisfeitas (`done`)?
   (5.1 `done`; 3.4/3.5/4.3/1.5/1.4 `done` transitivos)
-- [x] Stage cabe em ~3–12 Tasks? (estimativa: 13–14; o humano dispensou o limite
+- [x] Stage cabe em ~3–12 Tasks? (plano fechado em 15; o humano dispensou o limite
   de Tasks como restrição de desenho no alinhamento — bloco B4, issue #57 —
   preferindo separação a compressão)
 - [x] Riscos críticos têm mitigação plausível? (§10)
