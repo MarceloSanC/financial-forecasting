@@ -3,7 +3,7 @@ title: Concept — Trainer do TFT quantílico
 description: Treino do candidato TFT sob o harness walk-forward — decodificador multi-horizonte único, tipagem known/unknown, normalizador ajustado só no treino, parada antecipada com restauração de checkpoint, artefato + MLflow, e varredura Optuna exploratória isolada do confirmatório
 when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de executar
 keywords: [concept, tft-trainer, pytorch-forecasting, quantile-loss, known-unknown, early-stopping, checkpoint, target-normalizer, optuna, exploratorio, artefato, mlflow]
-status: draft
+status: done
 created_at: 2026-08-09
 updated_at: 2026-08-09
 stage_id: 5.4-tft-trainer
