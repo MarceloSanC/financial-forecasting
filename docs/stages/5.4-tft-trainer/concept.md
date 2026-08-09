@@ -3,7 +3,7 @@ title: Concept — Trainer do TFT quantílico
 description: Treino do candidato TFT sob o harness walk-forward — decodificador multi-horizonte único, tipagem known/unknown, normalizador ajustado só no treino, parada antecipada com restauração de checkpoint, artefato + MLflow, e varredura Optuna exploratória isolada do confirmatório
 when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de executar
 keywords: [concept, tft-trainer, pytorch-forecasting, quantile-loss, known-unknown, early-stopping, checkpoint, target-normalizer, optuna, exploratorio, artefato, mlflow]
-status: done
+status: draft
 created_at: 2026-08-09
 updated_at: 2026-08-09
 stage_id: 5.4-tft-trainer
@@ -56,6 +56,11 @@ depends_on: [5.1-walk-forward-harness]
   lightning, pytorch_forecasting) e `modeling-no-optuna-leak` (optuna), cada um
   com prova de quebra intencional **e** caso em `_REAL_VIOLATION_CASES`
   (guarda anti-contrato-míope já existente na suite de arquitetura).
+- **Caminho de instalação alinhado ao índice CPU.** `Makefile` e `Dockerfile`
+  instalam hoje com a interface `uv pip`, que **ignora** `[tool.uv.sources]`, e
+  o `Dockerfile` sequer copia o `uv.lock`. Sem corrigir isso, a declaração do
+  índice CPU não alcançaria o ambiente em que o projeto de fato roda (Docker) e
+  a imagem instalaria a variante CUDA — a decisão D3 valeria só no papel.
 - Correção dos comentários que a mudança de dependência torna falsos:
   `pyproject.toml` e `.importlinter` (ambos afirmam hoje que o CI roda sem
   `torch`), mais a nota retroativa nos ADRs estreitados (3.2.0002 e 5.1.0002).
@@ -304,7 +309,11 @@ sessão de alinhamento de 2026-08-09 (issue #57) e com os achados do Checkpoint 
 
 - **`TrainTft`** (use case) — portas injetadas: `MedallionStore`,
   `WalkForwardSplitter`, `TftTrainer`, `PersistPredictions`,
-  `AnalyticsRepository`, `ExperimentTracker`, `Hasher`. DTOs:
+  `AnalyticsRepository`, `ExperimentTracker`, `Hasher`; mais o valor de
+  configuração `artifacts_root` (raiz de artefatos, no padrão de `data_root`),
+  a partir do qual o use case compõe `artifact_dir = <artifacts_root>/tft/<run_id>`
+  e o passa ao port (D9 — é a origem do parâmetro `artifact_dir`, que de outro
+  modo não teria dono). DTOs:
 
   ```python
   @dataclass(frozen=True)
@@ -341,7 +350,9 @@ sessão de alinhamento de 2026-08-09 (issue #57) e com os achados do Checkpoint 
 
 - **`RunTftSweep`** (use case) — portas injetadas: `MedallionStore`,
   `WalkForwardSplitter`, `TftTrainer`, `HyperparameterSearch`,
-  `ExperimentTracker`. **Nenhuma porta que grave resultados** —
+  `ExperimentTracker`; mais `artifacts_root` (usado apenas para compor o
+  diretório passado ao port — no modo fit-only nenhum arquivo é escrito lá).
+  **Nenhuma porta que grave resultados** —
   `PersistPredictions` e `AnalyticsRepository` não aparecem no construtor
   (I14/D8). O `MedallionStore` entra apenas para a leitura do par read-only
   `(processed, dataset_tft)`, e nenhuma escrita passa por ele (asserção em A10).
@@ -414,7 +425,16 @@ sessão de alinhamento de 2026-08-09 (issue #57) e com os achados do Checkpoint 
   conjunto de treino nem a perda de validação — e a transformação **ajustada**
   do fluxo (o normalizador do alvo; não há codificador categórico ajustado
   porque todas as covariáveis são contínuas e o grupo é constante) é estimada
-  **apenas** sobre o bloco `train` e herdada pelas demais partições. A cláusula
+  **apenas sobre o quadro de treino** e herdada pelas demais partições.
+
+  *Quadro de treino* é o bloco `train` **mais** as `max_horizon` sessões
+  seguintes — que são de purga, nunca decisões, e existem no quadro porque são
+  os **rótulos** das últimas decisões de treino (o decodificador de `t` cobre
+  `t+1..t+max_horizon`). A distinção importa: essas sessões estão estritamente
+  antes de `early_stop`, `calib` e `test`, então incluí-las não é vazamento —
+  mas dizer "apenas o bloco `train`" tornaria a verificação numérica do
+  normalizador insatisfazível, porque a biblioteca ajusta sobre o quadro que
+  recebe. A cláusula
   (b) é o canal de vazamento real: normalizar sobre a série inteira antes de
   particionar é o erro que Hewamalage, Ackermann & Bergmeir (2023) nomeiam.
 
@@ -521,10 +541,13 @@ sessão de alinhamento de 2026-08-09 (issue #57) e com os achados do Checkpoint 
   colunas faltantes (drift registry × dataset, risco R6).
 - **C7 — rerun idêntico** → `DuplicateKeyError` propaga do `AnalyticsRepository`
   (append-only; semântica de replay é desenho da 5.5, finding herdado da 5.2).
-- **C8 — falha do `ExperimentTracker`** → não invalida a Stage: o erro é
-  propagado depois que as predições do fold estão persistidas, e o
-  `TftRunSummary` traz `tracking_run_id` vazio. Tracking é observabilidade, não
-  fonte da verdade dos resultados (a fonte é `fact_oos_predictions`).
+- **C8 — falha do `ExperimentTracker`** → **absorvida**, não propagada: o erro é
+  registrado em log e o fold segue, com `TftRunSummary.tracking_run_id` vazio.
+  Propagar destruiria o resultado de um trabalho já concluído e persistido —
+  tracking é observabilidade, não fonte da verdade (a fonte é
+  `fact_oos_predictions`). A ordem é obrigatória: **persistir primeiro,
+  rastrear depois**, para que a absorção nunca esconda uma persistência
+  incompleta.
 - **C9 — varredura sem trials válidos** → `ValueError` em `RunTftSweep` quando
   `n_trials < 1` ou quando todo trial falhou; `best_trial` sobre estudo vazio
   ergue no port (fake e real).
@@ -854,12 +877,15 @@ arquivo em disco referenciado pelo tracker (D9), fora do medalhão.
   (b) **contexto não é vácuo** — mutar sessões `≤ t` dentro da janela da decisão
   de teste de offset `j = 0` **altera** a predição daquela decisão, com a
   geometria escolhida para satisfazer `j <= L − gap − 2` (I4);
-  (c) **normalizador ajustado só no treino** — `normalizer_center` e
+  (c) **normalizador ajustado só no quadro de treino** — `normalizer_center` e
   `normalizer_scale` devolvidos pelo port batem com a média e o desvio amostral
-  do alvo sobre as **sessões do bloco `train`** (a biblioteca ajusta sobre o
-  quadro de treino, não sobre as decisões, e usa desvio amostral com epsilon).
-  Verificado **no adapter real** — inatingível na perna fake, que não tem
-  normalizador, na mesma linha do C5.
+  (com epsilon) do alvo sobre as **sessões do quadro de treino** definido em
+  I4(b). A mutação que isso detecta é **construir o conjunto de treino a partir
+  do painel inteiro** — aí os parâmetros mudam. Mutar o quadro de *predição*
+  não serve como prova: ele é derivado do de treino e herda os parâmetros sem
+  reajustar, então a asserção passaria de qualquer jeito. Verificado **no
+  adapter real** — inatingível na perna fake, que não tem normalizador, na
+  mesma linha do C5.
 - [ ] A5 — melhor checkpoint (I6), verificado por **mecanismo**:
   `best_epoch == argmin(val_loss_by_epoch)`; `len(val_loss_by_epoch)` igual ao
   número de épocas executadas (prova que a passagem de sanidade não contaminou o
@@ -876,8 +902,9 @@ arquivo em disco referenciado pelo tracker (D9), fora do medalhão.
   preenchida — teste de integração com store real em `tmp_path`.
 - [ ] A8 — rastreamento (I12) com **fake** do `ExperimentTracker`: cada fold
   abre e fecha um run, registra parâmetros/métricas/tags e chama `log_artifact`
-  com um caminho existente em disco; falha do tracker não impede a persistência
-  já feita (C8).
+  com um caminho existente em disco; tracker que ergue **não** derruba a
+  execução — o `TftRunSummary` volta com `tracking_run_id` vazio e as linhas
+  persistidas permanecem (C8).
 - [ ] A9 — determinismo (I9): duas chamadas idênticas ao port no mesmo processo
   produzem grades, `best_epoch` e `best_val_loss` idênticos (fake e real) — o
   que também prova que a semente é reaplicada por chamada; e o use case

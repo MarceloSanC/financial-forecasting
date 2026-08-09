@@ -67,11 +67,23 @@ The fitted `center` and `scale` are returned through the port
 be asserted directly on numbers instead of inferred from prediction behavior.
 
 The assertion compares them against the mean and the **sample** standard
-deviation (with the library's epsilon) of the target over the **sessions of the
-`train` block** — not over the training *decisions*: the library fits on every
-row of the frame it receives, and the decisions are a subset of those rows.
-Stating this precisely matters, because an assertion written against the wrong
-population would fail for a correct implementation.
+deviation (with the library's epsilon) of the target over the sessions of the
+**training frame** — the `train` block plus the `max_horizon` purge sessions
+that follow it. Two corrections are folded into that sentence, and both would
+otherwise produce a criterion that fails against a correct implementation:
+
+- Not the training *decisions*: the library fits on every row of the frame it
+  receives, and the decisions are a subset of those rows (the first
+  `max_encoder_length − 1` have no full window).
+- Not the `train` block alone: the frame necessarily extends `max_horizon`
+  sessions past `train_end`, because those rows are the **labels** of the last
+  training decisions. They are purge sessions, strictly before `early_stop`,
+  `calib` and `test`, so including them is not leakage — but excluding them
+  from the assertion's population would make the numbers disagree.
+
+The mutation this criterion detects is **building the training dataset from the
+full panel**. Mutating the *prediction* frame proves nothing: it is derived from
+the training dataset and inherits the fitted parameters without re-fitting.
 
 ## Alternatives considered
 

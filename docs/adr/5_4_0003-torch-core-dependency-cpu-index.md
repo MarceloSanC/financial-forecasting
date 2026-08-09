@@ -167,7 +167,20 @@ environment or introduce the conflicting-extras arrangement of Alternative B.
 
 - `pyproject.toml`: `[[tool.uv.index]] name = "pytorch-cpu", url =
   "https://download.pytorch.org/whl/cpu", explicit = true` and
-  `[tool.uv.sources] torch = [{ index = "pytorch-cpu" }]`. Requires uv ≥ 0.5.3.
+  `[tool.uv.sources] torch = [{ index = "pytorch-cpu", marker =
+  "platform_system != 'Darwin'" }]`. Requires uv ≥ 0.5.3. The platform marker is
+  not optional: the CPU index publishes no macOS wheels, so a universal lock
+  without it fails to resolve on the darwin split.
+- **The install path must use the project interface.** `tool.uv.sources` is
+  honoured by `uv lock`/`uv sync`/`uv run` and **ignored** by `uv pip`. Today
+  `Makefile` (`setup`, `install`) and both `Dockerfile` stages install with
+  `uv pip install -e ".[dev]"`, and the `Dockerfile` does not even copy
+  `uv.lock` — so the declaration above would have no effect where the project
+  actually runs, and the image would install the CUDA build. Migrating those
+  call sites to `uv sync --locked` (with `uv.lock` copied into the image) is
+  part of this decision, not a follow-up: without it the ADR is inert.
+- Verification must probe **inside the image**, not only through `uv run` on the
+  host — a host-only check passes while the container stays CUDA.
 - Pin by minor with `uv.lock` fixing the patch, following the posture of
   `exchange-calendars`/`lightgbm`.
 - The composition root still wires the adapter through a lazy proxy

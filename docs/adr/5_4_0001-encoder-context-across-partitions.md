@@ -105,8 +105,16 @@ The invariant is stated in **two clauses**, and both are enforced by tests:
    outside `early_stop` enters the early-stopping monitor; `calib` enters
    neither, remaining reserved for the conformal step. Every **fitted**
    transformation — target normalizer, categorical encoders, any statistic
-   estimated from data — is estimated from the training decisions only and
+   estimated from data — is estimated from the **training frame** only and
    inherited by the other partitions.
+
+   *Training frame* means the `train` block plus the `max_horizon` purge
+   sessions that follow it — the rows that are the labels of the last training
+   decisions, and which therefore must be present for those decisions to exist
+   at all. They lie strictly before `early_stop`, `calib` and `test`, so the
+   clause is unchanged in substance; the precision matters because the library
+   fits over the frame it is handed, and a rule stated over the block alone
+   would be unverifiable against a correct implementation.
 
 Clause 2 is the operative one. It is the channel through which this design could
 actually leak, and it is the pitfall Hewamalage et al. name: a normalizer fitted
