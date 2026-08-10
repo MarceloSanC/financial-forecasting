@@ -70,9 +70,15 @@ setup:
 
 # ---------------------------------------------------------------------------
 # install — atualiza dependências sem recriar o venv
+#
+# SEM `--locked` de propósito: este é o alvo de "mudei o pyproject.toml", e
+# `--locked` falharia exatamente nesse caso. Ele re-resolve e ATUALIZA o
+# `uv.lock` — que entra no commit junto com a mudança do pyproject. O
+# `--locked` fica em `setup`, no Dockerfile, no devcontainer e no CI, onde o
+# objetivo é reproduzir o conjunto revisado, não mudá-lo.
 # ---------------------------------------------------------------------------
 install:
-	uv sync --locked --extra dev
+	uv sync --extra dev
 
 # ---------------------------------------------------------------------------
 # run — servidor de desenvolvimento

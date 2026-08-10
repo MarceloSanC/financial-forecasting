@@ -5,7 +5,7 @@
   "workspaceFolder": "/app",
   "shutdownAction": "stopCompose",
   "remoteUser": "root",
-  "postCreateCommand": "if ls /app/.devcontainer/certs/*.crt >/dev/null 2>&1; then cp /app/.devcontainer/certs/*.crt /usr/local/share/ca-certificates/ && update-ca-certificates; fi; uv venv /app/.venv && uv pip install --python /app/.venv/bin/python -e \".[dev]\"",
+  "postCreateCommand": "if ls /app/.devcontainer/certs/*.crt >/dev/null 2>&1; then cp /app/.devcontainer/certs/*.crt /usr/local/share/ca-certificates/ && update-ca-certificates; fi; uv sync --locked --extra dev",
   "customizations": {
     "vscode": {
       "extensions": [

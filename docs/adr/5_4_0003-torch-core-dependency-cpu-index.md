@@ -171,16 +171,21 @@ environment or introduce the conflicting-extras arrangement of Alternative B.
   "platform_system != 'Darwin'" }]`. Requires uv ≥ 0.5.3. The platform marker is
   not optional: the CPU index publishes no macOS wheels, so a universal lock
   without it fails to resolve on the darwin split.
-- **The install path must use the project interface.** `tool.uv.sources` is
-  honoured by `uv lock`/`uv sync`/`uv run` and **ignored** by `uv pip`. Today
-  `Makefile` (`setup`, `install`) and both `Dockerfile` stages install with
-  `uv pip install -e ".[dev]"`, and the `Dockerfile` does not even copy
-  `uv.lock` — so the declaration above would have no effect where the project
-  actually runs, and the image would install the CUDA build. Migrating those
-  call sites to `uv sync --locked` (with `uv.lock` copied into the image) is
-  part of this decision, not a follow-up: without it the ADR is inert.
-- Verification must probe **inside the image**, not only through `uv run` on the
-  host — a host-only check passes while the container stays CUDA.
+- **The install path must use the project interface — for the lock, not for the
+  index.** Measured on uv 0.11.28: `uv pip` **does** honour `tool.uv.sources`
+  (`uv pip compile` resolves `torch==2.13.0+cpu`; only `--no-sources` brings the
+  CUDA wheel back). What `uv pip` does **not** consume is `uv.lock` — it
+  re-resolves on every invocation, so it can install a set nobody reviewed. The
+  four call sites (`Makefile`, both `Dockerfile` stages, the devcontainer's
+  `postCreateCommand`, and the `uv` fallback in `scripts/worktree-new.py`)
+  therefore migrate to `uv sync --locked`, with `uv.lock` copied into the image.
+  Getting the reason right matters: the next person to touch the install path
+  will read this note, and "uv pip ignores sources" would send them after the
+  wrong mechanism.
+- Verification must probe **inside the image** — `docker run` against the built
+  tag, not `docker compose run`: the compose file mounts a persistent named
+  volume over `/app/.venv`, so a compose probe inspects the volume rather than
+  the image, and would pass while the image was wrong.
 - Pin by minor with `uv.lock` fixing the patch, following the posture of
   `exchange-calendars`/`lightgbm`.
 - The composition root still wires the adapter through a lazy proxy

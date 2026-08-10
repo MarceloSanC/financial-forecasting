@@ -135,13 +135,20 @@ def test_assembler_feature_block_order_follows_registry() -> None:
 
 
 def test_full_pipeline_against_bronze_if_available(tmp_path: Path) -> None:
-    """Pipeline completo via wiring real — skip se bronze/torch ausentes (CI).
+    """Pipeline completo via wiring real — skip se bronze/`transformers` ausentes.
 
-    Quando a bronze `candle`/`fundamental` de AAPL e o extra `sentiment` (torch)
+    Quando a bronze `candle`/`fundamental` de AAPL e o extra `sentiment`
     estiverem presentes, roda `BuildDataset` AAPL e confere `n_features`/hash. Sem
     eles, pula (condição documentada — concept 3.5 A6, technical §5 risco do oráculo).
     """
-    pytest.importorskip("torch", reason="extra `sentiment` (torch) ausente — pula pipeline real")
+    # A guarda checa `transformers`, NÃO `torch`: desde a Stage 5.4 (ADR 5.4.0003)
+    # o `torch` é dependência principal e está sempre instalado, então usá-lo como
+    # procuração do extra `sentiment` deixaria a guarda sempre verde — e o
+    # `_LazyFinbertSentimentModel` estouraria `ImportError` no meio do pipeline,
+    # onde o desenho quer um skip limpo.
+    pytest.importorskip(
+        "transformers", reason="extra `sentiment` ausente — pula pipeline real"
+    )
 
     bronze_candle = Path("data") / "bronze" / "candle"
     if not bronze_candle.exists() or not any(bronze_candle.rglob("*.parquet")):

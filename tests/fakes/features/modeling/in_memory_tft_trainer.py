@@ -17,10 +17,26 @@ o índice devolvido pela predição —, porque um modelo de fumaça de 2 época
 tem precisão para um oráculo de proximidade.
 
 O que o fake NÃO cobre, por construção (declarado aqui para a auditoria não
-confundir com lacuna): C5 (emissão não finita — a emissão do fake é sempre
-finita), C10 (checkpoint inutilizável — o fake sempre grava) e A4(c)
-(normalizador — o fake não tem um ajustado por biblioteca). Os três vivem na
-perna real, na linha do finding herdado da Stage 5.3 sobre o C5.
+confundir com lacuna, e para que ninguém escreva sobre ele uma asserção vácua):
+
+- **C5** (emissão não finita) e **C10** (checkpoint inutilizável): a emissão do
+  fake é sempre finita e ele sempre grava.
+- **A4(c)** (normalizador): o fake não tem um ajustado por biblioteca.
+- **A4(a) e A4(b)** (anti-vazamento por mutação): a saída do fake depende
+  APENAS de `target[t + h]` e da escala do quadro de treino. Mutar `calib` não
+  muda nada aqui — então uma prova de anti-vazamento escrita sobre o fake seria
+  vácua. As duas vivem no adapter real (Tasks 08 e 09).
+- **Guardrail I5** (rearranjo monótono): a grade do fake é monótona por
+  construção (`anchor + (level - 0.5) * scale`, com níveis crescentes e
+  `scale > 0`), então o `QuantileForecast.from_raw` nunca é exercitado através
+  dele. Um teste do use case que afirme "guardrail aplicado" usando este fake
+  não prova nada — precisa de uma grade deliberadamente cruzada.
+- **I9 na cláusula semente↔saída:** o fake é função pura dos argumentos e não lê
+  `params.seed`. O determinismo que ele demonstra é o de ausência de estado, não
+  o de semeadura — essa cláusula é da perna real.
+
+Todos seguem a linha do finding herdado da Stage 5.3 sobre o C5: declarar onde a
+prova vive em vez de fingir paridade.
 """
 
 from __future__ import annotations

@@ -915,4 +915,108 @@ python scripts/check_technical_postexec.py docs/stages/5.4-tft-trainer/technical
 > `BEGIN/END: post-execution` são rejeitadas via
 > `scripts/check_technical_postexec.py`. Cada entrada carrega data + autor.
 
+### 2026-08-09 — [decision] Task 01 — medições de R1/R2 e diff do lock — Claude (Opus 5)
+**Contexto:** o critério de aceite pedia o número, não a impressão.
+**Medido:** `uv sync --locked --extra dev` no container: **27 s**, 14 pacotes
+novos, `torch 2.13.0+cpu` (182.9 MiB de download). `make docker-build` (stage
+builder, do zero): **4 min 07 s**, com o step de `uv sync` em 54.9 s. `make check`
+antes/depois: 3 min 11 s → 3 min 18 s. **R1 estava superestimado**: o concept
+projetava ~250–300 MB porque supunha `scipy`/`scikit-learn` novos, mas os dois já
+estavam no lock (via statsforecast/lightgbm) — o custo marginal real é ~185 MB.
+**Diff do lock:** removidos todos os `nvidia-*` e `triton`; adicionados
+torch/lightning/pytorch-lightning/pytorch-forecasting/optuna/torchmetrics/
+scikit-base/colorlog. `numpy 2.5.0`, `pandas 2.3.3`, `scipy 1.18.0` e
+`scikit-learn 1.9.0` **inalterados** — a guarda contra rebaixamento silencioso
+das fixtures-oráculo passou.
+
+### 2026-08-09 — [deviation] Task 01 — dois call sites de instalação além dos planejados — Claude (Opus 5)
+**Contexto:** o Checkpoint C do bloco 1 (dois revisores, convergentes) apontou
+que a migração para `uv sync --locked` cobriu `Makefile`, `Dockerfile` e CI, mas
+deixou de fora `.devcontainer/devcontainer.json` (`postCreateCommand`) e o
+fallback de `scripts/worktree-new.py`.
+**Razão:** o devcontainer é o ambiente de dev REAL desta máquina e roda **depois**
+do build, sobre o bind mount — ele recriava o venv com `uv pip install`,
+descartando o install correto da imagem. Deixá-lo fora tornaria a migração inócua
+exatamente onde ela mais importa. Corrigido em `[5.4/task-01-fix]`; a lista de
+arquivos da Task 01 fica com 7 em vez de 5, o que registro aqui em vez de
+silenciar.
+
+### 2026-08-09 — [deviation] Task 01 — a premissa do racional estava errada — Claude (Opus 5)
+**Contexto:** concept §1, ADR 5.4.0003, `pyproject.toml` e `Dockerfile`
+afirmavam que `uv pip` **ignora** `[tool.uv.sources]`, e que por isso a imagem
+baixaria a variante CUDA.
+**Medido (uv 0.11.28, alvo linux):** `uv pip compile --extra dev` resolve
+`torch==2.13.0+cpu` e **zero** pacotes `nvidia-*`; só com `--no-sources` a
+resolução volta para CUDA (16 pacotes `nvidia-*` + `triton`). Ou seja, `uv pip`
+**honra** as sources.
+**Razão da correção:** a migração continua certa, mas pelo outro motivo — o que
+`uv pip` não consome é o `uv.lock`: ele re-resolve a cada execução e pode
+instalar um conjunto que ninguém revisou. Acertar o motivo importa porque é o que
+a próxima pessoa vai ler ao mexer no caminho de instalação. Texto corrigido no
+concept §1, no ADR 5.4.0003, no `pyproject.toml` e no `Dockerfile`.
+
+### 2026-08-09 — [deviation] Task 01 — probe da imagem por `docker run`, não `docker compose run` — Claude (Opus 5)
+**Contexto:** o comando de verificação escrito no plano usava
+`docker compose run --rm app ...`.
+**Razão:** `docker-compose.yml` monta o volume nomeado `app-venv` sobre
+`/app/.venv`, então um probe via compose inspeciona o **volume** (possivelmente
+anterior à Stage) e não a imagem — o falso verde que o próprio critério dizia
+querer evitar. A verificação executada foi
+`docker run --rm --entrypoint sh financial_forecasting-app:dev -lc '...'`, que
+devolveu `torch 2.13.0+cpu` e nenhum pacote CUDA/triton. Consequência operacional
+registrada: quem já tinha a stack de pé precisa de `docker compose down -v` para
+o volume ser recriado.
+
+### 2026-08-09 — [deviation] Task 01 — `importorskip("torch")` deixou de guardar o que declarava — Claude (Opus 5)
+**Contexto:** `tests/integration/features/feature_engineering/test_build_dataset_aapl.py`
+usava `pytest.importorskip("torch")` como procuração para "o extra `sentiment`
+está instalado".
+**Razão:** com `torch` promovido a dependência principal, a guarda passou a
+sempre passar. Com bronze presente, o teste seguiria até o
+`_LazyFinbertSentimentModel`, que importa `transformers` e estouraria
+`ImportError` no meio do pipeline — onde o desenho quer um skip limpo. Trocado
+para `importorskip("transformers")`. Invisível no CI hoje (não há bronze), o que
+é justamente por que cairia em silêncio mais adiante.
+
+### 2026-08-09 — [decision] Task 01 — `make install` sem `--locked` — Claude (Opus 5)
+**Contexto:** a migração pôs `--locked` em todos os alvos, inclusive `install`.
+**Razão:** o `help` descreve `install` como "após mudar pyproject.toml" —
+exatamente o caso em que `--locked` aborta. `install` re-resolve e atualiza o
+lock (que entra no commit junto); `--locked` fica em `setup`, Dockerfile,
+devcontainer e CI, onde o objetivo é reproduzir o conjunto revisado, não mudá-lo.
+
+### 2026-08-09 — [finding] Task 01 — a imagem `runtime` passou a carregar a pilha de deep learning — Claude (Opus 5)
+**Contexto:** com `torch`/`lightning`/`pytorch-forecasting`/`optuna` em
+`[project.dependencies]`, a stage `runtime` — cujo propósito declarado é imagem
+slim sem dev deps — instala todos eles (~700 MB a mais). O ADR 5.4.0003
+precificou o custo no CI, não no artefato de deploy. `optuna` em particular é
+ferramenta exploratória e não tem função em produção.
+**Stage candidata: 7.1-inference-engine**, que é quando o runtime deixa de ser
+hipotético e se sabe se a superfície de inferência serve o TFT. Se servir, a
+pilha é legítima ali; se não, o caminho é um extra `modeling` que o CI instala e
+o runtime não. Registrado agora para a decisão não ser tomada por omissão.
+
+### 2026-08-09 — [decision] Task 02 — prova de quebra dos gates, saída literal — Claude (Opus 5)
+**Contexto:** A14 exige a prova executada e revertida, com saída no relatório.
+**Executado:** `import torch` em `train_gbm_quantile.py` →
+`Contracts: 11 kept, 1 broken`, exit **1**, com a mensagem
+`financial_forecasting.features.modeling.application is not allowed to import
+torch`. Idem `import optuna` → `Contracts: 11 kept, 1 broken`, exit **1**.
+Revertidos → `Contracts: 12 kept, 0 broken`, exit **0**.
+
+### 2026-08-09 — [deviation] Task 04 — fake: lista de não-cobertura ampliada e C3-monitor coberto — Claude (Opus 5)
+**Contexto:** o Checkpoint C mostrou que a docstring do fake declarava só C5,
+C10 e A4(c) como não-cobertos, e que o ramo de C3 por **monitor** vazio é
+inalcançável sob a geometria do splitter (o `if not fitted` dispara antes),
+ficando sem teste nas duas pernas.
+**Razão:** duas correções de honestidade da cobertura. (a) A lista passou a
+incluir **A4(a)/A4(b)** — a saída do fake não depende de `calib`, então uma prova
+de anti-vazamento escrita sobre ele seria vácua — e o **guardrail I5**, porque a
+grade do fake é monótona por construção e nunca exercita o rearranjo; quem
+escrever o teste do use case (Task 05) precisa de uma grade cruzada de propósito.
+(b) O ramo de monitor de C3 ganhou teste por chamada direta com `early_stop` na
+cauda do painel. Também documentei que o determinismo do fake é ausência de
+estado, não semeadura — ele não lê `params.seed`, então essa cláusula de I9 é da
+perna real.
+
 <!-- END: post-execution -->

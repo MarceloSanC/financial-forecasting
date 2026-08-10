@@ -120,6 +120,30 @@ class TestDeclaredDiscard:
         with pytest.raises(ValueError, match="treino"):
             _call(InMemoryTftTrainer(), tmp_path, encoder_length=40)
 
+    def test_monitor_without_full_decoder_raises(self, tmp_path: Path) -> None:
+        """C3 tem DOIS ramos; sob a geometria do splitter o do monitor nunca
+
+        dispara, então ele só é alcançável por chamada direta. Sem este caso, a
+        metade da regra ficaria sem cobertura nas duas pernas.
+        """
+        rows, target = _panel()
+        with pytest.raises(ValueError, match="monitor"):
+            InMemoryTftTrainer().train_and_predict(
+                params=TftTrainingParams(seed=7, max_encoder_length=_ENCODER_LENGTH),
+                feature_names=("a", "b"),
+                known_feature_names=("b",),
+                rows=rows,
+                target=target,
+                train_decision_indices=_TRAIN,
+                # Cauda do painel: t + max_horizon > panel_size - 1 para ambas.
+                early_stop_decision_indices=(_PANEL - 2, _PANEL - 1),
+                test_decision_indices=(),
+                max_horizon=_MAX_HORIZON,
+                horizons=_HORIZONS,
+                quantile_levels=_LEVELS,
+                artifact_dir=str(tmp_path),
+            )
+
 
 class TestAlignmentOracle:
     """A15 (perna fake) — mediana emitida ancorada em `target[t + h]`."""
@@ -179,6 +203,14 @@ class TestArtifact:
 
 
 class TestDeterminism:
+    """Ausência de estado, NÃO semeadura.
+
+    O fake é função pura dos argumentos e não lê `params.seed` — a cláusula de I9
+    que liga semente a saída é da perna real. O que este teste protege é o fake
+    não ganhar estado interno (cache, contador) que o torne dependente da ordem
+    de chamada e faça a suite de contrato divergir por artefato do dublê.
+    """
+
     def test_two_identical_calls_produce_identical_output(self, tmp_path: Path) -> None:
         first = _call(InMemoryTftTrainer(), tmp_path)
         second = _call(InMemoryTftTrainer(), tmp_path)

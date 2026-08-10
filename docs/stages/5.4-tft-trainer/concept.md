@@ -56,11 +56,14 @@ depends_on: [5.1-walk-forward-harness]
   lightning, pytorch_forecasting) e `modeling-no-optuna-leak` (optuna), cada um
   com prova de quebra intencional **e** caso em `_REAL_VIOLATION_CASES`
   (guarda anti-contrato-míope já existente na suite de arquitetura).
-- **Caminho de instalação alinhado ao índice CPU.** `Makefile` e `Dockerfile`
-  instalam hoje com a interface `uv pip`, que **ignora** `[tool.uv.sources]`, e
-  o `Dockerfile` sequer copia o `uv.lock`. Sem corrigir isso, a declaração do
-  índice CPU não alcançaria o ambiente em que o projeto de fato roda (Docker) e
-  a imagem instalaria a variante CUDA — a decisão D3 valeria só no papel.
+- **Caminho de instalação alinhado ao lock.** Os quatro pontos que instalam
+  dependências (`Makefile`, as duas stages do `Dockerfile`, o
+  `postCreateCommand` do devcontainer e o fallback de `scripts/worktree-new.py`)
+  usam hoje `uv pip`, que **não consome o `uv.lock`** — re-resolve a cada
+  execução e pode instalar um conjunto que ninguém revisou. Migram para
+  `uv sync --locked`, com o lock copiado para a imagem. (Medido no uv 0.11.28:
+  `uv pip` **honra** `[tool.uv.sources]`, então o índice CPU já seria respeitado
+  — o que falta é a reprodutibilidade do conjunto.)
 - Correção dos comentários que a mudança de dependência torna falsos:
   `pyproject.toml` e `.importlinter` (ambos afirmam hoje que o CI roda sem
   `torch`), mais a nota retroativa nos ADRs estreitados (3.2.0002 e 5.1.0002).

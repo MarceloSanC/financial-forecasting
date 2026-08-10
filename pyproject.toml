@@ -146,11 +146,13 @@ sentiment = [
 # macOS, e o lock deste projeto é universal — sem o marker, `uv lock` não
 # resolve o split darwin.
 #
-# ATENÇÃO (o que torna isto efetivo): `tool.uv.sources` é honrado pela interface
-# de PROJETO (`uv lock`/`uv sync`/`uv run`) e IGNORADO por `uv pip`. Por isso o
-# Makefile e o Dockerfile instalam com `uv sync --locked` — com `uv pip install`
-# a imagem voltaria a resolver o torch CUDA do PyPI e esta declaração seria
-# decorativa.
+# ATENÇÃO — o que torna isto REPRODUTÍVEL não é a declaração acima sozinha.
+# `uv pip install` HONRA `tool.uv.sources` (verificado no uv 0.11.28: só com
+# `--no-sources` a resolução volta a trazer o torch CUDA), mas NÃO consome o
+# `uv.lock`: ele re-resolve a cada execução. Ou seja, `uv pip` acerta o índice e
+# erra o conjunto — pode instalar versões que ninguém revisou no PR. Por isso o
+# Makefile, o Dockerfile e o devcontainer instalam com `uv sync --locked`, que é
+# a única forma de garantir exatamente o conjunto travado no lock.
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
