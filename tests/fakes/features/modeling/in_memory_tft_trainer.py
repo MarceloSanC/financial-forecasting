@@ -103,10 +103,17 @@ class InMemoryTftTrainer:
     """Fake determinístico que satisfaz o port `TftTrainer` por duck-typing."""
 
     def __init__(self) -> None:
-        # Argumentos da última chamada — consumidos pelas asserções estruturais
-        # de A6 (nenhum índice de calib como decisão) e A10 (fit-only na varredura).
-        self.last_call: dict[str, Any] = {}
+        # Histórico COMPLETO das chamadas — consumido pelas asserções
+        # estruturais de A6 (faixas de decisão por fold) e A10 (fit-only na
+        # varredura). Guardar só a última deixaria os folds anteriores sem
+        # cobertura: um vazamento restrito ao fold 0 passaria verde.
+        self.calls: list[dict[str, Any]] = []
         self.call_count = 0
+
+    @property
+    def last_call(self) -> dict[str, Any]:
+        """Última chamada registrada (`{}` se nenhuma)."""
+        return self.calls[-1] if self.calls else {}
 
     def train_and_predict(  # noqa: PLR0913 — espelha a assinatura do port
         self,
@@ -126,10 +133,15 @@ class InMemoryTftTrainer:
     ) -> TftTrainingResult:
         """Simula o treino e emite a grade crua conforme o contrato do port."""
         self.call_count += 1
-        self.last_call = {
+        self.calls.append({
             "params": params,
             "feature_names": tuple(feature_names),
             "known_feature_names": tuple(known_feature_names),
+            # O painel entra no registro para que a política de ausência
+            # (None -> NaN) seja verificável na FRONTEIRA, e não só por
+            # inspeção do parser do use case.
+            "rows": tuple(tuple(row) for row in rows),
+            "target": tuple(target),
             "train_decision_indices": tuple(train_decision_indices),
             "early_stop_decision_indices": tuple(early_stop_decision_indices),
             "test_decision_indices": tuple(test_decision_indices),
@@ -137,7 +149,7 @@ class InMemoryTftTrainer:
             "horizons": tuple(horizons),
             "quantile_levels": tuple(quantile_levels),
             "artifact_dir": artifact_dir,
-        }
+        })
 
         panel_size = self._validate_structure(
             feature_names=feature_names,

@@ -68,7 +68,7 @@ from financial_forecasting.features.modeling.domain.services.operationally_lates
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
     from datetime import date
 
     from financial_forecasting.features.analytics_store.application.ports.out.analytics_repository import (  # noqa: E501
@@ -196,11 +196,50 @@ def known_feature_names() -> tuple[str, ...]:
 
 
 def _assert_zero_removal(*, before: int, after: int) -> None:
-    """Defesa-em-profundidade de I11: o dedup NUNCA pode ter removido entradas."""
+    """Defesa-em-profundidade de I11: o dedup NUNCA pode ter removido entradas.
+
+    **Inatingível por construção neste fluxo, e isso é declarado de propósito**
+    (mesma situação do precedente 5.3): a chave de alinhamento
+    `(split, horizon, decision_idx + horizon, quantile_level)` determina
+    `decision_idx`, que é o próprio rank operacional — então uma duplicata real
+    empata chave E rank, e o serviço 5.1 ergue ambiguidade antes de chegar aqui.
+    Somado a isso, as entradas nascem de um `dict`, então nem repetição
+    estrutural existe. O guard fica como segunda camada para quando a composição
+    de cohort (5.5) juntar execuções cujos pontos alinhados se sobreponham.
+    Auditoria: não procure teste de fluxo que o dispare — não existe caminho.
+    """
     if before != after:
         raise ValueError(
             f"dedup removed {before - after} aligned-point entries — "
             "upstream fold geometry bug (I11)"
+        )
+
+
+def _assert_emission_within_request(
+    *,
+    grids: Mapping[int, Mapping[int, Sequence[float]]],
+    test_decision_indices: tuple[int, ...],
+    horizons: tuple[int, ...],
+) -> None:
+    """O port só pode devolver pares que o use case PEDIU (D5).
+
+    Sem esta checagem, um índice de `train`/`calib` devolvido por engano pelo
+    adapter (bug de piso de decisão — o risco que D5 cita para exigir faixas
+    contíguas) viraria predição out-of-sample persistida e entraria na
+    inferência do Step 6. O concept põe o controle do anti-vazamento no use
+    case; confiar só no argumento de entrada deixaria metade do controle fora.
+    """
+    unexpected_decisions = sorted(set(grids) - set(test_decision_indices))
+    if unexpected_decisions:
+        raise ValueError(
+            "trainer emitted decisions outside the requested test range: "
+            f"{unexpected_decisions!r} (D5)"
+        )
+    emitted_horizons = {horizon for by_horizon in grids.values() for horizon in by_horizon}
+    unexpected_horizons = sorted(emitted_horizons - set(horizons))
+    if unexpected_horizons:
+        raise ValueError(
+            f"trainer emitted horizons that were not requested: {unexpected_horizons!r} (D5)"
         )
 
 
@@ -272,6 +311,11 @@ class TrainTft:
                 known_names=known_names,
                 run_id=run_id,
             )
+            _assert_emission_within_request(
+                grids=training.grids,
+                test_decision_indices=tuple(index_by_session[day] for day in fold.test),
+                horizons=command.horizons,
+            )
             forecasts_by_decision: dict[int, dict[int, QuantileForecast]] = {}
             for decision_idx, grids in training.grids.items():
                 forecasts_by_decision[decision_idx] = {
@@ -287,7 +331,6 @@ class TrainTft:
                     for level in command.quantile_levels
                 )
 
-            self._write_dim_run(command, feature_names, known_names, fold, run_id)
             emissions.append((fold, run_id, forecasts_by_decision, training))
 
         # I11 (duas camadas): duplicata real empata chave+rank e ergue no próprio
@@ -300,6 +343,11 @@ class TrainTft:
         _assert_zero_removal(before=len(entries), after=len(deduped))
 
         for fold, run_id, forecasts_by_decision, training in emissions:
+            # `dim_run` junto da persistência das predições, não no laço de
+            # treino: gravar antes deixaria linhas órfãs (run sem predição) se o
+            # guard de dedup ou o persister erguesse, e o rerun idêntico (C7)
+            # passaria a colidir também aqui.
+            self._write_dim_run(command, feature_names, known_names, fold, run_id)
             rows_written = 0
             rows_skipped = 0
             for decision_idx, forecasts in forecasts_by_decision.items():
@@ -355,26 +403,29 @@ class TrainTft:
         concluído. Tracking é observabilidade; a fonte da verdade é
         `fact_oos_predictions`.
         """
+        # Fora do `try` de propósito: montar o payload é código NOSSO. Um
+        # AttributeError aqui seria defeito do use case, não backend fora do ar,
+        # e absorvê-lo como "tracking failed" esconderia um bug de programação
+        # atrás de uma mensagem de observabilidade.
+        params = _tracking_params(command, fold, run_id)
+        summary_metrics = {
+            "best_val_loss": training.best_val_loss,
+            "best_epoch": float(training.best_epoch),
+            "fitted_decisions": float(training.fitted_decision_count),
+            "monitored_decisions": float(training.monitored_decision_count),
+        }
+        tags = {
+            "model_version": _MODEL_VERSION,
+            "phase": _CONFIRMATORY_PHASE,
+            "fold": str(fold.fold_index),
+        }
         try:
             tracking_run_id = self._tracker.start_run(run_name=f"{_MODEL_VERSION}-{run_id}")
-            self._tracker.log_params(_tracking_params(command, fold, run_id))
+            self._tracker.log_params(params)
             for epoch, loss in enumerate(training.val_loss_by_epoch):
                 self._tracker.log_metrics({"val_loss": loss}, step=epoch)
-            self._tracker.log_metrics(
-                {
-                    "best_val_loss": training.best_val_loss,
-                    "best_epoch": float(training.best_epoch),
-                    "fitted_decisions": float(training.fitted_decision_count),
-                    "monitored_decisions": float(training.monitored_decision_count),
-                }
-            )
-            self._tracker.set_tags(
-                {
-                    "model_version": _MODEL_VERSION,
-                    "phase": _CONFIRMATORY_PHASE,
-                    "fold": str(fold.fold_index),
-                }
-            )
+            self._tracker.log_metrics(summary_metrics)
+            self._tracker.set_tags(tags)
             if training.artifact_path:
                 self._tracker.log_artifact(training.artifact_path)
             self._tracker.end_run()
@@ -385,8 +436,19 @@ class TrainTft:
                 run_id,
                 fold.fold_index,
             )
+            # Fechar o run mesmo na falha: sem isto ele fica ATIVO e o
+            # `start_run` do fold seguinte ergue "run já ativo" no backend real
+            # — a falha de um fold contaminaria todos os posteriores.
+            self._close_run_quietly(run_id)
             return ""
         return tracking_run_id
+
+    def _close_run_quietly(self, run_id: str) -> None:
+        """Encerra o run ativo ignorando falha — limpeza best-effort (C8)."""
+        try:
+            self._tracker.end_run()
+        except Exception:
+            logger.debug("could not close tracking run for run_id=%s", run_id)
 
     # -- leitura do dataset (C1/C6) ---------------------------------------------
 

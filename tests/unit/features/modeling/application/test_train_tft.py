@@ -136,6 +136,39 @@ class _CrossedGridTrainer(InMemoryTftTrainer):
         )
 
 
+class _OutOfRangeGridTrainer(InMemoryTftTrainer):
+    """Emite, no ÚLTIMO fold, um par cujo `t + h` cai fora do painel.
+
+    Serve para o contador de pulos do 4.3 ter algo a contar — sem isso
+    `rows_skipped` é sempre 0 e um acumulador quebrado passa verde.
+    """
+
+    def train_and_predict(self, **kwargs: Any) -> TftTrainingResult:  # noqa: ANN401
+        result = super().train_and_predict(**kwargs)
+        test_indices = kwargs["test_decision_indices"]
+        if not test_indices:
+            return result
+        last_decision = test_indices[-1]
+        longest_horizon = max(kwargs["horizons"])
+        if last_decision + longest_horizon <= len(kwargs["target"]) - 1:
+            return result  # este fold não toca a cauda; nada a forçar
+        grids = {decision: dict(by_h) for decision, by_h in result.grids.items()}
+        grids.setdefault(last_decision, {})[longest_horizon] = tuple(
+            0.01 * (position + 1) for position in range(len(kwargs["quantile_levels"]))
+        )
+        return TftTrainingResult(
+            grids=grids,
+            best_epoch=result.best_epoch,
+            best_val_loss=result.best_val_loss,
+            val_loss_by_epoch=result.val_loss_by_epoch,
+            fitted_decision_count=result.fitted_decision_count,
+            monitored_decision_count=result.monitored_decision_count,
+            normalizer_center=result.normalizer_center,
+            normalizer_scale=result.normalizer_scale,
+            artifact_path=result.artifact_path,
+        )
+
+
 class _CountingStore(FakeMedallionStore):
     """Conta leituras — prova que C2 ergue ANTES de qualquer I/O."""
 
@@ -168,7 +201,9 @@ _SESSIONS = _weekday_sessions(_N_SESSIONS)
 _FEATURE_NAMES = unknown_feature_names() + known_feature_names()
 
 
-def _dataset_rows(*, drop_column: str | None = None) -> list[dict[str, object]]:
+def _dataset_rows(
+    *, drop_column: str | None = None, none_feature_at: int | None = None
+) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for idx, day in enumerate(_SESSIONS):
         row: dict[str, object] = {
@@ -181,6 +216,8 @@ def _dataset_rows(*, drop_column: str | None = None) -> list[dict[str, object]]:
         }
         for position, name in enumerate(_FEATURE_NAMES):
             row[name] = float(idx) + (position + 1) / 100.0
+        if none_feature_at is not None and idx == none_feature_at:
+            row[_FEATURE_NAMES[0]] = None
         if drop_column is not None:
             row.pop(drop_column)
         rows.append(row)
@@ -217,31 +254,53 @@ def _command(**overrides: object) -> TrainTftCommand:
     return TrainTftCommand(**base)  # type: ignore[arg-type]
 
 
+def _folds() -> tuple[Any, ...]:
+    """Folds reais da geometria dos testes (os mesmos que o use case verá)."""
+    splitter = WalkForwardSplitter(TradingCalendar(TradingSessions(sessions=_SESSIONS)))
+    return splitter.split(
+        _SESSIONS,
+        _SCOPE,
+        n_folds=_N_FOLDS,
+        test_size=_TEST_SIZE,
+        val_size=_VAL_SIZE,
+        calib_size=_CALIB_SIZE,
+        embargo=_EMBARGO,
+        hasher=FakeHasher(),
+    )
+
+
+def _index_by_session() -> dict[str, int]:
+    return {day.isoformat(): idx for idx, day in enumerate(_SESSIONS)}
+
+
 def _build(
     tmp_path: Path,
     store: FakeMedallionStore | None = None,
     trainer: InMemoryTftTrainer | None = None,
-) -> tuple[TrainTft, FakeAnalyticsRepository, InMemoryTftTrainer]:
+    tracker: Any = None,  # noqa: ANN401 — qualquer dublê do port serve
+) -> tuple[TrainTft, FakeAnalyticsRepository, InMemoryTftTrainer, Any]:
+    """Constrói o use case JÁ com os dublês — nada é injetado por atributo."""
     repo = FakeAnalyticsRepository(clock=_FakeClock())
     resolved_trainer = trainer if trainer is not None else InMemoryTftTrainer()
+    resolved_tracker = tracker if tracker is not None else FakeExperimentTracker()
     use_case = TrainTft(
         store=store if store is not None else _seeded_store(),
         splitter=WalkForwardSplitter(TradingCalendar(TradingSessions(sessions=_SESSIONS))),
         trainer=resolved_trainer,
         persist_predictions=PersistPredictions(repository=repo),
         analytics_repository=repo,
-        tracker=FakeExperimentTracker(),
+        tracker=resolved_tracker,
         hasher=FakeHasher(),
         artifacts_root=tmp_path / "artifacts",
     )
-    return use_case, repo, resolved_trainer
+    return use_case, repo, resolved_trainer, resolved_tracker
 
 
 # -- happy path -------------------------------------------------------------------
 
 
 def test_one_summary_and_dim_run_row_per_fold(tmp_path: Path) -> None:
-    use_case, repo, _ = _build(tmp_path)
+    use_case, repo, _, _ = _build(tmp_path)
 
     result = use_case(_command())
 
@@ -259,7 +318,7 @@ def test_one_summary_and_dim_run_row_per_fold(tmp_path: Path) -> None:
 
 def test_artifact_dir_is_derived_from_artifacts_root_and_run_id(tmp_path: Path) -> None:
     """D9: a origem do `artifact_dir` é o use case, não o adapter."""
-    use_case, _, trainer = _build(tmp_path)
+    use_case, _, trainer, _ = _build(tmp_path)
 
     result = use_case(_command())
 
@@ -311,7 +370,7 @@ def test_excluded_columns_never_enter_either_typing_list(column: str) -> None:
 
 
 def test_port_receives_known_names_as_a_subset_of_feature_names(tmp_path: Path) -> None:
-    use_case, _, trainer = _build(tmp_path)
+    use_case, _, trainer, _ = _build(tmp_path)
 
     use_case(_command())
 
@@ -324,28 +383,42 @@ def test_port_receives_known_names_as_a_subset_of_feature_names(tmp_path: Path) 
 # -- A6: calib fora de treino e monitor (I4/I7) ------------------------------------
 
 
-def test_calib_indices_never_reach_the_port_as_decisions(tmp_path: Path) -> None:
-    use_case, _, trainer = _build(tmp_path)
-    splitter = WalkForwardSplitter(TradingCalendar(TradingSessions(sessions=_SESSIONS)))
-    folds = splitter.split(
-        _SESSIONS,
-        _SCOPE,
-        n_folds=_N_FOLDS,
-        test_size=_TEST_SIZE,
-        val_size=_VAL_SIZE,
-        calib_size=_CALIB_SIZE,
-        embargo=_EMBARGO,
-        hasher=FakeHasher(),
-    )
-    index_by_session = {day.isoformat(): idx for idx, day in enumerate(_SESSIONS)}
-    calib_indices = {index_by_session[day] for day in folds[-1].calib}
+def test_decision_ranges_match_each_fold_exactly(tmp_path: Path) -> None:
+    """Igualdade por fold, não apenas disjunção no último.
+
+    Assertar só "calib não intersecta" no ÚLTIMO fold deixa passar duas
+    mutações com forma de vazamento: monitorar sobre o próprio treino, e usar
+    `calib` como monitor apenas no fold 0. Por isso aqui se exige **igualdade**
+    das três faixas, em **todos** os folds.
+    """
+    use_case, _, trainer, _ = _build(tmp_path)
+    index_by_session = _index_by_session()
+    folds = _folds()
 
     use_case(_command())
 
-    train_indices = set(trainer.last_call["train_decision_indices"])
-    monitor_indices = set(trainer.last_call["early_stop_decision_indices"])
-    assert not (calib_indices & train_indices)
-    assert not (calib_indices & monitor_indices)
+    assert len(trainer.calls) == len(folds)
+    for fold, call in zip(folds, trainer.calls, strict=True):
+        expected_train = tuple(index_by_session[day] for day in fold.train)
+        expected_monitor = tuple(index_by_session[day] for day in fold.early_stop)
+        expected_test = tuple(index_by_session[day] for day in fold.test)
+        calib_indices = {index_by_session[day] for day in fold.calib}
+
+        assert call["train_decision_indices"] == expected_train
+        assert call["early_stop_decision_indices"] == expected_monitor
+        assert call["test_decision_indices"] == expected_test
+        assert not (calib_indices & set(expected_train))
+        assert not (calib_indices & set(expected_monitor))
+
+
+def test_monitored_decision_count_is_reported_per_fold(tmp_path: Path) -> None:
+    """I17 — a contagem efetiva do monitor chega ao summary, não fica no port."""
+    use_case, _, _, _ = _build(tmp_path)
+
+    result = use_case(_command())
+
+    assert all(summary.monitored_decision_count == _VAL_SIZE for summary in result.runs)
+    assert all(summary.fitted_decision_count > 0 for summary in result.runs)
 
 
 # -- I16: nada fabricado, nada pulado ----------------------------------------------
@@ -355,7 +428,7 @@ def test_rows_skipped_is_zero_because_the_port_emits_only_valid_pairs(
     tmp_path: Path,
 ) -> None:
     """A condição de emissão do port e a de pulo do 4.3 são a MESMA desigualdade."""
-    use_case, _, _ = _build(tmp_path)
+    use_case, _, _, _ = _build(tmp_path)
 
     result = use_case(_command())
 
@@ -363,9 +436,23 @@ def test_rows_skipped_is_zero_because_the_port_emits_only_valid_pairs(
     assert all(summary.rows_written > 0 for summary in result.runs)
 
 
+def test_out_of_range_pair_from_the_port_is_counted_as_skipped(tmp_path: Path) -> None:
+    """O contador de pulos é REAL, não uma constante zero.
+
+    Sem este caso, `rows_skipped` sempre valeria 0 e um acumulador quebrado
+    passaria despercebido — o zero do teste acima não discrimina "o port só
+    emitiu pares válidos" de "o contador está morto".
+    """
+    use_case, _, _, _ = _build(tmp_path, trainer=_OutOfRangeGridTrainer())
+
+    result = use_case(_command())
+
+    assert sum(summary.rows_skipped for summary in result.runs) == len(_LEVELS)
+
+
 def test_last_fold_emits_fewer_pairs_for_the_longer_horizon(tmp_path: Path) -> None:
     """Cauda do painel: h=2 perde uma decisão que h=1 mantém (I16)."""
-    use_case, repo, _ = _build(tmp_path)
+    use_case, repo, _, _ = _build(tmp_path)
 
     result = use_case(_command())
 
@@ -389,7 +476,7 @@ def test_last_fold_emits_fewer_pairs_for_the_longer_horizon(tmp_path: Path) -> N
 
 
 def test_crossed_grid_is_persisted_sorted(tmp_path: Path) -> None:
-    use_case, repo, _ = _build(tmp_path, trainer=_CrossedGridTrainer())
+    use_case, repo, _, _ = _build(tmp_path, trainer=_CrossedGridTrainer())
 
     use_case(_command())
 
@@ -417,7 +504,7 @@ def test_empty_dataset_raises(tmp_path: Path) -> None:
     store.seed_read_only(
         layer="processed", table="dataset_tft", asset=_SCOPE.asset_id, rows=[]
     )
-    use_case, _, _ = _build(tmp_path, store=store)
+    use_case, _, _, _ = _build(tmp_path, store=store)
 
     with pytest.raises(ValueError, match="C1"):
         use_case(_command())
@@ -425,7 +512,7 @@ def test_empty_dataset_raises(tmp_path: Path) -> None:
 
 def test_missing_expected_column_raises_naming_it(tmp_path: Path) -> None:
     dropped = unknown_feature_names()[0]
-    use_case, _, _ = _build(tmp_path, store=_seeded_store(_dataset_rows(drop_column=dropped)))
+    use_case, _, _, _ = _build(tmp_path, store=_seeded_store(_dataset_rows(drop_column=dropped)))
 
     with pytest.raises(ValueError, match=dropped):
         use_case(_command())
@@ -448,7 +535,7 @@ def test_invalid_command_raises_before_any_io(
 ) -> None:
     """C2 — uma cláusula por caso, e nenhuma leitura acontece."""
     store = _seeded_store()
-    use_case, _, _ = _build(tmp_path, store=store)
+    use_case, _, _, _ = _build(tmp_path, store=store)
 
     with pytest.raises(ValueError, match="C2"):
         use_case(_command(**overrides))
@@ -457,6 +544,87 @@ def test_invalid_command_raises_before_any_io(
 
 
 # -- I11 ---------------------------------------------------------------------------
+
+
+def test_persisted_rows_pin_the_schema_columns(tmp_path: Path) -> None:
+    """`split`, `schema_version` e identidade do cohort não podem derivar."""
+    use_case, repo, _, _ = _build(tmp_path)
+
+    use_case(_command())
+
+    rows = repo.read(layer="silver", table="fact_oos_predictions")
+    assert rows
+    for row in rows:
+        assert row["split"] == "test"
+        assert row["schema_version"] == 1
+        assert row["model_version"] == _EXPECTED_MODEL_VERSION
+        assert row["asset"] == _SCOPE.asset_id
+        assert row["feature_set_name"] == _SCOPE.feature_set_name
+
+
+def test_typing_is_part_of_the_run_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """I10 — mover uma spec de `unknown` para `known` MUDA o run_id.
+
+    O conjunto de colunas é o mesmo nos dois casos; o que muda é a tipagem. Se
+    `known_feature_names` saísse do payload, os dois runs colidiriam e a
+    auditabilidade da tipagem seria só uma frase no docstring.
+    """
+    columns = _FEATURE_NAMES[:3]
+    all_unknown = tuple(_StubSpec(name=name, tft_typing="unknown") for name in columns)
+    one_known = (
+        _StubSpec(name=columns[0], tft_typing="known"),
+        *(_StubSpec(name=name, tft_typing="unknown") for name in columns[1:]),
+    )
+
+    def _run_with(specs: tuple[_StubSpec, ...], directory: Path) -> str:
+        monkeypatch.setattr(module, "list_feature_specs", lambda **_: specs)
+        use_case, _, _, _ = _build(directory)
+        return use_case(_command()).runs[0].run_id
+
+    first = _run_with(all_unknown, tmp_path / "a")
+    second = _run_with(one_known, tmp_path / "b")
+
+    assert first != second
+
+
+def test_emission_outside_the_requested_range_raises(tmp_path: Path) -> None:
+    """D5 — o use case não persiste decisão que ele não pediu."""
+
+    class _RogueTrainer(InMemoryTftTrainer):
+        def train_and_predict(self, **kwargs: Any) -> TftTrainingResult:  # noqa: ANN401
+            result = super().train_and_predict(**kwargs)
+            grids = dict(result.grids)
+            grids[0] = {1: tuple(0.0 for _ in kwargs["quantile_levels"])}
+            return TftTrainingResult(
+                grids=grids,
+                best_epoch=result.best_epoch,
+                best_val_loss=result.best_val_loss,
+                val_loss_by_epoch=result.val_loss_by_epoch,
+                fitted_decision_count=result.fitted_decision_count,
+                monitored_decision_count=result.monitored_decision_count,
+                normalizer_center=result.normalizer_center,
+                normalizer_scale=result.normalizer_scale,
+                artifact_path=result.artifact_path,
+            )
+
+    use_case, _, _, _ = _build(tmp_path, trainer=_RogueTrainer())
+
+    with pytest.raises(ValueError, match="outside the requested test range"):
+        use_case(_command())
+
+
+def test_none_feature_reaches_the_port_as_nan(tmp_path: Path) -> None:
+    """Política de ausência: `None` no dataset vira NaN na fronteira do port."""
+    use_case, _, trainer, _ = _build(
+        tmp_path, store=_seeded_store(_dataset_rows(none_feature_at=0))
+    )
+
+    use_case(_command())
+
+    value = trainer.calls[0]["rows"][0][0]
+    assert value != value  # NaN != NaN  # noqa: PLR0124
 
 
 def test_zero_removal_guard_raises_when_dedup_removed_entries() -> None:
