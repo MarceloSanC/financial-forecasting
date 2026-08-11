@@ -44,6 +44,7 @@ rerun idêntico); C3/C4/C5/C10 erguem no trainer (port).
 
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from itertools import pairwise
@@ -99,6 +100,8 @@ if TYPE_CHECKING:
         Row,
     )
 
+logger = logging.getLogger(__name__)
+
 _DATASET_LAYER = "processed"
 _DATASET_TABLE = "dataset_tft"
 _SILVER_LAYER = "silver"
@@ -112,6 +115,10 @@ _ARTIFACT_SUBDIR = "tft"
 # mudaria `feature_set_hash` e o conjunto que alimenta o dataset (3.5) e o GBM
 # (5.3). Piso declarado; o tratamento geral é a issue #58.
 _CALENDAR_KNOWN_FEATURES = ("day_of_week", "month")
+# Rótulo de fase do run (I12). Distingue este fluxo da varredura exploratória,
+# que marca `phase='exploratory'` (ADR 5.4.0005) — a separação estrutural é o
+# grafo de dependências do `RunTftSweep`; o rótulo é a segunda camada.
+_CONFIRMATORY_PHASE = "confirmatory_ready"
 _KNOWN_TYPING = "known"
 _UNKNOWN_TYPING = "unknown"
 
@@ -311,6 +318,10 @@ class TrainTft:
                 )  # C7 propaga no rerun idêntico
                 rows_written += result.rows_written
                 rows_skipped += result.rows_skipped
+            # I12/C8 — rastrear DEPOIS de persistir. A ordem é o que torna a
+            # absorção da falha segura: ela nunca pode esconder uma persistência
+            # incompleta, porque nesse ponto a persistência já terminou.
+            tracking_run_id = self._track_fold(command, fold, run_id, training)
             summaries.append(
                 TftRunSummary(
                     run_id=run_id,
@@ -323,10 +334,59 @@ class TrainTft:
                     fitted_decision_count=training.fitted_decision_count,
                     monitored_decision_count=training.monitored_decision_count,
                     artifact_path=training.artifact_path,
-                    tracking_run_id="",
+                    tracking_run_id=tracking_run_id,
                 )
             )
         return TrainTftResult(runs=tuple(summaries))
+
+    # -- rastreamento do run (I12/C8) -------------------------------------------
+
+    def _track_fold(
+        self,
+        command: TrainTftCommand,
+        fold: FoldSplit,
+        run_id: str,
+        training: TftTrainingResult,
+    ) -> str:
+        """Registra o run do fold e devolve o id do tracker (`""` se falhou).
+
+        C8 — a falha é **absorvida**, não propagada: as predições do fold já
+        estão persistidas, e propagar destruiria o resultado de um trabalho
+        concluído. Tracking é observabilidade; a fonte da verdade é
+        `fact_oos_predictions`.
+        """
+        try:
+            tracking_run_id = self._tracker.start_run(run_name=f"{_MODEL_VERSION}-{run_id}")
+            self._tracker.log_params(_tracking_params(command, fold, run_id))
+            for epoch, loss in enumerate(training.val_loss_by_epoch):
+                self._tracker.log_metrics({"val_loss": loss}, step=epoch)
+            self._tracker.log_metrics(
+                {
+                    "best_val_loss": training.best_val_loss,
+                    "best_epoch": float(training.best_epoch),
+                    "fitted_decisions": float(training.fitted_decision_count),
+                    "monitored_decisions": float(training.monitored_decision_count),
+                }
+            )
+            self._tracker.set_tags(
+                {
+                    "model_version": _MODEL_VERSION,
+                    "phase": _CONFIRMATORY_PHASE,
+                    "fold": str(fold.fold_index),
+                }
+            )
+            if training.artifact_path:
+                self._tracker.log_artifact(training.artifact_path)
+            self._tracker.end_run()
+        except Exception:
+            logger.exception(
+                "experiment tracking failed for run_id=%s (fold %s) — predictions "
+                "were already persisted and remain valid (C8)",
+                run_id,
+                fold.fold_index,
+            )
+            return ""
+        return tracking_run_id
 
     # -- leitura do dataset (C1/C6) ---------------------------------------------
 
@@ -473,6 +533,28 @@ def _params_payload(params: TftTrainingParams) -> dict[str, object]:
         "patience": params.patience,
         "batch_size": params.batch_size,
         "model_version": _MODEL_VERSION,
+    }
+
+
+def _tracking_params(
+    command: TrainTftCommand, fold: FoldSplit, run_id: str
+) -> dict[str, object]:
+    """Params logados no tracker (I12): identidade + geometria do fold."""
+    return {
+        "run_id": run_id,
+        "asset_id": command.scope.asset_id,
+        "feature_set_name": command.scope.feature_set_name,
+        "cohort_id": command.scope.cohort_id,
+        "fold_index": fold.fold_index,
+        "split_fingerprint": fold.fingerprint.value,
+        "horizons": list(command.horizons),
+        "quantile_levels": list(command.quantile_levels),
+        "n_folds": command.n_folds,
+        "test_size": command.test_size,
+        "val_size": command.val_size,
+        "calib_size": command.calib_size,
+        "embargo": command.embargo,
+        **_params_payload(command.params),
     }
 
 
