@@ -12,7 +12,11 @@ quadro** passado a cada dataset:
 |----------|-----------------------------------------------|----------------|
 | treino   | `rows[0 : max(train) + max_horizon + 1]`       | `min(train)+1` |
 | monitor  | `rows[0 : max(early_stop) + max_horizon + 1]`  | `min(es)+1`    |
-| predição | painel inteiro                                 | `min(test)+1`  |
+| predição | `rows[0 : max(test) + max_horizon + 1]`        | `min(test)+1`  |
+
+O recorte da predição não é simetria estética: sem ele o dataset geraria
+decisões DEPOIS do bloco de teste, e todo fold que não é o último tem painel
+adiante dele — o use case reprovaria com `_assert_emission_within_request`.
 
 O quadro do monitor terminar antes de `calib` é o que torna a invariância de
 A4(a) **estrutural**, e não uma esperança: as sessões de `calib`/`test` sequer
@@ -47,6 +51,7 @@ from typing import TYPE_CHECKING, Any
 
 import lightning.pytorch as pl
 import pandas as pd
+import torch
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from pytorch_forecasting import QuantileLoss, TemporalFusionTransformer, TimeSeriesDataSet
 from pytorch_forecasting.data.encoders import GroupNormalizer
@@ -297,6 +302,7 @@ class PfTftTrainer:
             self._emit(
                 model=fitted.model,
                 prediction_dataset=datasets.prediction,
+                requested_decisions=frozenset(test_decision_indices),
                 horizons=horizons,
                 quantile_levels=quantile_levels,
                 batch_size=params.batch_size,
@@ -317,10 +323,11 @@ class PfTftTrainer:
         )
 
     @staticmethod
-    def _emit(
+    def _emit(  # noqa: PLR0913 — parâmetros coesos da regra de emissão
         *,
         model: Any,  # noqa: ANN401 — modelo da lib não cruza a fronteira do port
         prediction_dataset: Any,  # noqa: ANN401
+        requested_decisions: frozenset[int],
         horizons: Sequence[int],
         quantile_levels: Sequence[float],
         batch_size: int,
@@ -350,6 +357,18 @@ class PfTftTrainer:
             return_decoder_lengths=True,
             batch_size=batch_size,
             num_workers=0,
+            # `predict` constrói um `Trainer` PRÓPRIO com os defaults da lib —
+            # `logger=True` escreve `lightning_logs/` no diretório de trabalho a
+            # cada chamada, e `accelerator="auto"` poderia predizer em GPU
+            # enquanto o treino foi fixado em CPU (o que enfraqueceria I9).
+            # Fixar aqui é o único ponto onde isso é controlável.
+            trainer_kwargs={
+                "logger": False,
+                "accelerator": "cpu",
+                "devices": 1,
+                "enable_progress_bar": False,
+                "enable_model_summary": False,
+            },
         )
         decision_of_sample = [
             int(time_idx) - 1 for time_idx in prediction.index[_TIME_IDX_COLUMN]
@@ -358,6 +377,13 @@ class PfTftTrainer:
 
         best_sample_by_decision: dict[int, int] = {}
         for sample, decision in enumerate(decision_of_sample):
+            # Filtro EXPLÍCITO pelas decisões pedidas. Recortar o quadro não
+            # basta: com decodificador mínimo de 1 passo, a decisão seguinte à
+            # última pedida ainda cabe no quadro (usa uma linha só) e a
+            # biblioteca a gera. O contrato do port é "para cada decisão de
+            # teste", e o use case reprovaria o excedente (D5).
+            if decision not in requested_decisions:
+                continue
             current = best_sample_by_decision.get(decision)
             if current is None or lengths[sample] > lengths[current]:
                 best_sample_by_decision[decision] = sample
@@ -476,7 +502,11 @@ class PfTftTrainer:
         prediction = (
             TimeSeriesDataSet.from_dataset(
                 training,
-                frame,
+                # TETO também aqui: a lib só expressa piso, então sem recortar o
+                # quadro o dataset geraria decisões DEPOIS do bloco de teste —
+                # e todo fold que não é o último tem painel adiante dele. O
+                # último par legítimo precisa do índice `max(test) + max_horizon`.
+                frame.iloc[: max(test_decision_indices) + max_horizon + 1],
                 min_prediction_idx=min(test_decision_indices) + 1,
                 # Cauda variável (D2/I16): sem isto o default herdado
                 # (`min == max`) descartaria as decisões da ponta do painel.
@@ -543,6 +573,11 @@ class PfTftTrainer:
                 dirpath=artifact_dir, monitor="val_loss", mode="min", save_top_k=1
             )
             callbacks.append(checkpoint)
+        # `Trainer(deterministic=True)` liga uma flag GLOBAL de processo do
+        # torch e nunca a desliga — ela vazaria para o resto da suite (o adapter
+        # FinBERT, por exemplo, ergue sob algoritmos determinísticos). I9 exige
+        # restaurar; daí o `finally` abaixo.
+        deterministic_before = torch.are_deterministic_algorithms_enabled()
         trainer = pl.Trainer(
             max_epochs=params.max_epochs,
             accelerator="cpu",
@@ -558,7 +593,10 @@ class PfTftTrainer:
             logger=False,
             callbacks=callbacks,
         )
-        trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+        try:
+            trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+        finally:
+            torch.use_deterministic_algorithms(deterministic_before)
 
         val_loss_by_epoch = tuple(history.losses)
         best_epoch = _select_best_epoch(val_loss_by_epoch)

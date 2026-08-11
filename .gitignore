@@ -105,3 +105,7 @@ mlruns/
 *.log
 *.tmp
 tree.txt
+
+# Saída do CSVLogger que o `Trainer` interno do `predict` cria (Stage 5.4).
+# O adapter passa `logger=False`, mas qualquer uso direto da lib recria isto.
+lightning_logs/

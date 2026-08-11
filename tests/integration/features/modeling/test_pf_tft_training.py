@@ -172,3 +172,59 @@ class TestC10:
 
     def test_non_finite_entries_are_skipped(self) -> None:
         assert _select_best_epoch([math.nan, 0.3, 0.7]) == 1
+
+
+class TestRestoreIsObservable:
+    """A5 — a restauração só é PROVÁVEL quando o argmin é interior.
+
+    Com `max_epochs=2` e perda decrescente, a melhor época É a última: `restored`
+    e o modelo em memória têm os mesmos pesos e a comparação seria consigo
+    mesma. Esta configuração (taxa maior, paciência 1) produz argmin interior de
+    forma determinística — é o que dá dente à prova de A5.
+    """
+
+    _INTERIOR = TftTrainingParams(
+        seed=7,
+        max_encoder_length=_ENCODER_LENGTH,
+        hidden_size=4,
+        attention_head_size=1,
+        hidden_continuous_size=2,
+        max_epochs=6,
+        patience=1,
+        batch_size=8,
+        learning_rate=0.5,
+    )
+
+    def _fit_interior(self, tmp_path: Path) -> object:
+        trainer = PfTftTrainer()
+        rows, target = _panel()
+        datasets = trainer.build_datasets(
+            params=self._INTERIOR,
+            feature_names=_FEATURES,
+            known_feature_names=_KNOWN,
+            rows=rows,
+            target=target,
+            train_decision_indices=_TRAIN,
+            early_stop_decision_indices=_EARLY_STOP,
+            test_decision_indices=_TEST,
+            max_horizon=_MAX_HORIZON,
+            horizons=_HORIZONS,
+        )
+        return trainer.fit(
+            datasets=datasets,
+            params=self._INTERIOR,
+            quantile_levels=_LEVELS,
+            artifact_dir=str(tmp_path / "ckpt"),
+            write_checkpoint=True,
+        )
+
+    def test_best_epoch_is_interior(self, tmp_path: Path) -> None:
+        result = self._fit_interior(tmp_path)
+
+        assert result.best_epoch < len(result.val_loss_by_epoch) - 1
+
+    def test_artifact_filename_encodes_the_best_epoch(self, tmp_path: Path) -> None:
+        """A5 exige que o artefato CORRESPONDA à época `best_epoch`."""
+        result = self._fit_interior(tmp_path)
+
+        assert Path(result.artifact_path).name.startswith(f"epoch={result.best_epoch}")

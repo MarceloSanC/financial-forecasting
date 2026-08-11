@@ -223,6 +223,7 @@ class TestBestCheckpointIsUsed:
         replayed = PfTftTrainer._emit(
             model=reloaded,
             prediction_dataset=datasets.prediction,
+            requested_decisions=frozenset(_TEST),
             horizons=_HORIZONS,
             quantile_levels=_LEVELS,
             batch_size=_PARAMS.batch_size,
@@ -289,3 +290,109 @@ class TestC5:
 
         shorter, _ = _HORIZONS
         assert set(result.grids[_LAST_H1_ONLY_DECISION]) == {shorter}
+
+
+class TestPredictionRangeCeiling:
+    """O quadro de predição tem TETO, não só piso.
+
+    A biblioteca só expressa piso de decisão. Sem recortar o quadro, o dataset
+    de predição geraria decisões DEPOIS do bloco de teste — e todo fold que não
+    é o último tem painel adiante dele (`test_start = total - (n_folds -
+    fold_index) * test_size`). A fixture canônica esconde o defeito porque o
+    painel termina exatamente no fim do teste; este caso usa um painel mais
+    longo, que é a situação de qualquer fold não final.
+    """
+
+    def test_no_decision_beyond_the_requested_test_block(self, tmp_path: Path) -> None:
+        longer_panel = 64
+        rows = [
+            [0.01 * index, 50.0 + index, float(index % 5), float(index % 12 + 1)]
+            for index in range(longer_panel)
+        ]
+        target = [0.001 * index for index in range(longer_panel)]
+
+        result = PfTftTrainer().train_and_predict(
+            params=_PARAMS,
+            feature_names=_FEATURES,
+            known_feature_names=_KNOWN,
+            rows=rows,
+            target=target,
+            train_decision_indices=_TRAIN,
+            early_stop_decision_indices=_EARLY_STOP,
+            test_decision_indices=_TEST,
+            max_horizon=_MAX_HORIZON,
+            horizons=_HORIZONS,
+            quantile_levels=_LEVELS,
+            artifact_dir=str(tmp_path / "ckpt"),
+        )
+
+        assert set(result.grids) <= set(_TEST)
+        # Com painel adiante, a cauda deixa de recortar: TODAS as decisões
+        # pedidas emitem os dois horizontes.
+        assert set(result.grids) == set(_TEST)
+        for by_horizon in result.grids.values():
+            assert set(by_horizon) == set(_HORIZONS)
+
+
+class TestRestoredWeightsAreUsed:
+    """A5 — com argmin INTERIOR, restaurar deixa de ser no-op e vira observável.
+
+    Com `max_epochs=2` e perda decrescente, a melhor época é a última: o modelo
+    em memória e o recarregado são o mesmo, e a comparação seria consigo mesma.
+    """
+
+    _INTERIOR = TftTrainingParams(
+        seed=7,
+        max_encoder_length=_ENCODER_LENGTH,
+        hidden_size=4,
+        attention_head_size=1,
+        hidden_continuous_size=2,
+        max_epochs=6,
+        patience=1,
+        batch_size=8,
+        learning_rate=0.5,
+    )
+
+    def test_grids_come_from_the_best_epoch_not_the_last(self, tmp_path: Path) -> None:
+        from pytorch_forecasting import TemporalFusionTransformer  # noqa: PLC0415
+
+        trainer = PfTftTrainer()
+        rows, target = _panel()
+        result = trainer.train_and_predict(
+            params=self._INTERIOR,
+            feature_names=_FEATURES,
+            known_feature_names=_KNOWN,
+            rows=rows,
+            target=target,
+            train_decision_indices=_TRAIN,
+            early_stop_decision_indices=_EARLY_STOP,
+            test_decision_indices=_TEST,
+            max_horizon=_MAX_HORIZON,
+            horizons=_HORIZONS,
+            quantile_levels=_LEVELS,
+            artifact_dir=str(tmp_path / "ckpt"),
+        )
+        assert result.best_epoch < len(result.val_loss_by_epoch) - 1  # argmin interior
+
+        datasets = trainer.build_datasets(
+            params=self._INTERIOR,
+            feature_names=_FEATURES,
+            known_feature_names=_KNOWN,
+            rows=rows,
+            target=target,
+            train_decision_indices=_TRAIN,
+            early_stop_decision_indices=_EARLY_STOP,
+            test_decision_indices=_TEST,
+            max_horizon=_MAX_HORIZON,
+            horizons=_HORIZONS,
+        )
+        from_checkpoint = PfTftTrainer._emit(
+            model=TemporalFusionTransformer.load_from_checkpoint(result.artifact_path),
+            prediction_dataset=datasets.prediction,
+            requested_decisions=frozenset(_TEST),
+            horizons=_HORIZONS,
+            quantile_levels=_LEVELS,
+            batch_size=self._INTERIOR.batch_size,
+        )
+
+        assert from_checkpoint == result.grids

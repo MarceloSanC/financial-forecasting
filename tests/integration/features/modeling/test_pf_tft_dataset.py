@@ -199,3 +199,46 @@ class TestStructuralValidation:
     def test_empty_monitor_raises(self) -> None:
         with pytest.raises(ValueError, match="early_stop_decision_indices"):
             _build(early_stop_decision_indices=())
+
+
+class TestNormalizerChoiceIsPinned:
+    """ADR 5.4.0006 — o TIPO do normalizador é decisão, não acaso.
+
+    As asserções numéricas de A4(c) não distinguem `"auto"` do explícito na
+    geometria dos testes (`L=12 < 20`): a divergência só aparece em produção
+    (`L=60`), que nenhum teste constrói. Esta asserção é independente da
+    geometria.
+    """
+
+    def test_target_normalizer_is_an_explicit_single_group_normalizer(self) -> None:
+        from pytorch_forecasting.data.encoders import GroupNormalizer  # noqa: PLC0415
+
+        datasets = _build()
+
+        assert isinstance(datasets.training.target_normalizer, GroupNormalizer)
+        assert list(datasets.training.target_normalizer.groups) == []
+
+
+class TestRealLegErrorParity:
+    """C3/C4 que só o fake exercitava — a suite de contrato exige paridade."""
+
+    def test_monitor_without_full_decoder_raises(self) -> None:
+        with pytest.raises(ValueError, match="monitor"):
+            _build(early_stop_decision_indices=(_PANEL - 2, _PANEL - 1))
+
+    def test_target_length_mismatch_raises(self) -> None:
+        _, target = _panel()
+        with pytest.raises(ValueError, match="len\(target\)"):
+            _build(target=target[:-1])
+
+    def test_non_positive_max_horizon_raises(self) -> None:
+        with pytest.raises(ValueError, match="max_horizon"):
+            _build(max_horizon=0, horizons=())
+
+    def test_empty_horizons_raises(self) -> None:
+        with pytest.raises(ValueError, match="horizons"):
+            _build(horizons=())
+
+    def test_index_outside_panel_raises(self) -> None:
+        with pytest.raises(ValueError, match="fora do painel"):
+            _build(test_decision_indices=(_PANEL, _PANEL + 1))
