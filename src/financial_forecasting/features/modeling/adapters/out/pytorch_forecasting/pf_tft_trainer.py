@@ -56,6 +56,7 @@ if TYPE_CHECKING:
 
     from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
         TftTrainingParams,
+        TftTrainingResult,
     )
 
 _TIME_IDX_COLUMN = "time_idx"
@@ -216,6 +217,21 @@ def _select_best_epoch(history: Sequence[float]) -> int:
     return min(finite, key=lambda pair: (pair[1], pair[0]))[0]
 
 
+def _assert_finite(values: Sequence[float], *, decision: int, horizon: int) -> None:
+    """C5 — nada não finito sai silenciosamente.
+
+    Avaliado **depois** do recorte por comprimento de decodificador: as posições
+    de padding da cauda são não finitas por construção, então checar antes faria
+    toda cauda legítima erguer.
+    """
+    if not all(math.isfinite(value) for value in values):
+        msg = (
+            f"grade não finita emitida para decisão {decision}, horizonte "
+            f"{horizon}: {values!r} (C5)"
+        )
+        raise ValueError(msg)
+
+
 def _require_checkpoint(path: str | None) -> str:
     """C10 — caminho vazio significa que nada foi salvo; falhar aqui é o certo.
 
@@ -233,6 +249,140 @@ def _require_checkpoint(path: str | None) -> str:
 
 class PfTftTrainer:
     """Treinador do TFT quantílico sobre `pytorch-forecasting` (satisfaz o port)."""
+
+    def train_and_predict(  # noqa: PLR0913 — espelha a assinatura do port
+        self,
+        *,
+        params: TftTrainingParams,
+        feature_names: Sequence[str],
+        known_feature_names: Sequence[str],
+        rows: Sequence[Sequence[float]],
+        target: Sequence[float],
+        train_decision_indices: Sequence[int],
+        early_stop_decision_indices: Sequence[int],
+        test_decision_indices: Sequence[int],
+        max_horizon: int,
+        horizons: Sequence[int],
+        quantile_levels: Sequence[float],
+        artifact_dir: str,
+    ) -> TftTrainingResult:
+        """Implementa o contrato do port `TftTrainer` (concept 5.4 §4)."""
+        from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (  # noqa: PLC0415
+            TftTrainingResult,
+        )
+
+        datasets = self.build_datasets(
+            params=params,
+            feature_names=feature_names,
+            known_feature_names=known_feature_names,
+            rows=rows,
+            target=target,
+            train_decision_indices=train_decision_indices,
+            early_stop_decision_indices=early_stop_decision_indices,
+            test_decision_indices=test_decision_indices,
+            max_horizon=max_horizon,
+            horizons=horizons,
+        )
+        # Fit-only (varredura): sem decisões de teste não há checkpoint a
+        # escrever nem grade a emitir (ADR 5.4.0005).
+        write_checkpoint = bool(test_decision_indices)
+        fitted = self.fit(
+            datasets=datasets,
+            params=params,
+            quantile_levels=quantile_levels,
+            artifact_dir=artifact_dir,
+            write_checkpoint=write_checkpoint,
+        )
+        grids = (
+            self._emit(
+                model=fitted.model,
+                prediction_dataset=datasets.prediction,
+                horizons=horizons,
+                quantile_levels=quantile_levels,
+                batch_size=params.batch_size,
+            )
+            if test_decision_indices
+            else {}
+        )
+        return TftTrainingResult(
+            grids=grids,
+            best_epoch=fitted.best_epoch,
+            best_val_loss=fitted.best_val_loss,
+            val_loss_by_epoch=fitted.val_loss_by_epoch,
+            fitted_decision_count=datasets.fitted_decision_count,
+            monitored_decision_count=datasets.monitored_decision_count,
+            normalizer_center=datasets.normalizer_center,
+            normalizer_scale=datasets.normalizer_scale,
+            artifact_path=fitted.artifact_path,
+        )
+
+    @staticmethod
+    def _emit(
+        *,
+        model: Any,  # noqa: ANN401 — modelo da lib não cruza a fronteira do port
+        prediction_dataset: Any,  # noqa: ANN401
+        horizons: Sequence[int],
+        quantile_levels: Sequence[float],
+        batch_size: int,
+    ) -> dict[int, dict[int, tuple[float, ...]]]:
+        """Grade crua por (decisão x horizonte), recortada pelo decodificador real.
+
+        Três detalhes que não são opcionais:
+
+        1. **A chave de decisão vem do índice devolvido pela predição**, nunca de
+           uma contagem paralela mantida aqui. O `time_idx` do índice é o
+           PRIMEIRO passo do decodificador, logo a decisão é `time_idx - 1`. É
+           essa amarração que impede o off-by-one da classe registrada no ADR
+           4.3.0001 como o bug mais caro do repositório antigo.
+        2. **A saída é retangular e preenchida na cauda.** Sem recortar por
+           `decoder_lengths`, o padding viraria predição fabricada (I15).
+        3. **Uma decisão pode aparecer em MAIS DE UMA amostra** quando o
+           comprimento mínimo do decodificador é 1: a biblioteca gera também as
+           janelas curtas. Fica a de decodificador MAIS LONGO — é a geometria
+           com que o modelo foi treinado (treino e monitor usam sempre
+           `max_horizon` passos), então usar a curta quando a longa existe
+           avaliaria o modelo numa forma de entrada que ele nunca viu.
+        """
+        prediction = model.predict(
+            prediction_dataset,
+            mode="quantiles",
+            return_index=True,
+            return_decoder_lengths=True,
+            batch_size=batch_size,
+            num_workers=0,
+        )
+        decision_of_sample = [
+            int(time_idx) - 1 for time_idx in prediction.index[_TIME_IDX_COLUMN]
+        ]
+        lengths = [int(length) for length in prediction.decoder_lengths]
+
+        best_sample_by_decision: dict[int, int] = {}
+        for sample, decision in enumerate(decision_of_sample):
+            current = best_sample_by_decision.get(decision)
+            if current is None or lengths[sample] > lengths[current]:
+                best_sample_by_decision[decision] = sample
+
+        grids: dict[int, dict[int, tuple[float, ...]]] = {}
+        for decision, sample in sorted(best_sample_by_decision.items()):
+            by_horizon: dict[int, tuple[float, ...]] = {}
+            for horizon in horizons:
+                if horizon > lengths[sample]:
+                    continue  # passo além do decodificador real: não existe
+                values = tuple(
+                    float(value) for value in prediction.output[sample, horizon - 1, :]
+                )
+                _assert_finite(values, decision=decision, horizon=horizon)
+                if len(values) != len(quantile_levels):
+                    msg = (
+                        f"grade emitida com {len(values)} valores para "
+                        f"{len(quantile_levels)} níveis (decisão {decision}, "
+                        f"horizonte {horizon})"
+                    )
+                    raise ValueError(msg)
+                by_horizon[horizon] = values
+            if by_horizon:
+                grids[decision] = by_horizon
+        return grids
 
     def build_datasets(  # noqa: PLR0913 — espelha a fronteira do port
         self,
