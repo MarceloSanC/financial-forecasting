@@ -1019,4 +1019,28 @@ cauda do painel. Também documentei que o determinismo do fake é ausência de
 estado, não semeadura — ele não lê `params.seed`, então essa cláusula de I9 é da
 perna real.
 
+### 2026-08-09 — [deviation] cláusula de I8 migrou da Task 08 para a 09 — Claude (Opus 5)
+**Contexto:** o plano punha "exatamente um ajuste por fold" (cláusula de I8 em
+A2) como critério da Task 08.
+**Razão:** a Task 08 entrega o seam `fit(...)`; quem pode ser contado é
+`train_and_predict`, que só existe na Task 09. Contar ajustes dentro da própria
+`fit` seria tautológico. A asserção foi para
+`test_pf_tft_prediction.py::TestSingleFitPerCall`, com `monkeypatch` contando
+chamadas de `fit`. Nenhuma cobertura perdida — só deslocada uma Task adiante.
+
+### 2026-08-09 — [decision] decodificador variável gera mais de uma amostra por decisão — Claude (Opus 5)
+**Contexto:** com `min_prediction_length=1` no dataset de predição (necessário
+para a regra de cauda de I16/D2), a `pytorch-forecasting` gera **também** as
+janelas curtas: na geometria canônica a decisão 49 aparece com decodificador de
+comprimento 2 **e** de comprimento 1. O plano não previa a duplicata.
+**Razão:** o adapter mantém, por decisão, a amostra de decodificador **mais
+longo**. Treino e monitor usam sempre `max_horizon` passos, então a janela longa
+é a geometria com que o modelo foi treinado; ficar com a curta avaliaria o
+candidato numa forma de entrada que ele nunca viu — e faria `h=2` desaparecer da
+decisão 49, quebrando a contagem de A13. Reversível-barata e ancorada em D2
+(a perda do paper é sobre o decodificador completo), então decidida sem
+pergunta, com o teste
+`TestAlignment::test_longest_decoder_wins_when_a_decision_repeats` pinando a
+escolha.
+
 <!-- END: post-execution -->
