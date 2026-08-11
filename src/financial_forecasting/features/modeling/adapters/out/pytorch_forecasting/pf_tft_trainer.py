@@ -41,8 +41,15 @@ a população contra a qual o normalizador é verificado (A4c).
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+import lightning.pytorch as pl
+import pandas as pd
+from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
+from pytorch_forecasting import QuantileLoss, TemporalFusionTransformer, TimeSeriesDataSet
+from pytorch_forecasting.data.encoders import GroupNormalizer
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -156,6 +163,74 @@ def _eligible(
     )
 
 
+class _LossHistory(Callback):
+    """Callback que acumula a perda de validação POR ÉPOCA (D11).
+
+    O Lightning expõe só o ÚLTIMO valor das métricas; o histórico é contrato do
+    port (`val_loss_by_epoch`), então precisa ser coletado explicitamente. A
+    guarda de sanidade não é cosmética: o mesmo gancho dispara na passagem de
+    sanidade, e uma entrada antes da época 0 deslocaria todo o índice —
+    quebrando a identidade `best_epoch == argmin` que A5 usa como prova.
+
+    """
+
+    def __init__(self) -> None:
+        self.losses: list[float] = []
+
+    def on_validation_epoch_end(self, trainer: Any, pl_module: Any) -> None:  # noqa: ANN401
+        if getattr(trainer, "sanity_checking", False):
+            return
+        value = trainer.callback_metrics.get("val_loss")
+        if value is not None:
+            self.losses.append(float(value))
+
+
+@dataclass(frozen=True)
+class _TftFit:
+    """Seam interno do treino: o que sai do ajuste, antes de qualquer predição."""
+
+    model: Any
+    val_loss_by_epoch: tuple[float, ...]
+    best_epoch: int
+    best_val_loss: float
+    artifact_path: str
+
+
+def _select_best_epoch(history: Sequence[float]) -> int:
+    """Época de MENOR perda de validação (I6), desempate pela mais antiga.
+
+    Helper puro de propósito: é o que permite testar a seleção — e o C10 de
+    histórico não finito — sem depender de um treino divergir de verdade.
+    """
+    finite = [
+        (position, loss)
+        for position, loss in enumerate(history)
+        if math.isfinite(loss)
+    ]
+    if not finite:
+        msg = (
+            "perda de validação nunca foi finita — nenhum checkpoint utilizável "
+            "foi produzido (C10)"
+        )
+        raise ValueError(msg)
+    return min(finite, key=lambda pair: (pair[1], pair[0]))[0]
+
+
+def _require_checkpoint(path: str | None) -> str:
+    """C10 — caminho vazio significa que nada foi salvo; falhar aqui é o certo.
+
+    Devolver um `artifact_path` inválido só quebraria na Stage 7.1, longe da
+    causa.
+    """
+    if not path:
+        msg = (
+            "treino terminou sem checkpoint utilizável (caminho vazio) — "
+            "verifique se houve ao menos uma época de validação finita (C10)"
+        )
+        raise ValueError(msg)
+    return path
+
+
 class PfTftTrainer:
     """Treinador do TFT quantílico sobre `pytorch-forecasting` (satisfaz o port)."""
 
@@ -219,12 +294,6 @@ class PfTftTrainer:
         frame = self._panel_frame(feature_names, rows, target)
         unknown_names = [name for name in feature_names if name not in set(known_feature_names)]
 
-        # Import local: mantém o custo de carregar torch/lightning fora do
-        # import do módulo (o composition root já usa proxy lazy pelo mesmo
-        # motivo; aqui é defesa em profundidade para quem instancie direto).
-        from pytorch_forecasting import TimeSeriesDataSet  # noqa: PLC0415
-        from pytorch_forecasting.data.encoders import GroupNormalizer  # noqa: PLC0415
-
         training = TimeSeriesDataSet(
             frame.iloc[: max(fitted) + max_horizon + 1],
             time_idx=_TIME_IDX_COLUMN,
@@ -278,14 +347,97 @@ class PfTftTrainer:
             monitored_decision_count=len(monitored),
         )
 
+    def fit(
+        self,
+        *,
+        datasets: _TftDatasets,
+        params: TftTrainingParams,
+        quantile_levels: Sequence[float],
+        artifact_dir: str,
+        write_checkpoint: bool,
+    ) -> _TftFit:
+        """Ajusta o modelo e devolve o melhor checkpoint (I6/D6/D11).
+
+        Seam público: os critérios de A5 e C10 são verificáveis aqui, sem
+        depender do caminho de predição.
+        """
+        # Re-semear a CADA chamada: o gerador global avança entre elas, então
+        # semear uma vez no import não daria o determinismo que I9 afirma.
+        pl.seed_everything(params.seed, workers=True)
+
+        train_loader = datasets.training.to_dataloader(
+            train=True, batch_size=params.batch_size, num_workers=0
+        )
+        val_loader = datasets.monitor.to_dataloader(
+            train=False, batch_size=params.batch_size, num_workers=0
+        )
+        model = TemporalFusionTransformer.from_dataset(
+            datasets.training,
+            learning_rate=params.learning_rate,
+            hidden_size=params.hidden_size,
+            attention_head_size=params.attention_head_size,
+            dropout=params.dropout,
+            hidden_continuous_size=params.hidden_continuous_size,
+            # A grade é a do COMANDO: o default da biblioteca são 7 níveis
+            # fixos que não são a grade densa do projeto.
+            loss=QuantileLoss(quantiles=list(quantile_levels)),
+        )
+        history = _LossHistory()
+        callbacks: list[Any] = [
+            history,
+            EarlyStopping(monitor="val_loss", patience=params.patience, mode="min"),
+        ]
+        checkpoint: Any = None
+        if write_checkpoint:
+            checkpoint = ModelCheckpoint(
+                dirpath=artifact_dir, monitor="val_loss", mode="min", save_top_k=1
+            )
+            callbacks.append(checkpoint)
+        trainer = pl.Trainer(
+            max_epochs=params.max_epochs,
+            accelerator="cpu",
+            devices=1,
+            deterministic=True,
+            # Sem passagem de sanidade: ela dispara o mesmo gancho ANTES da
+            # época 0 e deslocaria todo o histórico, quebrando a identidade
+            # `best_epoch == argmin` que A5 usa como prova (D11).
+            num_sanity_val_steps=0,
+            enable_checkpointing=write_checkpoint,
+            enable_progress_bar=False,
+            enable_model_summary=False,
+            logger=False,
+            callbacks=callbacks,
+        )
+        trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+
+        val_loss_by_epoch = tuple(history.losses)
+        best_epoch = _select_best_epoch(val_loss_by_epoch)
+        if not write_checkpoint:
+            return _TftFit(
+                model=model,
+                val_loss_by_epoch=val_loss_by_epoch,
+                best_epoch=best_epoch,
+                best_val_loss=val_loss_by_epoch[best_epoch],
+                artifact_path="",
+            )
+        artifact_path = _require_checkpoint(checkpoint.best_model_path)
+        # Restauração EXPLÍCITA: o callback de parada antecipada não a faz, e
+        # sem ela a predição usaria os pesos da última época (I6/D6).
+        restored = TemporalFusionTransformer.load_from_checkpoint(artifact_path)
+        return _TftFit(
+            model=restored,
+            val_loss_by_epoch=val_loss_by_epoch,
+            best_epoch=best_epoch,
+            best_val_loss=val_loss_by_epoch[best_epoch],
+            artifact_path=artifact_path,
+        )
+
     @staticmethod
     def _panel_frame(
         feature_names: Sequence[str],
         rows: Sequence[Sequence[float]],
         target: Sequence[float],
     ) -> Any:  # noqa: ANN401 — pandas.DataFrame não cruza a fronteira do port
-        import pandas as pd  # noqa: PLC0415
-
         data = {
             name: [float(row[position]) for row in rows]
             for position, name in enumerate(feature_names)
