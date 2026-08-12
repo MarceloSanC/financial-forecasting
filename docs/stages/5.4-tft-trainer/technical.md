@@ -1104,4 +1104,56 @@ está determinada. A 5.5 (avaliação) traz o terceiro consumidor do mesmo datas
 e é o ponto natural de decidir a assinatura — registrado aqui para não virar
 dívida silenciosa.
 
+### 2026-08-11 — [decision] Task 15 — gate agregado, cobertura por arquivo e R1/R2 finais — Claude (Opus 5)
+**Bloco YAML do roadmap reconciliado** com a entrega: `contratos_introduzidos`
+passou de 2 para 4 (`HyperparameterSearch` e `RunTftSweep` entraram porque ADR
+5.4.0005 põe o laço de trials no use case, não no adapter) e
+`arquivos_a_criar` foi desdobrado — `optuna_sweep.py` virou `optuna_search.py`
+(o port é uma **busca**; a varredura é o use case), o smoke único virou três
+e2e por seam do adapter mais o e2e do use case, e
+`test_known_unknown_typing.py` virou teste do use case. Linha da tabela de
+Stages: `draft` → `done`; `updated_at`/`last_reviewed_at` do roadmap para
+2026-08-11.
+
+**Gate agregado (Docker, `uv run pytest tests/`):**
+
+```
+1659 passed, 23 skipped in 321.20s (0:05:21)
+TOTAL 4162 stmts, 85 missed, 98%
+Required test coverage of 90.0% reached. Total coverage: 97.96%
+```
+
+**Cobertura por arquivo tocado** (`term-missing`, todos ≥ 90% — critério de A17):
+
+| arquivo | stmts | miss | % |
+|---|---|---|---|
+| `ports/out/tft_trainer.py` | 57 | 0 | 100% |
+| `ports/out/hyperparameter_search.py` | 38 | 0 | 100% |
+| `use_cases/train_tft.py` | 201 | 6 | 97% |
+| `use_cases/run_tft_sweep.py` | 140 | 6 | 96% |
+| `adapters/out/pytorch_forecasting/pf_tft_trainer.py` | 183 | 3 | 98% |
+| `adapters/out/optuna/optuna_search.py` | 43 | 2 | 95% |
+| `shared/infrastructure/config/settings.py` | 17 | 0 | 100% |
+| `composition_root.py` | 136 | 14 | 90% |
+
+**Justificativa do piso do `composition_root.py`** (90%, o mais baixo): as
+linhas descobertas 299–320 são os corpos DELEGANTES dos proxies lazy
+(`_LazyPfTftTrainer.train_and_predict`, os cinco métodos de
+`_LazyOptunaSearch`). Exercitá-las é, por construção, importar torch/optuna —
+exatamente o que o proxy existe para adiar. Cobri-las num unit test do
+composition root pagaria ~5 s de import em toda rodada da suíte para provar uma
+delegação de uma linha; o e2e `test_train_tft.py` já atravessa esse caminho com
+o adapter real, e `test_composition_root.py` assere a superfície do proxy e que
+o delegate NÃO foi construído. É custo desproporcional, não buraco de teste.
+
+**R1 (instalação) — risco não materializou.** Medido na Task 01 dentro do
+Docker: 3 min 11 s antes da migração para `uv sync --locked`, 3 min 18 s depois
+(+7 s). O concept estimava ~8 min; a estimativa estava conservadora demais.
+
+**R2 (suite do adapter) — risco não materializou.** `test_pf_tft_*`:
+`45 passed in 28.39s`, contra o limiar de ~3 min do plano. Nenhuma marcação
+`slow` foi necessária. O teste mais caro da Stage não é do adapter e sim o e2e
+de determinismo (`test_two_isolated_runs_agree`, 32,01 s), que treina DUAS vezes
+por desenho — é o preço de provar I9, não desperdício.
+
 <!-- END: post-execution -->

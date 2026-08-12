@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-07-20
-last_reviewed_at: 2026-07-20
+updated_at: 2026-08-11
+last_reviewed_at: 2026-08-11
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -96,7 +96,7 @@ graph LR
 | `5.1-walk-forward-harness` | modeling | domain + application | vertical | done | 3.5, 4.3 |
 | `5.2-baselines-naive-statistical` | modeling | multi (domain + application + adapters/out) | vertical | done | 5.1 |
 | `5.3-gbm-quantile-baseline` | modeling | multi (application + adapters/out) | vertical | done | 5.1 |
-| `5.4-tft-trainer` | modeling | multi (application + adapters/out) | vertical | draft | 5.1 |
+| `5.4-tft-trainer` | modeling | multi (application + adapters/out) | vertical | done | 5.1 |
 | `5.5-confirmatory-retrain` | modeling | application (orquestração) | vertical | draft | 5.2, 5.3, 5.4 |
 | `6.1-scoring-and-calibration-metrics` | evaluation | multi (domain + adapters/out) | vertical | draft | 4.3 |
 | `6.2-paired-inference-dm-mcs-holm` | evaluation | multi (domain + adapters/out) | vertical | draft | 6.1 |
@@ -656,13 +656,41 @@ stage_id: 5.4-tft-trainer
 bounded_context: modeling
 camada_alvo: multi (application + adapters/out)
 arquivos_a_criar:
+  # Reconciliado na Task 15 com o que foi entregue (divergências declaradas no
+  # concept §1). O plano previa 4 arquivos de produção e 2 de teste; a entrega
+  # desdobrou a busca de hiperparâmetros em port + adapter + use case, porque
+  # ADR 5.4.0005 põe o laço de trials no use case (ask-and-tell) e não no
+  # adapter — sem isso a orquestração atravessaria a fronteira dentro de uma
+  # callable, fora do alcance do fake e do gate de camadas.
   - src/financial_forecasting/features/modeling/application/ports/out/tft_trainer.py
+  - src/financial_forecasting/features/modeling/application/ports/out/hyperparameter_search.py
   - src/financial_forecasting/features/modeling/application/use_cases/train_tft.py
+  - src/financial_forecasting/features/modeling/application/use_cases/run_tft_sweep.py
   - src/financial_forecasting/features/modeling/adapters/out/pytorch_forecasting/pf_tft_trainer.py
-  - src/financial_forecasting/features/modeling/adapters/out/optuna/optuna_sweep.py
-  - tests/integration/features/modeling/test_train_tft_smoke.py
-  - tests/unit/features/modeling/test_known_unknown_typing.py
-contratos_introduzidos: [TftTrainer (port-out), TrainTft (use case)]
+  # `optuna_search.py`, não `optuna_sweep.py`: o port é uma BUSCA; a varredura
+  # é o use case `run_tft_sweep.py`.
+  - src/financial_forecasting/features/modeling/adapters/out/optuna/optuna_search.py
+  # `test_known_unknown_typing.py` (flat) materializou como teste do use case —
+  # a tipagem known/unknown é função pública dele, padrão herdado da 5.3.
+  - tests/unit/features/modeling/application/test_train_tft.py
+  - tests/unit/features/modeling/application/test_train_tft_tracking.py
+  - tests/unit/features/modeling/application/test_run_tft_sweep.py
+  - tests/unit/features/modeling/application/test_tft_trainer_port.py
+  - tests/unit/features/modeling/application/test_hyperparameter_search_port.py
+  - tests/unit/features/modeling/application/test_in_memory_tft_trainer.py
+  # `test_train_tft_smoke.py` (um smoke) materializou como três e2e de
+  # integração, um por seam do adapter (dataset / treino / predição), mais o
+  # e2e do use case com o adapter real.
+  - tests/integration/features/modeling/test_pf_tft_dataset.py
+  - tests/integration/features/modeling/test_pf_tft_training.py
+  - tests/integration/features/modeling/test_pf_tft_prediction.py
+  - tests/integration/features/modeling/test_optuna_search.py
+  - tests/integration/features/modeling/test_train_tft.py
+  - tests/contract/features/modeling/test_tft_trainer_contract.py
+  - tests/contract/features/modeling/test_hyperparameter_search_contract.py
+  - tests/fakes/features/modeling/in_memory_tft_trainer.py
+  - tests/fakes/features/modeling/in_memory_hyperparameter_search.py
+contratos_introduzidos: [TftTrainer (port-out), HyperparameterSearch (port-out), TrainTft (use case), RunTftSweep (use case)]
 contratos_consumidos: [WalkForwardSplitter (5.1), FeatureRegistry (3.4), MultiHorizonPredictionPersister (4.3), ExperimentTracker (1.5)]
 definition_of_done: "TFT treina em modo quantílico com grade densa; price/indicadores tipados como unknown (calendário known); early-stop usa só o sub-split dedicado; artefato+predições persistidos; runs logados no MLflow; sweeps Optuna rotulados como exploratórios."
 non_goals: [re-treino confirmatório (5.5), métricas (Step 6)]
