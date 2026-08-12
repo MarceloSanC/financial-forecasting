@@ -1211,4 +1211,93 @@ cada um morreu sob mutação (M9, M6, M7). Duplicar a prova não aumentaria
 garantia, só custo de manutenção; fica registrado como fragilidade a exclusões
 futuras.
 
+### 2026-08-11 — [decision] Gate de saída da Stage 5.4 — evidência literal — Claude (Opus 5)
+
+Todos os itens do checklist de fechamento (§3) verificados **dentro do Docker**,
+com a saída colada abaixo. HEAD `5519a30`, árvore limpa.
+
+**`make check` — componentes, um a um:**
+
+```
+--- ruff ---
+All checks passed!
+--- mypy ---
+Success: no issues found in 176 source files
+--- layout ---
+PASSOU — nenhuma violação de arquitetura encontrada.
+--- import-linter ---
+Contracts: 12 kept, 0 broken.
+--- docs (check_technical_postexec) ---
+OK — 1 arquivo(s) validado(s).
+```
+
+**Suíte + cobertura:**
+
+```
+1662 passed, 23 skipped in 307.14s (0:05:07)
+TOTAL 4162 stmts, 84 missed, 98%
+Required test coverage of 90.0% reached. Total coverage: 97.98%
+```
+
+**A17 — cobertura por arquivo tocado** (todos ≥ 90%):
+
+```
+composition_root.py                              136  14   90%   167-175, 179, 299-305, 308, 311, 314, 317, 320
+adapters/out/optuna/optuna_search.py              43   2   95%   84-85
+adapters/out/pytorch_forecasting/pf_tft_trainer.py 183  2   99%   393-398
+application/ports/out/hyperparameter_search.py    38   0  100%
+application/ports/out/tft_trainer.py              57   0  100%
+application/use_cases/run_tft_sweep.py           140   6   96%   291-292, 359, 366, 373, 375
+application/use_cases/train_tft.py               201   6   97%   241, 452-453, 671, 679, 689
+```
+
+O piso (`composition_root.py`, 90%) está justificado na entrada da Task 15: as
+linhas 299–320 são os corpos delegantes dos proxies lazy, e exercitá-las é, por
+construção, importar torch/optuna — o que o proxy existe para adiar.
+
+**A14 — as duas provas de quebra dos gates, executadas e revertidas.** Com
+`import torch` em `train_tft.py` e `import optuna` em `run_tft_sweep.py`:
+
+```
+Application/domain não importam torch/lightning/pytorch_forecasting (só o adapter) BROKEN
+  torch: torch (l.691)
+Application/domain não importam optuna (só o adapter) BROKEN
+  optuna: -> optuna (l.377)
+Contracts: 10 kept, 2 broken.
+```
+
+Os contratos 11 e 12 não são decorativos: eles reprovam de fato o vazamento que
+declaram barrar. Árvore revertida e `lint-imports` de volta a 12/0.
+
+**Probe de torch CPU dentro da imagem (ADR 5.4.0003, decisão B1 do usuário):**
+
+```
+2.13.0+cpu
+torch.cuda.is_available() -> False
+uv pip list | grep -iE "^nvidia|cuda"  ->  (vazio)
+torch        2.13.0+cpu
+torchmetrics 1.9.0
+```
+
+Nenhum pacote `nvidia-*` na imagem — o índice `pytorch-cpu` do `[tool.uv.sources]`
+está sendo consumido pelo `uv sync --locked`, que era a razão da migração da
+Task 01.
+
+**ADRs 5.4.0001–0006:** todos em `status: accepted` (verificado por grep).
+
+**Checklist de fechamento:**
+
+- [x] A1–A17 satisfeitos; divergências registradas nesta §7.
+- [x] `make check` verde, saída colada acima.
+- [x] Cobertura ≥ 90% global (97,98%) e por arquivo tocado (tabela acima).
+- [x] `check_technical_postexec.py` verde.
+- [x] Auditoria de testes independente: 27 mutações, 22 mortas, 5 sobreviventes
+      **corrigidas e re-verificadas** (entrada anterior desta §7).
+- [x] Checkpoints A (3 rodadas), B (2 rodadas) e C (5 rodadas, uma por bloco)
+      com todos os achados dispostos por escrito.
+- [x] §7 reflete a execução real, incluindo os erros de percurso.
+- [x] Finding escalado com Stage candidata: duplicação de `_load_dataset` → 5.5.
+- [x] `roadmap.md` com a 5.4 em `done` e datas de hoje.
+- [x] ADRs 5.4.0001–0006 em `accepted`.
+
 <!-- END: post-execution -->
