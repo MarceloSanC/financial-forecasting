@@ -80,9 +80,14 @@ _PARAMS = TftTrainingParams(
 
 
 @pytest.fixture(params=["fake", "real"])
-def trainer(request: pytest.FixtureRequest) -> TftTrainer:
+def leg(request: pytest.FixtureRequest) -> str:
+    return str(request.param)
+
+
+@pytest.fixture
+def trainer(leg: str) -> TftTrainer:
     """Parametriza o contrato sobre as duas implementações do port."""
-    return InMemoryTftTrainer() if request.param == "fake" else PfTftTrainer()
+    return InMemoryTftTrainer() if leg == "fake" else PfTftTrainer()
 
 
 def _panel() -> tuple[list[list[float]], list[float]]:
@@ -126,9 +131,7 @@ class TestEmissionShape:
                 assert len(grid) == len(_LEVELS)
                 assert all(math.isfinite(value) for value in grid)
 
-    def test_tail_rule_is_identical_in_both_legs(
-        self, trainer: TftTrainer, tmp_path: Path
-    ) -> None:
+    def test_tail_rule_is_identical_in_both_legs(self, trainer: TftTrainer, tmp_path: Path) -> None:
         """I16 — é o que garante o mesmo conjunto de pontos alinhados de 5.2/5.3."""
         result = _call(trainer, tmp_path)
         shorter, longer = _HORIZONS
@@ -227,9 +230,7 @@ class TestDeterminism:
 class TestInsufficientHistory:
     """C3 — mesmo limiar e mesmo marcador nas duas pernas."""
 
-    def test_encoder_longer_than_train_block(
-        self, trainer: TftTrainer, tmp_path: Path
-    ) -> None:
+    def test_encoder_longer_than_train_block(self, trainer: TftTrainer, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="treino"):
             _call(
                 trainer,
@@ -237,9 +238,7 @@ class TestInsufficientHistory:
                 params=TftTrainingParams(seed=7, max_encoder_length=40),
             )
 
-    def test_monitor_without_full_decoder(
-        self, trainer: TftTrainer, tmp_path: Path
-    ) -> None:
+    def test_monitor_without_full_decoder(self, trainer: TftTrainer, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="monitor"):
             _call(
                 trainer,
@@ -271,9 +270,7 @@ class TestStructuralErrors:
         with pytest.raises(ValueError, match="known_feature_names"):
             _call(trainer, tmp_path, known_feature_names=("not_a_column",))
 
-    def test_non_contiguous_decision_range(
-        self, trainer: TftTrainer, tmp_path: Path
-    ) -> None:
+    def test_non_contiguous_decision_range(self, trainer: TftTrainer, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="contígua"):
             _call(trainer, tmp_path, train_decision_indices=(*range(20), 25))
 
@@ -294,11 +291,13 @@ class TestStructuralErrors:
             _call(trainer, tmp_path, early_stop_decision_indices=())
 
 
-def test_both_legs_are_exercised(trainer: TftTrainer) -> None:
-    """Guarda anti-suite-de-uma-perna: se o real sumisse, isto continuaria verde.
+def test_both_legs_are_exercised(trainer: TftTrainer, leg: str) -> None:
+    """Guarda anti-suite-de-uma-perna, agora com dente.
 
-    Por isso a asserção é sobre o TIPO — o parâmetro `real` tem de produzir o
-    adapter de verdade, não um segundo fake.
+    A versão anterior assertava `isinstance(trainer, Fake | Real)` — satisfeita
+    pelo fake nas DUAS parametrizações. Uma fixture que devolvesse sempre o fake
+    apagaria a perna real (e com ela C5, C10 e A4c) sem reprovar nada. A
+    asserção precisa amarrar o parâmetro ao tipo.
     """
-    assert isinstance(trainer, InMemoryTftTrainer | PfTftTrainer)
-
+    expected = PfTftTrainer if leg == "real" else InMemoryTftTrainer
+    assert isinstance(trainer, expected)

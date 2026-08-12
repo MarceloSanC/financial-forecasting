@@ -218,9 +218,7 @@ class TestSampleParityWithTheComparator:
     """A13 — o candidato cobre exatamente os mesmos pontos alinhados do GBM."""
 
     @pytest.mark.parametrize("horizon", _HORIZONS)
-    def test_same_target_timestamps_per_horizon(
-        self, pipeline: _PipelineRun, horizon: int
-    ) -> None:
+    def test_same_target_timestamps_per_horizon(self, pipeline: _PipelineRun, horizon: int) -> None:
         tft = {
             row["target_timestamp_utc"]
             for row in pipeline.facts(_TFT_VERSION)
@@ -266,9 +264,7 @@ class TestTrackingWithTheRealBackend:
 class TestDeterminismAcrossRuns:
     """A9 — duas execuções isoladas produzem as mesmas predições."""
 
-    def test_two_isolated_runs_agree(
-        self, tmp_path_factory: pytest.TempPathFactory
-    ) -> None:
+    def test_two_isolated_runs_agree(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         first_root = tmp_path_factory.mktemp("e2e-tft-a")
         second_root = tmp_path_factory.mktemp("e2e-tft-b")
         first_deps = _wire(first_root)
@@ -310,9 +306,7 @@ class TestReplaySemantics:
 class TestWiring:
     def test_both_use_cases_are_exposed(self, tmp_path_factory: pytest.TempPathFactory) -> None:
         deps = wire_dependencies(
-            settings=Settings(
-                _env_file=None, data_root=tmp_path_factory.mktemp("e2e-tft-wiring")
-            )
+            settings=Settings(_env_file=None, data_root=tmp_path_factory.mktemp("e2e-tft-wiring"))
         )
 
         assert deps.train_tft is not None

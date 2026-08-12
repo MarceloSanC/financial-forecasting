@@ -208,15 +208,10 @@ def _select_best_epoch(history: Sequence[float]) -> int:
     Helper puro de propósito: é o que permite testar a seleção — e o C10 de
     histórico não finito — sem depender de um treino divergir de verdade.
     """
-    finite = [
-        (position, loss)
-        for position, loss in enumerate(history)
-        if math.isfinite(loss)
-    ]
+    finite = [(position, loss) for position, loss in enumerate(history) if math.isfinite(loss)]
     if not finite:
         msg = (
-            "perda de validação nunca foi finita — nenhum checkpoint utilizável "
-            "foi produzido (C10)"
+            "perda de validação nunca foi finita — nenhum checkpoint utilizável foi produzido (C10)"
         )
         raise ValueError(msg)
     return min(finite, key=lambda pair: (pair[1], pair[0]))[0]
@@ -370,9 +365,7 @@ class PfTftTrainer:
                 "enable_model_summary": False,
             },
         )
-        decision_of_sample = [
-            int(time_idx) - 1 for time_idx in prediction.index[_TIME_IDX_COLUMN]
-        ]
+        decision_of_sample = [int(time_idx) - 1 for time_idx in prediction.index[_TIME_IDX_COLUMN]]
         lengths = [int(length) for length in prediction.decoder_lengths]
 
         best_sample_by_decision: dict[int, int] = {}
@@ -394,9 +387,7 @@ class PfTftTrainer:
             for horizon in horizons:
                 if horizon > lengths[sample]:
                     continue  # passo além do decodificador real: não existe
-                values = tuple(
-                    float(value) for value in prediction.output[sample, horizon - 1, :]
-                )
+                values = tuple(float(value) for value in prediction.output[sample, horizon - 1, :])
                 _assert_finite(values, decision=decision, horizon=horizon)
                 if len(values) != len(quantile_levels):
                     msg = (

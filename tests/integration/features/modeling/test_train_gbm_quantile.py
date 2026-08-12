@@ -146,8 +146,7 @@ def pipeline(tmp_path_factory: pytest.TempPathFactory) -> _PipelineRun:
     data_root = tmp_path_factory.mktemp("e2e-train-gbm")
     deps, result = _wire_and_run(data_root)
     iso = tuple(
-        datetime(day.year, day.month, day.day, tzinfo=UTC).isoformat()
-        for day in _xnys_sessions()
+        datetime(day.year, day.month, day.day, tzinfo=UTC).isoformat() for day in _xnys_sessions()
     )
     return _PipelineRun(deps=deps, result=result, iso_timestamps=iso)
 
@@ -214,9 +213,7 @@ def test_e2e_dim_run_one_row_per_fold_with_filled_seed(pipeline: _PipelineRun) -
     assert all(int(str(r["seed"])) == _SEED for r in rows)
     assert all(str(r["parent_sweep_id"]) == _COHORT_ID for r in rows)
     assert all(str(r["split_fingerprint"]) for r in rows)
-    assert {summary.run_id for summary in pipeline.result.runs} == {
-        str(r["run_id"]) for r in rows
-    }
+    assert {summary.run_id for summary in pipeline.result.runs} == {str(r["run_id"]) for r in rows}
 
 
 @pytest.mark.integration
@@ -226,16 +223,12 @@ def test_e2e_best_iterations_within_ceiling_and_tail_skips_counted(
     """m* em [1, teto] por (fold x horizonte); cauda pula e conta, nada fabricado."""
     for summary in pipeline.result.runs:
         assert set(summary.best_iteration_by_horizon) == set(_HORIZONS)
-        assert all(
-            1 <= m <= _CEILING for m in summary.best_iteration_by_horizon.values()
-        )
+        assert all(1 <= m <= _CEILING for m in summary.best_iteration_by_horizon.values())
     last_fold = [s for s in pipeline.result.runs if s.fold_index == _N_FOLDS - 1]
     assert all(summary.rows_skipped > 0 for summary in last_fold)
     rows = pipeline.facts()
     max_idx = _N_SESSIONS - 1
-    assert all(
-        int(str(r["decision_idx"])) + int(str(r["horizon"])) <= max_idx for r in rows
-    )
+    assert all(int(str(r["decision_idx"])) + int(str(r["horizon"])) <= max_idx for r in rows)
     assert len(rows) == sum(summary.rows_written for summary in pipeline.result.runs)
 
 
@@ -251,9 +244,17 @@ def test_e2e_a5_two_isolated_runs_persist_identical_predictions(
 
     def _sorted_rows(rows: Sequence[Row]) -> list[tuple[object, ...]]:
         keys = (
-            "run_id", "split", "horizon", "decision_idx", "quantile_level",
-            "value_raw", "value_guardrail", "guardrail_applied",
-            "timestamp_utc", "target_timestamp_utc", "model_version",
+            "run_id",
+            "split",
+            "horizon",
+            "decision_idx",
+            "quantile_level",
+            "value_raw",
+            "value_guardrail",
+            "guardrail_applied",
+            "timestamp_utc",
+            "target_timestamp_utc",
+            "model_version",
         )
         return sorted(tuple(row[key] for key in keys) for row in rows)
 
@@ -261,12 +262,8 @@ def test_e2e_a5_two_isolated_runs_persist_identical_predictions(
     facts_b = _sorted_rows(deps_b.analytics_repository.read(layer=_SILVER, table=_FACTS))
     assert facts_a == facts_b
     assert [
-        (s.run_id, s.fold_index, dict(s.best_iteration_by_horizon))
-        for s in pipeline.result.runs
-    ] == [
-        (s.run_id, s.fold_index, dict(s.best_iteration_by_horizon))
-        for s in result_b.runs
-    ]
+        (s.run_id, s.fold_index, dict(s.best_iteration_by_horizon)) for s in pipeline.result.runs
+    ] == [(s.run_id, s.fold_index, dict(s.best_iteration_by_horizon)) for s in result_b.runs]
 
 
 # -- C7: rerun idêntico colide e propaga -------------------------------------------
@@ -301,6 +298,5 @@ def test_lazy_wiring_importing_composition_root_does_not_import_lightgbm() -> No
     )
 
     assert completed.returncode == 0, (
-        "importar composition_root importou lightgbm (proxy lazy quebrado): "
-        f"{completed.stderr}"
+        f"importar composition_root importou lightgbm (proxy lazy quebrado): {completed.stderr}"
     )

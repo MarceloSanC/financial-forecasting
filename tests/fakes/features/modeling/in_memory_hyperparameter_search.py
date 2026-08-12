@@ -41,6 +41,7 @@ class InMemoryHyperparameterSearch:
         self.direction = "minimize"
         self.trials: list[SearchTrial] = []
         self.objectives: dict[int, float] = {}
+        self.failed: set[int] = set()
 
     def create_study(self, *, seed: int, direction: str = "minimize") -> str:
         self.seed = seed
@@ -67,6 +68,12 @@ class InMemoryHyperparameterSearch:
             msg = f"trial {trial_number} não foi pedido a este estudo"
             raise ValueError(msg)
         self.objectives[trial_number] = objective_value
+
+    def fail(self, *, trial_number: int) -> None:
+        if trial_number not in {trial.number for trial in self.trials}:
+            msg = f"trial {trial_number} não foi pedido a este estudo"
+            raise ValueError(msg)
+        self.failed.add(trial_number)
 
     def best_trial(self) -> SearchTrial:
         if not self.objectives:

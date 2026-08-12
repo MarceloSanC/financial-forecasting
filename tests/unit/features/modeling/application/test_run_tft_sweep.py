@@ -196,9 +196,7 @@ class TestStructuralIsolation:
 
 
 class TestFitOnlyMode:
-    def test_trainer_is_always_called_without_test_decisions(
-        self, tmp_path: Path
-    ) -> None:
+    def test_trainer_is_always_called_without_test_decisions(self, tmp_path: Path) -> None:
         """Nenhuma predição out-of-sample é sequer PRODUZIDA na exploração."""
         use_case, _, trainer, _ = _build(tmp_path)
 
@@ -237,13 +235,9 @@ class TestAskTellLoop:
         result = use_case(_command())
 
         expected = min(_FAKE_HISTORY)
-        assert all(
-            trial.objective_value == pytest.approx(expected) for trial in result.trials
-        )
+        assert all(trial.objective_value == pytest.approx(expected) for trial in result.trials)
 
-    def test_integer_dimension_is_recast_before_building_params(
-        self, tmp_path: Path
-    ) -> None:
+    def test_integer_dimension_is_recast_before_building_params(self, tmp_path: Path) -> None:
         """Sem reconverter, `hidden_size=16.0` passaria e quebraria na lib."""
         use_case, _, trainer, _ = _build(tmp_path)
 
@@ -314,3 +308,146 @@ class TestErrorCases:
 
         with pytest.raises(ValueError, match="C9"):
             use_case(_command())
+
+
+class TestObjectiveReachesTheStudy:
+    """O que chega ao `tell` é o que guia a busca — e não estava assertado.
+
+    O teste do DTO de saída passa por OUTRO caminho de código: uma varredura que
+    alimentasse o amostrador com uma constante (busca aleatória disfarçada)
+    manteria o DTO correto e a suíte verde.
+    """
+
+    def test_every_trial_reports_the_minimum_validation_loss(self, tmp_path: Path) -> None:
+        use_case, _, _, _ = _build(tmp_path)
+        search = use_case._search
+
+        use_case(_command())
+
+        assert search.objectives == {
+            number: pytest.approx(min(_FAKE_HISTORY)) for number in range(_N_TRIALS)
+        }
+
+    def test_failed_trial_is_marked_failed_and_gets_no_objective(self, tmp_path: Path) -> None:
+        """Inventar um objetivo contaminaria o amostrador; deixar pendente cria zumbi."""
+
+        failing_trial = 1
+
+        class _FailsTheSecond(InMemoryTftTrainer):
+            def train_and_predict(self, **kwargs: Any) -> Any:  # noqa: ANN401
+                result = super().train_and_predict(**kwargs)
+                if len(self.calls) == failing_trial + 1:
+                    msg = "combinação inviável"
+                    raise ValueError(msg)
+                return result
+
+        use_case, _, _, _ = _build(tmp_path, trainer=_FailsTheSecond())
+        search = use_case._search
+
+        result = use_case(_command())
+
+        assert len(result.trials) == _N_TRIALS - 1
+        assert search.failed == {failing_trial}
+        assert failing_trial not in search.objectives
+
+
+class TestFoldChoice:
+    """A varredura explora sobre o ÚLTIMO fold — afirmação substantiva, pinada."""
+
+    def test_uses_the_last_fold(self, tmp_path: Path) -> None:
+        use_case, _, trainer, _ = _build(tmp_path)
+        splitter = WalkForwardSplitter(TradingCalendar(TradingSessions(sessions=_SESSIONS)))
+        folds = splitter.split(
+            _SESSIONS,
+            _SCOPE,
+            n_folds=2,
+            test_size=3,
+            val_size=5,
+            calib_size=5,
+            embargo=1,
+            hasher=FakeHasher(),
+        )
+        index_by_session = {day.isoformat(): idx for idx, day in enumerate(_SESSIONS)}
+        expected_train = tuple(index_by_session[day] for day in folds[-1].train)
+
+        use_case(_command())
+
+        assert trainer.calls[0]["train_decision_indices"] == expected_train
+
+
+class TestTrackerFailureDoesNotStopTheSweep:
+    def test_sweep_completes_when_tracking_raises(self, tmp_path: Path) -> None:
+        """Observabilidade não derruba exploração — o análogo de C8 aqui."""
+
+        class _ExplodingTracker:
+            def start_run(self, **_: Any) -> str:  # noqa: ANN401
+                msg = "tracking indisponível"
+                raise RuntimeError(msg)
+
+            def end_run(self) -> None:
+                return None
+
+        use_case, _, _, _ = _build(tmp_path)
+        use_case._tracker = _ExplodingTracker()
+
+        result = use_case(_command())
+
+        assert len(result.trials) == _N_TRIALS
+
+
+class TestDatasetErrors:
+    def test_empty_dataset_raises(self, tmp_path: Path) -> None:
+        store = _WritingStore()
+        store.seed_read_only(layer="processed", table="dataset_tft", asset=_SCOPE.asset_id, rows=[])
+        use_case = RunTftSweep(
+            store=store,
+            splitter=WalkForwardSplitter(TradingCalendar(TradingSessions(sessions=_SESSIONS))),
+            trainer=InMemoryTftTrainer(),
+            search=InMemoryHyperparameterSearch(),
+            tracker=FakeExperimentTracker(),
+            hasher=FakeHasher(),
+            artifacts_root=tmp_path / "artifacts",
+        )
+
+        with pytest.raises(ValueError, match="C1"):
+            use_case(_command())
+
+    def test_missing_column_raises_naming_it(self, tmp_path: Path) -> None:
+        dropped = unknown_feature_names()[0]
+        rows = [{k: v for k, v in row.items() if k != dropped} for row in _dataset_rows()]
+        store = _WritingStore()
+        store.seed_read_only(
+            layer="processed", table="dataset_tft", asset=_SCOPE.asset_id, rows=rows
+        )
+        use_case = RunTftSweep(
+            store=store,
+            splitter=WalkForwardSplitter(TradingCalendar(TradingSessions(sessions=_SESSIONS))),
+            trainer=InMemoryTftTrainer(),
+            search=InMemoryHyperparameterSearch(),
+            tracker=FakeExperimentTracker(),
+            hasher=FakeHasher(),
+            artifacts_root=tmp_path / "artifacts",
+        )
+
+        with pytest.raises(ValueError, match=dropped):
+            use_case(_command())
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            pytest.param({"quantile_levels": ()}, id="niveis-vazio"),
+            pytest.param({"quantile_levels": (0.0, 0.5)}, id="nivel-fora-do-intervalo"),
+            pytest.param({"quantile_levels": (0.5, 0.1)}, id="niveis-nao-crescentes"),
+            pytest.param({"horizons": ()}, id="horizons-vazio"),
+            pytest.param({"horizons": (1, 9)}, id="horizonte-acima-do-max-do-scope"),
+        ],
+    )
+    def test_invalid_command_raises_before_any_io(
+        self, tmp_path: Path, overrides: dict[str, object]
+    ) -> None:
+        use_case, store, _, _ = _build(tmp_path)
+
+        with pytest.raises(ValueError, match="C2"):
+            use_case(_command(**overrides))
+
+        assert store.read_calls == 0

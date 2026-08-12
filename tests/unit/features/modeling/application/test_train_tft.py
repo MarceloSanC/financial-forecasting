@@ -90,9 +90,7 @@ _COHORT_ID = "cohort-h2"
 _EXPECTED_MODEL_VERSION = "tft_quantile"
 _EXCLUDED_FROM_TYPING = ("time_idx", "timestamp", "asset_id", "target_return")
 
-_SCOPE = ScopeSpec(
-    asset_id="TEST", feature_set_name="fs_test", max_horizon=2, cohort_id=_COHORT_ID
-)
+_SCOPE = ScopeSpec(asset_id="TEST", feature_set_name="fs_test", max_horizon=2, cohort_id=_COHORT_ID)
 
 
 class _FakeClock:
@@ -238,9 +236,7 @@ def _seeded_store(rows: list[dict[str, object]] | None = None) -> _CountingStore
 def _command(**overrides: object) -> TrainTftCommand:
     base: dict[str, object] = {
         "scope": _SCOPE,
-        "params": TftTrainingParams(
-            seed=_SEED, max_encoder_length=_ENCODER_LENGTH, max_epochs=3
-        ),
+        "params": TftTrainingParams(seed=_SEED, max_encoder_length=_ENCODER_LENGTH, max_epochs=3),
         "horizons": _HORIZONS,
         "quantile_levels": _LEVELS,
         "n_folds": _N_FOLDS,
@@ -466,9 +462,7 @@ def test_last_fold_emits_fewer_pairs_for_the_longer_horizon(tmp_path: Path) -> N
     decisions_h1 = {
         row["target_timestamp_utc"] for row in rows if row["horizon"] == shorter_horizon
     }
-    decisions_h2 = {
-        row["target_timestamp_utc"] for row in rows if row["horizon"] == longer_horizon
-    }
+    decisions_h2 = {row["target_timestamp_utc"] for row in rows if row["horizon"] == longer_horizon}
     assert len(decisions_h1) > len(decisions_h2)
 
 
@@ -501,9 +495,7 @@ def test_crossed_grid_is_persisted_sorted(tmp_path: Path) -> None:
 
 def test_empty_dataset_raises(tmp_path: Path) -> None:
     store = _CountingStore()
-    store.seed_read_only(
-        layer="processed", table="dataset_tft", asset=_SCOPE.asset_id, rows=[]
-    )
+    store.seed_read_only(layer="processed", table="dataset_tft", asset=_SCOPE.asset_id, rows=[])
     use_case, _, _, _ = _build(tmp_path, store=store)
 
     with pytest.raises(ValueError, match="C1"):
@@ -530,9 +522,7 @@ def test_missing_expected_column_raises_naming_it(tmp_path: Path) -> None:
         pytest.param({"quantile_levels": (0.5, 0.1)}, id="niveis-nao-crescentes"),
     ],
 )
-def test_invalid_command_raises_before_any_io(
-    tmp_path: Path, overrides: dict[str, object]
-) -> None:
+def test_invalid_command_raises_before_any_io(tmp_path: Path, overrides: dict[str, object]) -> None:
     """C2 — uma cláusula por caso, e nenhuma leitura acontece."""
     store = _seeded_store()
     use_case, _, _, _ = _build(tmp_path, store=store)

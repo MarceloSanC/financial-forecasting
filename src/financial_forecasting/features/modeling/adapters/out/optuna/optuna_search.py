@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 import optuna
 from optuna.distributions import FloatDistribution, IntDistribution
 from optuna.samplers import TPESampler
+from optuna.trial import TrialState
 
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
     SearchTrial,
@@ -41,9 +42,7 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 def _distribution(dimension: SearchDimension) -> Any:  # noqa: ANN401 — tipo da lib
     """Traduz uma dimensão do port para a distribuição da biblioteca."""
     if dimension.kind == _INT_KIND:
-        return IntDistribution(
-            low=int(dimension.low), high=int(dimension.high), log=dimension.log
-        )
+        return IntDistribution(low=int(dimension.low), high=int(dimension.high), log=dimension.log)
     return FloatDistribution(
         low=float(dimension.low), high=float(dimension.high), log=dimension.log
     )
@@ -79,6 +78,11 @@ class OptunaSearch:
         """Informa o objetivo observado, identificando o trial pelo NÚMERO."""
         study = self._require_study()
         study.tell(trial_number, float(objective_value))
+
+    def fail(self, *, trial_number: int) -> None:
+        """Marca o trial como falho no estudo (sem objetivo)."""
+        study = self._require_study()
+        study.tell(trial_number, state=TrialState.FAIL)
 
     def best_trial(self) -> SearchTrial:
         """Melhor trial informado; ergue se nenhum foi (C9).

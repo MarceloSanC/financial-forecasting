@@ -119,9 +119,7 @@ class RunTftSweepResult:
     best_params: TftTrainingParams
 
 
-def _recast(
-    values: Mapping[str, float], space: Sequence[SearchDimension]
-) -> dict[str, Any]:
+def _recast(values: Mapping[str, float], space: Sequence[SearchDimension]) -> dict[str, Any]:
     """Reconverte os valores da fronteira pelo `kind` declarado.
 
     O port devolve sempre `float` (contrato declarado lá); montar
@@ -189,8 +187,14 @@ class RunTftSweep:
         summaries: list[SweepTrialSummary] = []
         for _ in range(command.n_trials):
             trial = self._search.ask(command.space)
-            params = replace(command.base_params, **_recast(trial.values, command.space))
             try:
+                # A montagem dos params entra no `try`: `SearchDimension` valida
+                # a FORMA da dimensão (C11), não o domínio do campo — um espaço
+                # legítimo pode amostrar `learning_rate=0.0`, que o DTO recusa.
+                # Isso é "combinação inviável", exatamente o que este bloco
+                # existe para tolerar; deixar fora derrubaria a varredura
+                # inteira e perderia todos os trials já avaliados.
+                params = replace(command.base_params, **_recast(trial.values, command.space))
                 training = self._trainer.train_and_predict(
                     params=params,
                     feature_names=feature_names,
@@ -207,14 +211,14 @@ class RunTftSweep:
                     quantile_levels=command.quantile_levels,
                     artifact_dir=str(self._artifacts_root / _ARTIFACT_SUBDIR / study_id),
                 )
-            except (ValueError, RuntimeError):
-                # Trial inviável (combinação de hiperparâmetros que a lib
-                # recusa) não derruba a varredura — mas também não é informado
-                # ao estudo, para não contaminar o amostrador com um objetivo
-                # inventado.
-                logger.exception(
-                    "trial %s falhou e foi descartado da varredura", trial.number
-                )
+            except (ValueError, RuntimeError, TypeError):
+                # Trial inviável não derruba a varredura, e NÃO recebe objetivo
+                # inventado — inventar um valor contaminaria o amostrador. O
+                # trial é marcado como falho no estudo em vez de ficar pendente:
+                # o TPE só considera trials completos, então a marcação preserva
+                # a mesma garantia sem deixar trial zumbi.
+                logger.exception("trial %s falhou e foi descartado da varredura", trial.number)
+                self._search.fail(trial_number=trial.number)
                 continue
             objective = training.best_val_loss
             self._search.tell(trial_number=trial.number, objective_value=objective)

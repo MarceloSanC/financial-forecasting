@@ -20,6 +20,7 @@ Contrato semântico:
 - **`ask`** devolve um trial com um valor por dimensão declarada.
 - **`tell`** recebe o **número** do trial, não o objeto — a fronteira troca só
   primitivos.
+- **`fail`** marca um trial inviável sem lhe atribuir objetivo.
 - **`best_trial`** devolve o de melhor objetivo informado; sobre estudo sem
   nenhum `tell` **ergue** (C9).
 - **Fronteira sempre em `float`**: `SearchTrial.values` não carrega o tipo da
@@ -105,6 +106,16 @@ class HyperparameterSearch(Protocol):
 
     def tell(self, *, trial_number: int, objective_value: float) -> None:
         """Informa o objetivo observado para o trial de número `trial_number`."""
+        ...
+
+    def fail(self, *, trial_number: int) -> None:
+        """Marca o trial como FALHO, sem informar objetivo.
+
+        Um trial inviável não pode receber um objetivo inventado — isso
+        contaminaria o amostrador. Mas deixá-lo pendente também não serve: o
+        estudo ficaria com trials zumbis. Marcar como falho preserva a garantia
+        (amostradores só consideram trials completos) sem o zumbi.
+        """
         ...
 
     def best_trial(self) -> SearchTrial:

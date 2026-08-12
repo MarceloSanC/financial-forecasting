@@ -120,9 +120,7 @@ class TftTrainingParams:
             msg = f"attention_head_size deve ser >= 1, recebido {self.attention_head_size}"
             raise ValueError(msg)
         if self.hidden_continuous_size < 1:
-            msg = (
-                f"hidden_continuous_size deve ser >= 1, recebido {self.hidden_continuous_size}"
-            )
+            msg = f"hidden_continuous_size deve ser >= 1, recebido {self.hidden_continuous_size}"
             raise ValueError(msg)
         if not 0.0 <= self.dropout < 1.0:
             msg = f"dropout deve estar em [0, 1), recebido {self.dropout}"

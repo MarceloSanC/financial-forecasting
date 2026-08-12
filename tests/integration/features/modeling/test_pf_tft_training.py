@@ -67,9 +67,7 @@ def _panel(mutated: tuple[int, ...] = ()) -> tuple[list[list[float]], list[float
         [0.01 * index, 50.0 + index, float(index % 5), float(index % 12 + 1)]
         for index in range(_PANEL)
     ]
-    target = [
-        (100.0 if index in mutated else 0.0) + 0.001 * index for index in range(_PANEL)
-    ]
+    target = [(100.0 if index in mutated else 0.0) + 0.001 * index for index in range(_PANEL)]
     return rows, target
 
 
@@ -105,9 +103,7 @@ class TestStoppingMechanism:
         result = _fit(tmp_path)
 
         assert result.val_loss_by_epoch
-        assert result.best_epoch == result.val_loss_by_epoch.index(
-            min(result.val_loss_by_epoch)
-        )
+        assert result.best_epoch == result.val_loss_by_epoch.index(min(result.val_loss_by_epoch))
         assert result.best_val_loss == min(result.val_loss_by_epoch)
 
     def test_history_has_one_entry_per_executed_epoch(self, tmp_path: Path) -> None:
@@ -126,9 +122,7 @@ class TestStoppingMechanism:
 class TestAntiLeakage:
     """A4(a) — `calib` e `test` não alcançam o ajuste nem o monitor."""
 
-    def test_mutating_calibration_and_test_targets_changes_nothing(
-        self, tmp_path: Path
-    ) -> None:
+    def test_mutating_calibration_and_test_targets_changes_nothing(self, tmp_path: Path) -> None:
         baseline = _fit(tmp_path / "a")
         mutated = _fit(tmp_path / "b", mutated=(*_CALIB, *_TEST))
 

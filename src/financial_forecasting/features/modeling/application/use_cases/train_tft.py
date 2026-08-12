@@ -292,7 +292,9 @@ class TrainTft:
 
         summaries: list[TftRunSummary] = []
         entries: list[_StructuralEntry] = []
-        emissions: list[tuple[FoldSplit, str, dict[int, dict[int, QuantileForecast]], TftTrainingResult]] = []  # noqa: E501
+        emissions: list[
+            tuple[FoldSplit, str, dict[int, dict[int, QuantileForecast]], TftTrainingResult]
+        ] = []
 
         for fold in folds:
             # O `run_id` é calculado ANTES do treino porque o diretório do
@@ -598,9 +600,7 @@ def _params_payload(params: TftTrainingParams) -> dict[str, object]:
     }
 
 
-def _tracking_params(
-    command: TrainTftCommand, fold: FoldSplit, run_id: str
-) -> dict[str, object]:
+def _tracking_params(command: TrainTftCommand, fold: FoldSplit, run_id: str) -> dict[str, object]:
     """Params logados no tracker (I12): identidade + geometria do fold."""
     return {
         "run_id": run_id,

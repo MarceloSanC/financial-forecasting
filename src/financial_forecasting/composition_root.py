@@ -88,6 +88,7 @@ from financial_forecasting.features.modeling.application.ports.out.quantile_mode
 )
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
     TftTrainer,
+    TftTrainingParams,
     TftTrainingResult,
 )
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
@@ -246,9 +247,42 @@ class _LazyPfTftTrainer:
             self._delegate = PfTftTrainer()
         return self._delegate
 
-    def train_and_predict(self, **kwargs: object) -> TftTrainingResult:
-        """Delega ao adapter real (o contrato semântico é integralmente dele)."""
-        return self._ensure().train_and_predict(**kwargs)  # type: ignore[arg-type]
+    def train_and_predict(  # noqa: PLR0913 — assinatura do port (parâmetros coesos)
+        self,
+        *,
+        params: TftTrainingParams,
+        feature_names: Sequence[str],
+        known_feature_names: Sequence[str],
+        rows: Sequence[Sequence[float]],
+        target: Sequence[float],
+        train_decision_indices: Sequence[int],
+        early_stop_decision_indices: Sequence[int],
+        test_decision_indices: Sequence[int],
+        max_horizon: int,
+        horizons: Sequence[int],
+        quantile_levels: Sequence[float],
+        artifact_dir: str,
+    ) -> TftTrainingResult:
+        """Delega ao adapter real (o contrato semântico é integralmente dele).
+
+        A assinatura espelha o port campo a campo, como o proxy do LightGBM
+        abaixo: com `**kwargs: object` o mypy não checaria conformidade nenhuma
+        — qualquer Protocol seria satisfeito por acidente.
+        """
+        return self._ensure().train_and_predict(
+            params=params,
+            feature_names=feature_names,
+            known_feature_names=known_feature_names,
+            rows=rows,
+            target=target,
+            train_decision_indices=train_decision_indices,
+            early_stop_decision_indices=early_stop_decision_indices,
+            test_decision_indices=test_decision_indices,
+            max_horizon=max_horizon,
+            horizons=horizons,
+            quantile_levels=quantile_levels,
+            artifact_dir=artifact_dir,
+        )
 
 
 class _LazyOptunaSearch:
@@ -278,6 +312,9 @@ class _LazyOptunaSearch:
 
     def tell(self, *, trial_number: int, objective_value: float) -> None:
         self._ensure().tell(trial_number=trial_number, objective_value=objective_value)
+
+    def fail(self, *, trial_number: int) -> None:
+        self._ensure().fail(trial_number=trial_number)
 
     def best_trial(self) -> SearchTrial:
         return self._ensure().best_trial()
@@ -421,9 +458,7 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
     # único do `target_timestamp` — ADR 4.3.0001).
     splitter = WalkForwardSplitter(
         TradingCalendar(
-            calendar_provider.sessions(
-                start=_CALENDAR_WINDOW_START, end=_CALENDAR_WINDOW_END
-            )
+            calendar_provider.sessions(start=_CALENDAR_WINDOW_START, end=_CALENDAR_WINDOW_END)
         )
     )
     run_baselines = RunBaselines(

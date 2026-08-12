@@ -281,6 +281,14 @@ exclude_lines = [
     "raise NotImplementedError",
     "raise AssertionError",
     "if TYPE_CHECKING:",
-    # corpo de stub de Protocol (ports out clock.py/id_generator.py): `...`
-    "\\.\\.\\.",
+    # Corpo de stub de Protocol (ports out clock.py/id_generator.py): a linha
+    # que contém SÓ `...`. O padrão PRECISA ser ancorado. Sem `^\s*` e `\s*$`
+    # ele casa com qualquer linha que contenha reticências — inclusive
+    # anotações de tipo multi-linha como `) -> tuple[float, ...]:` — e, quando
+    # a linha casada abre um bloco, o coverage exclui a FUNÇÃO INTEIRA em
+    # silêncio. Achado do Checkpoint C da Stage 5.4: com o padrão solto, o
+    # `split()` do `walk_forward_splitter` (o algoritmo de purga/embargo) e os
+    # `_load_dataset` dos use cases de modeling estavam FORA da medição do gate
+    # de 90% — o gate reportava verde sobre código que não media.
+    "^\\s*\\.\\.\\.\\s*$",
 ]

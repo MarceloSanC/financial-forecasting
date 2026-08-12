@@ -81,9 +81,7 @@ def seed_dataset(
     """
     count = len(sessions)
     frame_data: dict[str, object] = {
-        "timestamp": [
-            datetime(day.year, day.month, day.day, tzinfo=UTC) for day in sessions
-        ],
+        "timestamp": [datetime(day.year, day.month, day.day, tzinfo=UTC) for day in sessions],
         "asset_id": [asset] * count,
         "target_return": [0.001 + 0.01 * lcg(31 + index) for index in range(count)],
         "time_idx": list(range(count)),
@@ -95,11 +93,7 @@ def seed_dataset(
         elif name == _MONTH:
             frame_data[name] = [day.month for day in sessions]
         else:
-            frame_data[name] = [
-                lcg(1_000_000 + position * count + index) for index in range(count)
-            ]
+            frame_data[name] = [lcg(1_000_000 + position * count + index) for index in range(count)]
     target_dir = data_root / "processed" / "dataset_tft" / asset
     target_dir.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(frame_data).to_parquet(
-        target_dir / f"dataset_tft_{asset}.parquet", index=False
-    )
+    pd.DataFrame(frame_data).to_parquet(target_dir / f"dataset_tft_{asset}.parquet", index=False)

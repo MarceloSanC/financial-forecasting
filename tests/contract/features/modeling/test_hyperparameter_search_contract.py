@@ -43,16 +43,17 @@ _SPACE = (
 
 
 @pytest.fixture(params=["fake", "real"])
-def search(request: pytest.FixtureRequest) -> HyperparameterSearch:
-    return (
-        InMemoryHyperparameterSearch() if request.param == "fake" else OptunaSearch()
-    )
+def leg(request: pytest.FixtureRequest) -> str:
+    return str(request.param)
+
+
+@pytest.fixture
+def search(leg: str) -> HyperparameterSearch:
+    return InMemoryHyperparameterSearch() if leg == "fake" else OptunaSearch()
 
 
 class TestStudyLifecycle:
-    def test_create_study_returns_an_identifier(
-        self, search: HyperparameterSearch
-    ) -> None:
+    def test_create_study_returns_an_identifier(self, search: HyperparameterSearch) -> None:
         study_id = search.create_study(seed=_SEED)
 
         assert isinstance(study_id, str)
@@ -67,9 +68,7 @@ class TestAsk:
 
         assert set(trial.values) == {dimension.name for dimension in _SPACE}
 
-    def test_values_respect_the_declared_bounds(
-        self, search: HyperparameterSearch
-    ) -> None:
+    def test_values_respect_the_declared_bounds(self, search: HyperparameterSearch) -> None:
         search.create_study(seed=_SEED)
 
         for _ in range(5):
@@ -77,9 +76,7 @@ class TestAsk:
             for dimension in _SPACE:
                 assert dimension.low <= trial.values[dimension.name] <= dimension.high
 
-    def test_integer_dimension_yields_integral_values(
-        self, search: HyperparameterSearch
-    ) -> None:
+    def test_integer_dimension_yields_integral_values(self, search: HyperparameterSearch) -> None:
         """Atravessa como `float`, mas o valor é integral — o use case reconverte."""
         search.create_study(seed=_SEED)
 
@@ -87,9 +84,7 @@ class TestAsk:
             value = search.ask(_SPACE).values[_HIDDEN]
             assert value == int(value)
 
-    def test_trials_are_numbered_in_sequence_from_zero(
-        self, search: HyperparameterSearch
-    ) -> None:
+    def test_trials_are_numbered_in_sequence_from_zero(self, search: HyperparameterSearch) -> None:
         search.create_study(seed=_SEED)
 
         numbers = [search.ask(_SPACE).number for _ in range(4)]
@@ -98,9 +93,7 @@ class TestAsk:
 
 
 class TestTellAndBest:
-    def test_best_trial_is_the_lowest_objective(
-        self, search: HyperparameterSearch
-    ) -> None:
+    def test_best_trial_is_the_lowest_objective(self, search: HyperparameterSearch) -> None:
         search.create_study(seed=_SEED)
         for objective in (0.9, 0.2, 0.5):
             trial = search.ask(_SPACE)
@@ -108,9 +101,7 @@ class TestTellAndBest:
 
         assert search.best_trial().number == 1
 
-    def test_best_trial_carries_the_sampled_values(
-        self, search: HyperparameterSearch
-    ) -> None:
+    def test_best_trial_carries_the_sampled_values(self, search: HyperparameterSearch) -> None:
         search.create_study(seed=_SEED)
         sampled: dict[int, dict[str, float]] = {}
         for objective in (0.9, 0.2):
@@ -122,9 +113,7 @@ class TestTellAndBest:
 
         assert dict(best.values) == sampled[best.number]
 
-    def test_best_trial_without_any_tell_raises(
-        self, search: HyperparameterSearch
-    ) -> None:
+    def test_best_trial_without_any_tell_raises(self, search: HyperparameterSearch) -> None:
         search.create_study(seed=_SEED)
         search.ask(_SPACE)
 
@@ -132,6 +121,12 @@ class TestTellAndBest:
             search.best_trial()
 
 
-def test_both_legs_are_exercised(search: HyperparameterSearch) -> None:
-    """Guarda anti-suite-de-uma-perna: o parâmetro `real` traz o adapter mesmo."""
-    assert isinstance(search, InMemoryHyperparameterSearch | OptunaSearch)
+def test_both_legs_are_exercised(search: HyperparameterSearch, leg: str) -> None:
+    """Guarda anti-suite-de-uma-perna, amarrando o parâmetro ao TIPO.
+
+    `isinstance(search, Fake | Real)` seria satisfeita pelo fake nas duas
+    parametrizações — uma fixture que devolvesse sempre o fake apagaria a perna
+    real sem reprovar nada.
+    """
+    expected = OptunaSearch if leg == "real" else InMemoryHyperparameterSearch
+    assert isinstance(search, expected)

@@ -1043,4 +1043,65 @@ pergunta, com o teste
 `TestAlignment::test_longest_decoder_wins_when_a_decision_repeats` pinando a
 escolha.
 
+### 2026-08-11 — [fix] Checkpoint C dos blocos 4–5: 3 mutações sobreviventes mortas — Claude (Opus 5)
+**Contexto:** o revisor adversarial rodou 11 mutações sobre as Tasks 10–14; três
+sobreviveram à suíte inteira, mais um achado sistêmico de configuração.
+**Razão e correção, uma a uma:**
+
+- **F1 (sistêmico, fora da 5.4):** `exclude_lines` do `pyproject.toml` trazia o
+  padrão `\.\.\.` **sem âncora**. Qualquer linha contendo três pontos — corpo de
+  `Protocol`, mas também docstrings e reticências em comentários — saía da
+  medição, e com ela FUNÇÕES INTEIRAS (o `split()` do `WalkForwardSplitter`
+  entre elas). Trocado por `^\s*\.\.\.\s*$`. A remedição expôs 505 statements
+  antes invisíveis e o gate seguiu verde (97,76%) — o achado é de confiança na
+  métrica, não de dívida de teste.
+- **F2 (M2 sobreviveu):** nenhum teste asseria QUAL valor chega ao
+  `HyperparameterSearch.tell`; uma varredura que alimentasse o TPE com uma
+  constante — busca aleatória disfarçada — mantinha o DTO de saída correto e a
+  suíte verde. `TestObjectiveReachesTheStudy` agora pina
+  `objectives == {n: min(history)}` e que trial falho não recebe objetivo.
+- **F3:** `params = replace(...)` estava FORA do `try` do trial, então um
+  `TypeError` de recasting derrubava a varredura inteira em vez de descartar o
+  trial. Movido para dentro; `except` ampliado para `(ValueError, RuntimeError,
+  TypeError)`.
+- **F4 (M4 sobreviveu):** trocar `folds[-1]` por `folds[0]` não reprovava nada.
+  `TestFoldChoice` recalcula os folds pelo splitter e assere os índices de treino
+  do último.
+- **F5 (M11 sobreviveu):** a guarda anti-suíte-de-uma-perna era vácua —
+  `isinstance(x, Fake | Real)` é satisfeita pelo fake nas DUAS parametrizações.
+  Uma fixture que devolvesse sempre o fake apagaria a perna real (e com ela C5,
+  C10, A4c) com 40 testes verdes. Nos dois contratos a fixture virou
+  `leg` + `trainer(leg)`, e a asserção amarra parâmetro ao TIPO.
+- **F6:** `run_tft_sweep.py` estava em 88%, abaixo do mínimo por arquivo de A17.
+  Cobertos absorção de falha do tracker, C1, C6 e as cláusulas restantes de C2 —
+  96%.
+- **F7:** a Task 14 listava `tests/unit/shared/test_composition_root.py` como
+  arquivo a modificar e ele não fora tocado; o e2e só asseria `is not None`.
+  Três testes novos: colaboradores compartilhados (I9), proxies lazy sem
+  delegate construído, e a AUSÊNCIA de `_persist_predictions`/
+  `_analytics_repository` no `RunTftSweep` — é essa asserção negativa que
+  impede um wiring futuro de reintroduzir o vazamento que ADR 5.4.0005 barra.
+- **F9:** `_LazyPfTftTrainer.train_and_predict` usava `**kwargs: object` com
+  `type: ignore`, o que aceitava silenciosamente qualquer chamada errada.
+  Reescrito espelhando o port campo a campo; o `type: ignore` caiu.
+- **F10:** o port não tinha como marcar trial inviável. Um objetivo inventado
+  contaminaria o amostrador e deixar pendente cria zumbi no estudo. Adicionado
+  `fail(*, trial_number)` ao Protocol, ao fake e ao adapter
+  (`study.tell(..., state=TrialState.FAIL)`).
+
+### 2026-08-11 — [finding] duplicação de `_load_dataset` entre `TrainTft` e `RunTftSweep` — escalado para a 5.5 — Claude (Opus 5)
+**Contexto:** os dois use cases repetem a leitura do dataset TFT (read + C1 + C6
++ ordenação temporal) e os três *helpers* de tipagem de linha
+(`_timestamp_of`, `_target_return_of`, `_feature_value_of`) — cerca de 55 linhas.
+**Por que NÃO foi extraído agora:** (a) as duas cópias já **divergem** — a do
+treino devolve também os timestamps ISO e ergue "nothing to train", a da
+varredura devolve 3-tupla e ergue "nothing to sweep"; uma extração hoje teria de
+parametrizar as duas diferenças no chute de qual o terceiro chamador vai querer;
+(b) `docs/LAYOUT.md` reserva `application/use_cases/` para **um arquivo por use
+case**, e nem `domain/services/` (isto lê por port) nem uma pasta nova servem
+sem justificativa de convenção; (c) com dois chamadores a forma certa ainda não
+está determinada. A 5.5 (avaliação) traz o terceiro consumidor do mesmo dataset
+e é o ponto natural de decidir a assinatura — registrado aqui para não virar
+dívida silenciosa.
+
 <!-- END: post-execution -->

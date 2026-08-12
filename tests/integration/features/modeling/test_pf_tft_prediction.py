@@ -80,9 +80,7 @@ def _panel(mutated: tuple[int, ...] = ()) -> tuple[list[list[float]], list[float
         [0.01 * index, 50.0 + index, float(index % 5), float(index % 12 + 1)]
         for index in range(_PANEL)
     ]
-    target = [
-        (5.0 if index in mutated else 0.0) + 0.001 * index for index in range(_PANEL)
-    ]
+    target = [(5.0 if index in mutated else 0.0) + 0.001 * index for index in range(_PANEL)]
     return rows, target
 
 
@@ -197,9 +195,7 @@ class TestAlignment:
 
 
 class TestBestCheckpointIsUsed:
-    def test_prediction_matches_a_model_reloaded_from_the_artifact(
-        self, tmp_path: Path
-    ) -> None:
+    def test_prediction_matches_a_model_reloaded_from_the_artifact(self, tmp_path: Path) -> None:
         """A5 (fecho) — a mutação "predizer com a última época" reprova aqui."""
         from pytorch_forecasting import TemporalFusionTransformer  # noqa: PLC0415
 
@@ -235,9 +231,7 @@ class TestBestCheckpointIsUsed:
 class TestContextIsNotVacuous:
     """A4(b) — a janela é REALMENTE lida; sem isto A4(a) passaria vazia."""
 
-    def test_mutating_sessions_inside_the_window_changes_the_grid(
-        self, tmp_path: Path
-    ) -> None:
+    def test_mutating_sessions_inside_the_window_changes_the_grid(self, tmp_path: Path) -> None:
         baseline = _run(tmp_path / "a")
         mutated = _run(tmp_path / "b", mutated=_IN_WINDOW_OF_FIRST_DECISION)
 

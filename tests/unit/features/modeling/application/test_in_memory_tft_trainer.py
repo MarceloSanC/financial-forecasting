@@ -86,12 +86,8 @@ class TestEmissionRule:
         result = _call(InMemoryTftTrainer(), tmp_path)
 
         first_horizon, second_horizon = _HORIZONS
-        emitted_h1 = tuple(
-            sorted(t for t, by_h in result.grids.items() if first_horizon in by_h)
-        )
-        emitted_h2 = tuple(
-            sorted(t for t, by_h in result.grids.items() if second_horizon in by_h)
-        )
+        emitted_h1 = tuple(sorted(t for t, by_h in result.grids.items() if first_horizon in by_h))
+        emitted_h2 = tuple(sorted(t for t, by_h in result.grids.items() if second_horizon in by_h))
 
         assert emitted_h1 == _EXPECTED_H1_DECISIONS
         assert emitted_h2 == _EXPECTED_H2_DECISIONS
@@ -113,9 +109,7 @@ class TestDeclaredDiscard:
         assert result.fitted_decision_count == _EXPECTED_FITTED
         assert result.monitored_decision_count == _EXPECTED_MONITORED
 
-    def test_encoder_longer_than_train_block_leaves_nothing_to_fit(
-        self, tmp_path: Path
-    ) -> None:
+    def test_encoder_longer_than_train_block_leaves_nothing_to_fit(self, tmp_path: Path) -> None:
         """Janela maior que o bloco de treino zera as decisões elegíveis (C3)."""
         with pytest.raises(ValueError, match="treino"):
             _call(InMemoryTftTrainer(), tmp_path, encoder_length=40)
@@ -167,9 +161,7 @@ class TestAlignmentOracle:
 class TestFitOnlyMode:
     """Modo da varredura: nada emitido, nenhum arquivo escrito (ADR 5.4.0005)."""
 
-    def test_empty_test_set_emits_nothing_and_writes_no_checkpoint(
-        self, tmp_path: Path
-    ) -> None:
+    def test_empty_test_set_emits_nothing_and_writes_no_checkpoint(self, tmp_path: Path) -> None:
         result = _call(InMemoryTftTrainer(), tmp_path, test_indices=())
 
         assert result.grids == {}
@@ -188,9 +180,7 @@ class TestStoppingMechanism:
         """`best_epoch < len - 1` é o que torna "não restaurar" observável."""
         result = _call(InMemoryTftTrainer(), tmp_path)
 
-        assert result.best_epoch == result.val_loss_by_epoch.index(
-            min(result.val_loss_by_epoch)
-        )
+        assert result.best_epoch == result.val_loss_by_epoch.index(min(result.val_loss_by_epoch))
         assert result.best_epoch < len(result.val_loss_by_epoch) - 1
 
 

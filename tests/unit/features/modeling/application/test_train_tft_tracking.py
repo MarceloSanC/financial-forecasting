@@ -113,9 +113,7 @@ class _RepositoryProbingTracker:
 
     def start_run(self, *, run_name: str | None = None, run_id: str | None = None) -> str:
         assert self.repository is not None
-        self.rows_at_start.append(
-            len(self.repository.read(layer="silver", table=_FACT_TABLE))
-        )
+        self.rows_at_start.append(len(self.repository.read(layer="silver", table=_FACT_TABLE)))
         return f"tracking-{len(self.rows_at_start)}"
 
     def log_params(self, params: Mapping[str, object]) -> None:
@@ -135,9 +133,7 @@ class _RepositoryProbingTracker:
 
 
 class TestRunIsTracked:
-    def test_one_run_per_fold_with_params_metrics_tags_and_artifact(
-        self, tmp_path: Path
-    ) -> None:
+    def test_one_run_per_fold_with_params_metrics_tags_and_artifact(self, tmp_path: Path) -> None:
         use_case, _, _, tracker = _build(tmp_path)
 
         result = use_case(_command())
@@ -191,9 +187,7 @@ class TestRunIsTracked:
 
 
 class TestPersistBeforeTrack:
-    def test_predictions_are_already_persisted_when_the_run_opens(
-        self, tmp_path: Path
-    ) -> None:
+    def test_predictions_are_already_persisted_when_the_run_opens(self, tmp_path: Path) -> None:
         """A ordem é o que torna a absorção de C8 segura — e aqui ela é observada."""
         probing = _RepositoryProbingTracker()
         use_case, repo, _, _ = _build(tmp_path, tracker=probing)
@@ -222,9 +216,7 @@ class TestTrackerFailureIsAbsorbed:
         assert all(summary.rows_written > 0 for summary in result.runs)
         assert repo.read(layer="silver", table=_FACT_TABLE)
 
-    def test_failure_midway_is_absorbed_and_the_run_is_closed(
-        self, tmp_path: Path
-    ) -> None:
+    def test_failure_midway_is_absorbed_and_the_run_is_closed(self, tmp_path: Path) -> None:
         tracker = _LateExplodingTracker()
         use_case, repo, _, _ = _build(tmp_path, tracker=tracker)
 

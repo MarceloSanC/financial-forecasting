@@ -133,23 +133,25 @@ class InMemoryTftTrainer:
     ) -> TftTrainingResult:
         """Simula o treino e emite a grade crua conforme o contrato do port."""
         self.call_count += 1
-        self.calls.append({
-            "params": params,
-            "feature_names": tuple(feature_names),
-            "known_feature_names": tuple(known_feature_names),
-            # O painel entra no registro para que a política de ausência
-            # (None -> NaN) seja verificável na FRONTEIRA, e não só por
-            # inspeção do parser do use case.
-            "rows": tuple(tuple(row) for row in rows),
-            "target": tuple(target),
-            "train_decision_indices": tuple(train_decision_indices),
-            "early_stop_decision_indices": tuple(early_stop_decision_indices),
-            "test_decision_indices": tuple(test_decision_indices),
-            "max_horizon": max_horizon,
-            "horizons": tuple(horizons),
-            "quantile_levels": tuple(quantile_levels),
-            "artifact_dir": artifact_dir,
-        })
+        self.calls.append(
+            {
+                "params": params,
+                "feature_names": tuple(feature_names),
+                "known_feature_names": tuple(known_feature_names),
+                # O painel entra no registro para que a política de ausência
+                # (None -> NaN) seja verificável na FRONTEIRA, e não só por
+                # inspeção do parser do use case.
+                "rows": tuple(tuple(row) for row in rows),
+                "target": tuple(target),
+                "train_decision_indices": tuple(train_decision_indices),
+                "early_stop_decision_indices": tuple(early_stop_decision_indices),
+                "test_decision_indices": tuple(test_decision_indices),
+                "max_horizon": max_horizon,
+                "horizons": tuple(horizons),
+                "quantile_levels": tuple(quantile_levels),
+                "artifact_dir": artifact_dir,
+            }
+        )
 
         panel_size = self._validate_structure(
             feature_names=feature_names,
@@ -264,9 +266,7 @@ class InMemoryTftTrainer:
 
         panel_size = len(rows)
         _validate_contiguous("train_decision_indices", train_decision_indices, panel_size)
-        _validate_contiguous(
-            "early_stop_decision_indices", early_stop_decision_indices, panel_size
-        )
+        _validate_contiguous("early_stop_decision_indices", early_stop_decision_indices, panel_size)
         _validate_contiguous("test_decision_indices", test_decision_indices, panel_size)
         return panel_size
 
