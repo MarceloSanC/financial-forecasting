@@ -32,7 +32,6 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
-import pandas as pd
 import pytest
 
 from financial_forecasting.composition_root import wire_dependencies
@@ -47,11 +46,9 @@ from financial_forecasting.features.modeling.application.use_cases.train_gbm_qua
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import (
     ScopeSpec,
 )
-from financial_forecasting.shared.adapters.out.calendar.exchange_calendars_provider import (
-    ExchangeCalendarsProvider,
-)
 from financial_forecasting.shared.domain.exceptions.base import DuplicateKeyError
 from financial_forecasting.shared.infrastructure.config.settings import Settings
+from tests.integration.features.modeling.conftest import seed_dataset, xnys_sessions
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -88,51 +85,8 @@ _DIM_RUN = "dim_run"
 
 
 def _xnys_sessions() -> tuple[date, ...]:
-    """120 sessões XNYS REAIS a partir de 2021-01-04 (grade densa da 3.5)."""
-    window = ExchangeCalendarsProvider().sessions(
-        start=date(2021, 1, 4), end=date(2021, 7, 30)
-    )
-    assert len(window.sessions) >= _N_SESSIONS
-    return window.sessions[:_N_SESSIONS]
-
-
-def _lcg(seed: int) -> float:
-    """Ruído determinístico em [-0.5, 0.5) (sem RNG global)."""
-    return ((seed * 1103515245 + 12345) % 2**31) / 2**31 - 0.5
-
-
-def _seed_dataset(data_root: Path, sessions: Sequence[date]) -> None:
-    """Materializa o parquet físico da 3.5 com TODAS as colunas esperadas.
-
-    As colunas de feature vêm de `expected_feature_names()` (fonte única — C6
-    reprovaria um seed com lista paralela desatualizada); `day_of_week`/`month`
-    são os ordinais REAIS das sessões; `time_idx`/`fundamentals_effective_date`
-    presentes para provar a exclusão I10 também no e2e.
-    """
-    n = len(sessions)
-    frame_data: dict[str, object] = {
-        "timestamp": [
-            datetime(day.year, day.month, day.day, tzinfo=UTC) for day in sessions
-        ],
-        "asset_id": [_ASSET] * n,
-        "target_return": [0.001 + 0.01 * _lcg(31 + i) for i in range(n)],
-        "time_idx": list(range(n)),
-        "fundamentals_effective_date": [None] * n,
-    }
-    for position, name in enumerate(_FEATURE_NAMES):
-        if name == "day_of_week":
-            frame_data[name] = [day.weekday() for day in sessions]
-        elif name == "month":
-            frame_data[name] = [day.month for day in sessions]
-        else:
-            frame_data[name] = [
-                _lcg(1_000_000 + position * n + i) for i in range(n)
-            ]
-    target_dir = data_root / "processed" / "dataset_tft" / _ASSET
-    target_dir.mkdir(parents=True)
-    pd.DataFrame(frame_data).to_parquet(
-        target_dir / f"dataset_tft_{_ASSET}.parquet", index=False
-    )
+    """120 sessões XNYS reais — helper compartilhado movido para o conftest."""
+    return xnys_sessions(_N_SESSIONS)
 
 
 def _command() -> TrainGbmQuantileCommand:
@@ -160,7 +114,7 @@ def _command() -> TrainGbmQuantileCommand:
 
 
 def _wire_and_run(data_root: Path) -> tuple[ApplicationDependencies, TrainGbmQuantileResult]:
-    _seed_dataset(data_root, _xnys_sessions())
+    seed_dataset(data_root, _xnys_sessions(), _FEATURE_NAMES, asset=_ASSET)
     deps = wire_dependencies(
         settings=Settings(
             _env_file=None,

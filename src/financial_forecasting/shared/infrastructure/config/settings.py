@@ -69,6 +69,18 @@ class Settings(BaseSettings):
     # em testes, aponta para `tmp_path` para isolamento.
     data_root: Path = Path("data")
 
+    # ---------------------------------------------------------------------------
+    # Artefatos de modelo (Stage 5.4 / ADR 5.4.0006 D9)
+    # ---------------------------------------------------------------------------
+    # Raiz dos checkpoints de modelo. O `TrainTft` compõe
+    # `<artifacts_root>/tft/<run_id>/` e registra o caminho no `ExperimentTracker`
+    # — nenhuma tabela silver nova é criada para artefato (o ADR 1.5.0002
+    # rejeitou explicitamente reproduzir o `fact_model_artifacts` do repo antigo).
+    # Separado de `data_root` de propósito: `data_root` é a raiz do medalhão, e
+    # checkpoint não é dado medalhão. Override por env (`ARTIFACTS_ROOT`); em
+    # testes, aponta para `tmp_path`.
+    artifacts_root: Path = Path("artifacts")
+
 
 @lru_cache
 def get_settings() -> Settings:
