@@ -1156,4 +1156,59 @@ Docker: 3 min 11 s antes da migração para `uv sync --locked`, 3 min 18 s depoi
 de determinismo (`test_two_isolated_runs_agree`, 32,01 s), que treina DUAS vezes
 por desenho — é o preço de provar I9, não desperdício.
 
+### 2026-08-11 — [fix] auditoria de testes independente: 27 mutações, 5 sobreviventes mortas — Claude (Opus 5)
+**Contexto:** auditor independente rodou **27 mutações semânticas reais** sobre
+os seis arquivos de produção da Stage, com árvore commitada em `d43ea57`.
+Resultado: 22 mortas, 5 sobreviventes. Os invariantes que são a razão de existir
+da Stage — I4(a) monitor, I4(b)/I8 normalizador, I7 `calib` fora de ajuste e
+seleção, I14 isolamento estrutural da varredura, A5 restauração do checkpoint,
+I15/I16 recorte e cauda — todos morreram, incluindo os casos estruturais.
+Zero skips na 5.4. Correções das cinco sobreviventes, cada uma verificada
+re-aplicando a mutação original:
+
+- **S1 (M3 — teto do quadro de predição).** A geometria canônica põe o bloco de
+  teste na PONTA do painel, então `max(test) + max_horizon + 1 > len(painel)` e
+  o recorte é um **no-op**: apagá-lo não mudava nada. A garantia inteira estava
+  no filtro `requested_decisions` — uma camada, não as duas que a docstring
+  afirma. `test_prediction_frame_has_a_ceiling_on_a_non_final_fold` mede o teto
+  onde ele é observável: painel de 64 sessões, teste em `[49,54)`, e assere
+  `max(prediction.data["time"]) == max(test) + max_horizon`. Verificado:
+  com `frame` inteiro em vez de `frame.iloc[:...]`, `1 failed, 19 passed`.
+- **S2 (M11 — "decodificador mais longo vence").** Indistinguível de "a primeira
+  amostra vence": a `pytorch-forecasting` hoje entrega a longa primeiro, então
+  a suíte era refém da ordenação interna da biblioteca. Um `batch_size`, um
+  sampler ou um release diferente faria decisões de teste serem avaliadas com
+  decodificador de 1 passo — geometria que o modelo nunca viu no treino — e
+  `h=2` sumiria em silêncio, quebrando a paridade de base amostral com a 5.3.
+  `test_the_rule_is_length_and_not_arrival_order` chama `_emit` com um
+  modelo-stub cuja ordem é a INVERSA. Verificado: com "primeira vence",
+  `1 failed, 14 passed`.
+- **S3 (M17 — tipagem na identidade do run). A mais grave.** O teste
+  `test_typing_is_part_of_the_run_identity` já existia e passava — **pelo motivo
+  errado**. `feature_names = unknown_names + known_names`, então mover a
+  PRIMEIRA spec de `unknown` para `known` também muda a ORDEM da lista, e o
+  run_id diferia por ordem mesmo com `known_feature_names` fora do payload. O
+  cenário de colisão real é mover a ÚLTIMA spec `unknown`: ela cai imediatamente
+  antes do calendário e a lista concatenada fica byte a byte idêntica. O teste
+  agora move a última e **assere `first_columns == second_columns`** antes de
+  comparar os run_id — é essa asserção do meio que separa "a tipagem entra na
+  identidade" de "a ordem mudou". Estendido também a `config_signature`, que
+  tem a mesma forma e é por onde a 5.5 reconhece "mesma configuração".
+  Verificado: sem `known_feature_names` no payload, `1 failed, 30 passed`.
+- **S4/S5 (M25/M26 — guarda de sanidade do `_LossHistory`).** D11 é defendido em
+  dois lugares (a guarda no callback e `num_sanity_val_steps=0` no `Trainer`) e
+  `test_history_has_one_entry_per_executed_epoch` só reprovava se AS DUAS
+  caíssem. Risco evolutivo: quem reabilitar a passagem de sanidade para depurar
+  passa a depender só da guarda, sem prova de que ela existe — e uma entrada
+  antes da época 0 desloca o índice inteiro, quebrando `best_epoch == argmin`,
+  de que A5 depende. `test_the_sanity_guard_holds_on_its_own` chama o gancho
+  direto com um trainer-stub. Verificado: sem a guarda, `1 failed, 12 passed`.
+
+**Não corrigido, por desenho:** o auditor apontou três invariantes com **prova
+em ponto único** (artefato ↔ `best_epoch`; monitor/predição herdam o
+normalizador; tipo explícito do normalizador). Não é vácuo — cada um TEM teste e
+cada um morreu sob mutação (M9, M6, M7). Duplicar a prova não aumentaria
+garantia, só custo de manutenção; fica registrado como fragilidade a exclusões
+futuras.
+
 <!-- END: post-execution -->

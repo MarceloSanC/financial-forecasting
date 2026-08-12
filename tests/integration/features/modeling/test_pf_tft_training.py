@@ -25,6 +25,9 @@ from pathlib import Path
 
 import pytest
 
+from financial_forecasting.features.modeling.adapters.out.pytorch_forecasting import (
+    pf_tft_trainer as module,
+)
 from financial_forecasting.features.modeling.adapters.out.pytorch_forecasting.pf_tft_trainer import (  # noqa: E501
     PfTftTrainer,
     _require_checkpoint,
@@ -35,6 +38,15 @@ from financial_forecasting.features.modeling.application.ports.out.tft_trainer i
 )
 
 pytestmark = pytest.mark.integration
+
+
+class _TrainerStub:
+    """Trainer mínimo para exercer o gancho do `_LossHistory` isoladamente."""
+
+    def __init__(self, *, sanity: bool, value: float) -> None:
+        self.sanity_checking = sanity
+        self.callback_metrics = {"val_loss": value}
+
 
 _PANEL = 54
 _ENCODER_LENGTH = 12
@@ -111,6 +123,26 @@ class TestStoppingMechanism:
         result = _fit(tmp_path)
 
         assert len(result.val_loss_by_epoch) == _MAX_EPOCHS
+
+    def test_the_sanity_guard_holds_on_its_own(self) -> None:
+        """A guarda do callback, provada SEM depender de `num_sanity_val_steps=0`.
+
+        D11 é defendido em dois lugares: a guarda `sanity_checking` no
+        `_LossHistory` e `num_sanity_val_steps=0` no `Trainer`. O teste acima
+        só reprova se AS DUAS caírem — cada uma isolada é indistinguível de sua
+        ausência. Isso é baixo risco hoje e alto risco na primeira vez que
+        alguém reabilitar a passagem de sanidade para depurar: aí a guarda
+        passa a ser a única defesa, e uma entrada antes da época 0 deslocaria
+        todo o índice, quebrando a identidade `best_epoch == argmin` de que A5
+        depende. Chamar o gancho direto é o que prova a guarda sozinha.
+        """
+        history = module._LossHistory()
+
+        history.on_validation_epoch_end(_TrainerStub(sanity=True, value=99.0), None)
+        history.on_validation_epoch_end(_TrainerStub(sanity=False, value=1.5), None)
+        history.on_validation_epoch_end(_TrainerStub(sanity=False, value=1.2), None)
+
+        assert history.losses == [1.5, 1.2]
 
     def test_checkpoint_exists_on_disk(self, tmp_path: Path) -> None:
         result = _fit(tmp_path)

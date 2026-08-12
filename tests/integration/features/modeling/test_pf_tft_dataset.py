@@ -114,6 +114,30 @@ class TestMechanics:
 
         assert monitor_max_time < _CALIB_START
 
+    def test_prediction_frame_has_a_ceiling_on_a_non_final_fold(self) -> None:
+        """O TETO do quadro de predição, medido onde ele é observável.
+
+        Na geometria canônica o bloco de teste está na PONTA do painel
+        (`max(test) + max_horizon + 1 > len(painel)`), então o recorte é um
+        no-op e remover o teto não muda nada — uma mutação que o apagasse
+        passaria. Só em fold NÃO-final existe painel adiante do teste, e é lá
+        que a afirmação da docstring do adapter tem conteúdo. Sem o teto, todo
+        fold intermediário materializaria amostras de decisão para o painel
+        inteiro à frente do bloco de teste, e a única rede restante seria o
+        filtro `requested_decisions` na emissão — uma camada, não duas.
+        """
+        long_panel = _PANEL + 10
+        rows = [
+            [0.01 * index, 50.0 + index, float(index % 5), float(index % 12 + 1)]
+            for index in range(long_panel)
+        ]
+        datasets = _build(rows=rows, target=[0.001 * index for index in range(long_panel)])
+
+        prediction_max_time = int(datasets.prediction.data["time"].max())
+
+        assert prediction_max_time == max(_TEST) + _MAX_HORIZON
+        assert prediction_max_time < long_panel - 1  # há painel adiante, e ele ficou fora
+
 
 def _normalizer_fitted_on(values: list[float]) -> tuple[float, float]:
     """Ajusta um normalizador igual ao do adapter sobre `values`.

@@ -557,26 +557,52 @@ def test_typing_is_part_of_the_run_identity(
 ) -> None:
     """I10 — mover uma spec de `unknown` para `known` MUDA o run_id.
 
-    O conjunto de colunas é o mesmo nos dois casos; o que muda é a tipagem. Se
-    `known_feature_names` saísse do payload, os dois runs colidiriam e a
-    auditabilidade da tipagem seria só uma frase no docstring.
+    **A escolha de QUAL spec mover é o teste.** `feature_names` é
+    `unknown_names + known_names`, então mover uma spec do MEIO do bloco
+    `unknown` também muda a ORDEM da lista — e o run_id passaria a diferir por
+    causa da ordem, com `known_feature_names` fora do payload. Uma versão
+    anterior deste teste movia a primeira coluna e por isso não distinguia as
+    duas hipóteses: era verde mesmo sem a tipagem na identidade.
+
+    Movendo a ÚLTIMA spec `unknown`, ela cai imediatamente antes do calendário
+    e a lista concatenada fica **byte a byte idêntica** nos dois cenários — a
+    asserção do meio prova isso. Aí a única diferença possível entre os dois
+    run_id é a tipagem, e é este o cenário de colisão real: dois modelos com o
+    mesmo conjunto de colunas e tipagens diferentes (o que I2 declara ser
+    mudança viva, não hipotética) indistinguíveis na identidade persistida —
+    `DuplicateKeyError` no armazém append-only no melhor caso, e dois modelos
+    diferentes com o mesmo `run_id` no cohort da 5.5 no pior.
     """
     columns = _FEATURE_NAMES[:3]
     all_unknown = tuple(_StubSpec(name=name, tft_typing="unknown") for name in columns)
-    one_known = (
-        _StubSpec(name=columns[0], tft_typing="known"),
-        *(_StubSpec(name=name, tft_typing="unknown") for name in columns[1:]),
+    last_known = (
+        *(_StubSpec(name=name, tft_typing="unknown") for name in columns[:-1]),
+        _StubSpec(name=columns[-1], tft_typing="known"),
     )
 
-    def _run_with(specs: tuple[_StubSpec, ...], directory: Path) -> str:
+    def _run_with(
+        specs: tuple[_StubSpec, ...], directory: Path
+    ) -> tuple[str, str, tuple[str, ...]]:
         monkeypatch.setattr(module, "list_feature_specs", lambda **_: specs)
-        use_case, _, _, _ = _build(directory)
-        return use_case(_command()).runs[0].run_id
+        use_case, repo, trainer, _ = _build(directory)
+        run_id = use_case(_command()).runs[0].run_id
+        signature = next(
+            str(row["config_signature"])
+            for row in repo.read(layer="silver", table="dim_run")
+            if row["run_id"] == run_id
+        )
+        return run_id, signature, tuple(trainer.calls[0]["feature_names"])
 
-    first = _run_with(all_unknown, tmp_path / "a")
-    second = _run_with(one_known, tmp_path / "b")
+    first, first_signature, first_columns = _run_with(all_unknown, tmp_path / "a")
+    second, second_signature, second_columns = _run_with(last_known, tmp_path / "b")
 
+    # Sem esta asserção o teste não separa "a tipagem entra na identidade" de
+    # "a ordem das colunas mudou".
+    assert first_columns == second_columns
     assert first != second
+    # `config_signature` tem a MESMA forma e o mesmo risco: é por ela que a 5.5
+    # reconhece "mesma configuração" ao compor o cohort.
+    assert first_signature != second_signature
 
 
 def test_emission_outside_the_requested_range_raises(tmp_path: Path) -> None:

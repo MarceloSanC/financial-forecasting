@@ -42,6 +42,30 @@ from financial_forecasting.features.modeling.application.ports.out.tft_trainer i
 
 pytestmark = pytest.mark.integration
 
+
+class _StubPrediction:
+    """Saída mínima de `model.predict` no formato que `_emit` consome."""
+
+    def __init__(
+        self, *, time_idx: tuple[int, ...], lengths: tuple[int, ...], output: list[Any]
+    ) -> None:
+        self.index = {"time_idx": list(time_idx)}
+        self.decoder_lengths = list(lengths)
+        self.output = output
+
+
+class _StubModel:
+    """Modelo-stub que devolve amostras em ordem CONTROLADA (ver o teste de ordem)."""
+
+    def __init__(
+        self, *, time_idx: tuple[int, ...], lengths: tuple[int, ...], output: list[Any]
+    ) -> None:
+        self._prediction = _StubPrediction(time_idx=time_idx, lengths=lengths, output=output)
+
+    def predict(self, *_: object, **__: object) -> _StubPrediction:
+        return self._prediction
+
+
 _PANEL = 54
 _LAST_INDEX = _PANEL - 1
 _ENCODER_LENGTH = 12
@@ -192,6 +216,49 @@ class TestAlignment:
         result = _run(tmp_path)
 
         assert set(result.grids[_FIRST_DECISION]) == set(_HORIZONS)
+
+    def test_the_rule_is_length_and_not_arrival_order(self) -> None:
+        """A regra é COMPRIMENTO, não "a primeira amostra vence".
+
+        O caso acima não separa as duas hipóteses: a `pytorch-forecasting`
+        hoje entrega a amostra longa primeiro, então "fica a primeira" produz o
+        mesmo resultado e uma mutação para essa regra passa. A distinção só
+        aparece com a CURTA chegando antes — situação que um `batch_size`, um
+        sampler ou um release diferente da lib podem produzir a qualquer
+        momento, e cujo efeito seria avaliar decisões de teste numa geometria de
+        entrada que o modelo nunca viu no treino (sempre `max_horizon` passos),
+        perdendo `h=2` em silêncio.
+
+        Por isso este teste chama `_emit` com um modelo-stub cuja ordem de
+        amostras é a INVERSA — é a única forma de exercer a cláusula sem ficar
+        refém da ordenação interna da biblioteca.
+        """
+        import torch  # noqa: PLC0415 — só este teste precisa do tensor cru
+
+        short_first = _StubModel(
+            time_idx=(_FIRST_DECISION + 1, _FIRST_DECISION + 1),
+            lengths=(1, 2),
+            output=torch.tensor(
+                [
+                    [[0.1, 0.2, 0.3], [0.0, 0.0, 0.0]],  # amostra 0: decodificador 1
+                    [[1.1, 1.2, 1.3], [2.1, 2.2, 2.3]],  # amostra 1: decodificador 2
+                ]
+            ),
+        )
+
+        grids = PfTftTrainer._emit(
+            model=short_first,
+            prediction_dataset=object(),
+            requested_decisions=frozenset({_FIRST_DECISION}),
+            horizons=_HORIZONS,
+            quantile_levels=_LEVELS,
+            batch_size=8,
+        )
+
+        # A amostra 1 (comprimento 2) tem de vencer, apesar de chegar DEPOIS.
+        assert set(grids[_FIRST_DECISION]) == set(_HORIZONS)
+        assert grids[_FIRST_DECISION][1] == pytest.approx((1.1, 1.2, 1.3))
+        assert grids[_FIRST_DECISION][2] == pytest.approx((2.1, 2.2, 2.3))
 
 
 class TestBestCheckpointIsUsed:
