@@ -5,7 +5,7 @@ when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem crit�
 keywords: [technical, plano de execução, tft-trainer, pytorch-forecasting, optuna, mlflow]
 status: done
 created_at: 2026-08-09
-updated_at: 2026-08-09
+updated_at: 2026-08-11
 stage_id: 5.4-tft-trainer
 stage_title: Trainer do TFT quantílico
 step_id: 5
