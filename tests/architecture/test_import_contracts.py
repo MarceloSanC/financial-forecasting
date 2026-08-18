@@ -67,6 +67,11 @@ _EXPECTED_CONTRACTS = (
     # optuna ao adapter .../out/optuna/ (concept 5.4 I13 / ADRs 5.4.0003 e 5.4.0005).
     "modeling-no-torch-leak",
     "modeling-no-optuna-leak",
+    # Issue #60: independência entre bounded contexts. `hexagonal-layers` é
+    # `type=layers` POR CONTAINER (só ordena camadas DENTRO de cada BC) e o
+    # `check_layout.py` só barra adapter<->adapter — nenhum gate cobria import
+    # cross-BC até aqui.
+    "bc-independence",
 )
 
 
@@ -83,16 +88,42 @@ def test_importlinter_file_exists_at_repo_root() -> None:
     assert parser["importlinter"]["root_package"] == "financial_forecasting"
 
 
-def test_importlinter_declares_expected_contracts() -> None:
-    """Cada contrato esperado deve estar declarado (guarda contra remoção)."""
+def _declared_contracts() -> set[str]:
+    """Nomes de contrato declarados no `.importlinter` de produção."""
     parser = _load_importlinter()
-    declared = {
+    return {
         section.split(":", 2)[2]
         for section in parser.sections()
         if section.startswith("importlinter:contract:")
     }
+
+
+def test_importlinter_declares_expected_contracts() -> None:
+    """`_EXPECTED_CONTRACTS` e o `.importlinter` são espelhos EXATOS.
+
+    A checagem é BIDIRECIONAL de propósito (issue #60). A versão anterior só
+    olhava `_EXPECTED_CONTRACTS - declared`, então um contrato ADICIONADO ao
+    `.importlinter` sem entrar nesta lista passava por vacuidade — e passou:
+    os contratos das Stages 2.4 e 3.2 ficaram anos fora da lista (registrado
+    como gap pré-existente na 5.2). Vacuidade importa porque a lista é o que
+    alimenta `test_each_expected_contract_is_individually_checkable` e
+    `test_every_expected_contract_has_a_real_violation_case`: contrato fora
+    dela não é exercitado por nenhum dos dois.
+    """
+    declared = _declared_contracts()
+
     missing = set(_EXPECTED_CONTRACTS) - declared
-    assert not missing, f"contratos ausentes no .importlinter: {sorted(missing)}"
+    assert not missing, (
+        f"contratos ausentes no .importlinter: {sorted(missing)} — "
+        "alguém removeu/renomeou um contrato e o gate perdeu cobertura."
+    )
+
+    unlisted = declared - set(_EXPECTED_CONTRACTS)
+    assert not unlisted, (
+        f"contratos no .importlinter fora de _EXPECTED_CONTRACTS: {sorted(unlisted)} — "
+        "adicione-os à lista, senão eles não são exercitados individualmente nem "
+        "exigem caso de violação real (contrato verde por vacuidade)."
+    )
 
 
 def test_domain_purity_forbids_the_data_ml_and_framework_libs() -> None:
@@ -322,8 +353,111 @@ _REAL_VIOLATION_CASES = (
             )
         },
         id="modeling-no-optuna-leak:modeling-application-imports-optuna",
+    # ---------------------------------------------------------------------
+    # Issue #60 — casos para os contratos que NUNCA tiveram um.
+    # Antes desta issue, 5 dos 10 contratos não apareciam aqui: o mais grave
+    # era `hexagonal-layers`, que encoda a regra CENTRAL de LAYOUT §3 e é o
+    # único `type=layers` do arquivo — logo, nenhum teste provava que um
+    # contrato de camadas sabe reprovar (o `test_forbidden_contract_detects_
+    # violation` monta pacote sintético e é `type=forbidden`).
+    # ---------------------------------------------------------------------
+    # `hexagonal-layers`: o domínio importando a application do MESMO container
+    # inverte a direção adapters > application > domain. Import de RUNTIME de
+    # propósito — `exclude_type_checking_imports = True` faz o grimp ignorar o
+    # bloco `if TYPE_CHECKING:`, que é justamente como o domínio tipa `Hasher`
+    # sem acoplar (ADR 1.4.0001). Um caso sob TYPE_CHECKING ficaria verde e daria
+    # a impressão errada de que o contrato não funciona.
+    pytest.param(
+        "hexagonal-layers",
+        {
+            "shared/domain/_arch_audit_taint_layers.py": (
+                "from financial_forecasting.shared.application.ports.out.hasher import Hasher\n"
+                "\n_use = Hasher\n"
+            )
+        },
+        id="hexagonal-layers:shared-domain-imports-application",
+    ),
+    # `inward-only`: mira a camada de FEATURE, não a `shared.*`. É o caso que
+    # prova a extensão de `source_modules` feita nesta issue — com o contrato
+    # antigo (só `shared.application`/`shared.domain`) este caso fica VERDE e o
+    # teste falha, que é exatamente o "contrato míope" que queremos pegar.
+    pytest.param(
+        "inward-only",
+        {
+            "features/market_data/application/_arch_audit_taint_inward.py": (
+                "from financial_forecasting.shared.infrastructure.config.settings import Settings\n"
+                "\n_use = Settings\n"
+            )
+        },
+        id="inward-only:market-data-application-imports-infrastructure",
+    ),
+    # `calendar-no-exchange-calendars-leak` (Stage 2.4 I3): a lib que arrasta
+    # pandas/numpy vive só no adapter `shared/adapters/out/calendar/`.
+    pytest.param(
+        "calendar-no-exchange-calendars-leak",
+        {
+            "shared/application/_arch_audit_taint_calendar.py": (
+                "import exchange_calendars  # violação temporária\n"
+            )
+        },
+        id="calendar-no-exchange-calendars-leak:shared-application-imports-lib",
+    ),
+    # `sentiment-no-ml-leak` (Stage 3.2 I5/D2): torch/transformers só no adapter
+    # finbert. O alvo é a `application` do BC feature_engineering — `domain-purity`
+    # já cobre `torch` no domínio, então um caso mirando o domínio não
+    # discriminaria ESTE contrato.
+    pytest.param(
+        "sentiment-no-ml-leak",
+        {
+            "features/feature_engineering/application/_arch_audit_taint_ml.py": (
+                "import transformers  # violação temporária\n"
+            )
+        },
+        id="sentiment-no-ml-leak:feature-engineering-application-imports-transformers",
+    ),
+    # `modeling-no-lightgbm-leak` (Stage 5.3 A9): lightgbm só no adapter.
+    pytest.param(
+        "modeling-no-lightgbm-leak",
+        {
+            "features/modeling/application/_arch_audit_taint_lightgbm.py": (
+                "import lightgbm  # violação temporária\n"
+            )
+        },
+        id="modeling-no-lightgbm-leak:modeling-application-imports-lightgbm",
+    ),
+    # `bc-independence` (issue #60): uma aresta cross-BC NOVA reprova, mesmo com
+    # as arestas legadas em `ignore_imports`. O alvo é `PredictionRow` justamente
+    # por NÃO estar na lista de exceções — se o teste usasse `QuantileForecast`
+    # (que está), o caso ficaria verde e provaria o oposto do que queremos.
+    pytest.param(
+        "bc-independence",
+        {
+            "features/modeling/application/_arch_audit_taint_bc.py": (
+                "from financial_forecasting.features.analytics_store.domain"
+                ".value_objects.prediction_row import PredictionRow\n"
+                "\n_use = PredictionRow\n"
+            )
+        },
+        id="bc-independence:modeling-imports-new-analytics-store-edge",
     ),
 )
+
+
+def test_every_expected_contract_has_a_real_violation_case() -> None:
+    """Todo contrato precisa de ao menos um caso que o faça ficar `broken`.
+
+    Sem isto, um contrato pode existir, ficar verde e nunca ter sido exercitado
+    contra uma violação real — que era o estado de 5 dos 10 contratos antes da
+    issue #60. Contrato sem prova de reação é declaração, não gate: ele não
+    distingue "a arquitetura está limpa" de "eu não sei olhar".
+    """
+    covered = {case.values[0] for case in _REAL_VIOLATION_CASES}
+    uncovered = set(_EXPECTED_CONTRACTS) - covered
+    assert not uncovered, (
+        f"contratos sem caso de violação real: {sorted(uncovered)} — "
+        "adicione um caso a _REAL_VIOLATION_CASES que faça o contrato ficar "
+        "`broken`, senão ele é um gate que nunca provou saber reprovar."
+    )
 
 
 @pytest.mark.parametrize(("contract_name", "files"), _REAL_VIOLATION_CASES)
