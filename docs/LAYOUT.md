@@ -242,6 +242,17 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 - **Imports sempre absolutos.** Nunca `from ..domain import` — use o caminho completo.
 - **Nenhum import circular.** Se você precisar, é sinal de que a camada está errada.
 - **Shared não importa de features.** O fluxo é sempre: features → shared, nunca o contrário.
+- **Features não importam de outras features.** Cada slice é uma unidade
+  substituível; o que precisa ser compartilhado sobe para `shared/`. As arestas
+  cross-feature que já existem estão declaradas UMA A UMA como exceção comentada
+  no contrato `bc-independence` do `.importlinter` — são débito medido, não
+  permissão, e uma aresta nova reprova o build. Exceção declarada hoje:
+  `market_data.domain.entities` (`Candle`, `NewsArticle`, `FundamentalReport`)
+  aparece em assinatura de port do `feature_engineering`; o tratamento fica para
+  ADR própria. **Nota de escopo:** esta regra enforça direção de dependência e
+  aciclicidade entre slices — NÃO afirma que cada slice é um Bounded Context
+  separado no sentido de Evans (a pré-condição desse padrão é escala de time, que
+  não existe neste projeto).
 
 ---
 

@@ -380,9 +380,9 @@ forbidden_modules =
 allow_indirect_imports = False
 # -----------------------------------------------------------------------------
 # Contrato 13 — bc-independence (type = independence) — issue #60
-# LAYOUT §1/§4: "cada funcionalidade de negócio vive em seu próprio diretório";
-# o fluxo é features -> shared, e a coesão de um bounded context é o que torna a
-# vertical slice uma unidade trocável. Nenhum contrato cobria isso: o
+# LAYOUT §7 (regra de ouro "Features não importam de outras features", emendada
+# junto com este contrato — a fonte da verdade vem primeiro). Nenhum contrato
+# cobria isso: o
 # `hexagonal-layers` é `type=layers` POR CONTAINER, então só ordena camadas
 # DENTRO de cada BC, e o `check_layout.py` só barra adapter<->adapter. Resultado:
 # `modeling.application` passou a importar `analytics_store` e
@@ -410,14 +410,19 @@ ignore_imports =
     # -- modeling -> analytics_store (dono único do target_timestamp, ADR 4.3.0001)
     # O use case de modeling monta o `PersistPredictionsCommand` e delega a
     # resolução temporal ao 4.3 em vez de remontar a linha LONG. A justificativa
-    # é boa; o acoplamento a use case CONCRETO de outro BC não. Sai quando o
-    # port `PredictionSink` + adapter anticorrupção entrarem.
+    # é boa; o acoplamento a use case CONCRETO de outro slice não. Sai quando o
+    # port for definido no CONSUMIDOR (`modeling/application/ports/out/`) e o
+    # `analytics_store` passar a satisfazê-lo por duck-typing — issue #68.
+    # NÃO por adapter anticorrupção: duplicar os VOs criaria duas definições da
+    # mesma linha de tabela, o oposto do que reprodutibilidade exige (#68).
     financial_forecasting.features.modeling.application.use_cases.run_baselines -> financial_forecasting.features.analytics_store.application.use_cases.persist_predictions
     financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile -> financial_forecasting.features.analytics_store.application.use_cases.persist_predictions
     # -- modeling -> analytics_store (VOs de domínio cruzando fronteira)
     # `QuantileForecast` (guardrail 4.3/I5) e `RunRecord` (linha de dim_run) são
-    # VOs do analytics_store construídos DENTRO do modeling. Saem junto com o
-    # `PredictionSink`/`RunLedger`, que devem expor DTOs próprios do modeling.
+    # VOs do analytics_store construídos DENTRO do modeling. Uso compartilhado de
+    # VO entre slices do MESMO contexto não é, por si, defeito — o que é defeito
+    # (e sai na #68) é depender da CLASSE CONCRETA do use case e furar a camada
+    # de aplicação do slice dono escrevendo direto no repositório dele.
     financial_forecasting.features.modeling.application.use_cases.run_baselines -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
     financial_forecasting.features.modeling.application.use_cases.run_baselines -> financial_forecasting.features.analytics_store.domain.value_objects.run_record
     financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
