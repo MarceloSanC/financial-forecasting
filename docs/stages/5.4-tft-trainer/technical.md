@@ -5,7 +5,7 @@ when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem crit�
 keywords: [technical, plano de execução, tft-trainer, pytorch-forecasting, optuna, mlflow]
 status: done
 created_at: 2026-08-09
-updated_at: 2026-08-11
+updated_at: 2026-08-09
 stage_id: 5.4-tft-trainer
 stage_title: Trainer do TFT quantílico
 step_id: 5
@@ -1299,5 +1299,42 @@ Task 01.
 - [x] Finding escalado com Stage candidata: duplicação de `_load_dataset` → 5.5.
 - [x] `roadmap.md` com a 5.4 em `done` e datas de hoje.
 - [x] ADRs 5.4.0001–0006 em `accepted`.
+
+### 2026-08-11 — [fix] auditoria independente: CI vermelha no HEAD do PR — Claude (Opus 5)
+**Achado (blocker).** O commit de fechamento `stage 5.4: complete` bumpou
+`updated_at: 2026-08-09 → 2026-08-11` no frontmatter deste arquivo e do
+`concept.md`. `CONVENTIONS.md` §3.4 é literal: **"`updated_at` do frontmatter
+não muda" com edições na §7** — o audit trail é a data+autor por entrada. Com
+`status: done` e a Stage ainda não mergeada, `check_technical_postexec.py`
+rejeita qualquer mudança fora dos marcadores, então `make check` e o job
+`lint-and-test` da CI ficavam VERMELHOS — e o `docs-check` mata o job **antes**
+da suíte, de modo que a CI nunca chegou a rodar os 1662 testes deste HEAD.
+Revertidos os dois campos para `2026-08-09`.
+
+**A causa é de processo, e é o aprendizado que importa.** A entrada do gate de
+saída acima declara "HEAD `5519a30`, árvore limpa" e cola `docs-check` verde —
+e isso era **verdade quando foi colhido**. Só que os dois commits de fechamento
+(`d481d17`, que cola a evidência, e `4ae0507`, que marca `complete`) vieram
+DEPOIS, e um deles quebrou o gate. Evidência verde de um commit que não é o
+candidato a merge é falso verde, por mais honesta que seja a medição. Some-se
+que a invocação colada passava **um arquivo como argumento**, enquanto
+`make check` roda o script sem argumento (21 arquivos) — duas leituras
+diferentes do mesmo gate.
+
+Regra que fica: **o gate de saída roda no HEAD final**, depois dos commits de
+fechamento, e com a mesma invocação que a CI usa. Não antes.
+
+**Achado non-blocker corrigido junto:** o comentário do `artifacts_root` em
+`settings.py` apontava para "ADR 5.4.0006 D9". A 5.4.0006 é o ADR do
+**normalizador**; D9 (artefato em disco) não tem ADR, vive no concept §7.
+Ponteiro trocado para `concept §7-D9` — o texto do comentário já estava certo.
+
+**Achado registrado sem ação:** o auditor observou que o argumento (b) da
+decisão de escalar a duplicação de `_load_dataset` para a 5.5 — "`LAYOUT.md`
+reserva `use_cases/` para um arquivo por use case" — é o mais fraco dos três,
+já que nada impede um módulo privado de leitura em outro ponto da `application`.
+Concordo: os argumentos (a) divergência real entre as cópias e (c) forma indefinida
+com dois chamadores sustentam a decisão sozinhos. A 5.5 não deve tratar (b) como
+impedimento estrutural.
 
 <!-- END: post-execution -->

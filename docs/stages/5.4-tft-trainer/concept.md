@@ -5,7 +5,7 @@ when-use: Consultar ao iniciar Fase 3B (technical) desta Stage; revisar antes de
 keywords: [concept, tft-trainer, pytorch-forecasting, quantile-loss, known-unknown, early-stopping, checkpoint, target-normalizer, optuna, exploratorio, artefato, mlflow]
 status: done
 created_at: 2026-08-09
-updated_at: 2026-08-11
+updated_at: 2026-08-09
 stage_id: 5.4-tft-trainer
 stage_title: Trainer do TFT quantílico
 step_id: 5

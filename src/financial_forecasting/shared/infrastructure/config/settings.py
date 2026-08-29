@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     data_root: Path = Path("data")
 
     # ---------------------------------------------------------------------------
-    # Artefatos de modelo (Stage 5.4 / ADR 5.4.0006 D9)
+    # Artefatos de modelo (Stage 5.4 / concept §7-D9)
     # ---------------------------------------------------------------------------
     # Raiz dos checkpoints de modelo. O `TrainTft` compõe
     # `<artifacts_root>/tft/<run_id>/` e registra o caminho no `ExperimentTracker`
