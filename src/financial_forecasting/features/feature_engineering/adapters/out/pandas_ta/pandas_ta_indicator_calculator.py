@@ -15,7 +15,15 @@ Fórmulas (concept 3.1 §4 / A6, validadas pela fixture-oráculo Task 06):
   (defaults 12/26/9 = EMA12-EMA26 e signal = EMA9(MACD)).
 - `ema_10/50/100/200` = `ta.ema(close, length=N)` (recursiva, alpha=2/(N+1)).
 - `volatility_20d` = `close.pct_change().rolling(20).std()` (cálculo manual).
-- `candle_range` = `high - low`; `candle_body` = `|close - open|` (cálculo manual).
+- `candle_range`/`candle_body` = DELEGADOS ao domínio
+  (`derived_features.candle_range`/`candle_body`) — a fórmula não é reimplementada aqui.
+
+Repartição de responsabilidade nas duas de candle (issue #67): o DOMÍNIO é dono da
+FÓRMULA (`high - low`, `|close - open|` — aritmética pura, testável, portável) e este
+ADAPTER é dono da FRONTEIRA DE DTYPE (o `astype("float32")` que o invariante I4 de
+`IndicatorSpec` exige do port). É a repartição do Humble Object: o adapter fica com a
+parte não-portável e cede a testável. Antes da #67 a aritmética morava inline aqui, sem
+nenhuma chamada de biblioteca com conteúdo — código de domínio em infraestrutura.
 
 I8/C2 — antes de devolver, valida que produziu EXATAMENTE as colunas de
 `INDICATOR_SPECS` (`set(produzidas) == set(registry)`); divergência → erro explícito
@@ -25,11 +33,15 @@ conjunto). Sequência vazia → saída vazia (C5).
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 
 import pandas as pd
 import pandas_ta_classic as ta
 
+from financial_forecasting.features.feature_engineering.domain.services import (
+    derived_features as df_,
+)
 from financial_forecasting.features.feature_engineering.domain.services.indicator_spec import (
     INDICATOR_SPECS,
 )
@@ -91,8 +103,14 @@ class PandasTaIndicatorCalculator:
             out[f"ema_{length}"] = ta.ema(close, length=length)
 
         out["volatility_20d"] = close.pct_change().rolling(_VOLATILITY_WINDOW).std()
-        out["candle_range"] = frame["high"] - frame["low"]
-        out["candle_body"] = (frame["close"] - frame["open"]).abs()
+
+        # Candle (#67): a fórmula vem do domínio; aqui só a travessia da fronteira.
+        out["candle_range"] = _from_domain(
+            df_.candle_range(frame["high"].tolist(), frame["low"].tolist())
+        )
+        out["candle_body"] = _from_domain(
+            df_.candle_body(frame["open"].tolist(), frame["close"].tolist())
+        )
 
         return out.astype("float32")
 
@@ -114,3 +132,13 @@ class PandasTaIndicatorCalculator:
         """`DataFrame` `float32` → uma `Mapping[str, float]` por barra (ordem preservada)."""
         names = list(INDICATOR_SPECS)
         return [{name: float(row[name]) for name in names} for _, row in indicators.iterrows()]
+
+
+def _from_domain(values: df_.OutSeq) -> list[float]:
+    """`OutSeq` do domínio → `list[float]`, traduzindo `None` (faltante) para `NaN`.
+
+    Travessia de fronteira: o domínio fala `None` para faltante, a coluna pandas fala
+    `NaN` — mesma semântica que a subtração de `Series` propagaria. A coerção a
+    `float32` (I4) é aplicada depois, no `astype` de `_compute_indicators`.
+    """
+    return [math.nan if value is None else value for value in values]
