@@ -11,10 +11,11 @@ Verifica:
    (libs de framework idem).
 3. Adapters de uma feature não importam adapters de outras features nem de uma
    subcamada irmã da mesma feature (in não importa out, out não importa in).
-3b. Adapter não importa adapter de OUTRO slot `(feature, side, subpacote)` —
-   inclui `out/pandas -> out/parquet`, que a regra 3 não expressava (issue #60).
-   Exceções vivem em `SIBLING_ADAPTER_ALLOWLIST`, com motivo, e reprovam quando
-   deixam de casar (exceção morta).
+3b. Adapter não importa adapter de OUTRO slot `(owner, side, subpacote)`, onde
+   `owner` é uma feature OU `shared` — inclui `out/pandas -> out/parquet`, que a
+   regra 3 não expressava (issue #60). Exceções vivem em
+   `SIBLING_ADAPTER_ALLOWLIST`, com motivo, e reprovam quando deixam de casar
+   (exceção morta).
 4. `shared/` não importa de `features/` (acoplamento inverso é proibido).
 5. Cada feature tem os diretórios obrigatórios (`domain/`, `application/`, `adapters/`).
 
@@ -178,18 +179,39 @@ def _module_name(py_file: Path, src_root: Path) -> str:
 
 
 def _adapter_slot(module: str) -> tuple[str, str, str] | None:
-    """`(feature, side, subpacote)` se `module` é um adapter de feature, senão None.
+    """`(owner, side, subpacote)` se `module` é um adapter, senão None.
 
-    `side` é `in`/`out`; `subpacote` é o diretório da tecnologia (`parquet`,
-    `pandas`, `finbert`, ...) ou `""` para arquivos direto sob `adapters/<side>/`.
+    `owner` é a feature (`market_data`, `modeling`, ...) **ou** `shared`; `side` é
+    `in`/`out`; `subpacote` é o diretório da tecnologia (`parquet`, `pandas`,
+    `finbert`, ...) ou `""` para arquivos direto sob `adapters/<side>/`.
+
+    `shared` entra por correção da issue #60 (finding da auditoria): a primeira
+    versão desta função exigia `parts[1] == "features"`, então os slots irmãos de
+    `shared/adapters/out/` (`calendar`, `hashing`, `mlflow`, `parquet`) ficavam
+    fora da regra 3b. Hoje não há import cruzado entre eles — o valor é fechar o
+    buraco antes que seja usado, que é a postura da issue inteira.
     """
     parts = module.split(".")
     # financial_forecasting.features.<feat>.adapters.<side>[.<sub>...]
-    min_parts_for_side = 5
-    if len(parts) < min_parts_for_side or parts[1] != "features" or parts[3] != "adapters":
+    min_parts_feature = 5
+    # financial_forecasting.shared.adapters.<side>[.<sub>...]
+    min_parts_shared = 4
+    if len(parts) < min_parts_shared or parts[0] != "financial_forecasting":
         return None
-    subpackage = parts[5] if len(parts) > min_parts_for_side else ""
-    return parts[2], parts[4], subpackage
+
+    if parts[1] == "features":
+        if len(parts) < min_parts_feature or parts[3] != "adapters":
+            return None
+        owner, side_index = parts[2], 4
+    elif parts[1] == "shared":
+        if parts[2] != "adapters":
+            return None
+        owner, side_index = "shared", 3
+    else:
+        return None
+
+    subpackage = parts[side_index + 1] if len(parts) > side_index + 1 else ""
+    return owner, parts[side_index], subpackage
 
 
 def check_sibling_adapter_imports(src_root: Path) -> list[str]:
@@ -201,9 +223,10 @@ def check_sibling_adapter_imports(src_root: Path) -> list[str]:
     não casava padrão nenhum. Falso verde de segunda ordem — quem lia o script
     concluía que a regra estava protegida (issue #60).
 
-    A comparação é por SLOT `(feature, side, subpacote)`: importar dentro do
-    próprio slot é normal (o adapter é um pacote), qualquer outro slot de adapter
-    é acoplamento entre implementações que deveria passar por port.
+    A comparação é por SLOT `(owner, side, subpacote)` — `owner` sendo uma feature
+    ou `shared`: importar dentro do próprio slot é normal (o adapter é um pacote),
+    qualquer outro slot de adapter é acoplamento entre implementações que deveria
+    passar por port.
     """
     violations: list[str] = []
     used_allowlist: set[int] = set()

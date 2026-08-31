@@ -122,6 +122,57 @@ def test_sibling_adapter_rule_flags_dead_allowlist_entry(
     assert "ALLOWLIST MORTA" in violations[0]
 
 
+def test_sibling_adapter_rule_covers_shared_adapters(
+    check_layout: ModuleType, tmp_path: Path
+) -> None:
+    """`shared/adapters/out/mlflow -> shared/adapters/out/parquet` reprova.
+
+    A primeira versão de `_adapter_slot` exigia `parts[1] == "features"`, então os
+    4 slots irmãos de `shared/adapters/out/` (`calendar`, `hashing`, `mlflow`,
+    `parquet`) ficavam fora da regra 3b — o mesmo buraco que a regra nasceu para
+    fechar do lado das features, medido pela auditoria da issue #60. Hoje não há
+    import cruzado entre eles no repo real; este teste é o que impede o buraco de
+    ser usado antes de alguém notar.
+    """
+    check_layout.SIBLING_ADAPTER_ALLOWLIST.clear()
+    src_root = _write_adapter_tree(
+        tmp_path,
+        source_rel="shared/adapters/out/mlflow/tracker.py",
+        import_line=(
+            "from financial_forecasting.shared.adapters.out.parquet.schemas"
+            ".bronze_schemas import PROBE\n"
+        ),
+    )
+
+    violations = check_layout.check_sibling_adapter_imports(src_root)
+
+    assert len(violations) == 1, f"esperava 1 violação, obtive {violations}"
+    assert "adapter irmão" in violations[0]
+    assert "('shared', 'out', 'mlflow')" in violations[0]
+
+
+def test_sibling_adapter_rule_allows_import_inside_the_same_shared_slot(
+    check_layout: ModuleType, tmp_path: Path
+) -> None:
+    """Import dentro do próprio slot de `shared` continua normal.
+
+    Contraparte do teste acima: sem isto, estender a regra a `shared` reprovaria
+    `parquet/parquet_medallion_store.py -> parquet/schemas/bronze_schemas.py`, que
+    é código real e legítimo — a regra morreria como ruído no primeiro PR.
+    """
+    check_layout.SIBLING_ADAPTER_ALLOWLIST.clear()
+    src_root = _write_adapter_tree(
+        tmp_path,
+        source_rel="shared/adapters/out/parquet/parquet_medallion_store.py",
+        import_line=(
+            "from financial_forecasting.shared.adapters.out.parquet.schemas"
+            ".bronze_schemas import PROBE\n"
+        ),
+    )
+
+    assert check_layout.check_sibling_adapter_imports(src_root) == []
+
+
 def test_real_repo_passes_the_sibling_adapter_rule() -> None:
     """A árvore real fica limpa (com as exceções declaradas em vigor).
 
