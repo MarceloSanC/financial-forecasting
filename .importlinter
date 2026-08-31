@@ -431,17 +431,15 @@ ignore_imports =
     # `list_feature_specs()` é consumido direto da application, sem injeção.
     # Sai quando o conjunto de features virar entrada do use case.
     financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile -> financial_forecasting.features.feature_engineering.domain.services.feature_registry
-    # -- PENDENTE DE MERGE DA STAGE 5.4 (PR #59) --------------------------------
-    # Estas 4 arestas AINDA NÃO EXISTEM nesta base: `train_tft.py` chega com a
-    # 5.4. Declaradas aqui de forma preventiva para que o merge de #59 não fique
-    # vermelho por um gate criado depois que a branch dele saiu. É a única razão
-    # de `unmatched_ignore_imports_alerting` estar em `warn` e não `error`.
+    # -- arestas do candidato TFT (Stage 5.4, mergeada em develop) --------------
+    # Mesma justificativa das anteriores: `PersistPredictionsCommand`,
+    # `QuantileForecast`/`RunRecord` e a registry de features atravessando a
+    # fronteira. Saem junto com as demais quando a issue #68 entrar.
     financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.analytics_store.application.use_cases.persist_predictions
     financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
     financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.analytics_store.domain.value_objects.run_record
     financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.feature_engineering.domain.services.feature_registry
-# `warn` (não `error`) SÓ por causa do bloco pendente acima: com `error`, as 4
-# arestas da 5.4 reprovariam como "exceção morta" enquanto #59 não mergeia.
-# AÇÃO AO MERGEAR #59: voltar para `error` — é o detector de exceção morta que
-# faz a lista encolher sozinha conforme as issues de fronteira fecham.
-unmatched_ignore_imports_alerting = warn
+# `error` é o detector de EXCEÇÃO MORTA: quando uma issue de fronteira remover
+# uma aresta, o ignore correspondente deixa de casar e o build cobra a remoção
+# da linha. É o que faz esta lista encolher sozinha em vez de virar sedimento.
+unmatched_ignore_imports_alerting = error

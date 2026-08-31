@@ -353,6 +353,7 @@ _REAL_VIOLATION_CASES = (
             )
         },
         id="modeling-no-optuna-leak:modeling-application-imports-optuna",
+    ),
     # ---------------------------------------------------------------------
     # Issue #60 — casos para os contratos que NUNCA tiveram um.
     # Antes desta issue, 5 dos 10 contratos não apareciam aqui: o mais grave
