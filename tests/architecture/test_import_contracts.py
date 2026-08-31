@@ -31,6 +31,7 @@ evitando `subprocess` (mais determinístico, sem depender do PATH do ambiente).
 
 from __future__ import annotations
 
+import ast
 import configparser
 import sys
 import textwrap
@@ -441,6 +442,122 @@ _REAL_VIOLATION_CASES = (
         },
         id="bc-independence:modeling-imports-new-analytics-store-edge",
     ),
+    # ---------------------------------------------------------------------
+    # Issue #60 (auditoria) — UM CASO POR MÓDULO PROIBIDO.
+    # O `## Escopo` item 3 pedia "um por módulo proibido onde o contrato lista
+    # vários", e só `modeling-no-torch-leak` cumpria. A auditoria mediu 7 dos 26
+    # módulos proibidos sem caso: com cobertura só por CONTRATO, um erro de
+    # digitação em `pyarrow`/`duckdb`/`numba` passa verde, porque o caso do
+    # módulo VIZINHO continua deixando o contrato `broken` — é o "contrato
+    # míope" um nível abaixo. `test_every_forbidden_module_has_a_real_violation_
+    # case` passa a exigir a paridade, então módulo proibido novo já nasce com
+    # caso.
+    # ---------------------------------------------------------------------
+    # `domain-purity`: o alvo é `shared.domain` em todos — o que se prova aqui é
+    # a lista de `forbidden_modules`; o `source_modules` já tem caso por camada
+    # nos blocos acima.
+    pytest.param(
+        "domain-purity",
+        {"shared/domain/_arch_audit_taint_numpy.py": "import numpy  # violação temporária\n"},
+        id="domain-purity:domain-imports-numpy",
+    ),
+    pytest.param(
+        "domain-purity",
+        {"shared/domain/_arch_audit_taint_pyarrow.py": "import pyarrow  # violação temporária\n"},
+        id="domain-purity:domain-imports-pyarrow",
+    ),
+    pytest.param(
+        "domain-purity",
+        {"shared/domain/_arch_audit_taint_torch.py": "import torch  # violação temporária\n"},
+        id="domain-purity:domain-imports-torch",
+    ),
+    pytest.param(
+        "domain-purity",
+        {
+            "shared/domain/_arch_audit_taint_pydantic.py": (
+                "import pydantic  # violação temporária\n"
+            )
+        },
+        id="domain-purity:domain-imports-pydantic",
+    ),
+    pytest.param(
+        "domain-purity",
+        {
+            "shared/domain/_arch_audit_taint_sqlalchemy.py": (
+                "import sqlalchemy  # violação temporária\n"
+            )
+        },
+        id="domain-purity:domain-imports-sqlalchemy",
+    ),
+    pytest.param(
+        "domain-purity",
+        {"shared/domain/_arch_audit_taint_fastapi.py": "import fastapi  # violação temporária\n"},
+        id="domain-purity:domain-imports-fastapi",
+    ),
+    # `store-no-storage-leak`: o alvo é a camada `application`, que `domain-purity`
+    # não cobre — é o que discrimina ESTE contrato para `pyarrow`.
+    pytest.param(
+        "store-no-storage-leak",
+        {
+            "features/modeling/application/_arch_audit_taint_pyarrow.py": (
+                "import pyarrow  # violação temporária\n"
+            )
+        },
+        id="store-no-storage-leak:modeling-application-imports-pyarrow",
+    ),
+    pytest.param(
+        "store-no-storage-leak",
+        {
+            "features/modeling/application/_arch_audit_taint_duckdb.py": (
+                "import duckdb  # violação temporária\n"
+            )
+        },
+        id="store-no-storage-leak:modeling-application-imports-duckdb",
+    ),
+    # `pandas_ta_classic` (I12 da Stage 3.1) mira o BC dono da lib.
+    pytest.param(
+        "store-no-storage-leak",
+        {
+            "features/feature_engineering/application/_arch_audit_taint_pta.py": (
+                "import pandas_ta_classic  # violação temporária\n"
+            )
+        },
+        id="store-no-storage-leak:feature-engineering-application-imports-pandas-ta",
+    ),
+    # `modeling-no-statsforecast-leak`: `numba` NÃO está instalado no ambiente e
+    # ainda assim reprova — o grimp resolve o nome do módulo externo pelo AST. É
+    # por isso que a defesa em profundidade contra um downgrade para a
+    # statsforecast 1.x (que arrastava numba) é testável hoje.
+    pytest.param(
+        "modeling-no-statsforecast-leak",
+        {
+            "features/modeling/application/_arch_audit_taint_numba.py": (
+                "import numba  # violação temporária\n"
+            )
+        },
+        id="modeling-no-statsforecast-leak:modeling-application-imports-numba",
+    ),
+    pytest.param(
+        "modeling-no-statsforecast-leak",
+        {
+            "features/modeling/application/_arch_audit_taint_numpy.py": (
+                "import numpy  # violação temporária\n"
+            )
+        },
+        id="modeling-no-statsforecast-leak:modeling-application-imports-numpy",
+    ),
+    # `sentiment-no-ml-leak`: `torch` na application do feature_engineering.
+    # Nenhum outro contrato cobre esse par — `domain-purity` só pega o `domain` e
+    # `modeling-no-torch-leak` só pega o BC modeling.
+    pytest.param(
+        "sentiment-no-ml-leak",
+        {
+            "features/feature_engineering/application/_arch_audit_taint_torch.py": (
+                "import torch  # violação temporária\n"
+            )
+        },
+        id="sentiment-no-ml-leak:feature-engineering-application-imports-torch",
+    ),
 )
 
 
@@ -458,6 +575,63 @@ def test_every_expected_contract_has_a_real_violation_case() -> None:
         f"contratos sem caso de violação real: {sorted(uncovered)} — "
         "adicione um caso a _REAL_VIOLATION_CASES que faça o contrato ficar "
         "`broken`, senão ele é um gate que nunca provou saber reprovar."
+    )
+
+
+def _imported_modules(source: str) -> set[str]:
+    """Nomes de módulo importados por um trecho de código-fonte."""
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names.add(node.module)
+    return names
+
+
+def test_every_forbidden_module_has_a_real_violation_case() -> None:
+    """Todo módulo de `forbidden_modules` precisa de um caso que o exercite.
+
+    `test_every_expected_contract_has_a_real_violation_case` garante cobertura por
+    CONTRATO — o que ainda deixa passar um erro na lista de módulos de um contrato
+    que proíbe vários: o caso de `torch` mantém `modeling-no-torch-leak` `broken`
+    mesmo que `lightning` vire `lightining` na lista. É o "contrato míope" um
+    nível abaixo — o contrato reprova, mas não reprova o que a lista DIZ que
+    reprova.
+
+    Gap medido na auditoria da issue #60 (`## Escopo` item 3, "um por módulo
+    proibido onde o contrato lista vários"): 7 dos 26 módulos proibidos não tinham
+    caso. Com este assert, módulo proibido novo já nasce com caso ou o build fica
+    vermelho — a disciplina deixa de depender de alguém lembrar.
+    """
+    parser = _load_importlinter()
+
+    imported_by_contract: dict[str, set[str]] = {}
+    for case in _REAL_VIOLATION_CASES:
+        contract_name, files = case.values
+        names = imported_by_contract.setdefault(contract_name, set())
+        for content in files.values():
+            names |= _imported_modules(content)
+
+    gaps: list[str] = []
+    for section in parser.sections():
+        if not section.startswith("importlinter:contract:"):
+            continue
+        if parser[section].get("type") != "forbidden":
+            continue
+        contract_name = section.split(":", 2)[2]
+        imported = imported_by_contract.get(contract_name, set())
+        for module in parser[section]["forbidden_modules"].split():
+            # o import injetado pode ser o próprio módulo (`import pandas`) ou um
+            # submódulo dele (`from financial_forecasting.features.x import y`).
+            if not any(name == module or name.startswith(f"{module}.") for name in imported):
+                gaps.append(f"{contract_name} -> {module}")
+
+    assert not gaps, (
+        f"módulos proibidos sem caso de violação real: {sorted(gaps)} — "
+        "adicione a _REAL_VIOLATION_CASES um caso que importe justamente esse "
+        "módulo, senão um erro de digitação no nome dele passa verde: o caso do "
+        "módulo vizinho continua deixando o contrato `broken`."
     )
 
 
