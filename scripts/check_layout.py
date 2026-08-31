@@ -11,6 +11,11 @@ Verifica:
    (libs de framework idem).
 3. Adapters de uma feature não importam adapters de outras features nem de uma
    subcamada irmã da mesma feature (in não importa out, out não importa in).
+3b. Adapter não importa adapter de OUTRO slot `(owner, side, subpacote)`, onde
+   `owner` é uma feature OU `shared` — inclui `out/pandas -> out/parquet`, que a
+   regra 3 não expressava (issue #60). Exceções vivem em
+   `SIBLING_ADAPTER_ALLOWLIST`, com motivo, e reprovam quando deixam de casar
+   (exceção morta).
 4. `shared/` não importa de `features/` (acoplamento inverso é proibido).
 5. Cada feature tem os diretórios obrigatórios (`domain/`, `application/`, `adapters/`).
 
@@ -83,6 +88,20 @@ FORBIDDEN_IMPORTS: list[tuple[str, list[str]]] = [
 # Diretórios obrigatórios em cada feature
 REQUIRED_FEATURE_DIRS = ["domain", "application", "adapters"]
 
+# Exceções DECLARADAS da regra 3b (adapter <-> adapter irmão), issue #60.
+# Formato: (módulo de origem, prefixo do import proibido, motivo).
+# Cada entrada é DÉBITO MEDIDO, não permissão permanente — some quando a issue
+# correspondente fechar. Entrada que não casa mais nada reprova (exceção morta),
+# pelo mesmo princípio do `unmatched_ignore_imports_alerting` do import-linter.
+SIBLING_ADAPTER_ALLOWLIST: list[tuple[str, str, str]] = [
+    (
+        "financial_forecasting.features.feature_engineering.adapters.out.pandas.dataset_assembler",
+        "financial_forecasting.features.feature_engineering.adapters.out.parquet.schemas",
+        "montador pandas acoplado ao schema pandera do adapter parquet; o schema "
+        "precisa virar contrato neutro da feature (LAYOUT §3 Adapters)",
+    ),
+]
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -152,6 +171,107 @@ def check_layer_imports(src_root: Path) -> list[str]:
     return violations
 
 
+def _module_name(py_file: Path, src_root: Path) -> str:
+    """Nome de módulo pontuado a partir do caminho do arquivo."""
+    rel = py_file.relative_to(src_root.parent).with_suffix("")
+    parts = [p for p in rel.parts if p != "__init__"]
+    return ".".join(parts)
+
+
+def _adapter_slot(module: str) -> tuple[str, str, str] | None:
+    """`(owner, side, subpacote)` se `module` é um adapter, senão None.
+
+    `owner` é a feature (`market_data`, `modeling`, ...) **ou** `shared`; `side` é
+    `in`/`out`; `subpacote` é o diretório da tecnologia (`parquet`, `pandas`,
+    `finbert`, ...) ou `""` para arquivos direto sob `adapters/<side>/`.
+
+    `shared` entra por correção da issue #60 (finding da auditoria): a primeira
+    versão desta função exigia `parts[1] == "features"`, então os slots irmãos de
+    `shared/adapters/out/` (`calendar`, `hashing`, `mlflow`, `parquet`) ficavam
+    fora da regra 3b. Hoje não há import cruzado entre eles — o valor é fechar o
+    buraco antes que seja usado, que é a postura da issue inteira.
+    """
+    parts = module.split(".")
+    # financial_forecasting.features.<feat>.adapters.<side>[.<sub>...]
+    min_parts_feature = 5
+    # financial_forecasting.shared.adapters.<side>[.<sub>...]
+    min_parts_shared = 4
+    if len(parts) < min_parts_shared or parts[0] != "financial_forecasting":
+        return None
+
+    if parts[1] == "features":
+        if len(parts) < min_parts_feature or parts[3] != "adapters":
+            return None
+        owner, side_index = parts[2], 4
+    elif parts[1] == "shared":
+        if parts[2] != "adapters":
+            return None
+        owner, side_index = "shared", 3
+    else:
+        return None
+
+    subpackage = parts[side_index + 1] if len(parts) > side_index + 1 else ""
+    return owner, parts[side_index], subpackage
+
+
+def check_sibling_adapter_imports(src_root: Path) -> list[str]:
+    """Regra 3b (LAYOUT §3, Adapters): adapter não importa adapter irmão.
+
+    A docstring deste script SEMPRE prometeu cobrir "adapters ... de uma
+    subcamada irmã da mesma feature", mas `FORBIDDEN_IMPORTS` só expressa
+    `in -> out` e `out -> in`: um adapter `out/pandas` importando `out/parquet`
+    não casava padrão nenhum. Falso verde de segunda ordem — quem lia o script
+    concluía que a regra estava protegida (issue #60).
+
+    A comparação é por SLOT `(owner, side, subpacote)` — `owner` sendo uma feature
+    ou `shared`: importar dentro do próprio slot é normal (o adapter é um pacote),
+    qualquer outro slot de adapter é acoplamento entre implementações que deveria
+    passar por port.
+    """
+    violations: list[str] = []
+    used_allowlist: set[int] = set()
+
+    for py_file in sorted(src_root.rglob("*.py")):
+        module = _module_name(py_file, src_root)
+        source_slot = _adapter_slot(module)
+        if source_slot is None:
+            continue
+
+        for imp in get_imports(py_file):
+            target_slot = _adapter_slot(imp)
+            if target_slot is None or target_slot == source_slot:
+                continue
+
+            allowed = False
+            for index, (allow_module, allow_prefix, _reason) in enumerate(
+                SIBLING_ADAPTER_ALLOWLIST
+            ):
+                if module == allow_module and imp.startswith(allow_prefix):
+                    used_allowlist.add(index)
+                    allowed = True
+                    break
+            if allowed:
+                continue
+
+            rel = py_file.relative_to(src_root.parent)
+            violations.append(
+                f"VIOLAÇÃO: {rel} importa '{imp}' — adapter não pode importar "
+                f"adapter irmão (slot {source_slot} -> {target_slot}); "
+                "passe pelo port (LAYOUT §3, Adapters)"
+            )
+
+    # Exceção morta: entrada que não casa mais nada é ruído que mascara o próximo
+    # afrouxamento. Mesmo princípio do `unmatched_ignore_imports_alerting`.
+    for index, (allow_module, allow_prefix, _reason) in enumerate(SIBLING_ADAPTER_ALLOWLIST):
+        if index not in used_allowlist:
+            violations.append(
+                f"ALLOWLIST MORTA: a exceção '{allow_module} -> {allow_prefix}' não "
+                "casa mais nenhum import — remova-a de SIBLING_ADAPTER_ALLOWLIST."
+            )
+
+    return violations
+
+
 def check_feature_structure(features_root: Path) -> list[str]:
     """Verifica que cada feature tem os diretórios obrigatórios."""
     violations: list[str] = []
@@ -203,6 +323,10 @@ def main() -> int:
     # Verifica imports por camada
     import_violations = check_layer_imports(src_root)
     all_violations.extend(import_violations)
+
+    # Verifica acoplamento entre adapters irmãos (regra 3b, issue #60)
+    sibling_violations = check_sibling_adapter_imports(src_root)
+    all_violations.extend(sibling_violations)
 
     # Verifica estrutura de features
     structure_violations = check_feature_structure(features_root)

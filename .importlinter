@@ -121,6 +121,14 @@ allow_indirect_imports = False
 #   - domain NÃO importa application/adapters/shared.infrastructure
 # A exceção composition_root (shared.infrastructure.http.app -> composition_root
 # -> features.*.adapters) é tratada por ignore_imports abaixo (LAYOUT §6).
+#
+# Issue #60: `source_modules` cobria SÓ `shared.*` — as camadas application/domain
+# das features ficavam de fora, então `features.<bc>.application` importando
+# `shared.infrastructure` passava por este contrato (só o `check_layout.py`, que
+# casa por prefixo textual, o pegava). Extensão aditiva: verde na base atual,
+# e o caso `inward-only:market-data-application-imports-infrastructure` em
+# `_REAL_VIOLATION_CASES` prova que o alvo novo REAGE (anti contrato míope).
+# Cada NOVA feature com application/domain entra aqui.
 # -----------------------------------------------------------------------------
 [importlinter:contract:inward-only]
 name = Direção outside-in — application/domain não importam para fora
@@ -128,6 +136,14 @@ type = forbidden
 source_modules =
     financial_forecasting.shared.application
     financial_forecasting.shared.domain
+    financial_forecasting.features.market_data.application
+    financial_forecasting.features.market_data.domain
+    financial_forecasting.features.feature_engineering.application
+    financial_forecasting.features.feature_engineering.domain
+    financial_forecasting.features.analytics_store.application
+    financial_forecasting.features.analytics_store.domain
+    financial_forecasting.features.modeling.application
+    financial_forecasting.features.modeling.domain
 forbidden_modules =
     financial_forecasting.shared.infrastructure
 
@@ -148,12 +164,13 @@ forbidden_modules =
 ignore_imports =
     financial_forecasting.shared.infrastructure.http.app -> financial_forecasting.composition_root
     financial_forecasting.composition_root -> financial_forecasting.features.**
-# `features/` ainda está vazio: o leg `composition_root -> features.**` da
-# fronteira só passa a casar quando a 1ª feature ganhar adapter wireado. Sem
-# `none`, o ignore não-casado vira alerta/erro hoje (F2). A presença do caminho
-# verbatim (LAYOUT §6, 222-229) documenta a exceção desde já; reentra como erro
-# quando o caminho existir e quisermos detectar exceção morta.
-unmatched_ignore_imports_alerting = none
+# Issue #60: o `none` era um deferimento da Stage 1.1, quando `features/` estava
+# vazio e o leg `composition_root -> features.**` não casava nada. As duas pernas
+# da exceção casam desde que a 1ª feature ganhou adapter wireado, então o
+# deferimento venceu: volta a `error`, que é o detector de EXCEÇÃO MORTA — se um
+# dia o composition_root parar de importar features (ou o app parar de importar o
+# composition_root), o ignore vira letra morta e o build avisa em vez de calar.
+unmatched_ignore_imports_alerting = error
 
 # -----------------------------------------------------------------------------
 # Contrato 5 — tracker-no-mlflow-leak (type = forbidden) — Stage 1.5 (I4)
@@ -361,3 +378,81 @@ source_modules =
 forbidden_modules =
     optuna
 allow_indirect_imports = False
+# -----------------------------------------------------------------------------
+# Contrato 13 — bc-independence (type = independence) — issue #60
+# LAYOUT §7 (regra de ouro "Features não importam de outras features", emendada
+# junto com este contrato — a fonte da verdade vem primeiro). Nenhum contrato
+# cobria isso: o
+# `hexagonal-layers` é `type=layers` POR CONTAINER, então só ordena camadas
+# DENTRO de cada slice, e o `check_layout.py` só barra adapter<->adapter.
+# Resultado: `modeling.application` passou a importar `analytics_store` e
+# `feature_engineering` livremente, incluindo a classe CONCRETA
+# `PersistPredictions` como colaborador de construtor — inversão de dependência
+# furada que nenhum gate viu.
+#
+# `independence` é BIDIRECIONAL: qualquer import entre dois módulos listados
+# reprova.
+#
+# PERÍMETRO — o que este contrato NÃO cobre. Está escrito aqui porque comentário
+# mais largo que o gate é o mesmo falso verde de segunda ordem que esta issue
+# existe para matar (LAYOUT §7 diz o mesmo, e é a fonte da verdade):
+#   - `market_data` está FORA da lista `modules`. NÃO é exceção declarada: é
+#     slice NÃO COBERTO — qualquer aresta que o envolva, inclusive uma nova,
+#     passa verde. As 9 arestas `feature_engineering -> market_data.domain.
+#     entities` (Candle/NewsArticle/FundamentalReport em assinatura de port) não
+#     estão declaradas abaixo. Incluí-lo forçaria agora a decisão sobre essas
+#     entidades, que a issue #68 defere para ADR própria.
+#   - Imports sob `if TYPE_CHECKING:` não são vistos
+#     (`exclude_type_checking_imports = True`, ver cabeçalho). As 3 referências
+#     `modeling -> analytics_store.application.ports.out.analytics_repository`
+#     são type-only e por isso NÃO aparecem na lista abaixo.
+#
+# Dentro do perímetro, cada aresta de runtime existente entra como exceção
+# NOMEADA abaixo (11 hoje). Elas não são "ok": são o débito medido, e a lista
+# encolhe conforme as issues de fronteira fecham. Aresta nova entre estes três
+# slices reprova o build — que é o ponto.
+# -----------------------------------------------------------------------------
+[importlinter:contract:bc-independence]
+name = Bounded contexts independentes (modeling / analytics_store / feature_engineering)
+type = independence
+modules =
+    financial_forecasting.features.modeling
+    financial_forecasting.features.analytics_store
+    financial_forecasting.features.feature_engineering
+ignore_imports =
+    # -- modeling -> analytics_store (dono único do target_timestamp, ADR 4.3.0001)
+    # O use case de modeling monta o `PersistPredictionsCommand` e delega a
+    # resolução temporal ao 4.3 em vez de remontar a linha LONG. A justificativa
+    # é boa; o acoplamento a use case CONCRETO de outro slice não. Sai quando o
+    # port for definido no CONSUMIDOR (`modeling/application/ports/out/`) e o
+    # `analytics_store` passar a satisfazê-lo por duck-typing — issue #68.
+    # NÃO por adapter anticorrupção: duplicar os VOs criaria duas definições da
+    # mesma linha de tabela, o oposto do que reprodutibilidade exige (#68).
+    financial_forecasting.features.modeling.application.use_cases.run_baselines -> financial_forecasting.features.analytics_store.application.use_cases.persist_predictions
+    financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile -> financial_forecasting.features.analytics_store.application.use_cases.persist_predictions
+    # -- modeling -> analytics_store (VOs de domínio cruzando fronteira)
+    # `QuantileForecast` (guardrail 4.3/I5) e `RunRecord` (linha de dim_run) são
+    # VOs do analytics_store construídos DENTRO do modeling. Uso compartilhado de
+    # VO entre slices do MESMO contexto não é, por si, defeito — o que é defeito
+    # (e sai na #68) é depender da CLASSE CONCRETA do use case e furar a camada
+    # de aplicação do slice dono escrevendo direto no repositório dele.
+    financial_forecasting.features.modeling.application.use_cases.run_baselines -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
+    financial_forecasting.features.modeling.application.use_cases.run_baselines -> financial_forecasting.features.analytics_store.domain.value_objects.run_record
+    financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
+    financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile -> financial_forecasting.features.analytics_store.domain.value_objects.run_record
+    # -- modeling -> feature_engineering (registry como singleton de módulo)
+    # `list_feature_specs()` é consumido direto da application, sem injeção.
+    # Sai quando o conjunto de features virar entrada do use case.
+    financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile -> financial_forecasting.features.feature_engineering.domain.services.feature_registry
+    # -- arestas do candidato TFT (Stage 5.4, mergeada em develop) --------------
+    # Mesma justificativa das anteriores: `PersistPredictionsCommand`,
+    # `QuantileForecast`/`RunRecord` e a registry de features atravessando a
+    # fronteira. Saem junto com as demais quando a issue #68 entrar.
+    financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.analytics_store.application.use_cases.persist_predictions
+    financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
+    financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.analytics_store.domain.value_objects.run_record
+    financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.feature_engineering.domain.services.feature_registry
+# `error` é o detector de EXCEÇÃO MORTA: quando uma issue de fronteira remover
+# uma aresta, o ignore correspondente deixa de casar e o build cobra a remoção
+# da linha. É o que faz esta lista encolher sozinha em vez de virar sedimento.
+unmatched_ignore_imports_alerting = error
