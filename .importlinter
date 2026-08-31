@@ -384,20 +384,33 @@ allow_indirect_imports = False
 # junto com este contrato — a fonte da verdade vem primeiro). Nenhum contrato
 # cobria isso: o
 # `hexagonal-layers` é `type=layers` POR CONTAINER, então só ordena camadas
-# DENTRO de cada BC, e o `check_layout.py` só barra adapter<->adapter. Resultado:
-# `modeling.application` passou a importar `analytics_store` e
+# DENTRO de cada slice, e o `check_layout.py` só barra adapter<->adapter.
+# Resultado: `modeling.application` passou a importar `analytics_store` e
 # `feature_engineering` livremente, incluindo a classe CONCRETA
 # `PersistPredictions` como colaborador de construtor — inversão de dependência
 # furada que nenhum gate viu.
 #
 # `independence` é BIDIRECIONAL: qualquer import entre dois módulos listados
-# reprova. `market_data` fica FORA da lista de propósito — `Candle`/`NewsArticle`
-# aparecem em ASSINATURA DE PORT do `feature_engineering` (9 arestas), o que é um
-# shared kernel de facto e merece ADR próprio, não um ignore enterrado aqui.
+# reprova.
 #
-# Cada aresta existente entra como exceção NOMEADA abaixo. Elas não são "ok":
-# são o débito medido, e a lista encolhe conforme as issues de fronteira fecham.
-# Aresta nova entre estes BCs reprova o build — que é o ponto.
+# PERÍMETRO — o que este contrato NÃO cobre. Está escrito aqui porque comentário
+# mais largo que o gate é o mesmo falso verde de segunda ordem que esta issue
+# existe para matar (LAYOUT §7 diz o mesmo, e é a fonte da verdade):
+#   - `market_data` está FORA da lista `modules`. NÃO é exceção declarada: é
+#     slice NÃO COBERTO — qualquer aresta que o envolva, inclusive uma nova,
+#     passa verde. As 9 arestas `feature_engineering -> market_data.domain.
+#     entities` (Candle/NewsArticle/FundamentalReport em assinatura de port) não
+#     estão declaradas abaixo. Incluí-lo forçaria agora a decisão sobre essas
+#     entidades, que a issue #68 defere para ADR própria.
+#   - Imports sob `if TYPE_CHECKING:` não são vistos
+#     (`exclude_type_checking_imports = True`, ver cabeçalho). As 3 referências
+#     `modeling -> analytics_store.application.ports.out.analytics_repository`
+#     são type-only e por isso NÃO aparecem na lista abaixo.
+#
+# Dentro do perímetro, cada aresta de runtime existente entra como exceção
+# NOMEADA abaixo (11 hoje). Elas não são "ok": são o débito medido, e a lista
+# encolhe conforme as issues de fronteira fecham. Aresta nova entre estes três
+# slices reprova o build — que é o ponto.
 # -----------------------------------------------------------------------------
 [importlinter:contract:bc-independence]
 name = Bounded contexts independentes (modeling / analytics_store / feature_engineering)
