@@ -50,19 +50,26 @@ _PRESENT_HIGH = 2.5
 def _candles(n: int = _N_BARS) -> list[Candle]:
     """Barras determinísticas com preços NÃO exatamente representáveis em float32.
 
-    Os offsets quebrados (`1.0891`/`1.0313`/`0.2137`) são deliberados: garantem que
-    `high - low` e `|close - open|` em float64 divirjam do float32 do port, dando
+    Os offsets quebrados (`1.0891`/`1.0313`/`0.2137`/`0.1873`) são deliberados: garantem
+    que `high - low` e `|close - open|` em float64 divirjam do float32 do port, dando
     dentes ao teste de paridade (ver `test_fixture_discriminates_float32_from_float64`).
+
+    As barras ALTERNAM alta e baixa (`close > open` nas pares, `close < open` nas ímpares).
+    Sem a alternância, o `abs()` de `candle_body` ficaria sem cobertura no nível do
+    contrato: uma fixture só de alta mantém `close - open` positivo e deixa a remoção do
+    `abs()` passar despercebida pelo gate de paridade.
     """
     base = datetime(2020, 1, 1, tzinfo=UTC)
     out: list[Candle] = []
     for i in range(n):
         close = 187.4432 + math.sin(i / 7.0) * 5.0 + i * 0.05
+        # par = barra de alta (abre abaixo); ímpar = barra de baixa (abre acima).
+        open_ = close - 0.2137 if i % 2 == 0 else close + 0.1873
         out.append(
             Candle(
                 asset=_ASSET,
                 timestamp=base + timedelta(days=i),
-                open=close - 0.2137,
+                open=open_,
                 high=close + 1.0891,
                 low=close - 1.0313,
                 close=close,
@@ -149,6 +156,19 @@ def test_fixture_discriminates_float32_from_float64() -> None:
         "a fixture perdeu o poder de discriminação: os preços viraram exatamente "
         "representáveis em float32, e o gate de paridade passou a ser vazio"
     )
+
+
+@pytest.mark.contract
+def test_fixture_covers_both_bullish_and_bearish_bars() -> None:
+    """ANTI-VACUIDADE do `abs()` — a fixture tem barra de alta E de baixa.
+
+    `candle_body` é `|close - open|`. Numa fixture só de alta, `close - open` já é
+    positivo e remover o `abs()` não mudaria valor nenhum — o gate de paridade passaria
+    verde sobre um adapter quebrado.
+    """
+    candles = _candles()
+    assert any(c.close > c.open for c in candles), "faltam barras de alta"
+    assert any(c.close < c.open for c in candles), "faltam barras de baixa"
 
 
 @pytest.mark.contract
