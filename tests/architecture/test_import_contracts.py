@@ -62,6 +62,11 @@ _EXPECTED_CONTRACTS = (
     # Stage 5.3 (A9): lightgbm confinado ao adapter
     # features/modeling/adapters/out/lightgbm/ (concept 5.3 §8).
     "modeling-no-lightgbm-leak",
+    # Stage 5.4 (A14): a pilha do candidato (torch/lightning/pytorch_forecasting)
+    # confinada ao adapter features/modeling/adapters/out/pytorch_forecasting/, e
+    # optuna ao adapter .../out/optuna/ (concept 5.4 I13 / ADRs 5.4.0003 e 5.4.0005).
+    "modeling-no-torch-leak",
+    "modeling-no-optuna-leak",
 )
 
 
@@ -274,6 +279,49 @@ _REAL_VIOLATION_CASES = (
             )
         },
         id="store-no-storage-leak:modeling-application-imports-pandas",
+    ),
+    # Stage 5.4 (A14): UM caso por módulo proibido do contrato
+    # `modeling-no-torch-leak`. Com um caso só (o de `torch`), um typo em
+    # `lightning`/`pytorch_forecasting` na lista de `forbidden_modules` ficaria
+    # verde — que é exatamente o "contrato míope" que esta constante existe para
+    # pegar. O alvo é `modeling.application` e não `modeling.domain`: o domínio
+    # já é coberto por `domain-purity` para `torch`, então um caso mirando o
+    # domínio não discriminaria o contrato novo.
+    pytest.param(
+        "modeling-no-torch-leak",
+        {
+            "features/modeling/application/_arch_audit_taint_torch.py": (
+                "import torch  # violação temporária\n"
+            )
+        },
+        id="modeling-no-torch-leak:modeling-application-imports-torch",
+    ),
+    pytest.param(
+        "modeling-no-torch-leak",
+        {
+            "features/modeling/application/_arch_audit_taint_lightning.py": (
+                "import lightning  # violação temporária\n"
+            )
+        },
+        id="modeling-no-torch-leak:modeling-application-imports-lightning",
+    ),
+    pytest.param(
+        "modeling-no-torch-leak",
+        {
+            "features/modeling/application/_arch_audit_taint_pf.py": (
+                "import pytorch_forecasting  # violação temporária\n"
+            )
+        },
+        id="modeling-no-torch-leak:modeling-application-imports-pytorch-forecasting",
+    ),
+    pytest.param(
+        "modeling-no-optuna-leak",
+        {
+            "features/modeling/application/_arch_audit_taint_optuna.py": (
+                "import optuna  # violação temporária\n"
+            )
+        },
+        id="modeling-no-optuna-leak:modeling-application-imports-optuna",
     ),
 )
 

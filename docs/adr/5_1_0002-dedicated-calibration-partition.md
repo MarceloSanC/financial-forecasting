@@ -134,6 +134,17 @@ so the calibration budget per fold is controllable and pre-registrable.
   not pretend to restore the finite-sample guarantee. Weighted/non-exchangeable
   variants (NexCP) are deliberated in Step 7.2, not here.
 
+> **Narrowed by [ADR 5.4.0001](./5_4_0001-encoder-context-across-partitions.md)
+> (Stage 5.4).** The word narrowed is **"solely"** in "reserved solely for
+> computing conformal non-conformity scores downstream". With the sequence model
+> of Stage 5.4, a test decision's encoder window may reach back across the purge
+> gap into `calib` (conditional on the geometry — the exact condition is in
+> 5.4.0001); reading those sessions as *input context* is
+> declared not to be a use of the partition in the sense forbidden here, because
+> it neither fits nor selects. The clause that matters — `calib` is never
+> consulted for early stopping or any model selection — is preserved verbatim
+> and is verified by mutation in that Stage.
+
 ## Implementation notes
 
 - `FoldSplit` carries `early_stop` and `calib` as separate, disjoint tuples;

@@ -75,10 +75,14 @@ RUN printf '%s\n' \
 # Cache de deps: copia pyproject + src antes do resto do codigo. Quando
 # arquivos fora desses caminhos mudam (tests, docs, scripts), o install de
 # deps reusa o layer cacheado.
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
-RUN uv venv /app/.venv && \
-    uv pip install --python /app/.venv/bin/python -e ".[dev]"
+# `uv sync --locked` e nao `uv pip install`: `uv pip` honra [tool.uv.sources]
+# (logo acertaria o indice CPU do torch), mas NAO consome o uv.lock — re-resolve
+# a cada build e pode instalar versoes que ninguem revisou. `--locked` instala
+# exatamente o conjunto travado, e falha se o lock estiver defasado em relacao ao
+# pyproject — dai o COPY do lock acima. Ver ADR 5.4.0003.
+RUN uv sync --locked --extra dev
 
 # Resto do codigo. No devcontainer, docker-compose substitui /app via bind
 # mount do host, entao o COPY aqui so importa para CI ou execucoes isoladas.
@@ -98,10 +102,18 @@ RUN groupadd --system app && \
 
 # Install prod-only (sem [dev]) em venv proprio do runtime. Nao reusa o venv
 # do builder para garantir que ruff/mypy/pytest nao vazem para producao.
-COPY --chown=app:app pyproject.toml README.md ./
+COPY --chown=app:app pyproject.toml uv.lock README.md ./
 COPY --chown=app:app src/ ./src/
-RUN uv venv /app/.venv && \
-    uv pip install --python /app/.venv/bin/python .
+# Mesmo motivo do builder: so `uv sync --locked` instala o conjunto travado.
+# Quem mantem ruff/mypy/pytest fora de producao e NAO passar `--extra dev` (sao
+# extras, nao dependency-groups; `--no-dev` aqui e no-op defensivo para o dia em
+# que o projeto ganhar um grupo). `--no-editable` reproduz o install
+# nao-editavel que o `uv pip install .` fazia aqui.
+# NOTA (ADR 5.4.0003): como torch/lightning/pytorch-forecasting/optuna entraram
+# em [project.dependencies], esta imagem passou a carrega-los (~700 MB a mais).
+# Aceito enquanto o runtime nao existe como deploy real; se a API nunca servir o
+# TFT, o caminho e mover a pilha para um extra `modeling`.
+RUN uv sync --locked --no-dev --no-editable
 
 USER app
 

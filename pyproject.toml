@@ -75,6 +75,30 @@ dependencies = [
     # abaixo disso. Requer libgomp.so.1 em runtime (presente no devcontainer;
     # fallback CI: apt-get libgomp1). Pinado por minor; uv.lock trava o patch.
     "lightgbm>=4.7,<5.0",
+    # Candidato TFT quantílico — Stage 5.4 / ADR 5.4.0003
+    # `torch` + `lightning` + `pytorch-forecasting` vivem SÓ no adapter
+    # features/modeling/adapters/out/pytorch_forecasting/; os gates import-linter
+    # `modeling-no-torch-leak` e `modeling-no-optuna-leak` reprovam vazamento para
+    # application/domain. Entram em `dependencies` (NÃO num extra) por uma razão
+    # DIFERENTE da do lightgbm/statsforecast: o TFT é o OBJETO DE ESTUDO do
+    # projeto, e "treina em modo quantílico com a grade densa" é o critério de
+    # aceite central da 5.4 — deixá-lo verificado só por execução manual tiraria a
+    # rede de segurança automática justamente do candidato. Isso ESTREITA o ADR
+    # 3.2.0002 na cláusula "o CI nunca instala torch" (o extra `sentiment` segue
+    # gateando transformers + os ~400 MB de pesos do FinBERT).
+    # O `torch` é resolvido do índice CPU declarado em [[tool.uv.index]] abaixo:
+    # a resolução default do PyPI em Linux traz a variante CUDA (vários GB), e
+    # nada nesta Stage roda em GPU. Habilitar ROCm no ambiente confirmatório é
+    # operação da Stage 5.5 (ADR 5.4.0003 §Alternativa B).
+    # Pinados por minor; uv.lock trava o patch (postura de todos os blocos acima).
+    "torch>=2.12,<3.0",
+    "lightning>=2.5,<2.7",
+    "pytorch-forecasting>=1.8,<2.0",
+    # Busca exploratória de hiperparâmetros — Stage 5.4 / ADR 5.4.0005
+    # Consumido SÓ pelo adapter features/modeling/adapters/out/optuna/, e apenas
+    # pela API ask-and-tell (o laço de trials vive no use case RunTftSweep, para
+    # que o isolamento exploratório/confirmatório seja auditável na application).
+    "optuna>=4.0,<5.0",
 ]
 
 [project.optional-dependencies]
@@ -91,21 +115,51 @@ dev = [
     # Fitness function de arquitetura — espelha docs/LAYOUT.md §3/§6 (Stage 1.3)
     "import-linter>=2.0",
 ]
-# Extra OPCIONAL de sentimento — Stage 3.2 / ADR 3.2.0002.
-# torch + transformers (~centenas de MB) ficam FORA do grupo `dev` de propósito: o
-# CI roda `uv sync --extra dev` (sem torch), então a coleta de testes e o gate de
-# cobertura NÃO baixam o modelo (~400 MB) no fluxo unattended. O adapter
-# `FinbertSentimentModel` faz import LAZY dessas libs (dentro do __init__), e a
-# lógica pura de scoring (`scores_from_probs`) é stdlib-only — daí a cobertura >=90%
-# do código vivo do BC sem instalar torch (concept 3.2 I8/I9/D2/D3). Instalar com:
+# Extra OPCIONAL de sentimento — Stage 3.2 / ADR 3.2.0002, ESTREITADO pela 5.4.
+# ATUALIZADO na Stage 5.4: `torch` saiu deste extra porque virou dependência
+# principal (ADR 5.4.0003) — mantê-lo aqui seria uma segunda declaração da mesma
+# lib, com piso divergente. O que o extra gateia hoje é `transformers` e, por
+# consequência, o download dos ~400 MB de pesos do FinBERT, que continua FORA do
+# fluxo unattended: o CI roda `uv sync --locked --extra dev` (sem `transformers`),
+# então a coleta de testes não baixa o modelo. O adapter `FinbertSentimentModel`
+# mantém o import LAZY (dentro do __init__) e a lógica pura de scoring
+# (`scores_from_probs`) segue stdlib-only (concept 3.2 I8/I9/D2/D3). Instalar com:
 #     uv sync --extra sentiment
-# Vivem SÓ no adapter `features/feature_engineering/adapters/out/finbert/`; o gate
-# import-linter `sentiment-no-ml-leak` (Task 07) reprova se vazarem p/ application/domain.
-# Pinado por minor; uv.lock trava o patch (mesma postura de exchange-calendars/yfinance).
+# Vive SÓ no adapter `features/feature_engineering/adapters/out/finbert/`; o gate
+# import-linter `sentiment-no-ml-leak` reprova se vazar p/ application/domain.
+# Pinado por minor; uv.lock trava o patch.
 sentiment = [
-    "torch>=2.2,<3.0",
     "transformers>=4.40,<5.0",
 ]
+
+# ---------------------------------------------------------------------------
+# uv — índice CPU do PyTorch (Stage 5.4 / ADR 5.4.0003)
+# ---------------------------------------------------------------------------
+# A resolução default do `torch` no PyPI para Linux traz a variante CUDA (wheel
+# de centenas de MB + nvidia-*/triton, mais de 1 GB instalado). Nada nesta Stage
+# roda em GPU, e o CI menos ainda — daí o índice CPU explícito.
+#
+# `explicit = true`: o índice só é usado por pacotes que o referenciam em
+# [tool.uv.sources]; nenhum outro pacote é resolvido a partir dele.
+#
+# O `marker` NÃO é opcional: download.pytorch.org/whl/cpu não publica wheels de
+# macOS, e o lock deste projeto é universal — sem o marker, `uv lock` não
+# resolve o split darwin.
+#
+# ATENÇÃO — o que torna isto REPRODUTÍVEL não é a declaração acima sozinha.
+# `uv pip install` HONRA `tool.uv.sources` (verificado no uv 0.11.28: só com
+# `--no-sources` a resolução volta a trazer o torch CUDA), mas NÃO consome o
+# `uv.lock`: ele re-resolve a cada execução. Ou seja, `uv pip` acerta o índice e
+# erra o conjunto — pode instalar versões que ninguém revisou no PR. Por isso o
+# Makefile, o Dockerfile e o devcontainer instalam com `uv sync --locked`, que é
+# a única forma de garantir exatamente o conjunto travado no lock.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "platform_system != 'Darwin'" }]
 
 [tool.hatch.build.targets.wheel]
 # Apenas o pacote src/financial_forecasting é empacotado; scripts/ e tests/ ficam fora
@@ -227,6 +281,14 @@ exclude_lines = [
     "raise NotImplementedError",
     "raise AssertionError",
     "if TYPE_CHECKING:",
-    # corpo de stub de Protocol (ports out clock.py/id_generator.py): `...`
-    "\\.\\.\\.",
+    # Corpo de stub de Protocol (ports out clock.py/id_generator.py): a linha
+    # que contém SÓ `...`. O padrão PRECISA ser ancorado. Sem `^\s*` e `\s*$`
+    # ele casa com qualquer linha que contenha reticências — inclusive
+    # anotações de tipo multi-linha como `) -> tuple[float, ...]:` — e, quando
+    # a linha casada abre um bloco, o coverage exclui a FUNÇÃO INTEIRA em
+    # silêncio. Achado do Checkpoint C da Stage 5.4: com o padrão solto, o
+    # `split()` do `walk_forward_splitter` (o algoritmo de purga/embargo) e os
+    # `_load_dataset` dos use cases de modeling estavam FORA da medição do gate
+    # de 90% — o gate reportava verde sobre código que não media.
+    "^\\s*\\.\\.\\.\\s*$",
 ]

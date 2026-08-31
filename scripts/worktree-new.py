@@ -321,8 +321,10 @@ def setup_env(path: Path, use_make: bool) -> None:
               file=sys.stderr)
         return
     _info("`make` indisponível — usando `uv` direto")
-    _run(["uv", "venv", ".venv"], cwd=path)
-    _run(["uv", "pip", "install", "-e", ".[dev]"], cwd=path)
+    # `uv sync --locked` e não `uv pip install`: só a interface de projeto
+    # consome o `uv.lock`, então é o que garante o MESMO conjunto de versões
+    # revisado no PR. `uv sync` cria o venv sozinho (o `uv venv` era redundante).
+    _run(["uv", "sync", "--locked", "--extra", "dev"], cwd=path)
     if (path / ".pre-commit-config.yaml").is_file():
         _run(["uv", "run", "pre-commit", "install",
               "--install-hooks",

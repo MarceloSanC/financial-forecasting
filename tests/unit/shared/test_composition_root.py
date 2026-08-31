@@ -18,6 +18,8 @@ import pytest
 from financial_forecasting.composition_root import (
     ApplicationDependencies,
     _LazyFinbertSentimentModel,
+    _LazyOptunaSearch,
+    _LazyPfTftTrainer,
     _LazyStatsforecastBaselineForecaster,
     wire_dependencies,
 )
@@ -39,8 +41,20 @@ from financial_forecasting.features.feature_engineering.adapters.out.pandas_ta.p
 from financial_forecasting.features.feature_engineering.application.use_cases.build_dataset import (
     BuildDataset,
 )
+from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
+    HyperparameterSearch,
+)
+from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
+    TftTrainer,
+)
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
+)
+from financial_forecasting.features.modeling.application.use_cases.run_tft_sweep import (
+    RunTftSweep,
+)
+from financial_forecasting.features.modeling.application.use_cases.train_tft import (
+    TrainTft,
 )
 from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
     WalkForwardSplitter,
@@ -190,3 +204,77 @@ def test_run_baselines_splitter_calendar_covers_wide_fixed_window(tmp_path: Path
     assert calendar.is_session(date(1995, 5, 5))  # sexta comum de 1995
     assert calendar.is_session(date(2035, 12, 31))  # última sessão da janela
     assert not calendar.is_session(date(1995, 7, 4))  # feriado XNYS
+
+
+@pytest.mark.unit
+def test_wire_dependencies_wires_train_tft(tmp_path: Path) -> None:
+    """Stage 5.4 Task 14: `train_tft` montado com os colaboradores REAIS.
+
+    Store/hasher/repo/tracker são as MESMAS instâncias do contêiner (I9 — grafo
+    único), o trainer é o proxy LAZY (torch custa ~5s de import e o contêiner é
+    construído em todo startup) e o `artifacts_root` vem do Settings injetado.
+    """
+    settings = Settings(_env_file=None, data_root=tmp_path, artifacts_root=tmp_path / "art")
+
+    deps = wire_dependencies(settings=settings)
+
+    train_tft = deps.train_tft
+    assert isinstance(train_tft, TrainTft)
+    assert train_tft._store is deps.store
+    assert train_tft._hasher is deps.hasher
+    assert train_tft._tracker is deps.tracker
+    assert train_tft._analytics_repository is deps.analytics_repository
+    assert isinstance(train_tft._splitter, WalkForwardSplitter)
+    assert isinstance(train_tft._persist_predictions, PersistPredictions)
+    assert train_tft._persist_predictions._repository is deps.analytics_repository
+    assert isinstance(train_tft._trainer, _LazyPfTftTrainer)
+    assert train_tft._trainer._delegate is None  # torch ainda não foi importado
+    assert train_tft._artifacts_root == tmp_path / "art"
+
+
+@pytest.mark.unit
+def test_wire_dependencies_wires_run_tft_sweep(tmp_path: Path) -> None:
+    """Stage 5.4 Task 14 / ADR 5.4.0005: a varredura NÃO recebe persistência.
+
+    O isolamento é estrutural, não disciplinar: `RunTftSweep` não tem campo de
+    `PersistPredictions` nem de `AnalyticsRepository`, então nenhuma previsão
+    exploratória tem por onde vazar para a silver. Asserir a AUSÊNCIA aqui é o
+    que impede um wiring futuro de reintroduzi-los por conveniência.
+    """
+    settings = Settings(_env_file=None, data_root=tmp_path, artifacts_root=tmp_path / "art")
+
+    deps = wire_dependencies(settings=settings)
+
+    sweep = deps.run_tft_sweep
+    assert isinstance(sweep, RunTftSweep)
+    assert sweep._store is deps.store
+    assert sweep._hasher is deps.hasher
+    assert sweep._tracker is deps.tracker
+    assert isinstance(sweep._trainer, _LazyPfTftTrainer)
+    assert isinstance(sweep._search, _LazyOptunaSearch)
+    assert sweep._search._delegate is None  # optuna ainda não foi importado
+    assert not hasattr(sweep, "_persist_predictions")
+    assert not hasattr(sweep, "_analytics_repository")
+
+
+@pytest.mark.unit
+def test_lazy_tft_proxies_expose_the_port_surface_without_building(tmp_path: Path) -> None:
+    """Precedente FinBERT: construir o proxy não pode puxar torch nem optuna.
+
+    Sem isto, `wire_dependencies` — chamado no startup do app e em todo teste de
+    wiring — pagaria o import de torch (~5s) sem que ninguém fosse treinar. E o
+    proxy tem de expor a superfície INTEIRA do port: um método faltando só
+    apareceria como `AttributeError` em produção, no meio de um treino.
+    """
+    trainer: TftTrainer = _LazyPfTftTrainer()
+    search: HyperparameterSearch = _LazyOptunaSearch()
+
+    assert trainer._delegate is None
+    assert search._delegate is None
+    for method in ("train_and_predict",):
+        assert callable(getattr(trainer, method))
+    for method in ("create_study", "ask", "tell", "fail", "best_trial"):
+        assert callable(getattr(search, method))
+    # Uma chamada real construiria o delegate — não é o que se testa aqui; o
+    # e2e de `tests/integration/features/modeling/test_train_tft.py` faz isso.
+    assert tmp_path.exists()

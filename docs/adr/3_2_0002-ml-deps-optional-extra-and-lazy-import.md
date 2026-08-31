@@ -143,6 +143,16 @@ Four coupled decisions:
   `uv.lock`; this ADR fixes the *placement* (extra, outside dev) and *posture*
   (lazy + contract), not the literal versions.
 
+> **Narrowed by [ADR 5.4.0003](./5_4_0003-torch-core-dependency-cpu-index.md)
+> (Stage 5.4).** The clause "the CI keeps running `uv sync --extra dev` and never
+> installs torch" no longer holds: Stage 5.4 puts `torch` (CPU wheel) in the main
+> dependencies because the TFT is the project's object of study and its training
+> path must be verified automatically. What survives from this ADR: FinBERT's
+> `transformers` and the ~400 MB of weights stay behind the optional `sentiment`
+> extra, the adapter keeps its lazy import, and its live test stays skipped in
+> CI. Read this ADR together with 5.4.0003 before reintroducing any
+> "CI is torch-free" assumption.
+
 ## Implementation notes
 
 - `pyproject.toml`: `[project.optional-dependencies].sentiment` (not `dev`); run

@@ -76,16 +76,32 @@ from financial_forecasting.features.modeling.application.ports.out.baseline_fore
     BaselineForecaster,
     GridByHorizon,
 )
+from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
+    HyperparameterSearch,
+    SearchDimension,
+    SearchTrial,
+)
 from financial_forecasting.features.modeling.application.ports.out.quantile_model_trainer import (
     GbmTrainingParams,
     QuantileModelTrainer,
     QuantileTrainingResult,
 )
+from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
+    TftTrainer,
+    TftTrainingParams,
+    TftTrainingResult,
+)
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
 )
+from financial_forecasting.features.modeling.application.use_cases.run_tft_sweep import (
+    RunTftSweep,
+)
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
     TrainGbmQuantile,
+)
+from financial_forecasting.features.modeling.application.use_cases.train_tft import (
+    TrainTft,
 )
 from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
     WalkForwardSplitter,
@@ -208,6 +224,102 @@ class _LazyStatsforecastBaselineForecaster:
         )
 
 
+class _LazyPfTftTrainer:
+    """Proxy lazy do `PfTftTrainer` (satisfaz o port `TftTrainer`).
+
+    Adia o import de `torch`/`lightning`/`pytorch_forecasting` até o PRIMEIRO
+    treino. Aqui a razão NÃO é opcionalidade — desde a Stage 5.4 a pilha é
+    dependência principal (ADR 5.4.0003) — e sim custo de carga: importar torch
+    leva segundos, e `wire_dependencies` é chamado por qualquer entrypoint,
+    inclusive os que não treinam nada.
+    """
+
+    def __init__(self) -> None:
+        self._delegate: TftTrainer | None = None
+
+    def _ensure(self) -> TftTrainer:
+        if self._delegate is None:
+            # Import LAZY proposital (PLC0415 ignorado no pyproject p/ este arquivo).
+            from financial_forecasting.features.modeling.adapters.out.pytorch_forecasting.pf_tft_trainer import (  # noqa: E501
+                PfTftTrainer,
+            )
+
+            self._delegate = PfTftTrainer()
+        return self._delegate
+
+    def train_and_predict(  # noqa: PLR0913 — assinatura do port (parâmetros coesos)
+        self,
+        *,
+        params: TftTrainingParams,
+        feature_names: Sequence[str],
+        known_feature_names: Sequence[str],
+        rows: Sequence[Sequence[float]],
+        target: Sequence[float],
+        train_decision_indices: Sequence[int],
+        early_stop_decision_indices: Sequence[int],
+        test_decision_indices: Sequence[int],
+        max_horizon: int,
+        horizons: Sequence[int],
+        quantile_levels: Sequence[float],
+        artifact_dir: str,
+    ) -> TftTrainingResult:
+        """Delega ao adapter real (o contrato semântico é integralmente dele).
+
+        A assinatura espelha o port campo a campo, como o proxy do LightGBM
+        abaixo: com `**kwargs: object` o mypy não checaria conformidade nenhuma
+        — qualquer Protocol seria satisfeito por acidente.
+        """
+        return self._ensure().train_and_predict(
+            params=params,
+            feature_names=feature_names,
+            known_feature_names=known_feature_names,
+            rows=rows,
+            target=target,
+            train_decision_indices=train_decision_indices,
+            early_stop_decision_indices=early_stop_decision_indices,
+            test_decision_indices=test_decision_indices,
+            max_horizon=max_horizon,
+            horizons=horizons,
+            quantile_levels=quantile_levels,
+            artifact_dir=artifact_dir,
+        )
+
+
+class _LazyOptunaSearch:
+    """Proxy lazy do `OptunaSearch` (satisfaz o port `HyperparameterSearch`).
+
+    Mesmo motivo do proxy acima: `optuna` só carrega quando uma varredura de
+    fato começa.
+    """
+
+    def __init__(self) -> None:
+        self._delegate: HyperparameterSearch | None = None
+
+    def _ensure(self) -> HyperparameterSearch:
+        if self._delegate is None:
+            from financial_forecasting.features.modeling.adapters.out.optuna.optuna_search import (
+                OptunaSearch,
+            )
+
+            self._delegate = OptunaSearch()
+        return self._delegate
+
+    def create_study(self, *, seed: int, direction: str = "minimize") -> str:
+        return self._ensure().create_study(seed=seed, direction=direction)
+
+    def ask(self, space: Sequence[SearchDimension]) -> SearchTrial:
+        return self._ensure().ask(space)
+
+    def tell(self, *, trial_number: int, objective_value: float) -> None:
+        self._ensure().tell(trial_number=trial_number, objective_value=objective_value)
+
+    def fail(self, *, trial_number: int) -> None:
+        self._ensure().fail(trial_number=trial_number)
+
+    def best_trial(self) -> SearchTrial:
+        return self._ensure().best_trial()
+
+
 class _LazyLightgbmQuantileTrainer:
     """Proxy lazy do `LightgbmQuantileTrainer` (satisfaz o port `QuantileModelTrainer`).
 
@@ -287,6 +399,11 @@ class ApplicationDependencies:
     run_baselines: RunBaselines
     # BC modeling (Stage 5.3, Task 06): GBM quantílico sob o mesmo harness/persister.
     train_gbm_quantile: TrainGbmQuantile
+    # BC modeling (Stage 5.4, Task 14): o CANDIDATO e a varredura exploratória.
+    # `run_tft_sweep` não recebe porta de persistência de resultados — o
+    # isolamento exploratório/confirmatório é estrutural (ADR 5.4.0005).
+    train_tft: TrainTft
+    run_tft_sweep: RunTftSweep
 
 
 def wire_dependencies(settings: Settings | None = None) -> ApplicationDependencies:
@@ -341,9 +458,7 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
     # único do `target_timestamp` — ADR 4.3.0001).
     splitter = WalkForwardSplitter(
         TradingCalendar(
-            calendar_provider.sessions(
-                start=_CALENDAR_WINDOW_START, end=_CALENDAR_WINDOW_END
-            )
+            calendar_provider.sessions(start=_CALENDAR_WINDOW_START, end=_CALENDAR_WINDOW_END)
         )
     )
     run_baselines = RunBaselines(
@@ -369,6 +484,32 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
         hasher=hasher,
     )
 
+    # BC modeling (Stage 5.4, Task 14): o candidato compartilha o MESMO splitter,
+    # repositório silver e tracker dos comparadores — grão, cohort e canal de
+    # emissão comuns. A varredura recebe o mesmo trainer e o mesmo store (para
+    # LER o dataset), mas NENHUMA porta de persistência de resultados: o
+    # isolamento exploratório/confirmatório é estrutural (ADR 5.4.0005).
+    tft_trainer = _LazyPfTftTrainer()
+    train_tft = TrainTft(
+        store=store,
+        splitter=splitter,
+        trainer=tft_trainer,
+        persist_predictions=PersistPredictions(repository=analytics_repository),
+        analytics_repository=analytics_repository,
+        tracker=tracker,
+        hasher=hasher,
+        artifacts_root=cfg.artifacts_root,
+    )
+    run_tft_sweep = RunTftSweep(
+        store=store,
+        splitter=splitter,
+        trainer=tft_trainer,
+        search=_LazyOptunaSearch(),
+        tracker=tracker,
+        hasher=hasher,
+        artifacts_root=cfg.artifacts_root,
+    )
+
     return ApplicationDependencies(
         hasher=hasher,
         tracker=tracker,
@@ -382,4 +523,6 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
         analytics_repository=analytics_repository,
         run_baselines=run_baselines,
         train_gbm_quantile=train_gbm_quantile,
+        train_tft=train_tft,
+        run_tft_sweep=run_tft_sweep,
     )

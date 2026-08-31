@@ -258,8 +258,11 @@ allow_indirect_imports = False
 # só em adapters. Mesma postura que `domain-purity`/`store-no-storage-leak`/
 # `calendar-no-exchange-calendars-leak`: o port-out `SentimentModel` (Protocol) troca
 # só `Sequence[float]` + a entity `NewsArticle`; `torch`/`transformers` vivem APENAS
-# no adapter `features/feature_engineering/adapters/out/finbert/`, com import LAZY
-# (extra opcional `sentiment`, fora do `dev`). `domain` entra por defesa em
+# no adapter `features/feature_engineering/adapters/out/finbert/`, com import LAZY.
+# ATUALIZADO na Stage 5.4: `torch` passou a ser dependência principal (ADR
+# 5.4.0003), então o que o extra opcional `sentiment` ainda gateia é
+# `transformers` + os pesos do FinBERT — o import lazy do adapter continua
+# valendo, mas por custo de carga, não por a lib estar ausente. `domain` entra por defesa em
 # profundidade (já stdlib-only, blinda contra import futuro). Novidade vs
 # `domain-purity` (que já lista `torch`): este contrato cobre a camada `application`
 # do BC feature_engineering (não coberta por domain-purity) e adiciona `transformers`.
@@ -318,4 +321,43 @@ source_modules =
     financial_forecasting.features.modeling.domain
 forbidden_modules =
     lightgbm
+allow_indirect_imports = False
+
+# Contrato 11 — modeling-no-torch-leak (type = forbidden) — Stage 5.4 (A14)
+# Mesma postura dos contratos 9 e 10 para a pilha de deep learning do candidato:
+# o port-out `TftTrainer` (Protocol) troca só primitivos/`collections.abc`;
+# `torch`/`lightning`/`pytorch_forecasting` vivem APENAS no adapter
+# features/modeling/adapters/out/pytorch_forecasting/ (concept 5.4 §8, I13).
+# Os TRÊS módulos entram no mesmo contrato porque são a mesma fronteira (a pilha
+# do modelo); `_REAL_VIOLATION_CASES` tem um caso POR módulo, senão um typo em
+# `lightning`/`pytorch_forecasting` passaria verde com o caso de `torch` sozinho.
+# `torch` já é proibido no `domain` por `domain-purity` — o que este contrato
+# acrescenta é a camada `application` do BC modeling, além de `lightning` e
+# `pytorch_forecasting`, que nenhum outro contrato lista.
+[importlinter:contract:modeling-no-torch-leak]
+name = Application/domain não importam torch/lightning/pytorch_forecasting (só o adapter)
+type = forbidden
+source_modules =
+    financial_forecasting.features.modeling.application
+    financial_forecasting.features.modeling.domain
+forbidden_modules =
+    torch
+    lightning
+    pytorch_forecasting
+allow_indirect_imports = False
+
+# Contrato 12 — modeling-no-optuna-leak (type = forbidden) — Stage 5.4 (A14)
+# Contrato SEPARADO do 11 de propósito (postura single-purpose do contrato 10):
+# `optuna` é outro concern — busca de hiperparâmetros, não a lib do modelo. O
+# port-out `HyperparameterSearch` é ask-and-tell e troca só primitivos, com o
+# laço de trials no use case `RunTftSweep`; `optuna` vive APENAS no adapter
+# features/modeling/adapters/out/optuna/ (ADR 5.4.0005).
+[importlinter:contract:modeling-no-optuna-leak]
+name = Application/domain não importam optuna (só o adapter)
+type = forbidden
+source_modules =
+    financial_forecasting.features.modeling.application
+    financial_forecasting.features.modeling.domain
+forbidden_modules =
+    optuna
 allow_indirect_imports = False
