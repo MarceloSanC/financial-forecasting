@@ -197,9 +197,14 @@ def test_adapter_delegates_to_domain_instead_of_reimplementing(
 def test_missing_ohlc_becomes_nan_column_not_none() -> None:
     """Fronteira `_from_domain`: `None` do domínio vira `NaN` na coluna (paridade pandas).
 
-    O domínio devolve `None` para faltante; a coluna pandas precisa de `NaN`, que é o
-    que a subtração de `Series` propagaria antes da #67. Sem essa tradução, a coluna
-    viraria `object` e a coerção a `float32` quebraria.
+    O domínio devolve `None` para faltante; a coluna pandas fala `NaN`, que é o que a
+    subtração de `Series` propagava antes da #67. A tradução torna essa equivalência
+    EXPLÍCITA na fronteira em vez de delegá-la à coerção implícita do pandas.
+
+    Nota (auditoria da #67): não é que sem a tradução o `astype("float32")` quebraria —
+    medido, `[1.5, None, 2.5]` vira float64 com `NaN` e atravessa sem erro. O motivo é
+    de contrato, não de exceção: quem lê o adapter não deve precisar conhecer a regra
+    de coerção do pandas para saber o que o domínio quis dizer com `None`.
     """
     first, missing, last = _PRESENT_LOW, None, _PRESENT_HIGH
     translated = _from_domain((first, missing, last))
