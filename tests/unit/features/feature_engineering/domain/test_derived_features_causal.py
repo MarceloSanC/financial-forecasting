@@ -552,17 +552,22 @@ def _call_all_derived(extra: tuple[float, ...] | None) -> dict[str, tuple[object
         "cashflow_efficiency": df.cashflow_efficiency(ocf, revenue),
         "revenue_yoy_growth": df.revenue_yoy_growth(revenue),
         "net_income_yoy_growth": df.net_income_yoy_growth(net_income),
+        # issue #67 — candle: consumidas pelo adapter `pandas_ta`, não pelo assembler,
+        # mas são funções puras do oráculo e entram na malha global de causalidade.
+        "candle_range": df.candle_range(high, low),
+        "candle_body": df.candle_body(open_, close),
     }
 
 
-# As 31 derivadas computadas pelo oráculo (espelha as derivadas do FEATURE_SPECS).
+# As 33 funções puras do oráculo: 31 derivadas consumidas pelo `DatasetAssembler` +
+# as 2 de candle (issue #67), consumidas pelo adapter `pandas_ta`.
 _ALL_DERIVED_NAMES = sorted(_call_all_derived(None).keys())
-_EXPECTED_DERIVED_FN_COUNT = 31
+_EXPECTED_DERIVED_FN_COUNT = 33
 
 
 @pytest.mark.unit
-def test_battery_covers_all_31_derived_functions() -> None:
-    """A bateria cobre exatamente as 31 derivadas computadas (sanidade da malha)."""
+def test_battery_covers_all_33_derived_functions() -> None:
+    """A bateria cobre exatamente as 33 funções puras do oráculo (sanidade da malha)."""
     assert len(_ALL_DERIVED_NAMES) == _EXPECTED_DERIVED_FN_COUNT
 
 
@@ -745,3 +750,62 @@ def test_length_mismatch_guards_raise() -> None:
         df.net_margin((1.0, 2.0), (1.0,))
     with pytest.raises(ValueError, match="length mismatch"):
         df.trend_regime((1.0, 2.0), (1.0,))
+    with pytest.raises(ValueError, match="length mismatch"):
+        df.candle_range((1.0, 2.0), (1.0,))
+    with pytest.raises(ValueError, match="length mismatch"):
+        df.candle_body((1.0, 2.0), (1.0,))
+
+
+# =============================================================================
+# issue #67 — candle (OHLC do mesmo timestamp)
+# =============================================================================
+
+
+@pytest.mark.unit
+def test_candle_range_matches_high_minus_low() -> None:
+    """`candle_range` = `high_t - low_t` barra a barra (warmup 0 — sem `None` inicial)."""
+    high = (10.5, 11.25, 9.75)
+    low = (10.0, 10.5, 9.5)
+    assert df.candle_range(high, low) == (
+        pytest.approx(0.5),
+        pytest.approx(0.75),
+        pytest.approx(0.25),
+    )
+
+
+@pytest.mark.unit
+def test_candle_body_is_absolute_and_symmetric() -> None:
+    """`candle_body` = `|close_t - open_t|`: barra de alta e de baixa dão o MESMO corpo."""
+    # barra 0 fecha em alta (+2), barra 1 fecha em baixa (-2): corpos iguais.
+    body = df.candle_body(open_=(10.0, 12.0), close=(12.0, 10.0))
+    assert body[0] == pytest.approx(2.0)
+    assert body[1] == pytest.approx(2.0)
+    # doji (close == open) → corpo zero, nunca negativo.
+    assert df.candle_body((10.0,), (10.0,)) == (0.0,)
+
+
+@pytest.mark.unit
+def test_candle_functions_have_no_warmup() -> None:
+    """Warmup 0 — a 1ª barra já produz valor (contraste com as derivadas de janela)."""
+    assert df.candle_range((10.0,), (9.0,))[0] is not None
+    assert df.candle_body((10.0,), (9.0,))[0] is not None
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("missing", [None, math.nan])
+def test_candle_functions_propagate_missing_as_none(missing: float | None) -> None:
+    """`None`/`NaN` em qualquer termo → `None` na posição (paridade `NaN` do pandas)."""
+    assert df.candle_range((missing, 11.0), (10.0, 10.0))[0] is None
+    assert df.candle_range((11.0, 11.0), (missing, 10.0))[0] is None
+    assert df.candle_body((missing, 10.0), (12.0, 12.0))[0] is None
+    assert df.candle_body((10.0, 10.0), (missing, 12.0))[0] is None
+    # a posição SEM faltante segue computando (o `None` não contamina a série).
+    assert df.candle_range((missing, 11.0), (10.0, 10.0))[1] == pytest.approx(1.0)
+    assert df.candle_body((missing, 10.0), (12.0, 12.0))[1] == pytest.approx(2.0)
+
+
+@pytest.mark.unit
+def test_candle_functions_accept_empty_sequences() -> None:
+    """Sequência vazia → saída vazia (C5, paridade com o `calculate` do adapter)."""
+    assert df.candle_range((), ()) == ()
+    assert df.candle_body((), ()) == ()

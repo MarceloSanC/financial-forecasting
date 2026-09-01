@@ -22,6 +22,8 @@ Convenção de tradução pandas → puro (concept 3.4 §4/§5):
 
 Este módulo (Task 04) traz os helpers + o grupo de preço/retorno/liquidez. Os grupos
 de volatilidade/regimes (Task 05) e sentimento/fundamento/YoY (Task 06) acumulam aqui.
+O grupo de candle (issue #67) acumulou por último e é o único cujo CONSUMIDOR é o
+adapter `pandas_ta` em vez do `DatasetAssembler` — ver o cabeçalho do Grupo 4.
 
 Pureza (I1): importa SÓ stdlib (`collections.abc`/`math`). `import pandas`/`numpy`
 aqui REPROVA `domain-purity` no import-linter.
@@ -622,3 +624,61 @@ def revenue_yoy_growth(revenue: Sequence[Number]) -> OutSeq:
 def net_income_yoy_growth(net_income: Sequence[Number]) -> OutSeq:
     """`pct_change(net_income, 252, fill_method=None)` (YoY; warmup 252)."""
     return _pct_change(net_income, _YOY_WINDOW)
+
+
+# =============================================================================
+# Grupo 4 — OHLC do mesmo timestamp / candle (issue #67)
+# =============================================================================
+#
+# Estas duas fórmulas moravam inline no adapter `pandas_ta`
+# (`out["candle_range"] = frame["high"] - frame["low"]`) — aritmética de domínio
+# escrita em infraestrutura, sem uma única chamada de biblioteca com conteúdo.
+# A issue #67 as traz para cá; o adapter passa a CHAMAR estas funções.
+#
+# Repartição (Humble Object): o DOMÍNIO é dono da FÓRMULA — a parte testável e
+# portável; o ADAPTER é dono da FRONTEIRA DE DTYPE — o `astype("float32")` que o
+# invariante I4 de `IndicatorSpec` exige do port `IndicatorCalculator`, parte
+# não-portável. Cada lado fica com o que lhe cabe.
+#
+# Diferença em relação aos Grupos 1-3: estas NÃO entram no laço de re-derivação
+# do `_validate_anti_leakage` (`DatasetAssembler`). O validador compara com
+# tolerância `1e-9`, e o valor que o dataset carrega vem do port já coagido a
+# `float32` — a quantização diverge do `float64` puro em até ~5e-8, acima da
+# tolerância. Cobri-las pelo validador exige adotar o `float64`, o que MUDA o
+# dataset; isso migrou para a issue #65, que carrega o bump de `pipeline_version`
+# e a regeneração de artefato.
+#
+# Causalidade: tag `same_timestamp_ohlc_derived` — dependem SÓ da barra `t`
+# (nenhuma janela, nenhum shift), logo warmup 0 e causalidade trivial (I6).
+
+
+def candle_range(high: Sequence[Number], low: Sequence[Number]) -> OutSeq:
+    """`high_t - low_t` — amplitude da barra (warmup 0, `same_timestamp_ohlc_derived`).
+
+    `None` onde `high_t` ou `low_t` é faltante (paridade com o `NaN` que a subtração
+    de `Series` propaga no pandas).
+    """
+    if len(high) != len(low):
+        raise ValueError("candle_range: high and low length mismatch")
+    out: list[float | None] = []
+    for high_value, low_value in zip(high, low, strict=True):
+        top = _as_float(high_value)
+        bottom = _as_float(low_value)
+        out.append(None if top is None or bottom is None else top - bottom)
+    return tuple(out)
+
+
+def candle_body(open_: Sequence[Number], close: Sequence[Number]) -> OutSeq:
+    """`abs(close_t - open_t)` — corpo da barra (warmup 0, `same_timestamp_ohlc_derived`).
+
+    `None` onde `open_t` ou `close_t` é faltante (paridade com o `NaN` que a subtração
+    de `Series` propaga no pandas).
+    """
+    if len(open_) != len(close):
+        raise ValueError("candle_body: open_ and close length mismatch")
+    out: list[float | None] = []
+    for open_value, close_value in zip(open_, close, strict=True):
+        opening = _as_float(open_value)
+        closing = _as_float(close_value)
+        out.append(None if opening is None or closing is None else abs(closing - opening))
+    return tuple(out)
