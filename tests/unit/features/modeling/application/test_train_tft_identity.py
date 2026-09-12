@@ -283,3 +283,23 @@ def test_known_typing_is_inside_config_signature(
     for key in set(base) & set(changed):
         assert base[key][1] != changed[key][1]
     _assert_all_run_ids_differ(base, changed)
+
+
+@pytest.mark.unit
+def test_feature_names_order_is_inside_config_signature(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Inverter a ordem das unknown muda a `config_signature` (registry e tipagem iguais).
+
+    Contraparte do teste de tipagem, que mantém `feature_names` byte a byte igual:
+    sem este, remover `feature_names` do payload de config do TFT passaria — o
+    conjunto e a tipagem seriam os mesmos, só a ORDEM consumida mudaria.
+    """
+    base = _identity_of(tmp_path / "a", _command())
+    unknown = tft_module.unknown_feature_names()
+    monkeypatch.setattr(tft_module, "unknown_feature_names", lambda: tuple(reversed(unknown)))
+    changed = _identity_of(tmp_path / "b", _command())
+
+    for key in set(base) & set(changed):
+        assert base[key][1] != changed[key][1]
+    _assert_all_run_ids_differ(base, changed)
