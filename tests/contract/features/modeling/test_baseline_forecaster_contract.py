@@ -100,6 +100,11 @@ _TRAIN_END_IDX = 39
 _DECISIONS = (48, 52)
 _LAST_DECISION = 52
 _MUTATION = 5.0  # valor implausível: qualquer contaminação muda a emissão
+# Teto da divergência dublê<->real no `ar1`: os dois estimadores (momentos
+# stdlib vs fit statsforecast) recuperam parâmetros próximos na série de
+# fixture, e a maior diferença de grade medida é ~4e-4. 2e-3 dá folga sem
+# tolerar uma regra de emissão diferente (que moveria a 2ª-3ª casa).
+_AR1_ESTIMATION_GAP = 2e-3
 
 
 def _ar1_returns(n: int = _N) -> tuple[float, ...]:
@@ -258,9 +263,7 @@ def test_i4_ar1_parameters_frozen_on_train(forecaster: BaselineForecaster) -> No
 
 @pytest.mark.contract
 @pytest.mark.parametrize("family", BASELINE_FAMILIES)
-def test_c5_nan_in_conditioning_window_raises(
-    forecaster: BaselineForecaster, family: str
-) -> None:
+def test_c5_nan_in_conditioning_window_raises(forecaster: BaselineForecaster, family: str) -> None:
     """C5: NaN dentro da janela condicionante (aqui: no r_t da decisão) ergue."""
     returns = _ar1_returns()
     poisoned = (*returns[:_LAST_DECISION], math.nan, *returns[_LAST_DECISION + 1 :])
@@ -348,9 +351,7 @@ def test_historical_mean_emission_is_train_mean_oracle(
     """
     tolerance = 1e-12  # tolerância declarada (ADR 0.0.0021)
     returns = _ar1_returns()
-    expected = degenerate_grid(
-        value=fmean(returns[: _TRAIN_END_IDX + 1]), levels=_LEVELS
-    )
+    expected = degenerate_grid(value=fmean(returns[: _TRAIN_END_IDX + 1]), levels=_LEVELS)
 
     result = _forecast(forecaster, _SPECS["historical_mean"], returns)
 
@@ -387,9 +388,7 @@ def test_historical_quantiles_window_ends_at_decision_oracle(
     # A fixture DISCRIMINA o mutante: sem o r_t (outlier) a grade muda materialmente.
     assert expected != pytest.approx(mutant_window, abs=tolerance)
 
-    result = _forecast(
-        forecaster, _SPECS["historical_quantiles"], returns, decisions=(decision,)
-    )
+    result = _forecast(forecaster, _SPECS["historical_quantiles"], returns, decisions=(decision,))
 
     for horizon in _HORIZONS:
         assert result[decision][horizon] == pytest.approx(expected, abs=tolerance)
@@ -474,9 +473,7 @@ def test_ewma_vol_decay_lambda_comes_from_spec(forecaster: BaselineForecaster) -
     canonical = _forecast(forecaster, _SPECS["ewma_vol"], returns)
 
     for decision in _DECISIONS:
-        sigma2 = ewma_variance_path(
-            returns=returns[: decision + 1], decay_lambda=alt_lambda
-        )[-1]
+        sigma2 = ewma_variance_path(returns=returns[: decision + 1], decay_lambda=alt_lambda)[-1]
         expected = gaussian_grid(mean=0.0, std=math.sqrt(sigma2), levels=_LEVELS)
         for horizon in _HORIZONS:
             assert result[decision][horizon] == pytest.approx(expected, abs=tolerance)
@@ -494,3 +491,127 @@ def test_shape_ar1_spread_grows_with_horizon(forecaster: BaselineForecaster) -> 
         spread_h1 = grids[1][-1] - grids[1][0]
         spread_h3 = grids[3][-1] - grids[3][0]
         assert spread_h3 > spread_h1
+
+
+# -- paridade ENTRE as pernas: o que o contrato existe para afirmar --------------
+#
+# Os testes acima são parametrizados sobre `[fake, real]`: cada um roda a MESMA
+# asserção, separadamente, em cada perna. Isso prova que cada implementação
+# satisfaz o contrato, mas não compara uma com a outra — e era exatamente aí que
+# o gap vivia (issue #66). Os dois testes abaixo fazem a comparação cruzada, que
+# é a proposição de um contract test segundo Fowler: o dublê responde como o
+# real responderia. Eles ficam vermelhos tanto se as pernas divergirem quanto se
+# a regra compartilhada parar de erguer.
+
+
+_STRUCTURAL_REJECTIONS: dict[
+    str, tuple[BaselineSpec, tuple[float, ...], int, tuple[int, ...], tuple[int, ...]]
+] = {
+    "empty_returns": (_SPECS["zero_return"], (), 0, (1,), _HORIZONS),
+    "train_end_idx_negative": (_SPECS["zero_return"], _ar1_returns(), -1, _DECISIONS, _HORIZONS),
+    "train_end_idx_past_the_series": (
+        _SPECS["zero_return"],
+        _ar1_returns(),
+        _N,
+        _DECISIONS,
+        _HORIZONS,
+    ),
+    "empty_decisions": (_SPECS["zero_return"], _ar1_returns(), _TRAIN_END_IDX, (), _HORIZONS),
+    "decision_past_the_series": (
+        _SPECS["zero_return"],
+        _ar1_returns(),
+        _TRAIN_END_IDX,
+        (_N,),
+        _HORIZONS,
+    ),
+    "decision_inside_the_train": (
+        _SPECS["zero_return"],
+        _ar1_returns(),
+        _TRAIN_END_IDX,
+        (_TRAIN_END_IDX,),
+        _HORIZONS,
+    ),
+    "decisions_repeated": (
+        _SPECS["zero_return"],
+        _ar1_returns(),
+        _TRAIN_END_IDX,
+        (48, 48),
+        _HORIZONS,
+    ),
+    "decisions_out_of_order": (
+        _SPECS["zero_return"],
+        _ar1_returns(),
+        _TRAIN_END_IDX,
+        (52, 48),
+        _HORIZONS,
+    ),
+    "empty_horizons": (_SPECS["zero_return"], _ar1_returns(), _TRAIN_END_IDX, _DECISIONS, ()),
+    "horizon_below_one": (
+        _SPECS["zero_return"],
+        _ar1_returns(),
+        _TRAIN_END_IDX,
+        _DECISIONS,
+        (0,),
+    ),
+}
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("case", sorted(_STRUCTURAL_REJECTIONS))
+def test_both_legs_reject_the_same_structural_input_with_the_same_message(
+    case: str,
+) -> None:
+    """Dublê e real recusam a MESMA entrada estrutural com a MESMA mensagem.
+
+    Duas falhas possíveis, ambas desejáveis: se uma perna aceitar o que a outra
+    recusa, a divergência aparece; se a regra compartilhada parar de erguer, as
+    duas pernas ficam vermelhas juntas. Antes da issue #66 a regra vivia em duas
+    cópias e nenhuma asserção deste tipo existia — removê-la só do adapter
+    deixava esta suíte inteiramente verde (medido).
+    """
+    spec, returns, train_end_idx, decisions, horizons = _STRUCTURAL_REJECTIONS[case]
+
+    errors = []
+    for factory in _FACTORIES:
+        with pytest.raises(ValueError) as raised:
+            factory().forecast(
+                spec=spec,
+                returns=returns,
+                train_end_idx=train_end_idx,
+                decision_indices=decisions,
+                horizons=horizons,
+                quantile_levels=_LEVELS,
+            )
+        errors.append(str(raised.value))
+
+    assert errors[0] == errors[1]
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("family", BASELINE_FAMILIES)
+def test_the_only_divergence_between_legs_is_the_ar1_estimation(family: str) -> None:
+    """O *shortcut* do dublê (Meszaros) é singular: só a estimação do AR(1).
+
+    Nas 4 famílias que não estimam nada, dublê e real colapsam BIT A BIT — é
+    isso que autoriza confiar no fake fora do `ar1`. No `ar1` eles divergem (o
+    fake usa momentos stdlib; o real, o fit do `statsforecast`), mas dentro da
+    ordem de grandeza do erro de estimação, não de uma regra diferente.
+    """
+    returns = _ar1_returns()
+    from_fake = _forecast(_build_fake(), _SPECS[family], returns)
+    from_real = _forecast(_build_real(), _SPECS[family], returns)
+
+    if family != "ar1":
+        assert from_fake == from_real
+        return
+
+    deviations = [
+        abs(from_fake[decision][horizon][level] - from_real[decision][horizon][level])
+        for decision in _DECISIONS
+        for horizon in _HORIZONS
+        for level in range(len(_LEVELS))
+    ]
+    assert max(deviations) > 0.0, "as duas estimações não podem ser a mesma implementação"
+    assert max(deviations) < _AR1_ESTIMATION_GAP, (
+        "divergência maior que o erro de estimação — é regra diferente, não shortcut"
+    )

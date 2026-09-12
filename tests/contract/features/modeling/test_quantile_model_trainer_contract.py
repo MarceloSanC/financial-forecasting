@@ -164,8 +164,7 @@ def test_best_iteration_is_one_based_and_bounded_by_the_ceiling(
 
     assert set(result.best_iteration_by_horizon) == set(_HORIZONS)
     assert all(
-        1 <= iteration <= _CEILING
-        for iteration in result.best_iteration_by_horizon.values()
+        1 <= iteration <= _CEILING for iteration in result.best_iteration_by_horizon.values()
     )
 
 
@@ -192,10 +191,7 @@ def test_nan_train_labels_equal_pre_removed_pairs(
 ) -> None:
     """Poluir 2 pares de train com NaN == removê-los antes (fit-side I11)."""
     nan = float("nan")
-    polluted = {
-        h: (nan, *_TRAIN_LABELS[h][1:20], nan, *_TRAIN_LABELS[h][21:])
-        for h in _HORIZONS
-    }
+    polluted = {h: (nan, *_TRAIN_LABELS[h][1:20], nan, *_TRAIN_LABELS[h][21:]) for h in _HORIZONS}
     keep = [i for i in range(_N_TRAIN) if i not in (0, 20)]
 
     with_nan = _train(trainer, train_labels=polluted)
@@ -219,8 +215,7 @@ def test_nan_feature_values_are_accepted_and_grid_stays_finite(
     """NaN em FEATURES não ergue (I11 — missing nativo); a grade emitida é finita."""
     nan = float("nan")
     holed_train = tuple(
-        (nan, *row[1:]) if position % 5 == 0 else row
-        for position, row in enumerate(_TRAIN_ROWS)
+        (nan, *row[1:]) if position % 5 == 0 else row for position, row in enumerate(_TRAIN_ROWS)
     )
     holed_test = ((nan, *_TEST_ROWS[0][1:]), *_TEST_ROWS[1:])
 
@@ -364,3 +359,81 @@ def test_a6_constant_features_collapse_to_type7_quantiles_of_train_labels(
             grid = result.grids[decision_idx][horizon]
             assert grid == pytest.approx(expected, abs=_ORACLE_TOLERANCE)
             assert grid != pytest.approx(mutant, abs=_ORACLE_TOLERANCE)
+
+
+# -- paridade ENTRE as pernas: o que o contrato existe para afirmar -----------------
+#
+# Os testes acima são parametrizados sobre `[fake, real]` e rodam a MESMA
+# asserção separadamente em cada perna — provam que cada implementação satisfaz
+# o contrato, mas nunca comparam uma com a outra. Enquanto o `_validate_structure`
+# era duplicado (issue #71), essa comparação sequer fazia sentido: eram duas
+# cópias do mesmo código. Os testes abaixo fecham o gap. Além disso, os casos de
+# largura cobrem as TRÊS posições do laço (train/early_stop/test) e os de rótulo
+# as DUAS: o `test_c4_row_width_mismatch_raises` acima toca só `train_rows`, e
+# remover `test_rows` do laço SÓ no adapter deixava esta suíte verde (medido).
+
+
+def _call(trainer: QuantileModelTrainer, **overrides: object) -> QuantileTrainingResult:
+    kwargs: dict[str, object] = {
+        "params": _params(),
+        "feature_names": _FEATURE_NAMES,
+        "train_rows": _TRAIN_ROWS,
+        "train_labels_by_horizon": _TRAIN_LABELS,
+        "early_stop_rows": _MONITOR_ROWS,
+        "early_stop_labels_by_horizon": _MONITOR_LABELS,
+        "test_rows": _TEST_ROWS,
+        "test_decision_indices": _DECISIONS,
+        "quantile_levels": _LEVELS,
+    }
+    kwargs.update(overrides)
+    return trainer.train_and_predict(**kwargs)  # type: ignore[arg-type]
+
+
+_C4_REJECTIONS: dict[str, dict[str, object]] = {
+    "empty_feature_names": {
+        "feature_names": (),
+        "train_rows": ((),) * _N_TRAIN,
+        "early_stop_rows": ((),) * _N_MONITOR,
+        "test_rows": ((),) * _N_TEST,
+    },
+    "empty_train_labels": {
+        "train_labels_by_horizon": {},
+        "early_stop_labels_by_horizon": {},
+    },
+    "horizon_sets_mismatch": {
+        "early_stop_labels_by_horizon": {_HORIZONS[0]: _MONITOR_LABELS[_HORIZONS[0]]}
+    },
+    "empty_early_stop_rows": {
+        "early_stop_rows": (),
+        "early_stop_labels_by_horizon": {h: () for h in _HORIZONS},
+    },
+    "decisions_length_mismatch": {"test_decision_indices": _DECISIONS[:-1]},
+    "train_row_width": {"train_rows": (_TRAIN_ROWS[0][:-1], *_TRAIN_ROWS[1:])},
+    "early_stop_row_width": {"early_stop_rows": (_MONITOR_ROWS[0][:-1], *_MONITOR_ROWS[1:])},
+    "test_row_width": {"test_rows": (_TEST_ROWS[0][:-1], *_TEST_ROWS[1:])},
+    "train_labels_width": {
+        "train_labels_by_horizon": {h: _TRAIN_LABELS[h][:-1] for h in _HORIZONS}
+    },
+    "early_stop_labels_width": {
+        "early_stop_labels_by_horizon": {h: _MONITOR_LABELS[h][:-1] for h in _HORIZONS}
+    },
+}
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("case", sorted(_C4_REJECTIONS))
+def test_both_legs_reject_the_same_c4_input_with_the_same_message(case: str) -> None:
+    """Dublê e real recusam a MESMA estrutura inválida com a MESMA mensagem.
+
+    Falha nas duas direções que importam: perna que aceita o que a outra recusa
+    (divergência), e regra compartilhada que parou de erguer (as duas ficam
+    vermelhas juntas). O `match=r"C4"` dos testes acima não distingue um guard
+    trocado por outro; a igualdade de mensagem distingue.
+    """
+    messages = []
+    for factory in _FACTORIES:
+        with pytest.raises(ValueError) as raised:
+            _call(factory(), **_C4_REJECTIONS[case])
+        messages.append(str(raised.value))
+
+    assert messages[0] == messages[1]

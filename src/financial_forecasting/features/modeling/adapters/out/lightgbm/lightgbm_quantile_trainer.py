@@ -5,6 +5,14 @@ Implementação real do port `QuantileModelTrainer` (concept 5.3 §4; ADRs
 gate `modeling-no-lightgbm-leak` reprova o import fora daqui, e NENHUM tipo
 numpy atravessa o port de volta (toda emissão vira `float` puro).
 
+Desde a issue #71 a validação estrutural C4 da entrada NÃO mora mais aqui: é o
+serviço de domínio `quantile_training_validation.validate_training_structure`,
+para onde este adapter e o dublê in-memory delegam. Antes eram 49 linhas
+literalmente idênticas nos dois arquivos (o maior bloco duplicado do repo), e o
+contract test parametrizado `[fake, real]` rodava duas cópias da mesma
+validação. O que sobrou aqui é só o que é do LightGBM: montar o `Dataset`,
+os parâmetros do booster e o `train`.
+
 Mecânica (concept D6, provada por probe no Checkpoint da Fase 3A):
 
 - Por horizonte: filtra pares de label finito para o fit E para o monitor
@@ -38,6 +46,9 @@ import numpy as np
 
 from financial_forecasting.features.modeling.application.ports.out.quantile_model_trainer import (
     QuantileTrainingResult,
+)
+from financial_forecasting.features.modeling.domain.services.quantile_training_validation import (
+    validate_training_structure,
 )
 
 if TYPE_CHECKING:
@@ -73,7 +84,7 @@ class LightgbmQuantileTrainer:
         quantile_levels: Sequence[float],
     ) -> QuantileTrainingResult:
         """Treina K x H boosters e emite a grade crua (ver docstring do módulo)."""
-        _validate_structure(
+        validate_training_structure(
             feature_names=feature_names,
             train_rows=train_rows,
             train_labels_by_horizon=train_labels_by_horizon,
@@ -239,7 +250,7 @@ def _select_best_iteration(histories: Sequence[Sequence[float]]) -> int:
     return best_index + 1
 
 
-# -- conversões e validações de fronteira ------------------------------------------
+# -- conversões de fronteira -------------------------------------------------------
 
 
 def _as_matrix(rows: Sequence[Sequence[float]], width: int) -> NDArray[np.float64]:
@@ -270,54 +281,3 @@ def _finite_grid(
         )
     return grid
 
-
-def _validate_structure(  # noqa: PLR0913 — validação C4 espelhada no fake
-    *,
-    feature_names: Sequence[str],
-    train_rows: Sequence[Sequence[float]],
-    train_labels_by_horizon: Mapping[int, Sequence[float]],
-    early_stop_rows: Sequence[Sequence[float]],
-    early_stop_labels_by_horizon: Mapping[int, Sequence[float]],
-    test_rows: Sequence[Sequence[float]],
-    test_decision_indices: Sequence[int],
-) -> None:
-    """C4: estrutura inconsistente ergue `ValueError` (paridade fake<->real)."""
-    if not feature_names:
-        raise ValueError("feature_names must be non-empty (C4)")
-    if not train_labels_by_horizon:
-        raise ValueError("train_labels_by_horizon must be non-empty (C4)")
-    if set(train_labels_by_horizon) != set(early_stop_labels_by_horizon):
-        raise ValueError(
-            "train and early_stop label horizons must match; got "
-            f"{sorted(train_labels_by_horizon)} vs "
-            f"{sorted(early_stop_labels_by_horizon)} (C4)"
-        )
-    if not early_stop_rows:
-        raise ValueError("early_stop_rows must be non-empty — no monitor, no m* (C4)")
-    if len(test_decision_indices) != len(test_rows):
-        raise ValueError(
-            f"test_decision_indices length {len(test_decision_indices)} != "
-            f"test_rows length {len(test_rows)} (C4)"
-        )
-    width = len(feature_names)
-    for block_name, rows in (
-        ("train_rows", train_rows),
-        ("early_stop_rows", early_stop_rows),
-        ("test_rows", test_rows),
-    ):
-        for position, row in enumerate(rows):
-            if len(row) != width:
-                raise ValueError(
-                    f"{block_name}[{position}] width {len(row)} != "
-                    f"len(feature_names)={width} (C4)"
-                )
-    for block_name, rows_len, labels_by_horizon in (
-        ("train", len(train_rows), train_labels_by_horizon),
-        ("early_stop", len(early_stop_rows), early_stop_labels_by_horizon),
-    ):
-        for horizon, labels in labels_by_horizon.items():
-            if len(labels) != rows_len:
-                raise ValueError(
-                    f"{block_name} labels for horizon {horizon} length "
-                    f"{len(labels)} != rows length {rows_len} (C4)"
-                )
