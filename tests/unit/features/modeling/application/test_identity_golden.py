@@ -18,8 +18,11 @@ aqui. Por consequência, o golden também reprova quando o `FeatureRegistry` mud
 (a lista ordenada de features entra no payload) — isso é desejado: identidade
 mudou, alguém precisa reconhecer.
 
-Marcação de estado deste arquivo: **ANTES da #65** (payloads privados
-`_run_payload`/`_config_payload`, `schema_version` dentro da chave).
+Estado deste arquivo (por use case): `PRE_65_*` guarda o valor pré-#65
+(payloads privados `_run_payload`/`_config_payload`, `schema_version` dentro da
+chave) e `GOLDEN_*` o valor pós-#65 (`RunId.compute`/`ConfigSignature.compute`,
+`pipeline_version="2"`). Um use case ainda sem `PRE_65_*` é porque a sua
+sub-task da #65 ainda não entrou.
 """
 
 from __future__ import annotations
@@ -238,9 +241,15 @@ def capture_tft(artifacts_root: Path) -> IdentityTable:
     return _identity_table(repo)
 
 
-# -- golden (ANTES da #65) ---------------------------------------------------------
+# -- golden --------------------------------------------------------------------------
+#
+# `PRE_65_*`: valores dos payloads hand-rolled (antes da #65) — histórico congelado,
+# NUNCA editar. `GOLDEN_*`: valores do caminho canônico (`RunId.compute` /
+# `ConfigSignature.compute`, `pipeline_version="2"`). O teste `*_broke_from_pre_65`
+# prova que a quebra foi total e intencional; o `*_matches_golden` prova que o
+# valor novo é estável.
 
-GOLDEN_BASELINES: IdentityTable = {
+PRE_65_BASELINES: IdentityTable = {
     ("baseline_ar1", "0"): (
         "f1901941e6972c1c72f3f0803d5fa208c6452544e3f1cce02918f669b40cef64",
         "f72105a769215dc298b0104206981c29d39f00b9cc5d18883e8e7f892ec522d1",
@@ -283,6 +292,49 @@ GOLDEN_BASELINES: IdentityTable = {
     ),
 }
 
+GOLDEN_BASELINES: IdentityTable = {
+    ("baseline_ar1", "0"): (
+        "700b4eef7b889ef53eab8a6b4f0a9aa69c01ba29aa2e6c95c744bb0386666127",
+        "bc6e77a0746dab8e3233c37b2494beda13ebcfb3c83440cfc9cdc0f70e9844e2",
+    ),
+    ("baseline_ar1", "1"): (
+        "45af707ebdc327d39edad80f0069cf3338a1bbeaf300aa8a77e268af92bae4cd",
+        "bc6e77a0746dab8e3233c37b2494beda13ebcfb3c83440cfc9cdc0f70e9844e2",
+    ),
+    ("baseline_ewma_vol", "0"): (
+        "0828627358019bfd2ecd3d89bf8c9533e270616e4b8a49be59cbc83e74ac5f97",
+        "1455fe15b745e4e33278744ffb8895182374990e910c0f05af6debdd1ec81a9b",
+    ),
+    ("baseline_ewma_vol", "1"): (
+        "6d28a8af23475d7107303d97bce9a8cdc5144c1e70bad18b38822b6dd3fcccd4",
+        "1455fe15b745e4e33278744ffb8895182374990e910c0f05af6debdd1ec81a9b",
+    ),
+    ("baseline_historical_mean", "0"): (
+        "bbbbedbc131e9c2218481383f12288d2d93d514a0357effe5e9a514f6a96f447",
+        "fe5825406e81f350583c2a1b4b11569ede156b36c250d4388dabbfcc8de1828a",
+    ),
+    ("baseline_historical_mean", "1"): (
+        "9a52d399a26f6d5a2c7929426cd9e8769c9f2a5dd89bb32b71ce52fb155edf81",
+        "fe5825406e81f350583c2a1b4b11569ede156b36c250d4388dabbfcc8de1828a",
+    ),
+    ("baseline_historical_quantiles", "0"): (
+        "beb73f8a44189efd4823144f77ce6042dd59e747cf19b51082e0ee291ad31e2f",
+        "cac8dc2ef14efaa27057f16070ccc508af91438e4bb4d055208de0af261b1c61",
+    ),
+    ("baseline_historical_quantiles", "1"): (
+        "127c1f5cb6c6f0e47eaf13a3cdb0c93be1894d812a3a1f32071e1b389c7c0e7c",
+        "cac8dc2ef14efaa27057f16070ccc508af91438e4bb4d055208de0af261b1c61",
+    ),
+    ("baseline_zero_return", "0"): (
+        "0e3136ee06a63b3c65f49e5de8fc3b8d484fcca7f3d7c31a93e1bb50c096aa64",
+        "2cb6736e62a4681d7f8c3e4f129530c3c670e554463eaa11f18d8ed3c92032d6",
+    ),
+    ("baseline_zero_return", "1"): (
+        "549c8fa00055df1e3e2dc18626d569717ddcfb21886d9294de171082cbf78154",
+        "2cb6736e62a4681d7f8c3e4f129530c3c670e554463eaa11f18d8ed3c92032d6",
+    ),
+}
+
 GOLDEN_GBM: IdentityTable = {
     ("gbm_quantile", "0"): (
         "c417ec9d7134cee3c1f8d51161498465200c76454c24b342148fa8146fefe338",
@@ -310,6 +362,16 @@ GOLDEN_TFT: IdentityTable = {
 def test_baselines_identity_matches_golden() -> None:
     """`RunBaselines`: (spec x fold) -> (run_id, config_signature) travados."""
     assert capture_baselines() == GOLDEN_BASELINES
+
+
+@pytest.mark.unit
+def test_baselines_identity_broke_from_pre_65() -> None:
+    """Todo `run_id` E toda `config_signature` diferem do pré-#65 (quebra intencional)."""
+    assert set(GOLDEN_BASELINES) == set(PRE_65_BASELINES)
+    for key, (run_id, config_signature) in GOLDEN_BASELINES.items():
+        old_run_id, old_config_signature = PRE_65_BASELINES[key]
+        assert run_id != old_run_id, key
+        assert config_signature != old_config_signature, key
 
 
 @pytest.mark.unit
