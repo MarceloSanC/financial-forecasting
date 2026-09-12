@@ -5,7 +5,7 @@ when-use: Reference before changing the canonical JSON hashing scheme, the float
 keywords: [adr, hashing, sha256, canonical-json, determinism, float, rounding, ulp, nan, infinity, fingerprint, run-id]
 status: accepted
 created_at: 2026-06-29
-updated_at: 2026-06-29
+updated_at: 2026-09-12
 adr_id: "1.4.0001"
 decision: Replicate the old repo's canonical sha256-over-sorted-compact-JSON scheme, but harden it by rounding floats to a declared fixed precision before serialization and rejecting NaN/±inf with ValueError; strip volatile keys from config signatures
 context_stage: 1.4-identity-and-fingerprints
@@ -13,6 +13,21 @@ bounded_context: shared
 ---
 
 # ADR 1.4.0001 — Deterministic canonical hashing scheme with hardened float canonicalization and NaN/inf rejection
+
+> ⚠️ **Errata (2026-09-12):** two statements below did not hold as written — "the
+> canonicalization policy lives in exactly one place (the adapter)" and "a single
+> parametrized contract test pins fake and real to identical behavior". The
+> in-memory `FakeHasher` was a verbatim copy of the adapter (32 of its 51 useful
+> lines, precision constant included), so the policy lived in **two** places and
+> the `[fake, real]` contract test compared the implementation with a copy of
+> itself: lowering `_FLOAT_PRECISION` on either side passed the entire suite
+> (1838 green). The fake was removed — the hasher is pure, deterministic and
+> I/O-free, so no test double is warranted; domain and use-case tests inject the
+> adapter — and the scheme is now pinned by golden vectors
+> (`tests/contract/shared/test_hasher_golden.py`) plus a 12-decimal payload in
+> the contract test that makes the rounding observable in both directions. The
+> decision itself (canonical form, 10-decimal rounding, NaN/±inf rejection,
+> volatile-key strip) is unchanged — see issue #70.
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 

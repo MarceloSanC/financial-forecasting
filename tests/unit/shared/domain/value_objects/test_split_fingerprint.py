@@ -2,17 +2,20 @@
 
 Cobre o critério A3 (invariante à ordem dentro de cada split, sensível ao
 conteúdo) e A5 (determinismo) do concept, mais I9 (frozen). Testa contra o
-`FakeHasher` in-memory (port injetado).
+`CanonicalJsonHasher` real (port injetado): o hasher é puro e sem I/O, então
+não há fake — o hash aqui é o de produção (issue #70).
 """
 
 import dataclasses
 
 import pytest
 
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
 from financial_forecasting.shared.domain.value_objects.split_fingerprint import (
     SplitFingerprint,
 )
-from tests.fakes.shared.in_memory_hasher import FakeHasher
 
 _TRAIN = ["2020-01-01", "2020-01-02", "2020-01-03"]
 _VAL = ["2020-02-01", "2020-02-02"]
@@ -23,7 +26,7 @@ _CALIB = ["2020-02-20", "2020-02-21"]
 @pytest.mark.unit
 def test_is_deterministic() -> None:
     """I1: mesmos splits -> mesma impressão em chamadas repetidas."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
 
     first = SplitFingerprint.compute(hasher=hasher, train=_TRAIN, val=_VAL, test=_TEST)
     second = SplitFingerprint.compute(hasher=hasher, train=_TRAIN, val=_VAL, test=_TEST)
@@ -34,7 +37,7 @@ def test_is_deterministic() -> None:
 @pytest.mark.unit
 def test_order_within_split_is_irrelevant() -> None:
     """I6: trocar a ordem DENTRO de um split não muda a impressão."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
     shuffled_train = ["2020-01-03", "2020-01-01", "2020-01-02"]
 
     ordered = SplitFingerprint.compute(
@@ -50,7 +53,7 @@ def test_order_within_split_is_irrelevant() -> None:
 @pytest.mark.unit
 def test_content_of_split_matters() -> None:
     """I6: mudar o CONTEÚDO de um split muda a impressão."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
     different_train = ["2020-01-01", "2020-01-02", "2020-01-99"]
 
     base = SplitFingerprint.compute(hasher=hasher, train=_TRAIN, val=_VAL, test=_TEST)
@@ -64,7 +67,7 @@ def test_content_of_split_matters() -> None:
 @pytest.mark.unit
 def test_split_assignment_matters() -> None:
     """Mover um timestamp de train para val muda a impressão (split é estrutura)."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
 
     base = SplitFingerprint.compute(
         hasher=hasher,
@@ -86,7 +89,7 @@ def test_split_assignment_matters() -> None:
 def test_is_frozen() -> None:
     """I9: VO imutável — atribuir a um campo levanta FrozenInstanceError."""
     fingerprint = SplitFingerprint.compute(
-        hasher=FakeHasher(), train=_TRAIN, val=_VAL, test=_TEST
+        hasher=CanonicalJsonHasher(), train=_TRAIN, val=_VAL, test=_TEST
     )
 
     with pytest.raises(dataclasses.FrozenInstanceError):
@@ -99,7 +102,7 @@ def test_is_frozen() -> None:
 @pytest.mark.unit
 def test_omitting_calib_is_backward_compatible() -> None:
     """Retrocompat: 3-vias e calib=None produzem a MESMA impressão de sempre."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
 
     without = SplitFingerprint.compute(hasher=hasher, train=_TRAIN, val=_VAL, test=_TEST)
     explicit_none = SplitFingerprint.compute(
@@ -117,16 +120,16 @@ def test_three_way_fingerprint_is_byte_identical_to_pre_calib_value() -> None:
     O golden é o sha256 do payload canônico `{"test","train","val"}` (sem a chave
     `calib`) — pina byte-a-byte que estender o VO não regrediu callers pré-5.1. Se
     a extensão passasse a emitir `"calib"` no payload 3-vias (ou a canonicalização
-    mudasse), este teste quebra. `FakeHasher` compartilha a canonicalização do
-    adapter real (contract test `test_hasher_contract.py`), logo o golden vale para
-    o hash de produção.
+    mudasse), este teste quebra. O hasher injetado É o adapter real, logo o
+    golden é o hash de produção (a trava byte-a-byte do esquema canônico em si
+    vive em `tests/contract/shared/test_hasher_golden.py`).
     """
     frozen_pre_calib = (
         "f51e6aae8a9690cd0dca5884233cee073d90bb0811aaddb09e135e7e23edd894"
     )
 
     three_way = SplitFingerprint.compute(
-        hasher=FakeHasher(), train=_TRAIN, val=_VAL, test=_TEST
+        hasher=CanonicalJsonHasher(), train=_TRAIN, val=_VAL, test=_TEST
     )
 
     assert three_way.value == frozen_pre_calib
@@ -135,7 +138,7 @@ def test_three_way_fingerprint_is_byte_identical_to_pre_calib_value() -> None:
 @pytest.mark.unit
 def test_calib_changes_fingerprint() -> None:
     """Adicionar um calib dedicado muda a impressão (fronteira first-class)."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
 
     three_way = SplitFingerprint.compute(hasher=hasher, train=_TRAIN, val=_VAL, test=_TEST)
     four_way = SplitFingerprint.compute(
@@ -148,7 +151,7 @@ def test_calib_changes_fingerprint() -> None:
 @pytest.mark.unit
 def test_calib_order_is_irrelevant() -> None:
     """A ordem DENTRO do calib não muda a impressão (sorted antes do hash)."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
     shuffled_calib = ["2020-02-21", "2020-02-20"]
 
     ordered = SplitFingerprint.compute(
@@ -164,7 +167,7 @@ def test_calib_order_is_irrelevant() -> None:
 @pytest.mark.unit
 def test_calib_content_matters() -> None:
     """Dois folds iguais em train/val/test mas com calib distinto NÃO colidem."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
     other_calib = ["2020-02-20", "2020-02-25"]
 
     base = SplitFingerprint.compute(

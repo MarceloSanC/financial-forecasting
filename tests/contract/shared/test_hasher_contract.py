@@ -1,18 +1,22 @@
-"""Contract test do port `Hasher` — paridade FakeHasher ↔ CanonicalJsonHasher.
+"""Contract test do port `Hasher` — a semântica canônica declarada no port.
 
-Um ÚNICO contrato parametrizado sobre `[FakeHasher(), CanonicalJsonHasher()]`
-prova que ambas as implementações honram a MESMA semântica canônica
-(invariante I11, critério A8): determinismo, ordem de chaves irrelevante,
-None->null, floats canonicalizados, NaN/±inf -> ValueError, e `hash_text`
-determinístico e sensível à ordem.
+Prova, contra o `CanonicalJsonHasher`, as propriedades que o docstring do port
+promete (ADR 1.4.0001): determinismo (I1), ordem de chaves irrelevante (I2),
+`None` -> `null`, floats canonicalizados por arredondamento declarado com a
+precisão OBSERVÁVEL em exatamente 10 casas (I3), NaN/±inf -> `ValueError` (I4),
+e `hash_text` determinístico e sensível à ordem.
 
-O REFORÇO de paridade (`fake.hash_mapping(p) == real.hash_mapping(p)` sobre
-payloads fixos) prova que fake e real produzem o MESMO hash — não só o mesmo
-comportamento — resolvendo a duplicação da regra de canonicalização entre os
-dois (a cópia mínima do FakeHasher da task-02).
+Há uma única implementação, de propósito. O `FakeHasher` que parametrizava
+este contrato sobre `[fake, real]` era cópia byte-a-byte do adapter — um
+contract test entre duas cópias não tem proposição a verificar (issue #70).
+Como o hasher é puro, determinístico e sem I/O, não existe shortcut legítimo
+para um fake oferecer (Meszaros), e os testes de domínio/use case injetam o
+próprio adapter. O VALOR do esquema (byte-compat com hashes persistidos) fica
+pinado à parte em `test_hasher_golden.py`; aqui ficam as propriedades.
 """
 
 import math
+from collections.abc import Callable
 
 import pytest
 
@@ -20,24 +24,12 @@ from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher imp
     CanonicalJsonHasher,
 )
 from financial_forecasting.shared.application.ports.out.hasher import Hasher
-from tests.fakes.shared.in_memory_hasher import FakeHasher
-
-# Bateria de payloads canônicos fixos para a igualdade cruzada fake==real.
-_FIXED_MAPPINGS: list[dict[str, object]] = [
-    {},
-    {"a": 1, "b": "x", "c": None},
-    {"asset": "AAPL", "row_count": 252, "close_sum": 1234.5, "volume_sum": 9.0},
-    {"nested": {"k": [1, 2, 3], "f": 3.14159}, "flag": True},
-    {"z": 1, "a": 2, "m": 3},
-]
-_FIXED_TEXTS: list[str] = ["", "a|b|c", "feature_one|feature_two", "AAPL"]
 
 
-@pytest.fixture(params=[FakeHasher(), CanonicalJsonHasher()], ids=["fake", "real"])
-def hasher(request: pytest.FixtureRequest) -> Hasher:
-    """Parametriza o contrato sobre o fake e o adapter real."""
-    impl: Hasher = request.param
-    return impl
+@pytest.fixture
+def hasher() -> Hasher:
+    """A única implementação do port (ver docstring do módulo)."""
+    return CanonicalJsonHasher()
 
 
 @pytest.mark.contract
@@ -122,6 +114,67 @@ def test_nested_real_float_difference_changes_hash(hasher: Hasher) -> None:
     assert base != different
 
 
+# -- I3 observável: float com 12 casas decimais pina a precisão em EXATAMENTE 10 --
+#
+# As fixtures `100.000000000001` acima só exigem que o ruído COLAPSE — passam
+# para qualquer precisão <= 12 e por isso não distinguem `round(., 10)` de
+# `round(., 5)` (issue #70: baixar a precisão era invisível à suíte inteira).
+# Aqui a 10ª casa é significativa: as casas 11-12 têm de sumir E a 10ª tem de
+# sobreviver, o que só `round(., 10)` satisfaz nas duas direções.
+
+_TWELVE_DECIMALS = 1.234567891234
+_TEN_DECIMALS = 1.2345678912  # o que resta após round(., 10)
+_NINE_DECIMALS = 1.234567891  # difere na 10ª casa
+
+
+def _at_top_level(value: float) -> dict[str, object]:
+    return {"x": value}
+
+
+def _inside_mapping(value: float) -> dict[str, object]:
+    return {"outer": {"f": value}}
+
+
+def _inside_list(value: float) -> dict[str, object]:
+    return {"series": [value, 2.0]}
+
+
+_SHAPES = [_at_top_level, _inside_mapping, _inside_list]
+_SHAPE_IDS = ["top_level", "nested_mapping", "nested_list"]
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("shape", _SHAPES, ids=_SHAPE_IDS)
+def test_digits_beyond_the_tenth_decimal_do_not_change_the_hash(
+    hasher: Hasher, shape: Callable[[float], dict[str, object]]
+) -> None:
+    """I3: as casas 11-12 são descartadas — 12 casas hasheiam como 10.
+
+    Falha se a precisão declarada SUBIR (>= 11): a 11ª casa passaria a
+    discriminar e os dois payloads divergiriam.
+    """
+    twelve = hasher.hash_mapping(shape(_TWELVE_DECIMALS))
+    ten = hasher.hash_mapping(shape(_TEN_DECIMALS))
+
+    assert twelve == ten
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("shape", _SHAPES, ids=_SHAPE_IDS)
+def test_the_tenth_decimal_still_discriminates(
+    hasher: Hasher, shape: Callable[[float], dict[str, object]]
+) -> None:
+    """I3: a 10ª casa sobrevive — 12 casas NÃO hasheiam como 9.
+
+    Falha se a precisão declarada DESCER (<= 9): a 10ª casa seria descartada e
+    os dois payloads colapsariam no mesmo hash — a mutação que era invisível.
+    """
+    twelve = hasher.hash_mapping(shape(_TWELVE_DECIMALS))
+    nine = hasher.hash_mapping(shape(_NINE_DECIMALS))
+
+    assert twelve != nine
+
+
 @pytest.mark.contract
 def test_nan_raises_value_error(hasher: Hasher) -> None:
     """I4: NaN no payload -> ValueError."""
@@ -154,23 +207,3 @@ def test_hash_text_is_deterministic(hasher: Hasher) -> None:
 def test_hash_text_is_order_sensitive(hasher: Hasher) -> None:
     """hash_text sensível à ordem: 'a|b' != 'b|a'."""
     assert hasher.hash_text("a|b") != hasher.hash_text("b|a")
-
-
-@pytest.mark.contract
-@pytest.mark.parametrize("payload", _FIXED_MAPPINGS)
-def test_fake_and_real_produce_same_mapping_hash(payload: dict[str, object]) -> None:
-    """I11: fake e real produzem o MESMO hash de mapping (igualdade cruzada)."""
-    fake = FakeHasher()
-    real = CanonicalJsonHasher()
-
-    assert fake.hash_mapping(payload) == real.hash_mapping(payload)
-
-
-@pytest.mark.contract
-@pytest.mark.parametrize("text", _FIXED_TEXTS)
-def test_fake_and_real_produce_same_text_hash(text: str) -> None:
-    """I11: fake e real produzem o MESMO hash de texto (igualdade cruzada)."""
-    fake = FakeHasher()
-    real = CanonicalJsonHasher()
-
-    assert fake.hash_text(text) == real.hash_text(text)

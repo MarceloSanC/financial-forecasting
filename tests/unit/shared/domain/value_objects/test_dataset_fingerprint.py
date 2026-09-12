@@ -3,18 +3,21 @@
 Cobre o critério A4 do concept: canonicalização de floats (mesmo valor
 matemático arredondado a 10 casas -> mesmo hash; diferença real -> hash
 diferente) e rejeição de NaN/±inf (C1/C2 -> ValueError), mais I1/I9. Testa
-contra o `FakeHasher` in-memory (port injetado), que aplica a mesma regra
-canônica do adapter real.
+contra o `CanonicalJsonHasher` real (port injetado): o hasher é puro e sem
+I/O, então não há fake — o hash aqui é o de produção (issue #70).
 """
 
 import dataclasses
 
 import pytest
 
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
+from financial_forecasting.shared.application.ports.out.hasher import Hasher
 from financial_forecasting.shared.domain.value_objects.dataset_fingerprint import (
     DatasetFingerprint,
 )
-from tests.fakes.shared.in_memory_hasher import FakeHasher
 
 _BASE_KWARGS: dict[str, object] = {
     "asset": "AAPL",
@@ -27,7 +30,7 @@ _BASE_KWARGS: dict[str, object] = {
 }
 
 
-def _compute(hasher: FakeHasher, **overrides: object) -> DatasetFingerprint:
+def _compute(hasher: Hasher, **overrides: object) -> DatasetFingerprint:
     kwargs = {**_BASE_KWARGS, **overrides}
     return DatasetFingerprint.compute(hasher=hasher, **kwargs)  # type: ignore[arg-type]
 
@@ -35,7 +38,7 @@ def _compute(hasher: FakeHasher, **overrides: object) -> DatasetFingerprint:
 @pytest.mark.unit
 def test_is_deterministic() -> None:
     """I1: mesmo dataset -> mesma impressão em chamadas repetidas."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
 
     assert _compute(hasher) == _compute(hasher)
 
@@ -43,7 +46,7 @@ def test_is_deterministic() -> None:
 @pytest.mark.unit
 def test_float_below_precision_floor_does_not_change_hash() -> None:
     """A4: diferença abaixo de 1e-10 (round a 10 casas) -> mesmo hash."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
 
     base = _compute(hasher, close_sum=100.0)
     noisy = _compute(hasher, close_sum=100.000000000001)
@@ -54,7 +57,7 @@ def test_float_below_precision_floor_does_not_change_hash() -> None:
 @pytest.mark.unit
 def test_real_float_difference_changes_hash() -> None:
     """A4: diferença real (acima do piso de arredondamento) -> hash diferente."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
 
     base = _compute(hasher, close_sum=100.0)
     different = _compute(hasher, close_sum=100.5)
@@ -66,7 +69,7 @@ def test_real_float_difference_changes_hash() -> None:
 @pytest.mark.parametrize("field", ["close_sum", "volume_sum"])
 def test_nan_raises_value_error(field: str) -> None:
     """C1: NaN em close_sum/volume_sum -> ValueError (fail-fast)."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
 
     with pytest.raises(ValueError, match="não-finito"):
         _compute(hasher, **{field: float("nan")})
@@ -77,7 +80,7 @@ def test_nan_raises_value_error(field: str) -> None:
 @pytest.mark.parametrize("non_finite", [float("inf"), float("-inf")])
 def test_inf_raises_value_error(field: str, non_finite: float) -> None:
     """C2: +inf/-inf em close_sum/volume_sum -> ValueError."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
 
     with pytest.raises(ValueError, match="não-finito"):
         _compute(hasher, **{field: non_finite})
@@ -90,7 +93,7 @@ def test_inf_raises_value_error(field: str, non_finite: float) -> None:
 )
 def test_each_string_field_changes_hash(field: str) -> None:
     """Sensibilidade: alterar qualquer campo string muda a impressão."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
 
     base = _compute(hasher)
     changed = _compute(hasher, **{field: "DIFFERENT"})
@@ -101,7 +104,7 @@ def test_each_string_field_changes_hash(field: str) -> None:
 @pytest.mark.unit
 def test_row_count_change_changes_hash() -> None:
     """Sensibilidade: row_count distinto muda a impressão."""
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
 
     assert _compute(hasher, row_count=252) != _compute(hasher, row_count=253)
 
@@ -109,7 +112,7 @@ def test_row_count_change_changes_hash() -> None:
 @pytest.mark.unit
 def test_is_frozen() -> None:
     """I9: VO imutável — atribuir a um campo levanta FrozenInstanceError."""
-    fingerprint = _compute(FakeHasher())
+    fingerprint = _compute(CanonicalJsonHasher())
 
     with pytest.raises(dataclasses.FrozenInstanceError):
         fingerprint.value = "tampered"  # type: ignore[misc]

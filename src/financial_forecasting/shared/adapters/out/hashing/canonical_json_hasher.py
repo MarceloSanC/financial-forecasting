@@ -16,9 +16,13 @@ conforme o ADR 1.4.0001:
   não-finito que escape do guard explícito.
 
 Não faz I/O (sem `_sha256_file`/leitura de disco — isso é Step 4.x). A
-canonicalização vive AQUI, no adapter, centralizada e contract-testada contra
-o `FakeHasher` (paridade I11), mantendo o domínio puro (os VOs só montam o
-payload e delegam).
+canonicalização vive AQUI, no adapter, centralizada — e esta é a ÚNICA
+implementação do port: por ser pura, determinística e sem I/O, não há fake em
+`tests/fakes/` (issue #70); os testes de domínio e de use case injetam este
+adapter. As propriedades são contract-testadas
+(`tests/contract/shared/test_hasher_contract.py`) e o valor é pinado
+byte-a-byte por golden (`test_hasher_golden.py`), mantendo o domínio puro (os
+VOs só montam o payload e delegam).
 """
 
 import json

@@ -12,10 +12,12 @@ import pytest
 from financial_forecasting.features.modeling.domain.value_objects.fold_split import (
     FoldSplit,
 )
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
 from financial_forecasting.shared.domain.value_objects.split_fingerprint import (
     SplitFingerprint,
 )
-from tests.fakes.shared.in_memory_hasher import FakeHasher
 
 _TRAIN = ("2020-01-01", "2020-01-02", "2020-01-03")
 _EARLY_STOP = ("2020-01-10", "2020-01-11")
@@ -25,7 +27,7 @@ _TEST = ("2020-01-30", "2020-01-31")
 
 def _fingerprint() -> SplitFingerprint:
     return SplitFingerprint.compute(
-        hasher=FakeHasher(),
+        hasher=CanonicalJsonHasher(),
         train=list(_TRAIN),
         val=list(_EARLY_STOP),
         test=list(_TEST),

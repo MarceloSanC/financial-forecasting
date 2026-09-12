@@ -2,8 +2,9 @@
 
 Infra: `FakeMedallionStore` semeado via `seed_read_only`,
 `FakeQuantileModelTrainer` (envolto num capturador), `FakeAnalyticsRepository`
-(4.2), `FakeHasher` (1.4) e o `WalkForwardSplitter` REAL sobre grade sintética
-de dias úteis contíguos (mesma técnica da 5.2). Os retornos codificam o índice
+(4.2), o `CanonicalJsonHasher` REAL (1.4 — puro e sem I/O, não há fake; issue
+#70) e o `WalkForwardSplitter` REAL sobre grade sintética de dias úteis
+contíguos (mesma técnica da 5.2). Os retornos codificam o índice
 da sessão (`returns[i] = i/1000`) e as features codificam (índice, coluna) —
 qualquer deslocamento de partição/label vira diferença numérica detectável.
 
@@ -51,6 +52,9 @@ from financial_forecasting.features.modeling.domain.services.walk_forward_splitt
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import (
     ScopeSpec,
 )
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
 from financial_forecasting.shared.domain.services.trading_calendar import (
     TradingCalendar,
 )
@@ -63,7 +67,6 @@ from tests.fakes.features.analytics_store.in_memory_analytics_repository import 
 from tests.fakes.features.modeling.in_memory_quantile_model_trainer import (
     FakeQuantileModelTrainer,
 )
-from tests.fakes.shared.in_memory_hasher import FakeHasher
 from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 
 if TYPE_CHECKING:
@@ -274,7 +277,7 @@ def _folds() -> tuple[FoldSplit, ...]:
         val_size=5,
         calib_size=5,
         embargo=1,
-        hasher=FakeHasher(),
+        hasher=CanonicalJsonHasher(),
     )
 
 
@@ -300,7 +303,7 @@ def _build(
     trainer: FakeQuantileModelTrainer | None = None,
 ) -> tuple[TrainGbmQuantile, FakeAnalyticsRepository]:
     repo = FakeAnalyticsRepository(clock=_FakeClock())
-    hasher: Hasher = FakeHasher()
+    hasher: Hasher = CanonicalJsonHasher()
     use_case = TrainGbmQuantile(
         store=store if store is not None else _seeded_store(),
         splitter=_splitter(),
@@ -663,8 +666,8 @@ def test_c6_missing_expected_feature_column_raises_naming_it() -> None:
 # -- I7: payloads canônicos pinam o feature set (mata o mutante M4 da auditoria) ---
 
 
-class _RecordingHasher(FakeHasher):
-    """FakeHasher que captura os payloads de `hash_mapping` (prova I7)."""
+class _RecordingHasher(CanonicalJsonHasher):
+    """Hasher real que captura os payloads de `hash_mapping` (prova I7)."""
 
     def __init__(self) -> None:
         self.payloads: list[dict[str, object]] = []
