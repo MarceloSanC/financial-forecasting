@@ -4,8 +4,9 @@ Abstrai o hashing canônico determinístico usado pela identidade do projeto
 (RunId, DatasetFingerprint, ConfigSignature, SplitFingerprint). Os value
 objects de domínio constroem o payload e delegam o hash a este port — nunca
 serializam/hasheiam inline — para que a semântica canônica viva num único
-lugar (o adapter), seja contract-testada contra um fake, e seja trocável sem
-tocar no domínio.
+lugar (o adapter), seja contract-testada e pinada por golden, e seja trocável
+sem tocar no domínio. Não há fake deste port: a implementação é pura e sem
+I/O, então os testes injetam o próprio adapter (issue #70).
 
 Semântica canônica garantida por qualquer implementação deste contrato:
 
