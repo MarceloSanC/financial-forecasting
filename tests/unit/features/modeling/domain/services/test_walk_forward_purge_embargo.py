@@ -18,13 +18,15 @@ from financial_forecasting.features.modeling.domain.services.walk_forward_splitt
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import (
     ScopeSpec,
 )
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
 from financial_forecasting.shared.domain.services.trading_calendar import (
     TradingCalendar,
 )
 from financial_forecasting.shared.domain.value_objects.trading_sessions import (
     TradingSessions,
 )
-from tests.fakes.shared.in_memory_hasher import FakeHasher
 
 _FRIDAY = 4  # datetime.weekday(): 0=segunda ... 4=sexta
 
@@ -59,7 +61,7 @@ def test_expanding_window_train_anchored_and_growing() -> None:
         val_size=2,
         calib_size=2,
         embargo=1,
-        hasher=FakeHasher(),
+        hasher=CanonicalJsonHasher(),
     )
 
     first_session = sessions[0].isoformat()
@@ -81,7 +83,7 @@ def test_test_blocks_tile_the_tail() -> None:
         val_size=2,
         calib_size=2,
         embargo=1,
-        hasher=FakeHasher(),
+        hasher=CanonicalJsonHasher(),
     )
 
     tests = [fold.test for fold in folds]
@@ -112,7 +114,7 @@ def test_purge_embargo_gap_equals_max_horizon_plus_embargo(
         val_size=3,
         calib_size=3,
         embargo=embargo,
-        hasher=FakeHasher(),
+        hasher=CanonicalJsonHasher(),
     )
     expected_gap = max_horizon + embargo
 
@@ -138,7 +140,7 @@ def test_no_overlap_across_all_partitions() -> None:
         val_size=2,
         calib_size=2,
         embargo=1,
-        hasher=FakeHasher(),
+        hasher=CanonicalJsonHasher(),
     )
 
     for fold in folds:
@@ -161,7 +163,7 @@ def test_insufficient_history_raises() -> None:
             val_size=2,
             calib_size=2,
             embargo=1,
-            hasher=FakeHasher(),
+            hasher=CanonicalJsonHasher(),
         )
 
 
@@ -178,7 +180,7 @@ def test_test_blocks_do_not_fit_raises() -> None:
             val_size=2,
             calib_size=2,
             embargo=1,
-            hasher=FakeHasher(),
+            hasher=CanonicalJsonHasher(),
         )
 
 
@@ -197,7 +199,7 @@ def test_non_contiguous_grid_raises() -> None:
             val_size=2,
             calib_size=2,
             embargo=1,
-            hasher=FakeHasher(),
+            hasher=CanonicalJsonHasher(),
         )
 
 
@@ -217,7 +219,7 @@ def test_non_session_in_grid_raises() -> None:
             val_size=2,
             calib_size=2,
             embargo=1,
-            hasher=FakeHasher(),
+            hasher=CanonicalJsonHasher(),
         )
 
 
@@ -244,4 +246,4 @@ def test_invalid_params_raise(kwargs: dict[str, int], match: str) -> None:
     }
     base.update(kwargs)
     with pytest.raises(ValueError, match=match):
-        _splitter(sessions).split(sessions, _SCOPE, hasher=FakeHasher(), **base)
+        _splitter(sessions).split(sessions, _SCOPE, hasher=CanonicalJsonHasher(), **base)

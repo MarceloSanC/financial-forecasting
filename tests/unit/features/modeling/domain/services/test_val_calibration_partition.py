@@ -17,6 +17,9 @@ from financial_forecasting.features.modeling.domain.services.walk_forward_splitt
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import (
     ScopeSpec,
 )
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
 from financial_forecasting.shared.domain.services.trading_calendar import (
     TradingCalendar,
 )
@@ -26,7 +29,6 @@ from financial_forecasting.shared.domain.value_objects.split_fingerprint import 
 from financial_forecasting.shared.domain.value_objects.trading_sessions import (
     TradingSessions,
 )
-from tests.fakes.shared.in_memory_hasher import FakeHasher
 
 _VAL_SIZE = 4
 _CALIB_SIZE = 3
@@ -58,7 +60,7 @@ def _split() -> tuple:
         val_size=_VAL_SIZE,
         calib_size=_CALIB_SIZE,
         embargo=1,
-        hasher=FakeHasher(),
+        hasher=CanonicalJsonHasher(),
     )
     index = {d.isoformat(): i for i, d in enumerate(sessions)}
     return folds, index
@@ -98,7 +100,7 @@ def test_calib_is_the_most_recent_validation_block_before_test() -> None:
 def test_fingerprint_is_deterministic_and_reflects_calib() -> None:
     """I8: impressão 4-vias determinística e sensível ao bloco de calib."""
     folds, _ = _split()
-    hasher = FakeHasher()
+    hasher = CanonicalJsonHasher()
 
     for fold in folds:
         recomputed = SplitFingerprint.compute(
@@ -130,7 +132,7 @@ def test_calib_size_change_shifts_only_the_calib_block() -> None:
         "test_size": _TEST_SIZE,
         "val_size": _VAL_SIZE,
         "embargo": 1,
-        "hasher": FakeHasher(),
+        "hasher": CanonicalJsonHasher(),
     }
 
     small_calib, large_calib = 2, 4
