@@ -242,6 +242,10 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 - **Imports sempre absolutos.** Nunca `from ..domain import` — use o caminho completo.
 - **Nenhum import circular.** Se você precisar, é sinal de que a camada está errada.
 - **Shared não importa de features.** O fluxo é sempre: features → shared, nunca o contrário.
+- **Identidade só pelos VOs de `shared/domain/value_objects/`.** `RunId`, `ConfigSignature`,
+  `SplitFingerprint` e `DatasetFingerprint` são o único caminho de hash; fora deles ninguém
+  chama `hasher.hash_mapping`/`hash_text` (payload hand-rolled num use case é uma segunda
+  definição de "o mesmo run" — ADR 5.2.0004). Gate: regra 6 do `scripts/check_layout.py`.
 - **Features não importam de outras features.** Cada slice é uma unidade
   substituível; o que precisa ser compartilhado sobe para `shared/`.
 

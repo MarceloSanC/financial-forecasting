@@ -182,3 +182,80 @@ def test_real_repo_passes_the_sibling_adapter_rule() -> None:
     """
     module = _load_check_layout()
     assert module.check_sibling_adapter_imports(_SRC_ROOT) == []
+
+
+# -- regra 6 (issue #65): hash_mapping/hash_text só são CHAMADOS nos VOs --------------
+
+
+@pytest.mark.parametrize("method", ["hash_mapping", "hash_text"])
+def test_hasher_call_rule_flags_call_outside_value_objects(
+    check_layout: ModuleType, tmp_path: Path, method: str
+) -> None:
+    """`self._hasher.hash_mapping(...)` num use case reprova.
+
+    É a violação REAL que existia em `develop` antes da #65 (3 use cases, 6 sítios,
+    cada um com o seu payload privado de identidade). Reproduzida em árvore
+    sintética para que o teste continue válido depois da correção.
+    """
+    src_root = _write_adapter_tree(
+        tmp_path,
+        source_rel="features/probe/application/use_cases/train.py",
+        import_line=(
+            "class Probe:\n"
+            "    def run(self, payload):\n"
+            f"        return self._hasher.{method}(payload)\n"
+        ),
+    )
+
+    violations = check_layout.check_hasher_call_sites(src_root)
+
+    assert len(violations) == 1, f"esperava 1 violação, obtive {violations}"
+    assert method in violations[0]
+    assert "train.py:3" in violations[0].replace("\\", "/")
+
+
+def test_hasher_call_rule_allows_calls_inside_shared_value_objects(
+    check_layout: ModuleType, tmp_path: Path
+) -> None:
+    """O VO de identidade é o único lugar que chama o port — e passa."""
+    src_root = _write_adapter_tree(
+        tmp_path,
+        source_rel="shared/domain/value_objects/probe_id.py",
+        import_line=(
+            "class ProbeId:\n"
+            "    @classmethod\n"
+            "    def compute(cls, *, hasher, payload):\n"
+            "        return cls(hasher.hash_mapping(payload))\n"
+        ),
+    )
+
+    assert check_layout.check_hasher_call_sites(src_root) == []
+
+
+def test_hasher_call_rule_ignores_definitions_of_the_port_and_adapter(
+    check_layout: ModuleType, tmp_path: Path
+) -> None:
+    """Definir `hash_mapping`/`hash_text` (port, adapter) não é chamar — passa.
+
+    Sem isto a regra reprovaria o próprio `Hasher` Protocol e o
+    `CanonicalJsonHasher`, e morreria como ruído no primeiro PR.
+    """
+    src_root = _write_adapter_tree(
+        tmp_path,
+        source_rel="shared/adapters/out/hashing/probe_hasher.py",
+        import_line=(
+            "class ProbeHasher:\n"
+            "    def hash_mapping(self, payload):\n"
+            "        return 'x'\n"
+            "    def hash_text(self, text):\n"
+            "        return 'y'\n"
+        ),
+    )
+
+    assert check_layout.check_hasher_call_sites(src_root) == []
+
+
+def test_real_repo_passes_the_hasher_call_rule() -> None:
+    """A árvore real fica limpa: nenhum use case hasheia identidade por conta própria."""
+    module = _load_check_layout()
+    assert module.check_hasher_call_sites(_SRC_ROOT) == []
