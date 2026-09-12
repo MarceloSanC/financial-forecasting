@@ -2,8 +2,9 @@
 
 Infra: `FakeMedallionStore` semeado via `seed_read_only`, `InMemoryTftTrainer`
 (Task 04), `FakeAnalyticsRepository` (4.2), `FakeExperimentTracker` (1.5),
-`FakeHasher` (1.4) e o `WalkForwardSplitter` REAL sobre grade sintética de dias
-úteis contíguos (mesma técnica de 5.2/5.3). Os retornos codificam o índice da
+o `CanonicalJsonHasher` REAL (1.4 — puro e sem I/O, não há fake; issue #70) e o
+`WalkForwardSplitter` REAL sobre grade sintética de dias úteis contíguos (mesma
+técnica de 5.2/5.3). Os retornos codificam o índice da
 sessão e as features codificam (índice, coluna) — qualquer deslocamento de
 partição vira diferença numérica detectável.
 
@@ -54,6 +55,9 @@ from financial_forecasting.features.modeling.domain.services.walk_forward_splitt
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import (
     ScopeSpec,
 )
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
 from financial_forecasting.shared.domain.services.trading_calendar import TradingCalendar
 from financial_forecasting.shared.domain.value_objects.trading_sessions import (
     TradingSessions,
@@ -63,7 +67,6 @@ from tests.fakes.features.analytics_store.in_memory_analytics_repository import 
 )
 from tests.fakes.features.modeling.in_memory_tft_trainer import InMemoryTftTrainer
 from tests.fakes.shared.in_memory_experiment_tracker import FakeExperimentTracker
-from tests.fakes.shared.in_memory_hasher import FakeHasher
 from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 
 if TYPE_CHECKING:
@@ -261,7 +264,7 @@ def _folds() -> tuple[Any, ...]:
         val_size=_VAL_SIZE,
         calib_size=_CALIB_SIZE,
         embargo=_EMBARGO,
-        hasher=FakeHasher(),
+        hasher=CanonicalJsonHasher(),
     )
 
 
@@ -286,7 +289,7 @@ def _build(
         persist_predictions=PersistPredictions(repository=repo),
         analytics_repository=repo,
         tracker=resolved_tracker,
-        hasher=FakeHasher(),
+        hasher=CanonicalJsonHasher(),
         artifacts_root=tmp_path / "artifacts",
     )
     return use_case, repo, resolved_trainer, resolved_tracker

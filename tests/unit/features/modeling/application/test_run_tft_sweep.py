@@ -35,6 +35,9 @@ from financial_forecasting.features.modeling.domain.services.walk_forward_splitt
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import (
     ScopeSpec,
 )
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
 from financial_forecasting.shared.domain.services.trading_calendar import TradingCalendar
 from financial_forecasting.shared.domain.value_objects.trading_sessions import (
     TradingSessions,
@@ -44,7 +47,6 @@ from tests.fakes.features.modeling.in_memory_hyperparameter_search import (
 )
 from tests.fakes.features.modeling.in_memory_tft_trainer import InMemoryTftTrainer
 from tests.fakes.shared.in_memory_experiment_tracker import FakeExperimentTracker
-from tests.fakes.shared.in_memory_hasher import FakeHasher
 from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 
 if TYPE_CHECKING:
@@ -166,7 +168,7 @@ def _build(
         trainer=resolved_trainer,
         search=InMemoryHyperparameterSearch(),
         tracker=tracker,
-        hasher=FakeHasher(),
+        hasher=CanonicalJsonHasher(),
         artifacts_root=tmp_path / "artifacts",
     )
     return use_case, store, resolved_trainer, tracker
@@ -365,7 +367,7 @@ class TestFoldChoice:
             val_size=5,
             calib_size=5,
             embargo=1,
-            hasher=FakeHasher(),
+            hasher=CanonicalJsonHasher(),
         )
         index_by_session = {day.isoformat(): idx for idx, day in enumerate(_SESSIONS)}
         expected_train = tuple(index_by_session[day] for day in folds[-1].train)
@@ -405,7 +407,7 @@ class TestDatasetErrors:
             trainer=InMemoryTftTrainer(),
             search=InMemoryHyperparameterSearch(),
             tracker=FakeExperimentTracker(),
-            hasher=FakeHasher(),
+            hasher=CanonicalJsonHasher(),
             artifacts_root=tmp_path / "artifacts",
         )
 
@@ -425,7 +427,7 @@ class TestDatasetErrors:
             trainer=InMemoryTftTrainer(),
             search=InMemoryHyperparameterSearch(),
             tracker=FakeExperimentTracker(),
-            hasher=FakeHasher(),
+            hasher=CanonicalJsonHasher(),
             artifacts_root=tmp_path / "artifacts",
         )
 

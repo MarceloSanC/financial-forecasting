@@ -2,8 +2,9 @@
 
 Infra: `FakeMedallionStore` semeado via `seed_read_only` (Task 04),
 `FakeBaselineForecaster` (Task 05), `FakeAnalyticsRepository` (4.2),
-`FakeHasher` (1.4) e o `WalkForwardSplitter` REAL sobre grade sintética de dias
-úteis contíguos (mesma técnica dos testes da 5.1).
+o `CanonicalJsonHasher` REAL (1.4 — puro e sem I/O, não há fake; issue #70) e o
+`WalkForwardSplitter` REAL sobre grade sintética de dias úteis contíguos (mesma
+técnica dos testes da 5.1).
 
 Prova (concept 5.2 §4/§5/§6; A5-unit/A6/A8):
 
@@ -51,6 +52,9 @@ from financial_forecasting.features.modeling.domain.value_objects.fold_split imp
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import (
     ScopeSpec,
 )
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
 from financial_forecasting.shared.domain.services.trading_calendar import (
     TradingCalendar,
 )
@@ -66,7 +70,6 @@ from tests.fakes.features.analytics_store.in_memory_analytics_repository import 
 from tests.fakes.features.modeling.in_memory_baseline_forecaster import (
     FakeBaselineForecaster,
 )
-from tests.fakes.shared.in_memory_hasher import FakeHasher
 from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 
 if TYPE_CHECKING:
@@ -191,7 +194,7 @@ def _build(
     splitter: WalkForwardSplitter | None = None,
 ) -> tuple[RunBaselines, FakeAnalyticsRepository]:
     repo = FakeAnalyticsRepository(clock=_FakeClock())
-    hasher: Hasher = FakeHasher()
+    hasher: Hasher = CanonicalJsonHasher()
     use_case = RunBaselines(
         store=store if store is not None else _seeded_store(),
         splitter=splitter if splitter is not None else _splitter(),
@@ -387,7 +390,7 @@ def _fold_with_test(
         calib=tuple(iso[train_end + 7 : train_end + 10]),
         test=tuple(iso[test_slice]),
         fingerprint=SplitFingerprint.compute(
-            hasher=FakeHasher(),
+            hasher=CanonicalJsonHasher(),
             train=iso[:train_end],
             val=iso[train_end + 2 : train_end + 5],
             test=iso[test_slice],
