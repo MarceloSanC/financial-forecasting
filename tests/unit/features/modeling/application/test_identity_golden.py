@@ -335,7 +335,7 @@ GOLDEN_BASELINES: IdentityTable = {
     ),
 }
 
-GOLDEN_GBM: IdentityTable = {
+PRE_65_GBM: IdentityTable = {
     ("gbm_quantile", "0"): (
         "c417ec9d7134cee3c1f8d51161498465200c76454c24b342148fa8146fefe338",
         "8c904fe80049741dde80fe26b5540947516ef044b724adce5ecace1a42017ce8",
@@ -343,6 +343,17 @@ GOLDEN_GBM: IdentityTable = {
     ("gbm_quantile", "1"): (
         "224a2562cf2700cbc3d41bee56bfa7ddece3b7d25680954a688e7549e23bdaf9",
         "8c904fe80049741dde80fe26b5540947516ef044b724adce5ecace1a42017ce8",
+    ),
+}
+
+GOLDEN_GBM: IdentityTable = {
+    ("gbm_quantile", "0"): (
+        "ae9faeed0a7a1bc6b72cacd5c820f0e0de480ddf206f69ed8b85ee7541e1e2cd",
+        "7f48abef91ad1834e9ac0c7601a3cdcab68f3682a3ad24c8006284a9020e1bec",
+    ),
+    ("gbm_quantile", "1"): (
+        "ce22414df14fbdc667ae061b2a0fe3a997a699a676dfa5ccc06ef64d7f125787",
+        "7f48abef91ad1834e9ac0c7601a3cdcab68f3682a3ad24c8006284a9020e1bec",
     ),
 }
 
@@ -378,6 +389,16 @@ def test_baselines_identity_broke_from_pre_65() -> None:
 def test_gbm_identity_matches_golden() -> None:
     """`TrainGbmQuantile`: fold -> (run_id, config_signature) travados."""
     assert capture_gbm() == GOLDEN_GBM
+
+
+@pytest.mark.unit
+def test_gbm_identity_broke_from_pre_65() -> None:
+    """Todo `run_id` E toda `config_signature` diferem do pré-#65 (quebra intencional)."""
+    assert set(GOLDEN_GBM) == set(PRE_65_GBM)
+    for key, (run_id, config_signature) in GOLDEN_GBM.items():
+        old_run_id, old_config_signature = PRE_65_GBM[key]
+        assert run_id != old_run_id, key
+        assert config_signature != old_config_signature, key
 
 
 @pytest.mark.unit

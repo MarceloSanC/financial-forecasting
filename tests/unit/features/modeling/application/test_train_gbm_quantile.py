@@ -663,7 +663,7 @@ def test_c6_missing_expected_feature_column_raises_naming_it() -> None:
     assert dropped in str(excinfo.value)
 
 
-# -- I7: payloads canônicos pinam o feature set (mata o mutante M4 da auditoria) ---
+# -- I7: o payload da config pina o feature set (mata o mutante M4 da auditoria) ---
 
 
 class _RecordingHasher(CanonicalJsonHasher):
@@ -677,13 +677,30 @@ class _RecordingHasher(CanonicalJsonHasher):
         return super().hash_mapping(payload)
 
 
-@pytest.mark.unit
-def test_i7_run_and_config_payloads_pin_the_ordered_feature_names() -> None:
-    """`run_id` E `config_signature` hasheiam a tupla ordenada de features.
+_RUN_ID_SLOTS = frozenset(
+    {
+        "asset",
+        "feature_set_hash",
+        "trial_number",
+        "fold",
+        "seed",
+        "model_version",
+        "config_signature",
+        "split_signature",
+        "pipeline_version",
+    }
+)
 
-    Mata o mutante M4 da auditoria de testes: remover `feature_names` de
-    `_run_payload`/`_config_payload` passa despercebido por testes que só
-    comparam run_id com run_id — aqui o CONTEÚDO do payload é assertado.
+
+@pytest.mark.unit
+def test_i7_config_payload_pins_the_ordered_feature_names_and_run_id_has_nine_slots() -> None:
+    """A tupla ordenada de features entra na config; o `run_id` tem os 9 slots.
+
+    Mata o mutante M4 da auditoria de testes: remover `feature_names` do payload
+    da config passa despercebido por testes que só comparam run_id com run_id —
+    aqui o CONTEÚDO do payload é assertado. Sob a #65 (ADR 5.2.0004) o payload
+    do `run_id` é FIXO (9 slots do `RunId`) e as features chegam nele via
+    `config_signature`, então o teste também pina essa cadeia.
     """
     hasher = _RecordingHasher()
     repo = FakeAnalyticsRepository(clock=_FakeClock())
@@ -699,14 +716,15 @@ def test_i7_run_and_config_payloads_pin_the_ordered_feature_names() -> None:
     use_case(_command())
 
     expected = list(_FEATURE_NAMES)
-    run_payloads = [p for p in hasher.payloads if "split_fingerprint" in p]
-    config_payloads = [
-        p for p in hasher.payloads if "params" in p and "split_fingerprint" not in p
-    ]
+    run_payloads = [p for p in hasher.payloads if "pipeline_version" in p]
+    config_payloads = [p for p in hasher.payloads if "params" in p]
     assert len(run_payloads) == _N_FOLDS
-    assert config_payloads
-    assert all(p.get("feature_names") == expected for p in run_payloads)
+    assert len(config_payloads) == _N_FOLDS
+    assert all(set(p) == _RUN_ID_SLOTS for p in run_payloads)
     assert all(p.get("feature_names") == expected for p in config_payloads)
+    assert "schema_version" not in str(hasher.payloads)
+    config_hashes = {CanonicalJsonHasher().hash_mapping(p) for p in config_payloads}
+    assert {p["config_signature"] for p in run_payloads} == config_hashes
 
 
 # -- I11: feature None atravessa o port como NaN -----------------------------------
