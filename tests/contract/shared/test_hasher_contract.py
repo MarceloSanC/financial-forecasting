@@ -13,6 +13,7 @@ dois (a cópia mínima do FakeHasher da task-02).
 """
 
 import math
+from collections.abc import Callable
 
 import pytest
 
@@ -120,6 +121,67 @@ def test_nested_real_float_difference_changes_hash(hasher: Hasher) -> None:
     different = hasher.hash_mapping({"outer": {"f": 100.5}, "series": [1.0]})
 
     assert base != different
+
+
+# -- I3 observável: float com 12 casas decimais pina a precisão em EXATAMENTE 10 --
+#
+# As fixtures `100.000000000001` acima só exigem que o ruído COLAPSE — passam
+# para qualquer precisão <= 12 e por isso não distinguem `round(., 10)` de
+# `round(., 5)` (issue #70: baixar a precisão era invisível à suíte inteira).
+# Aqui a 10ª casa é significativa: as casas 11-12 têm de sumir E a 10ª tem de
+# sobreviver, o que só `round(., 10)` satisfaz nas duas direções.
+
+_TWELVE_DECIMALS = 1.234567891234
+_TEN_DECIMALS = 1.2345678912  # o que resta após round(., 10)
+_NINE_DECIMALS = 1.234567891  # difere na 10ª casa
+
+
+def _at_top_level(value: float) -> dict[str, object]:
+    return {"x": value}
+
+
+def _inside_mapping(value: float) -> dict[str, object]:
+    return {"outer": {"f": value}}
+
+
+def _inside_list(value: float) -> dict[str, object]:
+    return {"series": [value, 2.0]}
+
+
+_SHAPES = [_at_top_level, _inside_mapping, _inside_list]
+_SHAPE_IDS = ["top_level", "nested_mapping", "nested_list"]
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("shape", _SHAPES, ids=_SHAPE_IDS)
+def test_digits_beyond_the_tenth_decimal_do_not_change_the_hash(
+    hasher: Hasher, shape: Callable[[float], dict[str, object]]
+) -> None:
+    """I3: as casas 11-12 são descartadas — 12 casas hasheiam como 10.
+
+    Falha se a precisão declarada SUBIR (>= 11): a 11ª casa passaria a
+    discriminar e os dois payloads divergiriam.
+    """
+    twelve = hasher.hash_mapping(shape(_TWELVE_DECIMALS))
+    ten = hasher.hash_mapping(shape(_TEN_DECIMALS))
+
+    assert twelve == ten
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("shape", _SHAPES, ids=_SHAPE_IDS)
+def test_the_tenth_decimal_still_discriminates(
+    hasher: Hasher, shape: Callable[[float], dict[str, object]]
+) -> None:
+    """I3: a 10ª casa sobrevive — 12 casas NÃO hasheiam como 9.
+
+    Falha se a precisão declarada DESCER (<= 9): a 10ª casa seria descartada e
+    os dois payloads colapsariam no mesmo hash — a mutação que era invisível.
+    """
+    twelve = hasher.hash_mapping(shape(_TWELVE_DECIMALS))
+    nine = hasher.hash_mapping(shape(_NINE_DECIMALS))
+
+    assert twelve != nine
 
 
 @pytest.mark.contract
