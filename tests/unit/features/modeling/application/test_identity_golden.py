@@ -21,8 +21,7 @@ mudou, alguém precisa reconhecer.
 Estado deste arquivo (por use case): `PRE_65_*` guarda o valor pré-#65
 (payloads privados `_run_payload`/`_config_payload`, `schema_version` dentro da
 chave) e `GOLDEN_*` o valor pós-#65 (`RunId.compute`/`ConfigSignature.compute`,
-`pipeline_version="2"`). Um use case ainda sem `PRE_65_*` é porque a sua
-sub-task da #65 ainda não entrou.
+`pipeline_version="2"`).
 """
 
 from __future__ import annotations
@@ -357,7 +356,7 @@ GOLDEN_GBM: IdentityTable = {
     ),
 }
 
-GOLDEN_TFT: IdentityTable = {
+PRE_65_TFT: IdentityTable = {
     ("tft_quantile", "0"): (
         "ffeb88ebdf2059a18d6cc983f5dac93e7fcdcbfd51f57029eafd052c5edea08b",
         "fc56cd97bcb30737acfb0ad276efeba4b27b39a884a5589a6dc21f0ff692d833",
@@ -365,6 +364,17 @@ GOLDEN_TFT: IdentityTable = {
     ("tft_quantile", "1"): (
         "324be906fa7651d78f361b711b64052839271851e778a7bb2d5096e6caa03244",
         "fc56cd97bcb30737acfb0ad276efeba4b27b39a884a5589a6dc21f0ff692d833",
+    ),
+}
+
+GOLDEN_TFT: IdentityTable = {
+    ("tft_quantile", "0"): (
+        "2f791916305b94ef2a532b736c26ae11c559a42e124b3b4166f44065e68cba7d",
+        "c8b545be371cb75c72c4e056e5046772a149d036ff53984d0a4d6e796011a0e6",
+    ),
+    ("tft_quantile", "1"): (
+        "2a62b588fe1026be7a131380fabe62fdd89fd3a0b42b96fb1ffc1e2aa9c280b4",
+        "c8b545be371cb75c72c4e056e5046772a149d036ff53984d0a4d6e796011a0e6",
     ),
 }
 
@@ -405,3 +415,13 @@ def test_gbm_identity_broke_from_pre_65() -> None:
 def test_tft_identity_matches_golden(tmp_path: Path) -> None:
     """`TrainTft`: fold -> (run_id, config_signature) travados."""
     assert capture_tft(tmp_path / "artifacts") == GOLDEN_TFT
+
+
+@pytest.mark.unit
+def test_tft_identity_broke_from_pre_65() -> None:
+    """Todo `run_id` E toda `config_signature` diferem do pré-#65 (quebra intencional)."""
+    assert set(GOLDEN_TFT) == set(PRE_65_TFT)
+    for key, (run_id, config_signature) in GOLDEN_TFT.items():
+        old_run_id, old_config_signature = PRE_65_TFT[key]
+        assert run_id != old_run_id, key
+        assert config_signature != old_config_signature, key
