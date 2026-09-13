@@ -247,6 +247,12 @@ def capture_tft(artifacts_root: Path) -> IdentityTable:
 # `ConfigSignature.compute`, `pipeline_version="2"`). O teste `*_broke_from_pre_65`
 # prova que a quebra foi total e intencional; o `*_matches_golden` prova que o
 # valor novo é estável.
+#
+# Descontinuidade #83 (2026-09-13): `warmup_count` de `volatility_regime`/`trend_regime`
+# reconciliado no registry → `feature_set_hash` mudou → os 14 `run_id` abaixo foram
+# regenerados (slot `feature_set_hash` dos 9 do `RunId`, ADR 5.2.0004). As
+# `config_signature` NÃO mudaram (carregam a lista de nomes de feature, não os
+# warmups) — o que o par antes/depois no `git blame` deste bloco deve mostrar.
 
 PRE_65_BASELINES: IdentityTable = {
     ("baseline_ar1", "0"): (
@@ -293,43 +299,43 @@ PRE_65_BASELINES: IdentityTable = {
 
 GOLDEN_BASELINES: IdentityTable = {
     ("baseline_ar1", "0"): (
-        "700b4eef7b889ef53eab8a6b4f0a9aa69c01ba29aa2e6c95c744bb0386666127",
+        "94849dbb322f9dff34c5ce27e1551bbbdb932d62cde647a2ac7598fb18e6a288",
         "bc6e77a0746dab8e3233c37b2494beda13ebcfb3c83440cfc9cdc0f70e9844e2",
     ),
     ("baseline_ar1", "1"): (
-        "45af707ebdc327d39edad80f0069cf3338a1bbeaf300aa8a77e268af92bae4cd",
+        "344d7154ad150a59386814030d8212d231016d2feb33ac478a38f3b523c5afca",
         "bc6e77a0746dab8e3233c37b2494beda13ebcfb3c83440cfc9cdc0f70e9844e2",
     ),
     ("baseline_ewma_vol", "0"): (
-        "0828627358019bfd2ecd3d89bf8c9533e270616e4b8a49be59cbc83e74ac5f97",
+        "abe0d55de8fb7e223a779d4be908a55578ad0c9953532ec610a402d67a31a646",
         "1455fe15b745e4e33278744ffb8895182374990e910c0f05af6debdd1ec81a9b",
     ),
     ("baseline_ewma_vol", "1"): (
-        "6d28a8af23475d7107303d97bce9a8cdc5144c1e70bad18b38822b6dd3fcccd4",
+        "d036d1ed836ac62d72b12395c288fe40130f014d2675481f51c7533d2059a67f",
         "1455fe15b745e4e33278744ffb8895182374990e910c0f05af6debdd1ec81a9b",
     ),
     ("baseline_historical_mean", "0"): (
-        "bbbbedbc131e9c2218481383f12288d2d93d514a0357effe5e9a514f6a96f447",
+        "aeb7c685be814e005810b0cd96e64c79e3e3e8916ffa78390fb35ed725bb7158",
         "fe5825406e81f350583c2a1b4b11569ede156b36c250d4388dabbfcc8de1828a",
     ),
     ("baseline_historical_mean", "1"): (
-        "9a52d399a26f6d5a2c7929426cd9e8769c9f2a5dd89bb32b71ce52fb155edf81",
+        "ff64c992a0fcdeb92524f989fbe91737156142a0da11025eab9b97e4f9c6fe4c",
         "fe5825406e81f350583c2a1b4b11569ede156b36c250d4388dabbfcc8de1828a",
     ),
     ("baseline_historical_quantiles", "0"): (
-        "beb73f8a44189efd4823144f77ce6042dd59e747cf19b51082e0ee291ad31e2f",
+        "0b15c8b9d2a7c64fba73532e7d92ad91a2cc01856c57502825e42a9abca80613",
         "cac8dc2ef14efaa27057f16070ccc508af91438e4bb4d055208de0af261b1c61",
     ),
     ("baseline_historical_quantiles", "1"): (
-        "127c1f5cb6c6f0e47eaf13a3cdb0c93be1894d812a3a1f32071e1b389c7c0e7c",
+        "4e45be1cfcb1f083e6ec49a57cf8a9dda99c68f7458db1ae899fa7a009a0a953",
         "cac8dc2ef14efaa27057f16070ccc508af91438e4bb4d055208de0af261b1c61",
     ),
     ("baseline_zero_return", "0"): (
-        "0e3136ee06a63b3c65f49e5de8fc3b8d484fcca7f3d7c31a93e1bb50c096aa64",
+        "ce60bb1aafec5eaeeeabbb1a59a6a151fd9f928fd5e7e1c736fca22980d1f4ff",
         "2cb6736e62a4681d7f8c3e4f129530c3c670e554463eaa11f18d8ed3c92032d6",
     ),
     ("baseline_zero_return", "1"): (
-        "549c8fa00055df1e3e2dc18626d569717ddcfb21886d9294de171082cbf78154",
+        "85b5bddfac58fc07cef66f5d567d925cb65f9129ccb48dfa1bf2a99c81bd79cb",
         "2cb6736e62a4681d7f8c3e4f129530c3c670e554463eaa11f18d8ed3c92032d6",
     ),
 }
@@ -347,11 +353,11 @@ PRE_65_GBM: IdentityTable = {
 
 GOLDEN_GBM: IdentityTable = {
     ("gbm_quantile", "0"): (
-        "ae9faeed0a7a1bc6b72cacd5c820f0e0de480ddf206f69ed8b85ee7541e1e2cd",
+        "4587d5867dcac9cc288ed8d125f077b8db38dfa80be9703e2f6faf32f074dbb1",
         "7f48abef91ad1834e9ac0c7601a3cdcab68f3682a3ad24c8006284a9020e1bec",
     ),
     ("gbm_quantile", "1"): (
-        "ce22414df14fbdc667ae061b2a0fe3a997a699a676dfa5ccc06ef64d7f125787",
+        "eac6e546e6fa3511eee267dc91ba9a522559d412e13d157420f3148f4469ee65",
         "7f48abef91ad1834e9ac0c7601a3cdcab68f3682a3ad24c8006284a9020e1bec",
     ),
 }
@@ -369,11 +375,11 @@ PRE_65_TFT: IdentityTable = {
 
 GOLDEN_TFT: IdentityTable = {
     ("tft_quantile", "0"): (
-        "2f791916305b94ef2a532b736c26ae11c559a42e124b3b4166f44065e68cba7d",
+        "59bb0bd9aace776c766882247754467bcf0837582a9ddc0494a473a4dfbda35f",
         "c8b545be371cb75c72c4e056e5046772a149d036ff53984d0a4d6e796011a0e6",
     ),
     ("tft_quantile", "1"): (
-        "2a62b588fe1026be7a131380fabe62fdd89fd3a0b42b96fb1ffc1e2aa9c280b4",
+        "e3ca44ba05a09736ba31aac0f0fb451d0b31c4b774682ebd78cfca8c2539944f",
         "c8b545be371cb75c72c4e056e5046772a149d036ff53984d0a4d6e796011a0e6",
     ),
 }

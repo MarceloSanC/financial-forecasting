@@ -477,7 +477,10 @@ def _derived_specs() -> dict[str, FeatureSpec]:
                 "Regime 0/1/2 from trailing terciles of volatility_20d (window 63, shifted)"
             ),
             anti_leakage_tag=_TRAILING,
-            warmup_count=63,
+            # warmup efetivo 82 (#83), medido no frame do dataset (pos-drop da 1a linha,
+            # ADR 3.5.0001): 20 (volatility_20d em warmup) + 1 (shift) + 62 (janela 63)
+            # - 1 (drop). O nominal 63 da janela subdeclarava 19 linhas.
+            warmup_count=82,
             tft_typing=_UNKNOWN,
             dtype="int64",
         ),
@@ -489,7 +492,11 @@ def _derived_specs() -> dict[str, FeatureSpec]:
                 "Regime -1/0/1 from EMA spread with trailing deadband (window 63, shifted)"
             ),
             anti_leakage_tag=_TRAILING,
-            warmup_count=63,
+            # warmup efetivo 112 (#83), medido no frame do dataset (pos-drop da 1a linha):
+            # 50 (ema_50 em warmup nominal) + 1 (shift) + 62 (janela 63) - 1 (drop). O
+            # adapter pandas-ta emite ema_50 uma barra antes (semente SMA em length-1) e
+            # mede 111 — dentro do declarado. O nominal 63 subdeclarava 49 linhas.
+            warmup_count=112,
             tft_typing=_UNKNOWN,
             dtype="int64",
         ),

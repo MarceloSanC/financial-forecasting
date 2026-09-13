@@ -6,18 +6,27 @@ persistir (concept 3.5 I5, D4). Opera sobre `Sequence`/`Mapping` — **nunca**
 `FeatureRegistry` (3.4), sem lista `FEATURE_WARMUP_BARS` paralela (D4 corrige o old,
 que mantinha a lista à parte e podia divergir).
 
-Quatro checagens (concept 3.5 I5 / old `dataset_quality_gate.py:87-99`):
+Quatro checagens (concept 3.5 I5 / old `dataset_quality_gate.py:87-99`; a (d) é da
+issue #83):
 
 - **(a) warmup + missing** — para cada feature, desconta o seu `warmup_count`
   (do registry) das primeiras linhas e mede o NaN-ratio só **após** o warmup; se
   o ratio exceder `max_nan_ratio_per_feature`, a feature entra em `failing_features`
   (ordenado desc. por ratio) → `DatasetQualityError` (C5). O limiar é **declarado
-  pelo chamador** (sem default — issue #72); o warmup descontado é o **nominal** do
-  registry, então feature cujo warmup efetivo excede o nominal aparece aqui como
-  missing pós-warmup (é o que o gate armado acusa — achado, não ruído).
+  pelo chamador** (sem default — issue #72). Como (d) roda ANTES, todo faltante à
+  esquerda já está dentro do nominal quando (a) mede: o ratio enxerga só missing
+  **interior** (real), não débito de declaração.
 - **(b) monotonicidade** — timestamps únicos (`require_unique_timestamps`) e
   ordenados crescente (`require_monotonic_timestamps`); violação → erro (C4).
 - **(c) cobertura temporal** — span de dias `>= min_temporal_coverage_days` (C6).
+- **(d) warmup efetivo `<=` nominal** (#83) — para cada feature, o índice do 1º valor
+  não-faltante tem de ser `<= warmup_count` declarado; feature nunca finita numa
+  série mais longa que o seu warmup também viola. Checagem **absoluta** (em linhas,
+  não em ratio): a auditoria do PR #80 mostrou que o ratio (a) é o instrumento
+  errado para "o registry subdeclara o warmup" — o ratio depende de N (o mesmo
+  excesso de 49 linhas dá 0.21 em 299 linhas e 0.012 em 4023, passando a 0.02 no
+  piloto), enquanto o excesso é um defeito de declaração com tamanho fixo. Sem
+  knob: não existe leitura legítima de "o registry mente sobre o warmup".
 
 A 1ª linha do dataset já foi dropada na montagem (alvo backward, ADR 3.5.0001), de
 modo que o warmup do gate é medido sobre o frame final (paridade com o old, que
@@ -90,7 +99,7 @@ class DatasetQualityGate:
 
     Sem estado: pode ser instanciado uma vez e reusado. `validate` levanta
     `DatasetQualityError` na primeira violação que encontra (ordem: monotonia →
-    cobertura → missing), sem silenciar.
+    cobertura → warmup efetivo → missing), sem silenciar.
     """
 
     def validate(
@@ -115,6 +124,7 @@ class DatasetQualityGate:
             )
         self._check_timestamps(timestamps, config)
         self._check_temporal_coverage(timestamps, config)
+        self._check_effective_warmup(rows, feature_cols)
         self._check_missing(rows, feature_cols, config)
 
     # -- (b) monotonicidade --------------------------------------------------
@@ -148,6 +158,54 @@ class DatasetQualityGate:
             raise DatasetQualityError(
                 f"Temporal coverage insufficient: {coverage_days} day(s) < required "
                 f"{int(config.min_temporal_coverage_days)}"
+            )
+
+    # -- (d) warmup efetivo <= nominal (#83) ---------------------------------
+
+    @staticmethod
+    def _check_effective_warmup(
+        rows: Sequence[Mapping[str, object]],
+        feature_cols: Sequence[str],
+    ) -> None:
+        """#83 — o 1º valor não-faltante de cada feature está em índice `<= warmup_count`.
+
+        Para cada feature lê o `warmup_count` nominal do registry e localiza o índice
+        do 1º valor não-faltante; índice maior que o nominal (ou feature nunca finita
+        numa série mais longa que o nominal) entra em `failing` (ordenado desc. pelo
+        excesso em linhas) → `DatasetQualityError` nomeando nominal e efetivo. Série
+        inteira dentro do warmup declarado (`len(rows) <= nominal`) não é avaliável —
+        mesma paridade de "série vazia pós-warmup → não avaliada" da checagem (a).
+        """
+        n_rows = len(rows)
+        failing: dict[str, tuple[int, int | None]] = {}  # col -> (nominal, 1º finito)
+        for col in feature_cols:
+            nominal = max(0, get_feature_spec(col).warmup_count)
+            if n_rows <= nominal:
+                continue  # inteira no warmup declarado → não avaliável
+            first_finite = next(
+                (index for index, row in enumerate(rows) if not _is_missing(row.get(col))),
+                None,
+            )
+            if first_finite is None or first_finite > nominal:
+                failing[col] = (nominal, first_finite)
+        if failing:
+            ordered = sorted(
+                failing.items(),
+                key=lambda kv: (n_rows if kv[1][1] is None else kv[1][1]) - kv[1][0],
+                reverse=True,
+            )
+            detail = "; ".join(
+                f"{name}: "
+                + (
+                    f"never finite in {n_rows} rows"
+                    if first is None
+                    else f"first finite at row {first}"
+                )
+                + f" > warmup_count {nominal}"
+                for name, (nominal, first) in ordered
+            )
+            raise DatasetQualityError(
+                f"Effective warmup exceeds declared warmup_count for features (desc): {detail}"
             )
 
     # -- (a) warmup + missing ------------------------------------------------
