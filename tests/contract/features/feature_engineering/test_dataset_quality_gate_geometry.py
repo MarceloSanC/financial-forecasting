@@ -64,7 +64,7 @@ _N = 300  # > maior warmup (252 YoY): toda feature tem linhas pós-warmup avali�
 _KNOWN_EXCESS_WARMUP: dict[str, int] = {"volatility_regime": 19, "trend_regime": 49}
 # Tamanho do piloto AAPL (oráculo 4023 x 62, ADR 3.5.0002) para a conta do limiar.
 _PILOT_N_ROWS = 4023
-_FAILING_ITEM = re.compile(r"(\w+)=([0-9.]+)")
+_FAILING_ITEM = re.compile(r"(\w+): first finite at row (\d+) > warmup_count (\d+)")
 
 
 def _synthetic_inputs(n: int = _N) -> DatasetAssemblyInputs:
@@ -136,10 +136,12 @@ def _first_finite_index(result: DatasetAssemblyResult, col: str) -> int:
     return -1
 
 
-def _failing_from_message(message: str) -> dict[str, float]:
-    """Extrai `{feature: ratio}` do detalhe `NaN-ratio above X for features (desc): ...`."""
+def _failing_from_message(message: str) -> dict[str, tuple[int, int]]:
+    """Extrai `{feature: (1º finito, nominal)}` do detalhe da checagem absoluta (d)."""
     _, _, detail = message.partition("(desc): ")
-    return {name: float(ratio) for name, ratio in _FAILING_ITEM.findall(detail)}
+    return {
+        name: (int(first), int(nominal)) for name, first, nominal in _FAILING_ITEM.findall(detail)
+    }
 
 
 def test_only_known_features_have_effective_warmup_beyond_nominal(
@@ -166,42 +168,44 @@ def test_only_known_features_have_effective_warmup_beyond_nominal(
 def test_armed_gate_names_exactly_the_known_excess_features_on_real_frame(
     assembled: DatasetAssemblyResult,
 ) -> None:
-    """Gate a 0.0 (o mais estrito) sobre o frame real acusa EXATAMENTE as duas, em desc.
+    """A checagem absoluta (d) do gate acusa EXATAMENTE as duas no frame real, em desc.
 
-    Ratio = excesso / linhas pós-nominal: `trend_regime` 49/236 = 0.2076 vem antes de
-    `volatility_regime` 19/236 = 0.0805. Nenhuma outra feature aparece — as 53
-    restantes têm ratio 0 pós-nominal (o gate não está "preso em falha").
+    Com o ratio DESARMADO (`1.0`) — o instrumento que a auditoria do #80 apontou como
+    errado para "warmup efetivo > nominal" — a checagem (d) nomeia nominal e efetivo de
+    cada uma: `trend_regime` (+49) antes de `volatility_regime` (+19). Nenhuma outra
+    feature aparece — as 53 restantes têm 1º finito `<=` nominal (o gate não está
+    "preso em falha").
     """
-    with pytest.raises(DatasetQualityError, match=r"NaN-ratio above 0\.0 ") as exc:
+    with pytest.raises(DatasetQualityError, match=r"^Effective warmup exceeds") as exc:
         DatasetQualityGate().validate(
             timestamps=list(assembled.timestamps),
             rows=list(assembled.feature_rows),
             feature_cols=list(assembled.feature_columns),
-            config=DatasetQualityGateConfig(max_nan_ratio_per_feature=0.0),
+            config=DatasetQualityGateConfig(max_nan_ratio_per_feature=1.0),
         )
 
     failing = _failing_from_message(str(exc.value))
-    post_nominal = assembled.n_rows - get_feature_spec("trend_regime").warmup_count
     expected = {
-        name: round(excess / post_nominal, 4) for name, excess in _KNOWN_EXCESS_WARMUP.items()
+        name: (get_feature_spec(name).warmup_count + excess, get_feature_spec(name).warmup_count)
+        for name, excess in _KNOWN_EXCESS_WARMUP.items()
     }
     assert failing == expected
-    assert list(failing) == ["trend_regime", "volatility_regime"]  # ordem desc. por ratio
+    assert list(failing) == ["trend_regime", "volatility_regime"]  # ordem desc. por excesso
 
 
-def test_gate_passes_real_frame_once_known_excess_is_tolerated(
+def test_gate_passes_real_frame_once_known_excess_is_declared(
     assembled: DatasetAssemblyResult,
 ) -> None:
-    """Controle — limiar logo acima do maior ratio medido (0.2076) → passa.
+    """Controle — descontado o excesso conhecido, nada mais no frame real dispara o gate.
 
-    Isola a causa das reprovações no excesso de warmup: tolerado o excesso, nada mais no
-    frame real dispara o gate.
+    Isola a causa das reprovações no débito de declaração: só as `feature_columns` sem
+    excesso, a 0.0 (o limiar mais estrito), passam nas duas checagens (d) e (a).
     """
     DatasetQualityGate().validate(
         timestamps=list(assembled.timestamps),
         rows=list(assembled.feature_rows),
-        feature_cols=list(assembled.feature_columns),
-        config=DatasetQualityGateConfig(max_nan_ratio_per_feature=0.21),
+        feature_cols=[col for col in assembled.feature_columns if col not in _KNOWN_EXCESS_WARMUP],
+        config=DatasetQualityGateConfig(max_nan_ratio_per_feature=0.0),
     )
 
 

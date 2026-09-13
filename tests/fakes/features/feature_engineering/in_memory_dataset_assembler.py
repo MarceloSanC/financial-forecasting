@@ -12,13 +12,16 @@ Modela a convenção do alvo (drop da 1ª linha) e a ordem de colunas do registr
 `feature_columns` na ordem do `FeatureRegistry`. Não calcula features (isso é do
 adapter real, validado pelo contract test); produz comportamento estável.
 
-**Geometria de missing (issue #72):** `feature_rows` reproduz a forma que o adapter
-real entrega ao gate — `None` (NaN normalizado) nas primeiras `warmup` linhas de cada
-feature e finito (`0.0`) depois. Por default o warmup é o **nominal** do registry;
-`effective_warmup={name: k}` sobrescreve por feature para modelar o caso real em que
-o warmup EFETIVO excede o nominal (ex. `trend_regime`: nominal 63, efetivo 112) ou um
-bloco estrutural de missing. Antes da #72 o fake emitia `0.0` em toda linha, e o ramo
-"gate reprova por NaN-ratio" era inalcançável pelo caminho wireado.
+**Geometria de missing (issues #72/#83):** `feature_rows` reproduz a forma que o
+adapter real entrega ao gate — `None` (NaN normalizado) nas primeiras `warmup` linhas
+de cada feature e finito (`0.0`) depois. Por default o warmup é o **nominal** do
+registry; `effective_warmup={name: k}` sobrescreve por feature para modelar o caso
+real em que o warmup EFETIVO excede o nominal (o débito que a #83 reconciliou:
+`trend_regime` nominal 63 vs efetivo 112 — hoje acusado pela checagem absoluta (d) do
+gate); `missing_rows={name: {i, j}}` emite `None` em índices INTERIORES (pós-drop),
+modelando missing real pós-warmup — o que a checagem de NaN-ratio (a) mede. Antes da
+#72 o fake emitia `0.0` em toda linha, e o ramo "gate reprova por NaN-ratio" era
+inalcançável pelo caminho wireado.
 
 Vive em `tests/` (fora do gate `import-linter`); importa SÓ stdlib + os DTOs do port
 e o `FeatureRegistry` do domínio.
@@ -26,7 +29,7 @@ e o `FeatureRegistry` do domínio.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 
 from financial_forecasting.features.feature_engineering.application.ports.out.dataset_assembler import (  # noqa: E501
     DatasetAssemblyInputs,
@@ -51,12 +54,22 @@ class InMemoryDatasetAssembler:
 
     `effective_warmup`: nº de linhas iniciais emitidas como `None` por feature; ausente
     → warmup nominal do registry (geometria default do adapter real).
+    `missing_rows`: índices (pós-drop) emitidos como `None` por feature, além do warmup
+    — missing interior, o que a checagem de NaN-ratio do gate mede.
     """
 
-    def __init__(self, *, effective_warmup: Mapping[str, int] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        effective_warmup: Mapping[str, int] | None = None,
+        missing_rows: Mapping[str, Collection[int]] | None = None,
+    ) -> None:
         self.persisted: list[str] = []
         self.last_inputs: DatasetAssemblyInputs | None = None
         self._effective_warmup: dict[str, int] = dict(effective_warmup or {})
+        self._missing_rows: dict[str, frozenset[int]] = {
+            name: frozenset(rows) for name, rows in (missing_rows or {}).items()
+        }
 
     def assemble(self, inputs: DatasetAssemblyInputs) -> DatasetAssemblyResult:
         """Devolve contagens/ordem coerentes; modela o drop da 1ª linha do alvo."""
@@ -70,13 +83,22 @@ class InMemoryDatasetAssembler:
             raise ValueError("not enough rows to compute target_return")
         retained = days[1:]  # drop da 1ª linha (alvo backward)
         n_rows = len(retained)
-        # Forma do gate (#72): `None` nas primeiras `warmup` linhas (nominal do registry
-        # ou o efetivo injetado), `0.0` finito depois — o fake não calcula features.
+        # Forma do gate (#72/#83): `None` nas primeiras `warmup` linhas (nominal do
+        # registry ou o efetivo injetado) e nos `missing_rows` interiores; `0.0` finito
+        # no resto — o fake não calcula features.
         warmup_by_feature = {
             spec.name: self._effective_warmup.get(spec.name, spec.warmup_count) for spec in specs
         }
         feature_rows = tuple(
-            {name: (None if index < warmup_by_feature[name] else 0.0) for name in feature_columns}
+            {
+                name: (
+                    None
+                    if index < warmup_by_feature[name]
+                    or index in self._missing_rows.get(name, frozenset())
+                    else 0.0
+                )
+                for name in feature_columns
+            }
             for index in range(n_rows)
         )
         return DatasetAssemblyResult(

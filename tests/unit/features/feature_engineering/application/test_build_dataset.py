@@ -11,9 +11,12 @@ Cobre concept 3.5 A2 / I1 / I6 / I7:
 - #72: a `DatasetQualityGateConfig` é OBRIGATÓRIA no construtor (sem fallback
   desarmado); o helper `_make_use_case` declara o limiar explicitamente.
 - #72 (caminho wireado): o fake do assembler emite `None` no warmup (geometria do
-  adapter real); feature com missing pós-warmup acima do limiar → `DatasetQualityError`
-  e NADA é persistido; abaixo do limiar / `1.0` (desarme explícito) → passa; e a
-  geometria real medida (`trend_regime` nominal 63, efetivo 112) é acusada.
+  adapter real); feature com missing INTERIOR pós-warmup acima do limiar →
+  `DatasetQualityError` e NADA é persistido; abaixo do limiar / `1.0` (desarme
+  explícito) → passa.
+- #83 (caminho wireado): feature cujo 1º finito excede o `warmup_count` nominal é
+  acusada pela checagem absoluta (d) do gate — nomeando nominal e efetivo — mesmo com
+  o ratio tolerante; controle: geometria nominal passa a 0.0.
 
 Usa SÓ fakes (não mocks): `FakeMedallionStore`, `FakeIndicatorCalculator`,
 `InMemorySentimentModel` (via `ScoreAndAggregateSentiment` real),
@@ -41,6 +44,7 @@ from financial_forecasting.features.feature_engineering.domain.services.dataset_
 )
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
     feature_set_hash,
+    get_feature_spec,
     list_feature_specs,
 )
 from tests.fakes.features.feature_engineering.in_memory_asof_join_adapter import (
@@ -229,13 +233,14 @@ def test_window_filter_narrows_candles() -> None:
 def test_quality_gate_rejects_missing_above_threshold_and_blocks_persist() -> None:
     """#72 — missing pós-warmup acima do limiar ergue `DatasetQualityError` via use case.
 
-    `sentiment_score` (warmup nominal 0) com 1 `None` em 9 linhas retidas → ratio
-    0.1111 > 0.02. O erro nomeia feature e ratio, e `persist` NÃO é chamado: o gate
-    roda ANTES da persistência. Antes da #72 este ramo era inalcançável (fake só `0.0`
-    e limiar `1.0`).
+    `sentiment_score` (warmup nominal 0) com 1 `None` INTERIOR (linha 4) em 9 linhas
+    retidas → ratio 0.1111 > 0.02. O erro nomeia feature e ratio, e `persist` NÃO é
+    chamado: o gate roda ANTES da persistência. Antes da #72 este ramo era inalcançável
+    (fake só `0.0` e limiar `1.0`). Interior, não à esquerda: `None` na linha 0 de uma
+    feature de warmup 0 é warmup subdeclarado — checagem absoluta (d), #83.
     """
     store = _seed_store()
-    assembler = InMemoryDatasetAssembler(effective_warmup={"sentiment_score": 1})
+    assembler = InMemoryDatasetAssembler(missing_rows={"sentiment_score": {4}})
     use_case = _make_use_case(
         store=store,
         assembler=assembler,
@@ -264,7 +269,7 @@ def test_quality_gate_passes_same_missing_when_within_threshold_control(threshol
     agora só alcançável por declaração.
     """
     store = _seed_store()
-    assembler = InMemoryDatasetAssembler(effective_warmup={"sentiment_score": 1})
+    assembler = InMemoryDatasetAssembler(missing_rows={"sentiment_score": {4}})
     use_case = _make_use_case(
         store=store,
         assembler=assembler,
@@ -278,39 +283,45 @@ def test_quality_gate_passes_same_missing_when_within_threshold_control(threshol
 
 
 def test_quality_gate_flags_feature_whose_effective_warmup_exceeds_nominal() -> None:
-    """#72 — geometria real: `trend_regime` nominal 63 (registry) vs efetivo 112.
+    """#83 — 1º finito além do `warmup_count` nominal é acusado pela checagem absoluta (d).
 
-    Medido no `DatasetAssembler` real (contract test `test_dataset_quality_gate_geometry`):
-    `trend_regime` = shift(1) + rolling(63) sobre `ema_50` (warmup 50) → 1º valor finito
-    na linha 112 do frame pós-drop. O gate desconta SÓ o nominal (63), então as 49
-    linhas de excesso contam como missing pós-warmup. Com 130 candles (129 retidas): 49
-    `None` em 66 linhas pós-nominal → ratio 0.7424 > 0.02 → reprova nomeando a feature.
-    Isto é o que o gate armado acusa: débito de declaração do registry (finding #72),
-    não ruído do gate.
+    Modela a geometria que a #72 mediu no `DatasetAssembler` real (`trend_regime`:
+    nominal 63 vs efetivo 112 — `ema_50` em warmup + shift(1) + rolling(63)) como um
+    excesso de 49 linhas sobre o nominal ATUAL do registry, e prova que o gate a acusa
+    pela checagem absoluta — nomeando nominal e efetivo — MESMO com o ratio desarmado
+    (`1.0`), que é o instrumento que o #80 apontou como errado para este defeito (o
+    ratio depende de N; o excesso não). `persist` NÃO é chamado.
     """
-    n = 130
+    n = 200
+    nominal = get_feature_spec("trend_regime").warmup_count
+    effective = nominal + 49
     store = _seed_store(n)
-    assembler = InMemoryDatasetAssembler(effective_warmup={"trend_regime": 112})
+    assembler = InMemoryDatasetAssembler(effective_warmup={"trend_regime": effective})
     use_case = _make_use_case(
         store=store,
         assembler=assembler,
-        gate_config=DatasetQualityGateConfig(max_nan_ratio_per_feature=0.02),
+        gate_config=DatasetQualityGateConfig(max_nan_ratio_per_feature=1.0),
         n=n,
     )
 
-    with pytest.raises(DatasetQualityError, match=r"trend_regime=0\.7424"):
+    with pytest.raises(
+        DatasetQualityError,
+        match=rf"Effective warmup exceeds.*trend_regime: first finite at row {effective}"
+        rf" > warmup_count {nominal}",
+    ):
         use_case.execute(BuildDatasetRequest(asset=_ASSET))
     assert assembler.persisted == []
 
 
 def test_quality_gate_passes_when_effective_warmup_matches_nominal_control() -> None:
-    """Controle #72 — mesma fixture (130 candles) sem excesso de warmup → passa a 0.0.
+    """Controle #72/#83 — mesma fixture (200 candles) sem excesso de warmup → passa a 0.0.
 
     O fake emite `None` exatamente no warmup NOMINAL de cada feature (geometria
-    default); o gate desconta esse warmup e mede ratio 0 em todas → nada a acusar,
-    mesmo com o limiar mais estrito. Isola a causa do teste anterior no excesso.
+    default); a checagem absoluta (d) passa (`1º finito == nominal`) e o ratio mede 0
+    em todas → nada a acusar, mesmo com o limiar mais estrito. Isola a causa do teste
+    anterior no excesso.
     """
-    n = 130
+    n = 200
     store = _seed_store(n)
     assembler = InMemoryDatasetAssembler()
     use_case = _make_use_case(store=store, assembler=assembler, gate_config=_STRICT_GATE, n=n)
