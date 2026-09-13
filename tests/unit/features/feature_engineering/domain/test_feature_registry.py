@@ -287,8 +287,8 @@ _EXPECTED_DERIVED: dict[str, tuple[str, int, str]] = {
     "volatility_garman_klass": ("technical", 20, "float64"),
     "downside_semivolatility": ("technical", 20, "float64"),
     "vol_of_vol": ("technical", 40, "float64"),
-    "volatility_regime": ("technical", 63, "int64"),
-    "trend_regime": ("technical", 63, "int64"),
+    "volatility_regime": ("technical", 82, "int64"),
+    "trend_regime": ("technical", 112, "int64"),
     "stress_tail_return_flag": ("technical", 63, "int64"),
     "sentiment_lag_1": ("sentiment", 1, "float64"),
     "sentiment_lag_3": ("sentiment", 3, "float64"),
@@ -359,10 +359,37 @@ def test_vol_of_vol_effective_warmup_is_40() -> None:
     assert get_feature_spec("vol_of_vol").warmup_count == 40  # noqa: PLR2004
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("name", "input_warmup", "expected"),
+    [
+        pytest.param("volatility_regime", 20, 82, id="volatility_regime-over-volatility_20d"),
+        pytest.param("trend_regime", 50, 112, id="trend_regime-over-ema_50"),
+    ],
+)
+def test_regime_warmups_are_the_effective_chained_over_their_inputs(
+    name: str, input_warmup: int, expected: int
+) -> None:
+    """#83 — regimes declaram o warmup EFETIVO: insumo em warmup + shift(1) + janela 63.
+
+    Ambos encadeiam `shift(1).rolling(63)` sobre um insumo que já chega em warmup
+    (`volatility_20d` = 20; `ema_50` = 50). No frame do dataset (pós-drop da 1ª linha,
+    ADR 3.5.0001) o 1º valor finito cai em `input + 1 + 62 - 1`; o nominal da janela
+    (63) subdeclarava 19 e 49 linhas — finding #72, medido no `DatasetAssembler` real.
+    A conta é afirmada aqui, e não só o número, para que uma mudança de janela ou de
+    insumo obrigue a rever a declaração.
+    """
+    shift, window, drop = 1, 63, 1
+    assert expected == input_warmup + shift + (window - 1) - drop
+    assert get_feature_spec(name).warmup_count == expected
+
+
 # Snapshot ancorado do hash do registry completo (base + 31 derivadas). Canário
 # contra mudança acidental: alterar QUALQUER spec muda este valor. Atualizar
 # conscientemente ao mudar o registry de propósito (regenerar via feature_set_hash()).
-_REGISTRY_HASH_SNAPSHOT = "bb34d43689fb570d7de5cf2b62735fe1477fa3bb3b906db93239510f9026884b"
+# #83: warmup_count de volatility_regime 63->82 e trend_regime 63->112 (anterior:
+# bb34d43689fb570d7de5cf2b62735fe1477fa3bb3b906db93239510f9026884b).
+_REGISTRY_HASH_SNAPSHOT = "7df0e1b4d6e93e3edb5695414a47d2d77882a2ffc674d00037f2a9f87a6409e0"
 
 
 @pytest.mark.unit

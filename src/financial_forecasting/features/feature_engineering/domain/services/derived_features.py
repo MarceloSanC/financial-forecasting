@@ -421,6 +421,10 @@ def volatility_regime(volatility_20d: Sequence[Number]) -> tuple[int | None, ...
     Causalidade (I6): os tercis (`q33`/`q66`) usam `volatility_20d.shift(1).rolling(63)`;
     o valor corrente `vol_t` é comparado ao threshold de `t-1..t-63`. `None` quando
     `vol_t` é faltante ou os quantis estão em warmup (C7). Saída em `{0, 1, 2}` ou `None`.
+
+    Warmup nominal 63 (janela); efetivo 83 na série crua quando `volatility_20d` chega
+    com os seus 20 de warmup (20 + 1 do shift + 62 da janela) → 82 no frame do dataset
+    pós-drop da 1ª linha, que é o que o registry declara (I7, #83).
     """
     shifted = _shift(volatility_20d, 1)
     q33 = _rolling_quantile(shifted, _REGIME_WINDOW, _REGIME_Q33)
@@ -447,6 +451,10 @@ def trend_regime(ema_10: Sequence[Number], ema_50: Sequence[Number]) -> tuple[in
     Causalidade (I6): `deadband = 0.10 * std_pop(spread.shift(1), 63)`; o spread
     corrente é comparado ao deadband de `t-1..t-63`. `None` quando o spread corrente
     é faltante ou o deadband está em warmup. Saída em `{-1, 0, 1}` ou `None`.
+
+    Warmup nominal 63 (janela); efetivo 113 na série crua quando `ema_50` chega com os
+    seus 50 de warmup nominal (50 + 1 do shift + 62 da janela) → 112 no frame do dataset
+    pós-drop da 1ª linha, que é o que o registry declara (I7, #83).
     """
     if len(ema_10) != len(ema_50):
         raise ValueError("trend_regime: ema_10 and ema_50 length mismatch")

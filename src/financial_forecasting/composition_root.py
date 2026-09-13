@@ -142,16 +142,18 @@ _FINBERT_PINNED_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
 # Limiar de missing do `DatasetQualityGate` (issue #72): NaN-ratio máximo por feature
 # APÓS descontar o warmup nominal do registry. Declarado AQUI (constante revisada em
 # code review, não env var — um override de ambiente poderia desarmar o gate sem
-# rastro) porque o domínio não tem mais default: o old herdava `1.0`, inalcançável
-# para `ratio ∈ [0, 1]`. Por que 0.02 (ponta apertada da faixa 0.02 a 0.05 da issue):
-# no piloto AAPL (~4023 linhas) tolera ≤ ~80 linhas faltantes pós-warmup — acima do
-# maior excesso MEDIDO de warmup efetivo sobre o nominal (`trend_regime` +49,
-# `volatility_regime` +19 — débito do registry, finding da #72). Limite HONESTO
-# do que ele acusa: 1 trimestre de fundamento ausente (≈ 63 linhas ≈ 1.6%) fica
-# ABAIXO de 0.02 e passa — a auditoria do #80 refez a conta; o gate só reprova a
-# partir de ~1.3 trimestre (≈ 80 linhas). 1 ano (≈ 6%) reprova. Um trimestre
-# faltante nem vira NaN aqui (o as-of faz carry-forward), então o instrumento
-# desse caso é outro. Apertar para 0.0 exige reconciliar `warmup_count` antes.
+# rastro; mesmo precedente de `_FINBERT_PINNED_REVISION`: pin metodológico que não
+# pode variar por ambiente) porque o domínio não tem mais default: o old herdava
+# `1.0`, inalcançável para `ratio ∈ [0, 1]`. Por que 0.02 (ponta apertada da faixa
+# 0.02 a 0.05 da issue): no piloto AAPL (~4023 linhas) tolera ≤ ~79 linhas faltantes
+# pós-warmup. Limite HONESTO do que ele acusa: 1 trimestre de fundamento ausente
+# (≈ 63 linhas ≈ 1.6%) fica ABAIXO de 0.02 e passa — a auditoria do #80 refez a
+# conta; o gate só reprova a partir de ~1.3 trimestre (≈ 80 linhas). 1 ano (≈ 6%)
+# reprova. Um trimestre faltante nem vira NaN aqui (o as-of faz carry-forward),
+# então o instrumento desse caso é outro. Desde a #83 este ratio mede SÓ missing
+# interior (real): warmup efetivo acima do declarado — o débito +19/+49 dos regimes
+# que a #72 mediu e este limiar tolerava por dependência de N — é acusado pela
+# checagem ABSOLUTA (d) do gate, em linhas, antes do ratio e sem knob.
 _DATASET_MAX_NAN_RATIO_PER_FEATURE = 0.02
 
 # Janela ampla FIXA do calendário XNYS para o wiring do `WalkForwardSplitter`

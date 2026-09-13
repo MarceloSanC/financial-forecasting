@@ -1,41 +1,35 @@
-"""Contract test #72 — geometria warmup nominal vs efetivo no frame REAL montado.
+"""Contract test #72/#83 — geometria warmup nominal vs efetivo no frame REAL montado.
 
-Fixa o que o `DatasetQualityGate` ARMADO acusa quando recebe `feature_rows` do
-`DatasetAssembler` real (pandas + oráculo `DerivedFeatures`) sobre candles sintéticos
-determinísticos + `FakeIndicatorCalculator` (NaN durante o warmup nominal dos
-indicadores, como o adapter 3.1). O gate desconta SÓ o `warmup_count` NOMINAL do
-registry; toda feature cujo warmup EFETIVO excede o nominal aparece como missing
-pós-warmup — é isso que um gate armado tem de revelar.
+Fixa que o `warmup_count` declarado no registry cobre o warmup EFETIVO de CADA feature
+quando o `DatasetQualityGate` recebe `feature_rows` do `DatasetAssembler` real (pandas
++ oráculo `DerivedFeatures`) sobre candles sintéticos determinísticos +
+`FakeIndicatorCalculator` (NaN durante o warmup nominal dos indicadores, como o
+adapter 3.1) — e, por consequência, que o gate mais estrito possível (ratio 0.0 +
+checagem absoluta (d)) PASSA no frame real.
 
-Medido (300 candles → 299 linhas pós-drop):
+Medido (300 candles → 299 linhas pós-drop), antes e depois da #83:
 
-- `volatility_regime`: nominal 63, 1º finito na linha 82 → excesso **+19**
-  (`volatility_20d` warmup 20 + shift(1) + rolling(63), menos o drop da 1ª linha).
-- `trend_regime`: nominal 63, 1º finito na linha 112 → excesso **+49**
-  (`ema_50` warmup 50 + shift(1) + rolling(63), idem).
+- `volatility_regime`: 1º finito na linha 82 (`volatility_20d` warmup 20 + shift(1) +
+  rolling(63), menos o drop da 1ª linha). Nominal era 63 (excesso +19); hoje 82.
+- `trend_regime`: 1º finito na linha 112 (`ema_50` warmup 50 + shift(1) + rolling(63),
+  idem). Nominal era 63 (excesso +49); hoje 112.
 - TODAS as outras 53 features: 1º finito `<=` nominal (a maioria a `-1`, pelo drop da
-  1ª linha; `vol_of_vol` — o exemplo da issue — já declara 40 e mede 38).
+  1ª linha; `vol_of_vol` — o exemplo da #72 — já declarava 40 e mede 38).
 
-Estes dois excessos são **débito de declaração do registry** (`warmup_count` nominal
-< efetivo), registrados como `[finding]` na #72 e fora do escopo dela (reconciliar
-churna `feature_set_hash`). Este teste é o sentinela: quando o registry for
-reconciliado, a lista de excessos aqui esvazia e o teste deve ser atualizado.
-
-O ratio é dependente de N (excesso absoluto / linhas pós-nominal): a 299 linhas os
-dois excessos dão 0.0805 e 0.2076; no piloto AAPL (4023 linhas, ADR 3.5.0002) dão
-0.0048 e 0.0124 — abaixo do limiar wireado 0.02, que por desenho tolera este débito
-conhecido e reprova bloco estrutural de missing.
+Os dois excessos eram **débito de declaração do registry** (finding #72), tolerado pelo
+limiar 0.02 no tamanho do piloto (0.0048/0.0124) por dependência de N — e é por isso
+que a #83 levou a checagem para dentro do gate como ABSOLUTA (linhas, não ratio). A
+sentinela `_KNOWN_EXCESS_WARMUP` está VAZIA desde a reconciliação: qualquer feature
+que volte a subdeclarar o warmup reaparece aqui com o excesso medido.
 """
 
 from __future__ import annotations
 
 import math
-import re
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from financial_forecasting.composition_root import _DATASET_MAX_NAN_RATIO_PER_FEATURE
 from financial_forecasting.features.feature_engineering.adapters.out.pandas.dataset_assembler import (  # noqa: E501
     DatasetAssembler,
 )
@@ -44,7 +38,6 @@ from financial_forecasting.features.feature_engineering.application.ports.out.da
     DatasetAssemblyResult,
 )
 from financial_forecasting.features.feature_engineering.domain.services.dataset_quality_gate import (  # noqa: E501
-    DatasetQualityError,
     DatasetQualityGate,
     DatasetQualityGateConfig,
 )
@@ -60,11 +53,11 @@ pytestmark = pytest.mark.contract
 
 _N = 300  # > maior warmup (252 YoY): toda feature tem linhas pós-warmup avaliáveis
 # Excesso MEDIDO de warmup efetivo sobre o nominal, por feature (linhas). Sentinela do
-# finding #72 — esvazia quando o registry reconciliar `warmup_count`.
-_KNOWN_EXCESS_WARMUP: dict[str, int] = {"volatility_regime": 19, "trend_regime": 49}
-# Tamanho do piloto AAPL (oráculo 4023 x 62, ADR 3.5.0002) para a conta do limiar.
-_PILOT_N_ROWS = 4023
-_FAILING_ITEM = re.compile(r"(\w+): first finite at row (\d+) > warmup_count (\d+)")
+# finding #72 — VAZIA desde a reconciliação do registry (#83): era
+# `{"volatility_regime": 19, "trend_regime": 49}`.
+_KNOWN_EXCESS_WARMUP: dict[str, int] = {}
+# Geometria medida no frame real que o registry passou a declarar (#83).
+_RECONCILED_FIRST_FINITE: dict[str, int] = {"volatility_regime": 82, "trend_regime": 112}
 
 
 def _synthetic_inputs(n: int = _N) -> DatasetAssemblyInputs:
@@ -136,23 +129,15 @@ def _first_finite_index(result: DatasetAssemblyResult, col: str) -> int:
     return -1
 
 
-def _failing_from_message(message: str) -> dict[str, tuple[int, int]]:
-    """Extrai `{feature: (1º finito, nominal)}` do detalhe da checagem absoluta (d)."""
-    _, _, detail = message.partition("(desc): ")
-    return {
-        name: (int(first), int(nominal)) for name, first, nominal in _FAILING_ITEM.findall(detail)
-    }
-
-
 def test_only_known_features_have_effective_warmup_beyond_nominal(
     assembled: DatasetAssemblyResult,
 ) -> None:
-    """Geometria — SÓ `volatility_regime`/`trend_regime` têm 1º finito além do nominal.
+    """Geometria — NENHUMA feature tem 1º finito além do nominal (sentinela vazia, #83).
 
     Para cada feature do registry mede o 1º índice finito no frame real e compara com
-    `warmup_count`. Excessos positivos devem ser EXATAMENTE os medidos (+19/+49);
-    qualquer outra feature com excesso — ou uma feature nunca finita em 299 linhas —
-    reprova (o registry passou a subdeclarar mais um warmup).
+    `warmup_count`. Excessos positivos devem ser EXATAMENTE os da sentinela (hoje
+    nenhum); qualquer feature com excesso — ou nunca finita em 299 linhas — reprova (o
+    registry passou a subdeclarar um warmup).
     """
     excess: dict[str, int] = {}
     for col in assembled.feature_columns:
@@ -165,59 +150,34 @@ def test_only_known_features_have_effective_warmup_beyond_nominal(
     assert excess == _KNOWN_EXCESS_WARMUP
 
 
-def test_armed_gate_names_exactly_the_known_excess_features_on_real_frame(
-    assembled: DatasetAssemblyResult,
+@pytest.mark.parametrize("name", sorted(_RECONCILED_FIRST_FINITE))
+def test_regime_declared_warmup_is_exactly_the_measured_first_finite(
+    assembled: DatasetAssemblyResult, name: str
 ) -> None:
-    """A checagem absoluta (d) do gate acusa EXATAMENTE as duas no frame real, em desc.
+    """#83 — o registry declara EXATAMENTE o 1º finito medido dos regimes (82/112).
 
-    Com o ratio DESARMADO (`1.0`) — o instrumento que a auditoria do #80 apontou como
-    errado para "warmup efetivo > nominal" — a checagem (d) nomeia nominal e efetivo de
-    cada uma: `trend_regime` (+49) antes de `volatility_regime` (+19). Nenhuma outra
-    feature aparece — as 53 restantes têm 1º finito `<=` nominal (o gate não está
-    "preso em falha").
+    Não só `<=` (que o teste anterior já garante): igualdade fixa que a declaração não
+    ficou folgada por engano (folga desconta linhas válidas do ratio) nem depende de a
+    janela/insumo mudarem sem rever o número. Com `FakeIndicatorCalculator` os insumos
+    ficam finitos exatamente no warmup nominal (`ema_50` = 50), que é a geometria em
+    que a conta `input + 1 + 62 - 1` é exata.
     """
-    with pytest.raises(DatasetQualityError, match=r"^Effective warmup exceeds") as exc:
-        DatasetQualityGate().validate(
-            timestamps=list(assembled.timestamps),
-            rows=list(assembled.feature_rows),
-            feature_cols=list(assembled.feature_columns),
-            config=DatasetQualityGateConfig(max_nan_ratio_per_feature=1.0),
-        )
-
-    failing = _failing_from_message(str(exc.value))
-    expected = {
-        name: (get_feature_spec(name).warmup_count + excess, get_feature_spec(name).warmup_count)
-        for name, excess in _KNOWN_EXCESS_WARMUP.items()
-    }
-    assert failing == expected
-    assert list(failing) == ["trend_regime", "volatility_regime"]  # ordem desc. por excesso
+    assert _first_finite_index(assembled, name) == _RECONCILED_FIRST_FINITE[name]
+    assert get_feature_spec(name).warmup_count == _RECONCILED_FIRST_FINITE[name]
 
 
-def test_gate_passes_real_frame_once_known_excess_is_declared(
-    assembled: DatasetAssemblyResult,
-) -> None:
-    """Controle — descontado o excesso conhecido, nada mais no frame real dispara o gate.
+def test_strictest_gate_passes_the_real_frame(assembled: DatasetAssemblyResult) -> None:
+    """O gate mais estrito (ratio 0.0 + checagem absoluta (d)) PASSA no frame real (#83).
 
-    Isola a causa das reprovações no débito de declaração: só as `feature_columns` sem
-    excesso, a 0.0 (o limiar mais estrito), passam nas duas checagens (d) e (a).
+    Antes da #83 este frame reprovava a 0.0 nomeando `trend_regime` (0.2076) e
+    `volatility_regime` (0.0805); com o registry reconciliado, o gate desconta o warmup
+    certo de cada feature e não há missing interior a acusar. É a forma positiva da
+    sentinela: se alguma feature voltar a subdeclarar, (d) reprova aqui com nominal e
+    efetivo na mensagem.
     """
     DatasetQualityGate().validate(
         timestamps=list(assembled.timestamps),
         rows=list(assembled.feature_rows),
-        feature_cols=[col for col in assembled.feature_columns if col not in _KNOWN_EXCESS_WARMUP],
+        feature_cols=list(assembled.feature_columns),
         config=DatasetQualityGateConfig(max_nan_ratio_per_feature=0.0),
     )
-
-
-def test_wired_threshold_tolerates_known_excess_at_pilot_size() -> None:
-    """Razão do 0.02 wireado, falsificável: no piloto (4023 linhas) o débito conhecido cabe.
-
-    Excesso absoluto / linhas pós-nominal do piloto: `trend_regime` 49/3960 = 0.0124 e
-    `volatility_regime` 19/3960 = 0.0048 — ambos `<` 0.02. Baixar o limiar (ex. 0.01)
-    SEM reconciliar o registry faria o `BuildDataset` de AAPL reprovar por débito de
-    declaração, não por missing real; este teste avisa antes.
-    """
-    nominal = get_feature_spec("trend_regime").warmup_count
-    worst = max(excess / (_PILOT_N_ROWS - nominal) for excess in _KNOWN_EXCESS_WARMUP.values())
-
-    assert worst < _DATASET_MAX_NAN_RATIO_PER_FEATURE
