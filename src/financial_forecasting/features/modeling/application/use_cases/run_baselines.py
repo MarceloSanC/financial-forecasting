@@ -30,7 +30,10 @@ Invariantes materializadas aqui:
   de remoção-zero (`_assert_zero_removal`) fica atrás dela como
   defesa-em-profundidade, testável por unit direto.
 - **I9 — determinismo:** sem clock/aleatoriedade; mesma entrada -> mesmos
-  payloads e hashes (`run_id`/`config_signature` canônicos via `Hasher` 1.4).
+  hashes. A identidade é o caminho ÚNICO dos VOs da 1.4 (`RunId.compute` com
+  os 9 slots, `ConfigSignature.compute` com a config completa menos o que os
+  outros 8 slots já carregam); `schema_version` é coluna de `dim_run`, nunca
+  chave (issue #65, ADR 5.2.0004).
 
 Casos de erro (concept §6): C2 (comando inválido ergue ANTES de qualquer I/O),
 C7 (dataset vazio ergue), C6 (janela de predição incompleta pula e conta —
@@ -54,9 +57,19 @@ from financial_forecasting.features.analytics_store.domain.value_objects.quantil
 from financial_forecasting.features.analytics_store.domain.value_objects.run_record import (
     RunRecord,
 )
+from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
+    feature_set_hash,
+)
+from financial_forecasting.features.modeling.application.pipeline_version import (
+    PIPELINE_VERSION,
+)
 from financial_forecasting.features.modeling.domain.services.operationally_latest_dedup import (
     deduplicate_operationally_latest,
 )
+from financial_forecasting.shared.domain.value_objects.config_signature import (
+    ConfigSignature,
+)
+from financial_forecasting.shared.domain.value_objects.run_id import RunId
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -284,8 +297,8 @@ class RunBaselines:
                     for level in command.quantile_levels
                 )
 
-            run_id = self._hasher.hash_mapping(_run_payload(command, spec, fold))
-            self._write_dim_run(command, spec, fold, run_id)
+            config_signature, run_id = self._identity(command, spec, fold)
+            self._write_dim_run(command, spec, fold, run_id, config_signature)
             emissions.append((fold, run_id, forecasts_by_decision))
 
         # I6 (duas camadas): duplicata real empata chave+rank e ergue no próprio
@@ -330,12 +343,52 @@ class RunBaselines:
             )
         return summaries
 
+    def _identity(
+        self, command: RunBaselinesCommand, spec: BaselineSpec, fold: FoldSplit
+    ) -> tuple[str, str]:
+        """`(config_signature, run_id)` de um (spec x fold) — caminho único da 1.4.
+
+        `config_signature` = configuração completa do run MENOS o que os outros
+        8 slots do `RunId` já carregam (asset, fold, seed, model_version,
+        split, feature_set_hash, pipeline_version). Por isso `model_version`
+        não entra aqui (tem slot) e `schema_version` não entra em lugar nenhum
+        (é coluna). `cohort_id`, `max_horizon` e `feature_set_name` ficam
+        dentro da config — decisão e evidência na ADR 5.2.0004.
+        """
+        config_signature = ConfigSignature.compute(
+            hasher=self._hasher,
+            config={
+                "scope": {
+                    "feature_set_name": command.scope.feature_set_name,
+                    "max_horizon": command.scope.max_horizon,
+                    "cohort_id": command.scope.cohort_id,
+                },
+                "spec": asdict(spec),
+                "horizons": list(command.horizons),
+                "quantile_levels": list(command.quantile_levels),
+            },
+        )
+        run_id = RunId.compute(
+            hasher=self._hasher,
+            asset=command.scope.asset_id,
+            feature_set_hash=feature_set_hash(),
+            trial_number=None,  # só o sweep tem trials, e ele não persiste runs
+            fold=str(fold.fold_index),
+            seed=None,  # baselines não têm semente (I9)
+            model_version=spec.model_version,
+            config_signature=config_signature.value,
+            split_signature=fold.fingerprint.value,
+            pipeline_version=PIPELINE_VERSION,
+        )
+        return config_signature.value, run_id.value
+
     def _write_dim_run(
         self,
         command: RunBaselinesCommand,
         spec: BaselineSpec,
         fold: FoldSplit,
         run_id: str,
+        config_signature: str,
     ) -> None:
         """Grava 1 `RunRecord` por (spec x fold) em `dim_run` (I9/I10/D5)."""
         record = RunRecord(
@@ -343,7 +396,7 @@ class RunBaselines:
             asset=command.scope.asset_id,
             parent_sweep_id=command.scope.cohort_id,
             feature_set_name=command.scope.feature_set_name,
-            config_signature=self._hasher.hash_mapping(_config_payload(command, spec)),
+            config_signature=config_signature,
             split_fingerprint=fold.fingerprint.value,
             fold=str(fold.fold_index),
             seed=None,  # baselines não têm semente (I9)
@@ -389,49 +442,6 @@ def _validate_command(command: RunBaselinesCommand) -> None:
         raise ValueError(f"specs must not share model_version; got {model_versions} (C2)")
 
 
-# -- payloads canônicos (I9) ------------------------------------------------------
-
-
-def _spec_payload(spec: BaselineSpec) -> dict[str, object]:
-    """Campos da spec como payload canônico (identidade da configuração)."""
-    return {
-        "family": spec.family,
-        "window": spec.window,
-        "decay_lambda": spec.decay_lambda,
-        "model_version": spec.model_version,
-    }
-
-
-def _config_payload(command: RunBaselinesCommand, spec: BaselineSpec) -> dict[str, object]:
-    """Payload do `config_signature`: spec + horizons + levels + schema_version."""
-    return {
-        "spec": _spec_payload(spec),
-        "horizons": list(command.horizons),
-        "quantile_levels": list(command.quantile_levels),
-        "schema_version": command.schema_version,
-    }
-
-
-def _run_payload(
-    command: RunBaselinesCommand, spec: BaselineSpec, fold: FoldSplit
-) -> dict[str, object]:
-    """Payload do `run_id`: scope + spec + fingerprint do fold + grade (I9/I10)."""
-    return {
-        "scope": {
-            "asset_id": command.scope.asset_id,
-            "feature_set_name": command.scope.feature_set_name,
-            "max_horizon": command.scope.max_horizon,
-            "cohort_id": command.scope.cohort_id,
-        },
-        "spec": _spec_payload(spec),
-        "split_fingerprint": fold.fingerprint.value,
-        "fold_index": fold.fold_index,
-        "horizons": list(command.horizons),
-        "quantile_levels": list(command.quantile_levels),
-        "schema_version": command.schema_version,
-    }
-
-
 # -- parsing defensivo das rows do dataset ----------------------------------------
 
 
@@ -439,9 +449,7 @@ def _timestamp_of(row: Row) -> datetime:
     """Extrai o `timestamp` tz-aware da row (premissa do par read-only da 3.5)."""
     value = row.get("timestamp")
     if not isinstance(value, datetime) or value.tzinfo is None:
-        raise ValueError(
-            f"dataset row 'timestamp' must be a tz-aware datetime; got {value!r}"
-        )
+        raise ValueError(f"dataset row 'timestamp' must be a tz-aware datetime; got {value!r}")
     return value
 
 

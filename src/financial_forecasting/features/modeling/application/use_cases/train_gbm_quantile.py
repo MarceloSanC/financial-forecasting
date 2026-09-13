@@ -32,12 +32,16 @@ Invariantes materializadas aqui (concept §5):
 - **I10 — feature set fixo:** registry `enabled_only=True` na ordem de
   inserção + `day_of_week` + `month`; `timestamp`/`asset_id`/
   `fundamentals_effective_date`/`target_return`/`time_idx` NUNCA viram
-  feature (anti-leakage/ADR 5.3.0003); a tupla ordenada entra nos payloads
-  de `run_id`/`config_signature` (I7 — auditabilidade do desenho).
+  feature (anti-leakage/ADR 5.3.0003); a tupla ordenada entra em
+  `config_signature`, um dos 9 slots do `run_id` (I7 — auditabilidade do
+  desenho).
 - **I8 — 1 obs por ponto alinhado:** mesma chave estrutural e mesma asserção
   de remoção-zero da 5.2.
 - **I4 — determinismo:** sem clock/aleatoriedade própria; a semente é a do
-  comando e os hashes são canônicos via `Hasher` (1.4).
+  comando. A identidade é o caminho ÚNICO dos VOs da 1.4 (`RunId.compute` com
+  os 9 slots, `ConfigSignature.compute` com `asdict(params)` menos `seed` +
+  features + grade + scope); `schema_version` é coluna de `dim_run`, nunca
+  chave (issue #65, ADR 5.2.0004).
 
 Casos de erro (concept §6): C1 (dataset vazio ergue), C2 (comando inválido
 ergue ANTES de qualquer I/O; params já validados na construção do DTO),
@@ -63,11 +67,19 @@ from financial_forecasting.features.analytics_store.domain.value_objects.run_rec
     RunRecord,
 )
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
+    feature_set_hash,
     list_feature_specs,
+)
+from financial_forecasting.features.modeling.application.pipeline_version import (
+    PIPELINE_VERSION,
 )
 from financial_forecasting.features.modeling.domain.services.operationally_latest_dedup import (
     deduplicate_operationally_latest,
 )
+from financial_forecasting.shared.domain.value_objects.config_signature import (
+    ConfigSignature,
+)
+from financial_forecasting.shared.domain.value_objects.run_id import RunId
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -236,7 +248,9 @@ class TrainGbmQuantile:
 
         summaries: list[GbmRunSummary] = []
         entries: list[_StructuralEntry] = []
-        emissions: list[tuple[FoldSplit, str, dict[int, dict[int, QuantileForecast]], Mapping[int, int]]] = []  # noqa: E501
+        emissions: list[
+            tuple[FoldSplit, str, dict[int, dict[int, QuantileForecast]], Mapping[int, int]]
+        ] = []
 
         for fold in folds:
             training = self._train_fold(
@@ -264,8 +278,8 @@ class TrainGbmQuantile:
                     for level in command.quantile_levels
                 )
 
-            run_id = self._hasher.hash_mapping(_run_payload(command, feature_names, fold))
-            self._write_dim_run(command, feature_names, fold, run_id)
+            config_signature, run_id = self._identity(command, feature_names, fold)
+            self._write_dim_run(command, fold, run_id, config_signature)
             emissions.append(
                 (fold, run_id, forecasts_by_decision, training.best_iteration_by_horizon)
             )
@@ -386,12 +400,57 @@ class TrainGbmQuantile:
             quantile_levels=command.quantile_levels,
         )
 
-    def _write_dim_run(
+    def _identity(
         self,
         command: TrainGbmQuantileCommand,
         feature_names: tuple[str, ...],
         fold: FoldSplit,
+    ) -> tuple[str, str]:
+        """`(config_signature, run_id)` de um fold — caminho único da 1.4 (I7).
+
+        `config_signature` = configuração completa do run MENOS o que os outros
+        8 slots do `RunId` já carregam: `seed` sai de `asdict(params)` (tem
+        slot), `model_version` não entra (tem slot), `schema_version` não entra
+        em lugar nenhum (é coluna). `asdict` em vez de lista à mão: um
+        hiperparâmetro novo entra sozinho na identidade. `cohort_id`,
+        `max_horizon` e `feature_set_name` ficam dentro da config — decisão e
+        evidência na ADR 5.2.0004.
+        """
+        params = {key: value for key, value in asdict(command.params).items() if key != "seed"}
+        config_signature = ConfigSignature.compute(
+            hasher=self._hasher,
+            config={
+                "scope": {
+                    "feature_set_name": command.scope.feature_set_name,
+                    "max_horizon": command.scope.max_horizon,
+                    "cohort_id": command.scope.cohort_id,
+                },
+                "params": params,
+                "feature_names": list(feature_names),
+                "horizons": list(command.horizons),
+                "quantile_levels": list(command.quantile_levels),
+            },
+        )
+        run_id = RunId.compute(
+            hasher=self._hasher,
+            asset=command.scope.asset_id,
+            feature_set_hash=feature_set_hash(),
+            trial_number=None,  # só o sweep tem trials, e ele não persiste runs
+            fold=str(fold.fold_index),
+            seed=command.params.seed,
+            model_version=_MODEL_VERSION,
+            config_signature=config_signature.value,
+            split_signature=fold.fingerprint.value,
+            pipeline_version=PIPELINE_VERSION,
+        )
+        return config_signature.value, run_id.value
+
+    def _write_dim_run(
+        self,
+        command: TrainGbmQuantileCommand,
+        fold: FoldSplit,
         run_id: str,
+        config_signature: str,
     ) -> None:
         """Grava 1 `RunRecord` por fold em `dim_run` — `seed` PREENCHIDA (I7)."""
         record = RunRecord(
@@ -399,9 +458,7 @@ class TrainGbmQuantile:
             asset=command.scope.asset_id,
             parent_sweep_id=command.scope.cohort_id,
             feature_set_name=command.scope.feature_set_name,
-            config_signature=self._hasher.hash_mapping(
-                _config_payload(command, feature_names)
-            ),
+            config_signature=config_signature,
             split_fingerprint=fold.fingerprint.value,
             fold=str(fold.fold_index),
             seed=command.params.seed,
@@ -468,57 +525,6 @@ def _validate_command(command: TrainGbmQuantileCommand) -> None:
         )
 
 
-# -- payloads canônicos (I4/I7) ----------------------------------------------------
-
-
-def _params_payload(params: GbmTrainingParams) -> dict[str, object]:
-    """Campos dos params como payload canônico (identidade da configuração)."""
-    return {
-        "seed": params.seed,
-        "num_boost_round_max": params.num_boost_round_max,
-        "num_leaves": params.num_leaves,
-        "learning_rate": params.learning_rate,
-        "min_data_in_leaf": params.min_data_in_leaf,
-        "model_version": _MODEL_VERSION,
-    }
-
-
-def _config_payload(
-    command: TrainGbmQuantileCommand, feature_names: tuple[str, ...]
-) -> dict[str, object]:
-    """Payload do `config_signature`: params + features + grade + schema (I7)."""
-    return {
-        "params": _params_payload(command.params),
-        "feature_names": list(feature_names),
-        "horizons": list(command.horizons),
-        "quantile_levels": list(command.quantile_levels),
-        "schema_version": command.schema_version,
-    }
-
-
-def _run_payload(
-    command: TrainGbmQuantileCommand,
-    feature_names: tuple[str, ...],
-    fold: FoldSplit,
-) -> dict[str, object]:
-    """Payload do `run_id`: scope + params + features + fingerprint + fold (I7)."""
-    return {
-        "scope": {
-            "asset_id": command.scope.asset_id,
-            "feature_set_name": command.scope.feature_set_name,
-            "max_horizon": command.scope.max_horizon,
-            "cohort_id": command.scope.cohort_id,
-        },
-        "params": _params_payload(command.params),
-        "feature_names": list(feature_names),
-        "split_fingerprint": fold.fingerprint.value,
-        "fold_index": fold.fold_index,
-        "horizons": list(command.horizons),
-        "quantile_levels": list(command.quantile_levels),
-        "schema_version": command.schema_version,
-    }
-
-
 # -- parsing defensivo das rows do dataset ----------------------------------------
 
 
@@ -526,9 +532,7 @@ def _timestamp_of(row: Row) -> datetime:
     """Extrai o `timestamp` tz-aware da row (premissa do par read-only da 3.5)."""
     value = row.get("timestamp")
     if not isinstance(value, datetime) or value.tzinfo is None:
-        raise ValueError(
-            f"dataset row 'timestamp' must be a tz-aware datetime; got {value!r}"
-        )
+        raise ValueError(f"dataset row 'timestamp' must be a tz-aware datetime; got {value!r}")
     return value
 
 
@@ -546,7 +550,5 @@ def _feature_value_of(row: Row, column: str) -> float:
     if value is None:
         return float("nan")
     if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValueError(
-            f"dataset row {column!r} must be numeric or None; got {value!r}"
-        )
+        raise ValueError(f"dataset row {column!r} must be numeric or None; got {value!r}")
     return float(value)

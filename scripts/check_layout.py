@@ -18,6 +18,11 @@ Verifica:
    (exceção morta).
 4. `shared/` não importa de `features/` (acoplamento inverso é proibido).
 5. Cada feature tem os diretórios obrigatórios (`domain/`, `application/`, `adapters/`).
+6. Chamadas a `hash_mapping`/`hash_text` (port `Hasher`) só dentro de
+   `shared/domain/value_objects/` — a identidade do projeto (`RunId`,
+   `ConfigSignature`, `SplitFingerprint`, `DatasetFingerprint`) é o ÚNICO caminho
+   de hash; um payload hand-rolled num use case é uma segunda definição de "o
+   mesmo run" (issue #65, ADR 5.2.0004). Sem allowlist: zero exceções.
 
 Limitação conhecida: o script não valida que apenas `composition_root.py` faz
 wiring (instanciação direta de adapters concretos). Essa regra é verificada por
@@ -87,6 +92,11 @@ FORBIDDEN_IMPORTS: list[tuple[str, list[str]]] = [
 
 # Diretórios obrigatórios em cada feature
 REQUIRED_FEATURE_DIRS = ["domain", "application", "adapters"]
+
+# Regra 6 (issue #65): métodos do port `Hasher` cuja CHAMADA só é permitida nos
+# value objects de identidade. Definir o método (port/adapter) não é chamar.
+HASHER_METHODS = frozenset({"hash_mapping", "hash_text"})
+HASHER_CALL_SITE_PREFIX = "financial_forecasting.shared.domain.value_objects"
 
 # Exceções DECLARADAS da regra 3b (adapter <-> adapter irmão), issue #60.
 # Formato: (módulo de origem, prefixo do import proibido, motivo).
@@ -272,6 +282,47 @@ def check_sibling_adapter_imports(src_root: Path) -> list[str]:
     return violations
 
 
+def check_hasher_call_sites(src_root: Path) -> list[str]:
+    """Regra 6 (issue #65): `hash_mapping`/`hash_text` só são CHAMADOS nos VOs.
+
+    Os três use cases de treino já tiveram, cada um, o seu `_run_payload` e o seu
+    `_config_payload` privados — três definições concorrentes de "o mesmo run",
+    todas com `schema_version` dentro da chave, enquanto `RunId`/`ConfigSignature`
+    (Stage 1.4) existiam sem chamador. A regra fecha a porta pela qual isso
+    volta: fora de `shared/domain/value_objects/`, ninguém chama o port de hash.
+
+    Detecção por AST: qualquer `ast.Call` cujo `func` é um `ast.Attribute` com
+    `attr` em `HASHER_METHODS` — cobre `self._hasher.hash_mapping(...)`,
+    `hasher.hash_text(...)` e qualquer receptor. Uma DEFINIÇÃO (`def
+    hash_mapping`) não é chamada, então port e adapter passam. Sem allowlist de
+    propósito: a única exceção legítima é um VO novo, e ele mora no prefixo.
+    """
+    violations: list[str] = []
+
+    for py_file in sorted(src_root.rglob("*.py")):
+        module = _module_name(py_file, src_root)
+        if module.startswith(HASHER_CALL_SITE_PREFIX):
+            continue
+        try:
+            tree = ast.parse(py_file.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr in HASHER_METHODS:
+                rel = py_file.relative_to(src_root.parent)
+                violations.append(
+                    f"VIOLAÇÃO: {rel}:{node.lineno} chama '{func.attr}' fora de "
+                    f"'{HASHER_CALL_SITE_PREFIX}' — a identidade é o caminho único "
+                    "dos VOs (RunId/ConfigSignature/SplitFingerprint/"
+                    "DatasetFingerprint; issue #65, ADR 5.2.0004)"
+                )
+
+    return violations
+
+
 def check_feature_structure(features_root: Path) -> list[str]:
     """Verifica que cada feature tem os diretórios obrigatórios."""
     violations: list[str] = []
@@ -327,6 +378,10 @@ def main() -> int:
     # Verifica acoplamento entre adapters irmãos (regra 3b, issue #60)
     sibling_violations = check_sibling_adapter_imports(src_root)
     all_violations.extend(sibling_violations)
+
+    # Verifica que o port de hash só é chamado nos VOs de identidade (regra 6, issue #65)
+    hasher_violations = check_hasher_call_sites(src_root)
+    all_violations.extend(hasher_violations)
 
     # Verifica estrutura de features
     structure_violations = check_feature_structure(features_root)

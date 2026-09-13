@@ -242,13 +242,17 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 - **Imports sempre absolutos.** Nunca `from ..domain import` — use o caminho completo.
 - **Nenhum import circular.** Se você precisar, é sinal de que a camada está errada.
 - **Shared não importa de features.** O fluxo é sempre: features → shared, nunca o contrário.
+- **Identidade só pelos VOs de `shared/domain/value_objects/`.** `RunId`, `ConfigSignature`,
+  `SplitFingerprint` e `DatasetFingerprint` são o único caminho de hash; fora deles ninguém
+  chama `hasher.hash_mapping`/`hash_text` (payload hand-rolled num use case é uma segunda
+  definição de "o mesmo run" — ADR 5.2.0004). Gate: regra 6 do `scripts/check_layout.py`.
 - **Features não importam de outras features.** Cada slice é uma unidade
   substituível; o que precisa ser compartilhado sobe para `shared/`.
 
   **Perímetro do gate hoje** — dito aqui porque doutrina mais larga que o gate é
   falso verde de segunda ordem, o defeito que a issue #60 existe para matar: o
   contrato `bc-independence` do `.importlinter` cobre **apenas** `modeling`,
-  `analytics_store` e `feature_engineering`. Dentro desse trio, as 11 arestas de
+  `analytics_store` e `feature_engineering`. Dentro desse trio, as 12 arestas de
   runtime existentes estão declaradas UMA A UMA como exceção comentada (débito
   medido, não permissão) e **uma aresta nova reprova o build**. Fora dele, a regra
   é doutrina sem gate:
@@ -262,7 +266,7 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   - **Arestas sob `if TYPE_CHECKING:` são invisíveis ao contrato**
     (`exclude_type_checking_imports = True`, ver §3). As 3 referências
     `modeling → analytics_store.application.ports.out.analytics_repository` são
-    type-only e por isso não entram na contagem de 11.
+    type-only e por isso não entram na contagem de 12.
 
   **Nota de escopo:** esta regra enforça direção de dependência e aciclicidade
   entre slices — NÃO afirma que cada slice é um Bounded Context separado no

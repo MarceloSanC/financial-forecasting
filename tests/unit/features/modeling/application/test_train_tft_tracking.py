@@ -20,6 +20,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from financial_forecasting.features.modeling.application.pipeline_version import (
+    PIPELINE_VERSION,
+)
 from tests.unit.features.modeling.application.test_train_tft import _build, _command
 
 if TYPE_CHECKING:
@@ -143,6 +146,9 @@ class TestRunIsTracked:
         for summary in result.runs:
             run = tracker._runs[summary.tracking_run_id]
             assert run.params["run_id"] == summary.run_id
+            # #65: a versão do pipeline que produziu o run_id fica rastreável no
+            # tracker — sem isto, um bump de identidade seria invisível na UI.
+            assert run.params["pipeline_version"] == PIPELINE_VERSION
             assert run.tags["model_version"] == _EXPECTED_MODEL_VERSION
             assert run.tags["phase"] == _EXPECTED_PHASE
             assert run.tags["fold"] == str(summary.fold_index)

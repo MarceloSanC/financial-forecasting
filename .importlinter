@@ -408,7 +408,7 @@ allow_indirect_imports = False
 #     são type-only e por isso NÃO aparecem na lista abaixo.
 #
 # Dentro do perímetro, cada aresta de runtime existente entra como exceção
-# NOMEADA abaixo (11 hoje). Elas não são "ok": são o débito medido, e a lista
+# NOMEADA abaixo (12 hoje). Elas não são "ok": são o débito medido, e a lista
 # encolhe conforme as issues de fronteira fecham. Aresta nova entre estes três
 # slices reprova o build — que é o ponto.
 # -----------------------------------------------------------------------------
@@ -444,6 +444,13 @@ ignore_imports =
     # `list_feature_specs()` é consumido direto da application, sem injeção.
     # Sai quando o conjunto de features virar entrada do use case.
     financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile -> financial_forecasting.features.feature_engineering.domain.services.feature_registry
+    # `run_baselines` não consome features, mas o `feature_set_hash` do registry
+    # é um dos 9 slots do `RunId` (issue #65, ADR 5.2.0004): o run declara de
+    # qual registry saiu o dataset lido. Calculado in-process (o mesmo valor que
+    # o `BuildDataset` devolve no DTO) e não recebido por DTO, para que a identidade
+    # nunca dependa de string fornecida pelo chamador. Mesma classe de débito e
+    # mesma condição de saída das arestas de registry acima.
+    financial_forecasting.features.modeling.application.use_cases.run_baselines -> financial_forecasting.features.feature_engineering.domain.services.feature_registry
     # -- arestas do candidato TFT (Stage 5.4, mergeada em develop) --------------
     # Mesma justificativa das anteriores: `PersistPredictionsCommand`,
     # `QuantileForecast`/`RunRecord` e a registry de features atravessando a

@@ -31,9 +31,12 @@ Invariantes materializadas aqui (concept §5):
   `t + h` dentro do painel; o use case persiste exatamente o que recebeu. Como
   essa é a MESMA desigualdade do pulo do 4.3, `rows_skipped` é zero por
   construção nesta Stage — e o teste assere isso em vez de ignorar.
-- **I10 — identidade persistida:** o payload do `run_id` inclui as tuplas
-  ordenadas de `feature_names` E de `known_feature_names` — a tipagem é parte da
-  identidade do run, não só o conjunto.
+- **I10 — identidade persistida:** a `config_signature` (um dos 9 slots do
+  `run_id`) inclui as tuplas ordenadas de `feature_names` E de
+  `known_feature_names` — a tipagem é parte da identidade do run, não só o
+  conjunto. A identidade é o caminho ÚNICO dos VOs da 1.4 (`RunId.compute`,
+  `ConfigSignature.compute`); `schema_version` é coluna de `dim_run`, nunca
+  chave (issue #65, ADR 5.2.0004).
 - **I11 — 1 obs por ponto alinhado:** mesma chave estrutural e mesma asserção de
   remoção-zero de 5.2/5.3.
 
@@ -61,11 +64,19 @@ from financial_forecasting.features.analytics_store.domain.value_objects.run_rec
     RunRecord,
 )
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
+    feature_set_hash,
     list_feature_specs,
+)
+from financial_forecasting.features.modeling.application.pipeline_version import (
+    PIPELINE_VERSION,
 )
 from financial_forecasting.features.modeling.domain.services.operationally_latest_dedup import (
     deduplicate_operationally_latest,
 )
+from financial_forecasting.shared.domain.value_objects.config_signature import (
+    ConfigSignature,
+)
+from financial_forecasting.shared.domain.value_objects.run_id import RunId
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -293,16 +304,14 @@ class TrainTft:
         summaries: list[TftRunSummary] = []
         entries: list[_StructuralEntry] = []
         emissions: list[
-            tuple[FoldSplit, str, dict[int, dict[int, QuantileForecast]], TftTrainingResult]
+            tuple[FoldSplit, str, str, dict[int, dict[int, QuantileForecast]], TftTrainingResult]
         ] = []
 
         for fold in folds:
             # O `run_id` é calculado ANTES do treino porque o diretório do
-            # artefato é derivado dele (D9) — tudo o que entra no payload já é
+            # artefato é derivado dele (D9) — tudo o que entra nos 9 slots já é
             # conhecido nesse ponto.
-            run_id = self._hasher.hash_mapping(
-                _run_payload(command, feature_names, known_names, fold)
-            )
+            config_signature, run_id = self._identity(command, feature_names, known_names, fold)
             training = self._train_fold(
                 command=command,
                 fold=fold,
@@ -333,7 +342,7 @@ class TrainTft:
                     for level in command.quantile_levels
                 )
 
-            emissions.append((fold, run_id, forecasts_by_decision, training))
+            emissions.append((fold, run_id, config_signature, forecasts_by_decision, training))
 
         # I11 (duas camadas): duplicata real empata chave+rank e ergue no próprio
         # serviço 5.1; a remoção-zero fica atrás como defesa-em-profundidade.
@@ -344,12 +353,12 @@ class TrainTft:
         )
         _assert_zero_removal(before=len(entries), after=len(deduped))
 
-        for fold, run_id, forecasts_by_decision, training in emissions:
+        for fold, run_id, config_signature, forecasts_by_decision, training in emissions:
             # `dim_run` junto da persistência das predições, não no laço de
             # treino: gravar antes deixaria linhas órfãs (run sem predição) se o
             # guard de dedup ou o persister erguesse, e o rerun idêntico (C7)
             # passaria a colidir também aqui.
-            self._write_dim_run(command, feature_names, known_names, fold, run_id)
+            self._write_dim_run(command, fold, run_id, config_signature)
             rows_written = 0
             rows_skipped = 0
             for decision_idx, forecasts in forecasts_by_decision.items():
@@ -525,13 +534,58 @@ class TrainTft:
             artifact_dir=str(artifact_dir),
         )
 
-    def _write_dim_run(
+    def _identity(
         self,
         command: TrainTftCommand,
         feature_names: tuple[str, ...],
         known_names: tuple[str, ...],
         fold: FoldSplit,
+    ) -> tuple[str, str]:
+        """`(config_signature, run_id)` de um fold — caminho único da 1.4 (I10).
+
+        `config_signature` = configuração completa do run MENOS o que os outros
+        8 slots do `RunId` já carregam: `seed` sai de `asdict(params)` (tem
+        slot), `model_version` não entra (tem slot), `schema_version` não entra
+        em lugar nenhum (é coluna). A tipagem known/unknown entra aqui (I10).
+        `max_horizon` é, no TFT, o comprimento do decodificador (ADR 5.4.0002)
+        — mais um motivo para viver na config e não só na purga (ADR 5.2.0004).
+        """
+        params = {key: value for key, value in asdict(command.params).items() if key != "seed"}
+        config_signature = ConfigSignature.compute(
+            hasher=self._hasher,
+            config={
+                "scope": {
+                    "feature_set_name": command.scope.feature_set_name,
+                    "max_horizon": command.scope.max_horizon,
+                    "cohort_id": command.scope.cohort_id,
+                },
+                "params": params,
+                "feature_names": list(feature_names),
+                "known_feature_names": list(known_names),
+                "horizons": list(command.horizons),
+                "quantile_levels": list(command.quantile_levels),
+            },
+        )
+        run_id = RunId.compute(
+            hasher=self._hasher,
+            asset=command.scope.asset_id,
+            feature_set_hash=feature_set_hash(),
+            trial_number=None,  # só o sweep tem trials, e ele não persiste runs
+            fold=str(fold.fold_index),
+            seed=command.params.seed,
+            model_version=_MODEL_VERSION,
+            config_signature=config_signature.value,
+            split_signature=fold.fingerprint.value,
+            pipeline_version=PIPELINE_VERSION,
+        )
+        return config_signature.value, run_id.value
+
+    def _write_dim_run(
+        self,
+        command: TrainTftCommand,
+        fold: FoldSplit,
         run_id: str,
+        config_signature: str,
     ) -> None:
         """Grava 1 `RunRecord` por fold em `dim_run` — `seed` preenchida (I10)."""
         record = RunRecord(
@@ -539,9 +593,7 @@ class TrainTft:
             asset=command.scope.asset_id,
             parent_sweep_id=command.scope.cohort_id,
             feature_set_name=command.scope.feature_set_name,
-            config_signature=self._hasher.hash_mapping(
-                _config_payload(command, feature_names, known_names)
-            ),
+            config_signature=config_signature,
             split_fingerprint=fold.fingerprint.value,
             fold=str(fold.fold_index),
             seed=command.params.seed,
@@ -580,24 +632,7 @@ def _validate_command(command: TrainTftCommand) -> None:
         )
 
 
-# -- payloads canônicos (I9/I10) --------------------------------------------------
-
-
-def _params_payload(params: TftTrainingParams) -> dict[str, object]:
-    """Campos dos params como payload canônico (identidade da configuração)."""
-    return {
-        "seed": params.seed,
-        "max_encoder_length": params.max_encoder_length,
-        "hidden_size": params.hidden_size,
-        "attention_head_size": params.attention_head_size,
-        "dropout": params.dropout,
-        "hidden_continuous_size": params.hidden_continuous_size,
-        "learning_rate": params.learning_rate,
-        "max_epochs": params.max_epochs,
-        "patience": params.patience,
-        "batch_size": params.batch_size,
-        "model_version": _MODEL_VERSION,
-    }
+# -- params do tracker (I12) ---------------------------------------------------------
 
 
 def _tracking_params(command: TrainTftCommand, fold: FoldSplit, run_id: str) -> dict[str, object]:
@@ -616,48 +651,9 @@ def _tracking_params(command: TrainTftCommand, fold: FoldSplit, run_id: str) -> 
         "val_size": command.val_size,
         "calib_size": command.calib_size,
         "embargo": command.embargo,
-        **_params_payload(command.params),
-    }
-
-
-def _config_payload(
-    command: TrainTftCommand,
-    feature_names: tuple[str, ...],
-    known_names: tuple[str, ...],
-) -> dict[str, object]:
-    """Payload do `config_signature`: params + tipagem + grade + schema (I10)."""
-    return {
-        "params": _params_payload(command.params),
-        "feature_names": list(feature_names),
-        "known_feature_names": list(known_names),
-        "horizons": list(command.horizons),
-        "quantile_levels": list(command.quantile_levels),
-        "schema_version": command.schema_version,
-    }
-
-
-def _run_payload(
-    command: TrainTftCommand,
-    feature_names: tuple[str, ...],
-    known_names: tuple[str, ...],
-    fold: FoldSplit,
-) -> dict[str, object]:
-    """Payload do `run_id`: scope + params + tipagem + fingerprint + fold (I10)."""
-    return {
-        "scope": {
-            "asset_id": command.scope.asset_id,
-            "feature_set_name": command.scope.feature_set_name,
-            "max_horizon": command.scope.max_horizon,
-            "cohort_id": command.scope.cohort_id,
-        },
-        "params": _params_payload(command.params),
-        "feature_names": list(feature_names),
-        "known_feature_names": list(known_names),
-        "split_fingerprint": fold.fingerprint.value,
-        "fold_index": fold.fold_index,
-        "horizons": list(command.horizons),
-        "quantile_levels": list(command.quantile_levels),
-        "schema_version": command.schema_version,
+        "model_version": _MODEL_VERSION,
+        "pipeline_version": PIPELINE_VERSION,
+        **asdict(command.params),
     }
 
 

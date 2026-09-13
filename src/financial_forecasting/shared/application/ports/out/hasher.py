@@ -20,7 +20,8 @@ Semântica canônica garantida por qualquer implementação deste contrato:
   `ValueError` (fail-fast: indicam dado corrompido a montante, não estado
   legítimo a fingerprintar).
 - `hash_text`: sha256 hex sobre os bytes UTF-8 do texto, direto e SENSÍVEL à
-  ordem (usado p.ex. para `feature_set_hash` via `"|".join(features_ordered)`).
+  ordem. Sem chamador em `src/` hoje: o `feature_set_hash` do run vem de
+  `feature_registry.feature_set_hash()` (ADR 5.2.0004 D7), não deste método.
 
 Ver ADR docs/adr/1_4_0001-canonicalizacao-de-hash-deterministico.md.
 """
@@ -46,6 +47,6 @@ class Hasher(Protocol):
         """sha256 hex sobre os bytes UTF-8 do texto.
 
         Direto e SENSÍVEL à ordem (`"a|b" != "b|a"`). Usado p.ex. para o
-        `feature_set_hash` via `"|".join(features_ordered)`.
+        Sem chamador em `src/` hoje (ver docstring do módulo).
         """
         ...
