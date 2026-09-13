@@ -159,6 +159,9 @@ def test_build_dataset_quality_gate_is_armed_with_declared_threshold(tmp_path: P
     assert isinstance(config, DatasetQualityGateConfig)
     assert config.max_nan_ratio_per_feature == _DATASET_MAX_NAN_RATIO_PER_FEATURE
     assert 0.0 <= config.max_nan_ratio_per_feature < 1.0  # armado: pode reprovar
+    # Teto: a faixa de partida da issue #72 é 0.02 a 0.05 pós-warmup. Afrouxar além
+    # disso é decisão nova — exige editar este teste (auditável), não só a constante.
+    assert config.max_nan_ratio_per_feature <= 0.05  # noqa: PLR2004
 
 
 @pytest.mark.unit
