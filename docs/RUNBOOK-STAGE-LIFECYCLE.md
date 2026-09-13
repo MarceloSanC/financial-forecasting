@@ -128,18 +128,127 @@ refletir, dizer isso e seguir.
 
 > No fluxo colapsado ([`PROMPT-stage-single-session.md`](./PROMPT-stage-single-session.md)),
 > o 1b é o **primeiro ato da sessão** quando ainda não aconteceu — as
-> partes mecânicas (1a/1c) podem precedê-lo.
+> partes mecânicas (1a e a gravação da issue em 1c) podem precedê-lo. A
+> **pesquisa de referências** de 1c, quando precede o 1b, alimenta o
+> alinhamento (entra nos "Pontos de reflexão").
 
-**1c. Criar (ou atualizar) a issue** com o entendimento validado no corpo.
-A issue é o registro durável da ideia e o ponto onde notas de outros
-momentos do desenvolvimento se acumulam:
+**1c. Pesquisar referências e criar (ou atualizar) a issue.** A issue é
+o registro durável da ideia e o ponto onde notas de outros momentos do
+desenvolvimento se acumulam — por isso, **antes de gravá-la**, a abordagem
+passa por uma pesquisa de fundamentação. O que entra no corpo é o
+entendimento validado em 1b **mais** o resultado dessa pesquisa.
+
+**Pesquisa de referências (subagente Opus 5 — não pular).** Despachar um
+subagente de contexto zerado (Agent tool, `model: opus`) com duas missões:
+
+1. **Referências teóricas** em fontes oficiais e validadas — paper revisado
+   por pares, livro-texto consagrado, documentação oficial do método ou da
+   biblioteca, spec/RFC. O critério é a **confiabilidade da fonte**, não a
+   conveniência: blog, fórum, marketing de software e "tutorial" só servem
+   para apontar *para* a fonte primária, que é a que se cita. Objetivo:
+   dar base teórica às decisões do que será implementado nesta issue.
+2. **Projetos comparáveis** — projetos robustos, reconhecidos pela
+   comunidade (adoção ampla, manutenção ativa, governança conhecida, código
+   aberto legível) que resolvem problema de contexto semelhante. Verificar
+   como eles abordam o ponto e extrair o insight: **confirmação** da
+   abordagem prevista em 1b, **contraparte** (fazem diferente, e por quê)
+   ou neutro.
+
+**Preferência pelas fontes já referenciadas** (mesma regra de sourcing do
+[`PROMPT-step-single-session.md`](./PROMPT-step-single-session.md) §1). A
+base da pesquisa é o que o projeto **já ratificou** — `docs/overview.md`
+§Referências, `## References` dos ADRs do BC e `concept.md` das Stages
+`done`. Essas fontes já passaram pelo crivo de confiabilidade e de
+aderência ao contexto; reutilizá-las mantém a fundamentação do projeto
+coerente entre Stages. Busca externa **só por lacuna**: quando, para um
+ponto de decisão, as fontes da lista trazem **pouca ou nenhuma**
+informação — e a fonte nova precisa declarar qual lacuna cobre. Fonte
+nova que vier a sustentar decisão de concept/ADR é registrada em
+`overview.md` §Referências no mesmo PR da Stage.
+
+Prompt do subagente:
+
+````markdown
+# MISSÃO
+
+Pesquisa de fundamentação para a Stage N.M — <título>. Você NÃO decide
+nem implementa: levanta evidência confiável para quem vai decidir.
+
+# ENTRADA
+
+- Abordagem prevista (validada com o humano): <colar o item 3 do 1b>
+- Pontos de decisão em aberto: <colar os "Pontos de reflexão" do 1b>
+- Contexto ratificado do projeto: docs/overview.md (§Objetivos e
+  §Referências), docs/roadmap.md (linha da Stage), ADRs do BC em docs/adr/
+
+# REGRA DE SOURCING — fontes já referenciadas primeiro
+
+1. Comece inventariando as fontes que o projeto **já referencia**:
+   docs/overview.md §Referências, `## References` dos ADRs em docs/adr/
+   e `concept.md` das Stages `done` do mesmo BC. Essa lista é a base da
+   pesquisa: para cada ponto de decisão, procure a resposta **nelas**
+   primeiro (abra o capítulo/seção; não cite de memória).
+2. Só abra busca externa para um ponto de decisão se as fontes da lista
+   trouxerem **pouca ou nenhuma** informação sobre ele. Nesse caso,
+   declare a lacuna ("as fontes X e Y não cobrem Z") antes de trazer a
+   fonte nova. Fonte nova que apenas repete o que uma da lista já diz
+   não entra.
+3. Marque cada fonte como `[já referenciada]` ou `[nova — lacuna: ...]`.
+
+# PARTE 1 — REFERÊNCIAS TEÓRICAS
+
+Para cada ponto de decisão: fonte primária que o fundamenta, seguindo a
+regra de sourcing acima. Para fonte nova, aceite só paper revisado por
+pares, livro-texto consagrado, documentação oficial do método/biblioteca,
+spec/RFC. Rejeite blog, fórum, tutorial e material de marketing (no
+máximo, siga-os até a fonte primária). Para cada fonte: citação completa
+(autor, ano, título, link/DOI), **por que é confiável** (venue, autoria,
+status oficial), o que diz de relevante, e se **sustenta ou contraria**
+a abordagem prevista.
+
+# PARTE 2 — PROJETOS COMPARÁVEIS
+
+2–4 projetos robustos e reconhecidos pela comunidade (adoção, manutenção
+ativa, governança) que resolvem problema de contexto semelhante. Para
+cada um: por que é comparável, como aborda o ponto (aponte código/doc),
+e o insight — **confirma**, **contraparte** ou neutro em relação à
+abordagem prevista. Contraparte exige explicar o que eles fazem
+diferente e a razão declarada (ou inferida, marcada como inferência).
+
+# SAÍDA (markdown, para colar no corpo da issue)
+
+## Referências
+### Teóricas — por ponto de decisão (`[já referenciada]` / `[nova — lacuna: ...]`)
+### Projetos comparáveis — confirmação / contraparte
+### Síntese — o que a evidência confirma, o que contraria, forks abertos
+### Fontes descartadas (e por quê)
+
+Não invente citação. Se não houver fonte primária para um ponto, escreva
+"sem fonte primária encontrada" — isso é um achado, não uma falha.
+````
+
+**Tratamento do retorno.** Ler a §Síntese antes de gravar a issue:
+
+- **Confirma** a abordagem de 1b → seguir; a seção `## Referências` vai
+  para o corpo da issue como está.
+- **Contraparte material** (fonte confiável ou projeto de referência
+  contradiz a abordagem validada) → **voltar ao humano** em bloco numerado
+  (B1, B2…) antes de gravar; a issue nasce com a abordagem re-validada.
+  Contraparte que não muda a decisão fica registrada mesmo assim — é
+  matéria-prima de ADR (§Alternativas descartadas) no Passo 4.
+- "Sem fonte primária" num ponto *load-bearing* → sinalizar ao humano;
+  pode ser decisão de política do projeto (vira ADR), não achado de
+  pesquisa.
+
+**Gravar a issue** com o entendimento validado + `## Referências`:
 
 ```powershell
 gh issue create `
   --title "feat: stage $N.$M — $title_humano" `
-  --body "<ideia/abordagem validada em 1b> — ver docs/roadmap.md e (após criação) docs/stages/$N.$M-$slug/concept.md"
+  --body-file <arquivo-com-corpo>   # ideia/abordagem validada em 1b + ## Referências da pesquisa
+                                    # + "ver docs/roadmap.md e (após criação) docs/stages/$N.$M-$slug/concept.md"
 # issue já existente com corpo defasado:
-# gh issue edit <num> --body "<corpo atualizado>"
+# gh issue edit <num> --body-file <arquivo-com-corpo>
 ```
 
 **Saída esperada:** URL da issue + número atribuído (ex.: `#42`).
