@@ -67,8 +67,12 @@ class FeatureSpec:
     - `formula_desc`: descrição textual da fórmula (verbatim do old quando derivada).
     - `anti_leakage_tag`: **tag de causalidade obrigatória**, em vocabulário fixo
       (C4 — espinha do DoD: feature sem contrato de causalidade é rejeitada).
-    - `warmup_count`: nº de barras de aquecimento (`>= 0`); é o tamanho de janela
-      nominal — o warmup EFETIVO (ex. `vol_of_vol`=40) é documentado no registry.
+    - `warmup_count`: nº de barras de aquecimento (`>= 0`). É a cota superior do
+      índice do 1º valor finito da feature no frame do dataset — checada pelo
+      `DatasetQualityGate` (checagem absoluta (d), #83). Nominal = tamanho da
+      janela; quando o efetivo difere (insumo que já chega em warmup), declara-se o
+      EFETIVO, com a conta no registry (ex. `vol_of_vol`=40, `volatility_regime`=82,
+      `trend_regime`=112).
     - `tft_typing`: tipagem TFT em `{known, unknown}` (I3); obrigatória.
     - `null_policy`: política de nulos (default `"allow"`).
     - `dtype`: tipo de saída (default `"float64"`; flags/regimes usam `"int64"`).
