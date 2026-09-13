@@ -10,6 +10,10 @@ Cobre concept 3.5 A2 / I1 / I6 / I7:
 - persistência delegada ao assembler (`persist(asset)` chamado).
 - #72: a `DatasetQualityGateConfig` é OBRIGATÓRIA no construtor (sem fallback
   desarmado); o helper `_make_use_case` declara o limiar explicitamente.
+- #72 (caminho wireado): o fake do assembler emite `None` no warmup (geometria do
+  adapter real); feature com missing pós-warmup acima do limiar → `DatasetQualityError`
+  e NADA é persistido; abaixo do limiar / `1.0` (desarme explícito) → passa; e a
+  geometria real medida (`trend_regime` nominal 63, efetivo 112) é acusada.
 
 Usa SÓ fakes (não mocks): `FakeMedallionStore`, `FakeIndicatorCalculator`,
 `InMemorySentimentModel` (via `ScoreAndAggregateSentiment` real),
@@ -107,10 +111,11 @@ def _make_use_case(
     store: FakeMedallionStore,
     assembler: InMemoryDatasetAssembler,
     gate_config: DatasetQualityGateConfig = _STRICT_GATE,
+    n: int = _N,
 ) -> BuildDataset:
     """Monta o `BuildDataset` com fakes de todos os ports (gate declarado, #72)."""
     calendar_provider = FakeExchangeCalendarProvider(
-        sessions=[date(2024, 1, 1) + timedelta(days=i) for i in range(_N + 5)]
+        sessions=[date(2024, 1, 1) + timedelta(days=i) for i in range(n + 5)]
     )
     sentiment = ScoreAndAggregateSentiment(
         store=store,
@@ -127,10 +132,10 @@ def _make_use_case(
     )
 
 
-def _seed_store() -> FakeMedallionStore:
+def _seed_store(n: int = _N) -> FakeMedallionStore:
     """`FakeMedallionStore` com candles + fundamentals + news vazia para AAPL."""
     store = FakeMedallionStore()
-    store.write(layer="bronze", table="candle", rows=_candle_rows())
+    store.write(layer="bronze", table="candle", rows=_candle_rows(n))
     store.write(layer="bronze", table="fundamental", rows=_fundamental_rows())
     return store
 
@@ -216,3 +221,101 @@ def test_window_filter_narrows_candles() -> None:
     assert result.n_rows == 4  # noqa: PLR2004
     assert result.start == date(2024, 1, 4)
     assert result.end == date(2024, 1, 7)
+
+
+# -- #72: gate ARMADO reprovando pelo caminho wireado (BuildDataset + fake com None) --
+
+
+def test_quality_gate_rejects_missing_above_threshold_and_blocks_persist() -> None:
+    """#72 — missing pós-warmup acima do limiar ergue `DatasetQualityError` via use case.
+
+    `sentiment_score` (warmup nominal 0) com 1 `None` em 9 linhas retidas → ratio
+    0.1111 > 0.02. O erro nomeia feature e ratio, e `persist` NÃO é chamado: o gate
+    roda ANTES da persistência. Antes da #72 este ramo era inalcançável (fake só `0.0`
+    e limiar `1.0`).
+    """
+    store = _seed_store()
+    assembler = InMemoryDatasetAssembler(effective_warmup={"sentiment_score": 1})
+    use_case = _make_use_case(
+        store=store,
+        assembler=assembler,
+        gate_config=DatasetQualityGateConfig(max_nan_ratio_per_feature=0.02),
+    )
+
+    with pytest.raises(
+        DatasetQualityError, match=r"NaN-ratio above 0\.02.*sentiment_score=0\.1111"
+    ):
+        use_case.execute(BuildDatasetRequest(asset=_ASSET))
+    assert assembler.persisted == []
+
+
+@pytest.mark.parametrize(
+    "threshold",
+    [
+        pytest.param(0.2, id="below-threshold"),
+        pytest.param(1.0, id="explicitly-disarmed"),
+    ],
+)
+def test_quality_gate_passes_same_missing_when_within_threshold_control(threshold: float) -> None:
+    """Controle #72 — o MESMO missing (0.1111) passa com limiar acima dele ou `1.0`.
+
+    Prova que a reprovação do teste anterior vem do limiar, não do fake: com 0.2 o
+    ratio 0.1111 cabe; com `1.0` (desarme explícito) nunca reprova — o defeito original,
+    agora só alcançável por declaração.
+    """
+    store = _seed_store()
+    assembler = InMemoryDatasetAssembler(effective_warmup={"sentiment_score": 1})
+    use_case = _make_use_case(
+        store=store,
+        assembler=assembler,
+        gate_config=DatasetQualityGateConfig(max_nan_ratio_per_feature=threshold),
+    )
+
+    result = use_case.execute(BuildDatasetRequest(asset=_ASSET))
+
+    assert result.n_rows == _N - 1
+    assert assembler.persisted == [_ASSET]
+
+
+def test_quality_gate_flags_feature_whose_effective_warmup_exceeds_nominal() -> None:
+    """#72 — geometria real: `trend_regime` nominal 63 (registry) vs efetivo 112.
+
+    Medido no `DatasetAssembler` real (contract test `test_dataset_quality_gate_geometry`):
+    `trend_regime` = shift(1) + rolling(63) sobre `ema_50` (warmup 50) → 1º valor finito
+    na linha 112 do frame pós-drop. O gate desconta SÓ o nominal (63), então as 49
+    linhas de excesso contam como missing pós-warmup. Com 130 candles (129 retidas): 49
+    `None` em 66 linhas pós-nominal → ratio 0.7424 > 0.02 → reprova nomeando a feature.
+    Isto é o que o gate armado acusa: débito de declaração do registry (finding #72),
+    não ruído do gate.
+    """
+    n = 130
+    store = _seed_store(n)
+    assembler = InMemoryDatasetAssembler(effective_warmup={"trend_regime": 112})
+    use_case = _make_use_case(
+        store=store,
+        assembler=assembler,
+        gate_config=DatasetQualityGateConfig(max_nan_ratio_per_feature=0.02),
+        n=n,
+    )
+
+    with pytest.raises(DatasetQualityError, match=r"trend_regime=0\.7424"):
+        use_case.execute(BuildDatasetRequest(asset=_ASSET))
+    assert assembler.persisted == []
+
+
+def test_quality_gate_passes_when_effective_warmup_matches_nominal_control() -> None:
+    """Controle #72 — mesma fixture (130 candles) sem excesso de warmup → passa a 0.0.
+
+    O fake emite `None` exatamente no warmup NOMINAL de cada feature (geometria
+    default); o gate desconta esse warmup e mede ratio 0 em todas → nada a acusar,
+    mesmo com o limiar mais estrito. Isola a causa do teste anterior no excesso.
+    """
+    n = 130
+    store = _seed_store(n)
+    assembler = InMemoryDatasetAssembler()
+    use_case = _make_use_case(store=store, assembler=assembler, gate_config=_STRICT_GATE, n=n)
+
+    result = use_case.execute(BuildDatasetRequest(asset=_ASSET))
+
+    assert result.n_rows == n - 1
+    assert assembler.persisted == [_ASSET]

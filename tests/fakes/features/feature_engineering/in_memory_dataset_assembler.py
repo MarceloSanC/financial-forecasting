@@ -12,11 +12,21 @@ Modela a convenção do alvo (drop da 1ª linha) e a ordem de colunas do registr
 `feature_columns` na ordem do `FeatureRegistry`. Não calcula features (isso é do
 adapter real, validado pelo contract test); produz comportamento estável.
 
+**Geometria de missing (issue #72):** `feature_rows` reproduz a forma que o adapter
+real entrega ao gate — `None` (NaN normalizado) nas primeiras `warmup` linhas de cada
+feature e finito (`0.0`) depois. Por default o warmup é o **nominal** do registry;
+`effective_warmup={name: k}` sobrescreve por feature para modelar o caso real em que
+o warmup EFETIVO excede o nominal (ex. `trend_regime`: nominal 63, efetivo 112) ou um
+bloco estrutural de missing. Antes da #72 o fake emitia `0.0` em toda linha, e o ramo
+"gate reprova por NaN-ratio" era inalcançável pelo caminho wireado.
+
 Vive em `tests/` (fora do gate `import-linter`); importa SÓ stdlib + os DTOs do port
 e o `FeatureRegistry` do domínio.
 """
 
 from __future__ import annotations
+
+from collections.abc import Mapping
 
 from financial_forecasting.features.feature_engineering.application.ports.out.dataset_assembler import (  # noqa: E501
     DatasetAssemblyInputs,
@@ -37,16 +47,22 @@ _TAIL_COLUMNS = (
 
 
 class InMemoryDatasetAssembler:
-    """Implementação in-memory determinística do contrato `DatasetAssemblerPort`."""
+    """Implementação in-memory determinística do contrato `DatasetAssemblerPort`.
 
-    def __init__(self) -> None:
+    `effective_warmup`: nº de linhas iniciais emitidas como `None` por feature; ausente
+    → warmup nominal do registry (geometria default do adapter real).
+    """
+
+    def __init__(self, *, effective_warmup: Mapping[str, int] | None = None) -> None:
         self.persisted: list[str] = []
         self.last_inputs: DatasetAssemblyInputs | None = None
+        self._effective_warmup: dict[str, int] = dict(effective_warmup or {})
 
     def assemble(self, inputs: DatasetAssemblyInputs) -> DatasetAssemblyResult:
         """Devolve contagens/ordem coerentes; modela o drop da 1ª linha do alvo."""
         self.last_inputs = inputs
-        feature_columns = tuple(spec.name for spec in list_feature_specs())
+        specs = list_feature_specs()
+        feature_columns = tuple(spec.name for spec in specs)
         columns = (*_BASE_LEADING, *feature_columns, *_TAIL_COLUMNS)
 
         days = list(inputs.grid_days)
@@ -54,8 +70,15 @@ class InMemoryDatasetAssembler:
             raise ValueError("not enough rows to compute target_return")
         retained = days[1:]  # drop da 1ª linha (alvo backward)
         n_rows = len(retained)
-        # Feature rows finitas (0.0) — o fake não calcula features; só dá forma ao gate.
-        feature_rows = tuple({name: 0.0 for name in feature_columns} for _ in retained)
+        # Forma do gate (#72): `None` nas primeiras `warmup` linhas (nominal do registry
+        # ou o efetivo injetado), `0.0` finito depois — o fake não calcula features.
+        warmup_by_feature = {
+            spec.name: self._effective_warmup.get(spec.name, spec.warmup_count) for spec in specs
+        }
+        feature_rows = tuple(
+            {name: (None if index < warmup_by_feature[name] else 0.0) for name in feature_columns}
+            for index in range(n_rows)
+        )
         return DatasetAssemblyResult(
             n_rows=n_rows,
             columns=columns,
