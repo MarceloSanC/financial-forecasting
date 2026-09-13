@@ -146,9 +146,12 @@ _FINBERT_PINNED_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
 # para `ratio ∈ [0, 1]`. Por que 0.02 (ponta apertada da faixa 0.02 a 0.05 da issue):
 # no piloto AAPL (~4023 linhas) tolera ≤ ~80 linhas faltantes pós-warmup — acima do
 # maior excesso MEDIDO de warmup efetivo sobre o nominal (`trend_regime` +49,
-# `volatility_regime` +19 — débito do registry, finding da #72), e abaixo de qualquer
-# bloco estrutural de missing (1 trimestre de fundamento ≈ 63 linhas ≈ 1.6%; 1 ano ≈
-# 6%). Apertar para 0.0 exige reconciliar `warmup_count` no registry antes.
+# `volatility_regime` +19 — débito do registry, finding da #72). Limite HONESTO
+# do que ele acusa: 1 trimestre de fundamento ausente (≈ 63 linhas ≈ 1.6%) fica
+# ABAIXO de 0.02 e passa — a auditoria do #80 refez a conta; o gate só reprova a
+# partir de ~1.3 trimestre (≈ 80 linhas). 1 ano (≈ 6%) reprova. Um trimestre
+# faltante nem vira NaN aqui (o as-of faz carry-forward), então o instrumento
+# desse caso é outro. Apertar para 0.0 exige reconciliar `warmup_count` antes.
 _DATASET_MAX_NAN_RATIO_PER_FEATURE = 0.02
 
 # Janela ampla FIXA do calendário XNYS para o wiring do `WalkForwardSplitter`
