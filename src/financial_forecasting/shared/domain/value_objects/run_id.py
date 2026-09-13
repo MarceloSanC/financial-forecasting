@@ -10,8 +10,9 @@ QUALQUER um dos 9 campos (inclusive `None -> valor`) muda o `run_id` (I1).
 Os opcionais `trial_number/fold/seed` entram EXPLICITAMENTE no payload e
 mapeiam para `null` via JSON (`None -> null`); nunca são omitidos, logo
 participam da chave de identidade (invariante I7). O `feature_set_hash` chega
-pré-calculado como string (via `hasher.hash_text("|".join(features_ordered))`
-no chamador — concept D5); não é um VO próprio. O hash é delegado ao port
+pré-calculado como string pelo chamador — hoje `feature_registry.feature_set_hash()`
+(ADR 5.2.0004 D7); o literal `hash_text("|".join(features_ordered))` do concept
+1.4 D5 não tem chamador em `src/`. Não é um VO próprio. O hash é delegado ao port
 `Hasher` injetado na factory; o domínio não importa o port em runtime.
 """
 

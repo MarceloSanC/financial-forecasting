@@ -447,7 +447,7 @@ ignore_imports =
     # `run_baselines` não consome features, mas o `feature_set_hash` do registry
     # é um dos 9 slots do `RunId` (issue #65, ADR 5.2.0004): o run declara de
     # qual registry saiu o dataset lido. Calculado in-process (o mesmo valor que
-    # o `BuildDataset` grava) e não recebido por DTO, para que a identidade
+    # o `BuildDataset` devolve no DTO) e não recebido por DTO, para que a identidade
     # nunca dependa de string fornecida pelo chamador. Mesma classe de débito e
     # mesma condição de saída das arestas de registry acima.
     financial_forecasting.features.modeling.application.use_cases.run_baselines -> financial_forecasting.features.feature_engineering.domain.services.feature_registry
