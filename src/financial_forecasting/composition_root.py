@@ -69,6 +69,9 @@ from financial_forecasting.features.feature_engineering.application.use_cases.bu
 from financial_forecasting.features.feature_engineering.application.use_cases.score_and_aggregate_sentiment import (  # noqa: E501
     ScoreAndAggregateSentiment,
 )
+from financial_forecasting.features.feature_engineering.domain.services.dataset_quality_gate import (  # noqa: E501
+    DatasetQualityGateConfig,
+)
 from financial_forecasting.features.market_data.domain.entities.news_article import (
     NewsArticle,
 )
@@ -135,6 +138,18 @@ from financial_forecasting.shared.infrastructure.config.settings import Settings
 
 # Revisão pinada do FinBERT (espelha o default do adapter; ADR 0.0.0017).
 _FINBERT_PINNED_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
+
+# Limiar de missing do `DatasetQualityGate` (issue #72): NaN-ratio máximo por feature
+# APÓS descontar o warmup nominal do registry. Declarado AQUI (constante revisada em
+# code review, não env var — um override de ambiente poderia desarmar o gate sem
+# rastro) porque o domínio não tem mais default: o old herdava `1.0`, inalcançável
+# para `ratio ∈ [0, 1]`. Por que 0.02 (ponta apertada da faixa 0.02 a 0.05 da issue):
+# no piloto AAPL (~4023 linhas) tolera ≤ ~80 linhas faltantes pós-warmup — acima do
+# maior excesso MEDIDO de warmup efetivo sobre o nominal (`trend_regime` +49,
+# `volatility_regime` +19 — débito do registry, finding da #72), e abaixo de qualquer
+# bloco estrutural de missing (1 trimestre de fundamento ≈ 63 linhas ≈ 1.6%; 1 ano ≈
+# 6%). Apertar para 0.0 exige reconciliar `warmup_count` no registry antes.
+_DATASET_MAX_NAN_RATIO_PER_FEATURE = 0.02
 
 # Janela ampla FIXA do calendário XNYS para o wiring do `WalkForwardSplitter`
 # (Stage 5.2 Task 09; decisão F-T1 opção A do technical 5.2 §5): cobre o span
@@ -444,6 +459,9 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
         sentiment=sentiment,
         asof_join=asof_join,
         assembler=dataset_assembler,
+        quality_gate_config=DatasetQualityGateConfig(
+            max_nan_ratio_per_feature=_DATASET_MAX_NAN_RATIO_PER_FEATURE
+        ),
     )
 
     # BC analytics_store (Stage 4.2, A11): adapter Parquet silver com data_root do

@@ -9,7 +9,8 @@ deferido — sem ele os ports/adapters de 3.1/3.2/3.3 seriam dead-code.
 Depende **só de ports/domain** (LAYOUT §3): nenhum import de `adapters`/`pandas`/
 `duckdb`/`torch`. Recebe/devolve **DTO frozen** — nunca uma entity nem um `DataFrame`
 cruza a fronteira (I6/A2). Os colaboradores são injetados no construtor (composition
-root / testes com fakes).
+root / testes com fakes), **inclusive a `DatasetQualityGateConfig`** — obrigatória
+desde a issue #72 (o limiar de missing é decisão explícita de quem wira, não default).
 
 Pipeline (concept 3.5 §4):
 
@@ -101,9 +102,9 @@ class BuildDataset:
         sentiment: ScoreAndAggregateSentiment,
         asof_join: AsofJoinAdapter,
         assembler: DatasetAssemblerPort,
+        quality_gate_config: DatasetQualityGateConfig,
         asof_policy: FundamentalsAsofPolicy | None = None,
         quality_gate: DatasetQualityGate | None = None,
-        quality_gate_config: DatasetQualityGateConfig | None = None,
         close_hour: time = _DEFAULT_CLOSE_HOUR,
     ) -> None:
         self._store = store
@@ -113,7 +114,10 @@ class BuildDataset:
         self._assembler = assembler
         self._asof_policy = asof_policy or FundamentalsAsofPolicy()
         self._quality_gate = quality_gate or DatasetQualityGate()
-        self._quality_gate_config = quality_gate_config or DatasetQualityGateConfig()
+        # Sem fallback (issue #72): o limiar de missing é declarado por quem monta o
+        # use case (composition root / teste) — não existe mais config "default"
+        # herdada que nasça desarmada.
+        self._quality_gate_config = quality_gate_config
         self._close_hour = close_hour
 
     def execute(self, request: BuildDatasetRequest) -> BuildDatasetResult:

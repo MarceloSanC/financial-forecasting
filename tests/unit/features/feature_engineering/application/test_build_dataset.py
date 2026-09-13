@@ -6,8 +6,10 @@ Cobre concept 3.5 A2 / I1 / I6 / I7:
   assembler real (fake) recebe candles/indicadores/sentimento/as-of alinhados.
 - DTO frozen de entrada e saída; nunca devolve entity nem `DataFrame`.
 - C1: menos de 2 candles → `ValueError` ("not enough rows to compute target_return").
-- propagação de erro do gate (NaN-ratio acima do limite → `DatasetQualityError`).
+- propagação de erro do gate (cobertura temporal impossível → `DatasetQualityError`).
 - persistência delegada ao assembler (`persist(asset)` chamado).
+- #72: a `DatasetQualityGateConfig` é OBRIGATÓRIA no construtor (sem fallback
+  desarmado); o helper `_make_use_case` declara o limiar explicitamente.
 
 Usa SÓ fakes (não mocks): `FakeMedallionStore`, `FakeIndicatorCalculator`,
 `InMemorySentimentModel` (via `ScoreAndAggregateSentiment` real),
@@ -56,6 +58,9 @@ from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 
 _ASSET = "AAPL"
 _N = 10
+# Limiar estrito para os testes que NÃO exercitam missing (o fake emite 0.0 finito):
+# com 0.0 qualquer missing pós-warmup reprovaria — o gate está ARMADO aqui.
+_STRICT_GATE = DatasetQualityGateConfig(max_nan_ratio_per_feature=0.0)
 
 
 def _candle_rows(n: int = _N) -> list[dict[str, object]]:
@@ -101,9 +106,9 @@ def _make_use_case(
     *,
     store: FakeMedallionStore,
     assembler: InMemoryDatasetAssembler,
-    gate_config: DatasetQualityGateConfig | None = None,
+    gate_config: DatasetQualityGateConfig = _STRICT_GATE,
 ) -> BuildDataset:
-    """Monta o `BuildDataset` com fakes de todos os ports."""
+    """Monta o `BuildDataset` com fakes de todos os ports (gate declarado, #72)."""
     calendar_provider = FakeExchangeCalendarProvider(
         sessions=[date(2024, 1, 1) + timedelta(days=i) for i in range(_N + 5)]
     )
@@ -179,12 +184,18 @@ def test_fewer_than_two_candles_raises_c1() -> None:
 
 
 def test_quality_gate_error_propagates() -> None:
-    """Propagação — gate com cobertura mínima impossível levanta `DatasetQualityError`."""
+    """Propagação — gate com cobertura mínima impossível levanta `DatasetQualityError`.
+
+    Exercita o ramo de COBERTURA TEMPORAL (C6), não o de NaN-ratio — o fake emite
+    features finitas; a reprovação por missing tem teste próprio (#72).
+    """
     store = _seed_store()
     use_case = _make_use_case(
         store=store,
         assembler=InMemoryDatasetAssembler(),
-        gate_config=DatasetQualityGateConfig(min_temporal_coverage_days=10_000),
+        gate_config=DatasetQualityGateConfig(
+            max_nan_ratio_per_feature=0.0, min_temporal_coverage_days=10_000
+        ),
     )
 
     with pytest.raises(DatasetQualityError, match="Temporal coverage insufficient"):

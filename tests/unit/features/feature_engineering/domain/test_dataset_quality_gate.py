@@ -7,6 +7,10 @@ Cobre concept 3.5 I5 / C4-C6:
 - C5: NaN-ratio acima do limite, `failing_features` ordenado desc.
 - C6: cobertura temporal insuficiente.
 - happy path: dataset limpo passa.
+- #72 (gate armado): `max_nan_ratio_per_feature` é OBRIGATÓRIO (sem default);
+  controle — `1.0` nunca dispara (o defeito herdado, reproduzido); violação — acima do
+  limiar ergue; abaixo e NO limiar (comparação estrita) não erguem; fora de `[0, 1]`
+  é rejeitado na construção.
 """
 
 from __future__ import annotations
@@ -102,7 +106,7 @@ def test_duplicate_timestamps_raises_c4() -> None:
             timestamps=timestamps,
             rows=rows,
             feature_cols=["rsi_14"],
-            config=DatasetQualityGateConfig(),
+            config=DatasetQualityGateConfig(max_nan_ratio_per_feature=0.0),
         )
 
 
@@ -117,7 +121,9 @@ def test_non_monotonic_timestamps_raises_c4() -> None:
             timestamps=timestamps,
             rows=rows,
             feature_cols=["rsi_14"],
-            config=DatasetQualityGateConfig(require_unique_timestamps=False),
+            config=DatasetQualityGateConfig(
+                max_nan_ratio_per_feature=0.0, require_unique_timestamps=False
+            ),
         )
 
 
@@ -132,7 +138,9 @@ def test_insufficient_temporal_coverage_raises_c6() -> None:
             timestamps=timestamps,
             rows=rows,
             feature_cols=["rsi_14"],
-            config=DatasetQualityGateConfig(min_temporal_coverage_days=10),
+            config=DatasetQualityGateConfig(
+                max_nan_ratio_per_feature=0.0, min_temporal_coverage_days=10
+            ),
         )
 
 
@@ -148,7 +156,9 @@ def test_empty_dataset_fails_coverage() -> None:
             timestamps=[],
             rows=[],
             feature_cols=["rsi_14"],
-            config=DatasetQualityGateConfig(min_temporal_coverage_days=1),
+            config=DatasetQualityGateConfig(
+                max_nan_ratio_per_feature=0.0, min_temporal_coverage_days=1
+            ),
         )
 
 
@@ -160,5 +170,99 @@ def test_length_mismatch_raises() -> None:
             timestamps=[_ts(0)],
             rows=[{"rsi_14": 1.0}, {"rsi_14": 2.0}],
             feature_cols=["rsi_14"],
-            config=DatasetQualityGateConfig(),
+            config=DatasetQualityGateConfig(max_nan_ratio_per_feature=0.0),
         )
+
+
+# -- #72: gate armado — limiar obrigatório, controle e violação ---------------
+
+
+def _rows_all_missing_after_warmup(n: int, col: str, warmup: int) -> list[dict[str, object]]:
+    """`n` linhas: `col` finita no warmup e 100% faltante DEPOIS dele (pior caso)."""
+    return [{col: (1.0 if d < warmup else math.nan)} for d in range(n)]
+
+
+def test_ratio_threshold_is_required_no_inherited_default() -> None:
+    """#72 — construir a config SEM limiar é rejeitado: o chamador declara o número.
+
+    Antes do conserto `DatasetQualityGateConfig()` construía com `1.0` herdado do old —
+    o gate nascia desarmado por omissão. Agora a omissão é um `TypeError`.
+    """
+    with pytest.raises(TypeError):
+        DatasetQualityGateConfig()  # type: ignore[call-arg]
+
+
+def test_threshold_one_never_fires_even_with_all_missing_control() -> None:
+    """Controle #72 — com `1.0` a checagem NUNCA dispara (defeito reproduzido).
+
+    Feature 100% faltante pós-warmup (`ratio == 1.0`) passa porque `1.0 > 1.0` é
+    falso — `ratio ∈ [0, 1]` torna o limiar `1.0` inalcançável. É por isso que o
+    default foi removido; `1.0` continua construível SÓ como desarme explícito.
+    """
+    n, warmup = 60, 14  # rsi_14
+    gate = DatasetQualityGate()
+
+    gate.validate(
+        timestamps=[_ts(d) for d in range(n)],
+        rows=_rows_all_missing_after_warmup(n, "rsi_14", warmup),
+        feature_cols=["rsi_14"],
+        config=DatasetQualityGateConfig(max_nan_ratio_per_feature=1.0),
+    )
+
+
+def test_ratio_above_threshold_raises_naming_feature_and_ratio() -> None:
+    """#72 — feature com ratio acima do limiar ERGUE `DatasetQualityError` (C5).
+
+    `sentiment_score` (warmup 0): 5 faltantes em 100 → ratio 0.05 > 0.02.
+    """
+    n = 100
+    rows = [{"sentiment_score": (math.nan if d < 5 else 0.1)} for d in range(n)]  # noqa: PLR2004
+    gate = DatasetQualityGate()
+
+    with pytest.raises(
+        DatasetQualityError, match=r"NaN-ratio above 0\.02.*sentiment_score=0\.0500"
+    ):
+        gate.validate(
+            timestamps=[_ts(d) for d in range(n)],
+            rows=rows,
+            feature_cols=["sentiment_score"],
+            config=DatasetQualityGateConfig(max_nan_ratio_per_feature=0.02),
+        )
+
+
+def test_ratio_below_threshold_passes_control() -> None:
+    """Controle #72 — abaixo do limiar NÃO ergue: 1 faltante em 100 (0.01) com 0.02."""
+    n = 100
+    rows = [{"sentiment_score": (math.nan if d == 0 else 0.1)} for d in range(n)]
+    gate = DatasetQualityGate()
+
+    gate.validate(
+        timestamps=[_ts(d) for d in range(n)],
+        rows=rows,
+        feature_cols=["sentiment_score"],
+        config=DatasetQualityGateConfig(max_nan_ratio_per_feature=0.02),
+    )
+
+
+def test_ratio_exactly_at_threshold_passes_strict_comparison() -> None:
+    """#72 — NO limiar (ratio == max) passa: a comparação é estrita (`>`), como o old.
+
+    2 faltantes em 100 (0.02) com limiar 0.02 → passa; uma mutação `>=` reprovaria.
+    """
+    n = 100
+    rows = [{"sentiment_score": (math.nan if d < 2 else 0.1)} for d in range(n)]  # noqa: PLR2004
+    gate = DatasetQualityGate()
+
+    gate.validate(
+        timestamps=[_ts(d) for d in range(n)],
+        rows=rows,
+        feature_cols=["sentiment_score"],
+        config=DatasetQualityGateConfig(max_nan_ratio_per_feature=0.02),
+    )
+
+
+@pytest.mark.parametrize("bad", [-0.01, 1.01, math.nan])
+def test_threshold_outside_unit_interval_is_rejected(bad: float) -> None:
+    """#72 — limiar fora de `[0, 1]` (ou NaN) é rejeitado: seria tão inalcançável quanto 1.0+."""
+    with pytest.raises(ValueError, match="max_nan_ratio_per_feature"):
+        DatasetQualityGateConfig(max_nan_ratio_per_feature=bad)

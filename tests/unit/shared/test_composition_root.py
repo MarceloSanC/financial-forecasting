@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from financial_forecasting.composition_root import (
+    _DATASET_MAX_NAN_RATIO_PER_FEATURE,
     ApplicationDependencies,
     _LazyFinbertSentimentModel,
     _LazyOptunaSearch,
@@ -40,6 +41,9 @@ from financial_forecasting.features.feature_engineering.adapters.out.pandas_ta.p
 )
 from financial_forecasting.features.feature_engineering.application.use_cases.build_dataset import (
     BuildDataset,
+)
+from financial_forecasting.features.feature_engineering.domain.services.dataset_quality_gate import (  # noqa: E501
+    DatasetQualityGateConfig,
 )
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
     HyperparameterSearch,
@@ -139,6 +143,22 @@ def test_build_dataset_is_wired_with_real_adapters_not_fakes(tmp_path: Path) -> 
     assert build_dataset._assembler is deps.dataset_assembler
     assert build_dataset._store is deps.store
     assert isinstance(build_dataset._assembler, DatasetAssembler)
+
+
+@pytest.mark.unit
+def test_build_dataset_quality_gate_is_armed_with_declared_threshold(tmp_path: Path) -> None:
+    """#72 — o wiring declara o limiar de missing do gate e ele está ARMADO (< 1.0).
+
+    O old herdava `1.0` (inalcançável para `ratio ∈ [0, 1]`); agora o domínio não tem
+    default e o composition root é quem declara o número. Uma regressão que voltasse
+    a wirar `1.0` (ou trocasse a constante por um "sem limite") reprovaria aqui.
+    """
+    deps = wire_dependencies(settings=Settings(_env_file=None, data_root=tmp_path))
+
+    config = deps.build_dataset._quality_gate_config
+    assert isinstance(config, DatasetQualityGateConfig)
+    assert config.max_nan_ratio_per_feature == _DATASET_MAX_NAN_RATIO_PER_FEATURE
+    assert 0.0 <= config.max_nan_ratio_per_feature < 1.0  # armado: pode reprovar
 
 
 @pytest.mark.unit
