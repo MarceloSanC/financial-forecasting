@@ -11,7 +11,10 @@ Quatro checagens (concept 3.5 I5 / old `dataset_quality_gate.py:87-99`):
 - **(a) warmup + missing** — para cada feature, desconta o seu `warmup_count`
   (do registry) das primeiras linhas e mede o NaN-ratio só **após** o warmup; se
   o ratio exceder `max_nan_ratio_per_feature`, a feature entra em `failing_features`
-  (ordenado desc. por ratio) → `DatasetQualityError` (C5).
+  (ordenado desc. por ratio) → `DatasetQualityError` (C5). O limiar é **declarado
+  pelo chamador** (sem default — issue #72); o warmup descontado é o **nominal** do
+  registry, então feature cujo warmup efetivo excede o nominal aparece aqui como
+  missing pós-warmup (é o que o gate armado acusa — achado, não ruído).
 - **(b) monotonicidade** — timestamps únicos (`require_unique_timestamps`) e
   ordenados crescente (`require_monotonic_timestamps`); violação → erro (C4).
 - **(c) cobertura temporal** — span de dias `>= min_temporal_coverage_days` (C6).
@@ -48,19 +51,33 @@ class DatasetQualityError(DomainError):
 
 @dataclass(frozen=True)
 class DatasetQualityGateConfig:
-    """Configuração imutável do gate (porta verbatim do old `:9-13`, D4).
+    """Configuração imutável do gate (porta do old `:9-13`, D4; limiar armado na #72).
 
     - `max_nan_ratio_per_feature`: NaN-ratio máximo tolerado por feature **após**
-      descontar o warmup (default `1.0` = sem limite, como o old).
+      descontar o warmup. **Obrigatório, sem default** (issue #72): o old herdava
+      `1.0`, e como `ratio ∈ [0, 1]` a comparação estrita `ratio > 1.0` era
+      matematicamente impossível — um gate que nunca dispara é documentação disfarçada
+      de asserção (Evans, *Assertions*). O chamador declara o número (auditável no
+      composition root); `1.0` continua construível **só como desarme explícito**;
+      fora de `[0, 1]` (ou NaN) é rejeitado na construção — seria igualmente
+      inalcançável.
     - `require_unique_timestamps`: exige timestamps sem duplicados (default `True`).
     - `require_monotonic_timestamps`: exige timestamps crescentes (default `True`).
     - `min_temporal_coverage_days`: span mínimo de dias do dataset (default `1`).
     """
 
-    max_nan_ratio_per_feature: float = 1.0
+    max_nan_ratio_per_feature: float
     require_unique_timestamps: bool = True
     require_monotonic_timestamps: bool = True
     min_temporal_coverage_days: int = 1
+
+    def __post_init__(self) -> None:
+        ratio = self.max_nan_ratio_per_feature
+        if math.isnan(ratio) or not 0.0 <= ratio <= 1.0:
+            raise ValueError(
+                f"DatasetQualityGateConfig.max_nan_ratio_per_feature must be within "
+                f"[0.0, 1.0], got {ratio!r}"
+            )
 
 
 def _is_missing(value: object) -> bool:
