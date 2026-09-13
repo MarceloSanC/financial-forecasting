@@ -16,8 +16,9 @@ Três travas, todas parametrizadas sobre `[fake, real]`:
 2. **Emissão do `ar1`** — a única família em que fake e real legitimamente
    divergem (momentos stdlib vs fit da lib — o *shortcut* de Meszaros). Cada
    perna tem seu próprio golden; a perna real usa tolerância relativa de
-   `1e-12` porque o valor vem de um otimizador numérico (qualquer mudança de
-   lógica move MUITO mais que isso), a perna fake é exata.
+   `1e-6` porque o valor vem de um otimizador numérico cujo caminho de
+   convergência varia entre plataformas (qualquer mudança de lógica move MUITO
+   mais que isso), a perna fake é exata.
 3. **Fronteira de erro** — as 15 bordas estruturais/C1/C4/C5/I7 erguem
    `ValueError` com mensagem IDÊNTICA nas duas pernas; o texto exato está
    congelado. É a trava mais sensível ao refactor, porque é exatamente o
@@ -68,11 +69,14 @@ _BUILDERS: dict[str, Callable[[], BaselineForecaster]] = {
 }
 _LEGS = ("fake", "real")
 
-# Tolerância da perna real na família `ar1`: o fit do `statsforecast` é
-# numérico, então o último ulp pode oscilar entre builds da lib. 1e-12 é
-# ordens de grandeza mais apertado que qualquer mudança de LÓGICA (trocar a
-# janela, o horizonte ou a fórmula move o valor na 2ª-3ª casa).
-_REAL_FIT_RTOL = 1e-12
+# Tolerância da perna real na família `ar1`: o fit do `statsforecast` é um
+# otimizador iterativo, e o caminho de convergência muda com BLAS/CPU — o golden
+# foi capturado na imagem Docker local e o runner do CI o reproduz com desvio
+# relativo de ~7.6e-8 (issue #81; 1e-12 reprovava por ruído de plataforma, não
+# por lógica). 1e-6 fica 1 ordem acima desse ruído e 4 ordens abaixo de qualquer
+# mudança de LÓGICA (trocar a janela, o horizonte ou a fórmula move o valor na
+# 2ª-3ª casa). A perna fake (stdlib) continua exata: tolerância 0.0.
+_REAL_FIT_RTOL = 1e-6
 
 # -- fixture determinística (idêntica à do contract test) ----------------------
 
@@ -384,7 +388,7 @@ def test_fake_and_real_agree_exactly_outside_the_ar1_estimation(family: str) -> 
 @pytest.mark.contract
 @pytest.mark.parametrize("leg", _LEGS)
 def test_ar1_emission_matches_the_frozen_grid_of_its_own_leg(leg: str) -> None:
-    """`ar1` é a única família com golden por perna — fake exato, real a 1e-12."""
+    """`ar1` é a única família com golden por perna — fake exato, real a 1e-6."""
     emitted = _forecast(_BUILDERS[leg](), "ar1")
 
     tolerance = 0.0 if leg == "fake" else _REAL_FIT_RTOL
