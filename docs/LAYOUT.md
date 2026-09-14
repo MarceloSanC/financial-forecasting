@@ -237,8 +237,13 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 - **Um use case por arquivo.** `create_order.py`, não `order_use_cases.py`.
 - **Adapters implementam ports.** `PostgresPaymentRepository` satisfaz `PaymentRepository` Protocol.
 - **Fakes implementam os mesmos ports.** `InMemoryPaymentRepository` satisfaz `PaymentRepository` Protocol.
+  Todo port-out tem fake em `tests/fakes/` **e** suíte de contrato `[fake, real]` — gate:
+  `scripts/check_port_coverage.py` (issue #62; baseline em `scripts/arch_baseline.toml`).
 - **Testes unitários usam fakes.** Nenhum teste unitário toca banco ou rede.
 - **Tests de contrato validam a equivalência.** A fake e a implementação real devem passar nos mesmos testes.
+  A fake não pode **ser** a implementação: bloco de lógica idêntico ≥ 15 linhas entre `tests/fakes/**` e
+  `src/**/adapters/**` reprova — a regra compartilhada sobe para `domain/services/` (gate:
+  `scripts/check_fake_parity.py`, issue #62).
 - **Imports sempre absolutos.** Nunca `from ..domain import` — use o caminho completo.
 - **Nenhum import circular.** Se você precisar, é sinal de que a camada está errada.
 - **Shared não importa de features.** O fluxo é sempre: features → shared, nunca o contrário.
