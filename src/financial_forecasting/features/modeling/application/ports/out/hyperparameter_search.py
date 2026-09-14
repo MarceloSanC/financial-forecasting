@@ -97,15 +97,28 @@ class HyperparameterSearch(Protocol):
 
         Returns:
             Identificador do estudo criado.
+
+        Raises:
+            HyperparameterSearchError: o backend de busca falhou (issue #84).
         """
         ...
 
     def ask(self, space: Sequence[SearchDimension]) -> SearchTrial:
-        """Pede o próximo trial, com um valor por dimensão de `space`."""
+        """Pede o próximo trial, com um valor por dimensão de `space`.
+
+        Raises:
+            HyperparameterSearchError: o backend de busca falhou (issue #84).
+        """
         ...
 
     def tell(self, *, trial_number: int, objective_value: float) -> None:
-        """Informa o objetivo observado para o trial de número `trial_number`."""
+        """Informa o objetivo observado para o trial de número `trial_number`.
+
+        Raises:
+            ValueError: `trial_number` não foi pedido a este estudo (bug do
+                chamador).
+            HyperparameterSearchError: o backend de busca falhou (issue #84).
+        """
         ...
 
     def fail(self, *, trial_number: int) -> None:
@@ -115,6 +128,11 @@ class HyperparameterSearch(Protocol):
         contaminaria o amostrador. Mas deixá-lo pendente também não serve: o
         estudo ficaria com trials zumbis. Marcar como falho preserva a garantia
         (amostradores só consideram trials completos) sem o zumbi.
+
+        Raises:
+            ValueError: `trial_number` não foi pedido a este estudo (bug do
+                chamador).
+            HyperparameterSearchError: o backend de busca falhou (issue #84).
         """
         ...
 
@@ -123,5 +141,6 @@ class HyperparameterSearch(Protocol):
 
         Raises:
             ValueError: nenhum trial foi informado ainda (C9).
+            HyperparameterSearchError: o backend de busca falhou (issue #84).
         """
         ...

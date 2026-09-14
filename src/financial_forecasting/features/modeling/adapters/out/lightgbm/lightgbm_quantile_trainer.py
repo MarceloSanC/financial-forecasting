@@ -43,9 +43,13 @@ from typing import TYPE_CHECKING
 
 import lightgbm as lgb
 import numpy as np
+from lightgbm.basic import LightGBMError
 
 from financial_forecasting.features.modeling.application.ports.out.quantile_model_trainer import (
     QuantileTrainingResult,
+)
+from financial_forecasting.features.modeling.domain.exceptions.backend import (
+    ModelTrainingError,
 )
 from financial_forecasting.features.modeling.domain.services.quantile_training_validation import (
     validate_training_structure,
@@ -103,9 +107,7 @@ class LightgbmQuantileTrainer:
         }
         best_iteration_by_horizon: dict[int, int] = {}
         for horizon in sorted(train_labels_by_horizon):
-            fit_matrix, fit_labels = _finite_pairs(
-                train_matrix, train_labels_by_horizon[horizon]
-            )
+            fit_matrix, fit_labels = _finite_pairs(train_matrix, train_labels_by_horizon[horizon])
             if fit_labels.shape[0] < params.min_data_in_leaf:
                 raise ValueError(
                     f"horizon {horizon}: {fit_labels.shape[0]} finite-label train "
@@ -116,8 +118,7 @@ class LightgbmQuantileTrainer:
             )
             if monitor_labels.shape[0] == 0:
                 raise ValueError(
-                    f"horizon {horizon}: early_stop has no finite-label monitor "
-                    "pairs (C3)"
+                    f"horizon {horizon}: early_stop has no finite-label monitor pairs (C3)"
                 )
 
             histories: list[tuple[float, ...]] = []
@@ -137,8 +138,7 @@ class LightgbmQuantileTrainer:
             best_iteration = _select_best_iteration(histories)
             best_iteration_by_horizon[horizon] = best_iteration
             predictions = [
-                booster.predict(test_matrix, num_iteration=best_iteration)
-                for booster in boosters
+                booster.predict(test_matrix, num_iteration=best_iteration) for booster in boosters
             ]
             for position, decision_idx in enumerate(test_decision_indices):
                 grids[decision_idx][horizon] = _finite_grid(
@@ -187,18 +187,30 @@ def _train_one_booster(  # noqa: PLR0913 — estado coeso de um booster (nível 
     monitor_matrix: NDArray[np.float64],
     monitor_labels: NDArray[np.float64],
 ) -> tuple[lgb.Booster, tuple[float, ...]]:
-    """Treina UM booster até o teto (sem parada) e devolve (booster, história)."""
-    train_set = lgb.Dataset(fit_matrix, label=fit_labels)
-    monitor_set = lgb.Dataset(monitor_matrix, label=monitor_labels, reference=train_set)
+    """Treina UM booster até o teto (sem parada) e devolve (booster, história).
+
+    A chamada à lib fica atrás da tradução da issue #84: `LightGBMError` (subclasse
+    direta de `Exception` — `lightgbm/basic.py`; ex. `alpha` fora de (0, 1),
+    `num_leaves` inválido, labels/dados desalinhados no C++), `ValueError`/`TypeError`
+    do wrapper Python (62/44 sítios em lightgbm 4.7) viram `ModelTrainingError` com a
+    original em `__cause__`. `_history_from` (mecânica de avaliação, R3) fica FORA:
+    o seu `ValueError` é regra do adapter, não falha da lib.
+    """
     evals: dict[str, dict[str, list[float]]] = {}
-    booster = lgb.train(
-        _booster_params(params, tau),
-        train_set,
-        num_boost_round=params.num_boost_round_max,
-        valid_sets=[monitor_set],
-        valid_names=[_MONITOR_NAME],
-        callbacks=[lgb.record_evaluation(evals)],
-    )
+    try:
+        train_set = lgb.Dataset(fit_matrix, label=fit_labels)
+        monitor_set = lgb.Dataset(monitor_matrix, label=monitor_labels, reference=train_set)
+        booster = lgb.train(
+            _booster_params(params, tau),
+            train_set,
+            num_boost_round=params.num_boost_round_max,
+            valid_sets=[monitor_set],
+            valid_names=[_MONITOR_NAME],
+            callbacks=[lgb.record_evaluation(evals)],
+        )
+    except (LightGBMError, ValueError, TypeError) as exc:
+        msg = f"lightgbm failed for tau={tau}: {type(exc).__name__}: {exc}"
+        raise ModelTrainingError(msg) from exc
     history = _history_from(evals, ceiling=params.num_boost_round_max)
     return booster, history
 
@@ -242,10 +254,7 @@ def _select_best_iteration(histories: Sequence[Sequence[float]]) -> int:
             f"histories must be non-empty and equal-length; got "
             f"{[len(history) for history in histories]}"
         )
-    means = [
-        fmean(history[iteration] for history in histories)
-        for iteration in range(length)
-    ]
+    means = [fmean(history[iteration] for history in histories) for iteration in range(length)]
     best_index = min(range(length), key=lambda iteration: (means[iteration], iteration))
     return best_index + 1
 
@@ -269,9 +278,7 @@ def _finite_pairs(
     return matrix[mask], label_array[mask]
 
 
-def _finite_grid(
-    values: Iterable[float], *, decision_idx: int, horizon: int
-) -> tuple[float, ...]:
+def _finite_grid(values: Iterable[float], *, decision_idx: int, horizon: int) -> tuple[float, ...]:
     """Materializa a grade crua de uma decisão, erguendo em não finito (C5)."""
     grid = tuple(float(value) for value in values)
     if any(not math.isfinite(value) for value in grid):
@@ -280,4 +287,3 @@ def _finite_grid(
             f"horizon {horizon}: {grid} (C5)"
         )
     return grid
-

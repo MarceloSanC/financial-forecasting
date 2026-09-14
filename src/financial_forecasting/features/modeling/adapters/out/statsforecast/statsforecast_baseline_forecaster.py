@@ -47,6 +47,9 @@ from typing import TYPE_CHECKING
 import numpy as np
 from statsforecast.models import ARIMA
 
+from financial_forecasting.features.modeling.domain.exceptions.backend import (
+    ModelTrainingError,
+)
 from financial_forecasting.features.modeling.domain.services.baseline_emission import (
     emit_baseline_grids,
 )
@@ -86,6 +89,17 @@ def _fit_ar1(returns: Sequence[float]) -> tuple[float, float, float]:
     fitted = model.model_
     coef = fitted["coef"]
     return float(coef["intercept"]), float(coef["ar1"]), float(fitted["sigma2"])
+
+
+# Vocabulário de falha da estimação em `statsforecast` 2.1 (`arima.py`), ENUMERADO
+# (issue #84): `ValueError` ("non-stationary AR part", "Too few non-missing
+# observations", "Not enough data to fit the model"…) e `RuntimeError` ("No ARIMA
+# model able to be estimated"); `numpy.linalg.LinAlgError` É `ValueError`. Os
+# `raise Exception` bare da lib estão todos em caminhos de `xreg`/`fixed`/
+# regressores, que este fit univariado sem regressores nunca alcança — por isso a
+# lista é enumerada e não há `except Exception`. `KeyError` cobre o dict do port do
+# R sem a chave esperada (mudança de versão da lib).
+_BACKEND_ERRORS: tuple[type[BaseException], ...] = (ValueError, RuntimeError, KeyError)
 
 
 class StatsforecastBaselineForecaster:
@@ -145,7 +159,14 @@ class StatsforecastBaselineForecaster:
                 "ar1 train series has zero variance (constant returns) — "
                 "cannot estimate AR(1) moments"
             )
-        mu, phi, sigma2_eps = self._fit_ar1(train)
+        # A tradução envolve o SEAM, não só o default `_fit_ar1`: um estimador
+        # injetado que falhe como a lib falha (RuntimeError) também vira o tipo do
+        # contrato — é o que o contract test da #84 exercita na perna real.
+        try:
+            mu, phi, sigma2_eps = self._fit_ar1(train)
+        except _BACKEND_ERRORS as exc:
+            msg = f"statsforecast AR(1) fit failed: {type(exc).__name__}: {exc}"
+            raise ModelTrainingError(msg) from exc
         if not (math.isfinite(mu) and math.isfinite(phi) and math.isfinite(sigma2_eps)):
             raise ValueError(
                 "ar1 fit produced non-finite parameters "
@@ -158,7 +179,6 @@ class StatsforecastBaselineForecaster:
             )
         if sigma2_eps <= 0.0:
             raise ValueError(
-                f"ar1 fit produced sigma2_eps <= 0 (sigma2_eps={sigma2_eps}) — "
-                "degenerate fit (C4)"
+                f"ar1 fit produced sigma2_eps <= 0 (sigma2_eps={sigma2_eps}) — degenerate fit (C4)"
             )
         return mu, phi, sigma2_eps

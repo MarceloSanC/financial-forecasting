@@ -15,28 +15,51 @@ existe para absorver.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 import optuna
 from optuna.distributions import FloatDistribution, IntDistribution
+from optuna.exceptions import OptunaError
 from optuna.samplers import TPESampler
 from optuna.trial import TrialState
 
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
     SearchTrial,
 )
+from financial_forecasting.features.modeling.domain.exceptions.backend import (
+    HyperparameterSearchError,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterator, Sequence
 
     from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (  # noqa: E501
         SearchDimension,
     )
 
 _INT_KIND = "int"
+# Vocabulário de falha do Optuna 4.9 (issue #84), ENUMERADO: `OptunaError` (raiz
+# própria da lib, subclasse direta de `Exception` — `StorageInternalError`,
+# `DuplicatedStudyError`, `TrialPruned`…), `RuntimeError` (25 sítios — estado interno
+# do estudo/storage) e `KeyError` (36 — lookups internos). `ValueError` fica FORA:
+# no ask-and-tell ele é a resposta do estudo a uso indevido pelo CHAMADOR (trial
+# desconhecido, `low > high`, dizer duas vezes) — o mesmo `ValueError` que o fake
+# ergue, e é o contrato de `best_trial` (C9).
+_BACKEND_ERRORS: tuple[type[BaseException], ...] = (OptunaError, RuntimeError, KeyError)
 # A varredura roda dezenas de trials; o log padrão do Optuna imprime uma linha
 # por trial e polui a saída dos testes e do fluxo autônomo.
 optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+
+@contextmanager
+def _translating_backend_errors(operation: str) -> Iterator[None]:
+    """Falha ENUMERADA da lib numa operação do estudo → `HyperparameterSearchError`."""
+    try:
+        yield
+    except _BACKEND_ERRORS as exc:
+        msg = f"optuna failed in {operation}: {type(exc).__name__}: {exc}"
+        raise HyperparameterSearchError(msg) from exc
 
 
 def _distribution(dimension: SearchDimension) -> Any:  # noqa: ANN401 — tipo da lib
@@ -56,17 +79,19 @@ class OptunaSearch:
 
     def create_study(self, *, seed: int, direction: str = "minimize") -> str:
         """Cria o estudo com amostrador semeado e devolve seu nome."""
-        self._study = optuna.create_study(
-            direction=direction,
-            sampler=TPESampler(seed=seed),
-        )
+        with _translating_backend_errors("create_study"):
+            self._study = optuna.create_study(
+                direction=direction,
+                sampler=TPESampler(seed=seed),
+            )
         return str(self._study.study_name)
 
     def ask(self, space: Sequence[SearchDimension]) -> SearchTrial:
         """Pede o próximo trial com as distribuições fixadas pelo espaço."""
         study = self._require_study()
         distributions = {dimension.name: _distribution(dimension) for dimension in space}
-        trial = study.ask(fixed_distributions=distributions)
+        with _translating_backend_errors("ask"):
+            trial = study.ask(fixed_distributions=distributions)
         # A fronteira devolve sempre `float` (contrato do port); reconverter por
         # `kind` é do use case.
         return SearchTrial(
@@ -77,12 +102,14 @@ class OptunaSearch:
     def tell(self, *, trial_number: int, objective_value: float) -> None:
         """Informa o objetivo observado, identificando o trial pelo NÚMERO."""
         study = self._require_study()
-        study.tell(trial_number, float(objective_value))
+        with _translating_backend_errors("tell"):
+            study.tell(trial_number, float(objective_value))
 
     def fail(self, *, trial_number: int) -> None:
         """Marca o trial como falho no estudo (sem objetivo)."""
         study = self._require_study()
-        study.tell(trial_number, state=TrialState.FAIL)
+        with _translating_backend_errors("fail"):
+            study.tell(trial_number, state=TrialState.FAIL)
 
     def best_trial(self) -> SearchTrial:
         """Melhor trial informado; ergue se nenhum foi (C9).
@@ -93,7 +120,8 @@ class OptunaSearch:
         """
         study = self._require_study()
         try:
-            best = study.best_trial
+            with _translating_backend_errors("best_trial"):
+                best = study.best_trial
         except ValueError as error:
             msg = "nenhum trial informado — não há melhor trial (C9)"
             raise ValueError(msg) from error
@@ -103,6 +131,12 @@ class OptunaSearch:
         )
 
     def _require_study(self) -> optuna.Study:
+        """Erro de WIRING (não da lib): `RuntimeError`, fora do contrato de propósito.
+
+        Não é traduzido (issue #84): quem chama `ask`/`tell` sem `create_study` tem um
+        bug de programação, e o sweep deixa esse tipo propagar em vez de o mascarar
+        como "trial inviável".
+        """
         if self._study is None:
             msg = "create_study precisa ser chamado antes de ask/tell/best_trial"
             raise RuntimeError(msg)

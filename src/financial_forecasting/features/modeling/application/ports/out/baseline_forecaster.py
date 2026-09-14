@@ -69,6 +69,8 @@ class BaselineForecaster(Protocol):
         Raises:
             ValueError: janela/train insuficiente (C1), entrada ou emissão
                 não-finita (C5), fit degenerado (C4 — adapter real) ou
-                argumentos estruturalmente inválidos.
+                argumentos estruturalmente inválidos — bug do CHAMADOR.
+            ModelTrainingError: o backend de estimação (a lib) falhou ao
+                ajustar o AR(1); a original fica em `__cause__` (issue #84).
         """
         ...

@@ -225,6 +225,9 @@ class TftTrainer(Protocol):
         Raises:
             ValueError: histórico insuficiente (C3), estrutura inconsistente
                 (C4), emissão não finita (C5) ou treino sem checkpoint
-                utilizável (C10).
+                utilizável (C10) — regra do port, erguida ANTES/DEPOIS da lib.
+            ModelTrainingError: o backend (pytorch-forecasting/lightning/torch)
+                falhou ao montar, treinar, restaurar ou predizer; a original
+                fica em `__cause__` (issue #84).
         """
         ...

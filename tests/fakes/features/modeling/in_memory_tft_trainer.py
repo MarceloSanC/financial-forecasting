@@ -50,6 +50,9 @@ from typing import TYPE_CHECKING, Any
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
     TftTrainingResult,
 )
+from financial_forecasting.features.modeling.domain.exceptions.backend import (
+    ModelTrainingError,
+)
 from financial_forecasting.features.modeling.domain.services.tft_panel_geometry import (
     resolve_panel_geometry,
 )
@@ -68,9 +71,20 @@ _MEDIAN_LEVEL = 0.5
 
 
 class InMemoryTftTrainer:
-    """Fake determinístico que satisfaz o port `TftTrainer` por duck-typing."""
+    """Fake determinístico que satisfaz o port `TftTrainer` por duck-typing.
 
-    def __init__(self) -> None:
+    `simulate_backend_failure`: quando informado, o fake ergue a exceção do contrato
+    (`ModelTrainingError`) com essa mensagem no MESMO ponto em que o adapter real chama a
+    biblioteca — DEPOIS da regra do port (issue #84). É o que permite ao contract
+    test provar que fake e real erguem o mesmo tipo quando "a lib falhou".
+    """
+
+    # Default de CLASSE: subclasses de teste que redefinem `__init__` sem chamar
+    # `super().__init__()` continuam sem falha simulada.
+    _simulate_backend_failure: str | None = None
+
+    def __init__(self, *, simulate_backend_failure: str | None = None) -> None:
+        self._simulate_backend_failure = simulate_backend_failure
         # Histórico COMPLETO das chamadas — consumido pelas asserções
         # estruturais de A6 (faixas de decisão por fold) e A10 (fit-only na
         # varredura). Guardar só a última deixaria os folds anteriores sem
@@ -138,6 +152,11 @@ class InMemoryTftTrainer:
         panel_size = geometry.panel_size
         fitted = geometry.fitted_decisions
         monitored = geometry.monitored_decisions
+        if self._simulate_backend_failure is not None:
+            # No ponto em que o real monta os `TimeSeriesDataSet` — depois da regra.
+            raise ModelTrainingError(self._simulate_backend_failure) from RuntimeError(
+                "simulated backend failure"
+            )
 
         center, scale = self._fit_normalizer(target, fitted, max_horizon)
         val_loss_by_epoch = self._simulated_history(params)

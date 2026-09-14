@@ -20,6 +20,9 @@ from __future__ import annotations
 from statistics import fmean
 from typing import TYPE_CHECKING
 
+from financial_forecasting.features.modeling.domain.exceptions.backend import (
+    ModelTrainingError,
+)
 from financial_forecasting.features.modeling.domain.services.baseline_emission import (
     emit_baseline_grids,
 )
@@ -39,7 +42,20 @@ _MIN_AR1_TRAIN = 3
 
 
 class FakeBaselineForecaster:
-    """Implementação in-memory determinística do contrato `BaselineForecaster`."""
+    """Implementação in-memory determinística do contrato `BaselineForecaster`.
+
+    `simulate_backend_failure`: quando informado, o fake ergue a exceção do contrato
+    (`ModelTrainingError`) com essa mensagem no MESMO ponto em que o adapter real chama a
+    biblioteca — DEPOIS da regra do port (issue #84). É o que permite ao contract
+    test provar que fake e real erguem o mesmo tipo quando "a lib falhou".
+    """
+
+    # Default de CLASSE: subclasses de teste que redefinem `__init__` sem chamar
+    # `super().__init__()` continuam sem falha simulada.
+    _simulate_backend_failure: str | None = None
+
+    def __init__(self, *, simulate_backend_failure: str | None = None) -> None:
+        self._simulate_backend_failure = simulate_backend_failure
 
     def forecast(  # noqa: PLR0913 — assinatura do port (parâmetros coesos)
         self,
@@ -53,7 +69,7 @@ class FakeBaselineForecaster:
     ) -> Mapping[int, GridByHorizon]:
         """Emite a grade crua por decisão x horizonte (ver docstring do port)."""
         return emit_baseline_grids(
-            _ar1_train_moments,
+            self._estimate_ar1,
             spec=spec,
             returns=returns,
             train_end_idx=train_end_idx,
@@ -61,6 +77,19 @@ class FakeBaselineForecaster:
             horizons=horizons,
             quantile_levels=quantile_levels,
         )
+
+    def _estimate_ar1(self, train: Sequence[float]) -> tuple[float, float, float]:
+        """Momentos stdlib — ou a falha simulada do backend, no ponto do fit real.
+
+        Os guards (C1, variância zero) rodam ANTES da falha simulada, como no adapter
+        real: entrada inválida continua `ValueError` mesmo com o backend quebrado.
+        """
+        moments = _ar1_train_moments(train)
+        if self._simulate_backend_failure is not None:
+            raise ModelTrainingError(self._simulate_backend_failure) from RuntimeError(
+                "simulated backend failure"
+            )
+        return moments
 
 
 def _ar1_train_moments(train: Sequence[float]) -> tuple[float, float, float]:
@@ -78,8 +107,7 @@ def _ar1_train_moments(train: Sequence[float]) -> tuple[float, float, float]:
     variance = sum((r - mu) ** 2 for r in train) / n
     if variance <= 0.0:
         raise ValueError(
-            "ar1 train series has zero variance (constant returns) — "
-            "cannot estimate AR(1) moments"
+            "ar1 train series has zero variance (constant returns) — cannot estimate AR(1) moments"
         )
     autocov1 = sum((train[t] - mu) * (train[t - 1] - mu) for t in range(1, n)) / n
     phi = autocov1 / variance
