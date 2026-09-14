@@ -46,6 +46,16 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
 _ORACLE = _REPO_ROOT / "data" / "processed" / "dataset_tft" / "AAPL" / "dataset_tft_AAPL.parquet"
 _ORACLE_N_COLS = 62
 _N = 300
+# Colunas do oráculo que NÃO são feature do registry (base + cauda, concept 3.5 §9).
+_NON_FEATURE_COLUMNS = (
+    "timestamp",
+    "asset_id",
+    "fundamentals_effective_date",
+    "day_of_week",
+    "month",
+    "target_return",
+    "time_idx",
+)
 
 
 def _oracle_columns() -> list[str]:
@@ -135,11 +145,16 @@ def test_assembler_feature_block_order_follows_registry() -> None:
 
 
 def test_full_pipeline_against_bronze_if_available(tmp_path: Path) -> None:
-    """Pipeline completo via wiring real — skip se bronze/`transformers` ausentes.
+    """Pipeline completo via wiring real — skip se bronze/`transformers`/oráculo ausentes.
 
-    Quando a bronze `candle`/`fundamental` de AAPL e o extra `sentiment`
-    estiverem presentes, roda `BuildDataset` AAPL e confere `n_features`/hash. Sem
-    eles, pula (condição documentada — concept 3.5 A6, technical §5 risco do oráculo).
+    Quando a bronze `candle`/`fundamental` de AAPL, o extra `sentiment` e o oráculo
+    estiverem presentes, roda `BuildDataset` AAPL e confere **contagens contra o
+    oráculo** (issue #32, F3): `n_rows` igual às linhas do parquet (4023, ADR
+    3.5.0002) e `n_features` igual às colunas de feature do oráculo (62 menos base/cauda).
+    Antes o assert era `n_rows > 0` — que qualquer montagem satisfaz. Sem os
+    pré-requisitos, pula (condição documentada — concept 3.5 A6, technical §5 risco
+    do oráculo). O caminho real (`PandasTaIndicatorCalculator` → `DatasetAssembler`
+    com o validador de indicadores da #32) é o que roda aqui.
     """
     # A guarda checa `transformers`, NÃO `torch`: desde a Stage 5.4 (ADR 5.4.0003)
     # o `torch` é dependência principal e está sempre instalado, então usá-lo como
@@ -153,12 +168,17 @@ def test_full_pipeline_against_bronze_if_available(tmp_path: Path) -> None:
     bronze_candle = Path("data") / "bronze" / "candle"
     if not bronze_candle.exists() or not any(bronze_candle.rglob("*.parquet")):
         pytest.skip("bronze candle de AAPL ausente — pula pipeline real")
+    if not _ORACLE.exists():
+        pytest.skip("oráculo dataset_tft AAPL ausente — sem contagem de referência")
+    oracle_rows = pq.read_metadata(_ORACLE).num_rows
+    oracle_feature_count = len(_oracle_columns()) - len(_NON_FEATURE_COLUMNS)
 
     # Lê a bronze real (data/) mas persiste o resultado em tmp_path (não clobera o
     # oráculo): o assembler usa `data_root/processed/dataset_tft`.
     deps = wire_dependencies(settings=Settings(_env_file=None, data_root=Path("data")))
     deps.dataset_assembler._dataset_root = tmp_path  # type: ignore[attr-defined]
     result = deps.build_dataset.execute(BuildDatasetRequest(asset="AAPL"))
-    assert result.n_rows > 0
+    assert result.n_rows == oracle_rows
+    assert result.n_features == oracle_feature_count
     assert result.start <= result.end
     assert isinstance(result.start, date)
