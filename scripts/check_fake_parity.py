@@ -206,7 +206,7 @@ def main() -> int:
         f"adapter:L{blocks[0].adapter_line})"
         for key, blocks in violations.items()
     }
-    new, dead = lib.reconcile(GATE, details, baseline)  # type: ignore[attr-defined]
+    new, dead = lib.reconcile(details, baseline)  # type: ignore[attr-defined]
     return int(lib.report(GATE, new, dead, len(baseline)))  # type: ignore[attr-defined]
 
 

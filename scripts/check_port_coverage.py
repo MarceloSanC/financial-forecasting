@@ -215,7 +215,7 @@ def main() -> int:
         for port in ports
         if port.violation is not None
     }
-    new, dead = lib.reconcile(GATE, violations, baseline)  # type: ignore[attr-defined]
+    new, dead = lib.reconcile(violations, baseline)  # type: ignore[attr-defined]
     return int(lib.report(GATE, new, dead, len(baseline)))  # type: ignore[attr-defined]
 
 

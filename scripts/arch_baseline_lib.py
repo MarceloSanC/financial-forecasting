@@ -15,8 +15,10 @@ o mínimo que os dois gates precisam, e nasce aqui para que #61 o reutilize):
 A chave de identidade de cada entrada é específica do gate (`key` no TOML); o script
 dono explica no seu docstring como a chave é montada.
 
-Stdlib-only (`tomllib` é stdlib desde o 3.11). Importado pelos scripts via
-`importlib` a partir de `scripts/`, como os demais helpers de gate.
+Stdlib-only (`tomllib` é stdlib desde o 3.11). `scripts/` não é pacote: os dois
+gates carregam este módulo por `importlib.util.spec_from_file_location` relativo ao
+próprio `__file__` (e registram-no em `sys.modules` antes de executar — dataclass com
+annotations adiadas precisa disso).
 """
 
 from __future__ import annotations
@@ -70,7 +72,7 @@ def load_baseline(gate: str, path: Path = BASELINE_PATH) -> dict[str, BaselineEn
 
 
 def reconcile(
-    gate: str, violations: dict[str, str], baseline: dict[str, BaselineEntry]
+    violations: dict[str, str], baseline: dict[str, BaselineEntry]
 ) -> tuple[list[str], list[str]]:
     """Cruza violações medidas x baseline.
 

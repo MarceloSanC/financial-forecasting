@@ -169,9 +169,7 @@ def test_baseline_tolerates_matching_entry_and_flags_dead_entry(
     )
     baseline = baseline_lib.load_baseline("fake_parity", toml)
 
-    new, dead = baseline_lib.reconcile(
-        "fake_parity", {"a <-> b": "18 linhas", "c <-> d": "20 linhas"}, baseline
-    )
+    new, dead = baseline_lib.reconcile({"a <-> b": "18 linhas", "c <-> d": "20 linhas"}, baseline)
 
     assert new == ["c <-> d: 20 linhas"]
     assert dead == ["morta <-> morta (motivo: já consertado; issue #75)"]
