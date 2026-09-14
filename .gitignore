@@ -109,3 +109,35 @@ tree.txt
 # Saída do CSVLogger que o `Trainer` interno do `predict` cria (Stage 5.4).
 # O adapter passa `logger=False`, mas qualquer uso direto da lib recria isto.
 lightning_logs/
+
+# ---------------------------------------------------------------------------
+# LaTeX — texto do TCC em `text/` (abnTeX2). Versionar só fontes
+# (.tex, .bib, .cls/.sty/.bst, imagens); ignorar tudo que a compilação gera.
+# Padrões escopados a `text/` para não esconder arquivos de outras pastas.
+# ---------------------------------------------------------------------------
+text/*.bbl
+text/*.bcf
+text/*.blg
+text/*.brf
+text/*.fdb_latexmk
+text/*.fls
+text/*.idx
+text/*.ilg
+text/*.ind
+text/*.lof
+text/*.loq
+text/*.lot
+text/*.nav
+text/*.nlg
+text/*.nlo
+text/*.nls
+text/*.out
+text/*.run.xml
+text/*.snm
+text/*.spl
+text/*.synctex.gz
+text/*.toc
+text/*.xdv
+text/**/*.aux
+text/**/*.bib.bak
+text/Main.pdf
