@@ -30,6 +30,9 @@ import pandera.pandas as pa
 import pyarrow.parquet as pq
 import pytest
 
+from financial_forecasting.features.feature_engineering.adapters.out.pandas import (
+    dataset_assembler as assembler_module,
+)
 from financial_forecasting.features.feature_engineering.adapters.out.pandas.dataset_assembler import (  # noqa: E501
     DatasetAssembler,
 )
@@ -47,6 +50,10 @@ from financial_forecasting.features.feature_engineering.application.ports.out.in
 )
 from financial_forecasting.features.feature_engineering.domain.services.fundamentals_asof_policy import (  # noqa: E501
     AntiLeakageError,
+)
+from financial_forecasting.features.feature_engineering.domain.services.indicator_spec import (
+    INDICATOR_SPECS,
+    IndicatorSpec,
 )
 from financial_forecasting.features.market_data.domain.entities.candle import Candle
 from tests.fakes.features.feature_engineering.in_memory_indicator_calculator import (
@@ -473,3 +480,28 @@ def test_tolerance_is_one_ulp_of_float32(
             assembler.assemble(indicator_inputs)
     else:
         assembler.assemble(indicator_inputs)
+
+
+def test_registry_indicator_without_pure_oracle_is_refused_not_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#32 — indicador novo no registry SEM oráculo puro ergue, em vez de passar sem conferir.
+
+    É a guarda contra o falso verde de segunda ordem que a #32 existe para matar: o
+    validador só é honesto se cobre TODO o registry; um `IndicatorSpec` que o oráculo não
+    reproduz precisa reprovar o build, não ser ignorado. Substitui o registry visto pelo
+    módulo do assembler por um com uma chave extra (o `MappingProxyType` real é imutável).
+    """
+    extra = IndicatorSpec(
+        name="obv_probe",
+        family="volume",
+        source_cols=("close", "volume"),
+        warmup=1,
+        anti_leakage_tag="trailing_window_causal",
+    )
+    monkeypatch.setattr(
+        assembler_module, "INDICATOR_SPECS", {**INDICATOR_SPECS, "obv_probe": extra}
+    )
+
+    with pytest.raises(AntiLeakageError, match=r"no pure oracle for indicators \['obv_probe'\]"):
+        DatasetAssembler().assemble(_build_inputs())
