@@ -109,10 +109,11 @@ def ema(close: Sequence[Number], length: int) -> OutSeq:
     first = next((index for index, value in enumerate(values) if value is not None), None)
     if first is None or first + length > n:
         return (None,) * n
-    seed = _mean_of_valid(values[first : first + length])
-    if seed is None:
-        return (None,) * n
-    return _ewm_recursion(values, 2.0 / (length + 1.0), first + length - 1, seed)
+    # A janela começa no 1º válido, então tem >= 1 valor: a média sempre existe.
+    window = [value for value in values[first : first + length] if value is not None]
+    return _ewm_recursion(
+        values, 2.0 / (length + 1.0), first + length - 1, sum(window) / len(window)
+    )
 
 
 def rma(seq: Sequence[Number], length: int) -> OutSeq:

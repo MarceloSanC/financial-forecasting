@@ -163,3 +163,35 @@ def test_volatility_zero_previous_close_yields_none() -> None:
     """`pct_change` com base 0 → `None` (não `inf`)."""
     closes = [0.0, 1.0, *[1.0 + i for i in range(30)]]
     assert f.volatility_20d(closes)[20] is None
+
+
+# -- `None` fora do contrato do port (entity garante close finito) — sem estado quebrado --
+
+
+def test_ema_interior_none_yields_none_without_touching_the_state() -> None:
+    """`None` interior sai como `None`; a recursão segue do último estado (não decai)."""
+    out = f.ema([1.0, 2.0, 3.0, None, 3.0], 3)
+    assert out[3] is None
+    assert out[4] == pytest.approx(((0.5) * 2.0 + 0.5 * 3.0) / (0.5 + 0.5))
+
+
+def test_rma_all_none_window_is_all_none_and_rejects_non_positive_length() -> None:
+    assert f.rma([None, None, None, 1.0], 3) == (None,) * 4
+    assert f.rma([1.0], 3) == (None,)  # mais curta que a janela
+    with pytest.raises(ValueError, match="length > 0"):
+        f.rma([1.0], 0)
+
+
+def test_ema_all_none_window_after_first_valid_is_all_none() -> None:
+    """Semente sem valor válido (janela toda `None` após o 1º válido isolado)."""
+    assert f.ema([None, 1.0], 3) == (None, None)
+
+
+def test_rsi_none_close_breaks_the_diff_pair_into_none() -> None:
+    """`close[t]` ou `close[t-1]` faltante → ganho/perda `None` na posição `t`."""
+    closes: list[float | None] = [100.0 + i for i in range(30)]
+    closes[20] = None
+    out = f.rsi(closes, 14)
+    assert out[19] is not None
+    assert out[20] is None
+    assert out[21] is None  # o par (20, 21) também tem o `None`
