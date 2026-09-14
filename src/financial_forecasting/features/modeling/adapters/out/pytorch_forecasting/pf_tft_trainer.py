@@ -56,6 +56,10 @@ from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from pytorch_forecasting import QuantileLoss, TemporalFusionTransformer, TimeSeriesDataSet
 from pytorch_forecasting.data.encoders import GroupNormalizer
 
+from financial_forecasting.features.modeling.domain.services.tft_panel_geometry import (
+    resolve_panel_geometry,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -89,84 +93,6 @@ class _TftDatasets:
     normalizer_scale: float
     fitted_decision_count: int
     monitored_decision_count: int
-
-
-def _validate_structure(  # noqa: PLR0913 — validação coesa da fronteira (C4)
-    *,
-    feature_names: Sequence[str],
-    known_feature_names: Sequence[str],
-    rows: Sequence[Sequence[float]],
-    target: Sequence[float],
-    train_decision_indices: Sequence[int],
-    early_stop_decision_indices: Sequence[int],
-    test_decision_indices: Sequence[int],
-    max_horizon: int,
-    horizons: Sequence[int],
-) -> None:
-    """C4 — mesma regra do fake, para a suite de contrato ter paridade."""
-    if len(target) != len(rows):
-        msg = f"len(target)={len(target)} != len(rows)={len(rows)} (C4)"
-        raise ValueError(msg)
-    width = len(feature_names)
-    for position, row in enumerate(rows):
-        if len(row) != width:
-            msg = f"rows[{position}] tem {len(row)} colunas, esperado {width} (C4)"
-            raise ValueError(msg)
-    unknown_known = set(known_feature_names) - set(feature_names)
-    if unknown_known:
-        msg = f"known_feature_names não contido em feature_names: {sorted(unknown_known)} (C4)"
-        raise ValueError(msg)
-    if max_horizon < 1:
-        msg = f"max_horizon deve ser >= 1, recebido {max_horizon} (C4)"
-        raise ValueError(msg)
-    if not horizons:
-        msg = "horizons não pode ser vazio (C4)"
-        raise ValueError(msg)
-    out_of_range = [h for h in horizons if not 1 <= h <= max_horizon]
-    if out_of_range:
-        msg = f"horizons {out_of_range} fora de 1..{max_horizon} (C4)"
-        raise ValueError(msg)
-    if not early_stop_decision_indices:
-        msg = "early_stop_decision_indices vazio — sem monitor não há seleção de época (C4)"
-        raise ValueError(msg)
-
-    panel_size = len(rows)
-    for name, indices in (
-        ("train_decision_indices", train_decision_indices),
-        ("early_stop_decision_indices", early_stop_decision_indices),
-        ("test_decision_indices", test_decision_indices),
-    ):
-        _validate_contiguous(name, indices, panel_size)
-
-
-def _validate_contiguous(name: str, indices: Sequence[int], panel_size: int) -> None:
-    """C4/D5 — faixa contígua, crescente e dentro do painel.
-
-    Contiguidade não é capricho: a biblioteca só expressa piso de decisão, então
-    um conjunto arbitrário não seria honrável — e um port que aceita o que o
-    adapter não honra produz divergência fake<->real silenciosa no monitor.
-    """
-    for position, index in enumerate(indices):
-        if not 0 <= index < panel_size:
-            msg = f"{name}[{position}]={index} fora do painel de {panel_size} sessões (C4)"
-            raise ValueError(msg)
-        if position > 0 and index != indices[position - 1] + 1:
-            msg = (
-                f"{name} deve ser uma faixa contígua e crescente; "
-                f"{indices[position - 1]} seguido de {index} (C4)"
-            )
-            raise ValueError(msg)
-
-
-def _eligible(
-    indices: Sequence[int], *, encoder_length: int, max_horizon: int, panel_size: int
-) -> tuple[int, ...]:
-    """Decisões com janela E decodificador completos (I17) — regra do port."""
-    return tuple(
-        index
-        for index in indices
-        if index >= encoder_length - 1 and index + max_horizon <= panel_size - 1
-    )
 
 
 class _LossHistory(Callback):
@@ -419,8 +345,14 @@ class PfTftTrainer:
 
         Público (sem underscore) de propósito: é o seam que torna A4(c) e as
         contagens de I17 verificáveis sem depender do treino.
+
+        A regra do painel (C4/I17/C3) é do domínio (`tft_panel_geometry`, #75);
+        aqui fica só o que é `pytorch_forecasting`: `TimeSeriesDataSet`,
+        `from_dataset` e o recorte dos quadros pelas faixas elegíveis.
         """
-        _validate_structure(
+        encoder_length = params.max_encoder_length
+        geometry = resolve_panel_geometry(
+            encoder_length=encoder_length,
             feature_names=feature_names,
             known_feature_names=known_feature_names,
             rows=rows,
@@ -431,32 +363,8 @@ class PfTftTrainer:
             max_horizon=max_horizon,
             horizons=horizons,
         )
-        panel_size = len(rows)
-        encoder_length = params.max_encoder_length
-        fitted = _eligible(
-            train_decision_indices,
-            encoder_length=encoder_length,
-            max_horizon=max_horizon,
-            panel_size=panel_size,
-        )
-        monitored = _eligible(
-            early_stop_decision_indices,
-            encoder_length=encoder_length,
-            max_horizon=max_horizon,
-            panel_size=panel_size,
-        )
-        if not fitted:
-            msg = (
-                "nenhuma decisão de treino sobrou após exigir janela de contexto de "
-                f"{encoder_length} sessões e decodificador de {max_horizon} passos (C3)"
-            )
-            raise ValueError(msg)
-        if not monitored:
-            msg = (
-                "nenhuma decisão de monitor sobrou após exigir janela de contexto de "
-                f"{encoder_length} sessões e decodificador de {max_horizon} passos (C3)"
-            )
-            raise ValueError(msg)
+        fitted = geometry.fitted_decisions
+        monitored = geometry.monitored_decisions
 
         frame = self._panel_frame(feature_names, rows, target)
         unknown_names = [name for name in feature_names if name not in set(known_feature_names)]
