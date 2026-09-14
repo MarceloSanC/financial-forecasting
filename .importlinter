@@ -385,10 +385,13 @@ allow_indirect_imports = False
 # cobria isso: o
 # `hexagonal-layers` é `type=layers` POR CONTAINER, então só ordena camadas
 # DENTRO de cada slice, e o `check_layout.py` só barra adapter<->adapter.
-# Resultado: `modeling.application` passou a importar `analytics_store` e
-# `feature_engineering` livremente, incluindo a classe CONCRETA
+# Resultado (na #60): `modeling.application` passou a importar `analytics_store`
+# e `feature_engineering` livremente, incluindo a classe CONCRETA
 # `PersistPredictions` como colaborador de construtor — inversão de dependência
-# furada que nenhum gate viu.
+# furada que nenhum gate viu. A #68 inverteu a seta (ports `PredictionPersister`/
+# `RunRecordPersister` definidos em `modeling/application/ports/out/`, satisfeitos
+# por duck-typing) e tirou o `AnalyticsRepository` alheio dos construtores; o que
+# resta abaixo são arestas de DADOS (DTO/VO), não de comportamento. ADR 0.0.0053.
 #
 # `independence` é BIDIRECIONAL: qualquer import entre dois módulos listados
 # reprova.
@@ -403,9 +406,12 @@ allow_indirect_imports = False
 #     estão declaradas abaixo. Incluí-lo forçaria agora a decisão sobre essas
 #     entidades, que a issue #68 defere para ADR própria.
 #   - Imports sob `if TYPE_CHECKING:` não são vistos
-#     (`exclude_type_checking_imports = True`, ver cabeçalho). As 3 referências
-#     `modeling -> analytics_store.application.ports.out.analytics_repository`
-#     são type-only e por isso NÃO aparecem na lista abaixo.
+#     (`exclude_type_checking_imports = True`, ver cabeçalho). Hoje os únicos
+#     type-only cross-BC do trio são as assinaturas dos ports de `modeling`
+#     (`PredictionPersister`/`RunRecordPersister` anotam o DTO
+#     `PersistPredictionsCommand`/`PersistPredictionsResult`,
+#     `PersistRunRecordResult` e o VO `RunRecord` do `analytics_store`) — o port
+#     é do consumidor, o formato dos dados é do fornecedor (#68).
 #
 # Dentro do perímetro, cada aresta de runtime existente entra como exceção
 # NOMEADA abaixo (12 hoje). Elas não são "ok": são o débito medido, e a lista
@@ -421,21 +427,24 @@ modules =
     financial_forecasting.features.feature_engineering
 ignore_imports =
     # -- modeling -> analytics_store (dono único do target_timestamp, ADR 4.3.0001)
-    # O use case de modeling monta o `PersistPredictionsCommand` e delega a
-    # resolução temporal ao 4.3 em vez de remontar a linha LONG. A justificativa
-    # é boa; o acoplamento a use case CONCRETO de outro slice não. Sai quando o
-    # port for definido no CONSUMIDOR (`modeling/application/ports/out/`) e o
-    # `analytics_store` passar a satisfazê-lo por duck-typing — issue #68.
-    # NÃO por adapter anticorrupção: duplicar os VOs criaria duas definições da
-    # mesma linha de tabela, o oposto do que reprodutibilidade exige (#68).
+    # O use case de modeling monta o `PersistPredictionsCommand` (DTO do port-in
+    # do fornecedor) e delega a resolução temporal ao 4.3 em vez de remontar a
+    # linha LONG. Desde a #68 a aresta é SÓ o DTO: o construtor recebe o port
+    # `PredictionPersister` (definido em `modeling/application/ports/out/`), que
+    # o `PersistPredictions` satisfaz por duck-typing sem importar nada daqui.
+    # A aresta do DTO fica: quem chama o port-in de outro módulo fala o DTO
+    # dele; um DTO próprio de `modeling` exigiria um tradutor — o ACL que a #68
+    # descarta (duas definições da mesma linha, o oposto do que reprodutibilidade
+    # exige). ADR 0.0.0053.
     financial_forecasting.features.modeling.application.use_cases.run_baselines -> financial_forecasting.features.analytics_store.application.use_cases.persist_predictions
     financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile -> financial_forecasting.features.analytics_store.application.use_cases.persist_predictions
     # -- modeling -> analytics_store (VOs de domínio cruzando fronteira)
     # `QuantileForecast` (guardrail 4.3/I5) e `RunRecord` (linha de dim_run) são
     # VOs do analytics_store construídos DENTRO do modeling. Uso compartilhado de
-    # VO entre slices do MESMO contexto não é, por si, defeito — o que é defeito
-    # (e sai na #68) é depender da CLASSE CONCRETA do use case e furar a camada
-    # de aplicação do slice dono escrevendo direto no repositório dele.
+    # VO entre slices do MESMO contexto não é, por si, defeito (ADR 0.0.0053) — o
+    # que ERA defeito saiu na #68: a classe concreta do use case no construtor e
+    # a escrita direta de `dim_run` no repositório do slice dono (hoje o
+    # `RunRecord` entra pelo port `RunRecordPersister` → `PersistRunRecord`).
     financial_forecasting.features.modeling.application.use_cases.run_baselines -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
     financial_forecasting.features.modeling.application.use_cases.run_baselines -> financial_forecasting.features.analytics_store.domain.value_objects.run_record
     financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
@@ -454,7 +463,8 @@ ignore_imports =
     # -- arestas do candidato TFT (Stage 5.4, mergeada em develop) --------------
     # Mesma justificativa das anteriores: `PersistPredictionsCommand`,
     # `QuantileForecast`/`RunRecord` e a registry de features atravessando a
-    # fronteira. Saem junto com as demais quando a issue #68 entrar.
+    # fronteira — dados, não comportamento (#68). As de registry saem quando o
+    # conjunto de features virar entrada do use case.
     financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.analytics_store.application.use_cases.persist_predictions
     financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
     financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.analytics_store.domain.value_objects.run_record

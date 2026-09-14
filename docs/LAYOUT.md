@@ -269,14 +269,18 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
     estão declaradas uma a uma. Incluir `market_data` no contrato forçaria agora a
     decisão sobre essas entidades, que a issue #68 defere para ADR própria.
   - **Arestas sob `if TYPE_CHECKING:` são invisíveis ao contrato**
-    (`exclude_type_checking_imports = True`, ver §3). As 3 referências
-    `modeling → analytics_store.application.ports.out.analytics_repository` são
-    type-only e por isso não entram na contagem de 12.
+    (`exclude_type_checking_imports = True`, ver §3). Hoje as únicas type-only
+    cross-BC do trio são as assinaturas dos ports `PredictionPersister`/
+    `RunRecordPersister` de `modeling` (anotam DTOs/VO do `analytics_store`).
 
-  **Nota de escopo:** esta regra enforça direção de dependência e aciclicidade
-  entre slices — NÃO afirma que cada slice é um Bounded Context separado no
-  sentido de Evans (a pré-condição desse padrão é escala de time, que não existe
-  neste projeto).
+  **Nota de escopo (ADR 0.0.0053):** esta regra enforça direção de dependência e
+  aciclicidade entre slices — NÃO afirma que cada slice é um Bounded Context
+  separado no sentido de Evans (a pré-condição desse padrão é escala de time, que
+  não existe neste projeto). Os slices são **módulos de um único contexto**: quando
+  um slice precisa de comportamento de outro, define o **port no consumidor**
+  (`<slice>/application/ports/out/`) e o fornecedor o satisfaz por duck-typing —
+  sem Anticorruption Layer nem Shared Kernel; o que cruza a fronteira em runtime
+  são dados (DTOs do port-in do fornecedor e VOs), declarados no contrato.
 
 ---
 
