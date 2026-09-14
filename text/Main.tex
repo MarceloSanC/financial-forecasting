@@ -1,0 +1,186 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%  Adequação do template de Trabalho de Conclusão de Curso     %
+%  para o Centro Tecnológico de Joinville, da Universidade     %
+%  Federal de Santa Catarina (UFSC).                           %
+%                                                              %
+% Editado por:                                                 %
+%       Matheus Santana Carvalho                               %
+%        Engenharia Mecatrônica                                %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\documentclass[12pt, a4paper, english, brazil, oneside, chapter=TITLE, section=TITLE]{abntex2}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%PACOTES A SEREM INCLUÍDOS%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[absolute,overlay]{textpos}
+\usepackage{hyperref}
+\usepackage{ragged2e}
+\usepackage{hyphenat}
+\usepackage{calrsfs}
+\usepackage{indentfirst}
+\usepackage{microtype} 
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{helvet}
+\usepackage[bottom]{footmisc}
+\usepackage{catchfilebetweentags}
+\usepackage{enumerate}
+\usepackage{lscape}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{titling}
+\usepackage{footmisc}
+\usepackage{scrextend}
+%\usepackage{titlesec}
+\usepackage{pdfpages}
+\usepackage{nomencl}
+\usepackage{multirow}
+\usepackage{textcomp}
+\usepackage{booktabs}
+
+
+%Color packages
+\usepackage{transparent}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+
+%Table packages
+\usepackage{tabu}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{multicol}
+\usepackage{multirow}
+
+%Equation packages
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{amstext}
+\usepackage{sansmath}
+\usepackage{bm}
+\usepackage{breqn}
+\usepackage{mathtools}
+\usepackage{chngcntr} %Para editar número equação
+
+%Image package
+\usepackage{tikz}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{tocbibind}
+
+\usepackage{hyphenat}
+%---------------------------------------------------------------
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%NOME DO AUTOR, TÍTULO DO TRABALHO E ANO%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newcommand{\aaluno}{MARCELO SANTOS DO CARMO}
+\newcommand{\atitulo} {Previsão Probabilística e Quantílica de Séries Temporais Financeiras com Temporal Fusion Transformer e Avaliação Reprodutível Fora da Amostra.}
+\newcommand{\aano}{2025}
+\newcommand{\acurso}{Engenharia Mecatrônica}
+\newcommand{\aorientador}{Orientador(a): Dr(a). Pedro Paulo de Andrade Júnior}
+\newcommand{\acoorientador}{Coorientador(a): Dr(a). Benjamin Grando Moreira}%Deixar em branco caso não tenha
+%--------------------------------------------------------------
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%IDENTIFICADORES PARA FOLHA DE APROVAÇÂO%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%ATENÇÃO: O preenchimento não é obrigatório! Em casos de não utilização deixe os dados em branco e retire o comando \ExecuteMetaData[settings.tex]{folhadeaprovacaoTag}
+%----------------------MEMBRO A--------------------------------
+\newcommand{\membrobancaA}{Prof. Dr. Nome do Membro A}
+\newcommand{\UnimembrobancaA}{Universidade do Membro A}
+%----------------------MEMBRO B--------------------------------
+\newcommand{\membrobancaB}{Prof. Dr. Nome do Membro B}
+\newcommand{\UnimembrobancaB}{Universidade do Membro B}
+%------------------------DATA----------------------------------
+\newcommand{\diaAprovacao}{00}
+\newcommand{\mesAprovacao}{mês}
+%--------------------------------------------------------------
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%DEFINIÇÕES DE PRÊAMBULO%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\ExecuteMetaData[settings.tex]{preambleTag}
+%---------------------------------------------------------------
+
+
+\begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%CAPA, FOLHA DE ROSTO E FOLHA DE APROVAÇÂO%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\ExecuteMetaData[settings.tex]{capaTag}\ExecuteMetaData[settings.tex]{folhadeaprovacaoTag} %OCULTAR ESSE COMANDO CASO NÃO DESEJE UTILIZAR A FOLHA DE APROVAÇÃO
+%---------------------------------------------------------------
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%RESUMO, ABSTRACT, AGRADECIMENTOS E EPIGRAFE%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\input{1_Resumo/1_1_Dedicatoria} %Arquivo do Resumo ("1_1_Dedicatoria.tex")
+\input{1_Resumo/1_2_Agradecimentos} %Arquivo do Resumo ("1_2_Agradecimentos.tex")
+\input{1_Resumo/1_3_Epigrafe} %Arquivo do Resumo ("1_3_Epigrafe.tex")
+\input{1_Resumo/1_4_Resumo} %Arquivo do Resumo ("1_4_Resumo.tex")
+\input{1_Resumo/1_5_Abstract} %Arquivo do Resumo ("1_5_Abstract.tex")
+
+%---------------------------------------------------------------
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%LISTA DE FIGURAS, TABELAS, SUMÁRIO E PAGINAÇÃO%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\ExecuteMetaData[settings.tex]{listOfFiguresTag}
+\ExecuteMetaData[settings.tex]{quadroTag}
+\ExecuteMetaData[settings.tex]{listOfTablesTag}
+% nomenclatureTag desativado: o pacote `nomencl` (\printnomenclature) gerava
+% uma página vazia com título "Lista de Abreviaturas e Siglas" duplicando a
+% lista nativa do abntex2 abaixo. Como não usamos \nomenclature{} no texto,
+% mantemos apenas o ambiente `siglas` do abntex2 (ABNT-conforme NBR 14724).
+% \ExecuteMetaData[settings.tex]{nomenclatureTag}
+\input{1_Resumo/lista-siglas.tex}
+\input{1_Resumo/lista-simbolos.tex}
+\ExecuteMetaData[settings.tex]{tableOfContentsTag}
+\ExecuteMetaData[settings.tex]{numberingTag}
+%---------------------------------------------------------------
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%ARQUIVOS TEXTUAIS%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\input{2_Introducao/2_Introducao} %Arquivo da Intrdoução "2_Introducao.tex"
+\input{3_Revisao_Teorica/3_Revisao_Teorica} %Arquivo da Revisão Teórica "3_Revisao_Teorica.tex"
+\input{4_Metodo/4_Metodo} %Arquivo do Método "4_Metodo.tex"
+\input{5_Resultados/5_Resultados} %Arquivo dos Resultados "5_Resultados.tex"
+\input{6_Conclusoes/6_Conclusoes} %Arquivo das Conclusões "6_Conclusoes.tex"
+%---------------------------------------------------------------
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%REFERÊNCIAS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\bibliography{7_Referencias/7_Referencias} %Arquivo das Referências "7_Referencias.tex"
+%----------------------------------------------------------------
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%APÊNDICES%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\input{8_Apendices/8_Apendices} %Arquivos de Apêndices "8_Apêndices.tex"
+%---------------------------------------------------------------
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%ANEXOS%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Anexos comentado: o trabalho não possui conteúdo de terceiros (mapas, leis,
+% estatutos etc.). Caso seja necessário incluir anexo no futuro, popular
+% 9_Anexos/9_Anexos.tex e descomentar a linha abaixo.
+%\input{9_Anexos/9_Anexos}
+%----------------------------------------------------------------
+
+\end{document}

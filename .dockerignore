@@ -32,3 +32,6 @@ coverage.xml
 # Outros artefatos locais
 *.log
 tree.txt
+
+# Texto do TCC (LaTeX) — não entra na imagem da aplicação
+text/
