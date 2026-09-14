@@ -22,7 +22,7 @@ Normalização (o que NÃO conta como lógica):
   `Nome,` (item de import/tuple). A assinatura de um `Protocol` é idêntica no fake e
   no adapter POR OBRIGAÇÃO (o contrato), e a lista de kwargs de uma delegação também;
   contá-las mediria o mecanismo errado (F2 da auditoria do PR #87: a assinatura de
-  `TftTrainer.train_and_predict` sozinha tem 16 linhas normalizadas);
+  `TftTrainer.train_and_predict` sozinha ocupa 16 linhas não vazias no port);
 - linhas de `import`/`from` descartadas.
 
 Blocos são procurados em QUALQUER ordem (não só a subsequência comum mais longa):
