@@ -403,10 +403,12 @@ class PfTftTrainer:
         fitted = geometry.fitted_decisions
         monitored = geometry.monitored_decisions
 
-        with _translating_backend_errors():
-            frame = self._panel_frame(feature_names, rows, target)
-            unknown_names = [name for name in feature_names if name not in set(known_feature_names)]
+        # Código NOSSO fica fora da seção traduzida (F3 da auditoria do PR #88): um
+        # `float(None)` aqui seria bug do chamador, não falha da lib.
+        frame = self._panel_frame(feature_names, rows, target)
+        unknown_names = [name for name in feature_names if name not in set(known_feature_names)]
 
+        with _translating_backend_errors():
             training = TimeSeriesDataSet(
                 frame.iloc[: max(fitted) + max_horizon + 1],
                 time_idx=_TIME_IDX_COLUMN,
