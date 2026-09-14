@@ -5,7 +5,7 @@
 # Requer: uv instalado (https://docs.astral.sh/uv/)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup install run migrate check lint fmt typecheck layout-check lint-imports docs-check test test-fast test-cov clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
+.PHONY: help setup install run migrate check lint fmt typecheck layout-check lint-imports fake-parity port-coverage docs-check test test-fast test-cov clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
 
 # Tag das imagens Docker. Mesmo nome usado em docker-compose.yml `image:` para
 # reusar o cache de layer (`make docker-build` e `make docker-up` produzem a
@@ -36,6 +36,8 @@ help:
 	@printf "%b\n" "  $(GREEN)make typecheck$(RESET)  Roda mypy strict"
 	@printf "%b\n" "  $(GREEN)make layout-check$(RESET) Valida regras de dependência via scripts/check_layout.py"
 	@printf "%b\n" "  $(GREEN)make lint-imports$(RESET) Valida contratos de arquitetura (import-linter / .importlinter)"
+	@printf "%b\n" "  $(GREEN)make fake-parity$(RESET)  Reprova lógica idêntica fake<->adapter (scripts/check_fake_parity.py)"
+	@printf "%b\n" "  $(GREEN)make port-coverage$(RESET) Exige fake + contract test [fake, real] por port-out (scripts/check_port_coverage.py)"
 	@printf "%b\n" "  $(GREEN)make docs-check$(RESET)  Valida §7 post-exec dos technical.md (CONVENTIONS §3.4)"
 	@printf "%b\n" "  $(GREEN)make test$(RESET)       Roda todos os testes medindo cobertura (gate ≥ 90%)"
 	@printf "%b\n" "  $(GREEN)make test-fast$(RESET)  Roda testes sem cobertura, pulando os slow (loop local rápido)"
@@ -99,7 +101,7 @@ migrate:
 # que o CI roda (I7). `lint-imports` roda antes de `test` para falhar cedo e
 # barato (Stage 1.3): viola a fronteira hexagonal => build vermelho.
 # ---------------------------------------------------------------------------
-check: lint typecheck layout-check lint-imports docs-check test
+check: lint typecheck layout-check lint-imports fake-parity port-coverage docs-check test
 
 # ---------------------------------------------------------------------------
 # lint — verifica estilo e regras sem modificar arquivos
@@ -134,6 +136,20 @@ layout-check:
 # ---------------------------------------------------------------------------
 lint-imports:
 	uv run lint-imports
+
+# ---------------------------------------------------------------------------
+# fake-parity / port-coverage — fitness functions da REDE DE SEGURANÇA (issue #62,
+# onda 3). `fake-parity` reprova bloco de lógica idêntico >= 15 linhas entre um fake
+# de tests/fakes/** e um adapter (a suíte [fake, real] rodando duas cópias da mesma
+# regra); `port-coverage` reprova port-out sem fake ou sem contract test [fake, real].
+# Baseline declarado em scripts/arch_baseline.toml (motivo + issue obrigatórios;
+# entrada morta reprova). Exit != 0 => `make check`/CI vermelhos.
+# ---------------------------------------------------------------------------
+fake-parity:
+	uv run python scripts/check_fake_parity.py
+
+port-coverage:
+	uv run python scripts/check_port_coverage.py
 
 # ---------------------------------------------------------------------------
 # docs-check — valida (1) que technical.md `done` só mudou dentro da §7
