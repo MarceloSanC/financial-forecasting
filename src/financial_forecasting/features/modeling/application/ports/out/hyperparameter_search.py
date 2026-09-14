@@ -97,6 +97,9 @@ class HyperparameterSearch(Protocol):
 
         Returns:
             Identificador do estudo criado.
+
+        Raises:
+            HyperparameterSearchError: o backend de busca falhou (issue #84).
         """
         ...
 
@@ -125,6 +128,11 @@ class HyperparameterSearch(Protocol):
         contaminaria o amostrador. Mas deixá-lo pendente também não serve: o
         estudo ficaria com trials zumbis. Marcar como falho preserva a garantia
         (amostradores só consideram trials completos) sem o zumbi.
+
+        Raises:
+            ValueError: `trial_number` não foi pedido a este estudo (bug do
+                chamador).
+            HyperparameterSearchError: o backend de busca falhou (issue #84).
         """
         ...
 

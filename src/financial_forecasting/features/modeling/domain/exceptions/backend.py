@@ -18,7 +18,7 @@ Duas exceções, uma por natureza de contrato:
   pytorch-forecasting/Lightning/torch, statsforecast). A original vai em
   `__cause__` (`raise ... from exc`), nunca se perde.
 - **`HyperparameterSearchError`** — o backend de busca (Optuna) falhou numa
-  operação do estudo (`ask`/`tell`/`fail`/`best_trial`).
+  operação do estudo (`create_study`/`ask`/`tell`/`fail`/`best_trial`).
 
 O que NÃO é traduzido, de propósito: `ValueError` erguido pela **regra do
 domínio/port** antes de tocar a lib (C1/C3/C4/C5 — entrada estruturalmente

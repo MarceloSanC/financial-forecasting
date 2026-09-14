@@ -189,7 +189,16 @@ def _gbm_kwargs(**overrides: Any) -> dict[str, Any]:  # noqa: ANN401
 
 
 def _raising_lgb_train(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-    """O tipo e a mensagem que o C++ do LightGBM produz para `alpha` fora de (0, 1)."""
+    """O tipo e a mensagem que o C++ do LightGBM produz para `alpha` fora de (0, 1).
+
+    Por que dublar `lgb.train` em vez de induzir a falha genuína: o único input que faz
+    a lib erguer através do port é um nível de quantil fora de (0, 1) — que é violação
+    da pré-condição do port (`quantile_levels` em (0, 1)), onde as duas pernas
+    legitimamente DIVERGEM (o fake ergue `ValueError` do `numpy`, o real ergue o tipo
+    traduzido). Validar a faixa dos níveis no domínio é a issue #64. Com dados válidos
+    o LightGBM não ergue (aceita NaN/inf em labels e features — medido), então "a lib
+    falhou" só é simulável dublando a função da lib — nunca um port.
+    """
     msg = "Check failed: alpha_ > 0 && alpha_ < 1 at regression_objective.hpp"
     raise LightGBMError(msg)
 
