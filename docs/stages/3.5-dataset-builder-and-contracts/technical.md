@@ -660,4 +660,18 @@ inverso (registry float, storage int).
 (`news_volume`/`has_news`/`volume_spike_flag`) como fonte de armazenamento; sem churn
 do `feature_set_hash` (3.4 está `done`).
 
+### 2026-09-14 — [finding] Tolerância do validador anti-leakage: `atol ~1e-12` da concept nunca foi a realidade — Claude (issue #32)
+**Contexto:** a concept 3.5 I2/D3 (e este technical, §"validador") declaram
+`atol ~1e-12` para a re-derivação de **cada** feature. O adapter sempre usou
+`_ATOL = 1e-9` nas derivadas (float64 dos dois lados), e a metade **indicadores** do
+oráculo — prometida pelo port, entregue só na issue #32 — não pode usar `atol` algum:
+o port 3.1 coage a `float32` (I4), então a única diferença legítima é a quantização,
+e a tolerância certa é **1 ulp de float32 do oráculo** (medido no container: 0
+posições acima de 1 ulp em 300/4000 barras; `float32(oráculo) == adapter` bit a bit;
+um deslocamento de 1 barra custa dezenas a milhares de ulps). Registrado no docstring
+do port `DatasetAssemblerPort` e no adapter (`dataset_assembler.py`), não na concept
+(Stage `done`; corpo histórico).
+**Stage candidata:** nenhuma — é doc derivado. Se a concept 3.5 for reaberta por outro
+motivo, alinhar I2/D3 ao texto do port: derivadas `1e-9`, indicadores 1 ulp float32.
+
 <!-- END: post-execution -->
