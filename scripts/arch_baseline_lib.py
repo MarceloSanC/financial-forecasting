@@ -43,11 +43,17 @@ def load_baseline(gate: str, path: Path = BASELINE_PATH) -> dict[str, BaselineEn
     """Lê as entradas `[[<gate>.allow]]`; entrada malformada é erro (exit 2)."""
     if not path.exists():
         return {}
-    with path.open("rb") as handle:
-        data = tomllib.load(handle)
+    try:
+        with path.open("rb") as handle:
+            data = tomllib.load(handle)
+    except tomllib.TOMLDecodeError as error:
+        _fail(f"TOML inválido em {path.name}: {error}")
     section = data.get(gate, {})
+    allow = section.get("allow", [])
+    if not isinstance(allow, list) or not all(isinstance(raw, dict) for raw in allow):
+        _fail(f"[{gate}] `allow` deve ser uma lista de tabelas `[[{gate}.allow]]`")
     entries: dict[str, BaselineEntry] = {}
-    for raw in section.get("allow", []):
+    for raw in allow:
         key = raw.get("key")
         motivo = raw.get("motivo")
         issue = raw.get("issue")

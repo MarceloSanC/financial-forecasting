@@ -186,6 +186,9 @@ def test_baseline_tolerates_matching_entry_and_flags_dead_entry(
         pytest.param('key = "a <-> b"\nmotivo = "x"\n', id="sem-issue"),
         pytest.param('key = "a <-> b"\nmotivo = "x"\nissue = 0\n', id="issue-zero"),
         pytest.param('motivo = "x"\nissue = 62\n', id="sem-key"),
+        pytest.param(
+            'key = "a <-> b"\nmotivo = "x"\nissue = 62\n[[fake_parity.allow', id="toml-invalido"
+        ),
     ],
 )
 def test_baseline_entry_without_motivo_or_issue_is_rejected(
@@ -193,6 +196,17 @@ def test_baseline_entry_without_motivo_or_issue_is_rejected(
 ) -> None:
     toml = tmp_path / "arch_baseline.toml"
     toml.write_text("[[fake_parity.allow]]\n" + entry, encoding="utf-8")
+
+    with pytest.raises(SystemExit) as raised:
+        baseline_lib.load_baseline("fake_parity", toml)
+    assert raised.value.code == 2  # noqa: PLR2004 — exit 2 = baseline malformado
+
+
+def test_baseline_allow_that_is_not_a_list_of_tables_is_rejected(
+    baseline_lib: ModuleType, tmp_path: Path
+) -> None:
+    toml = tmp_path / "arch_baseline.toml"
+    toml.write_text('[fake_parity]\nallow = "a <-> b"\n', encoding="utf-8")
 
     with pytest.raises(SystemExit) as raised:
         baseline_lib.load_baseline("fake_parity", toml)
