@@ -46,22 +46,27 @@ a população contra a qual o normalizador é verificado (A4c).
 from __future__ import annotations
 
 import math
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import lightning.pytorch as pl
 import pandas as pd
 import torch
+from lightning.fabric.utilities.exceptions import MisconfigurationException
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from pytorch_forecasting import QuantileLoss, TemporalFusionTransformer, TimeSeriesDataSet
 from pytorch_forecasting.data.encoders import GroupNormalizer
 
+from financial_forecasting.features.modeling.domain.exceptions.backend import (
+    ModelTrainingError,
+)
 from financial_forecasting.features.modeling.domain.services.tft_panel_geometry import (
     resolve_panel_geometry,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterator, Sequence
 
     from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
         TftTrainingParams,
@@ -70,6 +75,23 @@ if TYPE_CHECKING:
 
 _TIME_IDX_COLUMN = "time_idx"
 _TARGET_COLUMN = "target"
+# Vocabulário de falha da pilha `pytorch-forecasting`/`lightning`/`torch` (issue #84),
+# ENUMERADO — nunca `except Exception`. Verificado no container (pytorch-forecasting
+# 1.8.0, lightning 2.6.5, torch 2.13): a lib ergue `ValueError` (48 sítios; ex.
+# NA/inf no painel, nível fora da grade da `QuantileLoss`), `KeyError` (5),
+# `RuntimeError` (5 + os do torch), `TypeError` (3) e usa 305 `assert`
+# (`AssertionError`); o Lightning ergue `MisconfigurationException` (subclasse
+# direta de `Exception`, invisível a qualquer `except ValueError`). Os
+# `ValueError` da REGRA do port (C3/C4/C5/C10) são erguidos FORA das seções
+# traduzidas e continuam `ValueError`.
+_BACKEND_ERRORS: tuple[type[BaseException], ...] = (
+    ValueError,
+    KeyError,
+    RuntimeError,
+    TypeError,
+    AssertionError,
+    MisconfigurationException,
+)
 _GROUP_COLUMN = "series"
 # Grupo constante: o painel que atravessa o port é de UM ativo (o do ScopeSpec).
 # A biblioteca exige um `group_ids`; este valor não carrega informação e é
@@ -93,6 +115,20 @@ class _TftDatasets:
     normalizer_scale: float
     fitted_decision_count: int
     monitored_decision_count: int
+
+
+@contextmanager
+def _translating_backend_errors() -> Iterator[None]:
+    """Seção de código da biblioteca: qualquer falha enumerada vira `ModelTrainingError`.
+
+    A original vai em `__cause__` (`raise ... from exc`) — nunca se perde. Só envolve
+    chamadas à lib; a regra do port (`resolve_panel_geometry`, C5, C10) fica de fora.
+    """
+    try:
+        yield
+    except _BACKEND_ERRORS as exc:
+        msg = f"pytorch-forecasting/lightning failed: {type(exc).__name__}: {exc}"
+        raise ModelTrainingError(msg) from exc
 
 
 class _LossHistory(Callback):
@@ -271,26 +307,27 @@ class PfTftTrainer:
            `max_horizon` passos), então usar a curta quando a longa existe
            avaliaria o modelo numa forma de entrada que ele nunca viu.
         """
-        prediction = model.predict(
-            prediction_dataset,
-            mode="quantiles",
-            return_index=True,
-            return_decoder_lengths=True,
-            batch_size=batch_size,
-            num_workers=0,
-            # `predict` constrói um `Trainer` PRÓPRIO com os defaults da lib —
-            # `logger=True` escreve `lightning_logs/` no diretório de trabalho a
-            # cada chamada, e `accelerator="auto"` poderia predizer em GPU
-            # enquanto o treino foi fixado em CPU (o que enfraqueceria I9).
-            # Fixar aqui é o único ponto onde isso é controlável.
-            trainer_kwargs={
-                "logger": False,
-                "accelerator": "cpu",
-                "devices": 1,
-                "enable_progress_bar": False,
-                "enable_model_summary": False,
-            },
-        )
+        with _translating_backend_errors():
+            prediction = model.predict(
+                prediction_dataset,
+                mode="quantiles",
+                return_index=True,
+                return_decoder_lengths=True,
+                batch_size=batch_size,
+                num_workers=0,
+                # `predict` constrói um `Trainer` PRÓPRIO com os defaults da lib —
+                # `logger=True` escreve `lightning_logs/` no diretório de trabalho a
+                # cada chamada, e `accelerator="auto"` poderia predizer em GPU
+                # enquanto o treino foi fixado em CPU (o que enfraqueceria I9).
+                # Fixar aqui é o único ponto onde isso é controlável.
+                trainer_kwargs={
+                    "logger": False,
+                    "accelerator": "cpu",
+                    "devices": 1,
+                    "enable_progress_bar": False,
+                    "enable_model_summary": False,
+                },
+            )
         decision_of_sample = [int(time_idx) - 1 for time_idx in prediction.index[_TIME_IDX_COLUMN]]
         lengths = [int(length) for length in prediction.decoder_lengths]
 
@@ -366,56 +403,57 @@ class PfTftTrainer:
         fitted = geometry.fitted_decisions
         monitored = geometry.monitored_decisions
 
-        frame = self._panel_frame(feature_names, rows, target)
-        unknown_names = [name for name in feature_names if name not in set(known_feature_names)]
+        with _translating_backend_errors():
+            frame = self._panel_frame(feature_names, rows, target)
+            unknown_names = [name for name in feature_names if name not in set(known_feature_names)]
 
-        training = TimeSeriesDataSet(
-            frame.iloc[: max(fitted) + max_horizon + 1],
-            time_idx=_TIME_IDX_COLUMN,
-            target=_TARGET_COLUMN,
-            group_ids=[_GROUP_COLUMN],
-            min_encoder_length=encoder_length,
-            max_encoder_length=encoder_length,
-            min_prediction_length=max_horizon,
-            max_prediction_length=max_horizon,
-            min_prediction_idx=min(fitted) + 1,
-            time_varying_known_reals=list(known_feature_names),
-            time_varying_unknown_reals=[*unknown_names, _TARGET_COLUMN],
-            # Explícito, NUNCA "auto" (ADR 5.4.0006): acima de 20 sessões de
-            # janela o automático escolheria um normalizador POR JANELA, e a
-            # produção (60) cairia num caminho que os testes (~12) não usam.
-            target_normalizer=GroupNormalizer(groups=[]),
-            add_relative_time_idx=True,
-            allow_missing_timesteps=False,
-        )
-        # Monitor e predição DERIVADOS do de treino: é o que herda o
-        # normalizador já ajustado em vez de reajustar (I4b). Construí-los do
-        # zero sobre o painel inteiro é exatamente o vazamento que o ADR
-        # 5.4.0001 cláusula 2 existe para impedir.
-        monitor = TimeSeriesDataSet.from_dataset(
-            training,
-            frame.iloc[: max(monitored) + max_horizon + 1],
-            min_prediction_idx=min(monitored) + 1,
-            stop_randomization=True,
-        )
-        prediction = (
-            TimeSeriesDataSet.from_dataset(
+            training = TimeSeriesDataSet(
+                frame.iloc[: max(fitted) + max_horizon + 1],
+                time_idx=_TIME_IDX_COLUMN,
+                target=_TARGET_COLUMN,
+                group_ids=[_GROUP_COLUMN],
+                min_encoder_length=encoder_length,
+                max_encoder_length=encoder_length,
+                min_prediction_length=max_horizon,
+                max_prediction_length=max_horizon,
+                min_prediction_idx=min(fitted) + 1,
+                time_varying_known_reals=list(known_feature_names),
+                time_varying_unknown_reals=[*unknown_names, _TARGET_COLUMN],
+                # Explícito, NUNCA "auto" (ADR 5.4.0006): acima de 20 sessões de
+                # janela o automático escolheria um normalizador POR JANELA, e a
+                # produção (60) cairia num caminho que os testes (~12) não usam.
+                target_normalizer=GroupNormalizer(groups=[]),
+                add_relative_time_idx=True,
+                allow_missing_timesteps=False,
+            )
+            # Monitor e predição DERIVADOS do de treino: é o que herda o
+            # normalizador já ajustado em vez de reajustar (I4b). Construí-los do
+            # zero sobre o painel inteiro é exatamente o vazamento que o ADR
+            # 5.4.0001 cláusula 2 existe para impedir.
+            monitor = TimeSeriesDataSet.from_dataset(
                 training,
-                # TETO também aqui: a lib só expressa piso, então sem recortar o
-                # quadro o dataset geraria decisões DEPOIS do bloco de teste —
-                # e todo fold que não é o último tem painel adiante dele. O
-                # último par legítimo precisa do índice `max(test) + max_horizon`.
-                frame.iloc[: max(test_decision_indices) + max_horizon + 1],
-                min_prediction_idx=min(test_decision_indices) + 1,
-                # Cauda variável (D2/I16): sem isto o default herdado
-                # (`min == max`) descartaria as decisões da ponta do painel.
-                min_prediction_length=1,
+                frame.iloc[: max(monitored) + max_horizon + 1],
+                min_prediction_idx=min(monitored) + 1,
                 stop_randomization=True,
             )
-            if test_decision_indices
-            else None
-        )
-        center, scale = self._normalizer_parameters(training)
+            prediction = (
+                TimeSeriesDataSet.from_dataset(
+                    training,
+                    # TETO também aqui: a lib só expressa piso, então sem recortar o
+                    # quadro o dataset geraria decisões DEPOIS do bloco de teste —
+                    # e todo fold que não é o último tem painel adiante dele. O
+                    # último par legítimo precisa do índice `max(test) + max_horizon`.
+                    frame.iloc[: max(test_decision_indices) + max_horizon + 1],
+                    min_prediction_idx=min(test_decision_indices) + 1,
+                    # Cauda variável (D2/I16): sem isto o default herdado
+                    # (`min == max`) descartaria as decisões da ponta do painel.
+                    min_prediction_length=1,
+                    stop_randomization=True,
+                )
+                if test_decision_indices
+                else None
+            )
+            center, scale = self._normalizer_parameters(training)
         return _TftDatasets(
             training=training,
             monitor=monitor,
@@ -450,52 +488,53 @@ class PfTftTrainer:
         val_loader = datasets.monitor.to_dataloader(
             train=False, batch_size=params.batch_size, num_workers=0
         )
-        model = TemporalFusionTransformer.from_dataset(
-            datasets.training,
-            learning_rate=params.learning_rate,
-            hidden_size=params.hidden_size,
-            attention_head_size=params.attention_head_size,
-            dropout=params.dropout,
-            hidden_continuous_size=params.hidden_continuous_size,
-            # A grade é a do COMANDO: o default da biblioteca são 7 níveis
-            # fixos que não são a grade densa do projeto.
-            loss=QuantileLoss(quantiles=list(quantile_levels)),
-        )
-        history = _LossHistory()
-        callbacks: list[Any] = [
-            history,
-            EarlyStopping(monitor="val_loss", patience=params.patience, mode="min"),
-        ]
-        checkpoint: Any = None
-        if write_checkpoint:
-            checkpoint = ModelCheckpoint(
-                dirpath=artifact_dir, monitor="val_loss", mode="min", save_top_k=1
+        with _translating_backend_errors():
+            model = TemporalFusionTransformer.from_dataset(
+                datasets.training,
+                learning_rate=params.learning_rate,
+                hidden_size=params.hidden_size,
+                attention_head_size=params.attention_head_size,
+                dropout=params.dropout,
+                hidden_continuous_size=params.hidden_continuous_size,
+                # A grade é a do COMANDO: o default da biblioteca são 7 níveis
+                # fixos que não são a grade densa do projeto.
+                loss=QuantileLoss(quantiles=list(quantile_levels)),
             )
-            callbacks.append(checkpoint)
-        # `Trainer(deterministic=True)` liga uma flag GLOBAL de processo do
-        # torch e nunca a desliga — ela vazaria para o resto da suite (o adapter
-        # FinBERT, por exemplo, ergue sob algoritmos determinísticos). I9 exige
-        # restaurar; daí o `finally` abaixo.
-        deterministic_before = torch.are_deterministic_algorithms_enabled()
-        trainer = pl.Trainer(
-            max_epochs=params.max_epochs,
-            accelerator="cpu",
-            devices=1,
-            deterministic=True,
-            # Sem passagem de sanidade: ela dispara o mesmo gancho ANTES da
-            # época 0 e deslocaria todo o histórico, quebrando a identidade
-            # `best_epoch == argmin` que A5 usa como prova (D11).
-            num_sanity_val_steps=0,
-            enable_checkpointing=write_checkpoint,
-            enable_progress_bar=False,
-            enable_model_summary=False,
-            logger=False,
-            callbacks=callbacks,
-        )
-        try:
-            trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
-        finally:
-            torch.use_deterministic_algorithms(deterministic_before)
+            history = _LossHistory()
+            callbacks: list[Any] = [
+                history,
+                EarlyStopping(monitor="val_loss", patience=params.patience, mode="min"),
+            ]
+            checkpoint: Any = None
+            if write_checkpoint:
+                checkpoint = ModelCheckpoint(
+                    dirpath=artifact_dir, monitor="val_loss", mode="min", save_top_k=1
+                )
+                callbacks.append(checkpoint)
+            # `Trainer(deterministic=True)` liga uma flag GLOBAL de processo do
+            # torch e nunca a desliga — ela vazaria para o resto da suite (o adapter
+            # FinBERT, por exemplo, ergue sob algoritmos determinísticos). I9 exige
+            # restaurar; daí o `finally` abaixo.
+            deterministic_before = torch.are_deterministic_algorithms_enabled()
+            trainer = pl.Trainer(
+                max_epochs=params.max_epochs,
+                accelerator="cpu",
+                devices=1,
+                deterministic=True,
+                # Sem passagem de sanidade: ela dispara o mesmo gancho ANTES da
+                # época 0 e deslocaria todo o histórico, quebrando a identidade
+                # `best_epoch == argmin` que A5 usa como prova (D11).
+                num_sanity_val_steps=0,
+                enable_checkpointing=write_checkpoint,
+                enable_progress_bar=False,
+                enable_model_summary=False,
+                logger=False,
+                callbacks=callbacks,
+            )
+            try:
+                trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+            finally:
+                torch.use_deterministic_algorithms(deterministic_before)
 
         val_loss_by_epoch = tuple(history.losses)
         best_epoch = _select_best_epoch(val_loss_by_epoch)
@@ -510,7 +549,8 @@ class PfTftTrainer:
         artifact_path = _require_checkpoint(checkpoint.best_model_path)
         # Restauração EXPLÍCITA: o callback de parada antecipada não a faz, e
         # sem ela a predição usaria os pesos da última época (I6/D6).
-        restored = TemporalFusionTransformer.load_from_checkpoint(artifact_path)
+        with _translating_backend_errors():
+            restored = TemporalFusionTransformer.load_from_checkpoint(artifact_path)
         return _TftFit(
             model=restored,
             val_loss_by_epoch=val_loss_by_epoch,
