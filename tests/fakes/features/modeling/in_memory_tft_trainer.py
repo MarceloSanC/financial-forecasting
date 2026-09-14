@@ -2,10 +2,12 @@
 
 Materializa TODAS as regras do contrato (concept 5.4 §4) que não dependem de
 `torch`: validação estrutural (C4), regra de janela/decodificador completos e
-contagens declaradas (I17), erguer por histórico insuficiente (C3), regra de
-emissão na cauda (I16), modo fit-only e determinismo (I9). É o oráculo de FORMA
-da suite de contrato (`[fake, real]`), e o que permite testar o use case
-`TrainTft` inteiro sem instalar nem carregar a pilha de deep learning.
+contagens declaradas (I17) e histórico insuficiente (C3) — as três DELEGADAS ao
+serviço de domínio `tft_panel_geometry` (issue #75), a mesma casa única que o
+adapter real usa —, regra de emissão na cauda (I16), modo fit-only e
+determinismo (I9). É o oráculo de FORMA da suite de contrato (`[fake, real]`), e
+o que permite testar o use case `TrainTft` inteiro sem instalar nem carregar a
+pilha de deep learning.
 
 **A emissão lê `target[t + h]` de propósito** — inclusive para decisões de teste.
 Isso NÃO é uma afirmação de modelagem (o fake não é um modelo, e um modelo real
@@ -48,6 +50,9 @@ from typing import TYPE_CHECKING, Any
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
     TftTrainingResult,
 )
+from financial_forecasting.features.modeling.domain.services.tft_panel_geometry import (
+    resolve_panel_geometry,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -60,43 +65,6 @@ if TYPE_CHECKING:
 # a forma que o mecanismo de parada antecipada produz quando de fato para cedo.
 _SIMULATED_EPOCHS = 5
 _MEDIAN_LEVEL = 0.5
-
-
-def _validate_contiguous(name: str, indices: Sequence[int], panel_size: int) -> None:
-    """C4: faixa contígua, crescente e dentro do painel.
-
-    A contiguidade não é capricho: o adapter real só expressa PISO de decisão
-    (a biblioteca não tem teto), e o teto vem de recortar o quadro. Aceitar aqui
-    um conjunto que o real não honra produziria divergência fake<->real
-    silenciosa justamente no monitor — onde ela significaria `calib` entrando na
-    perda de validação.
-    """
-    for position, index in enumerate(indices):
-        if not 0 <= index < panel_size:
-            msg = f"{name}[{position}]={index} fora do painel de {panel_size} sessões (C4)"
-            raise ValueError(msg)
-        if position > 0 and index != indices[position - 1] + 1:
-            msg = (
-                f"{name} deve ser uma faixa contígua e crescente; "
-                f"{indices[position - 1]} seguido de {index} (C4)"
-            )
-            raise ValueError(msg)
-
-
-def _eligible(
-    indices: Sequence[int], *, encoder_length: int, max_horizon: int, panel_size: int
-) -> tuple[int, ...]:
-    """Decisões com janela de contexto E decodificador completos (I17).
-
-    Janela completa sse `t >= encoder_length - 1` (a janela é `[t-L+1, t]`,
-    terminando em `t` INCLUSIVE); decodificador completo sse
-    `t + max_horizon <= panel_size - 1`.
-    """
-    return tuple(
-        index
-        for index in indices
-        if index >= encoder_length - 1 and index + max_horizon <= panel_size - 1
-    )
 
 
 class InMemoryTftTrainer:
@@ -153,7 +121,10 @@ class InMemoryTftTrainer:
             }
         )
 
-        panel_size = self._validate_structure(
+        # A regra do painel (C4/I17/C3) é do domínio (`tft_panel_geometry`, #75):
+        # o fake fica só com a aritmética stdlib da simulação.
+        geometry = resolve_panel_geometry(
+            encoder_length=params.max_encoder_length,
             feature_names=feature_names,
             known_feature_names=known_feature_names,
             rows=rows,
@@ -164,33 +135,9 @@ class InMemoryTftTrainer:
             max_horizon=max_horizon,
             horizons=horizons,
         )
-
-        fitted = _eligible(
-            train_decision_indices,
-            encoder_length=params.max_encoder_length,
-            max_horizon=max_horizon,
-            panel_size=panel_size,
-        )
-        monitored = _eligible(
-            early_stop_decision_indices,
-            encoder_length=params.max_encoder_length,
-            max_horizon=max_horizon,
-            panel_size=panel_size,
-        )
-        if not fitted:
-            msg = (
-                "nenhuma decisão de treino sobrou após exigir janela de contexto de "
-                f"{params.max_encoder_length} sessões e decodificador de {max_horizon} "
-                "passos (C3)"
-            )
-            raise ValueError(msg)
-        if not monitored:
-            msg = (
-                "nenhuma decisão de monitor sobrou após exigir janela de contexto de "
-                f"{params.max_encoder_length} sessões e decodificador de {max_horizon} "
-                "passos (C3)"
-            )
-            raise ValueError(msg)
+        panel_size = geometry.panel_size
+        fitted = geometry.fitted_decisions
+        monitored = geometry.monitored_decisions
 
         center, scale = self._fit_normalizer(target, fitted, max_horizon)
         val_loss_by_epoch = self._simulated_history(params)
@@ -221,54 +168,6 @@ class InMemoryTftTrainer:
             normalizer_scale=scale,
             artifact_path=artifact_path,
         )
-
-    # -- C4 --------------------------------------------------------------------
-
-    def _validate_structure(  # noqa: PLR0913 — validação coesa da fronteira
-        self,
-        *,
-        feature_names: Sequence[str],
-        known_feature_names: Sequence[str],
-        rows: Sequence[Sequence[float]],
-        target: Sequence[float],
-        train_decision_indices: Sequence[int],
-        early_stop_decision_indices: Sequence[int],
-        test_decision_indices: Sequence[int],
-        max_horizon: int,
-        horizons: Sequence[int],
-    ) -> int:
-        """Valida a estrutura da fronteira e devolve o tamanho do painel (C4)."""
-        if len(target) != len(rows):
-            msg = f"len(target)={len(target)} != len(rows)={len(rows)} (C4)"
-            raise ValueError(msg)
-        width = len(feature_names)
-        for position, row in enumerate(rows):
-            if len(row) != width:
-                msg = f"rows[{position}] tem {len(row)} colunas, esperado {width} (C4)"
-                raise ValueError(msg)
-        unknown_known = set(known_feature_names) - set(feature_names)
-        if unknown_known:
-            msg = f"known_feature_names não contido em feature_names: {sorted(unknown_known)} (C4)"
-            raise ValueError(msg)
-        if max_horizon < 1:
-            msg = f"max_horizon deve ser >= 1, recebido {max_horizon} (C4)"
-            raise ValueError(msg)
-        if not horizons:
-            msg = "horizons não pode ser vazio (C4)"
-            raise ValueError(msg)
-        out_of_range = [h for h in horizons if not 1 <= h <= max_horizon]
-        if out_of_range:
-            msg = f"horizons {out_of_range} fora de 1..{max_horizon} (C4)"
-            raise ValueError(msg)
-        if not early_stop_decision_indices:
-            msg = "early_stop_decision_indices vazio — sem monitor não há seleção de época (C4)"
-            raise ValueError(msg)
-
-        panel_size = len(rows)
-        _validate_contiguous("train_decision_indices", train_decision_indices, panel_size)
-        _validate_contiguous("early_stop_decision_indices", early_stop_decision_indices, panel_size)
-        _validate_contiguous("test_decision_indices", test_decision_indices, panel_size)
-        return panel_size
 
     # -- simulação determinística ---------------------------------------------
 
