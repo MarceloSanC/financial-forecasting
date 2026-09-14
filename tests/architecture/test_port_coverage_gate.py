@@ -173,3 +173,55 @@ def test_main_exit_code_follows_the_baseline_verdict(
     out = capsys.readouterr().out
     assert "OrphanPort: sem fake" in out
     assert "[port_coverage] REPROVOU" in out
+
+
+def test_generic_protocol_and_infrastructure_implementation_are_seen(
+    gate: ModuleType, tmp_path: Path
+) -> None:
+    """F1/F2 da auditoria do PR #92: `Protocol[T]` é port; `shared/infrastructure/**` é real."""
+    src = tmp_path / "src" / "financial_forecasting"
+    _write(
+        src,
+        "shared/application/ports/out/ticker.py",
+        "from typing import Protocol, TypeVar\n\nT = TypeVar('T')\n\n\n"
+        "class Ticker(Protocol[T]):\n    def tick(self) -> T: ...\n",
+    )
+    _write(
+        src,
+        "shared/infrastructure/ticker/system_ticker.py",
+        '"""Satisfaz o port `Ticker`."""\n\n\nclass SystemTicker:\n    def tick(self) -> int:\n'
+        "        return 1\n",
+    )
+    fakes = tmp_path / "tests" / "fakes"
+    _write(
+        fakes,
+        "shared/in_memory_ticker.py",
+        "class FakeTicker:\n    def tick(self) -> int:\n        return 1\n",
+    )
+    contracts = tmp_path / "tests" / "contract"
+    _write(
+        contracts,
+        "shared/test_ticker_contract.py",
+        "import pytest\nfrom tests.fakes.shared.in_memory_ticker import FakeTicker\n"
+        "from financial_forecasting.shared.infrastructure.ticker.system_ticker import (\n"
+        "    SystemTicker,\n)\n"
+        '\n@pytest.fixture(params=[FakeTicker, SystemTicker], ids=["fake", "real"])\n'
+        "def ticker(request):\n    return request.param()\n",
+    )
+
+    [port] = gate.inventory(src, fakes, contracts)
+
+    assert port.name == "Ticker"
+    assert port.adapters == ("SystemTicker",)
+    assert port.violation is None
+
+
+def test_protocol_outside_application_ports_out_is_not_a_port(
+    gate: ModuleType, tmp_path: Path
+) -> None:
+    """Só `application/ports/out/` conta (F5): um `Protocol` em `domain/` não é port-out."""
+    src = tmp_path / "src" / "financial_forecasting"
+    _write(src, "features/x/domain/ports/out/not_a_port.py", _PORT)
+    _write(src, "features/x/application/ports/out/probe_fetcher.py", _PORT)
+
+    assert [name for name, _ in gate.find_ports(src)] == ["ProbeFetcher"]

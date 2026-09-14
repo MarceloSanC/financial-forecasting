@@ -15,11 +15,13 @@ reprova o dataset" era inalcançável pelo caminho wireado.
 
 Detecção (heurísticas declaradas, todas verificáveis por `--list`):
 
-- **port**: `class X(Protocol)` (base chamada `Protocol`) num módulo de `ports/out/`.
+- **port**: `class X(Protocol)` / `X(typing.Protocol)` / `X(Protocol[T])` num módulo
+  sob `application/ports/out/`.
 - **fake**: uma classe `FakeX` ou `InMemoryX` em `tests/fakes/**`, onde `X` é o nome do
   port sem o sufixo `Port` (`DatasetAssemblerPort` → `InMemoryDatasetAssembler`). É a
   convenção de nome de todos os 15 fakes do repo.
-- **adapter real**: uma classe PÚBLICA definida em `src/**/adapters/**` cujo módulo
+- **adapter real**: uma classe PÚBLICA definida em `src/**/adapters/**` ou
+  `src/**/infrastructure/**` (`SystemClock`/`Uuid4Generator`, LAYOUT §2) cujo módulo
   cita o nome do port (todo adapter do repo declara "satisfaz o port `X`" no
   docstring). Classes privadas (`_TftDatasets`, `_LossHistory`…) são auxiliares do
   módulo, não adapters. A heurística é por citação, não por análise de tipos: uma
@@ -85,29 +87,54 @@ class PortCoverage:
         return None
 
 
+_PORTS_OUT = ("application", "ports", "out")
+
+
+def _is_protocol_base(base: ast.expr) -> bool:
+    """`Protocol`, `typing.Protocol` ou `Protocol[T]` (port genérico)."""
+    if isinstance(base, ast.Subscript):
+        base = base.value
+    return (isinstance(base, ast.Name) and base.id == "Protocol") or (
+        isinstance(base, ast.Attribute) and base.attr == "Protocol"
+    )
+
+
 def find_ports(src_root: Path) -> list[tuple[str, Path]]:
     """`(nome, módulo)` de cada `class X(Protocol)` sob `application/ports/out/`."""
     ports: list[tuple[str, Path]] = []
     for path in sorted(src_root.rglob("*.py")):
         parts = path.parts
-        if "ports" not in parts or "out" not in parts or path.name == "__init__.py":
+        under_ports_out = any(
+            parts[i : i + len(_PORTS_OUT)] == _PORTS_OUT
+            for i in range(len(parts) - len(_PORTS_OUT) + 1)
+        )
+        if not under_ports_out or path.name == "__init__.py":
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef) and any(
-                (isinstance(base, ast.Name) and base.id == "Protocol")
-                or (isinstance(base, ast.Attribute) and base.attr == "Protocol")
-                for base in node.bases
+                _is_protocol_base(base) for base in node.bases
             ):
                 ports.append((node.name, path))
     return ports
 
 
+_REAL_IMPLEMENTATION_DIRS = ("adapters", "infrastructure")
+
+
 def class_index(root: Path, *, only_adapters: bool = False) -> dict[str, Path]:
-    """`{nome da classe: arquivo}` para toda classe definida sob `root`."""
+    """`{nome da classe: arquivo}` para toda classe definida sob `root`.
+
+    Com `only_adapters`, só módulos sob `adapters/**` ou `infrastructure/**`: LAYOUT §2
+    coloca `SystemClock`/`Uuid4Generator` em `shared/infrastructure/` (implementam os
+    ports `Clock`/`IdGenerator`), e o gate precisa enxergá-los para que a #91 possa
+    fechar com contrato `[FakeClock, SystemClock]` (F1 da auditoria do PR #92).
+    """
     index: dict[str, Path] = {}
     for path in sorted(root.rglob("*.py")):
-        if path.name == "__init__.py" or (only_adapters and "adapters" not in path.parts):
+        if path.name == "__init__.py" or (
+            only_adapters and not any(part in _REAL_IMPLEMENTATION_DIRS for part in path.parts)
+        ):
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
