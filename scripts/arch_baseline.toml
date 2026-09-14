@@ -1,0 +1,33 @@
+# Baseline declarado dos gates de arquitetura (issue #62; mecanismo em
+# `scripts/arch_baseline_lib.py`). Cada entrada é uma violação CONHECIDA, com
+# `motivo` e `issue` obrigatórios; violação fora daqui reprova o build; entrada que
+# não ocorre mais também reprova ("baseline morto" — remover a linha). Não é
+# permissão: é débito medido, e a lista deve encolher.
+
+# ---------------------------------------------------------------------------
+# check_fake_parity.py — bloco de LÓGICA idêntico >= 15 linhas entre um fake e um
+# adapter. VAZIO de propósito: os #66/#70/#71/#75 consertaram os quatro pares que
+# a issue #62 mediu (statsforecast, LightGBM, FakeHasher, TFT); o par do medallion
+# store tinha 15 linhas só na assinatura de `write`, que o normalizador descarta.
+[fake_parity]
+allow = []
+
+# ---------------------------------------------------------------------------
+# check_port_coverage.py — port-out sem fake em tests/fakes/** ou sem contract test
+# [fake, real]. Chave = nome do Protocol.
+[port_coverage]
+
+[[port_coverage.allow]]
+key = "Hasher"
+motivo = "Implementação única por desenho (issue #70): o FakeHasher era cópia byte a byte do CanonicalJsonHasher e foi removido; o contrato roda só no adapter real + golden, e os testes de domínio/use case injetam o adapter real (stdlib, determinístico). Um fake aqui seria uma segunda definição de identidade — o oposto do que reprodutibilidade exige."
+issue = 70
+
+[[port_coverage.allow]]
+key = "Clock"
+motivo = "Sem fake nem contract test; o único consumidor (ParquetAnalyticsRepository, created_at UTC via clock injetado — ADR 4.2.0002) é testado injetando um clock fixo ad hoc. Fake + suíte [fake, real] pendentes."
+issue = 91
+
+[[port_coverage.allow]]
+key = "IdGenerator"
+motivo = "Port MORTO: IdGenerator/Uuid4Generator não têm consumidor algum em src/ — nem o composition root os instancia. Destino a decidir (remover ou dar consumidor) — sem fake/contrato até lá."
+issue = 91
