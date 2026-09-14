@@ -91,8 +91,11 @@ class DatasetAssemblerPort(Protocol):
     - **Alvo** backward log-return aplicado via `TargetDefinition` (dono único); a
       1ª linha (alvo `None`) é dropada.
     - **Anti-leakage (I2/C2):** re-deriva CADA feature via `DerivedFeatures` (3.4) +
-      indicadores canônicos (3.1) como oráculo puro e confere contra o valor montado
-      (`atol ~1e-12`); divergência ⇒ `AntiLeakageError` nomeando a feature.
+      indicadores canônicos (3.1, `indicator_formulas`) como oráculo puro e confere
+      contra o valor montado — derivadas a `atol 1e-9` (float64 dos dois lados);
+      indicadores a 1 ulp de `float32` (o port 3.1 coage a `float32`), com faltante
+      aceito só antes do `warmup` declarado (I6); divergência ⇒ `AntiLeakageError`
+      nomeando a feature/indicador.
     - **Guarda as-of (I3/C3):** re-checa `fundamentals_effective_date <= day`;
       violação ⇒ `AntiLeakageError`.
     - **Schema** pandera validado antes de devolver/persistir (C7).

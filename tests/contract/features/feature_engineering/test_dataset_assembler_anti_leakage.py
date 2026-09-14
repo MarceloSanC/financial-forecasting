@@ -5,12 +5,20 @@ Cobre concept 3.5 I2/I3/I4/I7 / C2/C3:
 - happy path: monta um dataset sintético sem leakage; ordem de colunas = registry.
 - I2/C2: injeta divergência sintética numa feature derivada → `AntiLeakageError`
   nomeando-a (re-derivação via oráculo puro `DerivedFeatures`).
+- I2 (issue #32): a metade INDICADORES do oráculo — parametrizada em
+  `[fake-indicators, pandas-ta-indicators]`, porque com placeholders a extensão seria
+  inverificável e só o adapter real impõe a fronteira `float32` que a tolerância de
+  1 ulp existe para atravessar: happy path nas duas pernas; deslocamento de UMA barra
+  em `ema_50` → erro nomeando o indicador; valor fabricado no warmup do oráculo → erro;
+  faltante pós-warmup declarado → erro; perturbação de 4 ulp32 → erro, 0.4 ulp → passa.
 - I3/C3: `fundamentals_effective_date > day` → `AntiLeakageError` (guarda as-of).
 - I4: invariante causal — anexar uma barra futura não muda o prefixo das features.
 - regimes/flags em `float64` (D2 / ADR 3.5.0002).
 
-Usa o `FakeIndicatorCalculator` (3.1) para os indicadores e dados OHLCV sintéticos
-determinísticos. Não depende de DuckDB/FinBERT.
+Usa o `FakeIndicatorCalculator` (3.1) para os indicadores (fórmula canônica em
+`float64`, mascarada ao warmup nominal) e dados OHLCV sintéticos determinísticos; os
+testes da #32 rodam também com o `PandasTaIndicatorCalculator`. Não depende de
+DuckDB/FinBERT.
 """
 
 from __future__ import annotations
@@ -25,11 +33,17 @@ import pytest
 from financial_forecasting.features.feature_engineering.adapters.out.pandas.dataset_assembler import (  # noqa: E501
     DatasetAssembler,
 )
+from financial_forecasting.features.feature_engineering.adapters.out.pandas_ta.pandas_ta_indicator_calculator import (  # noqa: E501
+    PandasTaIndicatorCalculator,
+)
 from financial_forecasting.features.feature_engineering.adapters.out.parquet.schemas.dataset_schema import (  # noqa: E501
     DATASET_TFT_SCHEMA,
 )
 from financial_forecasting.features.feature_engineering.application.ports.out.dataset_assembler import (  # noqa: E501
     DatasetAssemblyInputs,
+)
+from financial_forecasting.features.feature_engineering.application.ports.out.indicator_calculator import (  # noqa: E501
+    IndicatorCalculator,
 )
 from financial_forecasting.features.feature_engineering.domain.services.fundamentals_asof_policy import (  # noqa: E501
     AntiLeakageError,
@@ -102,10 +116,15 @@ def _asof_rows(days: list[date], *, effective_offset_days: int = 30) -> list[dic
     return rows
 
 
-def _build_inputs(*, effective_offset_days: int = 30) -> DatasetAssemblyInputs:
+def _build_inputs(
+    *,
+    effective_offset_days: int = 30,
+    indicator_calculator: IndicatorCalculator | None = None,
+) -> DatasetAssemblyInputs:
     """Monta os insumos sintéticos completos para o assembler."""
     candles = _candles()
-    indicators = FakeIndicatorCalculator().calculate("AAPL", candles)
+    calculator = indicator_calculator or FakeIndicatorCalculator()
+    indicators = calculator.calculate("AAPL", candles)
     days = [c.timestamp.date() for c in candles]
     return DatasetAssemblyInputs(
         asset="AAPL",
@@ -329,3 +348,128 @@ def test_indicators_misaligned_raises() -> None:
     assembler = DatasetAssembler()
     with pytest.raises(ValueError, match="must align 1:1 with candles"):
         assembler.assemble(misaligned)
+
+
+# -- #32: metade INDICADORES do oráculo anti-leakage (fake e pandas-ta real) --------
+
+_INDICATOR_CALCULATORS: dict[str, type[IndicatorCalculator]] = {
+    "fake-indicators": FakeIndicatorCalculator,
+    "pandas-ta-indicators": PandasTaIndicatorCalculator,
+}
+_PROBE_ROW = 150  # pós-warmup de todo indicador comparado (ema_50 = 50, rsi = 14)
+_FLOAT32_ULP_EXPONENT_OFFSET = 24
+
+
+def _float32_ulp(value: float) -> float:
+    """Um ulp de float32 na magnitude de `value` (mesma conta do validador)."""
+    return 2.0 ** (math.frexp(abs(value))[1] - _FLOAT32_ULP_EXPONENT_OFFSET)
+
+
+def _assembler_with_indicator_patch(
+    patch: object,
+) -> DatasetAssembler:
+    """Assembler cujo `_attach_indicators` aplica `patch(frame)` DEPOIS de anexar.
+
+    Corrompe a coluna já anexada (o que o validador enxerga), não o insumo — isola a
+    prova no validador, não no calculador.
+    """
+    assembler = DatasetAssembler()
+    real_attach = assembler._attach_indicators
+
+    def attach(frame: object, indicators: object) -> None:
+        real_attach(frame, indicators)  # type: ignore[arg-type]
+        patch(frame)  # type: ignore[operator]
+
+    assembler._attach_indicators = attach  # type: ignore[method-assign]
+    return assembler
+
+
+@pytest.fixture(params=sorted(_INDICATOR_CALCULATORS))
+def indicator_inputs(request: pytest.FixtureRequest) -> DatasetAssemblyInputs:
+    """Insumos com indicadores do fake (float64) ou do pandas-ta real (float32)."""
+    return _build_inputs(indicator_calculator=_INDICATOR_CALCULATORS[str(request.param)]())
+
+
+def test_indicator_half_of_the_oracle_passes_the_real_assembler(
+    indicator_inputs: DatasetAssemblyInputs,
+) -> None:
+    """Happy path #32 — os 11 indicadores batem com `indicator_formulas` nas duas pernas.
+
+    Com o pandas-ta real é o fio que faltava (comentário 2 da #32): a fronteira
+    `float32` do port cruza o validador dentro de 1 ulp; com o fake, a fórmula canônica
+    em float64 bate exato.
+    """
+    result = DatasetAssembler().assemble(indicator_inputs)
+
+    assert result.n_rows == _N - 1
+
+
+def test_one_bar_shift_in_an_indicator_column_raises_naming_it(
+    indicator_inputs: DatasetAssemblyInputs,
+) -> None:
+    """#32 — `ema_50` deslocada UMA barra (a classe do ADR 4.3.0001) → erro nomeando-a.
+
+    Um `ema_50` correto na fórmula e deslocado de uma barra na montagem passava nos
+    dois testes existentes (3.1 valida a fórmula isolada; 3.5 não conferia indicador).
+    """
+
+    def shift_ema_50(frame: object) -> None:
+        frame["ema_50"] = frame["ema_50"].shift(1)  # type: ignore[index]
+
+    with pytest.raises(AntiLeakageError, match=r"indicator 'ema_50'"):
+        _assembler_with_indicator_patch(shift_ema_50).assemble(indicator_inputs)
+
+
+def test_fabricated_value_inside_oracle_warmup_raises(
+    indicator_inputs: DatasetAssemblyInputs,
+) -> None:
+    """#32 — valor finito onde o oráculo não tem (`ema_200` na linha 5) é fabricado → erro."""
+
+    def fabricate(frame: object) -> None:
+        frame.loc[5, "ema_200"] = 123.0  # type: ignore[attr-defined]
+
+    with pytest.raises(AntiLeakageError, match=r"'ema_200' has a value at row 5 where"):
+        _assembler_with_indicator_patch(fabricate).assemble(indicator_inputs)
+
+
+def test_missing_value_after_declared_warmup_raises(
+    indicator_inputs: DatasetAssemblyInputs,
+) -> None:
+    """#32 — `NaN` pós-warmup declarado onde o oráculo é finito é valor perdido → erro."""
+
+    def drop_one(frame: object) -> None:
+        frame.loc[_PROBE_ROW, "ema_50"] = math.nan  # type: ignore[attr-defined]
+
+    with pytest.raises(
+        AntiLeakageError, match=rf"'ema_50' missing at row {_PROBE_ROW} after its declared"
+    ):
+        _assembler_with_indicator_patch(drop_one).assemble(indicator_inputs)
+
+
+@pytest.mark.parametrize(
+    ("ulps", "should_raise"),
+    [
+        pytest.param(4.0, True, id="4-ulp32-raises"),
+        pytest.param(0.4, False, id="0.4-ulp32-passes"),
+    ],
+)
+def test_tolerance_is_one_ulp_of_float32(
+    indicator_inputs: DatasetAssemblyInputs, ulps: float, should_raise: bool
+) -> None:
+    """#32 — a tolerância é 1 ulp de float32: +4 ulp reprova, +0.4 ulp passa.
+
+    Fixa que o validador distingue "fórmula certa com dtype float32 no meio" (0.5 ulp
+    de quantização) de qualquer outra coisa — as tolerâncias `rel=1e-4`/`abs=1e-3` dos
+    testes da 3.1 são 4-5 ordens de grandeza acima disso.
+    """
+
+    def perturb(frame: object) -> None:
+        value = float(frame.loc[_PROBE_ROW, "ema_50"])  # type: ignore[attr-defined]
+        frame.loc[_PROBE_ROW, "ema_50"] = value + ulps * _float32_ulp(value)  # type: ignore[attr-defined]
+
+    assembler = _assembler_with_indicator_patch(perturb)
+    if should_raise:
+        with pytest.raises(AntiLeakageError, match=r"'ema_50' diverges .*tolerance=1 ulp float32"):
+            assembler.assemble(indicator_inputs)
+    else:
+        assembler.assemble(indicator_inputs)
