@@ -150,3 +150,26 @@ def test_real_repo_violations_are_exactly_the_declared_baseline(gate: ModuleType
 
     assert violating == ["Clock", "Hasher", "IdGenerator"]
     assert len(ports) >= 18  # noqa: PLR2004 — os 18 ports-out do repo hoje
+
+
+def test_main_exit_code_follows_the_baseline_verdict(
+    gate: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`main()` (o que `make port-coverage` roda): 0 no repo real; 1 com port novo sem fake."""
+    monkeypatch.setattr(sys, "argv", ["check_port_coverage.py", "--list"])
+    assert gate.main() == 0
+    assert "[port_coverage] PASSOU" in capsys.readouterr().out
+
+    real = gate.inventory()
+    orphan = gate.PortCoverage(
+        name="OrphanPort",
+        module=gate.SRC_ROOT / "features/x/application/ports/out/orphan_port.py",
+        fake=None,
+        adapters=("OrphanAdapter",),
+        contract=None,
+    )
+    monkeypatch.setattr(gate, "inventory", lambda: [*real, orphan])
+    assert gate.main() == 1
+    out = capsys.readouterr().out
+    assert "OrphanPort: sem fake" in out
+    assert "[port_coverage] REPROVOU" in out

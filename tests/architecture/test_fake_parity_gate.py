@@ -216,3 +216,21 @@ def test_baseline_allow_that_is_not_a_list_of_tables_is_rejected(
 def test_real_repo_passes_with_an_empty_baseline(gate: ModuleType) -> None:
     """Estado conquistado pelos #66/#70/#71/#75: nenhum par com lógica idêntica >= 15."""
     assert gate.scan(gate.DEFAULT_THRESHOLD) == {}
+
+
+def test_main_exit_code_follows_the_baseline_verdict(
+    gate: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`main()` (o que `make fake-parity` roda): 0 no repo real; 1 com violação injetada."""
+    monkeypatch.setattr(sys, "argv", ["check_fake_parity.py", "--list"])
+    assert gate.main() == 0
+    assert "[fake_parity] PASSOU" in capsys.readouterr().out
+
+    injected = {
+        "tests/fakes/x.py <-> src/y.py": (gate.Block(fake_line=1, adapter_line=1, size=20),)
+    }
+    monkeypatch.setattr(gate, "scan", lambda threshold: injected)
+    assert gate.main() == 1
+    out = capsys.readouterr().out
+    assert "tests/fakes/x.py <-> src/y.py: 20 linhas" in out
+    assert "[fake_parity] REPROVOU" in out
