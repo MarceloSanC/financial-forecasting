@@ -9,14 +9,22 @@ FORMA do adapter real para passar o MESMO contract test parametrizado do port
 - `candle_range`/`candle_body` são REAIS e causais (`high - low`, `|close - open|`) —
   derivados ponto-a-ponto da própria barra (`same_timestamp_ohlc_derived`).
 - Os indicadores trailing (`rsi_14`/`macd`/`macd_signal`/`ema_*`/`volatility_20d`)
-  são placeholders FINITOS e DETERMINÍSTICOS pós-warmup (derivados do `close` e do
-  índice da barra) e `NaN` durante o warmup declarado (I6) — o suficiente para um
-  consumidor exercitar o contrato sem `pandas`. O fake NÃO calcula a fórmula canônica
-  (isso é responsabilidade do adapter real, validado pela fixture-oráculo).
+  são a FÓRMULA CANÔNICA calculada pelo oráculo puro de domínio
+  (`indicator_formulas`, issue #32) em `float64`, com `NaN` nas primeiras `warmup`
+  barras DECLARADAS de cada spec (I6 — o fake mascara ao warmup NOMINAL; o adapter
+  real fica finito no warmup EFETIVO da lib, uma barra antes em `ema_N`/`rsi_14`).
+  Antes da #32 eram placeholders (`close + índice*1e-3`) — o que tornava
+  inverificável a extensão do validador anti-leakage do `DatasetAssembler` aos
+  indicadores: o placeholder reprovaria na primeira comparação, então todo teste
+  que alimenta o assembler com este fake exige a fórmula verdadeira.
+
+O fake NÃO coage a `float32` (a fronteira de dtype é do adapter real, #67) — é a
+diferença legítima entre as pernas, e é exatamente o que o validador do assembler
+tolera (1 ulp de `float32`).
 
 Vive em `tests/` (fora do gate `import-linter`), mas mantém o contrato agnóstico de
-`pandas`/`pandas_ta_classic`: importa SÓ stdlib + a entity `Candle` e o registry de
-domínio `INDICATOR_SPECS`.
+`pandas`/`pandas_ta_classic`: importa SÓ stdlib + a entity `Candle`, o registry de
+domínio `INDICATOR_SPECS` e o oráculo `indicator_formulas`.
 """
 
 from __future__ import annotations
@@ -24,6 +32,9 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 
+from financial_forecasting.features.feature_engineering.domain.services import (
+    indicator_formulas as f,
+)
 from financial_forecasting.features.feature_engineering.domain.services.indicator_spec import (
     INDICATOR_SPECS,
 )
@@ -43,18 +54,18 @@ class FakeIndicatorCalculator:
     def calculate(self, asset: str, candles: Sequence[Candle]) -> Sequence[Mapping[str, float]]:
         """Devolve uma `Mapping` por candle (ordenado por timestamp) com as chaves do registry."""
         ordered = sorted(candles, key=lambda c: c.timestamp)
+        trailing = f.trailing_indicators([float(c.close) for c in ordered])
         rows: list[Mapping[str, float]] = []
         for index, candle in enumerate(ordered):
             row: dict[str, float] = {}
             for name, spec in INDICATOR_SPECS.items():
                 if spec.anti_leakage_tag == _OHLC_TAG:
                     row[name] = self._ohlc_derived(name, candle)
-                elif index < spec.warmup:
-                    # `NaN` legítimo durante o warmup declarado (I6).
-                    row[name] = math.nan
-                else:
-                    # placeholder finito e determinístico pós-warmup (forma do contrato).
-                    row[name] = float(candle.close) + index * 1e-3
+                    continue
+                value = trailing[name][index]
+                # `NaN` legítimo durante o warmup DECLARADO (I6) — também onde o
+                # oráculo ainda não tem valor (série curta).
+                row[name] = math.nan if index < spec.warmup or value is None else value
             rows.append(row)
         return rows
 

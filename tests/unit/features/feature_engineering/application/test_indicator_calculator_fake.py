@@ -11,6 +11,9 @@ Prova que:
   (skill `pytest-with-fakes`).
 - A saída tem uma linha por candle com EXATAMENTE as chaves de `INDICATOR_SPECS`,
   `candle_range`/`candle_body` reais, `NaN` só no warmup, finito pós-warmup.
+- Desde a #32 os trailing são a fórmula canônica (oráculo `indicator_formulas`),
+  mascarada ao warmup NOMINAL: `ema_10` na barra 10 é a EMA de fato (semente SMA em 9,
+  um passo de recursão) — o fake responde como o real responderia, em `float64`.
 
 Importa SÓ stdlib + o port/registry de domínio + a entity `Candle` + o fake. Nada de
 `pandas`/`pandas_ta_classic`.
@@ -36,7 +39,7 @@ from tests.fakes.features.feature_engineering.in_memory_indicator_calculator imp
 )
 
 _ASSET = "AAPL"
-_N_BARS = 60  # cobre o warmup dos placeholders trailing do fake (rsi/macd/volatility).
+_N_BARS = 60  # cobre o warmup nominal dos trailing curtos do fake (rsi/macd/volatility).
 _BASE_TS = datetime(2024, 1, 1, tzinfo=UTC)
 
 
@@ -113,3 +116,21 @@ def test_empty_input_yields_empty_output() -> None:
     """Sequência vazia → saída vazia (C5)."""
     calculator: IndicatorCalculator = FakeIndicatorCalculator()
     assert list(_consume(calculator, [])) == []
+
+
+def test_trailing_values_are_the_canonical_formula_masked_to_nominal_warmup() -> None:
+    """#32 — `ema_10` do fake é a EMA canônica (não placeholder), com `NaN` até a barra 9.
+
+    Semente = SMA dos 10 primeiros closes em 9 (mascarada: warmup nominal 10), barra 10 =
+    um passo `((1-a)*sma + a*close_10) / ((1-a)+a)`, `a = 2/11`. Um fake com placeholder
+    reprovaria aqui — e reprovaria no validador anti-leakage do `DatasetAssembler`.
+    """
+    candles = _candles(_N_BARS)
+    rows = FakeIndicatorCalculator().calculate(_ASSET, candles)
+    closes = [float(c.close) for c in candles]
+    alpha = 2.0 / 11.0
+    sma = sum(closes[:10]) / 10.0
+    expected_10 = ((1.0 - alpha) * sma + alpha * closes[10]) / ((1.0 - alpha) + alpha)
+
+    assert math.isnan(rows[9]["ema_10"])  # semente existe no oráculo, mascarada ao nominal
+    assert rows[10]["ema_10"] == expected_10

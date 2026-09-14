@@ -28,10 +28,23 @@ Validadores anti-leakage in-process (I2/I3/D3):
 - **guarda as-of (I3/C3):** re-checa `fundamentals_effective_date <= day`;
   violação ⇒ `AntiLeakageError`.
 - **invariante causal (I2/I4):** re-deriva cada feature derivada com o oráculo puro
-  `DerivedFeatures` e confere contra a coluna montada (`atol ~1e-12`); divergência
+  `DerivedFeatures` e confere contra a coluna montada (`_ATOL = 1e-9`); divergência
   ⇒ `AntiLeakageError` nomeando a feature. O oráculo é a segunda implementação
   independente (ADR 0.0.0021), e como as janelas são trailing/shiftadas (`n>0`),
   anexar barras futuras não muda o prefixo (causalidade).
+- **indicadores canônicos (I2, issue #32):** re-deriva os 11 indicadores do port
+  `IndicatorCalculator` (3.1) com o oráculo puro `indicator_formulas` (+ as candle
+  de `DerivedFeatures`) e confere contra a coluna anexada. A tolerância aqui NÃO é
+  `_ATOL`: o port coage a `float32` (I4 da 3.1) e o oráculo computa em `float64`, então
+  a única diferença legítima é a quantização — `|montado - oráculo| <= 1 ulp float32
+  do oráculo` (0.5 ulp é o arredondamento; a folga de 1 ulp é contra dependência de
+  versão da lib — hoje a paridade é bit a bit, ver o contract test de paridade). Um
+  deslocamento de UMA barra custa ordens de grandeza mais (ADR 4.3.0001, a classe de
+  bug mais cara do repo antigo). Faltante só é aceito ANTES do `warmup` declarado no
+  `IndicatorSpec` (I6): valor finito onde o oráculo não tem (fabricado) ou faltante
+  pós-warmup onde o oráculo tem ⇒ `AntiLeakageError`. Antes da #32 as derivadas que
+  consomem indicadores (`vol_of_vol`, regimes, `sentiment_x_volatility`) eram
+  re-derivadas de colunas nunca conferidas — checagem tautológica nesse eixo.
 
 Ordem de colunas (I7): `timestamp`, `asset_id`, as 55 features na ORDEM do
 `FeatureRegistry`, `fundamentals_effective_date`, `day_of_week`, `month`,
@@ -59,11 +72,17 @@ from financial_forecasting.features.feature_engineering.application.ports.out.da
 from financial_forecasting.features.feature_engineering.domain.services import (
     derived_features as df_,
 )
+from financial_forecasting.features.feature_engineering.domain.services import (
+    indicator_formulas as f_,
+)
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
     list_feature_specs,
 )
 from financial_forecasting.features.feature_engineering.domain.services.fundamentals_asof_policy import (  # noqa: E501
     AntiLeakageError,
+)
+from financial_forecasting.features.feature_engineering.domain.services.indicator_spec import (
+    INDICATOR_SPECS,
 )
 from financial_forecasting.features.feature_engineering.domain.services.target_definition import (
     compute_target_return,
@@ -72,8 +91,14 @@ from financial_forecasting.features.feature_engineering.domain.services.target_d
 # Raiz default do dataset processado (espelha os demais writers processed, 2.2/2.3).
 DEFAULT_DATASET_ROOT = Path("data/processed/dataset_tft")
 
-# Tolerância de paridade montado↔oráculo (concept 3.5 I2).
+# Tolerância de paridade montado↔oráculo das DERIVADAS (float64 dos dois lados;
+# concept 3.5 I2).
 _ATOL = 1e-9
+# Tolerância dos INDICADORES (issue #32): o port coage a `float32`, o oráculo é
+# `float64` — 1 ulp de float32 na magnitude do oráculo (`2^(e-24)` via `frexp`),
+# com piso no menor subnormal (abaixo dele o espaçamento do float32 é constante).
+_FLOAT32_ULP_EXPONENT_OFFSET = 24
+_FLOAT32_SMALLEST_SUBNORMAL = 2.0**-149
 
 # Colunas-base/identificador/alvo fora do set de feature (concept 3.5 §9).
 _BASE_LEADING = ("timestamp", "asset_id")
@@ -339,7 +364,12 @@ class DatasetAssembler:
             )
 
     def _validate_anti_leakage(self, frame: pd.DataFrame) -> None:
-        """I2/D3 — re-deriva cada derivada via o oráculo puro e confere (atol ~1e-9)."""
+        """I2/D3 — re-deriva derivadas E indicadores via os oráculos puros e confere.
+
+        Derivadas: `_close` a `_ATOL` (float64 dos dois lados). Indicadores (#32):
+        `_close_float32` a 1 ulp de float32 (fronteira de dtype do port 3.1), com
+        faltante aceito SÓ antes do `warmup` declarado no `IndicatorSpec`.
+        """
         oracle = self._compute_derived(frame)
         for name, expected in oracle.items():
             built = frame[name].tolist()
@@ -353,6 +383,40 @@ class DatasetAssembler:
                     raise AntiLeakageError(
                         f"Anti-leakage validator: column {name!r} diverges from pure oracle "
                         f"at row {index}: assembled={b!r} oracle={e!r} (atol={_ATOL})"
+                    )
+        self._validate_indicators_against_oracle(frame)
+
+    @staticmethod
+    def _validate_indicators_against_oracle(frame: pd.DataFrame) -> None:
+        """#32 — cada indicador do port bate com `indicator_formulas` a 1 ulp float32.
+
+        Política de faltante (I6 da 3.1): `NaN` montado é aceito só em `row < warmup`
+        do spec; finito montado onde o oráculo é `None` é valor fabricado; `NaN`
+        montado pós-warmup onde o oráculo é finito é valor perdido — ambos erguem.
+        """
+        for name, expected in _compute_indicators(frame).items():
+            warmup = INDICATOR_SPECS[name].warmup
+            built = frame[name].tolist()
+            for index, (b, e) in enumerate(zip(built, expected, strict=True)):
+                built_missing = _is_nan(b)
+                if e is None:
+                    if built_missing:
+                        continue
+                    raise AntiLeakageError(
+                        f"Anti-leakage validator: indicator {name!r} has a value at row "
+                        f"{index} where the pure oracle has none: assembled={b!r}"
+                    )
+                if built_missing:
+                    if index < warmup:
+                        continue  # warmup declarado (I6) — o adapter pode ser mais conservador
+                    raise AntiLeakageError(
+                        f"Anti-leakage validator: indicator {name!r} missing at row {index} "
+                        f"after its declared warmup ({warmup}); oracle={e!r}"
+                    )
+                if not _close_float32(b, e):
+                    raise AntiLeakageError(
+                        f"Anti-leakage validator: indicator {name!r} diverges from pure oracle "
+                        f"at row {index}: assembled={b!r} oracle={e!r} (tolerance=1 ulp float32)"
                     )
 
     # -- ordenação de colunas (I7) -------------------------------------------
@@ -412,6 +476,42 @@ def _close(built: object, expected: float | None) -> bool:
     if built_missing:
         return False
     return abs(float(built) - float(expected)) <= _ATOL  # type: ignore[arg-type]
+
+
+def _is_nan(value: object) -> bool:
+    """`True` se `value` é `None` ou `NaN` (faltante numa coluna float do frame)."""
+    return value is None or (isinstance(value, float) and math.isnan(value))
+
+
+def _float32_ulp(value: float) -> float:
+    """Um ulp de `float32` na magnitude de `value` (`2^(e-24)`, `e` de `frexp`), piso subnormal."""
+    if value == 0.0:
+        return _FLOAT32_SMALLEST_SUBNORMAL
+    return max(
+        2.0 ** (math.frexp(abs(value))[1] - _FLOAT32_ULP_EXPONENT_OFFSET),
+        _FLOAT32_SMALLEST_SUBNORMAL,
+    )
+
+
+def _close_float32(built: object, expected: float) -> bool:
+    """`True` se `built` está a <= 1 ulp float32 de `expected` (fronteira de dtype, #32)."""
+    return abs(float(built) - expected) <= _float32_ulp(expected)  # type: ignore[arg-type]
+
+
+def _compute_indicators(frame: pd.DataFrame) -> dict[str, Sequence[float | None]]:
+    """Os 11 indicadores do port pelos oráculos puros (`indicator_formulas` + candle)."""
+    close = _seq(frame, "close")
+    oracle: dict[str, Sequence[float | None]] = {
+        **f_.trailing_indicators(close),
+        "candle_range": df_.candle_range(_seq(frame, "high"), _seq(frame, "low")),
+        "candle_body": df_.candle_body(_seq(frame, "open"), close),
+    }
+    missing = set(INDICATOR_SPECS) - set(oracle)
+    if missing:  # registry ganhou indicador sem oráculo → o validador não pode fingir
+        raise AntiLeakageError(
+            f"Anti-leakage validator: no pure oracle for indicators {sorted(missing)}"
+        )
+    return oracle
 
 
 def _to_date(value: object) -> date:
