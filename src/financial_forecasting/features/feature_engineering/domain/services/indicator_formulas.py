@@ -30,8 +30,18 @@ séries sintéticas e num passeio aleatório de 4000 barras (0 divergências > 1
 
 Convenções: entrada `Sequence[float | int | None]`, saída `tuple[float | None, ...]`
 alinhada 1:1 com `None` no warmup (paridade `NaN`), como em `derived_features.py`.
-`None` intermediário (fora do warmup) é propagado como `None` na saída — o adapter
-real nunca produz esse caso (candles sem `close` são rejeitados na entity).
+`None` intermediário (fora do warmup) sai como `None` sem alterar o estado da
+recursão — caso FORA do contrato do port: a entity `Candle` não barra `NaN` (só
+`None` e negativos), mas a bronze grava `close` não-nulo e o alvo
+(`compute_target_return`) ergue antes de qualquer validador; se um `NaN` chegasse,
+o pandas carregaria o estado anterior e o oráculo daria `None` — sem paridade, e o
+validador acusaria, que é o comportamento certo para insumo inválido.
+
+`trailing_indicators(close)` monta os 8 trailing chaveados pelo NOME do registry
+(`INDICATOR_SPECS`) — casa única da tabela "nome → fórmula" que o validador do
+`DatasetAssembler`, o `FakeIndicatorCalculator` e o contract test de paridade
+consomem; um spec trailing novo sem fórmula aqui ergue `KeyError` explícito, em vez
+de passar sem conferência.
 
 Pureza (I1): importa SÓ stdlib (`math`/`collections.abc`). `import pandas`/`numpy`
 aqui REPROVA `domain-purity` no import-linter.
@@ -46,6 +56,9 @@ from financial_forecasting.features.feature_engineering.domain.services.derived_
     Number,
     OutSeq,
 )
+from financial_forecasting.features.feature_engineering.domain.services.indicator_spec import (
+    INDICATOR_SPECS,
+)
 
 # Defaults do MACD (concept 3.1 §4 — `ta.macd(close)` sem argumentos = 12/26/9).
 MACD_FAST = 12
@@ -56,6 +69,10 @@ RSI_LENGTH = 14
 VOLATILITY_WINDOW = 20
 # Escala do RSI.
 _RSI_SCALE = 100.0
+# Tag dos indicadores ponto-a-ponto (candle), que NÃO são trailing (vivem em
+# `derived_features`) e prefixo das EMAs (`ema_N`) no registry.
+_OHLC_TAG = "same_timestamp_ohlc_derived"
+_EMA_PREFIX = "ema_"
 
 
 def _as_float(x: Number) -> float | None:
@@ -198,3 +215,31 @@ def volatility_20d(close: Sequence[Number], window: int = VOLATILITY_WINDOW) -> 
         variance = sum((value - mean) ** 2 for value in sample) / (window - 1)
         out[t] = math.sqrt(variance)
     return tuple(out)
+
+
+def trailing_indicators(close: Sequence[Number]) -> dict[str, OutSeq]:
+    """Os indicadores TRAILING de `INDICATOR_SPECS` pelo oráculo, chaveados pelo nome.
+
+    Exclui os `same_timestamp_ohlc_derived` (`candle_*`, em `derived_features`). Spec
+    trailing do registry sem fórmula aqui → `KeyError` nomeando-o: o registry cresceu
+    e o oráculo não — ninguém pode fingir que conferiu.
+    """
+    macd_line, macd_signal = macd(close)
+    formulas: dict[str, OutSeq] = {
+        "rsi_14": rsi(close),
+        "macd": macd_line,
+        "macd_signal": macd_signal,
+        "volatility_20d": volatility_20d(close),
+    }
+    out: dict[str, OutSeq] = {}
+    for name, spec in INDICATOR_SPECS.items():
+        if spec.anti_leakage_tag == _OHLC_TAG:
+            continue
+        if name.startswith(_EMA_PREFIX):
+            out[name] = ema(close, int(name.removeprefix(_EMA_PREFIX)))
+        elif name in formulas:
+            out[name] = formulas[name]
+        else:
+            msg = f"no pure oracle formula for trailing indicator {name!r} in INDICATOR_SPECS"
+            raise KeyError(msg)
+    return out

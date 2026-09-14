@@ -17,8 +17,11 @@ Cobre concept 3.5 I2/I3/I4/I7 / C2/C3:
 
 Usa o `FakeIndicatorCalculator` (3.1) para os indicadores (fórmula canônica em
 `float64`, mascarada ao warmup nominal) e dados OHLCV sintéticos determinísticos; os
-testes da #32 rodam também com o `PandasTaIndicatorCalculator`. Não depende de
-DuckDB/FinBERT.
+testes da #32 rodam também com o `PandasTaIndicatorCalculator`. Na metade dos
+indicadores a perna fake é **tautológica por desenho** (o fake e o validador usam a
+mesma `trailing_indicators` do domínio): ela prova a fiação e a política de faltante;
+a independência de implementação mora na perna real (pandas-ta) e no contract test de
+paridade. Não depende de DuckDB/FinBERT.
 """
 
 from __future__ import annotations
@@ -505,3 +508,15 @@ def test_registry_indicator_without_pure_oracle_is_refused_not_skipped(
 
     with pytest.raises(AntiLeakageError, match=r"no pure oracle for indicators \['obv_probe'\]"):
         DatasetAssembler().assemble(_build_inputs())
+
+
+def test_float32_ulp_tolerance_has_the_subnormal_floor() -> None:
+    """F2 da auditoria — abaixo de `2^-126` o espaçamento do float32 é constante (`2^-149`).
+
+    Sem o piso, `_float32_ulp(1e-40)` daria `~1e-47` e uma quantização legítima de um
+    valor subnormal reprovaria; inalcançável com preços, mas a função tem de ser correta.
+    """
+    tiny = 1e-40
+    assert assembler_module._float32_ulp(tiny) == 2.0**-149
+    assert assembler_module._close_float32(tiny + 2.0**-150, tiny)
+    assert not assembler_module._close_float32(tiny + 2.0**-148, tiny)

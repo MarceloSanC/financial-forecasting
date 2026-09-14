@@ -23,6 +23,10 @@ import pytest
 from financial_forecasting.features.feature_engineering.domain.services import (
     indicator_formulas as f,
 )
+from financial_forecasting.features.feature_engineering.domain.services.indicator_spec import (
+    INDICATOR_SPECS,
+    IndicatorSpec,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -182,8 +186,8 @@ def test_rma_all_none_window_is_all_none_and_rejects_non_positive_length() -> No
         f.rma([1.0], 0)
 
 
-def test_ema_all_none_window_after_first_valid_is_all_none() -> None:
-    """Semente sem valor válido (janela toda `None` após o 1º válido isolado)."""
+def test_ema_shorter_than_length_after_leading_none_is_all_none() -> None:
+    """`None` à esquerda + série mais curta que a janela a partir do 1º válido → tudo `None`."""
     assert f.ema([None, 1.0], 3) == (None, None)
 
 
@@ -195,3 +199,34 @@ def test_rsi_none_close_breaks_the_diff_pair_into_none() -> None:
     assert out[19] is not None
     assert out[20] is None
     assert out[21] is None  # o par (20, 21) também tem o `None`
+
+
+# -- trailing_indicators (tabela nome → fórmula, casa única) -----------------------
+
+
+def test_trailing_indicators_covers_every_trailing_spec_and_nothing_else() -> None:
+    closes = [100.0 + math.sin(i / 5.0) for i in range(60)]
+    out = f.trailing_indicators(closes)
+    trailing = {
+        n for n, s in INDICATOR_SPECS.items() if s.anti_leakage_tag != "same_timestamp_ohlc_derived"
+    }
+    assert set(out) == trailing
+    assert out["ema_10"] == f.ema(closes, 10)
+    assert out["macd"] == f.macd(closes)[0]
+
+
+def test_trailing_indicators_refuses_a_trailing_spec_without_formula(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Spec trailing novo no registry sem fórmula no oráculo → `KeyError` nomeando-o."""
+    extra = IndicatorSpec(
+        name="obv_probe",
+        family="volume",
+        source_cols=("close", "volume"),
+        warmup=1,
+        anti_leakage_tag="trailing_window_causal",
+    )
+    monkeypatch.setattr(f, "INDICATOR_SPECS", {**INDICATOR_SPECS, "obv_probe": extra})
+
+    with pytest.raises(KeyError, match="'obv_probe'"):
+        f.trailing_indicators([1.0, 2.0, 3.0])

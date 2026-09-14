@@ -55,10 +55,10 @@ _MIN_COMPARED_FRACTION = 0.9  # ≥ 90% das posições pós-warmup são comparad
 
 
 def _ulp32(value: float) -> float:
-    """Um ulp de `float32` na magnitude de `value` (`2^(e-24)` com `frexp`)."""
+    """Um ulp de `float32` na magnitude de `value` (`2^(e-24)` com `frexp`), piso subnormal."""
     if value == 0.0:
         return 2.0**-149
-    return 2.0 ** (math.frexp(abs(value))[1] - 24)
+    return max(2.0 ** (math.frexp(abs(value))[1] - 24), 2.0**-149)
 
 
 def _float32(value: float) -> float:
@@ -95,16 +95,8 @@ def _random_walk_closes() -> list[float]:
 def _oracle(candles: list[Candle]) -> dict[str, tuple[float | None, ...]]:
     """Os 11 indicadores do registry pelo oráculo puro (mesmas chaves de `INDICATOR_SPECS`)."""
     closes = [c.close for c in candles]
-    macd_line, macd_signal = f.macd(closes)
     return {
-        "rsi_14": f.rsi(closes),
-        "macd": macd_line,
-        "macd_signal": macd_signal,
-        "ema_10": f.ema(closes, 10),
-        "ema_50": f.ema(closes, 50),
-        "ema_100": f.ema(closes, 100),
-        "ema_200": f.ema(closes, 200),
-        "volatility_20d": f.volatility_20d(closes),
+        **f.trailing_indicators(closes),
         "candle_range": df_.candle_range([c.high for c in candles], [c.low for c in candles]),
         "candle_body": df_.candle_body([c.open for c in candles], [c.close for c in candles]),
     }

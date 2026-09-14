@@ -95,11 +95,10 @@ DEFAULT_DATASET_ROOT = Path("data/processed/dataset_tft")
 # concept 3.5 I2).
 _ATOL = 1e-9
 # Tolerância dos INDICADORES (issue #32): o port coage a `float32`, o oráculo é
-# `float64` — 1 ulp de float32 na magnitude do oráculo (`2^(e-24)` via `frexp`).
+# `float64` — 1 ulp de float32 na magnitude do oráculo (`2^(e-24)` via `frexp`),
+# com piso no menor subnormal (abaixo dele o espaçamento do float32 é constante).
 _FLOAT32_ULP_EXPONENT_OFFSET = 24
 _FLOAT32_SMALLEST_SUBNORMAL = 2.0**-149
-# Comprimentos das EMAs pelo nome da chave do registry (`ema_N`).
-_EMA_PREFIX = "ema_"
 
 # Colunas-base/identificador/alvo fora do set de feature (concept 3.5 §9).
 _BASE_LEADING = ("timestamp", "asset_id")
@@ -485,10 +484,13 @@ def _is_nan(value: object) -> bool:
 
 
 def _float32_ulp(value: float) -> float:
-    """Um ulp de `float32` na magnitude de `value` (`2^(e-24)`, `e` de `frexp`)."""
+    """Um ulp de `float32` na magnitude de `value` (`2^(e-24)`, `e` de `frexp`), piso subnormal."""
     if value == 0.0:
         return _FLOAT32_SMALLEST_SUBNORMAL
-    return 2.0 ** (math.frexp(abs(value))[1] - _FLOAT32_ULP_EXPONENT_OFFSET)
+    return max(
+        2.0 ** (math.frexp(abs(value))[1] - _FLOAT32_ULP_EXPONENT_OFFSET),
+        _FLOAT32_SMALLEST_SUBNORMAL,
+    )
 
 
 def _close_float32(built: object, expected: float) -> bool:
@@ -499,18 +501,11 @@ def _close_float32(built: object, expected: float) -> bool:
 def _compute_indicators(frame: pd.DataFrame) -> dict[str, Sequence[float | None]]:
     """Os 11 indicadores do port pelos oráculos puros (`indicator_formulas` + candle)."""
     close = _seq(frame, "close")
-    macd_line, macd_signal = f_.macd(close)
     oracle: dict[str, Sequence[float | None]] = {
-        "rsi_14": f_.rsi(close),
-        "macd": macd_line,
-        "macd_signal": macd_signal,
-        "volatility_20d": f_.volatility_20d(close),
+        **f_.trailing_indicators(close),
         "candle_range": df_.candle_range(_seq(frame, "high"), _seq(frame, "low")),
         "candle_body": df_.candle_body(_seq(frame, "open"), close),
     }
-    for name in INDICATOR_SPECS:
-        if name.startswith(_EMA_PREFIX):
-            oracle[name] = f_.ema(close, int(name.removeprefix(_EMA_PREFIX)))
     missing = set(INDICATOR_SPECS) - set(oracle)
     if missing:  # registry ganhou indicador sem oráculo → o validador não pode fingir
         raise AntiLeakageError(

@@ -42,8 +42,6 @@ from financial_forecasting.features.market_data.domain.entities.candle import Ca
 
 # Tags do registry (evita comparar strings literais espalhadas).
 _OHLC_TAG = "same_timestamp_ohlc_derived"
-# Comprimentos das EMAs pelo nome da chave do registry (`ema_N`).
-_EMA_PREFIX = "ema_"
 
 
 class FakeIndicatorCalculator:
@@ -56,7 +54,7 @@ class FakeIndicatorCalculator:
     def calculate(self, asset: str, candles: Sequence[Candle]) -> Sequence[Mapping[str, float]]:
         """Devolve uma `Mapping` por candle (ordenado por timestamp) com as chaves do registry."""
         ordered = sorted(candles, key=lambda c: c.timestamp)
-        trailing = self._trailing_columns([float(c.close) for c in ordered])
+        trailing = f.trailing_indicators([float(c.close) for c in ordered])
         rows: list[Mapping[str, float]] = []
         for index, candle in enumerate(ordered):
             row: dict[str, float] = {}
@@ -70,21 +68,6 @@ class FakeIndicatorCalculator:
                 row[name] = math.nan if index < spec.warmup or value is None else value
             rows.append(row)
         return rows
-
-    @staticmethod
-    def _trailing_columns(closes: list[float]) -> dict[str, tuple[float | None, ...]]:
-        """Os indicadores trailing do registry pela fórmula canônica (oráculo puro)."""
-        macd_line, macd_signal = f.macd(closes)
-        columns: dict[str, tuple[float | None, ...]] = {
-            "rsi_14": f.rsi(closes),
-            "macd": macd_line,
-            "macd_signal": macd_signal,
-            "volatility_20d": f.volatility_20d(closes),
-        }
-        for name in INDICATOR_SPECS:
-            if name.startswith(_EMA_PREFIX):
-                columns[name] = f.ema(closes, int(name.removeprefix(_EMA_PREFIX)))
-        return columns
 
     @staticmethod
     def _ohlc_derived(name: str, candle: Candle) -> float:
