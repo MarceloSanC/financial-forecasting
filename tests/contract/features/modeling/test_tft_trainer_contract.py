@@ -291,6 +291,73 @@ class TestStructuralErrors:
             _call(trainer, tmp_path, early_stop_decision_indices=())
 
 
+class TestCrossLegParity:
+    """#75 — o MESMO input nas duas fábricas: mesma exceção (texto) ou mesmo resultado.
+
+    A regra do painel (C4/I17/C3) tem casa única no domínio (`tft_panel_geometry`);
+    estes testes fecham o input de cada guarda pelas DUAS pernas ao mesmo tempo e
+    exigem igualdade de mensagem — não `match` frouxo. Nota da auditoria do #74/#62: a
+    asserção cruzada não é um mecanismo que faltava (a suíte parametrizada verifica a
+    paridade transitivamente para todo input que tem); o que ela acrescenta é a
+    cobertura de input de cada `raise` e o aperto para igualdade de texto.
+    """
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            pytest.param(
+                {"params": TftTrainingParams(seed=7, max_encoder_length=40)}, id="c3-train"
+            ),
+            pytest.param(
+                {"early_stop_decision_indices": (_PANEL - 2, _PANEL - 1)}, id="c3-monitor"
+            ),
+            pytest.param({"target": _panel()[1][:-1]}, id="c4-target-length"),
+            pytest.param({"known_feature_names": ("not_a_column",)}, id="c4-known-names"),
+            pytest.param({"train_decision_indices": (*range(20), 25)}, id="c4-gap"),
+            pytest.param({"train_decision_indices": (*range(20), 19)}, id="c4-repeat"),
+            pytest.param({"test_decision_indices": (_PANEL, _PANEL + 1)}, id="c4-outside"),
+            pytest.param({"test_decision_indices": (-1, 0)}, id="c4-negative"),
+            pytest.param({"horizons": (1, 7)}, id="c4-horizon-range"),
+            pytest.param({"horizons": ()}, id="c4-empty-horizons"),
+            pytest.param({"max_horizon": 0, "horizons": ()}, id="c4-max-horizon"),
+            pytest.param({"early_stop_decision_indices": ()}, id="c4-empty-monitor"),
+        ],
+    )
+    def test_both_legs_reject_the_same_input_with_the_same_message(
+        self, tmp_path: Path, overrides: dict[str, Any]
+    ) -> None:
+        messages: dict[str, str] = {}
+        for name, trainer in (("fake", InMemoryTftTrainer()), ("real", PfTftTrainer())):
+            with pytest.raises(ValueError) as raised:
+                _call(trainer, tmp_path / name, **overrides)
+            messages[name] = str(raised.value)
+
+        assert messages["fake"] == messages["real"]
+        assert messages["fake"].endswith(("(C3)", "(C4)"))
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            pytest.param({}, id="canonical"),
+            pytest.param(
+                {"params": TftTrainingParams(seed=7, max_encoder_length=25)}, id="encoder-25"
+            ),
+            pytest.param({"early_stop_decision_indices": (49, 50, 51, 52)}, id="monitor-at-edge"),
+        ],
+    )
+    def test_both_legs_declare_the_same_counts_for_the_same_geometry(
+        self, tmp_path: Path, overrides: dict[str, Any]
+    ) -> None:
+        """I17 nas duas pernas, pelo caminho público de cada uma, no MESMO teste."""
+        fake = _call(InMemoryTftTrainer(), tmp_path / "fake", **overrides)
+        real = _call(PfTftTrainer(), tmp_path / "real", **overrides)
+
+        assert (fake.fitted_decision_count, fake.monitored_decision_count) == (
+            real.fitted_decision_count,
+            real.monitored_decision_count,
+        )
+
+
 def test_both_legs_are_exercised(trainer: TftTrainer, leg: str) -> None:
     """Guarda anti-suite-de-uma-perna, agora com dente.
 
