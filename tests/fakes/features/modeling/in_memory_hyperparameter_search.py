@@ -18,6 +18,9 @@ from typing import TYPE_CHECKING
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
     SearchTrial,
 )
+from financial_forecasting.features.modeling.domain.exceptions.backend import (
+    HyperparameterSearchError,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -33,9 +36,20 @@ _GRID_STEPS = 5
 
 
 class InMemoryHyperparameterSearch:
-    """Fake determinístico que satisfaz o port por duck-typing."""
+    """Fake determinístico que satisfaz o port por duck-typing.
 
-    def __init__(self) -> None:
+    `simulate_backend_failure`: quando informado, o fake ergue a exceção do contrato
+    (`HyperparameterSearchError`) com essa mensagem no MESMO ponto em que o adapter real chama a
+    biblioteca — DEPOIS da regra do port (issue #84). É o que permite ao contract
+    test provar que fake e real erguem o mesmo tipo quando "a lib falhou".
+    """
+
+    # Default de CLASSE: subclasses de teste que redefinem `__init__` sem chamar
+    # `super().__init__()` continuam sem falha simulada.
+    _simulate_backend_failure: str | None = None
+
+    def __init__(self, *, simulate_backend_failure: str | None = None) -> None:
+        self._simulate_backend_failure = simulate_backend_failure
         self.study_id: str | None = None
         self.seed: int | None = None
         self.direction = "minimize"
@@ -49,7 +63,14 @@ class InMemoryHyperparameterSearch:
         self.study_id = f"fake-study-{seed}"
         return self.study_id
 
+    def _backend(self, operation: str) -> None:
+        """Ponto em que o real toca o estudo do Optuna: falha simulada, se pedida."""
+        if self._simulate_backend_failure is not None:
+            msg = f"{operation}: {self._simulate_backend_failure}"
+            raise HyperparameterSearchError(msg) from RuntimeError("simulated backend failure")
+
     def ask(self, space: Sequence[SearchDimension]) -> SearchTrial:
+        self._backend("ask")
         number = len(self.trials)
         position = number % _GRID_STEPS
         fraction = position / (_GRID_STEPS - 1)
@@ -67,12 +88,14 @@ class InMemoryHyperparameterSearch:
         if trial_number not in {trial.number for trial in self.trials}:
             msg = f"trial {trial_number} não foi pedido a este estudo"
             raise ValueError(msg)
+        self._backend("tell")
         self.objectives[trial_number] = objective_value
 
     def fail(self, *, trial_number: int) -> None:
         if trial_number not in {trial.number for trial in self.trials}:
             msg = f"trial {trial_number} não foi pedido a este estudo"
             raise ValueError(msg)
+        self._backend("fail")
         self.failed.add(trial_number)
 
     def best_trial(self) -> SearchTrial:
