@@ -17,7 +17,7 @@ Duas travas:
 1. **Contagens de I17** — `fitted_decision_count`/`monitored_decision_count` para 6
    geometrias (janela 12/20/25, decodificador 2/3, monitor encostado na ponta),
    IDÊNTICAS nas duas pernas.
-2. **Bordas C3/C4** — 10 estruturas inválidas erguem `ValueError` com a mensagem
+2. **Bordas C3/C4** — 11 estruturas inválidas erguem `ValueError` com a mensagem
    IDÊNTICA nas duas pernas; o texto exato está congelado.
 """
 
