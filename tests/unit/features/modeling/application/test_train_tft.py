@@ -37,6 +37,9 @@ import pytest
 from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
     PersistPredictions,
 )
+from financial_forecasting.features.analytics_store.application.use_cases.persist_run_record import (  # noqa: E501
+    PersistRunRecord,
+)
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
     TftTrainingParams,
     TftTrainingResult,
@@ -287,7 +290,7 @@ def _build(
         splitter=WalkForwardSplitter(TradingCalendar(TradingSessions(sessions=_SESSIONS))),
         trainer=resolved_trainer,
         persist_predictions=PersistPredictions(repository=repo),
-        analytics_repository=repo,
+        persist_run_record=PersistRunRecord(repository=repo),
         tracker=resolved_tracker,
         hasher=CanonicalJsonHasher(),
         artifacts_root=tmp_path / "artifacts",

@@ -9,12 +9,13 @@ de `max_horizon` passos — ADR 5.4.0002), aplica o guardrail via
 `QuantileForecast.from_raw` (4.3, I5), registra 1 `RunRecord` por fold em
 `dim_run` (I10 — `seed` preenchida), aplica o dedup operationally-latest (5.1)
 com chave ESTRUTURAL e remoção-zero assertada (I11) e persiste as predições LONG
-via `PersistPredictions` (4.3) com `model_version='tft_quantile'`.
+via o port `PredictionPersister` (4.3) com `model_version='tft_quantile'`.
 
 **Imports cross-BC (decisão consciente, precedentes rastreados):** idênticos aos
-do `train_gbm_quantile.py` (5.3) — `modeling.application ->
-analytics_store.application` pela justificativa do dono único do
-`target_timestamp` (ADR 4.3.0001), e `modeling.application ->
+do `train_gbm_quantile.py` (5.3) — `modeling.application -> analytics_store` só
+de DADOS (DTO + VOs; a persistência entra pelos ports `PredictionPersister`/
+`RunRecordPersister` deste slice, issue #68 / ADR 0.0.0053) pela justificativa do
+dono único do `target_timestamp` (ADR 4.3.0001), e `modeling.application ->
 feature_engineering.domain` como consumo declarado no roadmap.
 
 Invariantes materializadas aqui (concept §5):
@@ -82,11 +83,11 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from datetime import date
 
-    from financial_forecasting.features.analytics_store.application.ports.out.analytics_repository import (  # noqa: E501
-        AnalyticsRepository,
+    from financial_forecasting.features.modeling.application.ports.out.prediction_persister import (
+        PredictionPersister,
     )
-    from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
-        PersistPredictions,
+    from financial_forecasting.features.modeling.application.ports.out.run_record_persister import (
+        RunRecordPersister,
     )
     from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
         TftTrainer,
@@ -115,8 +116,6 @@ logger = logging.getLogger(__name__)
 
 _DATASET_LAYER = "processed"
 _DATASET_TABLE = "dataset_tft"
-_SILVER_LAYER = "silver"
-_DIM_RUN_TABLE = "dim_run"
 _SPLIT = "test"
 _MODEL_VERSION = "tft_quantile"
 _ARTIFACT_SUBDIR = "tft"
@@ -263,8 +262,8 @@ class TrainTft:
         store: MedallionStore,
         splitter: WalkForwardSplitter,
         trainer: TftTrainer,
-        persist_predictions: PersistPredictions,
-        analytics_repository: AnalyticsRepository,
+        persist_predictions: PredictionPersister,
+        persist_run_record: RunRecordPersister,
         tracker: ExperimentTracker,
         hasher: Hasher,
         artifacts_root: Path,
@@ -273,7 +272,7 @@ class TrainTft:
         self._splitter = splitter
         self._trainer = trainer
         self._persist_predictions = persist_predictions
-        self._analytics_repository = analytics_repository
+        self._persist_run_record = persist_run_record
         self._tracker = tracker
         self._hasher = hasher
         self._artifacts_root = artifacts_root
@@ -600,8 +599,8 @@ class TrainTft:
             model_version=_MODEL_VERSION,
             schema_version=command.schema_version,
         )
-        rows: list[Row] = [asdict(record)]
-        self._analytics_repository.write(layer=_SILVER_LAYER, table=_DIM_RUN_TABLE, rows=rows)
+        # `analytics_store` grava (dono de `dim_run`); `created_at_utc` é do adapter (4.2 I5).
+        self._persist_run_record(record)
 
 
 # -- validação do comando (C2) ---------------------------------------------------

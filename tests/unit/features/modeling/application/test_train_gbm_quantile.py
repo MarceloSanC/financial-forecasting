@@ -36,6 +36,9 @@ import pytest
 from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
     PersistPredictions,
 )
+from financial_forecasting.features.analytics_store.application.use_cases.persist_run_record import (  # noqa: E501
+    PersistRunRecord,
+)
 from financial_forecasting.features.modeling.application.ports.out.quantile_model_trainer import (
     GbmTrainingParams,
     QuantileTrainingResult,
@@ -309,7 +312,7 @@ def _build(
         splitter=_splitter(),
         trainer=trainer if trainer is not None else FakeQuantileModelTrainer(),
         persist_predictions=PersistPredictions(repository=repo),
-        analytics_repository=repo,
+        persist_run_record=PersistRunRecord(repository=repo),
         hasher=hasher,
     )
     return use_case, repo
@@ -709,7 +712,7 @@ def test_i7_config_payload_pins_the_ordered_feature_names_and_run_id_has_nine_sl
         splitter=_splitter(),
         trainer=FakeQuantileModelTrainer(),
         persist_predictions=PersistPredictions(repository=repo),
-        analytics_repository=repo,
+        persist_run_record=PersistRunRecord(repository=repo),
         hasher=hasher,
     )
 

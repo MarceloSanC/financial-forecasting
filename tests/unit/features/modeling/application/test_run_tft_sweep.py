@@ -64,7 +64,10 @@ _HORIZONS = (1, 2)
 _SEED = 11
 _N_TRIALS = 3
 _EXPECTED_PHASE = "exploratory"
-_FORBIDDEN_PORTS = ("persist_predictions", "analytics_repository")
+# Os nomes com que os use cases confirmatórios recebem as portas de persistência
+# (`PredictionPersister`/`RunRecordPersister` — issue #68) e o repositório do
+# analytics_store (o caminho antigo, que a #68 removeu de todos e não pode voltar).
+_FORBIDDEN_PORTS = ("persist_predictions", "persist_run_record", "analytics_repository")
 
 _SCOPE = ScopeSpec(
     asset_id="TEST", feature_set_name="fs_test", max_horizon=2, cohort_id="cohort-h2"

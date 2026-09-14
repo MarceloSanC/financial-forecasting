@@ -30,6 +30,9 @@ from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet
 from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
     PersistPredictions,
 )
+from financial_forecasting.features.analytics_store.application.use_cases.persist_run_record import (  # noqa: E501
+    PersistRunRecord,
+)
 from financial_forecasting.features.feature_engineering.adapters.out.duckdb.asof_join_adapter import (  # noqa: E501
     AsofJoinDuckdbAdapter,
 )
@@ -203,15 +206,18 @@ def test_wire_dependencies_wires_run_baselines(tmp_path: Path) -> None:
     run_baselines = deps.run_baselines
     assert isinstance(run_baselines, RunBaselines)
     assert run_baselines._store is deps.store
-    assert run_baselines._analytics_repository is deps.analytics_repository
     assert run_baselines._hasher is deps.hasher
     assert isinstance(run_baselines._forecaster, _LazyStatsforecastBaselineForecaster)
     assert run_baselines._forecaster._delegate is None  # statsforecast ainda não carregou
     assert isinstance(run_baselines._splitter, WalkForwardSplitter)
     assert isinstance(run_baselines._persist_predictions, PersistPredictions)
-    # PersistPredictions reusa o MESMO repositório silver (ADR 4.3.0001 — dono
-    # único do target_timestamp atrás de um único adapter).
+    # PersistPredictions e PersistRunRecord (issue #68) reusam o MESMO repositório
+    # silver (ADR 4.3.0001 — dono único do target_timestamp atrás de um único
+    # adapter); o use case não recebe mais o repositório do outro slice.
     assert run_baselines._persist_predictions._repository is deps.analytics_repository
+    assert isinstance(run_baselines._persist_run_record, PersistRunRecord)
+    assert run_baselines._persist_run_record._repository is deps.analytics_repository
+    assert not hasattr(run_baselines, "_analytics_repository")
 
 
 @pytest.mark.unit
@@ -246,10 +252,12 @@ def test_wire_dependencies_wires_train_tft(tmp_path: Path) -> None:
     assert train_tft._store is deps.store
     assert train_tft._hasher is deps.hasher
     assert train_tft._tracker is deps.tracker
-    assert train_tft._analytics_repository is deps.analytics_repository
     assert isinstance(train_tft._splitter, WalkForwardSplitter)
     assert isinstance(train_tft._persist_predictions, PersistPredictions)
     assert train_tft._persist_predictions._repository is deps.analytics_repository
+    assert isinstance(train_tft._persist_run_record, PersistRunRecord)
+    assert train_tft._persist_run_record._repository is deps.analytics_repository
+    assert not hasattr(train_tft, "_analytics_repository")
     assert isinstance(train_tft._trainer, _LazyPfTftTrainer)
     assert train_tft._trainer._delegate is None  # torch ainda não foi importado
     assert train_tft._artifacts_root == tmp_path / "art"
@@ -277,6 +285,7 @@ def test_wire_dependencies_wires_run_tft_sweep(tmp_path: Path) -> None:
     assert isinstance(sweep._search, _LazyOptunaSearch)
     assert sweep._search._delegate is None  # optuna ainda não foi importado
     assert not hasattr(sweep, "_persist_predictions")
+    assert not hasattr(sweep, "_persist_run_record")
     assert not hasattr(sweep, "_analytics_repository")
 
 

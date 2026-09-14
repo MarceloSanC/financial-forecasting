@@ -83,6 +83,9 @@ if TYPE_CHECKING:
 from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
     PersistPredictions,
 )
+from financial_forecasting.features.analytics_store.application.use_cases.persist_run_record import (  # noqa: E501
+    PersistRunRecord,
+)
 
 # -- grade sintética e comando canônico dos testes -------------------------------
 
@@ -200,7 +203,7 @@ def _build(
         splitter=splitter if splitter is not None else _splitter(),
         forecaster=FakeBaselineForecaster(),
         persist_predictions=PersistPredictions(repository=repo),
-        analytics_repository=repo,
+        persist_run_record=PersistRunRecord(repository=repo),
         hasher=hasher,
     )
     return use_case, repo

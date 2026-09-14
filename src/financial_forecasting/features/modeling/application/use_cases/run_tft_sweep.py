@@ -7,13 +7,13 @@ validação de volta ao estudo e registra o trial no tracker com
 `phase='exploratory'`.
 
 **O isolamento é ESTRUTURAL, não procedimental (I14/D8).** Este use case não
-recebe `PersistPredictions` nem `AnalyticsRepository`: os caminhos que produzem
-linhas em `fact_oos_predictions` e `dim_run` estão AUSENTES do seu grafo de
-dependências, então gravar no armazém confirmatório não é um comportamento que
-ele possa expressar — não é um que ele evite por disciplina. O `MedallionStore`
-que ele recebe existe para LER o par read-only `(processed, dataset_tft)`; esse
-port expõe um `write` genérico, então a ausência de escritas por ele não é
-estrutural e é assertada em teste.
+recebe `PredictionPersister`/`RunRecordPersister` (nem o `AnalyticsRepository`): os
+caminhos que produzem linhas em `fact_oos_predictions` e `dim_run` estão AUSENTES do
+seu grafo de dependências, então gravar no armazém confirmatório não é um
+comportamento que ele possa expressar — não é um que ele evite por disciplina. O
+`MedallionStore` que ele recebe existe para LER o par read-only
+`(processed, dataset_tft)`; esse port expõe um `write` genérico, então a ausência
+de escritas por ele não é estrutural e é assertada em teste.
 
 Por que isso importa: o protocolo de Raschka (2018 §3-4) exige que a seleção de
 hiperparâmetros use apenas treino+validação, e que a avaliação final aconteça
@@ -151,8 +151,9 @@ class RunTftSweep:
         artifacts_root: Path,
     ) -> None:
         # NOTE: nenhuma porta de persistência de resultados entra aqui. Se
-        # alguém adicionar `PersistPredictions` ou `AnalyticsRepository` a esta
-        # assinatura, o teste estrutural de A10 reprova — é o gate de I14.
+        # alguém adicionar `PredictionPersister`, `RunRecordPersister` ou
+        # `AnalyticsRepository` a esta assinatura, o teste estrutural de A10 reprova —
+        # é o gate de I14.
         self._store = store
         self._splitter = splitter
         self._trainer = trainer

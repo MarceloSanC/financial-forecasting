@@ -26,7 +26,8 @@ fixa** do XNYS (F-T1 opção A; constantes comentadas abaixo), o
 `StatsforecastBaselineForecaster` atrás do port `BaselineForecaster` via **proxy
 lazy** (`_LazyStatsforecastBaselineForecaster` — statsforecast só carrega no
 primeiro `forecast`, precedente FinBERT), `PersistPredictions` +
-`ParquetAnalyticsRepository` (silver) e o `Hasher` 1.4.
+`PersistRunRecord` (issue #68) sobre o `ParquetAnalyticsRepository` (silver) e o
+`Hasher` 1.4.
 """
 
 from collections.abc import Mapping, Sequence
@@ -41,6 +42,9 @@ from financial_forecasting.features.analytics_store.application.ports.out.analyt
 )
 from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
     PersistPredictions,
+)
+from financial_forecasting.features.analytics_store.application.use_cases.persist_run_record import (  # noqa: E501
+    PersistRunRecord,
 )
 from financial_forecasting.features.feature_engineering.adapters.out.duckdb.asof_join_adapter import (  # noqa: E501
     AsofJoinDuckdbAdapter,
@@ -477,8 +481,11 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
     # O splitter recebe SÓ o `TradingCalendar` (o `Hasher` é parâmetro de
     # `split(...)`, repassado pelo use case — concept 5.2 §8); o calendário é
     # materializado UMA vez na janela ampla fixa (F-T1 opção A, constantes acima).
-    # `PersistPredictions` reusa o MESMO repositório silver de `dim_run` (dono
-    # único do `target_timestamp` — ADR 4.3.0001).
+    # `PersistPredictions` e `PersistRunRecord` (issue #68) são os use cases do
+    # `analytics_store` sobre o MESMO repositório silver; entram nos use cases de
+    # `modeling` pelos ports `PredictionPersister`/`RunRecordPersister` definidos
+    # no consumidor e satisfeitos por duck-typing (dono único do `target_timestamp`
+    # — ADR 4.3.0001; encapsulamento de `dim_run` — ADR 0.0.0053).
     splitter = WalkForwardSplitter(
         TradingCalendar(
             calendar_provider.sessions(start=_CALENDAR_WINDOW_START, end=_CALENDAR_WINDOW_END)
@@ -489,21 +496,22 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
         splitter=splitter,
         forecaster=_LazyStatsforecastBaselineForecaster(),
         persist_predictions=PersistPredictions(repository=analytics_repository),
-        analytics_repository=analytics_repository,
+        persist_run_record=PersistRunRecord(repository=analytics_repository),
         hasher=hasher,
     )
 
     # BC modeling (Stage 5.3, Task 06): `TrainGbmQuantile` compartilha o MESMO
     # splitter e o MESMO repositório silver dos baselines (grão e cohort comuns
-    # — o comparador H2 persiste no mesmo canal); o `PersistPredictions` é
-    # instância própria, stateless, sobre esse mesmo repositório. O trainer
+    # — o comparador H2 persiste no mesmo canal); `PersistPredictions` e
+    # `PersistRunRecord` são instâncias próprias, stateless, sobre esse mesmo
+    # repositório. O trainer
     # LightGBM entra atrás do proxy lazy (import da lib só no 1º treino).
     train_gbm_quantile = TrainGbmQuantile(
         store=store,
         splitter=splitter,
         trainer=_LazyLightgbmQuantileTrainer(),
         persist_predictions=PersistPredictions(repository=analytics_repository),
-        analytics_repository=analytics_repository,
+        persist_run_record=PersistRunRecord(repository=analytics_repository),
         hasher=hasher,
     )
 
@@ -518,7 +526,7 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
         splitter=splitter,
         trainer=tft_trainer,
         persist_predictions=PersistPredictions(repository=analytics_repository),
-        analytics_repository=analytics_repository,
+        persist_run_record=PersistRunRecord(repository=analytics_repository),
         tracker=tracker,
         hasher=hasher,
         artifacts_root=cfg.artifacts_root,

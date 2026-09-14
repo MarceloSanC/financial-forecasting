@@ -4,19 +4,21 @@ Orquestra (concept 5.2 §4, fluxo por referência — é o contrato): lê o data
 TFT via `MedallionStore` (par read-only `("processed", "dataset_tft")` — D3),
 gera folds via `WalkForwardSplitter` (5.1), invoca o `BaselineForecaster` por
 (spec x fold), aplica o guardrail via `QuantileForecast.from_raw` (4.3, I5),
-registra 1 `RunRecord` por (spec x fold) em `dim_run` (I10/D5), aplica o dedup
-operationally-latest (5.1) com chave ESTRUTURAL de índices e **remoção-zero
-assertada** (I6) e persiste as predições LONG via `PersistPredictions` (4.3)
-com `model_version='baseline_<family>'` e `split="test"`.
+registra 1 `RunRecord` por (spec x fold) em `dim_run` via o port
+`RunRecordPersister` (I10/D5), aplica o dedup operationally-latest (5.1) com chave
+ESTRUTURAL de índices e **remoção-zero assertada** (I6) e persiste as predições
+LONG via o port `PredictionPersister` (4.3) com `model_version='baseline_<family>'`
+e `split="test"`.
 
-**Import cross-BC `modeling.application -> analytics_store.application`
-(decisão consciente e rastreada — concept 5.2 §8):** este é o primeiro import
-use case -> use case entre BCs do repo. Justificativa por referência: (i) nenhum
-contrato do LAYOUT/`.importlinter` proíbe import cross-BC na mesma camada
-(`hexagonal-layers` é por container; a direção inward é preservada); (ii) a
-alternativa — falar direto com o `AnalyticsRepository` e remontar as linhas
-LONG — duplicaria a resolução do `target_timestamp`, violando o dono único do
-ADR 4.3.0001 (exatamente o bug Gap 6 que o 4.3 existe para impedir).
+**Fronteira com o `analytics_store` (issue #68, ADR 0.0.0053):** os dois ports
+são Protocols definidos em `modeling/application/ports/out/` e satisfeitos por
+duck-typing pelos use cases `PersistPredictions`/`PersistRunRecord` do slice dono
+(Dependency Inversion — o construtor não recebe classe concreta de outro slice nem
+o repositório dele). O que ainda cruza a fronteira em runtime são **dados**: o DTO
+`PersistPredictionsCommand` e os VOs `QuantileForecast`/`RunRecord` do
+`analytics_store` — arestas declaradas uma a uma no `bc-independence`. Remontar a
+linha LONG aqui duplicaria a resolução do `target_timestamp`, violando o dono
+único do ADR 4.3.0001 (exatamente o bug Gap 6 que o 4.3 existe para impedir).
 
 Invariantes materializadas aqui:
 
@@ -75,14 +77,14 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import date
 
-    from financial_forecasting.features.analytics_store.application.ports.out.analytics_repository import (  # noqa: E501
-        AnalyticsRepository,
-    )
-    from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
-        PersistPredictions,
-    )
     from financial_forecasting.features.modeling.application.ports.out.baseline_forecaster import (
         BaselineForecaster,
+    )
+    from financial_forecasting.features.modeling.application.ports.out.prediction_persister import (
+        PredictionPersister,
+    )
+    from financial_forecasting.features.modeling.application.ports.out.run_record_persister import (
+        RunRecordPersister,
     )
     from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
         WalkForwardSplitter,
@@ -104,8 +106,6 @@ if TYPE_CHECKING:
 
 _DATASET_LAYER = "processed"
 _DATASET_TABLE = "dataset_tft"
-_SILVER_LAYER = "silver"
-_DIM_RUN_TABLE = "dim_run"
 _SPLIT = "test"
 
 # Entrada estrutural do dedup (I6): (split, horizon, decision_idx + horizon,
@@ -187,15 +187,15 @@ class RunBaselines:
         store: MedallionStore,
         splitter: WalkForwardSplitter,
         forecaster: BaselineForecaster,
-        persist_predictions: PersistPredictions,
-        analytics_repository: AnalyticsRepository,
+        persist_predictions: PredictionPersister,
+        persist_run_record: RunRecordPersister,
         hasher: Hasher,
     ) -> None:
         self._store = store
         self._splitter = splitter
         self._forecaster = forecaster
         self._persist_predictions = persist_predictions
-        self._analytics_repository = analytics_repository
+        self._persist_run_record = persist_run_record
         self._hasher = hasher
 
     def __call__(self, command: RunBaselinesCommand) -> RunBaselinesResult:
@@ -403,9 +403,8 @@ class RunBaselines:
             model_version=spec.model_version,
             schema_version=command.schema_version,
         )
-        rows: list[Row] = [asdict(record)]
-        # O adapter injeta `created_at_utc` write-time (4.2 I5).
-        self._analytics_repository.write(layer=_SILVER_LAYER, table=_DIM_RUN_TABLE, rows=rows)
+        # `analytics_store` grava (dono de `dim_run`); `created_at_utc` é do adapter (4.2 I5).
+        self._persist_run_record(record)
 
 
 # -- validação do comando (C2) ---------------------------------------------------
