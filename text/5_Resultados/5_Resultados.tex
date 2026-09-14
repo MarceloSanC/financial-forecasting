@@ -1,0 +1,34 @@
+\chapter{Resultados e Discussão}
+
+% Guardrails do capitulo (fonte: docs/living-paper/chapter_structure_freeze.md)
+% Objetivo: apresentar resultados, comparacoes e interpretacoes com base em evidencias rastreaveis.
+% Escopo obrigatorio: resultados por horizonte/split, incerteza quantilica, comparacoes e robustez.
+% Fora de escopo: afirmacoes sem suporte empirico ou sem alinhamento temporal OOS.
+% Status: este capitulo aguarda execucao da Fase B (resultados confirmatorios) e da Fase C
+% (interpretabilidade) sob pre-registro versionado. A Round 0 e tratada apenas como diagnostico
+% exploratorio do pipeline; nao alimenta claims confirmatorios.
+
+\section{Cenários experimentais avaliados}
+Os experimentos deste trabalho dividem-se em duas naturezas distintas. A primeira é a Round 0, conduzida sobre o ativo piloto AAPL com a coorte controlada de prefixo \texttt{0\_2\_3\_} no horizonte \(h+1\), e teve como propósito exclusivo o diagnóstico exploratório do pipeline: depuração da extração e persistência de quantis, sensibilidade a hiperparâmetros e identificação de patologias quantílicas que motivaram a definição dos gates de qualidade da Fase B. A Round 0 não constitui evidência confirmatória sobre o desempenho do modelo; achados quantitativos dessa rodada permanecem registrados em \texttt{docs/07\_reports/ROUND0\_023\_FROZEN\_SHORTLIST.md} e no \texttt{evidence\_log} do living-paper para rastreabilidade histórica.
+
+A segunda natureza, ainda a ser executada, é a Fase B, prevista para fornecer os resultados confirmatórios contra baselines pré-declarados sob pré-registro versionado, com alinhamento temporal estrito por \textit{target timestamp}, múltiplas sementes, governança de coorte por \texttt{parent\_sweep\_id} e variante quantilica primária pós-guardrail. As seções seguintes deste capítulo são organizadas como espaços reservados que serão preenchidos quando os artefatos confirmatórios estiverem disponíveis.
+
+\section{Resultados agregados por horizonte e split}
+\textit{A ser preenchido após a Fase B.} Esta seção consolidará as métricas pontuais (RMSE, MAE, acurácia direcional e viés) por horizonte (\(h+1\), \(h+7\); \(h+30\) suplementar se a amostra efetiva permitir) e por partição temporal, restrita a \textit{runs} pós-\textit{reset} do \textit{silver}/\textit{gold} de 10 de maio de 2026 e ao escopo de coorte pré-registrado.
+
+\section{Análise da incerteza (quantis, cobertura, largura de intervalo)}
+\textit{A ser preenchido após a Fase B.} A análise probabilística reportará calibração marginal por quantil (\(p10\), \(p50\), \(p90\)), PICP intervalar para o intervalo \(p10\)-\(p90\), MPIW médio, pinball loss e \textit{reliability diagram} por horizonte, todos sob a variante pós-guardrail como objeto primário de avaliação, conforme política consolidada em \texttt{docs/04\_evaluation/METRICS\_DEFINITIONS.md} e \texttt{docs/04\_evaluation/CALIBRATION\_AND\_RISK.md}.
+
+\section{Comparações entre configurações e feature sets}
+\textit{A ser preenchido após a Fase B.} As comparações restringir-se-ão a configurações com a mesma chave de coorte (\texttt{parent\_sweep\_id}) e seguirão o contrato de baselines admissíveis declarado em \texttt{docs/04\_evaluation/BASELINES.md} (random walk, AR(1), média histórica, EWMA-vol, quantis empíricos históricos), com escopo de ativos e horizontes definidos no pré-registro.
+
+\section{Análise estatística pareada}
+\textit{A ser preenchido após a Fase B.} A análise pareada utilizará o teste de Diebold-Mariano \cite{DIEBOLDMARIANO1995} com correção HAC e ajuste para amostras pequenas no estilo Harvey-Leybourne-Newbold \cite{HARVEY1997}, e ajuste de múltiplas comparações por Holm-Bonferroni, sobre coortes alinhadas por \textit{target timestamp}, conforme especificação em \texttt{docs/04\_evaluation/STATISTICAL\_TESTS.md}. \textit{Model Confidence Set} \cite{HANSEN2011MCS} poderá ser reportado quando o número de candidatos justificar.
+
+\section{Interpretabilidade e implicações}
+\textit{A ser preenchido após a Fase C.} A análise de contribuição relativa de famílias de indicadores (preço, técnico, sentimento, fundamentalista) seguirá a hierarquia metodológica de \texttt{docs/04\_evaluation/EXPLAINABILITY.md}: \textit{Variable Selection Network} (VSN) como evidência primária, importância por permutação como evidência complementar, ablação explicativa como verificação adicional. Conclusões de contribuição exigirão consistência em pelo menos dois dos três métodos.
+
+\section{Ameaças à validade dos resultados}
+As principais ameaças à validade incluem: (i) sensibilidade dos resultados ao recorte de ativo, horizonte e janela temporal, (ii) possibilidade de subpotência estatística para detectar diferenças pequenas entre candidatos, e (iii) risco de interpretação indevida quando comparações são feitas fora da mesma interseção temporal. Para mitigar esses riscos, a análise adotou coorte congelada, alinhamento temporal estrito e leitura conjunta de métricas pontuais, probabilísticas e pareadas.
+
+Adicionalmente, embora a infraestrutura de persistência favoreça rastreabilidade e reconstrução analítica, a generalização externa dos achados depende de replicação em outros ativos e períodos. Assim, as conclusões desta rodada devem ser entendidas como evidência robusta para o escopo experimental definido, e não como afirmação universal sobre desempenho relativo de arquiteturas ou famílias de features.

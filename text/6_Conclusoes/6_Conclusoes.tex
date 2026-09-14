@@ -1,0 +1,57 @@
+\chapter{Conclusões}
+
+% Guardrails do capitulo (fonte: docs/living-paper/chapter_structure_freeze.md)
+% Objetivo: sintetizar achados, contribuicoes, limitacoes e agenda futura.
+% Escopo obrigatorio: conclusoes sustentadas pelos resultados documentados.
+% Fora de escopo: novas afirmacoes sem evidencia na secao de resultados.
+
+\section{Síntese dos achados}
+% TODO: aguardando Fase B (resultados confirmatorios H1/H2a/H2b) e Fase C
+% (contribuicao de familias H3). Preencher apos consolidacao dos artefatos.
+
+\section{Contribuições do trabalho}
+As contribuições deste trabalho são organizadas em duas frentes: metodológicas, já consolidadas pelo desenho experimental e pela infraestrutura analítica do projeto, e empíricas, dependentes da execução confirmatória da Fase B e da análise de contribuição da Fase C.
+
+\subsection{Contribuições metodológicas}
+A primeira contribuição é a definição de uma política operacional de variante quantilica (\textit{raw} e pós-\textit{guardrail}) para avaliação probabilística com regressores quantílicos sujeitos a \textit{quantile crossing}. A política classifica cada tabela analítica em uma de três categorias (dual obrigatória, pós-\textit{guardrail} apenas, \textit{raw} apenas), conforme \texttt{docs/04\_evaluation/METRICS\_DEFINITIONS.md}, e declara a variante primária para cada hipótese. A justificativa formal segue resultado de Chernozhukov, Fernández-Val e Galichon (2010) sobre rearranjo monotônico de funções quantis sob perdas convexas simétricas em torno da mediana \cite{CHERNOZHUKOV2010REARRANGEMENT}, em conjunto com o enquadramento de regras de pontuação estritamente próprias \cite{GNEITING2007} e com a exigência de monotonicidade para medidas coerentes de risco \cite{JORION2007,ACERBI2002}.
+
+A segunda contribuição é a governança de coorte por \texttt{parent\_sweep\_id} como mecanismo explícito de comparabilidade entre execuções. Toda comparação confirmatória do candidato Temporal Fusion Transformer \textit{all-features} contra \textit{baselines} pré-declarados é restrita a \textit{runs} da mesma coorte, com o mesmo \textit{scope spec} de \textit{splits} e horizontes, evitando que \textit{rankings} e seleções misturem coortes heterogêneas. Esse mecanismo é operacionalizado em \texttt{docs/01\_architecture/ANALYTICS\_STORE\_ARCHITECTURE.md} e adotado como pré-condição de validade em qualquer teste estatístico pareado.
+
+A terceira contribuição é a separação operacional entre camadas imutáveis (fonte primária) e camadas reconstruíveis (analítica derivada), implementada como decisão arquitetural em \texttt{docs/01\_architecture/decisions/ADR-0001-analytics-store.md}. Essa arquitetura permite que conclusões sejam reproduzidas a partir de artefatos persistidos, sem retreinar modelos, e que reanálises com diferentes contratos (por exemplo, mudança de variante primária) sejam executadas em janela curta e auditável.
+
+A quarta contribuição é a hierarquia explícita de evidência para análise de contribuição de famílias de indicadores, documentada em \texttt{docs/04\_evaluation/EXPLAINABILITY.md}: \textit{Variable Selection Network} nativa do TFT \cite{LIMETAL2021TFT}, importância por permutação e ablação explicativa, com regra de consistência em pelo menos dois dos três métodos para sustentar afirmações de contribuição relativa. A hierarquia incorpora também a distinção formal entre contribuição preditiva condicional ao modelo e inferência causal, vedando \textit{claims} causais a partir de evidência preditiva.
+
+A quinta contribuição é a adoção de pré-registro versionado como pré-condição bloqueante para a rodada confirmatória, conforme \texttt{docs/08\_governance/EXPERIMENT\_TRACKING\_POLICY.md}. O pré-registro fixa, antes da observação dos resultados, candidato, \textit{baselines}, métrica primária, bandas de calibração, regra de desempate e contrato de variante quantilica, eliminando graus de liberdade que, na ausência da declaração antecipada, induzem \textit{p-hacking} e seleção adversa de \textit{baselines} \cite{PINEAU2021REPRODUCIBILITY}.
+
+\subsection{Contribuições empíricas}
+% TODO: consolidar contribuicoes empiricas (calibracao observada por horizonte;
+% comparacao TFT vs baselines; contribuicao relativa de familias) apos Fase B/C.
+As contribuições empíricas reportam, sob o protocolo estatístico acima, a calibração probabilística observada por horizonte, a comparação pareada do candidato contra os \textit{baselines} pré-declarados e a contribuição relativa das famílias de indicadores. Sua consolidação depende da execução confirmatória da Fase B e da análise de contribuição da Fase C, sob o pré-registro versionado, e será incorporada nesta seção após o fechamento das duas fases.
+
+\section{Limitações}
+As limitações deste trabalho são, em parte, decorrência direta do recorte assumido e devem ser interpretadas conjuntamente com os achados, independentemente do desfecho confirmatório das hipóteses.
+
+Em primeiro lugar, os modelos são \textit{single-asset} por ativo: cada execução é treinada e avaliada para um ativo específico, com AAPL como piloto inicial. A plataforma é multi-ativo e a \textit{pipeline} pode ser replicada para outros ativos, mas as conclusões são válidas apenas para os ativos e períodos efetivamente avaliados, sem afirmação de generalização para ativos, mercados ou períodos não incluídos no pré-registro.
+
+Em segundo lugar, as análises de contribuição relativa de famílias de indicadores (preço, técnico, sentimento, fundamentalista) por \textit{Variable Selection Network}, importância por permutação e ablação explicativa indicam contribuição preditiva condicional ao modelo treinado, e não causalidade. Interpretações locais são reportadas como ilustrativas; conclusões metodológicas derivam de evidência global por horizonte e da estabilidade entre sementes e \textit{folds}.
+
+Em terceiro lugar, retornos diários de ativo líquido apresentam expectativa empírica de \(R^2\) fora da amostra reduzida (tipicamente entre \(0{,}1\%\) e \(1\%\) na literatura de \textit{equity premium} \cite{GU2020}), o que torna empiricamente plausível a ausência de superioridade do candidato TFT \textit{all-features} frente a \textit{baselines} simples. Refutação de H2a ou H2b é, nesse contexto, resultado científico válido sobre os limites do estimador para os ativos avaliados sob protocolo OOS auditável, e não falha do método.
+
+Em quarto lugar, o horizonte \(h+30\) é tratado como suplementar por padrão, dada amostra efetiva pequena e sobreposição temporal entre observações; \textit{claims} confirmatórios concentram-se em \(h+1\) e \(h+7\).
+
+Em quinto lugar, os resultados da Round 0 (rodada exploratória sobre AAPL com coorte \texttt{0\_2\_3\_}) têm papel apenas diagnóstico do \textit{pipeline} e motivador dos \textit{quality gates}; não constituem evidência confirmatória. \textit{Claims} confirmatórios dependem da Fase B sob pré-registro versionado, conforme \texttt{docs/08\_governance/preregistration\_round1}.
+
+Em sexto lugar, o histórico de execuções anteriores a 10 de maio de 2026 apresentou \(91{,}25\%\) de degenerescência quantilica em \textit{runs} com \texttt{parent\_sweep\_id} nulo, fato registrado em \texttt{docs/07\_reports/phase-gates/A\_code\_audit.md} (M5-Q5) e em \texttt{docs/07\_reports/living-paper/evidence\_log.md}. Esse \textit{snapshot} foi arquivado em \texttt{data/analytics\_archive\_pre\_phase\_b/} e tratado como diagnóstico histórico; nenhum \textit{run} desse histórico alimenta resultados confirmatórios deste trabalho. A fronteira temporal para \textit{claims} confirmatórios é, portanto, posterior ao \textit{reset} operacional documentado em \texttt{docs/01\_architecture/ANALYTICS\_STORE\_ARCHITECTURE.md} (\textit{Archive pre-Phase B}).
+
+Por fim, a interpretabilidade local da arquitetura TFT é tratada como ilustrativa; conclusões de contribuição relativa de famílias de indicadores requerem consistência em pelo menos dois dos três métodos definidos no Capítulo 4 (VSN, permutação, ablação) e estabilidade entre sementes e \textit{folds}.
+
+\section{Trabalhos futuros}
+Como evoluções tecnicamente coerentes com as limitações observadas, propõem-se quatro direções.
+
+A primeira é ampliar a avaliação para mais ativos reais, mantendo o desenho \textit{single-asset} (um modelo por ativo) e definindo critérios de inclusão de ativos no próprio pré-registro, com declaração explícita de disponibilidade, qualidade e comparabilidade.
+
+A segunda é tratar classificação ou detecção de regimes de mercado como estudo separado, com rotulagem e metodologia próprias; o presente trabalho registra \textit{out-of-distribution} e regimes de alta volatilidade apenas como ameaças à validade, não como objeto de modelagem.
+
+A terceira é o desenho de estudo específico para inferência causal ou econométrica das famílias de indicadores. O escopo atual sustenta apenas contribuição preditiva condicional ao modelo; afirmações causais exigem identificação adequada, fora do recorte deste TCC.
+
+A quarta é a aplicação do estimador em \textit{portfolio} ou estratégia de \textit{trading}, condicionada à validação fora do escopo experimental atual (custos de transação, microestrutura, restrição de execução), também fora do recorte deste trabalho.

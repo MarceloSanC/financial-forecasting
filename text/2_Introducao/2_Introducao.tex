@@ -1,0 +1,44 @@
+\chapter{Introdução} \label{chap: Intro}
+
+% Guardrails do capitulo (fonte: docs/living-paper/chapter_structure_freeze.md)
+% Objetivo: apresentar contexto, problema, justificativa, objetivos, delimitacao e estrutura do trabalho.
+% Escopo obrigatorio: forecasting financeiro com TFT, avaliacao OOS e incerteza quantilica.
+% Fora de escopo: tema central de classificacao de sentimento com CNN.
+
+\section{Contextualização e motivação}
+\textit{Nota terminológica}: as siglas e termos técnicos recorrentes ao longo deste trabalho (TFT, VSN, PICP, MPIW, \textit{pinball loss}, \textit{crossing}, variante \textit{post-guardrail}, coorte, pré-registro, DM, HLN, MCS, entre outros) são definidos formalmente no Apêndice B (\textit{Glossário técnico de termos recorrentes}). Cada um é introduzido contextualmente em sua primeira ocorrência no corpo do texto, com referência cruzada à entrada correspondente do glossário quando útil para auditoria.
+
+A previsão de séries temporais financeiras permanece como um problema de elevada relevância acadêmica e aplicada, dada a sua relação direta com decisão de investimento, gestão de risco e alocação de capital. Na literatura econômica, a Hipótese de Mercado Eficiente estabelece um referencial clássico segundo o qual os preços incorporam rapidamente a informação disponível, tornando a previsão sistemática um desafio metodológico relevante \cite{FAMA1991}. Em paralelo, a Hipótese de Mercados Adaptativos propõe que a dinâmica de mercado é evolutiva e dependente de contexto, abrindo espaço para modelos que capturem não linearidades e mudanças de regime \cite{LO2004}.
+
+Uma calibração empírica das expectativas é necessária antes de propor qualquer protocolo de avaliação. Trabalhos de referência em \textit{equity premium prediction} indicam que o \(R^2\) fora da amostra esperado para retornos diários de ações líquidas costuma situar-se em uma faixa estreita, entre aproximadamente \(0{,}1\%\) e \(1\%\), mesmo com modelos flexíveis e grande conjunto de preditores \cite{GU2020,RAPACH2013}. Esse patamar baixo significa que ganhos preditivos modestos são a norma, e que protocolos que reportem ganhos sistematicamente altos devem ser inspecionados quanto a vazamento temporal de informação e seleção pós-observação dos resultados. Tal patamar também justifica priorizar avaliação probabilística e calibração de intervalos em vez de erro pontual isolado: previsões probabilísticas honestas continuam informativas mesmo quando a melhoria no ponto previsto é pequena.
+
+Com o aumento de disponibilidade de dados e capacidade computacional, abordagens de aprendizado de máquina passaram a ocupar papel central em \textit{forecasting} financeiro, especialmente em cenários multivariados e de múltiplos horizontes \cite{LIMZOHREN2021}. Nesse contexto, o Temporal Fusion Transformer (TFT; ver \hyperref[gl:tft]{Apêndice B}) destaca-se por combinar modelagem temporal, seleção de variáveis e interpretabilidade em tarefas de previsão, tornando-se uma referência contemporânea para problemas com covariáveis heterogêneas \cite{LIMETAL2021TFT}.
+
+\section{Problema de pesquisa}
+Apesar dos avanços recentes, ainda é comum observar estudos com comparações pouco auditáveis entre configurações de \textit{features} e hiperparâmetros, além de avaliações concentradas apenas em erro pontual. Esse cenário dificulta a distinção entre ganho real de modelagem e efeito de desenho experimental. Em previsão financeira, essa limitação é crítica, pois a utilidade prática depende não apenas de acurácia média, mas também de quantificação de incerteza e estabilidade fora da amostra.
+
+Sob a ótica de previsão probabilística, avaliar apenas ponto previsto é insuficiente; é necessário verificar qualidade distributiva, calibração e cobertura de intervalos \cite{GNEITING2007}. Em termos metodológicos, previsões quantílicas oferecem um arcabouço consolidado para representar incerteza em diferentes faixas de risco \cite{KOENKERBASSETT1978}. Adicionalmente, comparações entre modelos devem respeitar alinhamento temporal e teste estatístico apropriado de acurácia preditiva, como no \textit{framework} de Diebold-Mariano \cite{DIEBOLDMARIANO1995}. Assim, este trabalho investiga se um protocolo reprodutível com TFT e saída quantílica melhora a confiabilidade da comparação entre configurações em ambiente fora da amostra.
+
+\section{Justificativa}
+Este estudo se justifica por três frentes complementares. Na frente científica, contribui para reduzir lacunas de comparabilidade e reprodutibilidade em \textit{forecasting} financeiro ao integrar arquitetura, dados, métricas e rastreabilidade em um mesmo protocolo experimental. Na frente metodológica, adota o TFT como modelo principal por sua adequação a cenários multivariados com múltiplos horizontes e por oferecer mecanismos de interpretação relevantes para análise aplicada \cite{LIMETAL2021TFT}. Na frente prática, incorpora predição quantílica para suporte a decisão sob incerteza, condição essencial em contextos financeiros.
+
+Além disso, ao registrar de forma explícita configurações, partições temporais e artefatos de execução, o trabalho se alinha a recomendações contemporâneas de rigor experimental em aprendizado de máquina, favorecendo auditoria e repetibilidade dos resultados \cite{PINEAU2021REPRODUCIBILITY}.
+
+\section{Objetivos}
+\subsection{Objetivo geral}
+Avaliar rigorosamente a calibração probabilística de um Temporal Fusion Transformer aplicado à previsão multi-horizonte de retornos por ativo e caracterizar a contribuição relativa de famílias de indicadores sob um protocolo estatístico explícito, reprodutível e com pré-registro versionado, no recorte de ativo piloto AAPL e modelos \textit{single-asset}.
+
+\subsection{Objetivos específicos}
+\begin{itemize}
+    \item Estruturar um fluxo integrado de dados financeiros (preço, indicadores técnicos, sentimento agregado e fundamentos), com controle de consistência temporal e mitigação de \textit{leakage}.
+    \item Implementar treinamento e inferência com Temporal Fusion Transformer em modo quantílico (\(p10\), \(p50\), \(p90\)), com rastreabilidade completa de configurações, artefatos e sementes.
+    \item Definir e aplicar protocolo experimental reprodutível com pré-registro versionado, particionamento temporal, múltiplas sementes, alinhamento estrito por \textit{target timestamp} e comparação contra \textit{baselines} explícitos pré-declarados.
+    \item Avaliar calibração probabilística com métricas completas (calibração marginal por quantil, PICP intervalar, MPIW, \textit{pinball loss}, \textit{reliability diagram}) e comparar com \textit{baselines} via Diebold-Mariano com correção HAC e ajuste de Holm-Bonferroni.
+    \item Caracterizar a contribuição relativa de famílias de indicadores via \textit{Variable Selection Network}, importância por permutação e ablação explicativa, reportando convergências e divergências entre os três métodos.
+\end{itemize}
+
+\section{Delimitação do estudo}
+O recorte desta pesquisa é delimitado pela previsão supervisionada de séries temporais financeiras com Temporal Fusion Transformer, em desenho \textit{single-asset}: cada modelo é treinado e avaliado para um ativo específico, com AAPL como ativo piloto inicial. A \textit{pipeline} é multi-ativo e pode ser replicada para outros ativos, condicionada a critérios de disponibilidade, qualidade e comparabilidade declarados no próprio pré-registro. Os horizontes principais de avaliação são \(h+1\) e \(h+7\); \(h+30\) é tratado como suplementar quando a amostra efetiva permitir. A avaliação concentra-se em desempenho fora da amostra com métricas pontuais e probabilísticas, e em comparação pareada contra \textit{baselines} pré-declarados sob alinhamento temporal estrito por \textit{target timestamp}. A governança de coorte é operacionalizada por identificador explícito de \textit{sweep} pai, de modo que toda comparação confirmatória ocorra entre execuções da mesma coorte experimental. Não constitui objetivo deste trabalho comparar exaustivamente múltiplas arquiteturas profundas, propor estratégia de \textit{trading} em produção, generalizar para ativos ou períodos não avaliados, nem inferir causalidade entre indicadores e retorno.
+
+\section{Estrutura do trabalho}
+Além desta introdução, o Capítulo 3 apresenta a fundamentação teórica sobre previsão financeira, modelagem temporal com aprendizado profundo, predição probabilística e critérios de avaliação fora da amostra. O Capítulo 4 descreve o método, incluindo dados, engenharia de \textit{features}, configuração do TFT, protocolo experimental, métricas e rastreabilidade. O Capítulo 5 consolida os resultados e a discussão, com análise comparativa entre configurações e avaliação de incerteza. Por fim, o Capítulo 6 sintetiza os achados, explicita limitações e apresenta direções de trabalhos futuros.
