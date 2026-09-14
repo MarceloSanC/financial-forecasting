@@ -372,6 +372,29 @@ class TestHyperparameterSearchBackendFailure:
         with pytest.raises(ValueError, match="999"):
             search.tell(trial_number=999, objective_value=1.0)
 
+    @pytest.mark.parametrize("leg", _LEGS)
+    def test_tell_and_fail_translate_a_backend_failure_after_a_healthy_ask(
+        self, leg: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`tell`/`fail` também estão atrás da tradução (o real passa pelo mesmo `Study.tell`)."""
+        search = _search(leg, broken=False, monkeypatch=monkeypatch)
+        search.create_study(seed=11)
+        trial = search.ask(_SPACE)
+        if leg == "fake":
+            search._simulate_backend_failure = _SIMULATED
+        else:
+
+            def _raising_tell(self: Any, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+                msg = "storage backend unavailable"
+                raise StorageInternalError(msg)
+
+            monkeypatch.setattr(optuna.study.Study, "tell", _raising_tell)
+
+        with pytest.raises(HyperparameterSearchError, match="tell"):
+            search.tell(trial_number=trial.number, objective_value=1.0)
+        with pytest.raises(HyperparameterSearchError, match="fail"):
+            search.fail(trial_number=trial.number)
+
     def test_missing_study_is_a_wiring_runtime_error_not_translated(self) -> None:
         """`_require_study` continua `RuntimeError`: bug de wiring propaga (issue #84)."""
         with pytest.raises(RuntimeError, match="create_study"):
