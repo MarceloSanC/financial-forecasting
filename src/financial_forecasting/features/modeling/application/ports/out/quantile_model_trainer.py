@@ -137,6 +137,8 @@ class QuantileModelTrainer(Protocol):
 
         Raises:
             ValueError: treino insuficiente (C3), estrutura inconsistente (C4)
-                ou emissão não finita (C5).
+                ou emissão não finita (C5) — bug do CHAMADOR ou dado inviável.
+            ModelTrainingError: o backend de treino (a lib) falhou ao ajustar
+                um booster; a original fica em `__cause__` (issue #84).
         """
         ...

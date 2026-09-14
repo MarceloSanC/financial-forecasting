@@ -29,6 +29,9 @@ from typing import TYPE_CHECKING
 from financial_forecasting.features.modeling.application.ports.out.quantile_model_trainer import (
     QuantileTrainingResult,
 )
+from financial_forecasting.features.modeling.domain.exceptions.backend import (
+    ModelTrainingError,
+)
 from financial_forecasting.features.modeling.domain.services.quantile_grid_emission import (
     sample_quantiles_type7,
 )
@@ -50,7 +53,20 @@ _FAKE_BEST_ITERATION = 1
 
 
 class FakeQuantileModelTrainer:
-    """Implementação in-memory determinística do contrato `QuantileModelTrainer`."""
+    """Implementação in-memory determinística do contrato `QuantileModelTrainer`.
+
+    `simulate_backend_failure`: quando informado, o fake ergue a exceção do contrato
+    (`ModelTrainingError`) com essa mensagem no MESMO ponto em que o adapter real chama a
+    biblioteca — DEPOIS da regra do port (issue #84). É o que permite ao contract
+    test provar que fake e real erguem o mesmo tipo quando "a lib falhou".
+    """
+
+    # Default de CLASSE: subclasses de teste que redefinem `__init__` sem chamar
+    # `super().__init__()` continuam sem falha simulada.
+    _simulate_backend_failure: str | None = None
+
+    def __init__(self, *, simulate_backend_failure: str | None = None) -> None:
+        self._simulate_backend_failure = simulate_backend_failure
 
     def train_and_predict(  # noqa: PLR0913 — assinatura do port (parâmetros coesos)
         self,
@@ -93,18 +109,17 @@ class FakeQuantileModelTrainer:
                 # Paridade com o real (I11): monitor pós-filtragem vazio não é
                 # "seguir sem monitor" — é dado insuficiente (F2, Checkpoint C b1).
                 raise ValueError(
-                    f"horizon {horizon}: early_stop has no finite-label monitor "
-                    "pairs (C3)"
+                    f"horizon {horizon}: early_stop has no finite-label monitor pairs (C3)"
                 )
-            grid_by_horizon[horizon] = sample_quantiles_type7(
-                values=finite, levels=quantile_levels
-            )
+            if self._simulate_backend_failure is not None:
+                # No ponto em que o real chama `lgb.train` — depois de C3/C4.
+                raise ModelTrainingError(self._simulate_backend_failure) from RuntimeError(
+                    "simulated backend failure"
+                )
+            grid_by_horizon[horizon] = sample_quantiles_type7(values=finite, levels=quantile_levels)
 
         grids: dict[int, GridByHorizon] = {
             decision_idx: dict(grid_by_horizon) for decision_idx in test_decision_indices
         }
         best_iterations = dict.fromkeys(train_labels_by_horizon, _FAKE_BEST_ITERATION)
-        return QuantileTrainingResult(
-            grids=grids, best_iteration_by_horizon=best_iterations
-        )
-
+        return QuantileTrainingResult(grids=grids, best_iteration_by_horizon=best_iterations)

@@ -29,6 +29,9 @@ from financial_forecasting.features.modeling.application.use_cases.train_tft imp
     known_feature_names,
     unknown_feature_names,
 )
+from financial_forecasting.features.modeling.domain.exceptions.backend import (
+    ModelTrainingError,
+)
 from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
     WalkForwardSplitter,
 )
@@ -351,6 +354,58 @@ class TestObjectiveReachesTheStudy:
         assert len(result.trials) == _N_TRIALS - 1
         assert search.failed == {failing_trial}
         assert failing_trial not in search.objectives
+
+
+class TestBackendFailureVersusWiringBug:
+    """#84 — o `except` do laço captura SÓ `ValueError` e `ModelTrainingError`.
+
+    `ValueError` = a regra do port/DTO recusa a combinação (C3, `learning_rate=0.0`);
+    `ModelTrainingError` = a lib falhou nessa combinação. Os dois são "trial inviável":
+    marcado como falho, sem objetivo, e a varredura segue. `RuntimeError`/`TypeError`
+    são bug de wiring — propagam, em vez de virar um C9 no fim que esconde a causa.
+    """
+
+    def test_backend_failure_marks_the_trial_failed_and_continues(self, tmp_path: Path) -> None:
+        failing_trial = 1
+
+        class _BackendFailsTheSecond(InMemoryTftTrainer):
+            def train_and_predict(self, **kwargs: Any) -> Any:  # noqa: ANN401
+                result = super().train_and_predict(**kwargs)
+                if len(self.calls) == failing_trial + 1:
+                    msg = "lightning failed: MisconfigurationException"
+                    raise ModelTrainingError(msg)
+                return result
+
+        use_case, _, _, _ = _build(tmp_path, trainer=_BackendFailsTheSecond())
+        search = use_case._search
+
+        result = use_case(_command())
+
+        assert len(result.trials) == _N_TRIALS - 1
+        assert search.failed == {failing_trial}
+        assert failing_trial not in search.objectives
+
+    @pytest.mark.parametrize(
+        "wiring_error",
+        [
+            pytest.param(RuntimeError("create_study precisa ser chamado antes"), id="runtime"),
+            pytest.param(TypeError("unexpected keyword argument 'hiden_size'"), id="type"),
+        ],
+    )
+    def test_wiring_bug_propagates_instead_of_being_marked_infeasible(
+        self, tmp_path: Path, wiring_error: Exception
+    ) -> None:
+        class _WiringBug(InMemoryTftTrainer):
+            def train_and_predict(self, **kwargs: Any) -> Any:  # noqa: ANN401
+                super().train_and_predict(**kwargs)
+                raise wiring_error
+
+        use_case, _, _, _ = _build(tmp_path, trainer=_WiringBug())
+        search = use_case._search
+
+        with pytest.raises(type(wiring_error)):
+            use_case(_command())
+        assert search.failed == set()  # não foi mascarado como trial inviável
 
 
 class TestFoldChoice:

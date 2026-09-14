@@ -44,6 +44,9 @@ from financial_forecasting.features.modeling.application.use_cases.train_tft imp
     known_feature_names,
     unknown_feature_names,
 )
+from financial_forecasting.features.modeling.domain.exceptions.backend import (
+    ModelTrainingError,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -211,12 +214,21 @@ class RunTftSweep:
                     quantile_levels=command.quantile_levels,
                     artifact_dir=str(self._artifacts_root / _ARTIFACT_SUBDIR / study_id),
                 )
-            except (ValueError, RuntimeError, TypeError):
+            except (ValueError, ModelTrainingError):
                 # Trial inviável não derruba a varredura, e NÃO recebe objetivo
                 # inventado — inventar um valor contaminaria o amostrador. O
                 # trial é marcado como falho no estudo em vez de ficar pendente:
                 # o TPE só considera trials completos, então a marcação preserva
                 # a mesma garantia sem deixar trial zumbi.
+                #
+                # Dois tipos, e SÓ dois (issue #84): `ValueError` é a REGRA do
+                # port/DTO recusando a combinação (C3 — janela maior que o bloco
+                # de treino; `learning_rate=0.0` no DTO) e `ModelTrainingError` é
+                # a biblioteca falhando nessa combinação — os dois significam
+                # "este trial não é viável". `RuntimeError`/`TypeError` NÃO são
+                # capturados: são bug de wiring (`create_study` não chamado,
+                # dimensão do espaço que não é campo do DTO) e mascará-los como
+                # "trial inviável" esconderia o defeito atrás de um C9 no fim.
                 logger.exception("trial %s falhou e foi descartado da varredura", trial.number)
                 self._search.fail(trial_number=trial.number)
                 continue
