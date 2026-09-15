@@ -151,9 +151,9 @@ class RunTftSweep:
         artifacts_root: Path,
     ) -> None:
         # NOTE: nenhuma porta de persistência de resultados entra aqui. Se
-        # alguém adicionar `PredictionPersister`, `RunRecordPersister` ou
-        # `AnalyticsRepository` a esta assinatura, o teste estrutural de A10 reprova —
-        # é o gate de I14.
+        # alguém adicionar um parâmetro `persist_predictions`, `persist_run_record`
+        # ou `analytics_repository` a esta assinatura, o teste estrutural de A10
+        # reprova (ele checa os NOMES dos parâmetros) — é o gate de I14.
         self._store = store
         self._splitter = splitter
         self._trainer = trainer

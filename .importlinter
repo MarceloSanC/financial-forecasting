@@ -403,8 +403,9 @@ allow_indirect_imports = False
 #     slice NÃO COBERTO — qualquer aresta que o envolva, inclusive uma nova,
 #     passa verde. As 9 arestas `feature_engineering -> market_data.domain.
 #     entities` (Candle/NewsArticle/FundamentalReport em assinatura de port) não
-#     estão declaradas abaixo. Incluí-lo forçaria agora a decisão sobre essas
-#     entidades, que a issue #68 defere para ADR própria.
+#     estão declaradas abaixo. A regra que as julga já existe (ADR 0.0.0053:
+#     dados em assinatura de port ficam declarados); incluir `market_data` no
+#     contrato e declarar as 9 arestas é a issue #95 (speculative).
 #   - Imports sob `if TYPE_CHECKING:` não são vistos
 #     (`exclude_type_checking_imports = True`, ver cabeçalho). Hoje os únicos
 #     type-only cross-BC do trio são as assinaturas dos ports de `modeling`

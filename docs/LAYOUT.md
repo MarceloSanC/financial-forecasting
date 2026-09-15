@@ -266,8 +266,9 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
     **não coberto**: qualquer aresta envolvendo `market_data`, inclusive uma nova,
     passa verde. As 9 arestas `feature_engineering → market_data.domain.entities`
     (`Candle`, `NewsArticle`, `FundamentalReport` em assinatura de port) **não**
-    estão declaradas uma a uma. Incluir `market_data` no contrato forçaria agora a
-    decisão sobre essas entidades, que a issue #68 defere para ADR própria.
+    estão declaradas uma a uma. A regra que as julga já existe (ADR 0.0.0053: dados
+    em assinatura de port ficam declarados); incluir `market_data` no contrato e
+    declarar as 9 arestas é a issue #95 (speculative).
   - **Arestas sob `if TYPE_CHECKING:` são invisíveis ao contrato**
     (`exclude_type_checking_imports = True`, ver §3). Hoje as únicas type-only
     cross-BC do trio são as assinaturas dos ports `PredictionPersister`/

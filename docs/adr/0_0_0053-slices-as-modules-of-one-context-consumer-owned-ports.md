@@ -4,8 +4,8 @@ description: Architecture Decision Record
 when-use: Reference before adding any dependency between two slices under `features/` (modeling → analytics_store today; evaluation/inference → analytics_store tomorrow), before proposing an ACL/translator or a shared-kernel package between slices, or when questioning why `bc-independence` still lists data-only edges
 keywords: [adr, bounded-context, vertical-slices, modules, dependency-inversion, protocol, duck-typing, anticorruption-layer, shared-kernel, context-map, bc-independence, import-linter, modeling, analytics_store]
 status: accepted
-created_at: 2026-09-15
-updated_at: 2026-09-15
+created_at: 2026-09-14
+updated_at: 2026-09-14
 adr_id: 0.0.0053
 decision: The four slices under `features/` (market_data, feature_engineering, modeling, analytics_store) are modules of a single bounded context, not separate contexts — so the rule governing their coupling is layering, dependency direction and acyclicity, not context mapping. When a slice needs behavior from another, it defines the port (a `Protocol`) in its own `application/ports/out/` and the supplier satisfies it structurally without importing the consumer; what may cross the boundary at runtime is data (the supplier's inbound-port DTOs and its value objects), declared edge by edge in the `bc-independence` contract. No Anticorruption Layer and no Shared Kernel are introduced between slices.
 context_stage: 0.0-global
@@ -48,9 +48,11 @@ teams — which the issue itself used to discard those four. Read to the end,
 Evans' guidance for one developer, one repository and one CI is not a context map
 at all: it is **continuous integration inside a single bounded context**, with
 the slices as modules. `Candle`, `RunRecord`, `QuantileForecast` mean the same
-thing in every slice; there is no shift of ubiquitous language, which Fowler
-names as the dominant criterion for a boundary
-([BoundedContext](https://martinfowler.com/bliki/BoundedContext.html)).
+thing in every slice; there is no shift of ubiquitous language — and Fowler
+places the dominant boundary criterion in human culture precisely because *"models
+act as Ubiquitous Language, you need a different model when the language changes"*
+([BoundedContext](https://martinfowler.com/bliki/BoundedContext.html)); one
+culture, one language, one model.
 
 Forces:
 
@@ -132,8 +134,9 @@ Forces:
   `market_data` in `bc-independence` now.** Out of scope: the nine
   `feature_engineering → market_data.domain.entities` edges (`Candle`,
   `NewsArticle`, `FundamentalReport` in port signatures) are data edges of the
-  same kind as item 3 and stay deferred until the contract's perimeter grows
-  (LAYOUT §7 "Perímetro do gate hoje").
+  same kind as item 3; declaring them and adding `market_data` to the contract is
+  issue [#95](https://github.com/MarceloSanC/financial-forecasting/issues/95)
+  (speculative), which applies this ADR's rule rather than reopening it.
 
 ## Consequences
 
