@@ -10,13 +10,15 @@ ADR 5.3.0001), aplica o guardrail via `QuantileForecast.from_raw` (4.3, I3),
 registra 1 `RunRecord` por fold em `dim_run` (I7 — `seed` PREENCHIDA, primeiro
 produtor com semente não nula), aplica o dedup operationally-latest (5.1) com
 chave ESTRUTURAL e **remoção-zero assertada** (I8) e persiste as predições LONG
-via `PersistPredictions` (4.3) com `model_version='gbm_quantile'` e
+via o port `PredictionPersister` (4.3) com `model_version='gbm_quantile'` e
 `split="test"`.
 
 **Imports cross-BC (decisão consciente, precedentes rastreados):**
-`modeling.application -> analytics_store.application` segue a justificativa por
-referência do `run_baselines.py` (5.2 §8 — dono único do `target_timestamp`,
-ADR 4.3.0001); `modeling.application -> feature_engineering.domain`
+`modeling.application -> analytics_store` é só de DADOS (DTO
+`PersistPredictionsCommand`, VOs `QuantileForecast`/`RunRecord`) — a persistência
+entra pelos ports `PredictionPersister`/`RunRecordPersister` deste slice (issue #68,
+ADR 0.0.0053), com a justificativa do `run_baselines.py` (dono único do
+`target_timestamp`, ADR 4.3.0001); `modeling.application -> feature_engineering.domain`
 (`list_feature_specs`) é consumo declarado no roadmap 5.3
 (`contratos_consumidos: FeatureRegistry`) — import application -> domain
 cross-BC preserva a direção inward e nenhum contrato do `.importlinter` o
@@ -85,16 +87,16 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import date
 
-    from financial_forecasting.features.analytics_store.application.ports.out.analytics_repository import (  # noqa: E501
-        AnalyticsRepository,
-    )
-    from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
-        PersistPredictions,
+    from financial_forecasting.features.modeling.application.ports.out.prediction_persister import (
+        PredictionPersister,
     )
     from financial_forecasting.features.modeling.application.ports.out.quantile_model_trainer import (  # noqa: E501
         GbmTrainingParams,
         QuantileModelTrainer,
         QuantileTrainingResult,
+    )
+    from financial_forecasting.features.modeling.application.ports.out.run_record_persister import (
+        RunRecordPersister,
     )
     from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
         WalkForwardSplitter,
@@ -113,8 +115,6 @@ if TYPE_CHECKING:
 
 _DATASET_LAYER = "processed"
 _DATASET_TABLE = "dataset_tft"
-_SILVER_LAYER = "silver"
-_DIM_RUN_TABLE = "dim_run"
 _SPLIT = "test"
 _MODEL_VERSION = "gbm_quantile"
 
@@ -215,15 +215,15 @@ class TrainGbmQuantile:
         store: MedallionStore,
         splitter: WalkForwardSplitter,
         trainer: QuantileModelTrainer,
-        persist_predictions: PersistPredictions,
-        analytics_repository: AnalyticsRepository,
+        persist_predictions: PredictionPersister,
+        persist_run_record: RunRecordPersister,
         hasher: Hasher,
     ) -> None:
         self._store = store
         self._splitter = splitter
         self._trainer = trainer
         self._persist_predictions = persist_predictions
-        self._analytics_repository = analytics_repository
+        self._persist_run_record = persist_run_record
         self._hasher = hasher
 
     def __call__(self, command: TrainGbmQuantileCommand) -> TrainGbmQuantileResult:
@@ -465,9 +465,8 @@ class TrainGbmQuantile:
             model_version=_MODEL_VERSION,
             schema_version=command.schema_version,
         )
-        rows: list[Row] = [asdict(record)]
-        # O adapter injeta `created_at_utc` write-time (4.2 I5).
-        self._analytics_repository.write(layer=_SILVER_LAYER, table=_DIM_RUN_TABLE, rows=rows)
+        # `analytics_store` grava (dono de `dim_run`); `created_at_utc` é do adapter (4.2 I5).
+        self._persist_run_record(record)
 
 
 # -- labels do grid completo (I1/I12) ----------------------------------------------

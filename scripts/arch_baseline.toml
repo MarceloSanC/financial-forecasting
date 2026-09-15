@@ -31,3 +31,19 @@ issue = 91
 key = "IdGenerator"
 motivo = "Port MORTO: IdGenerator/Uuid4Generator não têm consumidor algum em src/ — nem o composition root os instancia. Destino a decidir (remover ou dar consumidor) — sem fake/contrato até lá."
 issue = 91
+
+# Ports de `modeling` satisfeitos por duck-typing pelo USE CASE de outro slice
+# (`analytics_store.PersistPredictions`/`PersistRunRecord` — issue #68, ADR
+# 0.0.0053). Fake + suíte [fake, real] existem
+# (tests/contract/features/modeling/test_persistence_ports_contract.py); o que
+# falta é o gate reconhecer implementação real fora de adapters/**/infrastructure/**
+# — por desenho o use case não cita o port do consumidor. Saem na #93.
+[[port_coverage.allow]]
+key = "PredictionPersister"
+motivo = "Real = use case `PersistPredictions` (analytics_store), não adapter; fake e contrato [fake, real] existem; o gate ainda só reconhece adapters/** e infrastructure/** como implementação real."
+issue = 93
+
+[[port_coverage.allow]]
+key = "RunRecordPersister"
+motivo = "Real = use case `PersistRunRecord` (analytics_store), não adapter; fake e contrato [fake, real] existem; o gate ainda só reconhece adapters/** e infrastructure/** como implementação real."
+issue = 93

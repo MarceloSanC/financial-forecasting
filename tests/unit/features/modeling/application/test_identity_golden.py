@@ -34,6 +34,9 @@ import pytest
 from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
     PersistPredictions,
 )
+from financial_forecasting.features.analytics_store.application.use_cases.persist_run_record import (  # noqa: E501
+    PersistRunRecord,
+)
 from financial_forecasting.features.modeling.application.ports.out.quantile_model_trainer import (
     GbmTrainingParams,
 )
@@ -174,7 +177,7 @@ def capture_baselines() -> IdentityTable:
         splitter=_splitter(),
         forecaster=FakeBaselineForecaster(),
         persist_predictions=PersistPredictions(repository=repo),
-        analytics_repository=repo,
+        persist_run_record=PersistRunRecord(repository=repo),
         hasher=CanonicalJsonHasher(),
     )
     use_case(
@@ -198,7 +201,7 @@ def capture_gbm() -> IdentityTable:
         splitter=_splitter(),
         trainer=FakeQuantileModelTrainer(),
         persist_predictions=PersistPredictions(repository=repo),
-        analytics_repository=repo,
+        persist_run_record=PersistRunRecord(repository=repo),
         hasher=CanonicalJsonHasher(),
     )
     use_case(
@@ -222,7 +225,7 @@ def capture_tft(artifacts_root: Path) -> IdentityTable:
         splitter=_splitter(),
         trainer=InMemoryTftTrainer(),
         persist_predictions=PersistPredictions(repository=repo),
-        analytics_repository=repo,
+        persist_run_record=PersistRunRecord(repository=repo),
         tracker=FakeExperimentTracker(),
         hasher=CanonicalJsonHasher(),
         artifacts_root=artifacts_root,
