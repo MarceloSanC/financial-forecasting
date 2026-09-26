@@ -26,16 +26,20 @@ Mudanças de classe (são as únicas):
   impedir (Nosek et al. 2018). Antes disso, C é do agente.
 - **E/C vira P** se a evidência verificada for conflitante **e** as opções trocarem o veredito de
   H1/H2/H3 — sobe com o dossiê (§5), não como pergunta aberta.
-- Irreversível/caro (port, formato persistido) **não** é P por si: exige §4.2 obrigatório.
+- Irreversível/caro (port, formato persistido) **não** é P por si: exige §4.2 e §4.3.
 
-## 2. Pesquisa — 1 subagente fresco por lote
+## 2. Evidência — interna primeiro, externa só para lacunas
 
-Juntar todas as perguntas E/C do momento num lote e despachar **um** `evidence-researcher`
-(`.claude/agents/` — o protocolo de fontes já é o system prompt dele; não colar brief). A
-mensagem leva só: as perguntas com as opções + os caminhos do projeto relevantes. **Não** incluir
-sua inclinação (induz viés de confirmação no pesquisador). Lote > ~6 perguntas → dividir por tema
-e despachar em paralelo. Fato sobre o **nosso dado** (volume, distribuição, significado de campo)
-não é pesquisa bibliográfica: é medição — skill `data-shape-evidence`.
+1. **Análise interna (você, sem web).** Leia o doc/ADR/código envolvidos procurando o que eles já
+   decidem ou contradizem: seção que invalida a proposta, fato de código que a torna inócua. Foi
+   daí que saíram os achados mais baratos do eval da #96 (controle: US$ 1,66, 3,7 min).
+2. **Pesquisa externa só para o que faltar.** Fonte já citada no projeto com localizador não se
+   repesquisa — vai direto ao §4.2 conferir o trecho. O resto (lacunas) vai num lote a **um**
+   `evidence-researcher` (o protocolo de fontes é o system prompt dele; não colar brief) com só:
+   perguntas, opções, caminhos do projeto e a lista do que já está citado. **Sem** sua inclinação
+   (viés de confirmação). Lote > ~6 perguntas → dividir por tema, em paralelo.
+3. Fato sobre o **nosso dado** (volume, distribuição, significado de campo) é medição, não
+   bibliografia — skill `data-shape-evidence`.
 
 ## 3. Decisão
 
@@ -65,7 +69,11 @@ não é pesquisa bibliográfica: é medição — skill `data-shape-evidence`.
    lê a fonte bruta e responde `sustenta | parcial | não sustenta`. Verificação por perguntas
    independentes da resposta original reduz alucinação (Chain-of-Verification, Dhuliawala et al.
    2024). "Não sustenta" → volta ao §3 sem aquela evidência.
-3. `[SEM-FONTE-PRIMÁRIA]` é aceitável só em **C**, declarando o degrau que decidiu; em **E** é
+3. **Completude** (decisões do item 2): despachar um `decision-reviewer` com os registros
+   `[decision]` e os caminhos do doc/código; ele responde só "o que isto ignora ou contradiz no
+   projeto?". Verificar citação não pega omissão — no eval, o tratamento decidiu o gate de H1 sem
+   ver que o PICP não detecta deslocamento de locação, que o próprio doc descreve.
+4. `[SEM-FONTE-PRIMÁRIA]` é aceitável só em **C**, declarando o degrau que decidiu; em **E** é
    lacuna → reclassificar como C (se houver opções defensáveis) ou HALT (fórmula sem nenhuma base).
 
 ## 5. Registro — decisão sai decidida

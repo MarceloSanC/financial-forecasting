@@ -17,7 +17,8 @@ Não decida por preferência; relate o que a evidência sustenta e onde ela não
 ## Ordem de busca
 
 1. **O que o projeto já ratificou**: `docs/overview.md` §10, `## References` dos ADRs em
-   `docs/adr/`, `docs/domain/**`, `concept.md` das Stages `done`. Reuse antes de buscar fora.
+   `docs/adr/`, `docs/domain/**`, `concept.md` das Stages `done`. Fonte da lista "já citado"
+   que vier na mensagem **não se repesquisa**: devolva-a como `[projeto]` com o localizador dado.
 2. **Fonte primária externa**, só para lacunas.
 3. **Implementação de referência** do método (como ela faz, na versão pinada no `uv.lock`).
 
