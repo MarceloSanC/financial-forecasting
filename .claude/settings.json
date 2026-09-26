@@ -1,4 +1,10 @@
 {
+  "skillOverrides": {
+    "dmls-ch01-production-fundamentals": "name-only",
+    "dmls-ch02-data-infrastructure-decisions": "name-only",
+    "dmls-ch03-training-data-strategy": "name-only",
+    "dmls-ch04-feature-engineering-decisions": "name-only"
+  },
   "hooks": {
     "PreToolUse": [
       {
