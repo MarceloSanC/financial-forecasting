@@ -2,7 +2,8 @@
 
 Recusa, quando o diretório efetivo do comando é o checkout PRINCIPAL (não uma worktree):
 - criar branch: `git checkout -b|-B`, `git switch -c|-C|--create`;
-- trocar para outra branch local: `git switch <b>` / `git checkout <b>` com `<b>` != develop;
+- trocar para outra branch: `git switch <b>` / `git checkout <b>` com `<b>` != develop (local ou
+  só remota — o `checkout` cria a local por DWIM), e `-` (volta à branch anterior);
 - `git worktree add` manual (o script valida nome/issue, copia `.env` e isola portas).
 
 Diretório efetivo = `cwd` do hook, seguido de `cd <dir>` anteriores no mesmo comando e de
@@ -49,7 +50,9 @@ def is_main_worktree(path: Path) -> bool:
 
 
 def branch_exists(path: Path, name: str) -> bool:
-    return _git(path, "show-ref", "--verify", "--quiet", f"refs/heads/{name}") is not None
+    """Local ou só remota: `git checkout <b>` com `<b>` só em `origin/` cria e troca (DWIM)."""
+    refs = (f"refs/heads/{name}", f"refs/remotes/*/{name}")
+    return bool(_git(path, "for-each-ref", "--count=1", "--format=%(refname)", *refs))
 
 
 def _positional(rest: list[str]) -> list[str]:
@@ -59,11 +62,11 @@ def _positional(rest: list[str]) -> list[str]:
 def _switch(rest: list[str], _cwd: Path, _exists: Callable[[Path, str], bool]) -> bool:
     targets = _positional(rest)
     creates = any(a in ("-c", "-C", "--create") for a in rest)
-    return creates or (bool(targets) and targets[0] != BASE_BRANCH)
+    return creates or "-" in rest or (bool(targets) and targets[0] != BASE_BRANCH)
 
 
 def _checkout(rest: list[str], cwd: Path, exists: Callable[[Path, str], bool]) -> bool:
-    if any(a in ("-b", "-B") for a in rest):
+    if any(a in ("-b", "-B", "-t", "--track", "-") for a in rest):
         return True
     targets = _positional(rest)  # `--` = restaurar arquivo, não troca de branch
     switches = "--" not in rest and len(targets) == 1 and targets[0] != BASE_BRANCH

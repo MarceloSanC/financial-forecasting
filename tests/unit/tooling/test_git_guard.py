@@ -14,7 +14,7 @@ pytestmark = pytest.mark.unit
 _HOOK = Path(__file__).resolve().parents[3] / ".claude" / "hooks" / "git_guard.py"
 MAIN = Path("/repo").resolve()
 WORKTREE = Path("/repo-worktrees/feat-1").resolve()
-LOCAL_BRANCHES = {"develop", "feat/77-6-1-scoring"}
+LOCAL_BRANCHES = {"develop", "feat/77-6-1-scoring", "feat/80-remote-only"}  # local ou remota
 
 
 def _load() -> ModuleType:
@@ -49,6 +49,11 @@ def _blocked(command: str, cwd: Path = MAIN) -> bool:
         "git switch feat/77-6-1-scoring",
         "git checkout feat/77-6-1-scoring",
         "git worktree add ../x feat/99-x",
+        "git checkout feat/80-remote-only",
+        "git checkout --track origin/feat/80-remote-only",
+        "git checkout -t origin/feat/80-remote-only",
+        "git switch -",
+        "git checkout -",
         "git status && git checkout -b feat/99-x",
         f"git -C {MAIN} switch -c feat/99-x",
     ],
