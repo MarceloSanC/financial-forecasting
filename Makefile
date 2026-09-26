@@ -169,6 +169,7 @@ docs-check:
 	uv run python scripts/check_adr_bounded_context.py
 	uv run python scripts/check_concept_directness.py
 	uv run python scripts/check_docs_pointers.py
+	uv run python scripts/check_harness.py
 
 # ---------------------------------------------------------------------------
 # test — roda toda a suite de testes MEDINDO cobertura (gate ≥ 90%).
