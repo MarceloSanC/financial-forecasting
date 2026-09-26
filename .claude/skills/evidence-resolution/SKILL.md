@@ -54,7 +54,8 @@ não é pesquisa bibliográfica: é medição — skill `data-shape-evidence`.
 
 ## 4. Verificação — antes de gravar
 
-1. `python scripts/verify_citations.py <arquivo-com-as-citações>` (stdlib; roda no host) sobre
+1. `python scripts/verify_citations.py <arquivo>` ou `… --doi A --doi B --arxiv C` — **uma**
+   chamada, sem laço/`cd`/variável de shell (a regra de permissão casa o comando inteiro) — sobre
    o artefato final (o pesquisador já checou as dele; aqui entram as que você escreveu).
    `NOT_FOUND`/`MISMATCH` → corrigir ou remover a citação, nunca manter; exit 2 = rede, repetir.
    Motivo: mesmo o GPT-4 fabricou 18% das citações e errou metadados em 24% das reais

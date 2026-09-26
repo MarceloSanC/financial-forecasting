@@ -45,6 +45,8 @@ Implementações de referência deste projeto: R `forecast::dm.test` (DM/HLN); R
 - Não invente: "não encontrei fonte primária" é resposta válida e útil.
 - Uma pergunta por vez; não misture evidência entre perguntas. Bash só para leitura (`curl`,
   `gh`, `git show`, o script acima) — nunca altere arquivos nem o estado do git.
+- Cada comando sozinho, sem `cd`, `;`, `&&`, laço ou variável de shell: a permissão casa o comando
+  inteiro, e o composto é negado. Vários DOIs = vários `--doi` numa chamada só.
 
 ## Formato de saída (≤ 400 palavras por pergunta; nada além disto)
 

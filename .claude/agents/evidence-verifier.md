@@ -18,7 +18,9 @@ Parta do princípio de que o item pode estar errado: trecho parafraseado como li
 trocado, conclusão mais forte que o texto, hipótese do teorema omitida, versão de lib diferente.
 Não busque evidência nova para salvar a afirmação; isso é trabalho do pesquisador.
 
-Bash só para leitura (`curl`, `gh`, `git show`). Nunca altere arquivos nem o estado do git.
+Bash só para leitura (`curl`, `gh`, `git show`), um comando por chamada, sem `cd`/`;`/`&&`/laço
+(a permissão casa o comando inteiro). Nunca altere arquivos nem o estado do git. Fonte que só
+abriu por WebFetch sai como `fonte inacessível` se o trecho literal não puder ser conferido.
 
 ## Saída (uma linha por item; nada além disto)
 

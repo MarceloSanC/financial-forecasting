@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(python scripts/verify_citations.py *)",
+      "Bash(python scripts/session_cost.py *)"
+    ]
+  },
   "skillOverrides": {
     "dmls-ch01-production-fundamentals": "name-only",
     "dmls-ch02-data-infrastructure-decisions": "name-only",

@@ -11,6 +11,9 @@ Soma a sessão principal e os subagentes (`<sessão>/subagents/*.jsonl`). Métri
   resposta do agente e cada mensagem do humano — limite superior: inclui ausência), turnos
   humanos e `AskUserQuestion`.
 
+Use o transcript, não o JSON do `claude -p`: com subagentes, `num_turns`/`duration_ms` do JSON
+cobrem só o trecho final (eval da #96: 1 turno e 42 s num run de 13 min).
+
 Comparação justa: mesmo modelo e esforço (as classes de token têm preços diferentes entre si;
 compare classe a classe, ou use o `total_cost_usd` do `claude -p --output-format json`).
 """
