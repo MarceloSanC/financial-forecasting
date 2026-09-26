@@ -245,7 +245,8 @@ Com a auditoria `complete`, a mestra entrega ao humano um **relatório completo 
 implementado na Stage**, no **mesmo formato do relatório da skill `stage-audit`** (as 6 seções da
 Fase E + status global + conclusão): linguagem clara para quem não acompanhou, jargão glosado, fato
 com `arquivo:linha`/comando→resultado, e a lente de **valor entregue + qualidade de design**. Este
-relatório **é o gate de aprovação humana**.
+relatório **é o gate de aprovação humana** e **abre com o bloco "Valide você"** da execução
+(PROMPT-stage §0 do relatório): o humano valida pelos passos antes de ler o resto.
 
 ### 3.5 Merge, limpeza e próxima Stage
 

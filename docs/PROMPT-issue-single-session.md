@@ -302,6 +302,10 @@ Sua **saída final** = (1) o **PR aberto** e (2) o **relatório** abaixo:
 ```markdown
 ## Issue #<issue> — relatório de execução
 
+### 0. Valide você — leia isto primeiro
+(mesma estrutura do §0 do relatório do PROMPT-stage: origem do resultado, ≤ 5 passos
+copiáveis com o esperado, saída bruta obtida, o que mostra, decisão P se houver)
+
 ### 1. Análise prévia
 - A issue ainda era válida? Algum drift identificado?
 - Impactos além do óbvio descobertos.

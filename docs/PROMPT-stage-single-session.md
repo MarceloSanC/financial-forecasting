@@ -526,7 +526,8 @@ Todos OBRIGATÓRIOS antes do commit final `stage <N.M>: complete`:
       dispostos** (`corrigido`/`refutado`/`escalado`).
 - [ ] **Verificação end-to-end:** fluxo da Stage exercitado pelo
       entrypoint real (API/CLI/job) quando houver superfície de
-      runtime — testes passando não substituem executar o fluxo.
+      runtime — testes passando não substituem executar o fluxo. Entrega:
+      bloco §0 "Valide você" no topo do relatório final.
 - [ ] §7 do technical reflete o que realmente aconteceu na execução.
 - [ ] Findings escalados (`[finding]`) têm Stage candidata identificada.
 - [ ] `docs/roadmap.md` atualizado: Stage `<N.M>` com `status: done`,
@@ -601,6 +602,19 @@ Sua **saída final** = (1) o **PR aberto** e (2) o **relatório** abaixo:
 ```markdown
 ## Stage <N.M>-<slug> — relatório de execução
 
+### 0. Valide você — leia isto primeiro (≤ 10 min)
+**Origem do resultado:** sintético | mecânica do pipeline | validação | exploratório
+(métrica confirmatória antes do 8.1 nunca aparece aqui: decidir olhando-a é *forking paths*)
+**Passos** (copiar e colar, no container; ≤ 5; cada um com o que deve aparecer):
+1. `<comando exato>` → esperado: <saída ou valor observável>
+2. …
+**O que eu obtive** (bruto, truncado): <saída> — completo em `<caminho do artefato>`
+**O que isso mostra:** <2–3 frases, sem jargão>
+**Decisão P pendente** (só se houver): dado o resultado acima, <pergunta> — cada opção com o
+que ela muda no resultado.
+Sem superfície executável → diga em 1 linha e entregue o fluxo rodando por script ou teste de
+integração com dado real mínimo; teste unitário com fake não é validação.
+
 ### 1. Implementação
 - Tasks executadas (lista com commit hash de cada uma).
 - Arquivos tocados (resumido).
@@ -632,7 +646,7 @@ Sua **saída final** = (1) o **PR aberto** e (2) o **relatório** abaixo:
 - [ ] Coverage ≥ 90% por arquivo tocado — <linhas relevantes do term-missing>
 - [ ] `check_technical_postexec.py` verde — <saída>
 - [ ] Checkpoints A/B/C com achados dispostos
-- [ ] Verificação end-to-end — <o que foi exercitado + resultado>
+- [ ] Verificação end-to-end — entregue no §0 (passos + saída obtida)
 - [ ] §7 reflete execução real
 - [ ] Findings com Stage candidata
 - [ ] `roadmap.md` atualizado

@@ -84,7 +84,9 @@ Sensibilidade pré-registrada: <alternativa> | nenhuma · Reversível: sim | nã
 - Resolver antes todos os E/C do mesmo lote; a pergunta P chega com eles como contexto decidido.
 - `AskUserQuestion`: todo `header` começa com `P:` (ex.: `P:Escopo`). Fork listado em texto leva
   `[P]` na linha. O hook `.claude/hooks/triage_gate.py` bloqueia o que vier sem marca.
-- Formato da pergunta: PROMPT-step §2 "Anatomia da pergunta ao humano".
+- Formato da pergunta: PROMPT-step §2 "Anatomia da pergunta ao humano". Havendo resultado
+  executável, a pergunta vem ancorada nele (bloco "Valide você", PROMPT-stage §0 do relatório):
+  saída bruta + passos para reproduzir + o que cada opção muda no resultado.
 
 ## Gotchas (execução real)
 
