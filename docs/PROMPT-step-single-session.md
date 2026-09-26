@@ -147,9 +147,12 @@ de uma abordagem viável):
    - **Docs respondem 100%** → o subagente **decide sozinho** pela abordagem que os docs sustentam,
      e **registra a decisão em ADR** (`docs/adr/<N>_<M>_NNNN-<slug>.md`, `status: accepted`) —
      opções, escolha, trade-offs, reversibilidade, e a **âncora** nos docs que a justifica.
-   - **Docs não respondem 100%** → o subagente **pergunta ao humano** (ele mesmo, se seu contexto de
-     execução permitir falar com o usuário; senão **sobe o fork para a mestra**, que pergunta),
-     detalhando a questão no formato rico abaixo. A **decisão do humano também vira ADR**.
+   - **Docs não respondem 100%** → **triagem da skill `evidence-resolution`**. Classe **E/C**
+     (teoria, estatística, convenção de método/lib) → o subagente **resolve por evidência
+     verificada** e registra em ADR, sem perguntar. Só classe **P** (preferência/negócio) → o
+     subagente **pergunta ao humano** (ele mesmo, se seu contexto de execução permitir falar com o
+     usuário; senão **sobe o fork para a mestra**, que pergunta), detalhando a questão no formato
+     rico abaixo. A **decisão do humano também vira ADR**.
 
 > **Ambos os caminhos geram ADR.** Fork com alternativa real descartada é decisão arquitetural —
 > registra-se independentemente de quem decidiu (subagente ancorado nos docs, ou humano).
@@ -189,7 +192,7 @@ aceite.
 
 Hierarquia de fontes (alta→baixa): **Overview > Roadmap > Domain > Concept > Technical > Código**.
 Ao encontrar contradição com fonte superior, contrato externo irreversível e ambíguo, fórmula sem
-fonte oficial (§1), ou gate objetivo que não fecha após tentativa honesta de correção: **PARE**,
+nenhuma base mesmo após a skill `evidence-resolution` (§1), ou gate objetivo que não fecha após tentativa honesta de correção: **PARE**,
 deixe a working tree estável, aponte com referência explícita à fonte conflitante e escale.
 Não force progresso; não use ADR para enterrar contradição que deveria parar.
 

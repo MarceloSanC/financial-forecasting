@@ -77,7 +77,9 @@ reversível e ancorável num princípio → **siga e registre**, não pare.
 - Existe uma **bifurcação material**: decisão com alternativas reais cujo
   conteúdo NÃO é recuperável de Overview/Roadmap/Concept/Technical/LAYOUT/
   código/skills — **e** que muda **contrato**, **fronteira da Stage** ou
-  **critério de aceite**.
+  **critério de aceite** — **e** que a triagem da skill `evidence-resolution`
+  classifica como **P**. Fork E/C (teoria, estatística, convenção de
+  método/lib) você resolve por evidência verificada e registra; não para.
 - A lacuna é **irreversível ou cara** (port shape, contrato externo, formato
   persistido).
 - Você precisaria **violar o escopo estrito** de uma Task (tocar arquivo fora

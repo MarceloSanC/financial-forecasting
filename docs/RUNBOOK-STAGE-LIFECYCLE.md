@@ -232,13 +232,13 @@ Não invente citação. Se não houver fonte primária para um ponto, escreva
 - **Confirma** a abordagem de 1b → seguir; a seção `## Referências` vai
   para o corpo da issue como está.
 - **Contraparte material** (fonte confiável ou projeto de referência
-  contradiz a abordagem validada) → **voltar ao humano** em bloco numerado
-  (B1, B2…) antes de gravar; a issue nasce com a abordagem re-validada.
+  contradiz a abordagem validada) → triagem da skill `evidence-resolution`:
+  E/C → ajustar a abordagem pela evidência e registrar; só P volta ao
+  humano em bloco numerado (B1 [P], B2 [P]…) antes de gravar.
   Contraparte que não muda a decisão fica registrada mesmo assim — é
   matéria-prima de ADR (§Alternativas descartadas) no Passo 4.
-- "Sem fonte primária" num ponto *load-bearing* → sinalizar ao humano;
-  pode ser decisão de política do projeto (vira ADR), não achado de
-  pesquisa.
+- "Sem fonte primária" num ponto *load-bearing* → classe C da mesma skill
+  (escada de desempate + sensibilidade pré-registrada), não pergunta.
 
 **Gravar a issue** com o entendimento validado + `## Referências`:
 
