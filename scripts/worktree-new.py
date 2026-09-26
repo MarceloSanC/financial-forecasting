@@ -32,9 +32,10 @@ Convenções respeitadas:
     - Formato `<tipo>/<num-issue>-<slug>` ou Stage
       `<tipo>/<num-issue>-<N-M>-<slug>` — CONVENTIONS.md §4.
     - Base remota: `develop` (feat/fix/refactor/...) ou `main` (hotfix).
-    - "Uma branch em voo por vez" deixa de ser bloqueio quando o
-      paralelismo acontece em **worktrees separadas** (cada worktree é
-      um checkout independente). Ver GIT-WORKFLOW.md §Worktrees paralelas.
+    - Até duas branches em voo, cada uma na sua worktree; o checkout
+      principal fica livre em `develop`. Agente no host (Docker-only):
+      `python scripts/worktree-new.py <branch> --no-setup --no-vscode`.
+      Ver GIT-WORKFLOW.md §"Branches em voo".
 
 Exit codes:
   0  worktree criada com sucesso

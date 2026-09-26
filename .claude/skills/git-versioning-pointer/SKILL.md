@@ -51,14 +51,14 @@ seção correspondente. Cada uma traz três blocos:
 
 ## 🌿 `git checkout -b` (criar branch)
 
-- **LER:** `docs/GIT-WORKFLOW.md` §Branches (incluindo "Revisões pós-Stage") + §"Uma branch em voo por vez" (inclui §Trabalho paralelo legítimo: `git worktree` — 2ª branch só em worktree separada via `make worktree BRANCH=...` / `scripts/worktree-new.py` quando escopos disjuntos); `docs/CONVENTIONS.md` §1 (slug em EN) + §4 (formato de branch de Stage e pós-Stage)
+- **LER:** `docs/GIT-WORKFLOW.md` §Branches (incluindo "Revisões pós-Stage") + §"Branches em voo" (até duas sem conflito, cada uma na sua worktree; criar só com `python scripts/worktree-new.py <branch> --no-setup --no-vscode`, nunca `git checkout -b` no checkout principal — o hook `git_guard` recusa); `docs/CONVENTIONS.md` §1 (slug em EN) + §4 (formato de branch de Stage e pós-Stage)
 - **CHECK:**
   ```bash
   git branch --show-current                        # se != develop/main, voltar
   gh pr list --head $(git branch --show-current)   # PR aberto na branch atual?
   gh issue view <num>                              # toda branch (Stage ou pós-Stage) exige issue
   ```
-- **GOTCHA:** se a branch atual não tem PR aberto, **terminá-la primeiro** (Princípio #7). PR parcial em draft é exceção e só sob pedido explícito do usuário.
+- **GOTCHA:** já há duas branches em voo, ou a nova conflita com a que voa (critérios em §"Branches em voo") → **terminar uma primeiro** (Princípio #7). PR parcial em draft é exceção e só sob pedido explícito do usuário.
 - **GOTCHA (Stage):** branch de Stage exige issue pré-existente no GitHub (Princípio #1 + CONVENTIONS §3). Se `gh issue view <num>` falha, **não criar branch** — voltar e criar a issue primeiro (RUNBOOK-STAGE-LIFECYCLE Passo 1).
 - **GOTCHA (pós-Stage):** branch criada **depois que o PR da Stage já foi mergeado** volta ao formato **genérico** `<tipo>/<num-issue>-<slug>` — **SEM `<N-M>`**. O `<N-M>` é só durante a execução da Stage. Pós-Stage = bug/chore/doc normal, com **nova issue** (não a issue original da Stage). Ver GIT-WORKFLOW §Branches → "Revisões pós-Stage".
 
@@ -86,7 +86,7 @@ seção correspondente. Cada uma traz três blocos:
 
 ## 🚀 `gh pr create`
 
-- **LER:** `docs/GIT-WORKFLOW.md` §Pull Requests + §Etapa 4 + §"Uma branch em voo por vez" (procedimento PR parcial)
+- **LER:** `docs/GIT-WORKFLOW.md` §Pull Requests + §Etapa 4 + §"Branches em voo" → §Quando precisar trocar de escopo (PR parcial)
 - **CHECK:** Etapa 3 fechada (testes verdes, coverage ≥ 90%, lint, working tree limpo) **E** Etapa 4 fechada (`git log origin/<base>..HEAD` sem carona).
 - **GOTCHA (título):** formato obrigatório `<tipo>(<escopo>): issue #<num> — <descrição>` (branch avulsa/pós-Stage) ou `<tipo>(<escopo>): stage N.M — <descrição>` (Stage). O identificador `issue #<num> —` / `stage N.M —` é o que mais escapa — **não montar de memória nem espelhar o título da issue**. Escopo = BC, nunca a Stage. **Sem validação programática** (o hook `commit-msg` cobre só commit, não título de PR), então só o code review pega — confira CONVENTIONS §4(c) ANTES do `gh pr create`.
 - **GOTCHA:** PR parcial em draft **só sob pedido explícito do usuário**. Título prefixado `... (parcial — checkpoint)` + flag `--draft`.
@@ -125,8 +125,8 @@ seção correspondente. Cada uma traz três blocos:
 | Tag `[N.M/--]` (off-task) | `CONVENTIONS.md` §4(a) → subseção |
 | Seção §7 post-execution do technical.md | `CONVENTIONS.md` §3.4 |
 | Gates de PR | `GIT-WORKFLOW.md` §Gates de PR |
-| PR parcial em draft (procedimento) | `GIT-WORKFLOW.md` §"Uma branch em voo por vez" |
-| Worktrees paralelas (2ª branch, escopos disjuntos) | `GIT-WORKFLOW.md` §"Uma branch em voo por vez" → §Trabalho paralelo legítimo: `git worktree`; `make worktree BRANCH=...` (`scripts/worktree-new.py` / `worktree-rm.py`) |
+| PR parcial em draft (procedimento) | `GIT-WORKFLOW.md` §"Branches em voo" → §Quando precisar trocar de escopo |
+| Worktrees paralelas (2ª branch, escopos disjuntos) | `GIT-WORKFLOW.md` §"Branches em voo" → §Criar a worktree; `make worktree BRANCH=...` (`scripts/worktree-new.py` / `worktree-rm.py`) |
 | Hotfix | `GIT-WORKFLOW.md` §Hotfix |
 | Release | `GIT-WORKFLOW.md` §Release |
 | Comportamento bloqueante | `GIT-WORKFLOW.md` §Comportamento bloqueante |
