@@ -1,0 +1,79 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python scripts/verify_citations.py *)",
+      "Bash(python scripts/session_cost.py *)",
+      "Bash(python */scripts/verify_citations.py *)",
+      "Bash(python */scripts/session_cost.py *)"
+    ]
+  },
+  "skillOverrides": {
+    "dmls-ch01-production-fundamentals": "name-only",
+    "dmls-ch02-data-infrastructure-decisions": "name-only",
+    "dmls-ch03-training-data-strategy": "name-only",
+    "dmls-ch04-feature-engineering-decisions": "name-only"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/triage_gate.py"
+            ]
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git *)",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/git_guard.py"
+            ]
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(git *)",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/git_guard.py"
+            ]
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/triage_gate.py"
+            ]
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/triage_gate.py"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

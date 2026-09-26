@@ -25,15 +25,14 @@ Fluxo de versionamento e CI/CD para projetos colaborativos. Garante rastreabilid
 4. **GitHub CLI (`gh`) preferencial**: usar quando disponível. Fallback para `git` puro se necessário.
 5. **Sem deploy manual**: produção só via merge em `main`. Dev só via merge em `develop`. SSH em prod é proibido.
 6. **Merge commit preserva história**: NUNCA squash, NUNCA rebase no merge. Branches trazem toda sua contexto.
-7. **Uma branch em voo por vez**: não abrir branch nova no **mesmo
-   checkout** enquanto a anterior estiver sem PR aberto. **Exceção:**
-   quando as branches **não têm nenhuma correlação/conflito** (escopos,
-   arquivos e dependências disjuntos), trabalhe nos dois escopos ao
-   mesmo tempo em **worktrees separadas** — cada worktree é um checkout
-   independente, então não há working tree suja nem `git stash` para
-   misturar escopos (`make worktree BRANCH=...`). Ver §"Uma branch em
-   voo por vez" adiante para o procedimento de PR parcial quando
-   precisar trocar de escopo no mesmo checkout.
+7. **Até duas branches em voo, cada uma na sua worktree**: no máximo
+   **duas** branches sem PR mergeado ao mesmo tempo, e só se **não
+   conflitam** (critérios em §"Branches em voo"). **Toda** implementação
+   roda numa worktree própria criada por `scripts/worktree-new.py`; o
+   **checkout principal fica sempre em `develop`, limpo** — nunca se cria
+   nem se troca de branch nele (o hook `.claude/hooks/git_guard.py`
+   recusa). Ver §"Branches em voo" para critérios, comando e o
+   procedimento de PR parcial.
 
 ---
 
@@ -493,35 +492,39 @@ Quando a equipe decide promover `develop` para `main`:
 
 ---
 
-## Uma branch em voo por vez
+## Branches em voo
 
-**Regra (Princípios fundamentais #7):** enquanto a branch atual não
-estiver com PR aberto, **não criar branch nova** para outro escopo.
-Trabalho paralelo em dois escopos diferentes — mesmo "rapidinho" —
-costuma:
+**Regra (Princípios fundamentais #7):** até **duas** branches em voo
+(sem PR mergeado), **cada uma na sua worktree**, e o checkout principal
+sempre livre em `develop`. O limite existe porque paralelismo sem
+isolamento costuma misturar commits via working tree sujo (`git stash`
+vira `git stash drop` errado), pôr PRs disputando o mesmo gate humano e
+deixar a branch antiga esquecida. Worktree resolve o primeiro; o teto de
+duas e o critério de conflito resolvem os outros dois.
 
-- misturar commits dos dois escopos via working tree não-limpo
-  (`git stash` muitas vezes vira `git stash drop` errado);
-- gerar PRs simultâneos disputando o mesmo gate humano de review;
-- esconder progresso real — branch antiga vai ficando esquecida
-  enquanto a "urgente" cresce e nunca volta.
+**Duas branches só podem voar juntas se não conflitam** — todas:
 
-**Fluxo padrão:** terminar a branch atual → abrir PR → começar a
-próxima. Ponto.
+- nenhuma depende da outra (roadmap "Depende de", issue, ou uma consome
+  contrato que a outra cria);
+- os arquivos a criar/modificar (issue/`technical.md`) são disjuntos;
+- nenhuma das duas mexe em ponto compartilhado: port/contrato público,
+  schema persistido, `.importlinter`, `pyproject.toml`/`uv.lock`,
+  `composition_root.py`, `docs/roadmap.md`.
 
-### Trabalho paralelo legítimo: `git worktree`
+Conferência mecânica antes de abrir o PR da segunda (interseção vazia =
+ok): `comm -12 <(git diff --name-only origin/develop...A | sort)
+<(git diff --name-only origin/develop...B | sort)`.
 
-A regra "uma branch em voo por vez" trata de **um único checkout
-misturando dois escopos**. Quando o paralelismo é legítimo (ex.: PR da
-branch anterior está em review aguardando aprovação, e você quer
-começar a próxima), o mecanismo aceito é criar uma **worktree
-separada** — cada worktree é um checkout independente, então não há
-working tree compartilhado, não há `git stash`, não há risco de
-misturar commits.
+### Criar a worktree (sempre pelo script)
+
+Agente, no host (stdlib; o setup de deps roda no container —
+Docker-only):
 
 ```bash
-make worktree BRANCH=feat/42-add-google-login
+python scripts/worktree-new.py feat/42-2-3-s3-adapter --no-setup --no-vscode
 ```
+
+Humano pode usar `make worktree BRANCH=...` (abre VS Code e roda setup).
 
 O target roda `scripts/worktree-new.py`, que num único comando:
 
@@ -723,7 +726,7 @@ Exemplo de feedback construtivo:
 - Push de branch com carona de outro escopo: `git log origin/<base>..HEAD` mostra commits que não pertencem ao escopo declarado do branch (ver Etapa 4)
 - Mensagem de commit fora do padrão Conventional Commits **em português** (descrição em PT, escopo em snake/kebab ASCII) ou sem `Refs #<num-issue>` no rodapé quando há issue associada
 - Nome de branch **fora de inglês ASCII kebab-case** (ex.: `feat/42-adicionar-login` ou `feat/42-Add-Login` — deve ser `feat/42-add-google-login`; ver §Princípios fundamentais #3 e [`./CONVENTIONS.md`](./CONVENTIONS.md) §1)
-- Tentativa de criar branch nova **no mesmo checkout** enquanto a branch atual não tem PR aberto (mesmo `--draft`). Exceções: (a) branches **sem correlação/conflito** (escopos disjuntos) em worktrees separadas (ver §"Uma branch em voo por vez" → §Trabalho paralelo legítimo); (b) usuário pediu **explicitamente** o fluxo de PR parcial (ver §"Uma branch em voo por vez")
+- Branch criada ou trocada **no checkout principal**, terceira branch em voo, ou duas branches em voo que **conflitam** (critérios em §"Branches em voo"). Exceção: usuário pediu **explicitamente** o fluxo de PR parcial (§"Branches em voo" → §Quando precisar trocar de escopo)
 - Body de commit de Task sem bullets, ou commit agrupando vários escopos diferentes (deve quebrar em commits separados por escopo mínimo)
 - Iniciar uma Stage (criar branch da Stage, pasta `docs/stages/N.M-<slug>/`, ou rodar prompt da Fase 3A) **sem que a issue correspondente já exista** no backlog do GitHub. Verificação: `gh issue view <num>` deve retornar a issue. Issue-first é Princípio fundamental #1; sem issue verificável, parar e criar a issue primeiro (ver [`./RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md) Passo 1 + `scripts/check_stage_issue.py` em `make docs-check`)
 

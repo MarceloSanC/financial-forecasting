@@ -107,14 +107,14 @@ check: lint typecheck layout-check lint-imports fake-parity port-coverage docs-c
 # lint — verifica estilo e regras sem modificar arquivos
 # ---------------------------------------------------------------------------
 lint:
-	uv run ruff check src/ tests/ scripts/
+	uv run ruff check src/ tests/ scripts/ .claude/hooks/
 
 # ---------------------------------------------------------------------------
 # fmt — formata e corrige automaticamente o que for possível
 # ---------------------------------------------------------------------------
 fmt:
-	uv run ruff format src/ tests/ scripts/
-	uv run ruff check --fix src/ tests/ scripts/
+	uv run ruff format src/ tests/ scripts/ .claude/hooks/
+	uv run ruff check --fix src/ tests/ scripts/ .claude/hooks/
 
 # ---------------------------------------------------------------------------
 # typecheck — checagem estática de tipos
@@ -169,6 +169,7 @@ docs-check:
 	uv run python scripts/check_adr_bounded_context.py
 	uv run python scripts/check_concept_directness.py
 	uv run python scripts/check_docs_pointers.py
+	uv run python scripts/check_harness.py
 
 # ---------------------------------------------------------------------------
 # test — roda toda a suite de testes MEDINDO cobertura (gate ≥ 90%).
