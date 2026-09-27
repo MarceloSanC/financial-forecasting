@@ -89,6 +89,9 @@ Thumbs.db
 # Convenção de storage definida na Stage 2.1 (MedallionStore). Dados de
 # bronze/silver/gold, raw, processed e modelos ficam fora do git.
 data/
+# Artefatos de treino (checkpoints do TFT, Stage 5.4) e ledger/lock do cohort
+# confirmatório (Stage 5.5) — `Settings.artifacts_root`.
+artifacts/
 
 # ---------------------------------------------------------------------------
 # MLflow — tracking local (backend SQLite + artefatos), Stage 1.5 / ADR 1.5.0001
