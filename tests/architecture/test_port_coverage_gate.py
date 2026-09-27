@@ -274,7 +274,9 @@ def test_real_repo_violations_are_exactly_the_declared_baseline(gate: ModuleType
     ports = gate.inventory()
     violating = sorted(port.name for port in ports if port.violation is not None)
 
-    assert violating == ["Hasher"]
+    # RuntimeEnvironmentProbe: entrada temporária da Stage 5.5 (port na Task 22,
+    # adapter real na Task 23, que a remove daqui e do baseline).
+    assert violating == ["Hasher", "RuntimeEnvironmentProbe"]
     assert len(ports) >= 19  # noqa: PLR2004 — os 19 ports-out do repo hoje (#91 removeu IdGenerator)
 
 
