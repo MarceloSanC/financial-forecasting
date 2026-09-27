@@ -237,7 +237,9 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 - **Adapters implementam ports.** `PostgresPaymentRepository` satisfaz `PaymentRepository` Protocol.
 - **Fakes implementam os mesmos ports.** `InMemoryPaymentRepository` satisfaz `PaymentRepository` Protocol.
   Todo port-out tem fake em `tests/fakes/` **e** suíte de contrato `[fake, real]` — gate:
-  `scripts/check_port_coverage.py` (issue #62; baseline em `scripts/arch_baseline.toml`).
+  `scripts/check_port_coverage.py` (issue #62; baseline em `scripts/arch_baseline.toml`). O real pode ser
+  o use case de outro slice que satisfaz o port do consumidor por duck-typing (ADR 0.0.0053) — o gate
+  o reconhece quando o contrato `[fake, real]` o importa (#93).
 - **Testes unitários usam fakes.** Nenhum teste unitário toca banco ou rede.
 - **Tests de contrato validam a equivalência.** A fake e a implementação real devem passar nos mesmos testes.
   A fake não pode **ser** a implementação: bloco de lógica idêntico ≥ 15 linhas entre `tests/fakes/**` e
