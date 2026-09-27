@@ -13,6 +13,13 @@ import pytest
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
     SearchDimension,
     SearchTrial,
+    validate_dimension_names,
+)
+from financial_forecasting.features.modeling.application.ports.out.quantile_model_trainer import (
+    GbmTrainingParams,
+)
+from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
+    TftTrainingParams,
 )
 from tests.fakes.features.modeling.in_memory_hyperparameter_search import (
     InMemoryHyperparameterSearch,
@@ -59,9 +66,32 @@ class TestSearchDimensionValidation:
 
         assert dimension.log is True
 
-    def test_name_outside_training_params_raises(self) -> None:
+    def test_dimension_accepts_any_name_shape_is_what_it_validates(self) -> None:
+        """O nome é validado pelo sweep contra o SEU tipo de params (Stage 5.5)."""
+        dimension = SearchDimension(name="num_leaves", low=4, high=64, kind="int")
+
+        assert dimension.name == "num_leaves"
+
+    def test_name_outside_the_params_type_raises(self) -> None:
+        space = (SearchDimension(name="not_a_param", low=1, high=2, kind="int"),)
+
         with pytest.raises(ValueError, match="não é campo de TftTrainingParams"):
-            SearchDimension(name="not_a_param", low=1, high=2, kind="int")
+            validate_dimension_names(space, TftTrainingParams)
+
+    def test_names_are_checked_against_the_given_type(self) -> None:
+        tft_space = (SearchDimension(name="hidden_size", low=8, high=64, kind="int"),)
+        gbm_space = (SearchDimension(name="num_leaves", low=4, high=64, kind="int"),)
+
+        validate_dimension_names(tft_space, TftTrainingParams)
+        validate_dimension_names(gbm_space, GbmTrainingParams)
+        with pytest.raises(ValueError, match="não é campo de GbmTrainingParams"):
+            validate_dimension_names(tft_space, GbmTrainingParams)
+        with pytest.raises(ValueError, match="não é campo de TftTrainingParams"):
+            validate_dimension_names(gbm_space, TftTrainingParams)
+
+    def test_params_type_must_be_a_dataclass(self) -> None:
+        with pytest.raises(TypeError, match="dataclass"):
+            validate_dimension_names((), dict)
 
 
 class TestSearchTrial:

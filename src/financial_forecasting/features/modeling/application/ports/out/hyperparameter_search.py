@@ -29,26 +29,21 @@ Contrato semântico:
 """
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, is_dataclass
 from typing import Protocol
-
-from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
-    TftTrainingParams,
-)
 
 _INT_KIND = "int"
 _FLOAT_KIND = "float"
 _VALID_KINDS = (_INT_KIND, _FLOAT_KIND)
-_TUNABLE_FIELDS = frozenset(field.name for field in fields(TftTrainingParams))
 
 
 @dataclass(frozen=True)
 class SearchDimension:
-    """Uma dimensão do espaço de busca (C11 validado na construção).
+    """Uma dimensão do espaço de busca (forma validada na construção — C11).
 
-    `name` tem de ser um campo de `TftTrainingParams`: sem essa checagem, um
-    nome errado só apareceria como `TypeError` opaco na hora de montar os params
-    do trial, longe da causa.
+    A dimensão valida só a FORMA (kind, faixa, escala log). O nome é validado
+    contra o tipo de params de quem usa o espaço — `validate_dimension_names` —,
+    porque o mesmo port serve ao sweep do TFT e ao do GBM (Stage 5.5, D13).
     """
 
     name: str
@@ -69,10 +64,24 @@ class SearchDimension:
             # biblioteca; barrar aqui dá erro no lugar certo.
             msg = f"low deve ser >= 1 para kind='int' com log=True; recebido {self.low} (C11)"
             raise ValueError(msg)
-        if self.name not in _TUNABLE_FIELDS:
+
+
+def validate_dimension_names(space: Sequence[SearchDimension], params_type: type) -> None:
+    """C11 — todo nome do espaço tem de ser campo do dataclass de params do sweep.
+
+    Sem essa checagem, um nome errado só apareceria como `TypeError` opaco na hora
+    de montar os params do trial, longe da causa. Chamado pelo use case de cada
+    sweep, antes de qualquer I/O, com o seu tipo (`TftTrainingParams`,
+    `GbmTrainingParams`).
+    """
+    if not is_dataclass(params_type):
+        raise TypeError(f"params_type must be a dataclass; got {params_type!r}")
+    tunable = frozenset(field.name for field in fields(params_type))
+    for dimension in space:
+        if dimension.name not in tunable:
             msg = (
-                f"name {self.name!r} não é campo de TftTrainingParams; "
-                f"campos válidos: {sorted(_TUNABLE_FIELDS)} (C11)"
+                f"name {dimension.name!r} não é campo de {params_type.__name__}; "
+                f"campos válidos: {sorted(tunable)} (C11)"
             )
             raise ValueError(msg)
 

@@ -315,6 +315,17 @@ class TestErrorCases:
         with pytest.raises(ValueError, match="space"):
             use_case(_command(space=()))
 
+    def test_dimension_name_outside_tft_params_raises_before_any_io(
+        self, tmp_path: Path
+    ) -> None:
+        """C11 no use case: o nome é validado contra `TftTrainingParams` (Stage 5.5)."""
+        use_case, store, _, _ = _build(tmp_path)
+        gbm_only = (SearchDimension(name="num_leaves", low=4, high=64, kind="int"),)
+
+        with pytest.raises(ValueError, match="não é campo de TftTrainingParams"):
+            use_case(_command(space=gbm_only))
+        assert store.read_calls == 0
+
     def test_all_trials_failing_raises(self, tmp_path: Path) -> None:
         class _AlwaysFailing(InMemoryTftTrainer):
             def train_and_predict(self, **kwargs: Any) -> Any:  # noqa: ANN401
