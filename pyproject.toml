@@ -250,16 +250,11 @@ omit = [
     "*/shared/infrastructure/http/*",
     # boot/config de infra (logging) — não lógica de domínio
     "*/shared/infrastructure/logging/*",
-    # adapters de infra diferidos — ainda sem consumidor nesta Stage;
-    # reentram (saem do omit) quando uma feature os injetar. `clock/*` saiu na
-    # #91: SystemClock é injetado pelo composition root e tem contrato [fake, real].
-    "*/shared/infrastructure/uuid_generator/*",
-    # ports-out stub (Protocol sem corpo) ainda SEM consumidor nesta Stage:
-    # módulo nunca importado por teste, então import+assinatura contam como
-    # missed (exclude_lines `...` só cobre o corpo). Diferidos, NÃO adapters —
-    # reentram (saem do omit) quando uma feature os injetar com fake+contract
-    # test (hex). Ver [deviation] na §7 do technical 1.2.
-    "*/shared/application/ports/out/id_generator.py",
+    # Infra herdada do template sem consumidor (adapters `clock`/`uuid_generator`
+    # e ports-out stub `clock.py`/`id_generator.py`, [deviation] da §7 do
+    # technical 1.2) saiu do omit na #91: `Clock` ganhou fake + contrato
+    # [fake, real] (SystemClock é injetado pelo composition root); `IdGenerator`
+    # e `Uuid4Generator` foram removidos (port morto, ADR 1.1.0001).
     # fora do pacote de domínio
     "*/migrations/*",
     "*/scripts/*",
@@ -280,7 +275,7 @@ exclude_lines = [
     "raise NotImplementedError",
     "raise AssertionError",
     "if TYPE_CHECKING:",
-    # Corpo de stub de Protocol (ports out clock.py/id_generator.py): a linha
+    # Corpo de stub de Protocol (métodos de ports-out, ex.: clock.py): a linha
     # que contém SÓ `...`. O padrão PRECISA ser ancorado. Sem `^\s*` e `\s*$`
     # ele casa com qualquer linha que contenha reticências — inclusive
     # anotações de tipo multi-linha como `) -> tuple[float, ...]:` — e, quando

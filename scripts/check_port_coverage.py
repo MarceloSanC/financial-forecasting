@@ -21,7 +21,7 @@ Detecção (heurísticas declaradas, todas verificáveis por `--list`):
   port sem o sufixo `Port` (`DatasetAssemblerPort` → `InMemoryDatasetAssembler`). É a
   convenção de nome de todos os 15 fakes do repo.
 - **adapter real**: uma classe PÚBLICA definida em `src/**/adapters/**` ou
-  `src/**/infrastructure/**` (`SystemClock`/`Uuid4Generator`, LAYOUT §2) cujo módulo
+  `src/**/infrastructure/**` (`SystemClock`, LAYOUT §2) cujo módulo
   cita o nome do port (todo adapter do repo declara "satisfaz o port `X`" no
   docstring). Classes privadas (`_TftDatasets`, `_LossHistory`…) são auxiliares do
   módulo, não adapters. A heurística é por citação, não por análise de tipos: uma
@@ -126,9 +126,9 @@ def class_index(root: Path, *, only_adapters: bool = False) -> dict[str, Path]:
     """`{nome da classe: arquivo}` para toda classe definida sob `root`.
 
     Com `only_adapters`, só módulos sob `adapters/**` ou `infrastructure/**`: LAYOUT §2
-    coloca `SystemClock`/`Uuid4Generator` em `shared/infrastructure/` (implementam os
-    ports `Clock`/`IdGenerator`), e o gate precisa enxergá-los para que a #91 possa
-    fechar com contrato `[FakeClock, SystemClock]` (F1 da auditoria do PR #92).
+    coloca `SystemClock` em `shared/infrastructure/` (implementa o port `Clock`), e o
+    gate precisa enxergá-lo para que o contrato `[FakeClock, SystemClock]` da #91 conte
+    (F1 da auditoria do PR #92).
     """
     index: dict[str, Path] = {}
     for path in sorted(root.rglob("*.py")):

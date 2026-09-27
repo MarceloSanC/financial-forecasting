@@ -53,14 +53,13 @@ src/financial_forecasting/
 │
 └── shared/                         # Código transversal — usado por múltiplas features
     ├── domain/                     # Exceções base, value objects genéricos (Pagination)
-    ├── application/                # Ports compartilhados (Clock, IdGenerator)
+    ├── application/                # Ports compartilhados (Clock, Hasher, calendário…)
     └── infrastructure/             # Implementações de infraestrutura
         ├── config/                 # Settings (pydantic-settings)
         ├── database/               # Engine SQLAlchemy, sessões
         ├── http/                   # FastAPI app factory, middlewares, error handlers
         ├── logging/                # Configuração de logging estruturado
-        ├── clock/                  # SystemClock (implementa shared Clock port)
-        └── uuid_generator/         # Uuid4Generator (implementa shared IdGenerator port)
+        └── clock/                  # SystemClock (implementa shared Clock port)
 
 tests/
 ├── unit/                           # Testes sem I/O — rápidos, sem fixtures de banco
@@ -137,7 +136,7 @@ adapters  →  application  →  domain
 - O port é consumido apenas por aquela feature
 
 **Coloque em `shared/`** quando:
-- É genuinamente reutilizado por 2+ features (ex: `Clock`, `IdGenerator`, `Pagination`)
+- É genuinamente reutilizado por 2+ features (ex: `Clock`, `Hasher`, `Pagination`)
 - É infraestrutura cross-cutting (ex: configuração, logging, factory do FastAPI)
 - É uma abstração de domínio agnóstica (ex: `DomainError`, `NotFoundError`)
 
