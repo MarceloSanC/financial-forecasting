@@ -28,6 +28,11 @@ lazy** (`_LazyStatsforecastBaselineForecaster` — statsforecast só carrega no
 primeiro `forecast`, precedente FinBERT), `PersistPredictions` +
 `PersistRunRecord` (issue #68) sobre o `ParquetAnalyticsRepository` (silver) e o
 `Hasher` 1.4.
+
+Stage 5.5 (Task 25): a ingestão LOCAL do BC `market_data` — `IngestCandles`,
+`IngestNews` e `IngestFundamentals` sobre os fetchers Parquet que leem os brutos
+sob `data_root` (`raw/market/candles`, `raw/news`, `processed/fundamentals`) —
+é wirada para o runner do cohort materializar o bronze a partir dos brutos.
 """
 
 from collections.abc import Mapping, Sequence
@@ -75,6 +80,24 @@ from financial_forecasting.features.feature_engineering.application.use_cases.sc
 )
 from financial_forecasting.features.feature_engineering.domain.services.dataset_quality_gate import (  # noqa: E501
     DatasetQualityGateConfig,
+)
+from financial_forecasting.features.market_data.adapters.out.parquet.parquet_fundamental_fetcher import (  # noqa: E501
+    ParquetFundamentalFetcher,
+)
+from financial_forecasting.features.market_data.adapters.out.parquet.parquet_raw_candle_fetcher import (  # noqa: E501
+    ParquetRawCandleFetcher,
+)
+from financial_forecasting.features.market_data.adapters.out.parquet.parquet_raw_news_fetcher import (  # noqa: E501
+    ParquetRawNewsFetcher,
+)
+from financial_forecasting.features.market_data.application.use_cases.ingest_candles import (
+    IngestCandles,
+)
+from financial_forecasting.features.market_data.application.use_cases.ingest_fundamentals import (
+    IngestFundamentals,
+)
+from financial_forecasting.features.market_data.application.use_cases.ingest_news import (
+    IngestNews,
 )
 from financial_forecasting.features.market_data.domain.entities.news_article import (
     NewsArticle,
@@ -410,6 +433,10 @@ class ApplicationDependencies:
     hasher: Hasher
     tracker: ExperimentTracker
     store: MedallionStore
+    # BC market_data (Stage 5.5, Task 25): ingestão local dos brutos para o bronze.
+    ingest_candles: IngestCandles
+    ingest_news: IngestNews
+    ingest_fundamentals: IngestFundamentals
     # BC feature_engineering (Stage 3.5, I8): ports tipando os 3 adapters + o use case.
     indicator_calculator: IndicatorCalculator
     sentiment_model: SentimentModel
@@ -449,6 +476,22 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
     hasher = CanonicalJsonHasher()
     tracker = MlflowTracker(tracking_uri=cfg.mlflow_tracking_uri)
     store = ParquetMedallionStore(data_root=cfg.data_root)
+
+    # BC market_data (Stage 5.5, Task 25): ingestão LOCAL — os fetchers Parquet leem
+    # os brutos já baixados sob `data_root` (nenhuma chamada de rede no runner) e os
+    # use cases gravam o bronze no MESMO store que o `BuildDataset` lê.
+    ingest_candles = IngestCandles(
+        fetcher=ParquetRawCandleFetcher(raw_root=cfg.data_root / "raw" / "market" / "candles"),
+        store=store,
+    )
+    ingest_news = IngestNews(
+        fetcher=ParquetRawNewsFetcher(raw_root=cfg.data_root / "raw" / "news"),
+        store=store,
+    )
+    ingest_fundamentals = IngestFundamentals(
+        fetcher=ParquetFundamentalFetcher(root=cfg.data_root / "processed" / "fundamentals"),
+        store=store,
+    )
 
     # BC feature_engineering — 3 adapters + assembler + use case (Stage 3.5, I8).
     indicator_calculator = PandasTaIndicatorCalculator()
@@ -545,6 +588,9 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
         hasher=hasher,
         tracker=tracker,
         store=store,
+        ingest_candles=ingest_candles,
+        ingest_news=ingest_news,
+        ingest_fundamentals=ingest_fundamentals,
         indicator_calculator=indicator_calculator,
         sentiment_model=sentiment_model,
         asof_join=asof_join,
