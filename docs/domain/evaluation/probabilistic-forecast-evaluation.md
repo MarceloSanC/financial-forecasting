@@ -3,7 +3,7 @@ title: Avaliação probabilística de previsões — teoria do Step 6 (scoring, 
 description: Teoria canônica do subdomínio probabilistic-forecast-evaluation — como se pontua uma grade finita de quantis (pinball, CRPS, interval score), como se caracteriza calibração e sharpness, o que é o gate de degeneração, como se faz inferência pareada (DM/HLN, Holm, MCS), como se backtesta cobertura (Christoffersen, Kupiec, VaR descritivo) e o que o pré-registro congela para que o scorecard seja mecânico
 when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 6 (6.1–6.5), ao questionar uma fórmula/convenção de avaliação, ou ao decidir se um tema pertence a este doc ou ao doc de modeling
 keywords: [domain, evaluation, pinball, crps, interval-score, winkler, picp, mpiw, reliability, sharpness, degeneracy-gate, diebold-mariano, hln, holm, mcs, christoffersen, kupiec, var, preregistration, scorecard, per-horizon]
-status: draft
+status: accepted
 created_at: 2026-09-12
 updated_at: 2026-09-26
 bounded_context: evaluation
@@ -36,8 +36,8 @@ references:
 > todas anteriores aos dados) foram fechadas pelo agente e registradas em §10.1
 > no formato `[decision:E|C]`, com o degrau que decidiu e a verificação da
 > citação; a única de classe P (redação do claim de H1, **B1**) foi decidida
-> pelo humano (issue #78, 2026-09-26). A ratificação do doc inteiro
-> (`status: accepted`) continua humana.
+> pelo humano (issue #78, 2026-09-26). Doc ratificado pelo humano em
+> 2026-09-26 (`status: accepted`) — gate do Step 6 fechado.
 
 ## 1. Escopo e como consumir este doc
 
