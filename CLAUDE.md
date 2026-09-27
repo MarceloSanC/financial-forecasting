@@ -15,19 +15,7 @@ Pipeline de previsão probabilística de retornos diários com TFT quantílico, 
 
 ## Stack Técnica
 
-| Camada | Tecnologia |
-|--------|-----------|
-| Framework HTTP | FastAPI 0.111+ |
-| Servidor ASGI | Uvicorn |
-| ORM / banco | SQLAlchemy 2.0+ (Core, sem ORM declarativo) |
-| Migrations | Alembic |
-| Validação | Pydantic v2 |
-| Configuração | pydantic-settings |
-| Python | 3.12 |
-| Gerenciador de pacotes | uv |
-| Linter/Formatter | Ruff |
-| Checagem de tipos | mypy strict |
-| Testes | pytest + pytest-asyncio + httpx |
+Dependências e versões: `pyproject.toml`. Convenção fora do default: SQLAlchemy só **Core** — sem ORM declarativo.
 
 ---
 
@@ -47,9 +35,6 @@ encaixa no docs/LAYOUT.md.**
 
 <!-- Atualize esta seção com o estado atual do projeto antes de iniciar uma sessão de IA -->
 
-- **Sprint/milestone atual:** _preencher_
-- **Funcionalidades em desenvolvimento:** _preencher_
-- **Débitos técnicos conhecidos:** _preencher_
 - **Decisões arquiteturais recentes (ADRs):** veja `docs/adr/`
 
 ---
@@ -71,16 +56,7 @@ Detalhes operacionais (setup inicial, branch protection, release, hotfix, code r
 
 ## Comandos Úteis
 
-```bash
-make setup      # configura o ambiente pela primeira vez
-make run        # sobe o servidor local com hot-reload
-make migrate    # aplica migrations pendentes
-make check      # lint + typecheck (bloqueante)
-make fmt        # formata o código automaticamente
-make test       # roda todos os testes
-make test-cov   # testes com relatório de cobertura HTML
-make clean      # limpa artefatos de build e cache
-```
+Alvos do `Makefile` (`make help` lista todos). `make check` é o gate bloqueante completo (lint, typecheck, layout, import-linter, fake-parity, port-coverage, docs e testes).
 
 ### Docker / devcontainer
 
@@ -89,14 +65,6 @@ O projeto vem com Docker desde o dia 1 (`Dockerfile` multi-stage + `docker-compo
 - **Devcontainer (recomendado):** VS Code → `Dev Containers: Reopen in Container`. Sobe a stage `builder` do `Dockerfile` via `docker-compose.yml`, com `uv`/`ruff`/`mypy`/`pytest` já instalados.
 - **Compose direto:** `make docker-up` sobe `app` (e `postgres` se habilitado no `init-project`); `make docker-shell` entra no container.
 - **Host nativo:** `make setup` + `make run` direto no host (sem Docker).
-
-```bash
-make docker-build       # builda a stage `builder` (dev/CI) — tag :dev
-make docker-build-prod  # builda a stage `runtime` (deploy) — tag :prod
-make docker-up          # sobe a stack em background
-make docker-down        # derruba a stack
-make docker-shell       # bash dentro do container app
-```
 
 `docker-compose.yml` traz `postgres` e `redis` comentados por default. `scripts/init-project.py` descomenta `postgres` automaticamente quando o projeto escolhe `banco=postgres`; `redis` é descomentado manualmente quando precisar.
 
