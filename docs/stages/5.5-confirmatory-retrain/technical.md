@@ -773,4 +773,8 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 - F12 (baixo) import de função privada → **corrigido**: `labels_from_full_grid` público (`task-16-fix`).
 - F13 (baixo) texto da Task 12 desatualizado quanto à ordem das colunas → **refutado como edição**: fora de §7 o technical `done` não é editável (`check_technical_postexec.py`); a mudança está registrada no Checkpoint C do bloco 05–10 + 12, acima.
 
+### 2026-09-27 — [deviation] Task 18 — commit com o gate vermelho, corrigido no commit seguinte — Claude (Opus 5.5)
+**O que houve:** o commit da Task 18 (`6a3f01f`) foi feito com o `make check` falhando em `tests/architecture/test_port_coverage_gate.py::test_real_repo_violations_are_exactly_the_declared_baseline`, que fixa a lista exata de ports em violação (`["Hasher"]`). A entrada temporária do baseline, prevista no plano, precisava entrar também nesse teste — o plano não previa. A falha passou porque o comando de verificação imprimia o código de saída do `echo`, não o do `make`.
+**Correção:** `task-18-fix` inclui `CohortProgressLedger` na lista fixada (sai na Task 19, com a entrada do baseline); as Tasks 20–23 seguem o mesmo par (entrada no port, saída no adapter). A verificação passa a imprimir `MAKE_EXIT` e o commit só roda com `MAKE_EXIT=0`.
+
 <!-- END: post-execution -->
