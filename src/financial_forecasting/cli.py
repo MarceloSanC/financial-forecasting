@@ -25,6 +25,7 @@ import importlib
 import importlib.util
 import logging
 import sys
+import traceback
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -102,7 +103,16 @@ def _parser() -> argparse.ArgumentParser:
             )
         return sub
 
-    add("materialize", "ingere os brutos e materializa o dataset do ativo do cohort")
+    materialize = add("materialize", "ingere os brutos e materializa o dataset do ativo do cohort")
+    materialize.add_argument(
+        "--start",
+        type=date.fromisoformat,
+        default=None,
+        help=(
+            "primeira sessão do dataset (AAAA-MM-DD); os brutos são ingeridos inteiros. "
+            "Usado quando o gate de qualidade recusa o começo da série (R9 da 5.5)."
+        ),
+    )
     sweep = add("sweep", "roda os dois sweeps exploratórios e grava os resultados")
     sweep.add_argument("--n-trials", type=int, default=None, help="sobrepõe sweep.n_trials")
     add("freeze", "congela o cohort com os resultados gravados dos sweeps")
@@ -140,6 +150,7 @@ def main(
                 asset_id=spec.asset_id,
                 sentiment_injected=injected.sentiment_model is not None,
                 break_stale_lock=args.break_stale_lock,
+                dataset_start=args.start,
                 out=stdout,
             )
         return _dispatch_cohort_command(args, deps, cohort_file, stdout)
@@ -147,6 +158,11 @@ def main(
         # Erro de execução sai com 2; divergência do `verify` sai com 1
         # (`EXIT_MISMATCH`): um script distingue "diverge" de "quebrou".
         stderr.write(f"error: {type(exc).__name__}: {exc}\n")
+        return _EXIT_ERROR
+    except Exception:
+        # Falha inesperada (bug): traceback completo, e ainda assim exit 2 —
+        # nunca o 1 do `verify` ("a corrida diverge").
+        traceback.print_exc(file=stderr)
         return _EXIT_ERROR
 
 
@@ -188,15 +204,20 @@ def _dispatch_cohort_command(
     return exit_code
 
 
-def _materialize(
+def _materialize(  # noqa: PLR0913 — opções coesas do subcomando
     deps: ApplicationDependencies,
     *,
     asset_id: str,
     sentiment_injected: bool,
     break_stale_lock: bool,
     out: TextIO,
+    dataset_start: date | None = None,
 ) -> int:
-    """Brutos → bronze (x3) → dataset, sob o lock do `data_root`."""
+    """Brutos → bronze (x3) → dataset, sob o lock do `data_root`.
+
+    `dataset_start` corta só o dataset: bronze e sentimento veem os brutos
+    inteiros. Serve para começar a série onde os fundamentos já valem (R9).
+    """
     if not sentiment_injected and importlib.util.find_spec(_SENTIMENT_MODULE) is None:
         raise MissingSentimentExtraError(
             "the FinBERT sentiment model needs the 'sentiment' extra — "
@@ -215,7 +236,9 @@ def _materialize(
         )
         dataset = deps.build_dataset.execute(
             BuildDatasetRequest(
-                asset=asset_id, start=_MATERIALIZE_START.date(), end=date(2035, 12, 31)
+                asset=asset_id,
+                start=dataset_start or _MATERIALIZE_START.date(),
+                end=_MATERIALIZE_END.date(),
             )
         )
     finally:

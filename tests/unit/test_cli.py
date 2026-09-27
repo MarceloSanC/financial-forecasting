@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import json
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -212,3 +213,46 @@ def test_unexpected_runtime_error_exits_2_not_the_mismatch_code(
 
     assert code == _EXIT_ERROR != commands.EXIT_MISMATCH
     assert "RuntimeError: git unavailable" in err.getvalue()
+
+
+@pytest.mark.unit
+def test_materialize_start_reaches_only_the_dataset_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--start` corta o dataset (R9); a ingestão continua lendo os brutos inteiros."""
+    seen: dict[str, object] = {}
+
+    def fake_materialize(deps: object, **kwargs: object) -> int:
+        seen.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(cli, "_materialize", fake_materialize)
+    argv = ["materialize", "--data-root", str(tmp_path / "d"), "--cohort", str(_cohort(tmp_path))]
+
+    assert cli.main([*argv, "--start", "2010-04-20"], wiring=_wiring(tmp_path)) == 0
+    assert seen["dataset_start"] == date(2010, 4, 20)
+    assert cli.main(argv, wiring=_wiring(tmp_path)) == 0
+    assert seen["dataset_start"] is None
+
+
+@pytest.mark.unit
+def test_any_other_unexpected_exception_also_exits_2_with_the_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commands: Any = cli.importlib.import_module(f"{cli._CLI_PACKAGE}.cohort_commands")
+
+    def broken(*args: object, **kwargs: object) -> int:
+        raise KeyError("missing")
+
+    monkeypatch.setattr(commands, "verify", broken)
+    err = io.StringIO()
+
+    code = cli.main(
+        ["verify", "--data-root", str(tmp_path / "d"), "--cohort", str(_cohort(tmp_path))],
+        wiring=_wiring(tmp_path),
+        err=err,
+    )
+
+    assert code == _EXIT_ERROR
+    assert "Traceback" in err.getvalue()
+    assert "KeyError" in err.getvalue()
