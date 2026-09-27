@@ -750,4 +750,9 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 - F5 (info) baselines passam a falhar com ausente no interior → já declarado (concept §4, R6); medido na Task 33.
 - F6 (info) mover `modeling_columns()` para módulo neutro → **refutado**: um módulo novo importando o registry é aresta nova que o `bc-independence` reprova (`.importlinter`, `ignore_imports` lista só `train_gbm_quantile`, `run_baselines`, `train_tft`); a função fica no módulo que já tem a aresta declarada.
 
+### 2026-09-27 — [finding] Task 14 — perda de early_stop do LightGBM não é bit a bit reprodutível — Claude (Opus 5.5)
+**Contexto:** no contrato de determinismo, com `num_leaves=63, learning_rate=0.2, min_data_in_leaf=40`, duas seeds deram grades e `best_iteration` **idênticas**, mas `early_stop_loss_by_horizon` diferente no último ulp (0.004482447927849784 × …783).
+**Leitura:** a métrica de avaliação do LightGBM é reduzida em paralelo (ordem de soma não fixa); `deterministic=True` fixa o treino, não essa soma. A D4 (GBM uma execução por fold) se mantém: o que o cohort persiste — as predições — é exato.
+**Disposição:** o teste exige igualdade exata de grades e iteração e `rel=1e-12` na perda. **Direção sugerida:** o sweep do GBM (Task 16) compara objetivos que podem diferir em ~1e-18 entre execuções; empate exato é irrelevante na prática, mas o `best_trial` do Optuna pode divergir entre reexecuções num empate — anotar no runbook que a reprodução do sweep é "mesmo melhor trial até ruído de ulp". **Stage candidata:** esta (Task 36, runbook).
+
 <!-- END: post-execution -->
