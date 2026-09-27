@@ -159,9 +159,10 @@ _CONSUMER_FAKE = (
     "    def __call__(self, command: object) -> int:\n        return 1\n"
 )
 _USE_CASE_IMPORT = (
-    "from financial_forecasting.features.{slice}.application.use_cases.persist_thing import (\n"
+    "from financial_forecasting.features.{slice}.{package}.persist_thing import (\n"
     "    PersistThing,\n)\n"
 )
+_USE_CASES_PACKAGE = "application.use_cases"
 _TWO_LEG = (
     "import pytest\n"
     "from tests.fakes.features.consumer.in_memory_thing_persister import InMemoryThingPersister\n"
@@ -172,7 +173,7 @@ _TWO_LEG = (
 )
 _ONE_LEG = (
     "from tests.fakes.features.consumer.in_memory_thing_persister import InMemoryThingPersister\n"
-    + _USE_CASE_IMPORT.format(slice="supplier")
+    + _USE_CASE_IMPORT.format(slice="supplier", package=_USE_CASES_PACKAGE)
     + "\n\ndef test_x():\n    assert PersistThing()(None) == InMemoryThingPersister()(None)\n"
 )
 
@@ -181,17 +182,21 @@ def _cross_slice_tree(
     tmp_path: Path,
     *,
     use_case_slice: str = "supplier",
+    use_case_package: str = _USE_CASES_PACKAGE,
     use_case: str = _USE_CASE,
     contract: str | None = None,
 ) -> tuple[Path, Path, Path]:
     src = tmp_path / "src" / "financial_forecasting"
     _write(src, "features/consumer/application/ports/out/thing_persister.py", _CONSUMER_PORT)
-    _write(src, f"features/{use_case_slice}/application/use_cases/persist_thing.py", use_case)
+    use_case_dir = use_case_package.replace(".", "/")
+    _write(src, f"features/{use_case_slice}/{use_case_dir}/persist_thing.py", use_case)
     fakes = tmp_path / "tests" / "fakes"
     _write(fakes, "features/consumer/in_memory_thing_persister.py", _CONSUMER_FAKE)
     contracts = tmp_path / "tests" / "contract"
     if contract is None:
-        contract = _TWO_LEG.format(use_case_import=_USE_CASE_IMPORT.format(slice=use_case_slice))
+        contract = _TWO_LEG.format(
+            use_case_import=_USE_CASE_IMPORT.format(slice=use_case_slice, package=use_case_package)
+        )
     _write(contracts, "features/consumer/test_thing_persister_contract.py", contract)
     return src, fakes, contracts
 
@@ -221,6 +226,30 @@ def test_cross_slice_use_case_imported_by_two_leg_contract_covers_the_port(
             id="citado-mas-nao-importado",
         ),
         pytest.param({"contract": _ONE_LEG}, id="contrato-sem-parametrizar"),
+        pytest.param(
+            {"use_case_package": "application.services"}, id="fora-de-application-use-cases"
+        ),
+        pytest.param(
+            {
+                "contract": _TWO_LEG.format(
+                    use_case_import=_USE_CASE_IMPORT.format(
+                        slice="supplier", package=_USE_CASES_PACKAGE
+                    )
+                ).replace("import InMemoryThingPersister", "import InMemoryOtherPersister")
+            },
+            id="contrato-de-outro-fake",
+        ),
+        pytest.param(
+            {
+                "use_case": _USE_CASE.replace("class PersistThing:", "class _PersistThing:"),
+                "contract": _TWO_LEG.format(
+                    use_case_import=_USE_CASE_IMPORT.format(
+                        slice="supplier", package=_USE_CASES_PACKAGE
+                    ).replace("PersistThing,", "_PersistThing,")
+                ),
+            },
+            id="classe-privada",
+        ),
     ],
 )
 def test_cross_slice_use_case_that_does_not_qualify_is_not_a_real(

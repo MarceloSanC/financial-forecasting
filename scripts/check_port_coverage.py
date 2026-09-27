@@ -36,7 +36,9 @@ Detecção (heurísticas declaradas, todas verificáveis por `--list`):
   os métodos do `Protocol` com as MESMAS anotações (filtra `Command`/`Result` do
   mesmo módulo e o use case irmão com outro `__call__`) e (b) é
   IMPORTADA por um `tests/contract/**` que também importa o fake e parametriza — o
-  contrato `[fake, real]` é a única fonte que sabe quem satisfaz o port.
+  contrato `[fake, real]` é a única fonte que sabe quem satisfaz o port. A comparação
+  de anotações é textual e falha FECHADO: se o gate acusar um port assim, o remédio é
+  anotar o port com os mesmos nomes que o use case usa, não abrir entrada no baseline.
 - **contrato `[fake, real]`**: um módulo em `tests/contract/**` que IMPORTA a classe
   do fake E cita (por nome) uma classe de adapter real do port E parametriza
   (`params=`/`parametrize`). O id da perna real é livre (`"real"`, `"duckdb"`…); a
