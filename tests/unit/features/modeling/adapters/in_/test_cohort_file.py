@@ -243,9 +243,10 @@ def test_non_finite_float_cannot_be_written() -> None:
 @pytest.mark.unit
 def test_strings_with_control_and_non_ascii_characters_round_trip() -> None:
     """F4 (Checkpoint C 24-31): U+007F cru é proibido em string básica TOML."""
-    spec = replace(_draft(), name='odd\x7f"name\\ção\n')
+    spec = replace(_draft(), name='odd\x7f"name\\ção\n\x01\U0001f600')
 
     text = cohort_file.dump(spec)
 
-    assert text.isascii()
+    assert "\x7f" not in text
+    assert "\U0001f600" in text  # fora do BMP vai cru (o escape seria par substituto)
     assert cohort_file.parse(text) == spec

@@ -20,7 +20,6 @@ volta `parse(dump(spec)) == spec` é o teste que o valida.
 
 from __future__ import annotations
 
-import json
 import math
 import tomllib
 import types
@@ -293,6 +292,36 @@ def dump(spec: CohortSpec) -> str:
     return "\n".join(lines) + "\n"
 
 
+_SHORT_ESCAPES = {
+    '"': '\\"',
+    "\\": "\\\\",
+    "\b": "\\b",
+    "\t": "\\t",
+    "\n": "\\n",
+    "\f": "\\f",
+    "\r": "\\r",
+}
+_DEL = 0x7F
+_FIRST_PRINTABLE = 0x20
+
+
+def _basic_string(text: str) -> str:
+    """String básica TOML: escapa aspas, barra, controles e DEL; o resto vai cru.
+
+    Não usa `json.dumps(ensure_ascii=True)`: fora do BMP ele gera par
+    substituto (`\\ud83d\\ude00`), que o TOML recusa como escape.
+    """
+    out = []
+    for char in text:
+        if char in _SHORT_ESCAPES:
+            out.append(_SHORT_ESCAPES[char])
+        elif ord(char) < _FIRST_PRINTABLE or ord(char) == _DEL:
+            out.append(f"\\u{ord(char):04X}")
+        else:
+            out.append(char)
+    return '"' + "".join(out) + '"'
+
+
 def _scalars(obj: object) -> dict[str, object]:
     return {f.name: getattr(obj, f.name) for f in fields(cast("Any", obj))}
 
@@ -319,9 +348,7 @@ def _literal(value: object) -> str:
             raise CohortFileError(f"cannot write non-finite float {value!r} to the cohort file")
         return repr(value)
     if isinstance(value, str):
-        # ASCII puro: `\uXXXX` vale em string básica TOML, e U+007F (proibido
-        # cru) sai escapado.
-        return json.dumps(value, ensure_ascii=True)
+        return _basic_string(value)
     if isinstance(value, list):
         return "[" + ", ".join(_literal(item) for item in value) + "]"
     raise CohortFileError(f"cannot write {type(value).__name__} to the cohort file")
