@@ -50,7 +50,7 @@ graph LR
   S62-->S64[6.4-gold-builders]; S63-->S64
   S64-->S65[6.5-prereg-scorecard]; S55-->S65
   S54-->S71[7.1-inference-engine]; S43-->S71
-  S71-->S72[7.2-conformal-cqr]; S51-->S72
+  S71-->S72[7.2-conformal-cqr]; S51-->S72; S61-->S72
   S71-->S73[7.3-explainability]; S61-->S73
   S72-->S74[7.4-inference-api]; S73-->S74
   S65-->S81[8.1-confirmatory-run]; S71-->S81; S72-->S81
@@ -97,7 +97,7 @@ graph LR
 | `5.2-baselines-naive-statistical` | modeling | multi (domain + application + adapters/out) | vertical | done | 5.1 |
 | `5.3-gbm-quantile-baseline` | modeling | multi (application + adapters/out) | vertical | done | 5.1 |
 | `5.4-tft-trainer` | modeling | multi (application + adapters/out) | vertical | done | 5.1 |
-| `5.5-confirmatory-retrain` | modeling | application (orquestração) | vertical | draft | 5.2, 5.3, 5.4 |
+| `5.5-confirmatory-retrain` | modeling | multi (domain + application + adapters/in + adapters/out) | vertical | in_progress | 5.2, 5.3, 5.4 |
 | `6.1-scoring-and-calibration-metrics` | evaluation | multi (domain + adapters/out) | vertical | done | 4.3 |
 | `6.2-paired-inference-dm-mcs-holm` | evaluation | multi (domain + adapters/out) | vertical | done | 6.1 |
 | `6.3-calibration-risk-backtests` | evaluation | domain | vertical | done | 6.1 |
@@ -701,24 +701,35 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation, dmls-
 
 #### Stage 5.5 — `5.5-confirmatory-retrain`
 
-**Descrição humana:** Orquestração do cohort confirmatório AAPL: re-treinar o candidato único all-features + GBM + baselines com seeds × folds sob o harness, persistindo tudo com `parent_sweep_id` do cohort confirmatório. Nenhuma seleção por OOS.
+**Descrição humana:** Orquestração do cohort confirmatório AAPL sobre dado real: pré-requisitos (leitura única do dataset de treino com corte do aquecimento — absorve a #99 — e gravação atômica no silver), sweeps exploratórios simétricos do TFT e do GBM na geometria do fold 0, cohort congelado, hasheado e ancorado antes da corrida, e re-treino retomável do candidato único all-features (seeds × folds), do GBM (uma execução por fold) e das 5 baselines. Nenhuma seleção por OOS; nenhuma métrica antes do pré-registro da 6.5 (cegamento).
 
 **Descrição para IA:**
 ```yaml
 stage_id: 5.5-confirmatory-retrain
 bounded_context: modeling
-camada_alvo: application (orquestração)
+camada_alvo: multi (domain + application + adapters/in + adapters/out)
 arquivos_a_criar:
-  - src/financial_forecasting/features/modeling/application/use_cases/run_confirmatory_cohort.py
-  - config/cohorts/aapl_confirmatory.yaml
-  - tests/integration/features/modeling/test_run_confirmatory_cohort.py
-contratos_introduzidos: [RunConfirmatoryCohort (use case)]
-contratos_consumidos: [TrainTft (5.4), TrainGbmQuantile (5.3), RunBaselines (5.2)]
-definition_of_done: "Candidato + GBM + 5 specs de baseline (`zero_return` ≡ RW sem drift) treinados no cohort AAPL (seeds × folds) com mesmo `parent_sweep_id`; predições alinhadas por target_timestamp; cohort congelado e hasheado; zero seleção por OOS."
-non_goals: [estatística confirmatória (Step 6), outros ativos]
-complexidade_estimada: M
+  # Lista completa no technical da Stage (38 Tasks); principais:
+  - src/financial_forecasting/cli.py
+  - src/financial_forecasting/shared/domain/value_objects/{cohort_hash.py, dataset_content_fingerprint.py}
+  - src/financial_forecasting/features/modeling/domain/services/training_grid.py
+  - src/financial_forecasting/features/modeling/domain/value_objects/cohort_geometry.py
+  - src/financial_forecasting/features/modeling/application/dtos/cohort_spec.py
+  - src/financial_forecasting/features/modeling/application/ports/out/{cohort_progress_ledger.py, cohort_run_index.py, runtime_environment_probe.py}
+  - src/financial_forecasting/features/modeling/application/use_cases/{run_gbm_sweep.py, run_confirmatory_cohort.py}
+  - src/financial_forecasting/features/modeling/adapters/in/cli/{cohort_file.py, cohort_commands.py}
+  - src/financial_forecasting/features/modeling/adapters/out/{filesystem/json_cohort_progress_ledger.py, runtime/git_runtime_environment_probe.py}
+  - src/financial_forecasting/features/analytics_store/adapters/out/parquet/parquet_cohort_run_index.py
+  - config/cohorts/aapl_confirmatory.toml
+  - tests/e2e/test_cohort_cli.py
+  - docs/runbooks/confirmatory-cohort-aapl.md
+contratos_introduzidos: [RunConfirmatoryCohort (use case), RunGbmSweep (use case), CohortSpec (dto), CohortGeometry (value-object), CohortHash/DatasetContentFingerprint (value-objects, shared), CohortProgressLedger/CohortRunIndex/RuntimeEnvironmentProbe (port-out)]
+contratos_consumidos: [TrainTft/RunTftSweep (5.4), TrainGbmQuantile (5.3), RunBaselines (5.2), IngestCandles/IngestNews/IngestFundamentals (2.2/2.3), BuildDataset (3.5), MedallionStore, Hasher (1.4)]
+definition_of_done: "Candidato TFT (seeds × folds) + GBM (uma execução por fold; teste de contrato 'duas seeds → predições idênticas' prova o determinismo — ADR 0.0.0010) + 5 specs de baseline (`zero_return` ≡ RW sem drift) treinados no cohort AAPL, horizontes h+1/h+7, todos sobre o mesmo grid de treino, com mesmo `parent_sweep_id`; predições alinhadas por target_timestamp e conferidas por contagem (`verify`); cohort declarado em `config/cohorts/aapl_confirmatory.toml`, congelado, hasheado e ancorado (tag publicada + comentário na issue) antes da corrida; número e lista de seeds do candidato decididos pelo humano no congelamento, com o custo medido (ADR 0.0.0010 devolve a decisão à 5.5); zero seleção por OOS; nenhuma métrica calculada sobre o cohort antes do pré-registro da 6.5."
+non_goals: [estatística confirmatória (Step 6), outros ativos, horizonte h+30 (corrida suplementar própria), ROCm (só se o custo em CPU inviabilizar)]
+complexidade_estimada: L
 gate_mode: strict
-skills_hint: [composition-root, hex-arch-python, dmls-ch05-model-development-and-evaluation]
+skills_hint: [composition-root, hex-arch-python, orchestrator-design, pytest-with-fakes, data-shape-evidence, dmls-ch05-model-development-and-evaluation]
 ```
 
 ---
@@ -749,7 +760,7 @@ arquivos_a_criar:
   - tests/unit/features/evaluation/test_degeneracy_gate.py
 contratos_introduzidos: [CoverageSeries (value-object), PinballScore/CrpsScore/IntervalScore/CoverageMetrics/DegeneracyGate (domain-services), ScoringBackend (port-out)]
 contratos_consumidos: [QuantileForecast (4.3)]
-definition_of_done: "Pinball/CRPS/Winkler batem com sklearn/scoringrules e fixtures analíticas; PICP/MPIW com nominal dinâmico; gate de degeneração (q_low==q_high) invalida métricas da linha e reporta rate, separado do guardrail."
+definition_of_done: "Pinball/CRPS/Winkler batem com sklearn/scoringrules e fixtures analíticas; PICP/MPIW com nominal dinâmico; gate de degeneração (colapso total da grade) invalida as métricas de **calibração** da linha — proper scores seguem computados — e reporta rate, separado do guardrail (doc de domínio evaluation §5.3; ADR 0.0.0011)."
 non_goals: [testes pareados (6.2), backtests de risco (6.3)]
 complexidade_estimada: M
 gate_mode: strict
@@ -862,7 +873,7 @@ arquivos_a_criar:
   - tests/unit/features/evaluation/test_scorecard_mechanical_rule.py
 contratos_introduzidos: [Preregistration, ConfirmatoryScorecard (domain-services), BuildConfirmatoryScorecard (use case)]
 contratos_consumidos: [DieboldMariano/Holm/MCS (6.2), CoverageMetrics (6.1), Hasher (1.4), WilsonBand, kupiec_pof, lr_uc_three_state, chi_square_sf, ChristoffersenTest, HitSequences (6.3) — LR_uc de 3 estados composto com lower_count = HitSequences.lower_tail(τ_l).n_violations e upper_count = HitSequences.upper_tail(τ_u).n_violations sobre o mesmo n_observed (mesma série e tolerância; I10, ADR 6.3.0005 item 2)]
-definition_of_done: "Pré-registro hasheado e imutável (alteração quebra o hash); scorecard aplica a regra pré-registrada mecanicamente (primária=pinball + gate calibração + DM/Holm + MCS); separa vencedor de perfil; `academic_decision_ready` exige todos os gates."
+definition_of_done: "Pré-registro hasheado e imutável (alteração quebra o hash); scorecard aplica a regra pré-registrada mecanicamente (primária=pinball + gate calibração + DM/Holm + MCS); separa vencedor de perfil; `academic_decision_ready` exige todos os gates; cegamento: nenhuma métrica sobre o `parent_sweep_id` do cohort confirmatório (5.5) é calculada antes de o hash do pré-registro estar publicado, e a Stage prova essa ordem (âncora com carimbo do servidor — ADR 5.5.0001)."
 non_goals: [execução do cohort (8.1), reabrir hipóteses]
 complexidade_estimada: M
 gate_mode: strict
@@ -922,7 +933,7 @@ arquivos_a_criar:
   - tests/unit/features/inference/test_conformal_embargo.py
   - tests/integration/features/inference/test_cqr_empirical_coverage.py
 contratos_introduzidos: [ConformalCalibrator (domain-service), ConformalBackend (port-out)]
-contratos_consumidos: [WalkForwardSplitter calib partition (5.1), RunInference (7.1)]
+contratos_consumidos: [WalkForwardSplitter calib partition (5.1), RunInference (7.1), CoverageMetrics (6.1)]
 definition_of_done: "CQR calibra no calib dedicado (não no early-stop), por fold/horizonte, com embargo; reporta cobertura EMPÍRICA (etiqueta não diz 'garantida'); variante escolhida pré-registrada em ADR antes do confirmatório; ACI/EnbPI ausentes do caminho confirmatório."
 non_goals: [ACI/EnbPI confirmatórios (travados), conformal como entrega primária]
 complexidade_estimada: M
@@ -1057,7 +1068,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 ## Lacunas conhecidas
 
 - **Variante do CQR (7.2):** split-CQR vs NexCP-ponderada vs não-fazer é deliberada e pré-registrada na própria Stage (overview §11/ADR `0_0_0008`); o roadmap fixa só a postura e os 4 invariantes.
-- **Parâmetros do MCS (6.2):** `B` de bootstrap e grade de sensibilidade de `block_len` (≥h) a fixar no concept de 6.2.
+- **Parâmetros do MCS (6.2):** regra do bloco fixada no doc de domínio evaluation §6.5 (max(h, maior b̂_sb de Politis–White), sensibilidades l = h, √T e moving-block — ADR 0.0.0010); `B` de bootstrap e semente a fixar no concept de 6.2.
 - **Bandas e tolerâncias:** bandas de calibração pré-registradas (H1) e tolerância de equivalência (8.2) a fixar nos concepts de 6.5/8.2.
 - **Fallback de fundamentals (3.3):** janela exata do fallback de disponibilidade a declarar e pré-registrar no concept de 3.3.
 
