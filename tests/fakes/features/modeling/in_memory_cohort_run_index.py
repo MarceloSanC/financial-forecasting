@@ -29,11 +29,11 @@ class InMemoryCohortRunIndex:
         run_id: str,
         fold: str,
         targets_by_horizon: Mapping[int, Iterable[str]],
-        rows: int | None = None,
+        rows: int,
     ) -> None:
-        """Registra um run; sem `rows`, conta um por alvo (soma dos conjuntos)."""
+        """Registra um run com a contagem de linhas de predição (níveis inclusos)."""
         targets = {h: frozenset(ts) for h, ts in targets_by_horizon.items()}
-        count = rows if rows is not None else sum(len(ts) for ts in targets.values())
+        count = rows
         bucket = self._runs.setdefault((cohort_id, asset_id, feature_set_name), {})
         bucket.setdefault((model_version, seed), {})[run_id] = (fold, count, targets)
 

@@ -25,8 +25,8 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
-        ParquetAnalyticsRepository,
+    from financial_forecasting.features.analytics_store.application.ports.out.analytics_repository import (  # noqa: E501
+        AnalyticsRepository,
     )
 
 _SILVER = "silver"
@@ -39,7 +39,7 @@ RunSummary = tuple[str, int, Mapping[int, frozenset[str]]]
 class ParquetCohortRunIndex:
     """Índice de runs de um cohort sobre o silver Parquet (port `CohortRunIndex`)."""
 
-    def __init__(self, *, repository: ParquetAnalyticsRepository) -> None:
+    def __init__(self, *, repository: AnalyticsRepository) -> None:
         self._repository = repository
 
     def recorded_runs(
@@ -50,6 +50,7 @@ class ParquetCohortRunIndex:
             table=_DIM_RUN,
             filters={"asset": asset_id, "parent_sweep_id": cohort_id},
         )
+        runs = [run for run in runs if run.get("feature_set_name") == feature_set_name]
         if not runs:
             return {}
         run_ids = {str(run["run_id"]) for run in runs}
@@ -74,5 +75,10 @@ class ParquetCohortRunIndex:
             seed = run["seed"]
             key = (str(run["model_version"]), int(seed) if seed is not None else None)  # type: ignore[call-overload]
             targets = {h: frozenset(ts) for h, ts in targets_by_run[run_id].items()}
-            index.setdefault(key, {})[run_id] = (str(run["fold"]), rows_by_run[run_id], targets)
+            fold = run.get("fold")
+            index.setdefault(key, {})[run_id] = (
+                str(fold) if fold is not None else "",
+                rows_by_run[run_id],
+                targets,
+            )
         return index

@@ -241,3 +241,25 @@ def test_unknown_cohort_is_empty(leg: tuple[CohortRunIndex, _SeedRun]) -> None:
     index, _ = leg
 
     assert _read(index, "no-such-cohort") == {}
+
+
+@pytest.mark.contract
+def test_tft_seeds_and_null_seed_baselines_coexist_in_one_cohort(
+    leg: tuple[CohortRunIndex, _SeedRun],
+) -> None:
+    index, seed_run = leg
+    for seed in (11, 22, 2**40):
+        seed_run(
+            cohort_id=_COHORT, model_version="tft_quantile", seed=seed,
+            run_id=f"run-tft-{seed}", fold="0", decisions=_decisions(1, [2]),
+        )
+    seed_run(
+        cohort_id=_COHORT, model_version="baseline_ar1", seed=None,
+        run_id="run-ar1", fold="0", decisions=_decisions(1, [2]),
+    )
+
+    runs = _read(index)
+
+    assert set(runs) == {
+        ("tft_quantile", 11), ("tft_quantile", 22), ("tft_quantile", 2**40), ("baseline_ar1", None)
+    }
