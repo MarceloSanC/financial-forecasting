@@ -61,6 +61,14 @@ bounded_context: modeling
   not file bytes) used by the cohort freeze.
 - The dataset's storage is unchanged.
 
+**Implementation note (2026-09-27, Stage 5.5 Task 06):** the single reader is a
+pure domain service, `build_training_grid(rows, *, columns)` in
+`modeling/domain/services/training_grid.py`. It returns the trimmed rows; the
+`DatasetContentFingerprint` is computed by the application caller (hashing lives
+only in `shared/domain/value_objects`, `check_layout` rule 6), and each use case
+keeps a thin `_load_dataset` that reads the store (asset partition), checks
+emptiness with its own error code and delegates to the service.
+
 ## Alternatives considered
 
 ### Alternative A — Drop warm-up rows in `BuildDataset`
