@@ -48,6 +48,24 @@ from financial_forecasting.features.feature_engineering.application.use_cases.bu
 from financial_forecasting.features.feature_engineering.domain.services.dataset_quality_gate import (  # noqa: E501
     DatasetQualityGateConfig,
 )
+from financial_forecasting.features.market_data.adapters.out.parquet.parquet_fundamental_fetcher import (  # noqa: E501
+    ParquetFundamentalFetcher,
+)
+from financial_forecasting.features.market_data.adapters.out.parquet.parquet_raw_candle_fetcher import (  # noqa: E501
+    ParquetRawCandleFetcher,
+)
+from financial_forecasting.features.market_data.adapters.out.parquet.parquet_raw_news_fetcher import (  # noqa: E501
+    ParquetRawNewsFetcher,
+)
+from financial_forecasting.features.market_data.application.use_cases.ingest_candles import (
+    IngestCandles,
+)
+from financial_forecasting.features.market_data.application.use_cases.ingest_fundamentals import (
+    IngestFundamentals,
+)
+from financial_forecasting.features.market_data.application.use_cases.ingest_news import (
+    IngestNews,
+)
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
     HyperparameterSearch,
 )
@@ -310,3 +328,30 @@ def test_lazy_tft_proxies_expose_the_port_surface_without_building(tmp_path: Pat
     # Uma chamada real construiria o delegate — não é o que se testa aqui; o
     # e2e de `tests/integration/features/modeling/test_train_tft.py` faz isso.
     assert tmp_path.exists()
+
+
+@pytest.mark.unit
+def test_wire_dependencies_wires_local_ingestion_under_data_root(tmp_path: Path) -> None:
+    """Stage 5.5 Task 25: os brutos são lidos sob `data_root`, e o bronze vai ao store."""
+    settings = Settings(_env_file=None, data_root=tmp_path)
+
+    deps = wire_dependencies(settings=settings)
+
+    assert isinstance(deps.ingest_candles, IngestCandles)
+    assert isinstance(deps.ingest_news, IngestNews)
+    assert isinstance(deps.ingest_fundamentals, IngestFundamentals)
+    for use_case in (deps.ingest_candles, deps.ingest_news, deps.ingest_fundamentals):
+        assert use_case._store is deps.store
+    candles = deps.ingest_candles._fetcher
+    news = deps.ingest_news._fetcher
+    fundamentals = deps.ingest_fundamentals._fetcher
+    assert isinstance(candles, ParquetRawCandleFetcher)
+    assert isinstance(news, ParquetRawNewsFetcher)
+    assert isinstance(fundamentals, ParquetFundamentalFetcher)
+    assert candles._parquet_path("AAPL") == (
+        tmp_path / "raw" / "market" / "candles" / "AAPL" / "candles_AAPL_1d.parquet"
+    )
+    assert news._parquet_path("AAPL") == tmp_path / "raw" / "news" / "AAPL" / "news_AAPL.parquet"
+    assert fundamentals._parquet_path("AAPL") == (
+        tmp_path / "processed" / "fundamentals" / "AAPL" / "fundamentals_AAPL.parquet"
+    )
