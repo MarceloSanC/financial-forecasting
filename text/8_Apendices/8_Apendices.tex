@@ -1,123 +1,143 @@
 \appendix
 
-\chapter*{APÊNDICE A - Protocolo operacional e contratos de qualidade}
-\addcontentsline{toc}{chapter}{APÊNDICE A - Protocolo operacional e contratos de qualidade}
+\chapter*{APÊNDICE A - Protocolo experimental consolidado}
+\addcontentsline{toc}{chapter}{APÊNDICE A - Protocolo experimental consolidado}
 
-Este apêndice consolida os elementos operacionais do protocolo experimental que sustentam o Capítulo 4 (Método) e o Capítulo 5 (Resultados). O conteúdo é descritivo e não substitui a documentação canônica em \texttt{docs/}; serve como referência integrada para auditoria do trabalho.
+Este apêndice consolida os elementos do protocolo experimental que sustentam os Capítulos~\ref{chap:metodo} e~\ref{chap:resultados}, como referência integrada para auditoria do trabalho.
 
 \section*{A.1 Identificadores de execução e \textit{fingerprints}}
 
-Cada execução experimental é identificada de forma determinística por um \texttt{run\_id} computado como hash SHA-256 da combinação ordenada de ativo, \texttt{feature\_set\_hash}, número de \textit{trial}, \textit{fold}, semente, \texttt{model\_version}, \texttt{config\_signature}, \texttt{split\_signature} e \texttt{pipeline\_version}. Essa identidade lógica garante que repetições com a mesma especificação produzem o mesmo \texttt{run\_id} e, portanto, que diferenças observadas entre execuções devem ser atribuídas a mudanças explícitas em pelo menos um desses componentes.
+Cada execução é identificada de forma determinística por um \texttt{run\_id}, o SHA-256 da representação JSON canônica (chaves ordenadas) de nove campos: ativo, \textit{hash} do conjunto de \textit{features}, número do \textit{trial}, \textit{fold}, semente, versão do modelo, assinatura de configuração, assinatura das partições e versão do \textit{pipeline}. Campos opcionais ausentes participam da chave como nulos. Repetições com a mesma especificação produzem o mesmo \texttt{run\_id}; diferenças entre execuções só podem decorrer de mudança explícita em algum desses campos.
 
-\textit{Fingerprints} complementares operam por camada: \texttt{dataset\_fingerprint} resume o conjunto de entrada por meio de \textit{hash} de ativo, intervalo temporal, contagem de linhas, soma de preço de fechamento, soma de volume e \textit{hash} do arquivo Parquet; \texttt{split\_fingerprint} resume a lista ordenada de \textit{timestamps} por partição (treino, validação, teste); \texttt{config\_signature} resume a configuração de hiperparâmetros e contratos do modelo. Comparações pareadas válidas exigem coincidência exata de \texttt{split\_fingerprint} entre os modelos comparados.
+\textit{Fingerprints} complementares: a impressão do conjunto de dados resume ativo, intervalo temporal, número de linhas, somas de fechamento e de volume e o \textit{hash} do arquivo; a impressão das partições resume as listas ordenadas de sessões de \texttt{train}, \texttt{early\_stop}, \texttt{calib} e \texttt{test}; a assinatura de configuração resume hiperparâmetros, \textit{features}, tipagem, grade de quantis, horizonte máximo e id de coorte, excluindo campos voláteis como datas de execução. Comparações pareadas exigem coincidência exata da impressão das partições.
 
-\section*{A.2 Camadas de persistência}
+\section*{A.2 Previsões persistidas}
 
-O repositório analítico do projeto adota separação entre camadas imutáveis e camadas reconstruíveis, conforme \texttt{docs/01\_architecture/decisions/ADR-0001-analytics-store.md}. A camada \textit{silver} é a fonte primária imutável, contendo \texttt{fact\_oos\_predictions}, \texttt{fact\_config}, \texttt{fact\_split\_metrics}, \texttt{fact\_epoch\_metrics}, \texttt{fact\_run\_snapshot} e \texttt{dim\_run}. A camada \textit{gold} é derivada e reconstruível a partir do \textit{silver}, contendo as tabelas de métricas agregadas, comparações estatísticas pareadas, calibração, risco e auditoria do guardrail monotônico.
+As previsões fora da amostra são persistidas em formato longo, com uma linha por (execução, partição, horizonte, sessão de decisão, \textit{target timestamp}, nível de quantil). Cada linha carrega o valor bruto do modelo, o valor após o rearranjo monotônico e um indicador de que o rearranjo alterou a ordem dos níveis. A grade de níveis é dado, e não estrutura: alterar a grade acrescenta linhas, sem mudar o esquema. Candidato e comparadores usam o mesmo formato e a mesma coorte.
 
-A reconstrutibilidade da camada \textit{gold} é propriedade metodológica, não apenas operacional: qualquer alteração no contrato analítico (por exemplo, mudança de variante quantilica primária) pode ser auditada por meio de \textit{refresh} controlado, sem necessidade de retreinar os modelos. A fronteira temporal para claims confirmatórios é posterior ao \textit{reset} operacional documentado em \texttt{docs/01\_architecture/ANALYTICS\_STORE\_ARCHITECTURE.md} (\textit{Archive pre-Phase B}); o \textit{snapshot} \textit{silver}/\textit{gold} anterior a 2026-05-10 foi arquivado em \texttt{data/analytics\_archive\_pre\_phase\_b/} como diagnóstico histórico e não alimenta as conclusões do trabalho.
+Os dados brutos e os fatos de execução são imutáveis; toda tabela de métricas, testes e decisão é derivada deles e pode ser reconstruída sem re-treinar os modelos --- inclusive para reanálises com outra variante quantílica ou outro parâmetro de teste.
 
-\section*{A.3 Política de variante quantilica}
+\section*{A.3 Rearranjo monotônico e \textit{gate} de degeneração}
 
-A pipeline persiste duas variantes paralelas dos quantis previstos. A variante \textit{raw} é a saída direta do modelo (\texttt{quantile\_p10}, \texttt{quantile\_p50}, \texttt{quantile\_p90}), que pode violar monotonicidade em parte das linhas. A variante \textit{post-guardrail} é o resultado do rearranjo monotônico (\texttt{sorted([p10,p50,p90])} por linha), com as colunas paralelas \texttt{quantile\_p10\_post\_guardrail}, \texttt{quantile\_p50\_post\_guardrail} e \texttt{quantile\_p90\_post\_guardrail}.
+O rearranjo ordena os \(K\) valores brutos da grade de cada previsão, produzindo quantis não decrescentes ao longo dos níveis; o indicador de rearranjo registra se a ordem mudou. Se algum valor bruto não é finito, a grade é preservada sem reordenação, e a decisão sobre sua validade fica com os critérios de qualidade. O rearranjo não altera grades colapsadas (\(\hat{q}_{\tau_1} = \hat{q}_{\tau_K}\)); estas são identificadas por um \textit{gate} de degeneração, que invalida as métricas da linha e reporta a taxa por execução. A variante (bruta ou rearranjada) que alimenta cada métrica confirmatória é fixada no pré-registro; métricas de risco usam sempre a variante rearranjada.
 
-A categorização canônica por tabela analítica é a seguinte. Tabelas de Categoria A persistem ambas variantes com sufixos \texttt{\_raw} e \texttt{\_post\_guardrail}, mais a coluna de diferença \texttt{delta\_<metrica>\_post\_minus\_raw}. Tabelas de Categoria B persistem somente a variante pós-guardrail, por exigência semântica das medidas envolvidas; é o caso das métricas de risco financeiro (\textit{Value-at-Risk}, \textit{Expected Shortfall}) e da tabela final de seleção do modelo. Tabelas de Categoria C persistem somente a variante \textit{raw}, por exigência diagnóstica; é o caso do \textit{check} de intervalo negativo e do \textit{gate} de degenerescência quantilica.
+\section*{A.4 \textit{Scorecard} e regra de decisão}
 
-A variante primária para as hipóteses H1, H2a e H2b é \texttt{post\_guardrail}, declarada por meio da flag \texttt{--primary-quantile-contract} e persistida como coluna homônima na tabela final de decisão. A justificativa formal segue resultado de Chernozhukov, Fernández-Val e Galichon (2010) sobre rearranjo monotônico em famílias de perdas convexas simétricas em torno da mediana; documentação completa em \texttt{docs/04\_evaluation/METRICS\_DEFINITIONS.md} (§Variante quantilica) e \texttt{docs/07\_reports/living-paper/20\_method.md} (§Política de variante quantilica).
-
-\section*{A.4 \textit{Gates} quantitativos de qualidade}
-
-A versão expandida dos \textit{gates} A, B, C e D está descrita no Capítulo 4, juntamente com a classificação dos limiares em três categorias metodológicas: (i) convenções estatísticas consagradas (\(p < 0{,}05\) do Gate D), (ii) limiares operacionais provisionais calibrados em rodada exploratória e (iii) contratos de governança fixados \textit{ex ante} no pré-registro, justificados pelo compromisso antecipado e auditável \cite{PINEAU2021REPRODUCIBILITY}. Para conveniência de auditoria, os limiares operacionais consolidados são:
-
-\begin{itemize}
-    \item \textbf{Gate A — Contrato quantilico}: \texttt{crossing\_bruto\_rate} \(\leq 0{,}10\%\); \texttt{crossing\_pos\_guardrail\_rate} \(= 0\); \texttt{negative\_interval\_width\_count} \(= 0\).
-    \item \textbf{Gate B — Impacto do guardrail}: \(\Delta\)pinball relativo \(\leq +1{,}0\%\); \(|\Delta\)PICP\(| \leq 0{,}02\); \(\Delta\)MPIW relativo \(\leq +5{,}0\%\).
-    \item \textbf{Gate C — Robustez entre repetições}: grupo instável quando desvio-padrão de \texttt{invalid\_rate} entre sementes/\textit{folds} \(> 0{,}005\); família reprovada quando mais de \(20\%\) dos grupos forem instáveis.
-    \item \textbf{Gate D — Sensibilidade a regime}: efeito reportado com \(p < 0{,}05\) e sinal consistente entre indicadores complementares (volatilidade local rolling, proxy OOD por \(z\)-score).
-\end{itemize}
-
-A composição de aprovação é hierárquica. \textit{Run} elegível para análise confirmatória da Fase B exige aprovação nos Gates A e B; promoção a evidência primária exige adicionalmente o Gate C; leitura segmentada por regime exige adicionalmente o Gate D. O status \texttt{provisório} é atribuído após uma rodada aprovada; o status \texttt{oficial} requer aprovação em duas rodadas consecutivas.
+A versão completa do \textit{scorecard} está na Seção~\ref{sec:scorecard}. Em síntese: (1) \textit{gate} de validade estatística --- perda \textit{pinball}, sem seleção dos melhores \textit{runs}, família de Holm restrita às mesmas partições, série deduplicada e alinhada; (2) \textit{gate} de calibração (H1) por horizonte, contra bandas pré-registradas; (3) veredito de H2 por horizonte, via DM/Holm contra cada nível da hierarquia de \textit{baselines} e pertencimento ao MCS; (4) H3 por consistência em pelo menos dois de três métodos. O veredito só é emitido com todas as condições de validade satisfeitas, e as demais métricas nunca o alteram.
 
 \section*{A.5 Protocolo estatístico}
 
-A comparação OOS entre modelos exige interseção exata por \texttt{(asset, split, horizon, target\_timestamp)} antes de qualquer estatística pareada, conforme \texttt{docs/01\_architecture/decisions/ADR-0002-oos-alignment.md}. O teste primário é o de Diebold-Mariano \cite{DIEBOLDMARIANO1995} sob correção HAC e ajuste para amostras pequenas no estilo Harvey-Leybourne-Newbold \cite{HARVEY1997}; o ajuste de múltiplas comparações é Holm-Bonferroni, persistido como \texttt{pvalue\_adj\_holm} nas tabelas \textit{gold}. \textit{Model Confidence Set} \cite{HANSEN2011MCS} é reportado a \(\alpha = 0{,}05\) como leitura complementar quando o número de candidatos justificar.
+A comparação fora da amostra exige interseção exata por (ativo, partição, horizonte, \textit{target timestamp}, nível de quantil), com uma única observação por ponto alinhado (a previsão operacionalmente mais recente). O teste primário é o de Diebold-Mariano \cite{DIEBOLDMARIANO1995}, unilateral, sobre a \textit{pinball loss}, com variância HAC de defasagem \(h-1\) \cite{NEWEYWEST1987} e correção HLN \cite{HARVEY1997}; o ajuste de múltiplas comparações é o de Holm \cite{HOLM1979}; o \textit{Model Confidence Set} \cite{HANSEN2011MCS} usa \textit{bootstrap} em blocos com parâmetros fixados no pré-registro. Todos os procedimentos são conferidos contra implementações de referência. Toda comparação confirmatória é restrita a execuções da mesma coorte.
 
-Toda comparação confirmatória é restrita a \textit{runs} com o mesmo \texttt{parent\_sweep\_id} (coorte) e o mesmo \texttt{scope\_spec} de \textit{splits} e horizontes. Comparações globais sem restrição de coorte são reservadas a monitoramento de saúde da plataforma (\texttt{global\_health}) e não podem ser reportadas como evidência confirmatória.
+\section*{A.6 Pré-registro}
 
-\section*{A.6 Pré-registro versionado}
-
-A rodada confirmatória da Fase B só pode iniciar após \textit{commit} de pré-registro versionado, conforme \texttt{docs/08\_governance/EXPERIMENT\_TRACKING\_POLICY.md}. O pré-registro fixa, antes da observação dos resultados, o candidato (\textit{features} exatas, hiperparâmetros, janela de treino, semente), a métrica primária por horizonte, os baselines oficiais, a regra de desempate, o \textit{threshold} de relevância prática, as bandas de calibração marginal por quantil, a regra de PICP intervalar e o contrato de variante quantilica. Mudanças após o \textit{commit} exigem emenda datada no próprio arquivo, com justificativa explícita.
+A rodada confirmatória só se inicia após o congelamento do pré-registro, que fixa: hipóteses (H1, H2, H3); candidato (\textit{features}, hiperparâmetros, sementes, \textit{folds}); grade de quantis e horizontes; hierarquia de \textit{baselines} e suas convenções de emissão; métrica primária; bandas de calibração e pares de níveis dos intervalos; variante quantílica de cada métrica; parâmetros do DM, do Holm e do MCS; variante da predição conformal; limiar de degeneração; e a regra de decisão do \textit{scorecard}. O documento é \textit{hasheado}, e o \textit{hash} é ancorado aos artefatos confirmatórios: qualquer alteração posterior é detectável.
 
 \chapter*{APÊNDICE B - Glossário técnico de termos recorrentes}
 \addcontentsline{toc}{chapter}{APÊNDICE B - Glossário técnico de termos recorrentes}
 
-Este apêndice reúne, em formato sintético, os termos técnicos recorrentes ao longo do trabalho. As definições são canônicas conforme \texttt{docs/00\_overview/GLOSSARY.md}; para formulações algébricas e \textit{thresholds} operacionais, consultar \texttt{docs/04\_evaluation/METRICS\_DEFINITIONS.md}.
+Este apêndice reúne, em formato sintético, os termos técnicos recorrentes ao longo do trabalho.
 
-\section*{B.1 Termos de calibração e contrato probabilístico}
+\section*{B.1 Termos de previsão probabilística}
 
-\phantomsection\label{gl:calibracao}\textbf{Calibração probabilística}: correspondência entre a probabilidade nominal declarada pelo modelo e a frequência empírica observada nas previsões. Um modelo bem calibrado em \(p90\) deve ter \(y_{\textit{true}}\) abaixo do quantil previsto em aproximadamente \(90\%\) dos casos.
+\phantomsection\label{gl:calibracao}\textbf{Calibração probabilística}: correspondência entre a probabilidade nominal declarada pelo modelo e a frequência empírica observada. Um modelo bem calibrado no nível \(0{,}9\) tem o valor observado abaixo do quantil previsto em aproximadamente \(90\%\) dos casos.
 
-\phantomsection\label{gl:picp}\textbf{PICP (\textit{Prediction Interval Coverage Probability})}: probabilidade empírica de cobertura do intervalo de predição, definida na Equação~\ref{eq:picp} (Capítulo 3). Para o intervalo \([p10, p90]\), a cobertura nominal é \(0{,}80\).
+\phantomsection\label{gl:nitidez}\textbf{Nitidez (\textit{sharpness})}: concentração da distribuição preditiva; intervalos mais estreitos são mais nítidos. Só é desejável sujeita à calibração.
 
-\phantomsection\label{gl:mpiw}\textbf{MPIW (\textit{Mean Prediction Interval Width})}: largura média do intervalo de predição, definida na Equação~\ref{eq:mpiw} (Capítulo 3). Analisada conjuntamente com PICP, dado que intervalo estreito com PICP baixo indica modelo sistematicamente errado, e não modelo preciso.
+\phantomsection\label{gl:grade}\textbf{Grade de quantis}: conjunto comum de níveis \(\{\tau_1 < \dots < \tau_K\}\), com \(K\) entre 7 e 9, emitido por todos os modelos.
 
-\phantomsection\label{gl:pinball}\textbf{\textit{Pinball loss}}: função de perda para regressão quantilica, definida na Equação~\ref{eq:pinball} (Capítulo 3); métrica primária deste trabalho para avaliação probabilística, por ser regra de pontuação estritamente própria.
+\phantomsection\label{gl:pinball}\textbf{\textit{Pinball loss}}: perda assimétrica da regressão quantílica, definida na Equação~\ref{eq:pinball}; estritamente consistente para o quantil do nível correspondente e métrica primária deste trabalho.
 
-\phantomsection\label{gl:variante-quantilica}\textbf{Variante quantilica (\textit{raw} e \textit{post-guardrail})}: duas representações paralelas dos quantis previstos, conforme apêndice A.3.
+\phantomsection\label{gl:crps}\textbf{CRPS (\textit{Continuous Ranked Probability Score})}: regra de pontuação própria para a distribuição preditiva inteira; igual a duas vezes a integral da \textit{pinball} sobre os níveis (Equação~\ref{eq:crps}). Métrica complementar.
 
-\phantomsection\label{gl:crossing}\textbf{\textit{Crossing}}: violação da ordenação dos quantis (\(p10 > p50\) ou \(p50 > p90\)) na saída \textit{raw} do modelo, mitigado por rearranjo monotônico no pós-processamento.
+\phantomsection\label{gl:picp}\textbf{PICP (\textit{Prediction Interval Coverage Probability})}: frequência empírica de observações dentro do intervalo delimitado por um par de níveis \((\tau_l, \tau_h)\) (Equação~\ref{eq:picp}), comparada ao nominal \(\tau_h - \tau_l\).
 
-\section*{B.2 Termos de governança e escopo}
+\phantomsection\label{gl:mpiw}\textbf{MPIW (\textit{Mean Prediction Interval Width})}: largura média do intervalo de predição (Equação~\ref{eq:mpiw}); sempre lida em conjunto com o PICP.
 
-\phantomsection\label{gl:coorte}\textbf{Coorte}: conjunto de \textit{runs} de um mesmo \textit{sweep} (mesmo \texttt{parent\_sweep\_id}) que compartilham protocolo homogêneo de treino, validação e teste. Comparações estatísticas válidas ocorrem apenas dentro de coortes comparáveis.
+\phantomsection\label{gl:crossing}\textbf{\textit{Quantile crossing}}: violação da ordenação dos quantis previstos (\(\hat{q}_{\tau_j} > \hat{q}_{\tau_k}\) com \(\tau_j < \tau_k\)), típica de regressores treinados por nível.
 
-\phantomsection\label{gl:scope-modes}\textbf{\texttt{cohort\_decision} e \texttt{global\_health}}: dois modos de escopo. O primeiro restringe validações e comparações à coorte oficial declarada e é bloqueante para decisões finais. O segundo verifica saúde de plataforma sem restrição de coorte e não substitui validação \textit{scoped} para decisão de vencedor.
+\phantomsection\label{gl:rearranjo}\textbf{Rearranjo monotônico}: ordenação dos valores da grade de cada previsão, que restaura a monotonicidade sem afastar a previsão da curva quantílica verdadeira \cite{CHERNOZHUKOV2010REARRANGEMENT}; corrige ordem, não calibração.
 
-\phantomsection\label{gl:preregistro}\textbf{Pré-registro}: documento versionado, comitado antes da rodada confirmatória, que declara o candidato, os baselines, a métrica primária, as bandas de calibração, a regra de desempate e o contrato de variante quantilica. Sua função é eliminar graus de liberdade que induzem \textit{p-hacking} e seleção adversa de baselines.
+\phantomsection\label{gl:degeneracao}\textbf{Degeneração da grade}: previsão cujos níveis extremos coincidem, sem informação distribucional; tratada por \textit{gate} próprio, separado do rearranjo.
 
-\phantomsection\label{gl:leakage}\textbf{\textit{Leakage} temporal}: uso de informação futura no cálculo de \textit{features}, no ajuste de \textit{scalers} ou na seleção de modelo por meio do conjunto de teste. Invalida conclusões OOS quando presente.
+\phantomsection\label{gl:cqr}\textbf{CQR (\textit{Conformalized Quantile Regression})}: ajuste conformal dos quantis de um modelo com base nos escores de não conformidade de um conjunto de calibração disjunto; usada como referência de cobertura empírica.
 
-\section*{B.3 Termos do modelo e da pipeline}
+\section*{B.2 Termos de protocolo e governança}
 
-\phantomsection\label{gl:tft}\textbf{TFT (\textit{Temporal Fusion Transformer})}: modelo de previsão multi-horizonte que combina mecanismos de seleção de variáveis, camadas recorrentes, atenção \textit{multi-head} e cabeça \textit{multi-quantile}, conforme Lim et al. (2021).
+\phantomsection\label{gl:leakage}\textbf{\textit{Leakage} temporal}: uso de informação futura no cálculo de \textit{features}, no ajuste de transformações ou na seleção de modelo. Invalida conclusões fora da amostra.
 
-\phantomsection\label{gl:vsn}\textbf{VSN (\textit{Variable Selection Network})}: subcomponente do TFT que atribui pesos dinâmicos por \textit{timestep} e por família de \textit{feature}, separando entradas estáticas, conhecidas no futuro e desconhecidas no futuro.
+\phantomsection\label{gl:walkforward}\textbf{\textit{Walk-forward} com purga e embargo}: validação temporal com origens sucessivas, em que o treino cresce a cada \textit{fold} e as partições são separadas por \(h_{\max}\) + embargo sessões excluídas.
 
-\phantomsection\label{gl:feature-families}\textbf{Famílias de \textit{features}}: agrupamento semântico de variáveis de entrada por origem; o trabalho utiliza PRICE (preço, volume, retorno log), TECHNICAL (indicadores técnicos sobre OHLCV), SENTIMENT (sentimento agregado de notícias por sessão) e FUNDAMENTAL (indicadores fundamentalistas).
+\phantomsection\label{gl:split}\textbf{Partições do \textit{fold}}: \texttt{train} (ajuste), \texttt{early\_stop} (parada antecipada e avaliação da busca exploratória), \texttt{calib} (calibração conformal, nunca usada para seleção) e \texttt{test} (avaliação fora da amostra), disjuntas e nessa ordem temporal.
 
-\phantomsection\label{gl:run-id}\textbf{\texttt{run\_id}}: identidade lógica determinística de uma execução, conforme apêndice A.1.
+\phantomsection\label{gl:known}\textbf{Entradas conhecidas e observadas}: no TFT, conhecidas são as predeterminadas até o horizonte (calendário); observadas são as medidas apenas até a decisão (preço, indicadores, sentimento, fundamentos).
 
-\phantomsection\label{gl:split}\textbf{\textit{Split} temporal}: divisão cronológica do dataset em \textit{train} (ajuste), \textit{val} (parada antecipada e otimização de hiperparâmetros) e \textit{test} (avaliação OOS final), sem sobreposição.
+\phantomsection\label{gl:coorte}\textbf{Coorte}: conjunto de execuções com mesmo ativo, conjunto de \textit{features}, horizonte máximo, geometria de partições e id de coorte. Comparações confirmatórias ocorrem apenas dentro de uma coorte.
+
+\phantomsection\label{gl:dedup}\textbf{Deduplicação \textit{operationally-latest}}: quando \textit{folds} distintos preveem o mesmo ponto alinhado, mantém-se apenas a previsão mais recente, garantindo uma observação por ponto.
+
+\phantomsection\label{gl:preregistro}\textbf{Pré-registro}: documento congelado e \textit{hasheado} antes da rodada confirmatória, que fixa hipóteses, candidato, \textit{baselines}, métricas, bandas, parâmetros dos testes e regra de decisão.
+
+\phantomsection\label{gl:scorecard}\textbf{\textit{Scorecard}}: aplicação mecânica da regra de decisão pré-registrada, que separa o veredito do perfil comparativo.
+
+\section*{B.3 Termos do modelo}
+
+\phantomsection\label{gl:tft}\textbf{TFT (\textit{Temporal Fusion Transformer})}: modelo de previsão multi-horizonte que combina seleção de variáveis, camadas recorrentes, atenção \textit{multi-head} e saída quantílica \cite{LIMETAL2021TFT}.
+
+\phantomsection\label{gl:vsn}\textbf{VSN (\textit{Variable Selection Network})}: subcomponente do TFT que atribui pesos por passo de tempo às variáveis de entrada.
+
+\phantomsection\label{gl:feature-families}\textbf{Famílias de \textit{features}}: preço (OHLCV e derivadas de preço e volume), técnico (indicadores e medidas de volatilidade), sentimento (agregados de notícias por sessão) e fundamento (demonstrativos e razões contábeis).
+
+\phantomsection\label{gl:gbm}\textbf{GBM quantílico}: \textit{gradient boosting} treinado com a \textit{pinball loss}, um modelo por par (nível, horizonte); comparador forte da hierarquia de \textit{baselines}.
+
+\phantomsection\label{gl:run-id}\textbf{\texttt{run\_id}}: identidade determinística de uma execução, conforme o Apêndice A.1.
 
 \section*{B.4 Termos de teste estatístico}
 
-\phantomsection\label{gl:dm}\textbf{DM (\textit{Diebold-Mariano})}: teste para igualdade de acurácia preditiva esperada entre dois modelos, sobre série de perdas pareadas por \texttt{target\_timestamp}.
+\phantomsection\label{gl:dm}\textbf{DM (Diebold-Mariano)}: teste de igualdade de acurácia preditiva esperada entre dois modelos, sobre a série de perdas pareadas por \textit{target timestamp}.
 
-\phantomsection\label{gl:hln}\textbf{HLN (\textit{Harvey-Leybourne-Newbold})}: correção do DM para amostras pequenas, baseada em ajuste HAC de variância e distribuição \(t\) com graus de liberdade adaptados.
+\phantomsection\label{gl:hln}\textbf{HLN (Harvey-Leybourne-Newbold)}: correção do DM para amostras pequenas, com distribuição \(t\) de Student.
 
-\phantomsection\label{gl:mcs}\textbf{MCS (\textit{Model Confidence Set})}: procedimento de Hansen, Lunde e Nason (2011) que identifica o conjunto de modelos não rejeitáveis como melhores ao nível \(\alpha\), controlando FWER por construção.
+\phantomsection\label{gl:holm}\textbf{Holm}: ajuste sequencial de múltiplas comparações que controla a \textit{Family-Wise Error Rate}.
 
-\phantomsection\label{gl:holm}\textbf{Holm-Bonferroni}: ajuste de múltiplas comparações por passos descendentes que controla \textit{Family-Wise Error Rate}; resultado significativo exige \texttt{pvalue\_adj\_holm} \(< 0{,}05\).
+\phantomsection\label{gl:mcs}\textbf{MCS (\textit{Model Confidence Set})}: procedimento de \cite{HANSEN2011MCS} que identifica o conjunto de modelos não rejeitados como superiores ao nível \(\alpha\).
 
-\chapter*{APÊNDICE C - Comandos de reprodução}
-\addcontentsline{toc}{chapter}{APÊNDICE C - Comandos de reprodução}
+\phantomsection\label{gl:christoffersen}\textbf{Christoffersen e Kupiec}: testes de razão de verossimilhança para a cobertura de intervalos e VaR; Kupiec avalia a proporção de violações e Christoffersen acrescenta a independência entre elas.
 
-Este apêndice indica os pontos de entrada operacionais para reprodução do pipeline. Para detalhes de instalação e configuração de ambiente, consultar \texttt{docs/06\_runbooks/RUN\_PIPELINE\_QUICKSTART.md}.
+\chapter*{APÊNDICE C - Reprodução}
+\addcontentsline{toc}{chapter}{APÊNDICE C - Reprodução}
 
-\section*{C.1 Construção do dataset}
+Este apêndice indica como reproduzir o \textit{pipeline}. O repositório do trabalho contém o código, a configuração e a documentação de decisões.
 
-A ordem operacional dos sub-pipelines de ingestão e construção do \textit{dataset} TFT está documentada em \texttt{docs/06\_runbooks/RUN\_DATASET.md}. As fontes externas (\texttt{yfinance}, \texttt{finnhub}, \texttt{alpha vantage}) e os respectivos contratos estão em \texttt{docs/02\_data/DATA\_SOURCES.md}; o \textit{registry} de \textit{features} por família está em \texttt{docs/02\_data/FEATURE\_SETS.md}; os \textit{quality gates} aplicados durante o \textit{refresh} estão em \texttt{docs/02\_data/QUALITY\_GATES.md}.
+\section*{C.1 Ambiente}
 
-\section*{C.2 Treinamento e inferência}
+O ambiente é definido por uma imagem Docker com Python 3.12 e dependências fixadas em arquivo de travamento. Os alvos principais são \texttt{make setup} (configuração inicial), \texttt{make check} (verificações estáticas e testes) e \texttt{make test-cov} (testes com relatório de cobertura); \texttt{make docker-build}, \texttt{make docker-up} e \texttt{make docker-shell} constroem e acessam o ambiente em contêiner.
 
-O comando canônico de treino do TFT está em \texttt{docs/06\_runbooks/RUN\_TRAINING.md}; o fluxo de inferência \textit{rolling} está em \texttt{docs/06\_runbooks/RUN\_INFERENCE.md}; a execução de \textit{sweeps} (Optuna e \textit{explicit-config}) está em \texttt{docs/06\_runbooks/RUN\_SWEEPS.md}, incluindo a operação de \textit{purge} \textit{scoped}.
+\section*{C.2 Dados e \textit{features}}
 
-\section*{C.3 Atualização da camada analítica}
+As fontes são \texttt{yfinance} (cotações diárias), Alpha Vantage (notícias, demonstrativos e datas de divulgação) e o modelo FinBERT com revisão de pesos fixada. A sequência é: ingestão de cotações, notícias e fundamentos; pontuação e agregação de sentimento por sessão; e construção do conjunto de dados com as 55 \textit{features}, o alvo e o \textit{gate} de qualidade.
 
-O comando canônico de \textit{refresh} da camada analítica é:
+\section*{C.3 Treinamento e avaliação}
 
-\begin{verbatim}
-python -m src.main_refresh_analytics_store --fail-on-quality
-\end{verbatim}
+Sobre o conjunto de dados, executam-se: os cinco \textit{baselines} estatísticos, o GBM quantílico e o TFT sob o mesmo protocolo \textit{walk-forward}; a busca exploratória de hiperparâmetros do TFT; e a rodada confirmatória do cohort pré-registrado. Em seguida, calculam-se métricas, testes, predição conformal e contribuição de famílias, e o \textit{scorecard} produz o veredito. As execuções são registradas em MLflow com \textit{backend} local.
 
-A flag \texttt{--fail-on-quality} aborta a atualização em caso de violação dos \textit{quality gates}. O parâmetro \texttt{--primary-quantile-contract} define a variante primária (\texttt{raw} ou \texttt{post\_guardrail}), com \texttt{post\_guardrail} como \textit{default}. A documentação operacional completa está em \texttt{docs/06\_runbooks/RUN\_REFRESH\_ANALYTICS.md}.
+\chapter*{APÊNDICE D - Notas de implementação}
+\addcontentsline{toc}{chapter}{APÊNDICE D - Notas de implementação}
+
+Este apêndice descreve, de forma sucinta, as escolhas de engenharia de software que sustentam o trabalho. Elas não fazem parte do objeto científico, mas asseguram que os números reportados sejam verificáveis.
+
+\section*{D.1 Arquitetura}
+
+O código segue arquitetura hexagonal (\textit{ports and adapters}) organizada em \textit{vertical slices} por contexto: dados de mercado, engenharia de \textit{features}, armazenamento analítico e modelagem, com os contextos de avaliação e inferência previstos na mesma estrutura. O domínio é implementado apenas com a biblioteca padrão do Python; bibliotecas numéricas e de aprendizado de máquina (\texttt{pandas}, \texttt{pyarrow}, \texttt{torch}, \texttt{pytorch-forecasting}, \texttt{lightgbm}, \texttt{statsforecast}, \texttt{optuna}) ficam restritas a adaptadores. A direção das dependências é verificada automaticamente pelo \texttt{import-linter}, com checagem de tipos estrita (\texttt{mypy --strict}) e cobertura mínima de testes de 90\% como condição para integrar qualquer mudança.
+
+\section*{D.2 Validação das estatísticas}
+
+As métricas e os testes são implementados como funções puras sobre objetos de valor com invariantes (grade de quantis, séries de perdas pareadas, séries de cobertura) e validados por testes de contrato contra casos analíticos e contra implementações de referência (R, \texttt{scikit-learn}, \texttt{scoringrules}, \texttt{arch}, \texttt{statsmodels}). Cada indicador técnico é conferido contra sua fórmula canônica e contra um teste de ausência de \textit{leakage}.
+
+\section*{D.3 Armazenamento}
+
+Os dados seguem a organização em camadas \textit{bronze} (dados brutos imutáveis), \textit{silver} (fatos de execução, fonte da verdade) e \textit{gold} (tabelas analíticas derivadas e reconstruíveis), em arquivos Parquet consultados com DuckDB. A camada \textit{silver} contém as tabelas de dimensão de execuções, configuração, previsões fora da amostra (formato longo, com nível de quantil na chave), métricas por partição e falhas; fatos são apenas acrescentados, nunca sobrescritos. O rastreamento de experimentos usa MLflow com \textit{backend} SQLite local.
+
+\section*{D.4 Registro de decisões}
+
+As decisões de desenho são registradas em documentos de decisão arquitetural (ADR) versionados no repositório, por exemplo: enquadramento em calibração probabilística (ADR 0.0.0002), controle de \textit{leakage} (0.0.0018), convenções de emissão de quantis dos \textit{baselines} (0.0.0052), definição do alvo (3.5.0001), formato longo das previsões (4.1.0002), indexação do \textit{target timestamp} por sessão (4.3.0001), rearranjo sobre a grade densa (4.3.0002), \textit{walk-forward} expansivo e partição de calibração (5.1.0001--5.1.0003), GBM direto por nível e horizonte (5.3.0001) e configuração do TFT (5.4.0001--5.4.0006).
