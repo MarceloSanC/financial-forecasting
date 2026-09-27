@@ -775,14 +775,14 @@ def test_i11_missing_feature_prefix_is_trimmed_from_training() -> None:
 def test_i12_label_index_beyond_the_grid_raises() -> None:
     """`idx + h` além do grid ergue nomeando o bug de geometria (I12)."""
     from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (  # noqa: PLC0415
-        _labels_from_full_grid,
+        labels_from_full_grid,
     )
 
     returns = _returns()
-    assert _labels_from_full_grid((0, 1), returns, 2) == (returns[2], returns[3])
+    assert labels_from_full_grid((0, 1), returns, 2) == (returns[2], returns[3])
 
     with pytest.raises(ValueError, match=r"I12"):
-        _labels_from_full_grid((_N_SESSIONS - 1,), returns, 2)
+        labels_from_full_grid((_N_SESSIONS - 1,), returns, 2)
 
 
 # -- I4/I9: determinismo -----------------------------------------------------------

@@ -521,6 +521,8 @@ class TestDatasetErrors:
             pytest.param({"quantile_levels": (0.5, 0.1)}, id="niveis-nao-crescentes"),
             pytest.param({"horizons": ()}, id="horizons-vazio"),
             pytest.param({"horizons": (1, 9)}, id="horizonte-acima-do-max-do-scope"),
+            pytest.param({"horizons": (0,)}, id="horizonte-zero"),
+            pytest.param({"horizons": (1, 1)}, id="horizonte-repetido"),
         ],
     )
     def test_invalid_command_raises_before_any_io(

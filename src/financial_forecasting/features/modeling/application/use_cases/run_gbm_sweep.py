@@ -38,14 +38,15 @@ from statistics import fmean
 from typing import TYPE_CHECKING, Any
 
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
+    stable_objective,
     validate_dimension_names,
 )
 from financial_forecasting.features.modeling.application.ports.out.quantile_model_trainer import (
     GbmTrainingParams,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
-    _labels_from_full_grid,
     expected_feature_names,
+    labels_from_full_grid,
     modeling_columns,
 )
 from financial_forecasting.features.modeling.domain.exceptions.backend import (
@@ -53,9 +54,6 @@ from financial_forecasting.features.modeling.domain.exceptions.backend import (
 )
 from financial_forecasting.features.modeling.domain.services.training_grid import (
     build_training_grid,
-)
-from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
-    DatasetContentFingerprint,
 )
 
 if TYPE_CHECKING:
@@ -183,10 +181,10 @@ class RunGbmSweep:
         train_rows = tuple(feature_rows[idx] for idx in train_indices)
         early_stop_rows = tuple(feature_rows[idx] for idx in early_stop_indices)
         train_labels = {
-            h: _labels_from_full_grid(train_indices, returns, h) for h in command.horizons
+            h: labels_from_full_grid(train_indices, returns, h) for h in command.horizons
         }
         early_stop_labels = {
-            h: _labels_from_full_grid(early_stop_indices, returns, h) for h in command.horizons
+            h: labels_from_full_grid(early_stop_indices, returns, h) for h in command.horizons
         }
 
         study_id = self._search.create_study(seed=command.seed)
@@ -216,8 +214,8 @@ class RunGbmSweep:
                 logger.exception("trial %s falhou e foi descartado da varredura", trial.number)
                 self._search.fail(trial_number=trial.number)
                 continue
-            objective = fmean(
-                training.early_stop_loss_by_horizon[h] for h in command.horizons
+            objective = stable_objective(
+                fmean(training.early_stop_loss_by_horizon[h] for h in command.horizons)
             )
             self._search.tell(trial_number=trial.number, objective_value=objective)
             self._track_trial(command, study_id, trial.number, params, objective)
@@ -295,19 +293,12 @@ class RunGbmSweep:
                 f"dataset ({_DATASET_LAYER!r}, {_DATASET_TABLE!r}) is empty for "
                 f"asset {scope.asset_id!r} — nothing to sweep (C1)"
             )
-        columns = modeling_columns()
-        grid = build_training_grid(rows, columns=columns)
-        fingerprint = DatasetContentFingerprint.compute(
-            hasher=self._hasher,
-            asset_id=scope.asset_id,
-            timestamps=grid.timestamps_iso(),
-            columns={name: grid.column(name) for name in columns},
-        )
+        grid = build_training_grid(rows, columns=modeling_columns())
         return (
             grid.column(_TARGET_COLUMN),
             grid.sessions(),
             grid.matrix(feature_names),
-            fingerprint.value,
+            grid.content_fingerprint(hasher=self._hasher, asset_id=scope.asset_id),
         )
 
 
@@ -329,6 +320,10 @@ def _validate_command(command: RunGbmSweepCommand) -> None:
         )
     if not command.horizons:
         raise ValueError("horizons must be non-empty (C2)")
+    if any(h < 1 for h in command.horizons) or len(set(command.horizons)) != len(
+        command.horizons
+    ):
+        raise ValueError(f"horizons must be unique and >= 1; got {command.horizons} (C2)")
     if max(command.horizons) > command.scope.max_horizon:
         raise ValueError(
             f"max(horizons)={max(command.horizons)} exceeds "

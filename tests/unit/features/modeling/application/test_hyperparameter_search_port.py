@@ -13,6 +13,7 @@ import pytest
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
     SearchDimension,
     SearchTrial,
+    stable_objective,
     validate_dimension_names,
 )
 from financial_forecasting.features.modeling.application.ports.out.quantile_model_trainer import (
@@ -88,6 +89,26 @@ class TestSearchDimensionValidation:
             validate_dimension_names(tft_space, GbmTrainingParams)
         with pytest.raises(ValueError, match="não é campo de TftTrainingParams"):
             validate_dimension_names(gbm_space, TftTrainingParams)
+
+    def test_seed_is_never_a_search_dimension(self) -> None:
+        space = (SearchDimension(name="seed", low=0, high=100, kind="int"),)
+
+        with pytest.raises(ValueError, match="não é campo"):
+            validate_dimension_names(space, GbmTrainingParams)
+
+    def test_repeated_dimension_names_are_rejected(self) -> None:
+        space = (
+            SearchDimension(name="num_leaves", low=4, high=64, kind="int"),
+            SearchDimension(name="num_leaves", low=8, high=32, kind="int"),
+        )
+
+        with pytest.raises(ValueError, match="repeated"):
+            validate_dimension_names(space, GbmTrainingParams)
+
+    def test_stable_objective_keeps_twelve_significant_digits(self) -> None:
+        """Diferença de ulp some; diferença real permanece (Checkpoint C da 5.5)."""
+        assert stable_objective(0.004482447927849784) == stable_objective(0.004482447927849783)
+        assert stable_objective(0.0044824479) != stable_objective(0.0044824478)
 
     def test_params_type_must_be_a_dataclass(self) -> None:
         with pytest.raises(TypeError, match="dataclass"):

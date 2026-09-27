@@ -22,11 +22,12 @@ predições no mesmo armazém do confirmatório, a separação passaria a depend
 todo leitor futuro aplicar o filtro certo — e um filtro esquecido no Step 6
 reintroduziria exatamente o viés que o desenho elimina.
 
-**Qual fold a varredura usa:** o ÚLTIMO. É o de janela de treino mais longa e
-histórico mais recente, portanto o mais representativo do regime em que o
-candidato será treinado no confirmatório. Explorar sobre todos os folds
-multiplicaria o custo por `n_folds` sem mudar a natureza exploratória do
-resultado.
+**Qual fold a varredura usa:** o ÚLTIMO da geometria recebida. No cohort
+confirmatório (Stage 5.5, D2; ADR 5.5.0002) o runner passa a geometria
+exploratória — um único fold cujo treino e early_stop são os do fold 0 — para
+que nenhum dado pontuado pelo confirmatório entre na busca (Raschka 2018 §3-4).
+Com a geometria confirmatória, o último fold treinaria sobre os testes dos
+folds anteriores: a garantia é da geometria passada, conferida no runner.
 
 Casos de erro (concept §6): C2 (comando inválido antes de qualquer I/O — os
 mesmos limites do `TrainTft`), C9 (`n_trials < 1`, ou todos os trials falharam).
@@ -40,6 +41,7 @@ from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
+    stable_objective,
     validate_dimension_names,
 )
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
@@ -54,9 +56,6 @@ from financial_forecasting.features.modeling.domain.exceptions.backend import (
 )
 from financial_forecasting.features.modeling.domain.services.training_grid import (
     build_training_grid,
-)
-from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
-    DatasetContentFingerprint,
 )
 
 if TYPE_CHECKING:
@@ -195,7 +194,8 @@ class RunTftSweep:
             embargo=command.embargo,
             hasher=self._hasher,
         )
-        # Último fold: janela de treino mais longa e histórico mais recente.
+        # Último fold da geometria recebida — no cohort, o único (geometria
+        # exploratória, D2 da Stage 5.5).
         fold = folds[-1]
         index_by_session = {day.isoformat(): idx for idx, day in enumerate(sessions)}
         train_indices = tuple(index_by_session[day] for day in fold.train)
@@ -247,7 +247,7 @@ class RunTftSweep:
                 logger.exception("trial %s falhou e foi descartado da varredura", trial.number)
                 self._search.fail(trial_number=trial.number)
                 continue
-            objective = training.best_val_loss
+            objective = stable_objective(training.best_val_loss)
             self._search.tell(trial_number=trial.number, objective_value=objective)
             self._track_trial(command, study_id, trial.number, params, objective)
             summaries.append(
@@ -339,19 +339,12 @@ class RunTftSweep:
                 f"dataset ({_DATASET_LAYER!r}, {_DATASET_TABLE!r}) is empty for "
                 f"asset {scope.asset_id!r} — nothing to sweep (C1)"
             )
-        columns = (*feature_names, _TARGET_COLUMN)
-        grid = build_training_grid(rows, columns=columns)
-        fingerprint = DatasetContentFingerprint.compute(
-            hasher=self._hasher,
-            asset_id=scope.asset_id,
-            timestamps=grid.timestamps_iso(),
-            columns={name: grid.column(name) for name in columns},
-        )
+        grid = build_training_grid(rows, columns=(*feature_names, _TARGET_COLUMN))
         return (
             grid.column(_TARGET_COLUMN),
             grid.sessions(),
             grid.matrix(feature_names),
-            fingerprint.value,
+            grid.content_fingerprint(hasher=self._hasher, asset_id=scope.asset_id),
         )
 
 
@@ -374,6 +367,10 @@ def _validate_command(command: RunTftSweepCommand) -> None:
         )
     if not command.horizons:
         raise ValueError("horizons must be non-empty (C2)")
+    if any(h < 1 for h in command.horizons) or len(set(command.horizons)) != len(
+        command.horizons
+    ):
+        raise ValueError(f"horizons must be unique and >= 1; got {command.horizons} (C2)")
     if max(command.horizons) > command.scope.max_horizon:
         raise ValueError(
             f"max(horizons)={max(command.horizons)} exceeds "

@@ -25,6 +25,9 @@ import pytest
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
 )
+from financial_forecasting.features.modeling.application.use_cases.run_gbm_sweep import (
+    RunGbmSweep,
+)
 from financial_forecasting.features.modeling.application.use_cases.run_tft_sweep import (
     RunTftSweep,
 )
@@ -289,3 +292,22 @@ def test_sweep_fingerprint_equals_the_fingerprint_over_modeling_columns() -> Non
     )
 
     assert sweep_fingerprint == cohort_fingerprint.value
+
+
+def test_both_sweeps_fingerprint_the_same_data_identically() -> None:
+    """I4: a proveniência tem UMA impressão digital para os dois sweeps.
+
+    O sweep do TFT corta pelas colunas na ordem do TFT; o do GBM por
+    `modeling_columns()`. Sobre as mesmas linhas, a impressão digital é a mesma.
+    """
+    rows = _with_modeling_columns(
+        [_row(2, 0.01, 1.0, 10.0), _row(3, 0.02, 2.0, 20.0), _row(4, 0.03, 3.0, 30.0)]
+    )
+    tft_features = unknown_feature_names() + known_feature_names()
+
+    *_, tft_fingerprint = _load_sweep(_self(_store(rows)), _SCOPE, tft_features)
+    *_, gbm_fingerprint = RunGbmSweep._load_dataset(  # type: ignore[arg-type]
+        _self(_store(rows)), _SCOPE, expected_feature_names()
+    )
+
+    assert tft_fingerprint == gbm_fingerprint
