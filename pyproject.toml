@@ -229,7 +229,7 @@ markers = [
     "integration: testes de integração — usam banco ou serviços reais",
     "contract: testes de contrato — validam que fakes e reais respeitam o mesmo contrato",
     "e2e: testes de ponta a ponta — sobem a aplicação completa",
-    "slow: testes lentos (treino real, modelo pesado) — pulados nos gates T1/T2 com -m 'not slow'; sempre rodam em make check/CI (ADR 0.0.0055)",
+    "slow: testes lentos (treino real, modelo pesado) — pulados só no gate T1 com -m 'not slow'; rodam em T2 e em make check/CI (ADR 0.0.0055)",
 ]
 
 [tool.coverage.run]
