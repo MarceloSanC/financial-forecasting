@@ -81,6 +81,16 @@ class Settings(BaseSettings):
     # testes, aponta para `tmp_path`.
     artifacts_root: Path = Path("artifacts")
 
+    # ---------------------------------------------------------------------------
+    # Raiz do repositório (Stage 5.5 / ADR 5.5.0001)
+    # ---------------------------------------------------------------------------
+    # Onde o `GitRuntimeEnvironmentProbe` roda o `git` para fotografar a identidade
+    # do código do cohort confirmatório (hash de `src/`, `uv.lock` e do arquivo do
+    # cohort). Default `.` = diretório de trabalho do processo (`/app` no
+    # container); override por env (`REPO_ROOT`); nos testes, um repositório
+    # descartável em `tmp_path`.
+    repo_root: Path = Path(".")
+
 
 @lru_cache
 def get_settings() -> Settings:
