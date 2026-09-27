@@ -1117,12 +1117,20 @@ transforma em prova com um teste de contrato "duas seeds → predições
 idênticas" (DoD da 5.5 no roadmap). Se um dia o GBM ganhar subamostragem, a
 regra (a) passa a valer para ele sem mudança.
 
-**Número de seeds do candidato** — decisão **P** (custo de GPU), tomada ao
-congelar o cohort (5.5), não aqui. Insumo para ela: o poder do DM vem de T;
-S reduz só a parcela da variância de d̄ que vem da seed, e o ganho de S = 10
-sobre S = 5 depende da razão r entre a variância entre seeds e a variância
-dos dados, mensurável no split exploratório. Baselines determinísticos não
-têm o problema. Alternativas descartadas: ensemble de previsões (muda o
+**Número de seeds do candidato** — decisão **P** (custo de GPU), tomada pelo
+humano em 2026-09-26: **S = 5**, com regra pré-declarada para subir a 10.
+Racional: a seed muda o modelo inteiro, logo o seu efeito é um deslocamento
+da perda média que T não dilui — só S dilui. A variância de d̄ tem duas
+parcelas, ≈ EP²_dados (cai com T) + s_b²/S (cai com S), onde s_b é o
+desvio-padrão, entre seeds, da pinball média de cada seed. **Regra** (medida
+no split exploratório, antes do congelamento do cohort — não contamina o
+confirmatório): treinar o candidato com 5 seeds; se s_b²/5 > 0,25·EP², onde
+EP é o erro-padrão HAC do DM contra um baseline, usar S = 10; senão, S = 5.
+O limiar corresponde a a seed inflar o EP do teste em mais de ~12 % com
+S = 5; abaixo dele, S = 10 reduz o EP em ≲ 5 %, o que não paga o dobro do
+treino. Bouthillier et al. (2021) acham a variância da inicialização em
+geral abaixo de metade da variância dos dados. O S efetivo e o s_b medido
+entram no pré-registro. Baselines determinísticos não têm o problema. Alternativas descartadas: ensemble de previsões (muda o
 objeto testado — o claim seria sobre um ensemble que o projeto não estuda —
 e é otimista pelo Jensen acima); seed fixa (cherry-picking se escolhida por
 OOS; se pré-fixada, joga fora a variância que Bouthillier mostram ser da
@@ -1769,7 +1777,7 @@ pelo gate, depois fechada pela triagem E/C com registro em §10.1; ADR onde indi
 | 16b | Stationary bootstrap (HLN usam moving-block — sensibilidade) com bloco = maior b̂_sb de Politis–White entre os diferenciais do horizonte + sensibilidade l = h e √T | Politis & White 2004; White 2000 §2.c; `[SEM-FONTE-PRIMÁRIA]` para variante e agregação | **decidida — B-MCS** (§10.1) | 6.2, 6.5 |
 | 17 | Pareamento por interseção exata de `target_timestamp` entre todos os modelos do horizonte; T reportado (1.21b) | DM 1995 §1; HLN 2011 p. 458; statsmodels HAC | decidida | 6.2, 6.4 |
 | 18 | Folds concatenados em série contígua por horizonte; diagnóstico de estacionariedade; DM por fold no perfil; janela rolante = limitação declarada (FB6) | Diebold 2015 §2.2/§3; HLN 2011 p. 484 e nota 11 do WP; GW 2006 §3.2 | **decidida — B-FOLDS** (§10.1) | 6.2, 6.5 |
-| 19 | Seeds → média ponto a ponto das perdas (conservadora pelo Jensen); cobertura/degeneração = média entre seeds, n ≈ T (nunca S·T); gate e sensibilidades por contagens médias; LR_ind/cc por seed e fração de seeds que rejeita no perfil; GBM determinístico → uma execução, com teste de contrato na 5.5; nº de seeds = P no congelamento do cohort (T12/FB7) | Bouthillier 2021; Jensen (derivação); código do adapter LightGBM | **decidida — B-SEEDS** (§10.1) (ADR) | 6.2, 6.5 |
+| 19 | Seeds → média ponto a ponto das perdas (conservadora pelo Jensen); cobertura/degeneração = média entre seeds, n ≈ T (nunca S·T); gate e sensibilidades por contagens médias; LR_ind/cc por seed e fração de seeds que rejeita no perfil; GBM determinístico → uma execução, com teste de contrato na 5.5; S = 5 seeds (decisão P do humano), 10 se s_b²/5 > 0,25·EP² no split exploratório (T12/FB7) | Bouthillier 2021; Jensen (derivação); código do adapter LightGBM | **decidida — B-SEEDS** (§10.1) (ADR) | 6.2, 6.5 |
 | 20 | Backtests: 2-estados por intervalo aninhado + unilateral por τ; 3-estados não adotado como backtest — exceto o LR_uc de 3 estados do par primário, sensibilidade do gate H1 (FC4) | Christoffersen 1998 §3/§4.2 | decidida | 6.3 |
 | 21 | Convenção "pura" de condicionamento — todas as contagens sobre t = 2..T, n_1 = n_01 + n_11 (identidade LR_cc = LR_uc + LR_ind exata); golden-test compara convenções iguais (oráculo alimentado a partir de t = 2), sem tolerância O(1/T) (FC5) | Christoffersen 1998 pp. 845/847; C&P 2004 §4.1; `rugarch` | decidida | 6.3 |
 | 22 | P-valor χ² assintótico; MC exato sob iid Bern(p) como sensibilidade em h+1; mínimo de violações para LR_ind pré-registrado (FC6) | Christoffersen 1998; Christoffersen & Pelletier 2004 §4.1, §4.3, §5 | decidida | 6.3, 6.5 |
