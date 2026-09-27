@@ -63,7 +63,9 @@ if TYPE_CHECKING:
         Row,
     )
 
-pytestmark = pytest.mark.integration
+# `slow`: o treino real do TFT soma ~55 s no CI (três runs completos) e sai dos
+# gates T1/T2 (`-m "not slow"`); continua rodando em `make check`/CI (ADR 0.0.0055).
+pytestmark = [pytest.mark.integration, pytest.mark.slow]
 
 _ASSET = "TEST"
 _FEATURE_SET = "fs_e2e"

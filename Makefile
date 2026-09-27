@@ -5,7 +5,7 @@
 # Requer: uv instalado (https://docs.astral.sh/uv/)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup install run migrate check lint fmt typecheck layout-check lint-imports fake-parity port-coverage docs-check test test-fast test-cov clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
+.PHONY: help setup install run migrate check check-task check-block lint fmt typecheck layout-check lint-imports fake-parity port-coverage docs-check test test-fast test-cov clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
 
 # Tag das imagens Docker. Mesmo nome usado em docker-compose.yml `image:` para
 # reusar o cache de layer (`make docker-build` e `make docker-up` produzem a
@@ -30,7 +30,9 @@ help:
 	@printf "%b\n" "  $(GREEN)make install$(RESET)    Reinstala dependências (após mudar pyproject.toml)"
 	@printf "%b\n" "  $(GREEN)make run$(RESET)        Sobe o servidor de desenvolvimento com hot-reload"
 	@printf "%b\n" "  $(GREEN)make migrate$(RESET)    Aplica migrations pendentes (alembic upgrade head)"
-	@printf "%b\n" "  $(GREEN)make check$(RESET)      Lint + typecheck + layout + import-linter + docs + testes c/ cobertura ≥90% (gate completo — usado no CI)"
+	@printf "%b\n" "  $(GREEN)make check$(RESET)      Lint + typecheck + layout + import-linter + docs + testes c/ cobertura ≥90% (gate completo — fim de Stage e CI)"
+	@printf "%b\n" "  $(GREEN)make check-task SLICE=<s>$(RESET) Gates estáticos + testes do slice, sem cobertura/slow (T1 — commit da Task)"
+	@printf "%b\n" "  $(GREEN)make check-block$(RESET) Gates estáticos + docs + suíte inteira paralela, sem cobertura (T2 — Checkpoint C)"
 	@printf "%b\n" "  $(GREEN)make lint$(RESET)       Roda ruff check (apenas reporta)"
 	@printf "%b\n" "  $(GREEN)make fmt$(RESET)        Formata o código com ruff format + ruff check --fix"
 	@printf "%b\n" "  $(GREEN)make typecheck$(RESET)  Roda mypy strict"
@@ -102,6 +104,50 @@ migrate:
 # barato (Stage 1.3): viola a fronteira hexagonal => build vermelho.
 # ---------------------------------------------------------------------------
 check: lint typecheck layout-check lint-imports fake-parity port-coverage docs-check test
+
+# ---------------------------------------------------------------------------
+# Gates em camadas (ADR 0.0.0055 / issue #110). `check` acima segue sendo o
+# gate completo (T3 fim de Stage/pré-push, T4 CI). Os alvos abaixo são as
+# camadas intermediárias — NÃO substituem `check` antes do PR.
+#
+# PYTEST_PAR: `--dist loadgroup` + os grupos do tests/conftest.py = um arquivo
+# por worker (fixtures module-scoped, ex.: o treino real do TFT, rodam uma vez)
+# e tests/architecture/ inteiro num worker só (injetam módulos na árvore real).
+# ---------------------------------------------------------------------------
+PYTEST_PAR := -n auto --dist loadgroup
+STATIC_GATES := lint typecheck layout-check lint-imports fake-parity port-coverage
+
+# check-task (T1, commit da Task) — gates estáticos + testes SÓ dos slices
+# tocados, sem cobertura e sem `slow`. Uso:
+#     make check-task SLICE=modeling
+#     make check-task SLICE="modeling shared"
+# SLICE aceita os slices de features/ e também `shared` e `tooling`.
+# tests/architecture/ fica FORA: testa os próprios gates (que já rodam aqui como
+# STATIC_GATES) e custa minutos por reconstruir o grafo de imports sem cache.
+# Mexer em .importlinter/scripts de gate já sobe a Task para T3 (RUNBOOK).
+# O guard de SLICE roda ANTES dos gates (sub-make), para falhar em 0 s.
+check-task:
+	@if [ -z "$(SLICE)" ]; then \
+		printf "%b\n" "$(YELLOW)Uso: make check-task SLICE=<slice> [SLICE=\"a b\"]$(RESET)"; exit 2; \
+	fi
+	@$(MAKE) --no-print-directory $(STATIC_GATES)
+	@paths=""; \
+	for s in $(SLICE); do \
+		case "$$s" in shared|tooling) base="$$s" ;; *) base="features/$$s" ;; esac; \
+		found=0; \
+		for kind in unit contract integration e2e; do \
+			if [ -d "tests/$$kind/$$base" ]; then paths="$$paths tests/$$kind/$$base"; found=1; fi; \
+		done; \
+		if [ "$$found" = 0 ]; then printf "%b\n" "$(YELLOW)Slice sem testes: $$s$(RESET)"; exit 2; fi; \
+	done; \
+	echo "uv run pytest $$paths $(PYTEST_PAR) -q -m 'not slow'"; \
+	uv run pytest $$paths $(PYTEST_PAR) -q -m "not slow"
+
+# check-block (T2, Checkpoint C a cada 2–3 Tasks) — todos os gates estáticos +
+# docs-check + suíte INTEIRA (inclui `slow`) em paralelo, sem cobertura. Pega a
+# quebra em slice não tocado que o check-task não enxerga.
+check-block: $(STATIC_GATES) docs-check
+	uv run pytest tests/ $(PYTEST_PAR) -q
 
 # ---------------------------------------------------------------------------
 # lint — verifica estilo e regras sem modificar arquivos
@@ -176,16 +222,18 @@ docs-check:
 # É o alvo que `make check` (e portanto o CI) executa: o --cov aqui faz o
 # fail_under=90 do pyproject DISPARAR (sem --cov o gate fica inerte — F3).
 # Fonte única da verdade: o que o dev roda local == o que o CI roda (I7).
+# Paralelo via xdist (ADR 0.0.0055): o pytest-cov combina a cobertura dos
+# workers, então o fail_under=90 continua valendo sobre a suíte inteira.
 # ---------------------------------------------------------------------------
 test:
-	uv run pytest tests/ -v --cov=src/financial_forecasting --cov-report=term-missing
+	uv run pytest tests/ $(PYTEST_PAR) -v --cov=src/financial_forecasting --cov-report=term-missing
 
 # ---------------------------------------------------------------------------
 # test-fast — pula testes slow e NÃO mede cobertura (loop local rápido).
 # Não dispara o gate de cobertura; use `make test`/`make check` para o gate.
 # ---------------------------------------------------------------------------
 test-fast:
-	uv run pytest tests/ -v -m "not slow"
+	uv run pytest tests/ $(PYTEST_PAR) -q -m "not slow"
 
 # ---------------------------------------------------------------------------
 # test-cov — testes com relatório de cobertura em HTML (gate ≥ 90% via pyproject)
