@@ -6,7 +6,7 @@ Uso (stdlib only — roda no host sem venv):
     python scripts/verify_citations.py --arxiv 2309.11495
     python scripts/verify_citations.py --title "Specification curve analysis" --year 2020
 
-Extrai DOIs e ids arXiv dos arquivos e consulta Crossref / arXiv; `--title` busca por
+Extrai DOIs e ids arXiv dos arquivos e consulta Crossref / DataCite (arXiv); `--title` busca por
 título na Crossref (para livros e papers sem DOI no texto). Saída: uma linha TSV por
 citação `STATUS  id  ano  primeiro-autor  título`. Exit 1 se alguma for NOT_FOUND ou
 MISMATCH; exit 2 se a rede falhou (resultado inconclusivo, não aprovado).
@@ -18,6 +18,7 @@ da skill `evidence-resolution`. Prova só que a fonte existe e é a que se diz s
 from __future__ import annotations
 
 import argparse
+import contextlib
 import difflib
 import json
 import re
@@ -30,13 +31,16 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
-_DOI_RE = re.compile(r"\b10\.\d{4,9}/[^\s\"'<>()\[\]{},;`|]+")
+# Parênteses entram (Elsevier: 10.1016/S0169-2070(96)00719-4); o `)` final desbalanceado sai.
+_DOI_RE = re.compile(r"\b10\.\d{4,9}/[^\s\"'<>\[\]{},;`|]+")
 _ARXIV_RE = re.compile(r"(?:arXiv[:\s]\s*|arxiv\.org/(?:abs|pdf)/)(\d{4}\.\d{4,5})", re.IGNORECASE)
 _USER_AGENT = "financial-forecasting-citation-check/1.0"
 _TIMEOUT_S = 20
 _TITLE_MATCH_MIN = 0.90
 _HTTP_NOT_FOUND = 404
-_HTTP_RETRYABLE = (429, 503)
+_HTTP_RETRYABLE = (406, 429, 503)  # arXiv limita taxa com 406 (fora do padrão)
+_ARXIV_BATCH = 20
+_ARXIV_PAUSE_S = 3  # termos da API do arXiv: no máximo 1 requisição a cada 3 s
 
 
 @dataclass(frozen=True)
@@ -51,9 +55,15 @@ class Result:
         return "\t".join((self.status, self.ident, self.year, self.author, self.title))
 
 
+def _clean_doi(raw: str) -> str:
+    doi = raw
+    while doi and (doi[-1] in ".:" or (doi[-1] == ")" and doi.count(")") > doi.count("("))):
+        doi = doi[:-1]
+    return doi
+
+
 def extract_dois(text: str) -> list[str]:
-    found = (m.group(0).rstrip(".") for m in _DOI_RE.finditer(text))
-    return list(dict.fromkeys(found))
+    return list(dict.fromkeys(_clean_doi(m.group(0)) for m in _DOI_RE.finditer(text)))
 
 
 def extract_arxiv_ids(text: str) -> list[str]:
@@ -67,8 +77,8 @@ def title_similarity(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, norm(a), norm(b)).ratio()
 
 
-def _get(url: str, retries: int = 2) -> bytes:
-    """GET com retry curto: arXiv pede ~3 s entre chamadas e responde 429/503 sob carga."""
+def _get(url: str, retries: int = 3) -> bytes:
+    """GET com retry curto para limitação de taxa (406/429/503) e falha de rede."""
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     for attempt in range(retries + 1):
         try:
@@ -81,7 +91,7 @@ def _get(url: str, retries: int = 2) -> bytes:
         except (urllib.error.URLError, TimeoutError):
             if attempt == retries:
                 raise
-        time.sleep(3 * (attempt + 1))
+        time.sleep(5 * 3**attempt)  # 5, 15, 45 s: a janela de limitação do arXiv dura dezenas de s
     raise AssertionError("unreachable")
 
 
@@ -111,20 +121,60 @@ def check_doi(doi: str) -> Result:
     return Result("OK", doi, *_crossref_fields(data["message"]))
 
 
-def check_arxiv(arxiv_id: str) -> Result:
-    url = "https://export.arxiv.org/api/query?id_list=" + urllib.parse.quote(arxiv_id)
-    try:
-        root = ET.fromstring(_get(url))
-    except (urllib.error.URLError, TimeoutError, ET.ParseError):
-        return Result("ERROR", "arXiv:" + arxiv_id)
+def parse_arxiv_feed(feed: bytes, ids: list[str]) -> list[Result]:
+    """Resultados na ordem de `ids`; id ausente do feed = NOT_FOUND."""
     ns = {"a": "http://www.w3.org/2005/Atom"}
-    entry = root.find("a:entry", ns)
-    title = entry.findtext("a:title", "", ns) if entry is not None else ""
-    if entry is None or not title or entry.findtext("a:id", "", ns).endswith("/api/errors"):
-        return Result("NOT_FOUND", "arXiv:" + arxiv_id)
-    author = entry.findtext("a:author/a:name", "", ns).split(" ")[-1]
-    year = entry.findtext("a:published", "", ns)[:4]
-    return Result("OK", "arXiv:" + arxiv_id, year, author, " ".join(title.split()))
+    found: dict[str, Result] = {}
+    for entry in ET.fromstring(feed).findall("a:entry", ns):
+        match = re.search(r"abs/(\d{4}\.\d{4,5})", entry.findtext("a:id", "", ns))
+        title = " ".join(entry.findtext("a:title", "", ns).split())
+        if match and title:
+            author = entry.findtext("a:author/a:name", "", ns).split(" ")[-1]
+            year = entry.findtext("a:published", "", ns)[:4]
+            found[match.group(1)] = Result("OK", "arXiv:" + match.group(1), year, author, title)
+    return [found.get(i, Result("NOT_FOUND", "arXiv:" + i)) for i in ids]
+
+
+def _check_arxiv_datacite(arxiv_id: str) -> Result:
+    """Todo paper do arXiv tem DOI DataCite 10.48550/arXiv.<id>; outra infraestrutura, sem o
+    limite de taxa agressivo da API do arXiv (que responde 406 sob rajada)."""
+    ident = "arXiv:" + arxiv_id
+    try:
+        raw = _get("https://api.datacite.org/dois/10.48550/arXiv." + urllib.parse.quote(arxiv_id))
+    except urllib.error.HTTPError as exc:
+        return Result("NOT_FOUND" if exc.code == _HTTP_NOT_FOUND else "ERROR", ident)
+    except (urllib.error.URLError, TimeoutError):
+        return Result("ERROR", ident)
+    try:
+        attrs = json.loads(raw)["data"]["attributes"]
+    except (ValueError, KeyError, TypeError):
+        return Result("ERROR", ident)  # payload inesperado → cai na reserva (API do arXiv)
+    titles = attrs.get("titles") or [{}]
+    creators = attrs.get("creators") or [{}]
+    author = str(creators[0].get("familyName") or creators[0].get("name") or "")
+    title = " ".join(str(titles[0].get("title", "")).split())
+    return Result("OK", ident, str(attrs.get("publicationYear") or ""), author, title)
+
+
+def check_arxiv(ids: list[str]) -> list[Result]:
+    """DataCite por id; a API do arXiv (lote, com pausa) só para o que o DataCite não respondeu."""
+    results = {i: _check_arxiv_datacite(i) for i in ids}
+    retry = [i for i, r in results.items() if r.status == "ERROR"]
+    for start in range(0, len(retry), _ARXIV_BATCH):
+        chunk = retry[start : start + _ARXIV_BATCH]
+        time.sleep(_ARXIV_PAUSE_S)
+        ids_param = ",".join(urllib.parse.quote(i) for i in chunk)
+        try:
+            feed = _get(
+                f"https://export.arxiv.org/api/query?id_list={ids_param}&max_results={len(chunk)}"
+            )
+        except (urllib.error.URLError, TimeoutError):
+            continue
+        with contextlib.suppress(ET.ParseError):
+            results.update(
+                {r.ident.removeprefix("arXiv:"): r for r in parse_arxiv_feed(feed, chunk)}
+            )
+    return [results[i] for i in ids]
 
 
 def check_title(title: str, year: str | None) -> Result:
@@ -161,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
         arxiv_ids += extract_arxiv_ids(text)
 
     results = [check_doi(d) for d in dict.fromkeys(dois)]
-    results += [check_arxiv(a) for a in dict.fromkeys(arxiv_ids)]
+    results += check_arxiv(list(dict.fromkeys(arxiv_ids)))
     results += [check_title(t, args.year if len(args.title) == 1 else None) for t in args.title]
     if not results:
         print("nenhuma citação verificável (DOI/arXiv/--title) encontrada", file=sys.stderr)

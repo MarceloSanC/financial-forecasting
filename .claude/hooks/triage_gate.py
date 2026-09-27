@@ -28,6 +28,16 @@ _PENDING_FORK = re.compile(
     r"|^\W*B(?:\d+|-[A-Z][A-Z0-9-]*)\b.*(?:\?|\(Recomendad[ao]\))",
     re.IGNORECASE | re.MULTILINE,
 )
+# Linha que declara o item fechado não é pendência, mesmo citando o marcador (caso real, #78:
+# `As 11 bifurcações "a ratificar" estão fechadas`). Aspas não servem de critério: o
+# verdadeiro positivo original também cita o marcador entre aspas. Exige a forma declarativa
+# (verbo de estado + particípio, sem "não" antes): "ainda não decidido", "a ser resolvido" e
+# "será tratado" são pendências e continuam bloqueando.
+_CLOSED = re.compile(
+    r"(?<!não )\b(?:est[aã]o|est[aá]|foram|foi|ficaram|ficou|j[aá])\s+(?:tod[ao]s\s+)?"
+    r"(?:fechad|decidid|resolvid|tratad|encerrad|conclu[ií]d)",
+    re.IGNORECASE,
+)
 _MAX_LINES_ECHOED = 5
 
 
@@ -42,7 +52,7 @@ def unclassified_questions(tool_input: dict[str, Any]) -> list[str]:
 def pending_fork_lines(message: str) -> list[str]:
     lines = []
     for line in message.splitlines():
-        if _PENDING_FORK.search(line) and "[P]" not in line:
+        if _PENDING_FORK.search(line) and "[P]" not in line and not _CLOSED.search(line):
             lines.append(line.strip()[:160])
     return lines
 

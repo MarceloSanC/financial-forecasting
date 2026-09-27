@@ -29,8 +29,16 @@ import sys
 from pathlib import Path
 
 ALLOWED_TYPES = (
-    "feat", "fix", "refactor", "test", "docs",
-    "chore", "perf", "style", "build", "ci",
+    "feat",
+    "fix",
+    "refactor",
+    "test",
+    "docs",
+    "chore",
+    "perf",
+    "style",
+    "build",
+    "ci",
 )
 
 # Reserved subjects — fixed text, NOT Conventional Commits.
@@ -155,6 +163,16 @@ def main(argv: list[str]) -> int:
     except OSError as exc:
         print(f"check_commit_msg: cannot read {msg_path}: {exc}", file=sys.stderr)
         return 2
+
+    if content.startswith("\ufeff"):
+        print(
+            "check_commit_msg: rejected commit message: starts with a UTF-8 BOM (invisible "
+            "U+FEFF that would stay in the subject). Typical cause: PowerShell Out-File / "
+            "Set-Content -Encoding utf8. Write the file without BOM (Python "
+            "open(..., 'w', encoding='utf-8'), or git commit -m).",
+            file=sys.stderr,
+        )
+        return 1
 
     # Skip lines comencing with `#` (git commentary) when looking for subject.
     subject = ""
