@@ -3,7 +3,7 @@ title: ADR 0.0.0010 — Paired inference: DM/HLN per comparator, Holm over the c
 description: Architecture Decision Record
 when-use: Reference when questioning the paired loss, the Holm family, the DM negative-variance fallback, the MCS bootstrap and block rule, how folds are combined, or how multiple seeds enter the tests
 keywords: [adr, diebold-mariano, hln, holm, mcs, bootstrap, block-length, seeds, folds, paired-inference, evaluation, step-6]
-status: proposed
+status: accepted
 created_at: 2026-09-26
 updated_at: 2026-09-26
 adr_id: 0.0.0010
@@ -18,7 +18,7 @@ bounded_context: evaluation
 
 ## Status
 
-`proposed` — flips to `accepted` with the evaluation domain doc (ADR 0.0.0054).
+`accepted` — ratified by the human (Marcelo) on 2026-09-26, together with the evaluation domain doc (issue #78).
 
 ## Context
 

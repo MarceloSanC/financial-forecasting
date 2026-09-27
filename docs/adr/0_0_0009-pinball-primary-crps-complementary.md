@@ -3,7 +3,7 @@ title: ADR 0.0.0009 — Pinball as primary metric; CRPS reported as 2 × grid-av
 description: Architecture Decision Record
 when-use: Reference when questioning which score decides H2, how "CRPS" is computed from a finite quantile grid, why it is not compared to published CRPS values, or which oracle validates it
 keywords: [adr, pinball, crps, quantile-grid, scoringrules, scoring-rule, evaluation, step-6]
-status: proposed
+status: accepted
 created_at: 2026-09-26
 updated_at: 2026-09-26
 adr_id: 0.0.0009
@@ -18,7 +18,7 @@ bounded_context: evaluation
 
 ## Status
 
-`proposed` — flips to `accepted` with the evaluation domain doc (ADR 0.0.0054).
+`accepted` — ratified by the human (Marcelo) on 2026-09-26, together with the evaluation domain doc (issue #78).
 
 ## Context
 

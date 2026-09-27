@@ -3,7 +3,7 @@ title: ADR 0.0.0054 — Single evaluation domain doc covering Step 6, with bound
 description: Architecture Decision Record
 when-use: Reference when questioning why the Step 6 domain gate is satisfied by one doc (probabilistic-forecast-evaluation.md), why it does not re-derive Step 5 theory or cover conformal/CQR, or why the roadmap's orphan vocabulary (C.0, Gates A–F) is not used
 keywords: [adr, domain-doc, evaluation, probabilistic-forecast-evaluation, scope, boundary, step-6, step-7, conformal, doc-category]
-status: proposed
+status: accepted
 created_at: 2026-09-26
 updated_at: 2026-09-26
 adr_id: 0.0.0054
@@ -18,8 +18,7 @@ bounded_context: evaluation
 
 ## Status
 
-`proposed` — flips to `accepted` together with the human ratification of the
-doc it governs (ADR 0.0.0003 lifecycle).
+`accepted` — ratified by the human (Marcelo) on 2026-09-26, together with the evaluation domain doc (issue #78).
 
 ## Context
 

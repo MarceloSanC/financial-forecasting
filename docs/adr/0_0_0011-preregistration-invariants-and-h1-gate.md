@@ -3,7 +3,7 @@ title: ADR 0.0.0011 — Preregistration order, degeneracy gate semantics and the
 description: Architecture Decision Record
 when-use: Reference when questioning when the preregistration is hashed, what the degeneracy gate invalidates, how the H1 gate is defined, how the H1 claim is worded, or why comparators failing H1 stay in the H2 family
 keywords: [adr, preregistration, degeneracy-gate, h1-gate, calibration, wilson, bonferroni, christoffersen, power, scorecard, evaluation, step-6]
-status: proposed
+status: accepted
 created_at: 2026-09-26
 updated_at: 2026-09-26
 adr_id: 0.0.0011
@@ -18,9 +18,7 @@ bounded_context: evaluation
 
 ## Status
 
-`proposed` — flips to `accepted` with the evaluation domain doc (ADR 0.0.0054).
-The wording of the H1 claim (B1) is already a human decision (issue #78,
-2026-09-26).
+`accepted` — ratified by the human (Marcelo) on 2026-09-26, together with the evaluation domain doc (issue #78).
 
 ## Context
 
