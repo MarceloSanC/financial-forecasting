@@ -13,6 +13,10 @@ from datetime import date, timedelta
 
 import pytest
 
+from financial_forecasting.features.analytics_store.domain.services.multi_horizon_prediction_persister import (  # noqa: E501
+    IncompletePredictionWindowError,
+    MultiHorizonPredictionPersister,
+)
 from financial_forecasting.features.modeling.domain.exceptions.cohort import (
     GeometryDoesNotFitError,
 )
@@ -78,22 +82,60 @@ def test_exploratory_geometry_is_one_fold_over_the_whole_oos_tail() -> None:
     )
 
 
-def test_expected_rows_follow_the_persister_rule_on_the_real_splitter() -> None:
-    """Conta decisões com alvo dentro do painel (regra do persister) nas folds reais."""
+def _persisted_rows(fold: object, sessions: tuple[date, ...], horizons: tuple[int, ...]) -> int:
+    """Conta pelo persister REAL: decisão cuja janela é incompleta é pulada."""
+    timestamps = tuple(day.isoformat() for day in sessions)
+    index = {day: i for i, day in enumerate(timestamps)}
+    persisted = 0
+    for day in fold.test:  # type: ignore[attr-defined]
+        for h in horizons:
+            try:
+                MultiHorizonPredictionPersister.build(
+                    decision_idx=index[day], horizon=h, dataset_timestamps=timestamps
+                )
+            except IncompletePredictionWindowError:
+                continue
+            persisted += 1
+    return persisted * _N_LEVELS
+
+
+@pytest.mark.parametrize(
+    ("geometry", "horizons"),
+    [
+        (_SMALL, _HORIZONS),
+        # h > test_size: o penúltimo fold também perde decisões.
+        (CohortGeometry(n_folds=3, test_size=5, val_size=8, calib_size=6, embargo=2), (1, 7)),
+    ],
+    ids=["small", "h-beyond-test-size"],
+)
+def test_expected_rows_match_the_real_persister_on_the_real_splitter(
+    geometry: CohortGeometry, horizons: tuple[int, ...]
+) -> None:
     sessions = _weekday_sessions(120)
-    index = {day.isoformat(): i for i, day in enumerate(sessions)}
-    folds = _split(_SMALL, sessions)
+    scope = ScopeSpec(asset_id="AAPL", feature_set_name="fs_all", max_horizon=max(horizons))
+    splitter = WalkForwardSplitter(TradingCalendar(TradingSessions(sessions=sessions)))
+    folds = splitter.split(
+        sessions,
+        scope,
+        n_folds=geometry.n_folds,
+        test_size=geometry.test_size,
+        val_size=geometry.val_size,
+        calib_size=geometry.calib_size,
+        embargo=geometry.embargo,
+        hasher=CanonicalJsonHasher(),
+    )
 
     for fold_index, fold in enumerate(folds):
-        persisted = sum(
-            1
-            for day in fold.test
-            for h in _HORIZONS
-            if index[day] + h < len(sessions)
-        ) * _N_LEVELS
-        assert persisted == _SMALL.expected_prediction_rows(
-            fold_index=fold_index, horizons=_HORIZONS, n_levels=_N_LEVELS
+        assert _persisted_rows(fold, sessions, horizons) == geometry.expected_prediction_rows(
+            fold_index=fold_index, horizons=horizons, n_levels=_N_LEVELS
         )
+
+
+def test_expected_runs_per_unit() -> None:
+    assert _AAPL.expected_runs(runs_per_fold=1) == 6  # noqa: PLR2004 — TFT/GBM
+    assert _AAPL.expected_runs(runs_per_fold=5) == 30  # noqa: PLR2004 — 5 baselines
+    with pytest.raises(ValueError, match="runs_per_fold"):
+        _AAPL.expected_runs(runs_per_fold=0)
 
 
 def test_aapl_cohort_expected_rows_per_fold() -> None:
@@ -147,6 +189,7 @@ def test_invalid_geometry_is_rejected(kwargs: dict[str, int]) -> None:
         ({"fold_index": 0, "horizons": (), "n_levels": 7}, "horizons"),
         ({"fold_index": 0, "horizons": (0,), "n_levels": 7}, "horizons"),
         ({"fold_index": 0, "horizons": (1,), "n_levels": 0}, "n_levels"),
+        ({"fold_index": 0, "horizons": (1, 1), "n_levels": 7}, "unique"),
     ],
 )
 def test_expected_rows_rejects_invalid_arguments(kwargs: dict[str, object], match: str) -> None:
