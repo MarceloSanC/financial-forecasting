@@ -46,6 +46,7 @@ from financial_forecasting.features.modeling.application.ports.out.quantile_mode
 )
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
     expected_feature_names,
+    grid_fingerprint,
     labels_from_full_grid,
     modeling_columns,
 )
@@ -298,7 +299,7 @@ class RunGbmSweep:
             grid.column(_TARGET_COLUMN),
             grid.sessions(),
             grid.matrix(feature_names),
-            grid.content_fingerprint(hasher=self._hasher, asset_id=scope.asset_id),
+            grid_fingerprint(grid, hasher=self._hasher, asset_id=scope.asset_id),
         )
 
 

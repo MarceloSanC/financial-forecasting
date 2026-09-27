@@ -169,3 +169,45 @@ def test_real_release_does_not_remove_a_lock_held_by_someone_else(tmp_path: Path
     stranger.release_writer()
 
     assert (tmp_path / "d" / ".writer.lock").exists()
+
+
+@pytest.mark.contract
+def test_sweep_results_round_trip_through_json_in_both_legs(open_ledger: _OpenLedger) -> None:
+    """Tuplas voltam como listas e chaves como texto — igual no fake e no real."""
+    open_ledger().record_sweep_result(
+        "scope-json", "gbm", {"best_params": {"num_leaves": 16}, "losses": {1: 0.5}, "t": (1, 2)}
+    )
+
+    result = open_ledger().sweep_results("scope-json")["gbm"]
+
+    assert result == {"best_params": {"num_leaves": 16}, "losses": {"1": 0.5}, "t": [1, 2]}
+
+
+@pytest.mark.contract
+def test_real_old_owner_does_not_remove_a_lock_taken_over_by_break_stale(
+    tmp_path: Path,
+) -> None:
+    old = JsonCohortProgressLedger(artifacts_root=tmp_path / "a", data_root=tmp_path / "d")
+    new = JsonCohortProgressLedger(artifacts_root=tmp_path / "a", data_root=tmp_path / "d")
+    old.acquire_writer()
+    new.acquire_writer(break_stale=True)
+
+    old.release_writer()
+
+    assert (tmp_path / "d" / ".writer.lock").exists()
+    third = JsonCohortProgressLedger(artifacts_root=tmp_path / "x", data_root=tmp_path / "d")
+    with pytest.raises(CohortRunLockedError):
+        third.acquire_writer()
+    new.release_writer()
+    assert not (tmp_path / "d" / ".writer.lock").exists()
+
+
+@pytest.mark.contract
+def test_real_corrupted_ledger_file_raises_naming_it(tmp_path: Path) -> None:
+    progress = tmp_path / "a" / "cohorts" / _COHORT / "progress.json"
+    progress.parent.mkdir(parents=True)
+    progress.write_text("", encoding="utf-8")
+
+    ledger = JsonCohortProgressLedger(artifacts_root=tmp_path / "a", data_root=tmp_path / "d")
+    with pytest.raises(ValueError, match="unreadable"):
+        ledger.completed_units(_COHORT)

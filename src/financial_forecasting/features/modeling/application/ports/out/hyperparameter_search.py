@@ -99,8 +99,10 @@ def stable_objective(value: float) -> float:
     A perda de early_stop do LightGBM varia no último ulp entre execuções (soma
     paralela da métrica), mesmo com a mesma seed; sem o arredondamento, um empate
     entre trials viraria sorteio e uma reexecução poderia congelar outro melhor
-    trial. Com ele, empates são exatos e o estudo desempata pelo menor número de
-    trial (Stage 5.5, Checkpoint C).
+    trial. O arredondamento REDUZ esse risco: quase-empates viram empates exatos,
+    desempatados pelo menor número de trial; ruído que cruza a fronteira do 12º
+    dígito ainda pode mudar o valor, o que só troca o melhor trial se outro estiver
+    a ~1e-12 relativo (Stage 5.5, Checkpoint C).
     """
     return float(f"{value:.{_OBJECTIVE_SIGNIFICANT_DIGITS}g}")
 

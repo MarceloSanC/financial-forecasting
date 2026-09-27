@@ -64,13 +64,16 @@ class CohortProgressLedger(Protocol):
         ...
 
     def environment(self, cohort_id: str) -> Mapping[str, str] | None:
-        """Ambiente gravado na primeira execução; `None` se ainda não houve."""
+        """Último ambiente gravado; `None` se ainda não houve execução.
+
+        O use case só grava na primeira execução e compara nas seguintes (I5).
+        """
         ...
 
     def record_environment(
         self, cohort_id: str, env: Mapping[str, str], *, started_at: str
     ) -> None:
-        """Grava o ambiente e, só na primeira vez, o instante de início."""
+        """Grava o ambiente; o instante de início é gravado só na primeira vez."""
         ...
 
     def run_started_at(self, cohort_id: str) -> str | None:
@@ -80,7 +83,11 @@ class CohortProgressLedger(Protocol):
     def record_sweep_result(
         self, scope_id: str, model: str, result: Mapping[str, object]
     ) -> None:
-        """Grava o resultado do sweep de `model` (`"tft"`/`"gbm"`) sob o scope id."""
+        """Grava o resultado do sweep de `model` (`"tft"`/`"gbm"`) sob o scope id.
+
+        `result` passa por JSON: tuplas voltam como listas e chaves como texto —
+        o leitor normaliza (o fake faz a mesma ida e volta, para paridade).
+        """
         ...
 
     def sweep_results(self, scope_id: str) -> Mapping[str, Mapping[str, object]]:

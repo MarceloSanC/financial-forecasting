@@ -8,10 +8,13 @@ Layout (ADR 5.5.0003):
 - `<data_root>/.writer.lock` — lock de escritor único do `data_root`.
 
 Toda gravação de JSON vai para um temporário no mesmo diretório e troca por
-`os.replace` (atômico no mesmo sistema de arquivos): uma queda no meio deixa o
-arquivo anterior intacto. O lock é criado com `O_CREAT | O_EXCL` (falha se já
-existe) e guarda pid, host e início para identificar o dono; esta instância só
-remove o lock que ela mesma adquiriu, e `break_stale=True` o remove de propósito.
+`os.replace` (atômico no mesmo sistema de arquivos): uma queda do PROCESSO no
+meio deixa o arquivo anterior intacto (sem `fsync`, queda de energia/SO pode
+deixar um arquivo vazio — a leitura então ergue um erro nomeando o arquivo). O
+lock é criado com `O_CREAT | O_EXCL` (falha se já existe) e guarda pid, host,
+início e um token único: esta instância só remove o lock cujo token é o dela —
+depois de um `break_stale=True` de outro processo, o antigo dono não apaga o lock
+do novo.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -39,7 +43,7 @@ class JsonCohortProgressLedger:
     def __init__(self, *, artifacts_root: Path | str, data_root: Path | str) -> None:
         self._cohorts_dir = Path(artifacts_root) / "cohorts"
         self._lock_path = Path(data_root) / _LOCK_NAME
-        self._holds_lock = False
+        self._token: str | None = None
 
     # -- lock -----------------------------------------------------------------
 
@@ -47,10 +51,12 @@ class JsonCohortProgressLedger:
         self._lock_path.parent.mkdir(parents=True, exist_ok=True)
         if break_stale:
             self._lock_path.unlink(missing_ok=True)
+        token = uuid.uuid4().hex
         owner = {
             "pid": os.getpid(),
             "host": socket.gethostname(),
             "started_at": datetime.now(tz=UTC).isoformat(),
+            "token": token,
         }
         try:
             fd = os.open(self._lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -61,12 +67,18 @@ class JsonCohortProgressLedger:
             ) from exc
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(owner, handle)
-        self._holds_lock = True
+        self._token = token
 
     def release_writer(self) -> None:
-        if self._holds_lock:
+        if self._token is None:
+            return
+        try:
+            owner = json.loads(self._lock_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            owner = {}
+        if owner.get("token") == self._token:
             self._lock_path.unlink(missing_ok=True)
-            self._holds_lock = False
+        self._token = None
 
     def _describe_owner(self) -> str:
         try:
@@ -128,7 +140,13 @@ class JsonCohortProgressLedger:
         path = self._path(key, name)
         if not path.exists():
             return {}
-        loaded = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            raise ValueError(
+                f"cohort ledger file {path} is unreadable (empty or corrupted, e.g. after an "
+                "OS crash) — inspect it; the silver is the source of truth for completed runs"
+            ) from exc
         return dict(loaded)
 
     def _write(self, key: str, name: str, state: Mapping[str, object]) -> None:

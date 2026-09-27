@@ -6,6 +6,7 @@ paridade), sem disco. `owner` identifica o dono do lock na mensagem de erro.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 
 from financial_forecasting.features.modeling.application.ports.out.cohort_progress_ledger import (
@@ -61,7 +62,8 @@ class InMemoryCohortProgressLedger:
     def record_sweep_result(
         self, scope_id: str, model: str, result: Mapping[str, object]
     ) -> None:
-        self._sweeps.setdefault(scope_id, {})[model] = dict(result)
+        # Mesma ida e volta JSON do adapter real (tuplas viram listas; chaves, texto).
+        self._sweeps.setdefault(scope_id, {})[model] = json.loads(json.dumps(dict(result)))
 
     def sweep_results(self, scope_id: str) -> Mapping[str, Mapping[str, object]]:
         return {model: dict(result) for model, result in self._sweeps.get(scope_id, {}).items()}
