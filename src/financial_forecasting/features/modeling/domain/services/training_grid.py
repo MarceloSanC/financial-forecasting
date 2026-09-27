@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import date, datetime
 
 from financial_forecasting.features.modeling.domain.exceptions.cohort import (
     InteriorMissingValuesError,
@@ -57,3 +59,87 @@ def usable_start(values: Mapping[str, Sequence[float | None]]) -> int:
     if interior:
         raise InteriorMissingValuesError(interior, first_usable=first)
     return first
+
+
+Row = Mapping[str, object]
+_TIMESTAMP = "timestamp"
+
+
+@dataclass(frozen=True)
+class TrainingGrid:
+    """Linhas do dataset de treino em ordem cronológica, já sem o prefixo sem valor.
+
+    `columns` guarda cada coluna pedida (inclui `target_return`) alinhada a
+    `timestamps`; `trimmed_prefix` é quantas linhas iniciais o corte removeu.
+    """
+
+    timestamps: tuple[datetime, ...]
+    columns: Mapping[str, tuple[float, ...]]
+    trimmed_prefix: int
+
+    def timestamps_iso(self) -> tuple[str, ...]:
+        return tuple(ts.isoformat() for ts in self.timestamps)
+
+    def sessions(self) -> tuple[date, ...]:
+        return tuple(ts.date() for ts in self.timestamps)
+
+    def column(self, name: str) -> tuple[float, ...]:
+        return self.columns[name]
+
+    def matrix(self, names: Sequence[str]) -> tuple[tuple[float, ...], ...]:
+        """Matriz linha-a-linha das colunas `names`, na ordem pedida."""
+        selected = [self.columns[name] for name in names]
+        return tuple(zip(*selected, strict=True)) if selected else tuple(
+            () for _ in self.timestamps
+        )
+
+
+def _timestamp_of(row: Row) -> datetime:
+    value = row.get(_TIMESTAMP)
+    if not isinstance(value, datetime) or value.tzinfo is None:
+        raise ValueError(f"dataset row 'timestamp' must be a tz-aware datetime; got {value!r}")
+    return value
+
+
+def _numeric_or_missing(row: Row, column: str) -> float | None:
+    """Número vira float; `None` é ausente (decidido pelo corte); outro tipo ergue."""
+    value = row.get(column)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError(f"dataset row {column!r} must be numeric or None; got {value!r}")
+    return float(value)
+
+
+def build_training_grid(rows: Sequence[Row], *, columns: Sequence[str]) -> TrainingGrid:
+    """Monta o grid único: ordena, valida, extrai `columns` e corta o prefixo.
+
+    - Coluna pedida ausente das rows → `ValueError` (C6, drift registry x dataset;
+      presença checada na primeira row — schema homogêneo do Parquet).
+    - Timestamp repetido → `ValueError` (o grid de sessões exige unicidade).
+    - Prefixo até a primeira linha com todas as `columns` finitas é removido;
+      ausente depois dele → `InteriorMissingValuesError` (`usable_start`).
+    - Sem linhas → `NoUsableRowsError`.
+
+    O filtro por ativo é do chamador (a leitura do store já filtra por partição).
+    """
+    if not rows:
+        raise NoUsableRowsError("dataset has no rows")
+    missing = tuple(name for name in columns if name not in rows[0])
+    if missing:
+        raise ValueError(
+            f"dataset is missing expected feature columns {missing!r} — "
+            "registry x dataset drift (C6)"
+        )
+    ordered = sorted(rows, key=_timestamp_of)
+    timestamps = tuple(_timestamp_of(row) for row in ordered)
+    if len(set(timestamps)) != len(timestamps):
+        raise ValueError("dataset has repeated timestamps — the session grid must be unique")
+
+    raw = {name: [_numeric_or_missing(row, name) for row in ordered] for name in columns}
+    start = usable_start(raw)
+    trimmed = {
+        name: tuple(float(value) for value in values[start:] if value is not None)
+        for name, values in raw.items()
+    }
+    return TrainingGrid(timestamps=timestamps[start:], columns=trimmed, trimmed_prefix=start)
