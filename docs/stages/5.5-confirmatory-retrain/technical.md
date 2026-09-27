@@ -718,5 +718,19 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 - `RunTftSweep` não devolve os timestamps: **acidental** (não precisava deles); converge ao usar o grid, que devolve tudo.
 - Texto das mensagens (C6, tipos): idêntico; vira uma só no grid.
 **Razão:** preservar os contratos de erro que os testes existentes fixam e convergir só o que não carrega significado.
+- Derivação das colunas — GBM por `expected_feature_names()`, TFT/sweep por `unknown_feature_names() + known_feature_names()`: caminhos distintos, **mesmo conjunto** hoje; fixado por teste (Checkpoint C) para o grid único cortar pelo mesmo conjunto (I9).
+
+### 2026-09-27 — [deviation] Tasks 06–10 — `_load_dataset` fica como método fino; grid sem `asset_id` — Claude (Opus 5.5)
+**O que mudou:** (1) em vez de apagar `_load_dataset` (critério "`grep` vazio" das Tasks 07–10), cada use case mantém um `_load_dataset` fino que lê o store, faz a checagem de vazio com o seu código e delega ao `build_training_grid`; o critério passa a ser "`_load_dataset` não tem lógica de parsing — só leitura, checagem de vazio e delegação". (2) `build_training_grid(rows, *, columns)` não recebe `asset_id`: o filtro de ativo é da leitura do store (partição), como a caracterização mostrou.
+**Por quê:** Checkpoint C — a caracterização da Task 04 chama `_load_dataset`; apagar o método obrigaria reescrever os testes no mesmo commit do refactor, e eles deixariam de proteger a extração. A duplicação que a #99 ataca é a lógica (~55 linhas × 4), não o nome.
+
+### 2026-09-27 — Checkpoint C (bloco 01–04) — disposições — Claude (Opus 5.5)
+- C1 (médio) caracterização presa a método que seria apagado → **corrigido** pelo desvio acima + teste do conjunto de colunas GBM = TFT (`task-04-fix`).
+- C2 (médio) fixture com `None` na 1ª linha contrariava "sem NaN" → **corrigido**: fixture sem ausentes; `None`→NaN em teste próprio marcado como mudança prevista (`task-04-fix`).
+- C3 (médio) temporário válido ao lado da partição, lido pelo DuckDB, sem teste → **corrigido** (`task-03-fix`).
+- C4 (baixo) limpeza na primeira gravação sem teste → **corrigido** (`task-03-fix`).
+- C5 (baixo) queda no meio do `write_table` → **corrigido** (`task-03-fix`).
+- C6 (baixo) sem `fsync` → **corrigido** como escopo declarado na docstring (atomicidade contra queda do processo; energia coberta pela reconferência de contagens do ADR 5.5.0003).
+- C7 (baixo) limpeza silenciosa → **refutado**: o lock de escritor único impede apagar temporário de outro processo em voo (artefato: ADR 5.5.0003 §Decision "Single writer per `data_root`"); o adapter não tem logger e incluir um só para isso não muda comportamento.
 
 <!-- END: post-execution -->
