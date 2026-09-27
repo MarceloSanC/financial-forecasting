@@ -5,11 +5,15 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 6 (
 keywords: [domain, evaluation, pinball, crps, interval-score, winkler, picp, mpiw, reliability, sharpness, degeneracy-gate, diebold-mariano, hln, holm, mcs, christoffersen, kupiec, var, preregistration, scorecard, per-horizon]
 status: draft
 created_at: 2026-09-12
-updated_at: 2026-09-12
+updated_at: 2026-09-26
 bounded_context: evaluation
 subdomain: probabilistic-forecast-evaluation
 references:
   - ../modeling/quantile-model-training.md
+  - ../../adr/0_0_0054-evaluation-domain-doc-scope-and-boundary.md
+  - ../../adr/0_0_0009-pinball-primary-crps-complementary.md
+  - ../../adr/0_0_0010-paired-inference-dm-holm-mcs.md
+  - ../../adr/0_0_0011-preregistration-invariants-and-h1-gate.md
   - ../../adr/0_0_0020-statistics-in-domain-over-value-objects.md
   - ../../adr/0_0_0021-per-unit-contract-tests-with-oracle.md
   - ../../adr/4_3_0002-quantile-forecast-dense-grid-guardrail.md
@@ -27,8 +31,13 @@ references:
 > em primária, a citação carrega o rótulo `[CITAÇÃO-NÃO-ACESSADA]` e o texto
 > diz o que está inferido; onde não existe fonte primária e a regra é política
 > do projeto, o texto diz `[SEM-FONTE-PRIMÁRIA]` e a regra vira convenção
-> (§10). Convenções marcadas **(a ratificar — B-…)** são a posição recomendada
-> pela sessão do gate, pendentes de decisão humana.
+> (§10). As bifurcações do gate (**B-…**) foram triadas pela skill
+> `evidence-resolution` (2026-09-26): as de classe E/C (evidência ou convenção,
+> todas anteriores aos dados) foram fechadas pelo agente e registradas em §10.1
+> no formato `[decision:E|C]`, com o degrau que decidiu e a verificação da
+> citação; a única de classe P (redação do claim de H1, **B1**) foi decidida
+> pelo humano (issue #78, 2026-09-26). A ratificação do doc inteiro
+> (`status: accepted`) continua humana.
 
 ## 1. Escopo e como consumir este doc
 
@@ -298,18 +307,23 @@ pontual + grade simétrica ⇒ CRPS_Q = |y − x|, P̄_G = |y − x|/2 (o "pinba
 MAE/2" do modeling §3.4, confirmado pelo User Guide do sklearn: "half of
 mean_absolute_error when alpha = 0.5").
 
-**Convenção do projeto (a ratificar — B-CRPS).** O CRPS reportado é o
+**Convenção do projeto (B-CRPS — decidida, §10.1).** O CRPS reportado é o
 estimador (a): CRPS_Q = 2·P̄_G, pesos iguais, na grade comum. O doc **declara
 explicitamente**: com grade comum, CRPS_Q carrega a **mesma ordenação** da
 pinball média para todo modelo e toda observação — mesmo DM (a estatística de
 2d_t é idêntica), mesmo MCS — e portanto **não é evidência independente**. O
 papel "complementar" (overview §11, linha `0_0_0009`) é (i) **escala**: reportar
-na unidade de y, comparável ao MAE dos baselines pontuais e à literatura
-("the units are those of the absolute error", Bracher et al. §2.2); e (ii)
-**perfil por τ**: o quantile score plot (§3.1). Nunca um segundo veredito.
-Rotulagem honesta: "CRPS_Q = 2 × pinball média na grade (pesos iguais)",
-nunca "CRPS" sem qualificador — a grade de ~7 níveis não é densa nem
-equiespaçada. Alternativa real descartada: (b)/(c) dariam um número
+na unidade de y, comparável ao MAE dos baselines pontuais **do próprio
+projeto** ("the units are those of the absolute error", Bracher et al. §2.2);
+e (ii) **perfil por τ**: o quantile score plot (§3.1). Nunca um segundo
+veredito. **Não** é comparável a CRPS publicado: a aproximação de Berrisch &
+Ziel (2023, Eq. (9)) pressupõe grade **densa e equidistante**, e a grade de
+~7 níveis não é nenhuma das duas — CRPS_Q aproxima o CRPS da distribuição
+só na medida em que a grade o permite, e o erro dessa aproximação é
+desconhecido. Rotulagem honesta: "CRPS_Q = 2 × pinball média na grade (pesos
+iguais)", nunca "CRPS" sem qualificador. Oráculo: `scoringrules.crps_quantile`
+(§11.3), cuja versão a Stage 6.1 **pina** em `pyproject.toml`/`uv.lock` (hoje
+a lib não está nas dependências). Alternativa real descartada: (b)/(c) dariam um número
 **diferente** (métrica nova, com viés ou convenção de cauda próprios) sem
 oráculo direto na biblioteca e sem o Dirac exato; a informação distribucional
 "a mais" que prometeriam vem de uma convenção, não dos dados.
@@ -428,12 +442,14 @@ nas duas caudas ⇒ PICP nominal, **mas não o inverso** — o PICP é invariant
 um deslocamento comum da miscobertura das duas caudas (ĉ(τ_l) = τ_l + δ e
 ĉ(τ_u) = τ_u + δ dão PICP exatamente nominal com as caudas miscalibradas em
 sentidos opostos). O perfil ĉ(τ) por cauda (§4.1) e os hits unilaterais (§7.5)
-são o que detecta assimetria; um gate por PICP (§8.5) é **necessário, não
-suficiente**. O PICP dos intervalos centrais "can be read off the PIT
-histogram" (GBR §3.1).
+são o que detecta assimetria; um gate só por PICP seria **necessário, não
+suficiente** — por isso o gate H1 (§8.5) é definido **por cauda** do par
+primário, e o PICP fica no perfil. O PICP dos intervalos centrais "can be
+read off the PIT histogram" (GBR §3.1).
 
 **Como se aplica aqui.** PICP e MPIW por par simétrico, por (modelo,
-horizonte). O PICP de um par é o objeto do gate H1 (§8.5); o MPIW é a largura
+horizonte). O PICP do par primário é **perfil** de H1 — o gate usa as duas
+caudas desse par separadamente (§8.5); o MPIW é a largura
 média do IS_α (§3.3) e é **descritivo** (roadmap 6.3: "descritivas
 não-inferenciais").
 
@@ -505,11 +521,15 @@ tipo Bröcker–Smith condicionada) — nenhuma é canônica para quantis de ret
 a correção HAC seria composição com o que a 6.2 usa `[SEM-FONTE-PRIMÁRIA para a
 combinação]`.
 
-**Convenção do projeto (a ratificar — B-BANDAS).** A banda de cobertura de H1
-é o **intervalo de Wilson a 95 %** (BCD 2001 Eq. (4)), computado **por
+**Convenção do projeto (B-BANDAS — decidida, §10.1).** A banda de cobertura
+de H1 é o **intervalo de Wilson** (BCD 2001 Eq. (4)), computado **por
 horizonte, pooled sobre folds** (T = soma dos blocos de test), e o critério é
 "a banda **contém o nominal**" — a banda escala com T e tem fonte primária
-para a fórmula. O LR_uc/POF (§7.2–§7.3) é reportado como o **teste formal
+para a fórmula. Nível: **95 %** para um teste isolado (PICP e ĉ(τ) no
+perfil); **97,5 % por cauda** no gate H1, que testa as duas caudas do par
+primário com Bonferroni (§8.5). Com S seeds, o n da banda é o de **um** conjunto de pontos alinhados (≈ T; ver abaixo), **nunca S·T**:
+as seeds são réplicas do mesmo ponto alinhado, não observações novas (a
+cobertura entra como média entre seeds — §6.9). O LR_uc/POF (§7.2–§7.3) é reportado como o **teste formal
 associado** — mesma nula binomial, mas é um teste de razão de verossimilhanças,
 enquanto o Wilson inverte o teste *score* (BCD 2001 §3.1.1); as regiões de
 aceitação **diferem em até uma violação na fronteira** (ex.: τ = 0.02,
@@ -519,8 +539,12 @@ cálculo próprio). O pré-registro nomeia a banda de Wilson como critério
 **reportada, não arbitrada** —, e as zonas
 verde/amarela/vermelha do Basel (1996, §III(c)) entram como leitura auxiliar
 no perfil (o Basel é unilateral — só excesso de violações; H1 é **bilateral**:
-intervalo largo demais também é miscalibração). O nível (95 %), o T mínimo e o
-tratamento de h+7 são **conteúdo do pré-registro** (6.5). Alternativas reais
+intervalo largo demais também é miscalibração). Os níveis (95 % isolado;
+97,5 % por cauda no gate), o T mínimo e o tratamento de h+7 são **conteúdo do
+pré-registro** (6.5). **n da banda:** o número de pontos alinhados
+**não-degenerados** do horizonte (as métricas de calibração excluem as linhas
+degeneradas — §5.3, item 2), que o limiar de degeneração mantém próximo de T;
+com S seeds, a média entre seeds desse número, nunca a soma. Alternativas reais
 descartadas: (i) tolerância absoluta fixa δ — sem fonte que fixe δ e cega ao T
 (o exemplo acima mostra que δ < 0.01 em τ = 0.02 é irrealizável); (ii) banda
 "conformal-relativa" (comparar à cobertura do CQR) — o CQR é benchmark, não
@@ -597,7 +621,7 @@ aparece só como consequência indesejada de losses ad hoc — Pearce §3). O ga
 é, portanto, **política do projeto** `[SEM-FONTE-PRIMÁRIA]`; o que a teoria
 faz é delimitar o que a política pode dizer sem contradizer os scores.
 
-### 5.3 Convenção do projeto (a ratificar — B-GATE)
+### 5.3 Convenção do projeto (B-GATE — decidida, §10.1; ADR 0.0.0011)
 
 1. **Proper scores sempre computados em todas as linhas** — pinball por τ,
    P̄_G, CRPS_Q, IS_α — inclusive nas degeneradas (Dirac bem-posto; a
@@ -632,8 +656,9 @@ faz é delimitar o que a política pode dizer sem contradizer os scores.
 
 **Consequência de redação.** O DoD da Stage 6.1 ("invalida métricas da linha
 e reporta rate") e o modeling §7 item 4 leem-se "invalida as métricas de
-**calibração** da linha e reporta a taxa" — ajuste a fazer no roadmap na PR da
-6.1. Isto resolve a tensão T1 do inventário: o modeling §3.4 (Dirac bem-posto,
+**calibração** da linha e reporta a taxa" — o DoD da 6.1 no roadmap foi
+ajustado na PR da #78; o texto do modeling §7 item 4 é ajustado na próxima
+revisão daquele doc e, até lá, lê-se assim. Isto resolve a tensão T1 do inventário: o modeling §3.4 (Dirac bem-posto,
 penalização informativa) e o DoD 6.1 (invalidar) só eram contraditórios sob a
 leitura "invalidar **tudo**".
 
@@ -641,8 +666,9 @@ leitura "invalidar **tudo**".
 não-nula, retirar as linhas degeneradas do hit sequence (item 2) abre lacunas
 nas **transições** de que o LR_ind depende (§7.2); o limiar do item 4 mantém a
 taxa pequena, e o pré-registro deve declarar que, nesse caso, LR_ind/LR_cc são
-computados sobre a sequência com lacunas, com a sensibilidade "com/sem" quando
-o veredito de H1 depender disso (ICH E9 §5.3).
+computados sobre a sequência com lacunas, com a versão "com/sem" as lacunas
+reportada lado a lado **no perfil** (ICH E9 §5.3) — LR_ind/LR_cc nunca entram
+no gate H1 (§8.5), logo a escolha não troca o veredito.
 
 **Alternativas reais descartadas.** (ii) Invalidar **todas** as métricas da
 linha (leitura literal do DoD) — equivale a excluir os naive de H2; a teoria
@@ -650,8 +676,8 @@ não sustenta. (iii) Exclusão **pareada** por `target_timestamp` quando um
 modelo distribucional colapsa — preserva o pareamento mas reduz T, quebra a
 contiguidade e introduz seleção condicionada ao comportamento de um modelo
 (viés); a literatura só diz "mesma amostra" (DM 1995 §1), a regra de quando
-excluir seria política sem fonte. **Vira ADR** (redação do `0_0_0011` nunca
-autorado).
+excluir seria política sem fonte. Registrada no
+[ADR 0.0.0011](../../adr/0_0_0011-preregistration-invariants-and-h1-gate.md).
 
 ### 5.4 Relação com o guardrail e com os baselines pontuais
 
@@ -723,7 +749,8 @@ h−1** (DM 1995; R `dm.test` com `varestimator = "acf"`) + correção HLN (§6.
 aviso (com h = 1 a variância nula é erro, não fallback); DM 1995 trataria como
 0 e rejeitaria. O projeto **segue o oráculo** (h = 1) e registra a ocorrência —
 regra `[SEM-FONTE-PRIMÁRIA]` (convenção de software contra a prescrição do
-paper), pré-registrada (**a ratificar — B-DM**).
+paper), pré-registrada (**B-DM — decidida, §10.1**: degrau 2, o oráculo fixa a
+convenção e mantém a equivalência testável).
 **Bartlett** (Newey & West 1987 `[CITAÇÃO-NÃO-ACESSADA]`; pesos 1 − k/h para
 k = 0..h−1, inferidos das implementações verificadas em R e statsmodels) fica
 como **sensibilidade**: é sempre ≥ 0, mas sob MA(h−1) exata com
@@ -839,7 +866,7 @@ congelada é o que torna Holm válido. Regra operacional (derivação): a famíl
 o conjunto de hipóteses cujas rejeições sustentam **uma mesma claim**;
 comparações que não podem trocar o veredito (perfil) ficam fora.
 
-**Convenção do projeto (a ratificar — B-FAMILIA).** A **loss pareada
+**Convenção do projeto (B-FAMILIA — decidida, §10.1; ADR 0.0.0010).** A **loss pareada
 confirmatória é a pinball média na grade** (L_t), por horizonte; **um DM por
 (candidato, comparador, horizonte)**; a **família de Holm = os B comparadores
 dentro de um horizonte** (m = B = 6: cinco baselines + GBM), com FWER = α por
@@ -855,9 +882,23 @@ níveis do mesmo par (Romano & Wolf §3), e nos τ extremos o diferencial contra
 um baseline pontual é dominado pela penalização estrutural do Dirac (rejeições
 "fáceis" nas caudas e possivelmente o oposto no centro), o que a média na grade
 embute; (d) sub-famílias por camada (naive m = 2; fortes m = 4) — ganha poder
-mas exige declarar duas claims independentes. **Vira ADR** (redação do
-`0_0_0010`). O CQR (Step 7) **não** está na família: é benchmark de
-calibração, não de skill.
+mas exige declarar duas claims independentes. Registrada no
+[ADR 0.0.0010](../../adr/0_0_0010-paired-inference-dm-holm-mcs.md). O CQR
+(Step 7) **não** está na família: é benchmark de calibração, não de skill.
+
+**A família não depende de H1 dos comparadores.** Um comparador
+distribucional que reprova o seu próprio H1 (ex.: EWMA-vol sub-cobrindo nas
+caudas, como o ADR 0.0.0052 antecipa) **continua** na família de Holm e em
+M0 do MCS. O gate H1 decide **só a elegibilidade do candidato** (§8.5): se
+também filtrasse comparadores, m e M0 passariam a depender de um resultado
+observado nos mesmos dados — exatamente o "número de comparações
+efetivamente consideradas" que White (2000, §2) mostra inflar o erro, e uma
+família que não é mais a congelada no pré-registro. A calibração dos
+comparadores entra no perfil de H1. É também a leitura que o overview já
+impõe: os baselines pontuais não têm calibração nenhuma (grade degenerada
+por especificação, §5.3) e ainda assim são comparadores de H2 (overview §4);
+"não se compara skill de modelo mal-calibrado" refere-se ao **candidato**,
+cujo skill é o objeto de H2.
 
 ### 6.5 Model Confidence Set — Hansen, Lunde & Nason (2011)
 
@@ -930,8 +971,10 @@ p. 484, logo a variante é escolha do projeto `[SEM-FONTE-PRIMÁRIA]`, com o
 *moving-block* de bloco igual como sensibilidade) com **bloco = comprimento
 automático de Politis–White 2004** — b_opt é definido para a média de **uma**
 série; com C(k, 2) diferenciais, a regra operacional é **o maior b̂_sb entre
-todos os d_{ij,t} do horizonte** (o mais persistente; `[SEM-FONTE-PRIMÁRIA]`
-para a agregação — **a ratificar — B-MCS**) e **sensibilidade a l = h e
+todos os d_{ij,t} do horizonte, com piso h** (l = max(h, max b̂_sb): a
+dependência MA(h−1) do diferencial é estrutural, e o roadmap já fixa a grade
+de sensibilidade de bloco em "≥ h"; o mais persistente; `[SEM-FONTE-PRIMÁRIA]`
+para a agregação — **B-MCS, decidida, §10.1**) e **sensibilidade a l = h e
 l = √T reportada**; tudo pré-registrado (6.5), inclusive a semente do
 bootstrap. O "bug de eliminação"
 do projeto antigo (overview §2) não está descrito neste repo — o doc dá a
@@ -999,8 +1042,9 @@ empirical results that are based on parameters estimated over a rolling
 window with a fixed number of observations"; e Giacomini & White (2006, §3.2,
 comentário 2 do WP): "the requirement of finite estimation window rules out the use
 of a recursive forecasting scheme, which utilizes an expanding estimation
-window". Mas os próprios HLN 2011 (fn. 12) relatam que, "although our
-assumption does not justify the recursive estimation scheme, it produces
+window". Mas os próprios HLN relatam (nota 11 do working paper CREATES
+RP 2010-76, a versão lida; a numeração na Econometrica não foi conferida)
+que, "although our assumption do not justify the recursive estimation scheme, it produces
 pseudo-MCS results that are very similar to those obtained under the rolling
 window estimation scheme" — evidência empírica, não teorema, de que o esquema
 expansivo não distorce o MCS de forma material. (b) Testar por fold e agregar: T_fold é pequeno (HLN 1997 Table 1: n
@@ -1014,7 +1058,7 @@ não só p; Diebold 2015 §7 lembra que comparações pseudo-OOS "are typically
 costly in terms of power loss" — preço aceito pela validade temporal (ADR
 0.0.0018).
 
-**Convenção do projeto (a ratificar — B-FOLDS).** **Concatenar os folds em
+**Convenção do projeto (B-FOLDS — decidida, §10.1).** **Concatenar os folds em
 uma série contígua por horizonte** para DM e MCS (esquema expansivo já
 decidido — ADR 5.1.0001), com (i) **diagnóstico de estacionariedade de d_t
 pré-registrado** (Diebold 2015 §2.2: ACF, gráfico, quebras) e (ii) **DM por
@@ -1038,16 +1082,51 @@ teste por seed e distribuição das estatísticas (Bouthillier et al. 2021:
 um scorecard mecânico; (d) seed fixa/mediana. Sem fonte primária que prescreva
 uma opção para testes DM `[SEM-FONTE-PRIMÁRIA]`.
 
-**Convenção do projeto (a ratificar — B-SEEDS).** A série do candidato com S
-seeds é a **média ponto a ponto das perdas entre seeds** (opção a); a
-**dispersão entre seeds** entra no perfil — o DM por seed e a **fração de
-seeds que rejeita** (respeita "comparar distribuições" sem quebrar o veredito
-mecânico). **Mesmo tratamento para o GBM** (seeds do booster). Baselines
-determinísticos não têm o problema. Alternativas descartadas: ensemble de
-previsões (muda o objeto testado — o claim seria sobre um ensemble que o
-projeto não estuda); seed fixa (cherry-picking se escolhida por OOS; se
-pré-fixada, joga fora a variância que Bouthillier mostram ser da mesma ordem da
-inicialização). **Vira ADR.**
+**Convenção do projeto (B-SEEDS — decidida, §10.1; ADR 0.0.0010).** A série
+do candidato com S seeds é a **média ponto a ponto das perdas entre seeds**
+(opção a); a **dispersão entre seeds** entra no perfil — o DM por seed e a
+**fração de seeds que rejeita** (respeita "comparar distribuições" sem quebrar
+o veredito mecânico). A opção (a) é **conservadora** frente ao ensemble (b):
+a pinball é convexa em q̂, logo, pela desigualdade de Jensen,
+ρ_τ(y − mean_s q̂_s) ≤ mean_s ρ_τ(y − q̂_s) ponto a ponto — a perda média entre
+seeds nunca é menor que a do ensemble, e o claim fica sobre o modelo único
+que o projeto estuda (derivação elementar).
+
+Consequências para as métricas que não são perdas:
+
+- **Cobertura e degeneração** do candidato são a **média entre seeds** de
+  ĉ_s(τ) e da taxa de degeneração por seed; a banda de Wilson usa como n os
+  pontos alinhados não-degenerados (≈ T), **nunca S·T** (§4.4) — as S
+  previsões do mesmo ponto não são observações independentes do realizado.
+- **Gate H1 e suas sensibilidades** (§8.5: bandas por cauda, LR_uc de 3
+  estados, partição de DGT em h+7) usam **só contagens** por cauda, sem
+  transições; entram com as contagens médias entre seeds e o mesmo n — uma
+  única regra para o candidato, sem escolher seed.
+- **Backtests com transições** (LR_ind, LR_cc — §7) exigem uma sequência
+  binária; são computados **por seed** e ficam no **perfil** (distribuição
+  das estatísticas entre seeds).
+
+**GBM: seeds não criam variância.** O treino do GBM do projeto é
+determinístico: `deterministic=True`, `feature_fraction = 1.0`,
+`bagging_fraction = 1.0`, `bagging_freq = 0` (adapter LightGBM da Stage 5.3,
+conferido no código em 2026-09-26) — não há subamostragem de linhas nem de
+colunas em que o `seed` atue, e S seeds dariam S cópias idênticas. O GBM
+entra, portanto, com **uma** execução por fold; a média entre seeds é a
+identidade. Isso é fato de **código lido, não executado**: a Stage 5.5 o
+transforma em prova com um teste de contrato "duas seeds → predições
+idênticas" (DoD da 5.5 no roadmap). Se um dia o GBM ganhar subamostragem, a
+regra (a) passa a valer para ele sem mudança.
+
+**Número de seeds do candidato** — decisão **P** (custo de GPU), tomada ao
+congelar o cohort (5.5), não aqui. Insumo para ela: o poder do DM vem de T;
+S reduz só a parcela da variância de d̄ que vem da seed, e o ganho de S = 10
+sobre S = 5 depende da razão r entre a variância entre seeds e a variância
+dos dados, mensurável no split exploratório. Baselines determinísticos não
+têm o problema. Alternativas descartadas: ensemble de previsões (muda o
+objeto testado — o claim seria sobre um ensemble que o projeto não estuda —
+e é otimista pelo Jensen acima); seed fixa (cherry-picking se escolhida por
+OOS; se pré-fixada, joga fora a variância que Bouthillier mostram ser da
+mesma ordem da inicialização).
 
 ### 6.10 "Superar" (DM) vs "empatar" (MCS); não-rejeição ≠ equivalência
 
@@ -1153,8 +1232,13 @@ informação** com T de centenas; para 80 % e 50 % (p_viol 0.20/0.50) há materi
 (PICP/Christoffersen) + **unilateral por nível τ** (hits {y ≤ q̂_τ}; VaR
 descritivo, §7.5; Kupiec por cauda). O **3-estados** de Christoffersen §4.2
 (pp. 848–849: S_t ∈ {1, 2, 3} para as duas caudas de um par, com LR_uc ~ χ²(2),
-LR_ind ~ χ²(4), LR_cc ~ χ²(6)) **não** é adotado: testa ambas as caudas de uma
-vez, mas com E[n_ij] minúsculos nas caudas sofre ainda mais de esparsidade.
+LR_ind ~ χ²(4), LR_cc ~ χ²(6)) **não** é adotado como backtest: testa ambas as
+caudas de uma vez, mas com E[n_ij] minúsculos nas caudas o LR_ind/LR_cc sofre
+ainda mais de esparsidade. **Exceção:** o **LR_uc de 3 estados** — que só usa
+as contagens das duas caudas, sem transições — é computado para o **par
+primário** como sensibilidade pré-registrada do gate H1 (§8.5); com ~50
+violações esperadas por cauda no par de 80 % (T = 500), a esparsidade não se
+aplica. Pertence ao serviço de Christoffersen da Stage 6.3.
 
 ### 7.3 Kupiec (1995): POF ≡ LR_uc, e o poder nas caudas
 
@@ -1237,7 +1321,7 @@ autocorrelação positiva a variância de Σ I_t/T é maior → sobre-rejeição
 `[SEM-FONTE-PRIMÁRIA para o passo "hits (h−1)-dependentes ⇒ tamanho distorcido
 dos LR"; é composição de DGT 1998 §6 + Christoffersen 1998 Lemma 1]`.
 
-**Convenção do projeto (a ratificar — B-H7).** LR_uc, LR_ind e LR_cc são
+**Convenção do projeto (B-H7 — decidida, §10.1).** LR_uc, LR_ind e LR_cc são
 **definidos e computados para todo horizonte**; para h > 1 o doc declara que a
 nula de independência é violada pela sobreposição de conjuntos de informação
 (DGT 1998 §6 + a derivação marcada acima; Christoffersen & Diebold 2000 fn. 14
@@ -1250,10 +1334,15 @@ com o aviso de anti-conservadorismo), **não LR_cc**. A versão HAC do LR_uc
 Christoffersen §4.3, pp. 849–850, já formula o critério como regressão de hits
 e como restrições de momento; Engle & Manganelli 2004 `[CITAÇÃO-NÃO-ACESSADA]`
 é o parente próximo) **não é adotada**: composição sem fonte primária
-`[SEM-FONTE-PRIMÁRIA]`. A **partição em h sub-séries + Bonferroni** (DGT) fica
-**registrada como alternativa com poder ínfimo**: com h = 7 e T = 500/1000, cada
-sub-série tem 71/142 pontos e 1,4/2,8 hits esperados a p_viol = 0.02 — LR_ind
-fica vazio; viável só para 80 %/50 % e a mediana. P-valor simulado sob nula
+`[SEM-FONTE-PRIMÁRIA]`. A **partição em h sub-séries + Bonferroni** (DGT, a
+recomendação do paper de origem para o multi-passo) entra como
+**sensibilidade pré-registrada do gate H1 em h+7**, aplicada ao par primário
+(§8.5): cada sub-série é, sob a nula de DGT, iid, logo a banda binomial vale
+nela sem o anti-conservadorismo. Não é o gate porque o poder é baixo: com
+h = 7 e T = 500/1000, cada sub-série tem 71/142 pontos — para o par de 80 %,
+~7/14 violações esperadas por cauda; a p_viol = 0.02, 1,4/2,8 hits, e LR_ind
+fica vazio. Se gate e sensibilidade discordarem, a discordância é reportada
+(ICH E9 §5.3), não arbitrada. P-valor simulado sob nula
 (h−1)-dependente: inviável (a estrutura de dependência é parâmetro de incômodo
 que a H0 não determina).
 
@@ -1348,10 +1437,13 @@ resultados, mudaria um número reportado ou o veredito:
   Holm, a direção do DM, o kernel e o lag (h−1), o fallback de variância;
 - os **parâmetros do MCS** (α_MCS, reps, tipo de bootstrap, regra do bloco e
   grade de sensibilidade, semente);
-- a **regra do gate H1** (§8.5): o intervalo primário, a banda (Wilson 95 %),
-  o pooling por horizonte, o tratamento de h+7, o **limiar de degeneração**
-  e a tolerância numérica de "igual";
-- a **agregação de seeds** (média das perdas) e a lista de seeds;
+- a **regra do gate H1** (§8.5): o par primário, as bandas por cauda (Wilson
+  97,5 %, Bonferroni), o pooling por horizonte, o tratamento de h+7 e suas
+  sensibilidades (LR_uc de 3 estados; partição de DGT), o **limiar de
+  degeneração**, a tolerância numérica de "igual", o **desvio mínimo
+  relevante** e o poder do gate contra ele no T efetivo (B1);
+- a **agregação de seeds** (média das perdas; cobertura média com n = pontos não-degenerados, nunca S·T) e a
+  lista de seeds;
 - a **fonte do realizado** (§2.1) e a **ausência de regras de exclusão** de
   observações (§5.3), a regra de mínimo de violações (§7.6);
 - a **forma lógica do veredito** por horizonte (§8.6) e o critério de sucesso
@@ -1368,7 +1460,7 @@ ICH E9 §5.1 (pp. 23–24): "Only results from analyses envisaged in the protoco
 
 ### 8.2 Quando: antes de qualquer métrica confirmatória
 
-**Convenção do projeto (a ratificar — B-ORDEM).** O pré-registro (6.5) é
+**Convenção do projeto (B-ORDEM — decidida, §10.1; ADR 0.0.0011).** O pré-registro (6.5) é
 **hasheado antes de qualquer métrica confirmatória ser computada** sobre as
 predições OOS do cohort (8.1). O cohort (5.5) congela **o que** se treina
 (candidato, comparadores, seeds, folds, configuração, grade) e tem **hash
@@ -1458,25 +1550,85 @@ probabilidade até 1 − 0.95^K (≈ 30 % para K = 7) — teto sob independênci
 dependência positiva entre pares aninhados sobre os mesmos hits reduz o valor
 real, mas não o elimina.
 
-**Convenção do projeto (a ratificar — B-GATE-H1).** **Um critério-gate
-pré-declarado por horizonte**, com duas condições:
+**Redação do claim (B1 — decisão P do humano, 2026-09-26).** O gate é um
+teste que só consegue **reprovar**: passar significa "não há evidência de
+descalibração", não prova de calibração. H1 é enunciada como **"calibração
+não rejeitada na banda de Wilson"**, sempre acompanhada do **poder
+declarado** contra um desvio mínimo pré-registrado; "calibrado" sem
+qualificação não é usado (overview §4). Base: ICH E9 §3.3.2 (pp. 17–18):
+"Concluding equivalence or non-inferiority based on observing a
+non-significant test result of the null hypothesis that there is no
+difference … is inappropriate" — o mesmo tratamento dado a H2 em §6.10. Alternativa
+descartada pelo humano: **B2**, teste de equivalência (IC da cobertura
+inteiro dentro de nominal ± δ) — δ não tem convenção na área, e com δ = 5 p.p.
+e T = 500 um modelo perfeitamente calibrado passaria só em ~60 % das vezes,
+bloqueando H2 por acaso em ~40 % dos casos.
 
-1. o **PICP do intervalo central primário** está dentro da **banda de Wilson a
-   95 %** (§4.4), pooled sobre folds — recomendado: um par central com
-   **número esperado de violações suficiente para poder** (ex.: 80 %, com ~100
-   violações esperadas em T = 500), **não** as caudas τ_1/τ_K (~10 violações
-   esperadas, §7.3); qual par é o primário é conteúdo do pré-registro;
+**Convenção do projeto (B-GATE-H1 — decidida, §10.1; ADR 0.0.0011).** **Um
+critério-gate pré-declarado por horizonte**, sobre o **par central
+primário** (τ_l, τ_u) = (α/2, 1 − α/2), com duas condições:
+
+1. **cada cauda** do par está dentro da **banda de Wilson a 97,5 %** (§4.4),
+   pooled sobre folds: ĉ(τ_l) contém τ_l **e** 1 − ĉ(τ_u) contém 1 − τ_u —
+   Bonferroni sobre as duas caudas, logo a probabilidade de reprovar um
+   modelo calibrado é ≤ 5 %. Par recomendado: 80 % (~50 violações esperadas
+   por cauda em T = 500), **não** as caudas τ_1/τ_K (~10 violações, §7.3);
+   qual par é o primário é conteúdo do pré-registro. Para o candidato com S
+   seeds, ĉ é a média entre seeds, com n = pontos não-degenerados, nunca S·T (§6.9);
 2. a **taxa de degeneração** ≤ limiar pré-registrado (§5.3, item 4).
 
+**Por que por cauda e não PICP.** O PICP é invariante a um deslocamento
+comum das duas caudas (§4.2): um erro de **locação** — o modelo erra o
+centro, e as duas caudas miscobrem em sentidos opostos — passa num gate só
+por PICP. Probabilidade de **passar** no gate (cálculo próprio, binomial e
+multinomial exatas, T = 500, par de 80 %, verdade N(μ, σ²) e previsão com os
+quantis de N(0, 1)):
+
+| Cenário | PICP real | só PICP (Wilson 95 %) | por cauda (Wilson 97,5 % ×2) | LR_uc 3 estados, χ²(2) a 5 % |
+|---|---|---|---|---|
+| calibrado | 0,800 | 0,950 | 0,959 | 0,951 |
+| locação 0,2σ | 0,791 | 0,916 | 0,160 | 0,111 |
+| locação 0,3σ | 0,780 | 0,790 | 0,004 | 0,002 |
+| largura: cobertura real 75 % | 0,750 | 0,220 | 0,420 | 0,330 |
+| largura: cobertura real 85 % | 0,850 | 0,173 | 0,464 | 0,252 |
+
+O custo é declarado: contra erro **puro de largura** o gate por cauda detecta
+pior que o PICP (passa 0,42 contra 0,22 com cobertura real de 75 %), porque
+divide o mesmo desvio em duas caudas testadas a 97,5 %. O PICP do par
+continua no **perfil**, onde esse erro aparece.
+
+**Poder declarado (B1).** O pré-registro fixa o desvio mínimo relevante —
+ex.: ±5 p.p. na cobertura do par primário, em duas formas, largura (as duas
+caudas miscobrem no mesmo sentido) e locação (em sentidos opostos) — e
+reporta o poder do gate contra cada forma **no T efetivo** do horizonte. Ordem
+de grandeza em T = 500, pela tabela: largura de 5 p.p. é detectada em ~0,54–0,58;
+locação de 0,2σ (3–4 p.p. por cauda, em sentidos opostos), em ~0,84.
+
+**Sensibilidade pré-registrada.** O **LR_uc de 3 estados** de Christoffersen
+(1998, §4.2) sobre o mesmo par — as duas caudas num teste χ²(2) — domina o
+gate por cauda em todos os cenários da tabela. Fica como sensibilidade, e não
+como gate, porque B1 enuncia o claim na banda de Wilson (degrau 1: coerência
+com o que o humano ratificou) e porque a leitura "cada cauda dentro da sua
+banda" é a que o perfil ĉ(τ) já mostra. Discordância gate × sensibilidade é
+reportada, não arbitrada. Em h+7, a partição de DGT (§7.4) é a segunda
+sensibilidade.
+
+**Só o candidato é filtrado.** Comparadores que reprovam o próprio H1
+continuam na família de Holm e no MCS (§6.4); o gate decide apenas a
+elegibilidade do candidato para H2.
+
 O resto de H1 — cobertura por τ (com Holm **dentro** do horizonte quando se
-quiser inferência), demais intervalos, LR_ind/LR_cc, sharpness, VaR descritivo
-— é **perfil de H1**, não gate: caracteriza "de forma rica" (overview §4) sem
-multiplicar chances de reprovação por acaso. Alternativas reais descartadas:
-(b) Holm sobre toda a família de H1 — conservador demais com o poder de §7.3;
-(c) regra de interseção "nenhum teste rejeita a α_gate" — conservadora no
-sentido oposto, sem controle explícito; (d) zonas Basel como gate — unilateral
-(H1 é bilateral) e calibrado a 99 %/250 dias, não à grade do projeto (fica no
-perfil).
+quiser inferência), PICP e demais intervalos, LR_ind/LR_cc, sharpness, VaR
+descritivo — é **perfil de H1**, não gate: caracteriza "de forma rica"
+(overview §4) sem multiplicar chances de reprovação por acaso. Alternativas
+reais descartadas: (a) gate só por PICP (o rascunho deste doc) — cego a
+locação, tabela acima; (b) Holm sobre toda a família de H1 — conservador
+demais com o poder de §7.3; (c) regra de interseção "nenhum teste rejeita a
+α_gate" — conservadora no sentido oposto, sem controle explícito; (d) zonas
+Basel como gate — unilateral (H1 é bilateral) e calibrado a 99 %/250 dias,
+não à grade do projeto (fica no perfil); (e) PICP **e** caudas juntos —
+três testes elevam a reprovação por acaso de um modelo calibrado para até
+~10 % sem correção.
 
 ### 8.6 Estrutura do veredito por horizonte
 
@@ -1485,9 +1637,9 @@ O scorecard é uma **árvore de decisão pré-registrada** (Nosek et al. 2018,
 rules at each stage of the sequence"), aplicada mecanicamente, **por
 horizonte**:
 
-    H1 (gate): PICP do par primário dentro da banda de Wilson  E  taxa de degeneração ≤ limiar
-        ├─ reprova → H2 "não aplicável" neste horizonte (skill de modelo mal-calibrado não se compara — overview §4)
-        └─ aprova → H2:
+    H1 (gate, só o candidato): cada cauda do par primário na banda de Wilson 97,5 %  E  taxa de degeneração ≤ limiar
+        ├─ reprova → H2 "não aplicável" neste horizonte (skill de candidato mal-calibrado não se compara — overview §4)
+        └─ aprova ("calibração não rejeitada", com o poder declarado) → H2 (família e M0 inalterados pelo H1 dos comparadores):
               (i)  supera os naive?        DM unilateral + Holm (família = B comparadores do horizonte), α pré-registrado
               (ii) supera/empata os fortes? DM+Holm para "supera"; "empata" = não eliminado do MCS ao nível α_MCS (§6.10)
               (iii) pertence ao MCS?        evidência complementar, não condição
@@ -1529,9 +1681,10 @@ desenho de modelo por "blurs the per-horizon reading".
 ### 8.8 Critério de sucesso do estudo: "≥ 1 horizonte"
 
 **Convenção (T11).** H1 é julgada **por horizonte**; H2 só nos horizontes que
-passam H1; "calibrado para ≥ 1 horizonte dentro de bandas pré-registradas"
-(overview §4) é o **critério de sucesso do estudo** — existe ao menos um
-horizonte calibrado — e não uma agregação: um horizonte reprovado em H1 é
+passam H1; "calibração não rejeitada para ≥ 1 horizonte dentro de bandas
+pré-registradas" (overview §4, redação B1) é o **critério de sucesso do
+estudo** — existe ao menos um horizonte em que o gate não rejeita a
+calibração, com o poder declarado — e não uma agregação: um horizonte reprovado em H1 é
 reportado como tal, com seu perfil, e "refutação é resultado válido"
 (overview §1). O h+30 suplementar segue a mesma árvore, com o excesso de
 tamanho do DM crescendo com h (HLN 1997 Table 1) declarado.
@@ -1591,8 +1744,8 @@ Stages (registro no ADR de recorte deste gate):
 ## 10. Convenções decididas (tabela-resumo)
 
 Legenda de status: **decidida** (política sem fonte primária, ancorada em doc
-ratificado ou na teoria citada); **a ratificar — B-…** (posição recomendada
-pelo gate, pendente de decisão humana; vira ADR onde indicado).
+ratificado ou na teoria citada); **decidida — B-…** (posição recomendada
+pelo gate, depois fechada pela triagem E/C com registro em §10.1; ADR onde indicado).
 
 | # | Convenção | Fonte / âncora | Status | Stage |
 |---|---|---|---|---|
@@ -1601,33 +1754,104 @@ pelo gate, pendente de decisão humana; vira ADR onde indicado).
 | 3 | Pontua-se o vetor rearranjado; bruto não pontuado; taxa de aplicação do guardrail no perfil (T4/FA9) | modeling §2.4; ADR 4.3.0002 Alt C; Berrisch & Ziel 2023 §3.4; Brehmer & Gneiting 2021 §3.2 | decidida (ancorada); ADR curto | 6.1 |
 | 4 | Escala ρ_τ (sem fator 2); CRPS_Q na escala do CRPS; escala dos oráculos declarada (T8) | modeling §2.2/§9.3; §11.3 | decidida | 6.1 |
 | 5 | Pesos iguais na média da grade (FA2) | Gneiting & Ranjan 2011 pós-(17) | decidida | 6.1 |
-| 6 | CRPS reportado = CRPS_Q = 2·P̄_G (quadratura uniforme); não é evidência independente; papel = escala de y + perfil por τ | Berrisch & Ziel 2023 Eq. (9); Bracher et al. 2021 App. A Eq. (6); GR 2007 §4.2 | **a ratificar — B-CRPS** (ADR `0_0_0009`) | 6.1, 6.5 |
+| 6 | CRPS reportado = CRPS_Q = 2·P̄_G (quadratura uniforme); não é evidência independente; papel = escala de y + perfil por τ | Berrisch & Ziel 2023 Eq. (9); Bracher et al. 2021 App. A Eq. (6); GR 2007 §4.2 | **decidida — B-CRPS** (§10.1) (ADR `0_0_0009`) | 6.1, 6.5 |
 | 7 | IS_α por par simétrico, não escalado, com decomposição; WIS não reportado; só pares simétricos (FA4/FA10) | GR 2007 Eq. (43); Bracher et al. 2021 App. A Eq. (5); Brehmer & Gneiting 2021 Thm 3.1 | decidida | 6.1 |
 | 8 | MPIW em unidade de y (não NMPIW) + sharpness diagram (FA5) | GBR 2007 §3.3 | decidida | 6.1, 8.3 |
 | 9 | Cobertura marginal com 1{y ≤ q̂}; PICP com [l ≤ y ≤ u] (FA7) | GBR 2007 Thm 2; Kuleshov 2018 Eq. (3); Pearce 2018 Eq. (4) | decidida | 6.1, 6.3 |
-| 10 | Banda de H1 = Wilson 95 %, por horizonte, pooled sobre folds, contendo o nominal (critério decisivo); LR_uc/POF como teste formal associado (pode discordar por 1 contagem — reportado, não arbitrado); zonas Basel no perfil; nível/T mín./h+7 no pré-registro (FA6/FC2) | BCD 2001 Eq. (4); Kupiec 1995 Table 2; BCBS 1996 §III | **a ratificar — B-BANDAS** | 6.3, 6.5 |
+| 10 | Banda de H1 = Wilson (95 % para teste isolado; 97,5 % por cauda no gate), por horizonte, pooled sobre folds, contendo o nominal (critério decisivo); n = pontos alinhados não-degenerados (≈ T), nunca S·T; LR_uc/POF como teste formal associado (pode discordar por 1 contagem — reportado, não arbitrado); zonas Basel no perfil; nível/T mín./h+7 no pré-registro (FA6/FC2) | BCD 2001 Eq. (4); Kupiec 1995 Table 2; BCBS 1996 §III | **decidida — B-BANDAS** (§10.1) | 6.3, 6.5 |
 | 11 | CWC e combinações ad hoc largura×cobertura não existem no domínio | GR 2007 §9.3/§6.3; Askanazi et al. 2018 §3 | decidida | 6.1 |
-| 12 | Gate de degeneração: colapso total; parcial = diagnóstico; proper scores sempre; calibração só em não-degeneradas (N/A a 100 %); taxa sempre; limiar pré-registrado reprova H1 dos distribucionais; **sem exclusão de linhas** na inferência; DoD 6.1 lê-se "métricas de calibração" (T1/FA8/FB5/FC7) | GR 2007 §4.2; Simmons 2011 req. 5; ICH E9 §5.2–§5.3; contiguidade HAC/bootstrap | **a ratificar — B-GATE** (ADR `0_0_0011`) | 6.1, 6.2, 6.4, 6.5 |
-| 13 | Loss pareada = P̄_G por horizonte; 1 DM por (cand, comp, h); família de Holm = B comparadores do horizonte; DM por τ = perfil (T3/T5/FB1/FB3) | Holm 1979 Thm 1; Romano & Wolf 2005 §3; overview §7 | **a ratificar — B-FAMILIA** (ADR `0_0_0010`) | 6.2, 6.5 |
+| 12 | Gate de degeneração: colapso total; parcial = diagnóstico; proper scores sempre; calibração só em não-degeneradas (N/A a 100 %); taxa sempre; limiar pré-registrado reprova H1 dos distribucionais; **sem exclusão de linhas** na inferência; DoD 6.1 lê-se "métricas de calibração" (T1/FA8/FB5/FC7) | GR 2007 §4.2; Simmons 2011 req. 5; ICH E9 §5.2–§5.3; contiguidade HAC/bootstrap | **decidida — B-GATE** (§10.1) (ADR `0_0_0011`) | 6.1, 6.2, 6.4, 6.5 |
+| 13 | Loss pareada = P̄_G por horizonte; 1 DM por (cand, comp, h); família de Holm = B comparadores do horizonte; DM por τ = perfil (T3/T5/FB1/FB3) | Holm 1979 Thm 1; Romano & Wolf 2005 §3; overview §7 | **decidida — B-FAMILIA** (§10.1) (ADR `0_0_0010`) | 6.2, 6.5 |
 | 14 | Kernel retangular lag h−1 + HLN + t_{T−1}; Bartlett como sensibilidade (FB2) | DM 1995 p. 254; HLN 1997 Eq. (9); R `dm.test` | decidida (pré-registrável) | 6.2 |
-| 14b | Variância de longo prazo ≤ 0 (h > 1) → seguir o oráculo (recalcular com h = 1), registrar a ocorrência; DM 1995 rejeitaria | R `dm.test`; `[SEM-FONTE-PRIMÁRIA]` | **a ratificar — B-DM** | 6.2, 6.5 |
+| 14b | Variância de longo prazo ≤ 0 (h > 1) → seguir o oráculo (recalcular com h = 1), registrar a ocorrência; DM 1995 rejeitaria | R `dm.test`; `[SEM-FONTE-PRIMÁRIA]` | **decidida — B-DM** (§10.1) | 6.2, 6.5 |
 | 15 | DM unilateral testa "superar" (E[d] < 0); "empatar" = pertencer ao MCS; não-rejeição ≠ equivalência; TOST não adotado (T7) | DM 1995; HLN 2011 Def. 4/Thm 3 | decidida | 6.2, 6.5 |
 | 16 | MCS: estatística 'R', α_MCS = 0,10, reps ≥ 1.000, regra de eliminação correta; pré-condição var(L_i − L_j) > 0 (T6/FB4/FB8/FB9) | HLN 2011 Defs. 2/4, §5.1, fn. 14 | decidida (pré-registrável) | 6.2, 6.5 |
-| 16b | Stationary bootstrap (HLN usam moving-block — sensibilidade) com bloco = maior b̂_sb de Politis–White entre os diferenciais do horizonte + sensibilidade l = h e √T | Politis & White 2004; White 2000 §2.c; `[SEM-FONTE-PRIMÁRIA]` para variante e agregação | **a ratificar — B-MCS** | 6.2, 6.5 |
+| 16b | Stationary bootstrap (HLN usam moving-block — sensibilidade) com bloco = maior b̂_sb de Politis–White entre os diferenciais do horizonte + sensibilidade l = h e √T | Politis & White 2004; White 2000 §2.c; `[SEM-FONTE-PRIMÁRIA]` para variante e agregação | **decidida — B-MCS** (§10.1) | 6.2, 6.5 |
 | 17 | Pareamento por interseção exata de `target_timestamp` entre todos os modelos do horizonte; T reportado (1.21b) | DM 1995 §1; HLN 2011 p. 458; statsmodels HAC | decidida | 6.2, 6.4 |
-| 18 | Folds concatenados em série contígua por horizonte; diagnóstico de estacionariedade; DM por fold no perfil; janela rolante = limitação declarada (FB6) | Diebold 2015 §2.2/§3; HLN 2011 p. 484 e fn. 12; GW 2006 §3.2 | **a ratificar — B-FOLDS** | 6.2, 6.5 |
-| 19 | Seeds → média ponto a ponto das perdas; dispersão e fração de seeds que rejeita no perfil; mesmo para o GBM (T12/FB7) | Bouthillier 2021; sem fonte para a regra | **a ratificar — B-SEEDS** (ADR) | 6.2, 6.5 |
-| 20 | Backtests: 2-estados por intervalo aninhado + unilateral por τ; 3-estados não adotado (FC4) | Christoffersen 1998 §3/§4.2 | decidida | 6.3 |
+| 18 | Folds concatenados em série contígua por horizonte; diagnóstico de estacionariedade; DM por fold no perfil; janela rolante = limitação declarada (FB6) | Diebold 2015 §2.2/§3; HLN 2011 p. 484 e nota 11 do WP; GW 2006 §3.2 | **decidida — B-FOLDS** (§10.1) | 6.2, 6.5 |
+| 19 | Seeds → média ponto a ponto das perdas (conservadora pelo Jensen); cobertura/degeneração = média entre seeds, n ≈ T (nunca S·T); gate e sensibilidades por contagens médias; LR_ind/cc por seed e fração de seeds que rejeita no perfil; GBM determinístico → uma execução, com teste de contrato na 5.5; nº de seeds = P no congelamento do cohort (T12/FB7) | Bouthillier 2021; Jensen (derivação); código do adapter LightGBM | **decidida — B-SEEDS** (§10.1) (ADR) | 6.2, 6.5 |
+| 20 | Backtests: 2-estados por intervalo aninhado + unilateral por τ; 3-estados não adotado como backtest — exceto o LR_uc de 3 estados do par primário, sensibilidade do gate H1 (FC4) | Christoffersen 1998 §3/§4.2 | decidida | 6.3 |
 | 21 | Convenção "pura" de condicionamento — todas as contagens sobre t = 2..T, n_1 = n_01 + n_11 (identidade LR_cc = LR_uc + LR_ind exata); golden-test compara convenções iguais (oráculo alimentado a partir de t = 2), sem tolerância O(1/T) (FC5) | Christoffersen 1998 pp. 845/847; C&P 2004 §4.1; `rugarch` | decidida | 6.3 |
 | 22 | P-valor χ² assintótico; MC exato sob iid Bern(p) como sensibilidade em h+1; mínimo de violações para LR_ind pré-registrado (FC6) | Christoffersen 1998; Christoffersen & Pelletier 2004 §4.1, §4.3, §5 | decidida | 6.3, 6.5 |
-| 23 | h+7: LR's computados; LR_ind/LR_cc descritivos para h > 1; gate H1 em h+7 = banda; LR_uc-HAC não adotado; partição + Bonferroni registrada (FC1) | DGT 1998 §6 + derivação `[SEM-FONTE-PRIMÁRIA]`; Christoffersen & Diebold 2000 fn. 14 (só reconhecimento) | **a ratificar — B-H7** | 6.3, 6.5 |
+| 23 | h+7: LR's computados; LR_ind/LR_cc descritivos para h > 1; gate H1 em h+7 = banda; LR_uc-HAC não adotado; partição + Bonferroni registrada (FC1) | DGT 1998 §6 + derivação `[SEM-FONTE-PRIMÁRIA]`; Christoffersen & Diebold 2000 fn. 14 (só reconhecimento) | **decidida — B-H7** (§10.1) | 6.3, 6.5 |
 | 24 | VaR_α(r) = −q_{1−α}(r); hits unilaterais por cauda; Kupiec + Christoffersen por cauda; "descritivo" = sem claim de risco | QRM 2005 Def. 2.10; Christoffersen 1998 pp. 843–844 | decidida | 6.3 |
-| 25 | Pré-registro congela COMO se julga e é hasheado antes de qualquer métrica confirmatória; cohort congela O QUE e tem hash próprio referenciado (T10) | Nosek 2018; ICH E9 §5.1; modeling §6.3 | **a ratificar — B-ORDEM** | 6.5, 8.1 |
-| 26 | Gate H1 = um critério por horizonte (PICP do par primário na banda de Wilson + taxa de degeneração ≤ limiar); o resto é perfil de H1; par primário no pré-registro (FC3) | ICH E9 §2.2.2; Nosek 2018 "Challenge 2"; §7.3 (poder) | **a ratificar — B-GATE-H1** | 6.5, 8.1 |
+| 25 | Pré-registro congela COMO se julga e é hasheado antes de qualquer métrica confirmatória; cohort congela O QUE e tem hash próprio referenciado (T10) | Nosek 2018; ICH E9 §5.1; modeling §6.3 | **decidida — B-ORDEM** (§10.1) | 6.5, 8.1 |
+| 26 | Gate H1 = um critério por horizonte, só do candidato (cada cauda do par primário na banda de Wilson 97,5 % + taxa de degeneração ≤ limiar); claim "calibração não rejeitada" + poder declarado (B1); LR_uc 3 estados e partição DGT (h+7) como sensibilidades; PICP e o resto no perfil; comparadores ficam na família mesmo reprovando H1 (FC3) | ICH E9 §2.2.2 e §3.3.2; Nosek 2018 "Challenge 2"; Christoffersen 1998 §4.2; White 2000 §2; §8.5 (tabela de poder) | **decidida — B-GATE-H1** (§10.1) | 6.5, 8.1 |
 | 27 | Veredito por horizonte: H1 → H2 = {supera naive?, supera/empata fortes?, MCS?}; perfil nunca troca o veredito; forma lógica exata no pré-registro | ICH E9 §2.2.2/§5.5; Simmons 2011; Nosek 2018 | decidida | 6.5, 8.1 |
 | 28 | H1 por horizonte; H2 só onde H1 passa; "≥ 1 horizonte" = sucesso do estudo (T11) | overview §4 | decidida | 6.5, 8.1 |
 | 29 | Nunca agregar entre horizontes — prática + premissas dos testes, não teorema | DM 1995; HLN 1997; GW 2006 §3.3; FPP3 §5.10; Kupiec 1995 pp. 8–9 | decidida (ancorada em overview §7) | todas |
 | 30 | Vocabulário órfão do roadmap (C.0, Gate A–F, top-50, win-rate, DELETAR/DESCRIPTIVE) abandonado; roadmap ajustado nas PRs 6.2/6.3/6.5 (T9) | — | decidida (ADR de recorte) | 6.2, 6.3, 6.5 |
+
+### 10.1 Registro das decisões (triagem `evidence-resolution`, 2026-09-26)
+
+Triagem: todas as bifurcações abaixo são anteriores a qualquer dado
+confirmatório (8.1 não rodou), logo nenhuma C virou P. A única P do lote é a
+redação do claim de H1 (**B1**, decidida pelo humano na issue #78); o número
+de seeds do cohort é P da Stage 5.5, fora deste doc. "Verificado" = trecho
+conferido na fonte bruta por verificador de contexto zerado (skill §4.2) nesta
+sessão; os demais localizadores são os da sessão do gate.
+
+```
+[decision:P] B1 — redação do claim de H1
+Escolha: "calibração não rejeitada na banda de Wilson" + poder declarado contra desvio mínimo pré-registrado · Alternativas: B2 (equivalência, IC ⊂ nominal ± δ) · Decisor: humano (issue #78, 2026-09-26)
+Base: ICH E9 §3.3.2 pp. 17–18 "Concluding equivalence or non-inferiority based on observing a non-significant test result … is inappropriate" [verificado]
+Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash do pré-registro
+
+[decision:C] B-GATE-H1 — que teste é o gate de H1 por horizonte
+Escolha: cada cauda do par primário na banda de Wilson 97,5 % (Bonferroni, 2 caudas) + taxa de degeneração ≤ limiar; só o candidato · Alternativas: só PICP (Wilson 95 %); LR_uc 3 estados χ²(2); PICP e caudas juntos; Holm sobre a família de H1; Basel · Degrau: 1 (B1 ratificou o claim na banda de Wilson) e 4 (menos aprovações falsas: locação 0,3σ passa 0,004 contra 0,790 do PICP — §8.5, cálculo próprio)
+Base: §4.2 (PICP invariante a deslocamento comum das caudas); Christoffersen 1998 §4.2 (3 estados) [não reverificado: as cópias acessíveis são escaneadas; localizador da sessão do gate; o χ²(2) é elementar — multinomial de 3 células, nula sem parâmetro livre]
+Sensibilidade pré-registrada: LR_uc de 3 estados no mesmo par; partição DGT em h+7 · Reversível: sim, até o hash do pré-registro
+
+[decision:C] B-BANDAS — banda de cobertura de H1
+Escolha: Wilson, por horizonte, pooled sobre folds, n = pontos alinhados não-degenerados (≈ T, nunca S·T); 95 % isolado, 97,5 % por cauda no gate · Alternativas: Wald; tolerância fixa δ; banda relativa ao CQR · Degrau: 3
+Base: Brown, Cai & DasGupta 2001, abstract p. 101 "we recommend the Wilson interval or the equal-tailed Jeffreys prior interval for small n" [verificado]
+Sensibilidade pré-registrada: LR_uc/POF (mesma nula, teste LR) · Reversível: sim
+
+[decision:C] B-CRPS — estimador do CRPS sobre a grade
+Escolha: (a) CRPS_Q = 2·P̄_G, pesos iguais; rotulado "2 × pinball média"; sem comparação com CRPS publicado · Alternativas: (b) ensemble de quantis; (c) spline + convenção de cauda · Degrau: 2
+Base: scoringrules 0.11.0 `crps_quantile` → `core/crps/_approx.py::quantile_pinball` "2 * B.mean(below + above, axis=-1)" [verificado]; Berrisch & Ziel 2023 Eq. (9) "for an equidistant dense grid" [verificado]
+Sensibilidade pré-registrada: nenhuma (mesma ordenação da pinball) · Reversível: sim
+
+[decision:C] B-GATE — semântica do gate de degeneração
+Escolha: colapso total; proper scores em todas as linhas; calibração só nas não-degeneradas; taxa sempre; limiar reprova H1 dos distribucionais; sem exclusão de linhas na inferência · Alternativas: invalidar tudo (leitura literal do DoD 6.1); exclusão pareada · Degrau: 1 (modeling §3.4 e ADR 0.0.0052: Dirac bem-posto)
+Base: Gneiting & Raftery 2007 §4.2 p. 367 "the CRPS provides a direct way to compare deterministic and probabilistic forecasts" [verificado]; Simmons et al. 2011 req. 5 p. 1363 "If observations are eliminated, authors must also report what the statistical results are if those observations are included" [verificado]
+Sensibilidade pré-registrada: nenhuma no veredito; LR_ind/LR_cc com/sem as lacunas reportados lado a lado no perfil · Reversível: sim
+
+[decision:C] B-DM — variância de longo prazo ≤ 0 com h > 1
+Escolha: seguir o oráculo (recalcular com h = 1) e registrar a ocorrência · Alternativas: DM 1995 (tratar como 0 e rejeitar); Bartlett · Degrau: 2
+Base: R forecast `R/DM2.R` warning("Variance is negative. Try varestimator = bartlett. Proceeding with horizon h=1.") [verificado]
+Sensibilidade pré-registrada: Bartlett (já em §6.1) · Reversível: sim
+
+[decision:C] B-FAMILIA — loss pareada e família de Holm
+Escolha: L_t = P̄_G por ponto; 1 DM por (candidato, comparador, horizonte); família = os B comparadores do horizonte, independente do H1 deles; DM por τ = perfil · Alternativas: família global H × B; por τ; subfamílias por camada · Degrau: 1 (overview §4/§7: H2 por horizonte, nunca agregar)
+Base: Holm 1979 §2 p. 67 "compared to the numbers α/n, α/(n−1), …, α" e Theorem 1 [verificado]
+Sensibilidade pré-registrada: nenhuma · Reversível: sim
+
+[decision:C] B-MCS — bootstrap e bloco do MCS
+Escolha: stationary bootstrap; bloco = max(h, maior b̂_sb de Politis–White entre os d_ij do horizonte) — piso h por coerência com o roadmap ("block_len ≥ h", degrau 1) · Alternativas: moving-block (o de HLN 2011); √T (default do backend); l = h · Degrau: 2 (variante = default do `arch`) e 4 (bloco mais persistente = mais conservador); o default √T foi descartado porque a própria docstring pede escolha "appropriate for the data"
+Base: `arch` `MCS(... bootstrap="stationary", block_size=None)`, docstring "In general, this should be provided and chosen to be appropriate for the data"; `optimal_block_length` → `b_sb` [verificado]
+Sensibilidade pré-registrada: l = h, l = √T, moving-block · Reversível: sim
+
+[decision:C] B-FOLDS — série de teste sob o esquema expansivo
+Escolha: concatenar os folds numa série contígua por horizonte + diagnóstico de estacionariedade de d_t + DM por fold no perfil; janela rolante = limitação declarada · Alternativas: cohort rolante; teste por fold agregado · Degrau: 1 (ADR 5.1.0001, esquema expansivo)
+Base: HLN (CREATES RP 2010-76, nota 11) "it produces pseudo-MCS results that are very similar to those obtained under the rolling window estimation scheme" [verificado]
+Sensibilidade pré-registrada: DM por fold (perfil) · Reversível: sim (a limitação fica declarada)
+
+[decision:C] B-SEEDS — série do candidato com S seeds
+Escolha: média ponto a ponto das perdas; cobertura/degeneração = média entre seeds, n ≈ T (nunca S·T); gate e sensibilidades por contagens médias; LR_ind/cc por seed no perfil; GBM com uma execução (determinístico) · Alternativas: ensemble de previsões; teste por seed; seed fixa · Degrau: 4 (Jensen: média das perdas ≥ perda do ensemble)
+Base: convexidade da pinball (derivação); adapter LightGBM `deterministic=True`, `feature_fraction=1.0`, `bagging_fraction=1.0`, `bagging_freq=0` (código lido em 2026-09-26, teste de contrato na 5.5)
+Sensibilidade pré-registrada: dispersão e fração de seeds que rejeita · Reversível: sim
+
+[decision:C] B-H7 — backtests e gate em h+7
+Escolha: LR's computados; LR_ind/LR_cc descritivos para h > 1; gate = banda (§8.5), com aviso de anti-conservadorismo · Alternativas: LR_uc-HAC; partição DGT como gate · Degrau: 3 para a sensibilidade (DGT é a recomendação do paper de origem) e 5 para o gate (o mesmo critério em todo horizonte)
+Base: Diebold, Gunther & Tay 1998 §6 p. 880 "each of the following h sub-series will be i.i.d. … a test with size bounded by α can be obtained by performing h tests, each of size α/h" [verificado; apresentado pelos autores como generalização, com a ideia de Bonferroni atribuída a Campbell & Ghysels 1995]
+Sensibilidade pré-registrada: partição DGT + Bonferroni no par primário · Reversível: sim
+
+[decision:C] B-ORDEM — ordem cohort × pré-registro
+Escolha: cohort (5.5) congelado e treinado → pré-registro (6.5) hasheado → métricas confirmatórias (8.1); ver predições brutas não viola, computar métricas confirmatórias viola · Alternativas: pré-registrar antes do treino · Degrau: 1 (roadmap 5.5 → 6.5; overview §7)
+Base: Nosek et al. 2018 "Challenge 3" "once the data have been observed, there are inevitable risks for blinding … This transparency provides insight about potential biasing influences" [verificado; a reticência une dois parágrafos]
+Sensibilidade pré-registrada: nenhuma · Reversível: não depois do hash (é o objetivo)
+```
 
 ## 11. Referências
 
@@ -1643,7 +1867,7 @@ indicada, ou documentação/código oficial).
 
 - Diebold, F. X.; Mariano, R. S. (1995). "Comparing Predictive Accuracy". *Journal of Business & Economic Statistics*, 13(3), 253–263. DOI: 10.1080/07350015.1995.10524599. (§1–§1.1 p. 254: nula, S1, lag window retangular com S(T) = k−1, variância negativa; §3 p. 257: oversized em amostras pequenas. Lida na reimpressão JSTOR 2002; paginação original mapeada pelos cabeçalhos.)
 - Harvey, D.; Leybourne, S.; Newbold, P. (1997). "Testing the equality of prediction mean squared errors". *International Journal of Forecasting*, 13(2), 281–291. DOI: 10.1016/S0169-2070(96)00719-4. (pp. 281–282 premissa MA(h−1); §2 Eqs. (5)–(9) p. 283; t_{n−1} pp. 283–284; Table 1 p. 285; §5 pp. 290–291.)
-- Hansen, P. R.; Lunde, A.; Nason, J. M. (2011). "The Model Confidence Set". *Econometrica*, 79(2), 453–497. DOI: 10.3982/ECTA5771. (p. 458 d_{ij,t}, Definition 1, Eq. (1); Definition 2 p. 459; Theorem 1 p. 459; Definition 4 e Theorem 3 p. 462; Assumption 2 p. 464; §3.1.2 p. 465 t_ij/T_R; p. 466 e_R/e_max; §4.1 p. 474; §5.1 pp. 477–478; p. 484 e fn. 14. Supplemental Material não acessado.)
+- Hansen, P. R.; Lunde, A.; Nason, J. M. (2011). "The Model Confidence Set". *Econometrica*, 79(2), 453–497. DOI: 10.3982/ECTA5771. (p. 458 d_{ij,t}, Definition 1, Eq. (1); Definition 2 p. 459; Theorem 1 p. 459; Definition 4 e Theorem 3 p. 462; Assumption 2 p. 464; §3.1.2 p. 465 t_ij/T_R; p. 466 e_R/e_max; §4.1 p. 474; §5.1 pp. 477–478; p. 484 e fn. 14. Supplemental Material não acessado. A nota sobre o esquema recursivo (§6.8) foi lida no working paper CREATES RP 2010-76, nota 11.)
 - Holm, S. (1979). "A Simple Sequentially Rejective Multiple Test Procedure". *Scandinavian Journal of Statistics*, 6(2), 65–70. (Definição p. 65; §2 Scheme 1 pp. 66–67; Theorem 1 p. 67.)
 - Koenker, R.; Bassett, G., Jr. (1978). "Regression Quantiles". *Econometrica*, 46(1), 33–50. DOI: 10.2307/1913643. (Displays da p. 38.)
 - Gneiting, T. (2011). "Making and Evaluating Point Forecasts". *Journal of the American Statistical Association*, 106(494), 746–762. DOI: 10.1198/jasa.2011.r10138. (§1.1 Eq. (1); Definition 2.1, Theorems 2.2–2.4; Eq. (24) §3.3 pp. 754–755; Theorem 9 p. 755 — Theorem 3.3 no preprint arXiv:0912.0902, que foi a versão lida; §5.)
@@ -1709,7 +1933,7 @@ Backtests e pré-registro:
 - Brown, L. D.; Cai, T. T.; DasGupta, A. (2001). "Interval Estimation for a Binomial Proportion". *Statistical Science*, 16(2), 101–133. DOI: 10.1214/ss/1009213286. (Abstract p. 101; Eq. (1) p. 103; §3.1.1 Eq. (4) p. 107.)
 - Wilson, E. B. (1927). "Probable Inference, the Law of Succession, and Statistical Inference". *JASA*, 22(158), 209–212. DOI: 10.1080/01621459.1927.10502953. `[CITAÇÃO-NÃO-ACESSADA]` (origem do intervalo; via BCD 2001.)
 - Basel Committee on Banking Supervision (1996). *Supervisory framework for the use of "backtesting" in conjunction with the internal models approach to market risk capital requirements*. Bank for International Settlements, jan. 1996. (§III(b)–(c), pp. 6–8. Documento oficial, bis.org.)
-- ICH (1998). *ICH Harmonised Tripartite Guideline E9: Statistical Principles for Clinical Trials*. CPMP/ICH/363/96 (EMA). (§2.2.2 pp. 7–8; §4.2 p. 21; §5.1 pp. 23–24; §5.2 p. 24; §5.3 pp. 26–27; §5.5 p. 28. Documento oficial, EMA.)
+- ICH (1998). *ICH Harmonised Tripartite Guideline E9: Statistical Principles for Clinical Trials*. CPMP/ICH/363/96 (EMA). (§2.2.2 pp. 7–8; §3.3.2 pp. 17–18; §4.2 p. 21; §5.1 pp. 23–24; §5.2 p. 24; §5.3 pp. 26–27; §5.5 p. 28. Documento oficial, EMA.)
 - Simmons, J. P.; Nelson, L. D.; Simonsohn, U. (2011). "False-Positive Psychology: Undisclosed Flexibility in Data Collection and Analysis Allows Presenting Anything as Significant". *Psychological Science*, 22(11), 1359–1366. DOI: 10.1177/0956797611417632. (p. 1359; Table 1 p. 1361; requisitos pp. 1362–1363; Guideline 3 p. 1363.)
 - Wagenmakers, E.-J.; Wetzels, R.; Borsboom, D.; van der Maas, H. L. J.; Kievit, R. A. (2012). "An Agenda for Purely Confirmatory Research". *Perspectives on Psychological Science*, 7(6), 632–638. DOI: 10.1177/1745691612463078. (Abstract p. 632; p. 635.)
 - Chambers, C. D. (2013). "Registered Reports: A new publishing initiative at Cortex". *Cortex*, 49(3), 609–610. DOI: 10.1016/j.cortex.2012.12.016. `[CITAÇÃO-NÃO-ACESSADA]` (suplementar.)
@@ -1720,6 +1944,6 @@ Backtests e pré-registro:
 - **scikit-learn** — `sklearn.metrics.mean_pinball_loss(y_true, y_pred, *, sample_weight=None, alpha=0.5, multioutput='uniform_average')` (código `sklearn/metrics/_regression.py`, branch main; User Guide §"Pinball loss"). Implementa exatamente ρ_τ com `alpha` = **nível τ** (sem fator 2); "equivalent to half of mean_absolute_error when alpha = 0.5" (User Guide). Restrição: `alpha` é float **único** — para K níveis o oráculo é chamado K vezes; `multioutput` agrega saídas com o mesmo alpha. Fixtures oficiais: y_true = [1, 2, 3], y_pred = [0, 2, 3], alpha = 0.1 → 0,0333…; y_pred = [1, 2, 4], alpha = 0.1 → 0,3. Neutralizar: nada (mesma escala do projeto).
 - **scoringrules 0.11.0** — `quantile_score(obs, fct, alpha)` = (1{y < q} − τ)(q − y) = ρ_τ exatamente, `alpha` = nível, aceita vetor; `crps_quantile(obs, fct, alpha)` = (2/|Q|) Σ pinball com **pesos iguais** sobre os níveis passados, sem ordenação, sem interpolação, `alpha` ∈ (0,1) estrito, `fct.shape[-1] == alpha.shape[-1]` — identidade `crps_quantile == 2 × pinball média na grade` (conferida < 1e−15), logo **não** é oráculo independente do sklearn; `interval_score(obs, lower, upper, alpha)` = GR 2007 Eq. (43) com `alpha` = **miscobertura** (0.04 para 96 %), desigualdades **estritas** (y = l ou y = u ⇒ dentro), `alpha` pode ser array; `weighted_interval_score(obs, median, lower, upper, alpha, w_median=None, w_alpha=None)` — defaults do **código** `w_alpha = alpha/2`, `w_median = 0.5` (idênticos a Bracher Eqs. (1)–(2); a **docstring** diz 2/α_k, mas o código usa α/2); o termo da mediana **depende do backend**: com numba (default quando instalado) a lib calcula |y − m| internamente; com numpy/jax/torch usa `w_median * median` sem |·| (bug). Neutralizar: fator 2 no CRPS; `alpha` = miscobertura no IS; se o WIS for usado como identidade de teste, fixar `backend` explicitamente e passar `median = m` (numba) ou `median = |y − m|` (numpy) — ou dispensar a função e testar WIS ≡ CRPS_Q direto via `crps_quantile`.
 - **statsmodels** — `stats.multitest.multipletests(pvals, alpha=0.05, method='holm', …)`: rejeita se p_(i) ≤ α/(m − i + 1) (≤, como Holm), step-down, `pvals_corrected = maximum.accumulate(pvals * arange(m, 0, −1))` truncado em 1; a correção "is independent of the alpha specified". `OLSResults.get_robustcov_results(cov_type='HAC', maxlags=m, kernel='bartlett'|'uniform', use_correction=True)` (código `stats/sandwich_covariance.py`): `weights_bartlett` = 1 − k/(m+1) (com m = h−1: 1 − k/h, idêntico ao "bartlett" do R); `weights_uniform` = 1 (janela retangular DM 1995 / "acf" do R); `nlags=None` → floor(4(T/100)^{2/9}); `use_correction=True` multiplica por T/(T−1) — coincide com o fator HLN em h = 1 e **difere** para h > 1 ("just guessing on correction factor, need reference"), por isso fica desligado em todo h e o HLN é aplicado por fora; `use_t=False` → p-valores pela normal. Neutralizar: `kernel='uniform'`, `maxlags=h−1`, `use_correction=False`, aplicar o fator HLN e a t_{T−1} por fora; o estimador pressupõe "a single time series with zero axis consecutive, equal spaced".
-- **arch** — `arch.bootstrap.MCS(losses, size, reps=1000, block_size=None, method='R', bootstrap='stationary', *, seed=None)` (código `arch/bootstrap/multiple_comparison.py`): `losses` T × k completa; `block_size=None` → √T ("should be provided and chosen to be appropriate for the data"); `method='R'`: d̄_ij = L̄_i − L̄_j, var̂ por bootstrap calculada **uma vez** com os mesmos índices reutilizados, estatística max t_ij, elimina o i do par que atinge o máximo (= e_R,M); `method='max'`: var recalculada a cada passo, elimina arg max t_i· (= e_max,M); p-valores = máximo cumulativo (= Definition 4 de HLN 2011); `included` = modelos com p-valor **>** `size` (HLN Theorem 3 usa ≥ α — diferença só em empate exato); o aviso "estimated standard deviation of at least one loss difference was 0" existe **só** em `method='max'` — em `method='R'` só a diagonal da matriz de variâncias é protegida (`variances += np.eye(k)`), e duas colunas de perda idênticas dão `0/0 = NaN`, p-valor 0 e `IndexError` sem diagnóstico (validar var(L_i − L_j) > 0 antes de chamar — §6.5). `StationaryBootstrap(block_size)`: `block_size` = comprimento **médio** (Politis & Romano 1994); `optimal_block_length(x)` devolve `b_sb` e `b_cb` (Politis & White 2004 + Patton et al. 2009). Neutralizar: `size` = α_MCS, `seed` fixo e `reps` pré-registrados; bloco explícito; > vs ≥ na fronteira.
+- **arch** — `arch.bootstrap.MCS(losses, size, reps=1000, block_size=None, method='R', bootstrap='stationary', *, seed=None)` (código `arch/bootstrap/multiple_comparison.py`): `losses` T × k completa; `block_size=None` → int(√T) ("should be provided and chosen to be appropriate for the data"); `method='R'`: d̄_ij = L̄_i − L̄_j, var̂ por bootstrap calculada **uma vez** com os mesmos índices reutilizados, estatística max t_ij, elimina o i do par que atinge o máximo (= e_R,M); `method='max'`: var recalculada a cada passo, elimina arg max t_i· (= e_max,M); p-valores = máximo cumulativo (= Definition 4 de HLN 2011); `included` = modelos com p-valor **>** `size` (HLN Theorem 3 usa ≥ α — diferença só em empate exato); o aviso "estimated standard deviation of at least one loss difference was 0" existe **só** em `method='max'` — em `method='R'` só a diagonal da matriz de variâncias é protegida (`variances += np.eye(k)`), e duas colunas de perda idênticas dão `0/0 = NaN`, p-valor 0 e `IndexError` sem diagnóstico (validar var(L_i − L_j) > 0 antes de chamar — §6.5). `StationaryBootstrap(block_size)`: `block_size` = comprimento **médio** (Politis & Romano 1994); `optimal_block_length(x)` devolve `b_sb` e `b_cb` (Politis & White 2004 + Patton et al. 2009). Neutralizar: `size` = α_MCS, `seed` fixo e `reps` pré-registrados; bloco explícito; > vs ≥ na fronteira.
 - **R `forecast::dm.test(e1, e2, alternative, h, power, varestimator)`** (código `R/DM2.R`; página de referência oficial): recebe **erros** e usa d = |e1|^power − |e2|^power — para testar um diferencial de **pinball**, passar as próprias séries de perda (≥ 0) como `e1`, `e2` com `power = 1`; autocovariâncias até h−1; `varestimator = "acf"` (default) = janela retangular (γ̂_0 + 2Σγ̂_k)/n; `"bartlett"` = pesos 1 − k/h; se a variância for ≤ 0 com h > 1: aviso "Variance is negative. Try varestimator = bartlett. Proceeding with horizon h=1" e **recalcula com h = 1**; estatística × fator HLN ((n + 1 − 2h + h(h−1)/n)/n)^{1/2}; p-valor com **t de Student, df = n − 1**; variância ≤ 0 com h = 1 ⇒ `stop("Variance of DM statistic is zero")` (erro, não fallback); `alternative = "less"` = "method 2 is less accurate than method 1" ⇔ com e1 = candidato, H1 "candidato melhor". Neutralizar: nada além de `power = 1` e da convenção de sinal; é o oráculo que fixa retangular + HLN + t_{n−1}.
 - **R `rugarch::VaRTest(alpha = 0.05, actual, VaR, conf.level = 0.95)`** (man page; código `R/rugarch-tests.R`): `alpha` = **probabilidade de violação**; `VaR` = quantil de **retorno** (negativo na cauda inferior); hit = `actual < VaR` (estrito); `.LR.uc` sobre as T observações, com **produtos** de verossimilhanças (sub-fluxo a 0 e `NaN` para T de milhares — fixtures em T de centenas); `.LR.cc`: tabela de transições sobre T−1 pares, `stat.cc = stat.uc + stat.ind` (identidade só aproximada — LR_uc sobre T obs; O(1/T) se I_1 = 0, O(1) se I_1 = 1, §7.7); `0^0 = 1` ⇒ N11 = 0 funciona (= Christoffersen & Pelletier §4.1); `N10 + N11 = 0` ⇒ `p11 = NaN`; erro ("subscript out of bounds") sempre que algum símbolo {0, 1} falte em `head` ou em `tail` da série — zero violações, ou **uma única** violação em t = 1 ou t = T; saída: `expected.exceed = floor(alpha·TN)`, `actual.exceed`, `uc.LRstat`, `uc.LRp`, `cc.LRstat`, `cc.LRp` (não devolve LR_ind separado — derivar como cc − uc na convenção do R). Neutralizar: alimentar o oráculo com a série a partir de t = 2 para igualar a convenção pura (§7.7) — sem tolerância O(1/T); desigualdade estrita vs ≤ (§4.5); casos-limite como casos de domínio, não valores do oráculo.
