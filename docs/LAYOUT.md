@@ -28,6 +28,9 @@ em `shared/`. Tudo que é específico de uma feature fica na feature.
 ```
 src/financial_forecasting/
 ├── main.py                         # Entrypoint ASGI
+├── cli.py                          # Entrypoint de linha de comando (runner do cohort, 5.5):
+│                                   #   monta Settings, chama wire_dependencies e despacha
+│                                   #   para adapters/in/cli via importlib (§8)
 ├── composition_root.py             # Única wiring point — instancia dependências concretas
 │
 ├── features/                       # Um diretório por bounded context / vertical slice
@@ -266,7 +269,9 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 - **Nenhum import circular.** Se você precisar, é sinal de que a camada está errada.
 - **Shared não importa de features.** O fluxo é sempre: features → shared, nunca o contrário.
 - **Identidade só pelos VOs de `shared/domain/value_objects/`.** `RunId`, `ConfigSignature`,
-  `SplitFingerprint` e `DatasetFingerprint` são o único caminho de hash; fora deles ninguém
+  `SplitFingerprint`, `DatasetFingerprint`, `CohortHash` (hash do spec do cohort
+  confirmatório, ADR 5.5.0001) e `DatasetContentFingerprint` (conteúdo do grid de
+  treino, ADR 5.5.0004) são o único caminho de hash; fora deles ninguém
   chama `hasher.hash_mapping`/`hash_text` (payload hand-rolled num use case é uma segunda
   definição de "o mesmo run" — ADR 5.2.0004). Gate: regra 6 do `scripts/check_layout.py`.
 - **Features não importam comportamento de outras features.** Cada slice é uma unidade
