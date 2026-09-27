@@ -25,6 +25,9 @@ from financial_forecasting.features.modeling.application.dtos.cohort_spec import
     SweepProvenance,
 )
 from financial_forecasting.features.modeling.application.pipeline_version import PIPELINE_VERSION
+from financial_forecasting.features.modeling.application.ports.out.cohort_progress_ledger import (
+    CohortRunLockedError,
+)
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
     SearchDimension,
 )
@@ -54,6 +57,8 @@ from financial_forecasting.features.modeling.application.use_cases.run_confirmat
     PartialCohortUnitError,
     RunConfirmatoryCohort,
     RunConfirmatoryCohortCommand,
+    cohort_model_keys,
+    load_training_grid,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
     GbmRunSummary,
@@ -130,9 +135,7 @@ def _rows() -> list[dict[str, object]]:
 
 def _store(rows: list[dict[str, object]] | None = None) -> FakeMedallionStore:
     store = FakeMedallionStore()
-    store.seed_read_only(
-        layer="processed", table="dataset_tft", asset=_ASSET, rows=rows or _rows()
-    )
+    store.seed_read_only(layer="processed", table="dataset_tft", asset=_ASSET, rows=rows or _rows())
     return store
 
 
@@ -216,7 +219,10 @@ class _Harness:
         )
 
     def _persist(
-        self, command: Any, model_version: str, seed: int | None  # noqa: ANN401
+        self,
+        command: Any,  # noqa: ANN401
+        model_version: str,
+        seed: int | None,
     ) -> list[tuple[str, int, int]]:
         persisted = []
         for fold in range(_GEOMETRY.n_folds):
@@ -246,8 +252,13 @@ class _Harness:
         self.calls.append(("baselines", command))
         self._maybe_fail("baselines")
         runs = [
-            BaselineRunSummary(run_id=r, model_version=f"baseline_{b.family}", fold_index=f,
-                               rows_written=n, rows_skipped=0)
+            BaselineRunSummary(
+                run_id=r,
+                model_version=f"baseline_{b.family}",
+                fold_index=f,
+                rows_written=n,
+                rows_skipped=0,
+            )
             for b in command.specs
             for r, f, n in self._persist(command, f"baseline_{b.family}", None)
         ]
@@ -257,8 +268,14 @@ class _Harness:
         self.calls.append(("gbm", command))
         self._maybe_fail("gbm")
         runs = [
-            GbmRunSummary(run_id=r, model_version="gbm_quantile", fold_index=f, rows_written=n,
-                          rows_skipped=0, best_iteration_by_horizon={1: 1})
+            GbmRunSummary(
+                run_id=r,
+                model_version="gbm_quantile",
+                fold_index=f,
+                rows_written=n,
+                rows_skipped=0,
+                best_iteration_by_horizon={1: 1},
+            )
             for r, f, n in self._persist(command, "gbm_quantile", command.params.seed)
         ]
         return TrainGbmQuantileResult(runs=tuple(runs))
@@ -268,10 +285,19 @@ class _Harness:
         self.calls.append((unit, command))
         self._maybe_fail(unit)
         runs = [
-            TftRunSummary(run_id=r, model_version="tft_quantile", fold_index=f, rows_written=n,
-                          rows_skipped=0, best_epoch=1, best_val_loss=0.1,
-                          fitted_decision_count=1, monitored_decision_count=1,
-                          artifact_path="x", tracking_run_id="t")
+            TftRunSummary(
+                run_id=r,
+                model_version="tft_quantile",
+                fold_index=f,
+                rows_written=n,
+                rows_skipped=0,
+                best_epoch=1,
+                best_val_loss=0.1,
+                fitted_decision_count=1,
+                monitored_decision_count=1,
+                artifact_path="x",
+                tracking_run_id="t",
+            )
             for r, f, n in self._persist(command, "tft_quantile", command.params.seed)
         ]
         return TrainTftResult(runs=tuple(runs))
@@ -412,9 +438,15 @@ def _record_gbm(harness: _Harness, *, rows: int | None, n_folds: int = 2) -> Non
             fold_index=fold, horizons=_HORIZONS, n_levels=len(_LEVELS)
         )
         harness.index.record(
-            asset_id=_ASSET, feature_set_name=_FEATURE_SET, cohort_id=_cohort_id(_spec()),
-            model_version="gbm_quantile", seed=_GBM_SEED, run_id=f"pre-{fold}", fold=str(fold),
-            targets_by_horizon={}, rows=expected if rows is None else rows,
+            asset_id=_ASSET,
+            feature_set_name=_FEATURE_SET,
+            cohort_id=_cohort_id(_spec()),
+            model_version="gbm_quantile",
+            seed=_GBM_SEED,
+            run_id=f"pre-{fold}",
+            fold=str(fold),
+            targets_by_horizon={},
+            rows=expected if rows is None else rows,
         )
 
 
@@ -424,7 +456,7 @@ def test_orphan_runs_are_retried() -> None:
 
     result = harness.run()
 
-    assert ("gbm" in [unit for unit, _ in harness.calls])
+    assert "gbm" in [unit for unit, _ in harness.calls]
     assert result.outcomes[1].status == "ran"
 
 
@@ -463,9 +495,15 @@ def test_completed_unit_with_changed_counts_is_reported_corrupted() -> None:
     harness.run()
     cohort_id = _cohort_id(_spec())
     harness.index.record(
-        asset_id=_ASSET, feature_set_name=_FEATURE_SET, cohort_id=cohort_id,
-        model_version="gbm_quantile", seed=_GBM_SEED, run_id=f"gbm_quantile-s{_GBM_SEED}-f0",
-        fold="0", targets_by_horizon={}, rows=1,
+        asset_id=_ASSET,
+        feature_set_name=_FEATURE_SET,
+        cohort_id=cohort_id,
+        model_version="gbm_quantile",
+        seed=_GBM_SEED,
+        run_id=f"gbm_quantile-s{_GBM_SEED}-f0",
+        fold="0",
+        targets_by_horizon={},
+        rows=1,
     )
 
     with pytest.raises(CompletedUnitCorruptedError, match="gbm"):
@@ -481,3 +519,38 @@ def test_failing_unit_is_not_marked_and_the_lock_is_released() -> None:
     completed = harness.ledger.completed_units(_cohort_id(_spec()))
     assert set(completed) == {"baselines", "gbm"}
     assert not harness.ledger.is_locked
+
+
+@pytest.mark.unit
+def test_break_stale_lock_takes_over_an_orphan_lock() -> None:
+    harness = _Harness()
+    harness.ledger.acquire_writer()  # lock órfão de um processo morto
+
+    with pytest.raises(CohortRunLockedError):
+        harness.use_case(RunConfirmatoryCohortCommand(spec=_spec()))
+    harness.use_case(RunConfirmatoryCohortCommand(spec=_spec(), break_stale_lock=True))
+
+    assert not harness.ledger.is_locked
+
+
+@pytest.mark.unit
+def test_cohort_model_keys_lists_every_unit_in_run_order() -> None:
+    keys = cohort_model_keys(_spec())
+
+    assert list(keys) == ["baselines", "gbm", "tft:seed=11", "tft:seed=22"]
+    assert keys["baselines"] == tuple((f"baseline_{b.family}", None) for b in _BASELINES)
+    assert keys["gbm"] == (("gbm_quantile", _GBM_SEED),)
+    assert keys["tft:seed=22"] == (("tft_quantile", 22),)
+
+
+@pytest.mark.unit
+def test_cohort_model_keys_of_a_draft_is_refused() -> None:
+    with pytest.raises(CohortNotFrozenError):
+        cohort_model_keys(_spec(gbm_params=None))
+
+
+@pytest.mark.unit
+def test_load_training_grid_reads_the_same_grid_the_run_checks() -> None:
+    grid = load_training_grid(store=_store(), asset_id=_ASSET, columns=modeling_columns())
+
+    assert grid_fingerprint(grid, hasher=_HASHER, asset_id=_ASSET) == _fingerprint()
