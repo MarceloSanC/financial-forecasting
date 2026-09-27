@@ -319,7 +319,9 @@ def _literal(value: object) -> str:
             raise CohortFileError(f"cannot write non-finite float {value!r} to the cohort file")
         return repr(value)
     if isinstance(value, str):
-        return json.dumps(value, ensure_ascii=False)
+        # ASCII puro: `\uXXXX` vale em string básica TOML, e U+007F (proibido
+        # cru) sai escapado.
+        return json.dumps(value, ensure_ascii=True)
     if isinstance(value, list):
         return "[" + ", ".join(_literal(item) for item in value) + "]"
     raise CohortFileError(f"cannot write {type(value).__name__} to the cohort file")

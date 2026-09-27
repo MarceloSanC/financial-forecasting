@@ -67,7 +67,7 @@ cohort_file: Any = cli.importlib.import_module(f"{cli._CLI_PACKAGE}.cohort_file"
 
 _ASSET = "AAPL"
 _FIRST_SESSION = date(2019, 1, 2)
-# Aquecimento (252) + 3 gaps (3 x 8) + early_stop (20) + calib (20) + 2 x teste
+# Aquecimento (252) + 3 gaps (3 x 8) + early_stop (20) + calib (16) + 2 x teste
 # (40) + treino folgado para o encoder do TFT: 560 sessões → ~308 no grid útil.
 _N_SESSIONS = 560
 _COHORT_REL = Path("config") / "cohorts" / "e2e.toml"
@@ -89,7 +89,8 @@ def _draft() -> CohortSpec:
         pipeline_version=PIPELINE_VERSION,
         horizons=(1, 7),
         quantile_levels=(0.1, 0.5, 0.9),
-        geometry=CohortGeometry(n_folds=2, test_size=20, val_size=20, calib_size=20, embargo=1),
+        # val_size != calib_size: uma troca entre eles no wiring apareceria na contagem.
+        geometry=CohortGeometry(n_folds=2, test_size=20, val_size=20, calib_size=16, embargo=1),
         device="cpu",
         seeds=(11,),
         sweep=SweepPlan(
@@ -249,8 +250,14 @@ def test_cohort_runner_end_to_end(world: _World) -> None:
     code, _, err = world.cli("run")
     assert code == _EXIT_ERROR
     assert "CohortRunLockedError" in err
-    world.ok("run", "--break-stale-lock")
+    after_break = _unit_statuses(world.ok("run", "--break-stale-lock"))
+    assert set(after_break.values()) == {"skipped_completed"}  # nada re-treinado
     assert not (world.data / ".writer.lock").exists()
+
+    # unidade completa no silver mas fora do ledger → verificada, sem treino
+    _forget_unit(world.artifacts, cohort_id, "baselines")
+    assert _unit_statuses(world.ok("run"))["baselines"] == "verified_completed"
+    assert world.ok("verify").rstrip().endswith("OK")
 
     # unidade parcial fora do ledger → erro; remediação por nova revisão
     gbm_runs = _forget_unit(world.artifacts, cohort_id, "gbm")

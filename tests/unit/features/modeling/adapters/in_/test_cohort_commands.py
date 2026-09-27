@@ -177,6 +177,7 @@ class _Harness:
             confirmatory_cohort_for=self._cohort_for,
             modeling_columns=modeling_columns(),
             load_spec=cohort_file.load,
+            parse_spec=cohort_file.parse,
             dump_spec=cohort_file.dump,
         )
 
@@ -421,9 +422,15 @@ def _frozen_harness(tmp_path: Path) -> tuple[_Harness, CohortSpec, str]:
 
 
 def _record_complete_run(harness: _Harness, spec: CohortSpec, cohort_id: str) -> None:
-    for keys in cohort_model_keys(spec).values():
+    """Silver e ledger de uma corrida completa (o `verify` confere os dois — A8)."""
+    for unit_key, keys in cohort_model_keys(spec).items():
+        rows_by_run: dict[str, int] = {}
         for model_version, seed in keys:
             for fold in range(_GEOMETRY.n_folds):
+                rows = _GEOMETRY.expected_prediction_rows(
+                    fold_index=fold, horizons=_HORIZONS, n_levels=len(_LEVELS)
+                )
+                rows_by_run[f"{model_version}-{seed}-{fold}"] = rows
                 harness.index.record(
                     asset_id=_ASSET,
                     feature_set_name=_FEATURE_SET,
@@ -433,10 +440,9 @@ def _record_complete_run(harness: _Harness, spec: CohortSpec, cohort_id: str) ->
                     run_id=f"{model_version}-{seed}-{fold}",
                     fold=str(fold),
                     targets_by_horizon={h: {f"t{fold}-{h}"} for h in _HORIZONS},
-                    rows=_GEOMETRY.expected_prediction_rows(
-                        fold_index=fold, horizons=_HORIZONS, n_levels=len(_LEVELS)
-                    ),
+                    rows=rows,
                 )
+        harness.ledger.mark_completed(cohort_id, unit_key, rows_by_run)
 
 
 @pytest.mark.unit
@@ -457,7 +463,7 @@ def test_verify_exits_zero_when_every_model_has_every_fold(tmp_path: Path) -> No
 
 
 @pytest.mark.unit
-def test_verify_exits_nonzero_on_a_missing_fold(tmp_path: Path) -> None:
+def test_verify_exits_nonzero_on_runs_of_an_undeclared_model(tmp_path: Path) -> None:
     harness, spec, cohort_id = _frozen_harness(tmp_path)
     _record_complete_run(harness, spec, cohort_id)
     harness.index.record(
@@ -533,3 +539,57 @@ def test_the_commands_module_imports_nothing_from_evaluation() -> None:
     assert imported  # o teste leu imports de verdade
     assert not [name for name in imported if ".features.evaluation" in name]
     assert "evaluation" not in {part for name in imported for part in name.split(".")}
+
+
+@pytest.mark.unit
+def test_verify_exits_nonzero_when_a_declared_model_misses_one_fold(tmp_path: Path) -> None:
+    """G8 (Checkpoint C 24-31): um fold ausente de um modelo declarado."""
+    harness, spec, cohort_id = _frozen_harness(tmp_path)
+    _record_complete_run(harness, spec, cohort_id)
+    runs = harness.index._runs[(cohort_id, _ASSET, _FEATURE_SET)]
+    runs[("tft_quantile", 22)].pop("tft_quantile-22-1")
+    out = io.StringIO()
+
+    assert commands.verify(harness.deps, harness.path, out=out) == commands.EXIT_MISMATCH
+    assert "tft_quantile seed=22: folds [0], expected 0..1" in out.getvalue()
+
+
+@pytest.mark.unit
+def test_verify_exits_nonzero_when_the_ledger_misses_a_unit(tmp_path: Path) -> None:
+    """F2 (Checkpoint C 24-31): silver completo sem a marcação no ledger não é corrida
+    concluída (queda entre a gravação da última unidade e o `mark_completed`)."""
+    harness, spec, cohort_id = _frozen_harness(tmp_path)
+    _record_complete_run(harness, spec, cohort_id)
+    harness.ledger._units[cohort_id].pop("tft:seed=22")
+    out = io.StringIO()
+
+    assert commands.verify(harness.deps, harness.path, out=out) == commands.EXIT_MISMATCH
+    assert "ledger: unit 'tft:seed=22' is not marked completed" in out.getvalue()
+
+
+@pytest.mark.unit
+def test_verify_exits_nonzero_when_ledger_counts_differ_from_the_silver(tmp_path: Path) -> None:
+    harness, spec, cohort_id = _frozen_harness(tmp_path)
+    _record_complete_run(harness, spec, cohort_id)
+    harness.ledger._units[cohort_id]["gbm"]["gbm_quantile-7-0"] = 1
+    out = io.StringIO()
+
+    assert commands.verify(harness.deps, harness.path, out=out) == commands.EXIT_MISMATCH
+    assert "ledger: unit 'gbm' counts differ" in out.getvalue()
+
+
+@pytest.mark.unit
+def test_freeze_refuses_a_file_that_would_not_read_back_the_same(harness: _Harness) -> None:
+    """F3 (Checkpoint C 24-31): o hash publicado tem de ser o do arquivo gravado."""
+    commands.sweep(harness.deps, harness.path, out=harness.out)
+    before = harness.path.read_text(encoding="utf-8")
+
+    def lossy_dump(spec: CohortSpec) -> str:
+        text: str = cohort_file.dump(spec)
+        return text.replace("num_leaves = 9", "num_leaves = 10")
+
+    deps = replace(harness.deps, dump_spec=lossy_dump)
+    with pytest.raises(commands.CohortCommandError, match="round trip"):
+        commands.freeze(deps, harness.path, out=harness.out)
+    assert harness.path.read_text(encoding="utf-8") == before
+    assert not list(harness.path.parent.glob("*.tmp-*"))

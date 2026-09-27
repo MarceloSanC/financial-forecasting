@@ -45,6 +45,7 @@ from financial_forecasting.features.modeling.application.use_cases.run_confirmat
     RunConfirmatoryCohortCommand,
     cohort_model_keys,
     load_training_grid,
+    recorded_run_problems,
 )
 from financial_forecasting.features.modeling.application.use_cases.run_gbm_sweep import (
     RunGbmSweepCommand,
@@ -85,6 +86,8 @@ if TYPE_CHECKING:
 
 _TFT = "tft"
 _GBM = "gbm"
+# `verify` com divergência; erro de execução do CLI sai com 2 (`cli.py`).
+EXIT_MISMATCH = 1
 
 
 class CohortCommandError(ApplicationError):
@@ -106,6 +109,7 @@ class CohortCommandDeps:
     ]
     modeling_columns: Sequence[str]
     load_spec: Callable[[Path], CohortSpec]
+    parse_spec: Callable[[str], CohortSpec]
     dump_spec: Callable[[CohortSpec], str]
 
 
@@ -267,10 +271,19 @@ def freeze(
             ),
             dataset_fingerprint=current,
         )
-        _write_atomically(cohort_path, deps.dump_spec(frozen))
+        text = deps.dump_spec(frozen)
+        # O hash publicado tem de ser o que o `run` vai recalcular do ARQUIVO: a
+        # ida e volta tem de fechar antes de gravar (valor de tipo errado vindo de
+        # `best_params`, ou escrita que o `parse` recusa, param aqui).
+        reread = deps.parse_spec(text)
+        if reread != frozen:
+            raise CohortCommandError(
+                "the frozen cohort does not survive a write/read round trip — not written"
+            )
+        _write_atomically(cohort_path, text)
     finally:
         deps.ledger.release_writer()
-    cohort_hash = CohortHash.compute(hasher=deps.hasher, payload=frozen.hash_payload())
+    cohort_hash = CohortHash.compute(hasher=deps.hasher, payload=reread.hash_payload())
     out.write(f"frozen {frozen.cohort_id(cohort_hash)}\nhash {cohort_hash.value}\n")
     return 0
 
@@ -284,8 +297,11 @@ def _params(record: Mapping[str, object]) -> dict[str, object]:
 
 def _write_atomically(path: Path, text: str) -> None:
     temp = path.with_name(f"{path.name}.tmp-{os.getpid()}")
-    temp.write_text(text, encoding="utf-8", newline="\n")
-    os.replace(temp, path)
+    try:
+        temp.write_text(text, encoding="utf-8", newline="\n")
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
 
 
 # -- run -------------------------------------------------------------------------------
@@ -312,7 +328,13 @@ def run(
 
 
 def verify(deps: CohortCommandDeps, cohort_path: Path, *, out: TextIO) -> int:
-    """Confere a corrida pela contagem no silver; exit 0 só se tudo bate."""
+    """Confere a corrida pelo silver e pelo ledger; exit 0 só se tudo bate.
+
+    A regra de "unidade completa" é a da corrida (`recorded_run_problems`); aqui
+    ela vale para todos os modelos juntos (alvos iguais entre modelos por fold).
+    Soma-se: nenhum run de modelo não declarado sob o cohort, e o ledger com
+    todas as unidades, com as mesmas contagens do silver (A8).
+    """
     spec = deps.load_spec(cohort_path)
     if not spec.is_frozen():
         raise CohortNotFrozenError(f"cohort {spec.name!r} r{spec.revision} is not frozen")
@@ -321,46 +343,38 @@ def verify(deps: CohortCommandDeps, cohort_path: Path, *, out: TextIO) -> int:
     recorded = deps.run_index.recorded_runs(
         asset_id=spec.asset_id, feature_set_name=spec.feature_set_name, cohort_id=cohort_id
     )
-    geometry = spec.geometry
-    n_levels = len(spec.quantile_levels)
-    expected_by_fold = {
-        fold: geometry.expected_prediction_rows(
-            fold_index=fold, horizons=spec.horizons, n_levels=n_levels
-        )
-        for fold in range(geometry.n_folds)
-    }
-    model_keys = [key for keys in cohort_model_keys(spec).values() for key in keys]
-    problems: list[str] = []
-    targets_by_fold: dict[str, set[tuple[tuple[int, frozenset[str]], ...]]] = {}
-    observed_total = 0
-    for model_version, seed in model_keys:
-        label = f"{model_version}" + ("" if seed is None else f" seed={seed}")
-        runs = recorded.get((model_version, seed), {})
-        folds = sorted(int(fold) for fold, _, _ in runs.values())
-        if folds != list(range(geometry.n_folds)):
-            problems.append(f"{label}: folds {folds}, expected 0..{geometry.n_folds - 1}")
-        for run_id, (fold, rows, targets) in sorted(runs.items()):
-            observed_total += rows
-            expected = expected_by_fold.get(int(fold))
-            if rows != expected:
-                problems.append(
-                    f"{label}: run {run_id} fold {fold} has {rows} rows, expected {expected}"
-                )
-            targets_by_fold.setdefault(fold, set()).add(tuple(sorted(targets.items())))
-    for fold, variants in sorted(targets_by_fold.items()):
-        if len(variants) != 1:
-            problems.append(f"fold {fold}: target_timestamp sets differ across models")
+    units = cohort_model_keys(spec)
+    model_keys = [key for keys in units.values() for key in keys]
+    problems = recorded_run_problems(spec, model_keys, recorded)
     unexpected = sorted(set(recorded) - set(model_keys), key=str)
     if unexpected:
         problems.append(f"runs of undeclared models under the cohort: {unexpected}")
-    expected_total = sum(expected_by_fold.values()) * len(model_keys)
+    completed = deps.ledger.completed_units(cohort_id)
+    for unit_key, keys in units.items():
+        silver = {
+            run_id: rows for key in keys for run_id, (_, rows, _) in recorded.get(key, {}).items()
+        }
+        if unit_key not in completed:
+            problems.append(f"ledger: unit {unit_key!r} is not marked completed")
+        elif dict(completed[unit_key]) != silver:
+            problems.append(f"ledger: unit {unit_key!r} counts differ from the silver")
+    geometry = spec.geometry
+    per_model = sum(
+        geometry.expected_prediction_rows(
+            fold_index=fold, horizons=spec.horizons, n_levels=len(spec.quantile_levels)
+        )
+        for fold in range(geometry.n_folds)
+    )
+    observed_total = sum(
+        rows for key in model_keys for _, rows, _ in recorded.get(key, {}).values()
+    )
     out.write(
         f"cohort {cohort_id}: {len(model_keys)} models x {geometry.n_folds} folds; "
-        f"rows expected {expected_total}, observed {observed_total}\n"
+        f"rows expected {per_model * len(model_keys)}, observed {observed_total}\n"
     )
     for problem in problems:
         out.write(f"MISMATCH {problem}\n")
     if problems:
-        return 1
+        return EXIT_MISMATCH
     out.write("OK\n")
     return 0

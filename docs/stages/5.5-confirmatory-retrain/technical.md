@@ -839,4 +839,48 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 
 `python -m financial_forecasting.cli run --data-root data/cohorts/aapl --cohort config/cohorts/aapl_confirmatory.toml` → `error: CohortNotFrozenError: cohort 'aapl_confirmatory' r0 is not frozen — run sweep and freeze first (seeds, n_trials, params, provenance and dataset fingerprint)`, exit 2.
 
+### 2026-09-27 — Checkpoint C (bloco 24–31) — disposições — Claude (Opus 5.5)
+Dois revisores de contexto zerado sobre `371d4f5..HEAD`: um com a lente de comportamento/contrato (F1–F9), outro com a de arquitetura e testes (G1–G11). Não houve blocker; os médios foram F1, F2, G1, G2 e G3.
+- **F1/G2** (médio) — identidade do código dependente do diretório corrente → **corrigido**:
+  - o probe resolve `repo_root` e recusa quando ele não é `git rev-parse --show-toplevel`; num subdiretório os pathspecs do `git status` não casariam `src` e `code_dirty` sairia sempre "false";
+  - a fábrica do composition root passa ao probe o caminho do cohort resolvido contra o diretório corrente, o mesmo arquivo que o CLI leu;
+  - testes: probe num subdiretório e caminho relativo resolvido.
+
+  O `artifacts_root` relativo continua dependendo do diretório corrente: **aceito**, com o runbook fixando a invocação (`docker run -w /app`). Um ledger em outro lugar não reaproveita nada em silêncio: as unidades são reconferidas pelo silver (`verified_completed`) e o ambiente é gravado de novo.
+- **F2** (médio) — `verify` não conferia o ledger (o A8 pede "ledger com todas as unidades") → **corrigido**: toda unidade tem de estar marcada, com as mesmas contagens do silver, mais dois testes.
+- **G1** (médio) — comandos das unidades montados com `**dict` e `type: ignore`, de modo que uma troca `val_size`/`calib_size` passaria em tudo → **corrigido**: campos nomeados um a um e checados pelo mypy, um teste que confere a geometria de cada unidade (spec de teste com val 8 ≠ calib 6) e o e2e com `calib_size = 16 ≠ val_size = 20`.
+- **G3** (médio) — duas definições de "unidade completa" (classificação da corrida × `verify`) → **corrigido**: fonte única `recorded_run_problems(spec, model_keys, recorded)` no módulo do use case, usada na classificação (I7-c), depois de executar a unidade (F6) e no `verify`. Ela confere: um run por fold; fold legível; contagem; horizontes; alvos iguais entre modelos no mesmo fold. Runs órfãos (0 linhas) são ignorados.
+
+  A parte "o `freeze` repete I4" foi **refutada**: o `freeze` chama as mesmas funções (`load_training_grid`, `grid_fingerprint`) e precisa conferir antes de gravar o arquivo, porque o `run` só confere depois (artefato: `cohort_commands.py`, bloco `freeze`, e `run_confirmatory_cohort.py::_check_declarations`, que usam as duas funções).
+- **F3** (baixo/médio) — `freeze` podia gravar um arquivo que o `parse` recusa (dimensão `kind="float"` em campo int) e publicar um hash que não é o do arquivo → **corrigido**:
+  - `validate_dimension_names` confere o `kind` contra o tipo do campo;
+  - o `freeze` refaz a ida e volta e só grava se ela fechar, com o hash calculado sobre o spec relido;
+  - o temporário é removido em falha;
+  - testes nos dois pontos.
+- **F4** (baixo) — U+007F cru é TOML inválido → **corrigido**: `ensure_ascii=True` no `dump` + teste de ida e volta.
+- **F5/G7** (baixo) — exit 1 ambíguo (MISMATCH do `verify` × exceção não capturada) e nenhum log por unidade → **corrigido**:
+  - `RuntimeError`, `OSError` e `TypeError` saem com 2, e a divergência do `verify` sai com `EXIT_MISMATCH = 1`;
+  - cada unidade loga início, desfecho, runs, linhas e tempo (`logging`, configurado no `cli.main`);
+  - teste do código de saída.
+- **F6** (baixo) — unidade marcada sem conferir o que o use case gravou → **corrigido**: `UnitOutputMismatchError` quando o silver não confirma a unidade, que não é marcada + teste.
+- **F7** (baixo) — família de baseline repetida quebraria a contagem por modelo → **corrigido**: `CohortSpec` recusa + teste.
+- **F8/G10** (baixo) — fold nulo (`""` no índice) virava `ValueError` cru → **corrigido**: vira problema ("unreadable fold") → `PartialCohortUnitError` / MISMATCH + teste.
+- **F9** (baixo) — e2e sem asserção dos status depois do `--break-stale-lock` e sem o caminho `verified_completed` com o índice real → **corrigido**: as duas asserções entraram no fluxo do e2e.
+- **G4** (baixo) — `model_version` das baselines montado à mão → **corrigido**: `BaselineSpec.model_version`, e o harness também o usa. O teste `test_cohort_model_keys_lists_every_unit_in_run_order` fixa o literal `baseline_<família>`.
+- **G5** (baixo):
+  - `modeling_columns()` injetado em dois pontos → **corrigido**: campo único `ApplicationDependencies.modeling_columns`, usado pelo `run` e pelo `freeze` + teste;
+  - `cli.py` fora dos contratos do import-linter → **aceito como limitação**. Um contrato `forbidden` exigiria `allow_indirect_imports` (o `cli.py` importa o composition root, que por desenho importa `adapters/out`) mais um caso de violação real no teste de contratos. O arquivo tem um só import de produção fora da aplicação (`Settings`) e a revisão G1 confirmou que ele não instancia concreto.
+- **G6** (baixo) — `cohort_commands` carregado por `importlib` fica `Any` para o mypy → **aceito como limitação** da keyword `in` (LAYOUT §8). Coberto em runtime pelos testes de despacho do `test_cli.py` e pelo e2e, que passam pelos quatro comandos.
+- **G8** (baixo) — o teste "missing fold" não tirava fold nenhum → **corrigido**: renomeado para o que testa (modelo não declarado), mais um teste de fold ausente num modelo declarado.
+- **G9** (baixo) — faltava teste do I9 ligando o leitor do cohort ao dos use cases → **corrigido**: `test_the_cohort_reader_starts_on_the_same_row_as_the_use_cases` (grid do cohort, GBM e baselines começam na mesma sessão com aquecimento).
+- **G11** (baixo) — a invariante "libera só o próprio lock" existia só no adapter → **corrigido no port** (docstring de `release_writer`). O fake, de processo único, não tem outro dono possível; o `[real]` do contrato já prova a invariante com duas instâncias.
+
+### 2026-09-27 — [finding] Task 33 — materialização real: notícia depois do fechamento do último dia derrubava o `BuildDataset` — Claude (Opus 5.5)
+**O que houve:** a primeira `materialize` real rodou 914 s (quase todos no FinBERT sobre as notícias) e caiu com `ValueError: No trading session after 2025-12-31 within the materialized window`. O `ScoreAndAggregateSentiment` montava o calendário só na janela dos candles. Um artigo publicado depois do fechamento no último dia resolve para a sessão seguinte, que não estava no calendário. O dado sintético do e2e não tinha esse caso, porque todos os artigos saem antes do fechamento.
+**Correção:** o calendário ganha folga de 14 dias no fim, e os artigos cujo dia de pregão cai depois da janela saem, porque não têm linha no grid. Dentro da janela o comportamento não muda. Há teste de regressão com o caso real (artigo às 20:00 UTC do último dia, `close_hour` 16:00). É um bug da Stage 3.2, corrigido aqui porque bloqueia a execução real da 5.5.
+
+### 2026-09-27 — [finding] Task 33 — `materialize` não é re-executável sobre um bronze existente — Claude (Opus 5.5)
+**O que houve:** a segunda tentativa encontrou o bronze deixado pela primeira e caiu em 14 s com `DuplicateKeyError: Duplicate logical PK collision in (bronze, candle) … path=data/cohorts/aapl/bronze/candle/asset=AAPL/year=2010/candle.parquet`. A ingestão grava por acréscimo e recusa chave repetida.
+**Disposição:** a recusa é o comportamento certo, porque não sobrescreve nada em silêncio, e o erro nomeia o arquivo. Antes de repetir a `materialize`, o runbook manda apagar as camadas derivadas (`bronze/` e `processed/dataset_tft/`), preservando `raw/` e `processed/fundamentals/`, que são entrada. Aqui foi apagado só o `bronze/` produzido pela tentativa que falhou.
+
 <!-- END: post-execution -->

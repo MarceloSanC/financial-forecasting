@@ -481,3 +481,31 @@ def test_silver_schema_version_matches_every_silver_table() -> None:
     versions = {table.schema_version for table in SILVER_REGISTRY.values()}
 
     assert versions == {_SILVER_SCHEMA_VERSION}
+
+
+@pytest.mark.unit
+def test_modeling_columns_are_exposed_once_for_run_and_freeze(tmp_path: Path) -> None:
+    """G5 (Checkpoint C 24-31): uma fonte só para as duas impressões digitais de I4."""
+    settings = Settings(_env_file=None, data_root=tmp_path, repo_root=tmp_path)
+    deps = wire_dependencies(settings=settings)
+
+    cohort = deps.confirmatory_cohort_for(tmp_path / "c.toml", "cpu")
+
+    assert deps.modeling_columns == modeling_columns()
+    assert cohort._modeling_columns == deps.modeling_columns
+
+
+@pytest.mark.unit
+def test_git_probe_receives_the_cohort_path_resolved_against_the_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """G2 (Checkpoint C 24-31): o probe fotografa o MESMO arquivo que o CLI leu."""
+    monkeypatch.chdir(tmp_path)
+    settings = Settings(_env_file=None, data_root=tmp_path / "d", repo_root=tmp_path)
+    deps = wire_dependencies(settings=settings)
+
+    probe = deps.runtime_probe_for(Path("config") / "cohorts" / "x.toml", "cpu")
+
+    assert isinstance(probe, GitRuntimeEnvironmentProbe)
+    assert probe._repo_root == tmp_path.resolve()
+    assert probe._cohort_path == "config/cohorts/x.toml"

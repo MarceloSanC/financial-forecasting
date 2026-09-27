@@ -35,6 +35,8 @@ grid que a corrida — uma fonte só.
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
@@ -69,6 +71,7 @@ if TYPE_CHECKING:
     )
     from financial_forecasting.features.modeling.application.ports.out.cohort_run_index import (
         CohortRunIndex,
+        RunSummary,
     )
     from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
         RuntimeEnvironmentProbe,
@@ -80,12 +83,13 @@ if TYPE_CHECKING:
         MedallionStore,
     )
 
+_LOG = logging.getLogger(__name__)
 _DATASET_LAYER = "processed"
 _DATASET_TABLE = "dataset_tft"
-# `model_version` que cada use case grava (fixado em teste contra os use cases).
+# `model_version` que o GBM e o TFT gravam (fixado em teste contra os use cases);
+# o dos baselines vem de `BaselineSpec.model_version`.
 GBM_MODEL_VERSION = "gbm_quantile"
 TFT_MODEL_VERSION = "tft_quantile"
-BASELINE_MODEL_VERSION_PREFIX = "baseline_"
 
 _RAN = "ran"
 _SKIPPED = "skipped_completed"
@@ -114,6 +118,10 @@ class PartialCohortUnitError(ApplicationError):
 
 class CompletedUnitCorruptedError(ApplicationError):
     """Unidade marcada no ledger cujas contagens não batem mais com o silver (I6)."""
+
+
+class UnitOutputMismatchError(ApplicationError):
+    """A unidade rodou, mas o silver não tem os runs esperados — não é marcada."""
 
 
 @dataclass(frozen=True)
@@ -168,14 +176,79 @@ def cohort_model_keys(spec: CohortSpec) -> dict[str, tuple[tuple[str, int | None
     if gbm_params is None:
         raise CohortNotFrozenError(f"cohort {spec.name!r} has no frozen gbm_params")
     keys: dict[str, tuple[tuple[str, int | None], ...]] = {
-        "baselines": tuple(
-            (f"{BASELINE_MODEL_VERSION_PREFIX}{b.family}", None) for b in spec.baseline_specs
-        ),
+        "baselines": tuple((b.model_version, None) for b in spec.baseline_specs),
         "gbm": ((GBM_MODEL_VERSION, gbm_params.seed),),
     }
     for seed in spec.seeds:
         keys[_tft_unit(seed)] = ((TFT_MODEL_VERSION, seed),)
     return keys
+
+
+def _fold_index(fold: str) -> int | None:
+    """Fold do índice como inteiro; vazio/ilegível (fold nulo no silver) → `None`."""
+    try:
+        return int(fold)
+    except ValueError:
+        return None
+
+
+def recorded_run_problems(
+    spec: CohortSpec,
+    model_keys: Sequence[tuple[str, int | None]],
+    recorded: Mapping[tuple[str, int | None], Mapping[str, RunSummary]],
+) -> list[str]:
+    """O que falta ou sobra nos runs gravados de `model_keys`; lista vazia = completo.
+
+    Fonte ÚNICA de "unidade completa" — usada pela classificação da corrida
+    (I7-c), pela conferência depois de executar uma unidade e pelo `verify`.
+    Por modelo: um run por fold (`0..n_folds-1`, nem falta nem repete), fold
+    legível, a contagem de linhas esperada do fold e todos os horizontes do
+    spec; run órfão (registrado sem nenhum fato, I7-b) é ignorado. Entre
+    modelos: no mesmo fold, os `target_timestamp` de cada horizonte são os
+    mesmos.
+    """
+    geometry = spec.geometry
+    n_levels = len(spec.quantile_levels)
+    expected_rows = {
+        fold: geometry.expected_prediction_rows(
+            fold_index=fold, horizons=spec.horizons, n_levels=n_levels
+        )
+        for fold in range(geometry.n_folds)
+    }
+    problems: list[str] = []
+    targets_by_fold: dict[int, set[tuple[tuple[int, frozenset[str]], ...]]] = {}
+    for model_version, seed in model_keys:
+        label = model_version if seed is None else f"{model_version} seed={seed}"
+        folds: list[int] = []
+        for run_id, (fold, rows, targets) in sorted(
+            recorded.get((model_version, seed), {}).items()
+        ):
+            if rows == 0:
+                continue  # órfão (registro sem fatos): não carrega predição, não conta
+            index = _fold_index(fold)
+            if index is None:
+                problems.append(f"{label}: run {run_id} has an unreadable fold {fold!r}")
+                continue
+            folds.append(index)
+            if rows != expected_rows.get(index):
+                problems.append(
+                    f"{label}: run {run_id} fold {index} has {rows} rows, "
+                    f"expected {expected_rows.get(index)}"
+                )
+            if set(targets) != set(spec.horizons):
+                problems.append(
+                    f"{label}: run {run_id} has horizons {sorted(targets)}, "
+                    f"expected {list(spec.horizons)}"
+                )
+            targets_by_fold.setdefault(index, set()).add(tuple(sorted(targets.items())))
+        if sorted(folds) != list(range(geometry.n_folds)):
+            problems.append(f"{label}: folds {sorted(folds)}, expected 0..{geometry.n_folds - 1}")
+    problems.extend(
+        f"fold {fold}: target_timestamp sets differ across models"
+        for fold, variants in sorted(targets_by_fold.items())
+        if len(variants) != 1
+    )
+    return problems
 
 
 def load_training_grid(
@@ -298,36 +371,63 @@ class RunConfirmatoryCohort:
 
     def _units(self, spec: CohortSpec, scope: ScopeSpec) -> list[_Unit]:
         geometry = spec.geometry
-        common = {
-            "scope": scope,
-            "horizons": spec.horizons,
-            "quantile_levels": spec.quantile_levels,
-            "n_folds": geometry.n_folds,
-            "test_size": geometry.test_size,
-            "val_size": geometry.val_size,
-            "calib_size": geometry.calib_size,
-            "embargo": geometry.embargo,
-            "schema_version": self._schema_version,
-        }
         gbm_params = spec.gbm_params
         tft_params = spec.tft_params
         assert gbm_params is not None and tft_params is not None  # is_frozen garante
         model_keys = cohort_model_keys(spec)
+        # Campos nomeados um a um (sem `**dict`): o mypy confere nome e tipo, e
+        # uma troca val_size/calib_size não passa despercebida.
 
         def baselines() -> Mapping[str, int]:
             result = self._run_baselines(
-                RunBaselinesCommand(specs=spec.baseline_specs, **common)  # type: ignore[arg-type]
+                RunBaselinesCommand(
+                    specs=spec.baseline_specs,
+                    scope=scope,
+                    horizons=spec.horizons,
+                    quantile_levels=spec.quantile_levels,
+                    n_folds=geometry.n_folds,
+                    test_size=geometry.test_size,
+                    val_size=geometry.val_size,
+                    calib_size=geometry.calib_size,
+                    embargo=geometry.embargo,
+                    schema_version=self._schema_version,
+                )
             )
             return {run.run_id: run.rows_written for run in result.runs}
 
         def gbm() -> Mapping[str, int]:
-            result = self._train_gbm(TrainGbmQuantileCommand(params=gbm_params, **common))  # type: ignore[arg-type]
+            result = self._train_gbm(
+                TrainGbmQuantileCommand(
+                    params=gbm_params,
+                    scope=scope,
+                    horizons=spec.horizons,
+                    quantile_levels=spec.quantile_levels,
+                    n_folds=geometry.n_folds,
+                    test_size=geometry.test_size,
+                    val_size=geometry.val_size,
+                    calib_size=geometry.calib_size,
+                    embargo=geometry.embargo,
+                    schema_version=self._schema_version,
+                )
+            )
             return {run.run_id: run.rows_written for run in result.runs}
 
         def tft(seed: int) -> Callable[[], Mapping[str, int]]:
             def execute() -> Mapping[str, int]:
-                params = replace(tft_params, seed=seed)
-                result = self._train_tft(TrainTftCommand(params=params, **common))  # type: ignore[arg-type]
+                result = self._train_tft(
+                    TrainTftCommand(
+                        params=replace(tft_params, seed=seed),
+                        scope=scope,
+                        horizons=spec.horizons,
+                        quantile_levels=spec.quantile_levels,
+                        n_folds=geometry.n_folds,
+                        test_size=geometry.test_size,
+                        val_size=geometry.val_size,
+                        calib_size=geometry.calib_size,
+                        embargo=geometry.embargo,
+                        schema_version=self._schema_version,
+                    )
+                )
                 return {run.run_id: run.rows_written for run in result.runs}
 
             return execute
@@ -345,9 +445,28 @@ class RunConfirmatoryCohort:
     def _run_unit(
         self, spec: CohortSpec, scope: ScopeSpec, cohort_id: str, unit: _Unit
     ) -> CohortUnitOutcome:
-        recorded = self._run_index.recorded_runs(
+        started = time.monotonic()
+        _LOG.info("unit %s: start", unit.key)
+        outcome = self._classify_and_run(spec, cohort_id, unit)
+        _LOG.info(
+            "unit %s: %s (%d runs, %d rows written, %.1fs)",
+            unit.key,
+            outcome.status,
+            len(outcome.run_ids),
+            outcome.rows_written,
+            time.monotonic() - started,
+        )
+        return outcome
+
+    def _recorded(
+        self, spec: CohortSpec, cohort_id: str
+    ) -> Mapping[tuple[str, int | None], Mapping[str, RunSummary]]:
+        return self._run_index.recorded_runs(
             asset_id=spec.asset_id, feature_set_name=spec.feature_set_name, cohort_id=cohort_id
         )
+
+    def _classify_and_run(self, spec: CohortSpec, cohort_id: str, unit: _Unit) -> CohortUnitOutcome:
+        recorded = self._recorded(spec, cohort_id)
         runs = {
             run_id: summary
             for model_key in unit.model_keys
@@ -371,7 +490,7 @@ class RunConfirmatoryCohort:
             )
 
         if runs and any(summary[1] > 0 for summary in runs.values()):
-            if self._is_complete(spec, unit, runs):
+            if not recorded_run_problems(spec, unit.model_keys, recorded):
                 rows_by_run = {run_id: summary[1] for run_id, summary in runs.items()}
                 self._ledger.mark_completed(cohort_id, unit.key, rows_by_run)
                 return CohortUnitOutcome(
@@ -386,28 +505,18 @@ class RunConfirmatoryCohort:
             )
 
         rows_by_run = dict(unit.execute())
+        # Só marca o que o silver confirma: um use case que devolvesse menos runs
+        # ou linhas sem erguer erro ficaria `skipped_completed` para sempre.
+        problems = recorded_run_problems(spec, unit.model_keys, self._recorded(spec, cohort_id))
+        if problems:
+            raise UnitOutputMismatchError(
+                f"unit {unit.key!r} ran but the silver does not hold the expected runs: "
+                + "; ".join(problems)
+            )
         self._ledger.mark_completed(cohort_id, unit.key, rows_by_run)
         return CohortUnitOutcome(
             unit_key=unit.key,
             status=_RAN,
             run_ids=tuple(sorted(rows_by_run)),
             rows_written=sum(rows_by_run.values()),
-        )
-
-    @staticmethod
-    def _is_complete(
-        spec: CohortSpec,
-        unit: _Unit,
-        runs: Mapping[str, tuple[str, int, Mapping[int, frozenset[str]]]],
-    ) -> bool:
-        geometry = spec.geometry
-        if len(runs) != geometry.expected_runs(runs_per_fold=len(unit.model_keys)):
-            return False
-        n_levels = len(spec.quantile_levels)
-        return all(
-            rows
-            == geometry.expected_prediction_rows(
-                fold_index=int(fold), horizons=spec.horizons, n_levels=n_levels
-            )
-            for fold, rows, _ in runs.values()
         )

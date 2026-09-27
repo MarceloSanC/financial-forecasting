@@ -57,8 +57,10 @@ from financial_forecasting.features.modeling.application.use_cases.run_confirmat
     PartialCohortUnitError,
     RunConfirmatoryCohort,
     RunConfirmatoryCohortCommand,
+    UnitOutputMismatchError,
     cohort_model_keys,
     load_training_grid,
+    recorded_run_problems,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
     GbmRunSummary,
@@ -184,6 +186,11 @@ def _spec(**overrides: object) -> CohortSpec:
     return CohortSpec(**base)  # type: ignore[arg-type]
 
 
+def _targets(fold: int) -> dict[int, set[str]]:
+    """Alvos de um fold — os mesmos para todos os modelos, como no silver real."""
+    return {h: {f"t{fold}-{h}"} for h in _HORIZONS}
+
+
 def _cohort_id(spec: CohortSpec) -> str:
     return spec.cohort_id(CohortHash.compute(hasher=_HASHER, payload=spec.hash_payload()))
 
@@ -238,7 +245,7 @@ class _Harness:
                 seed=seed,
                 run_id=run_id,
                 fold=str(fold),
-                targets_by_horizon={},
+                targets_by_horizon=_targets(fold),
                 rows=rows,
             )
             persisted.append((run_id, fold, rows))
@@ -254,13 +261,13 @@ class _Harness:
         runs = [
             BaselineRunSummary(
                 run_id=r,
-                model_version=f"baseline_{b.family}",
+                model_version=b.model_version,
                 fold_index=f,
                 rows_written=n,
                 rows_skipped=0,
             )
             for b in command.specs
-            for r, f, n in self._persist(command, f"baseline_{b.family}", None)
+            for r, f, n in self._persist(command, b.model_version, None)
         ]
         return RunBaselinesResult(runs=tuple(runs))
 
@@ -445,7 +452,7 @@ def _record_gbm(harness: _Harness, *, rows: int | None, n_folds: int = 2) -> Non
             seed=_GBM_SEED,
             run_id=f"pre-{fold}",
             fold=str(fold),
-            targets_by_horizon={},
+            targets_by_horizon=_targets(fold),
             rows=expected if rows is None else rows,
         )
 
@@ -502,7 +509,7 @@ def test_completed_unit_with_changed_counts_is_reported_corrupted() -> None:
         seed=_GBM_SEED,
         run_id=f"gbm_quantile-s{_GBM_SEED}-f0",
         fold="0",
-        targets_by_horizon={},
+        targets_by_horizon=_targets(0),
         rows=1,
     )
 
@@ -554,3 +561,87 @@ def test_load_training_grid_reads_the_same_grid_the_run_checks() -> None:
     grid = load_training_grid(store=_store(), asset_id=_ASSET, columns=modeling_columns())
 
     assert grid_fingerprint(grid, hasher=_HASHER, asset_id=_ASSET) == _fingerprint()
+
+
+def test_every_unit_command_carries_the_spec_geometry_and_grid() -> None:
+    """G1 (Checkpoint C 24-31): val_size e calib_size diferem no spec de teste (8 e 6),
+    então uma troca entre eles no use case aparece aqui."""
+    harness = _Harness()
+
+    harness.run()
+
+    for unit, cmd in harness.calls:
+        observed = (cmd.n_folds, cmd.test_size, cmd.val_size, cmd.calib_size, cmd.embargo)
+        assert observed == (2, 10, 8, 6, 1), unit
+        assert cmd.horizons == _HORIZONS, unit
+        assert cmd.quantile_levels == _LEVELS, unit
+        assert cmd.schema_version == 1, unit
+
+
+def test_unit_that_returns_without_persisting_everything_is_not_marked() -> None:
+    """F6 (Checkpoint C 24-31): o ledger só marca o que o silver confirma."""
+    harness = _Harness()
+
+    def gbm_that_drops_a_fold(command: Any) -> TrainGbmQuantileResult:  # noqa: ANN401
+        result = harness._gbm(command)
+        harness.index._runs[(command.scope.cohort_id, _ASSET, _FEATURE_SET)][
+            ("gbm_quantile", _GBM_SEED)
+        ].pop(f"gbm_quantile-s{_GBM_SEED}-f1")
+        return result
+
+    harness.use_case._train_gbm = gbm_that_drops_a_fold
+
+    with pytest.raises(UnitOutputMismatchError, match="gbm"):
+        harness.run()
+    assert "gbm" not in harness.ledger.completed_units(_cohort_id(_spec()))
+    assert not harness.ledger.is_locked
+
+
+def test_run_with_an_unreadable_fold_is_partial_not_a_crash() -> None:
+    """F8/G10 (Checkpoint C 24-31): fold nulo no silver vira `""` no índice."""
+    harness = _Harness()
+    _record_gbm(harness, rows=None)
+    harness.index.record(
+        asset_id=_ASSET,
+        feature_set_name=_FEATURE_SET,
+        cohort_id=_cohort_id(_spec()),
+        model_version="gbm_quantile",
+        seed=_GBM_SEED,
+        run_id="null-fold",
+        fold="",
+        targets_by_horizon=_targets(0),
+        rows=5,
+    )
+
+    with pytest.raises(PartialCohortUnitError):
+        harness.run()
+
+
+def _frozen_targets(fold: int) -> dict[int, frozenset[str]]:
+    """Alvos no formato que o índice devolve (`frozenset`)."""
+    return {h: frozenset(ts) for h, ts in _targets(fold).items()}
+
+
+def test_recorded_run_problems_names_each_defect() -> None:
+    spec = _spec()
+    key = ("gbm_quantile", _GBM_SEED)
+    rows0 = _GEOMETRY.expected_prediction_rows(fold_index=0, horizons=_HORIZONS, n_levels=3)
+    recorded = {
+        key: {
+            "a": ("0", rows0, _frozen_targets(0)),
+            "b": ("0", rows0 - 1, {1: frozenset({"x"})}),
+        },
+        ("tft_quantile", 11): {"c": ("0", rows0, {h: frozenset({"other"}) for h in _HORIZONS})},
+    }
+
+    problems = recorded_run_problems(spec, [key, ("tft_quantile", 11)], recorded)
+
+    text = " | ".join(problems)
+    assert "run b fold 0 has" in text
+    assert "horizons [1]" in text
+    assert "folds [0, 0]" in text
+    assert "tft_quantile seed=11: folds [0]" in text
+    assert "fold 0: target_timestamp sets differ" in text
+    assert recorded_run_problems(spec, [key], {key: {"a": ("0", rows0, _frozen_targets(0))}}) == [
+        f"gbm_quantile seed={_GBM_SEED}: folds [0], expected 0..1"
+    ]

@@ -28,6 +28,7 @@ Contrato semântico:
   case — declarado aqui para os dois lados não suporem o contrário.
 """
 
+import typing
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass
 from typing import Protocol
@@ -35,6 +36,7 @@ from typing import Protocol
 _INT_KIND = "int"
 _FLOAT_KIND = "float"
 _VALID_KINDS = (_INT_KIND, _FLOAT_KIND)
+_KIND_BY_TYPE: dict[object, str] = {int: _INT_KIND, float: _FLOAT_KIND}
 _SEED_FIELD = "seed"
 _OBJECTIVE_SIGNIFICANT_DIGITS = 12
 
@@ -84,11 +86,21 @@ def validate_dimension_names(space: Sequence[SearchDimension], params_type: type
     names = [dimension.name for dimension in space]
     if len(set(names)) != len(names):
         raise ValueError(f"search space has repeated dimension names: {names} (C11)")
+    field_types = typing.get_type_hints(params_type)
     for dimension in space:
         if dimension.name not in tunable:
             msg = (
                 f"name {dimension.name!r} não é campo de {params_type.__name__}; "
                 f"campos válidos: {sorted(tunable)} (C11)"
+            )
+            raise ValueError(msg)
+        # O `kind` tem de casar com o tipo do campo: `kind="float"` num campo int
+        # sortearia 7.53 para `num_leaves`, que o dataclass aceitaria sem reclamar.
+        expected_kind = _KIND_BY_TYPE.get(field_types[dimension.name])
+        if expected_kind is not None and dimension.kind != expected_kind:
+            msg = (
+                f"dimension {dimension.name!r} has kind {dimension.kind!r} but "
+                f"{params_type.__name__}.{dimension.name} is {expected_kind} (C11)"
             )
             raise ValueError(msg)
 

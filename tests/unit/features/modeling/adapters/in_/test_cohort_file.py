@@ -238,3 +238,14 @@ def test_non_finite_float_cannot_be_written() -> None:
 
     with pytest.raises(CohortFileError, match="non-finite"):
         cohort_file.dump(spec)
+
+
+@pytest.mark.unit
+def test_strings_with_control_and_non_ascii_characters_round_trip() -> None:
+    """F4 (Checkpoint C 24-31): U+007F cru é proibido em string básica TOML."""
+    spec = replace(_draft(), name='odd\x7f"name\\ção\n')
+
+    text = cohort_file.dump(spec)
+
+    assert text.isascii()
+    assert cohort_file.parse(text) == spec

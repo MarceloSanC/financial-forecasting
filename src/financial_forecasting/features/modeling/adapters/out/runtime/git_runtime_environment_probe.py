@@ -39,11 +39,11 @@ class GitRuntimeEnvironmentProbe:
     """Foto do ambiente e da identidade do código de um checkout git."""
 
     def __init__(self, *, repo_root: Path | str, cohort_file: Path | str, device: str) -> None:
-        self._repo_root = Path(repo_root)
+        self._repo_root = Path(repo_root).resolve()
         cohort = Path(cohort_file)
         if cohort.is_absolute():
             try:
-                cohort = cohort.relative_to(self._repo_root)
+                cohort = cohort.resolve().relative_to(self._repo_root)
             except ValueError as exc:
                 raise RuntimeError(
                     f"cohort file {cohort} is outside the repository {self._repo_root} — "
@@ -53,6 +53,15 @@ class GitRuntimeEnvironmentProbe:
         self._device = device
 
     def snapshot(self) -> Mapping[str, str]:
+        # Os pathspecs do `git status` são relativos ao diretório de trabalho:
+        # num subdiretório do repositório, `src` não casaria nada e `code_dirty`
+        # sairia sempre "false". Por isso a raiz tem de ser a do repositório.
+        top = Path(self._git("rev-parse", "--show-toplevel")).resolve()
+        if top != self._repo_root:
+            raise RuntimeError(
+                f"repo_root {self._repo_root} is not the repository root {top} — "
+                "run from the repository root (or set REPO_ROOT to it)"
+            )
         tracked = {
             "code.src": "src",
             "code.uv_lock": "uv.lock",

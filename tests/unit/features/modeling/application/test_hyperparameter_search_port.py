@@ -187,3 +187,20 @@ class TestFakeSampler:
 
         with pytest.raises(ValueError, match="não foi pedido"):
             search.tell(trial_number=99, objective_value=0.1)
+
+
+@pytest.mark.parametrize(
+    ("dimension", "params_type"),
+    [
+        (SearchDimension(name="num_leaves", low=8, high=64, kind="float"), GbmTrainingParams),
+        (SearchDimension(name="dropout", low=0.1, high=0.5, kind="int"), TftTrainingParams),
+    ],
+    ids=["float-kind-on-int-field", "int-kind-on-float-field"],
+)
+def test_dimension_kind_must_match_the_field_type(
+    dimension: SearchDimension, params_type: type
+) -> None:
+    """F3 (Checkpoint C 24-31): `kind="float"` em `num_leaves` sortearia 7.53 e o
+    dataclass aceitaria; o arquivo congelado deixaria de ser lido."""
+    with pytest.raises(ValueError, match="kind"):
+        validate_dimension_names((dimension,), params_type)
