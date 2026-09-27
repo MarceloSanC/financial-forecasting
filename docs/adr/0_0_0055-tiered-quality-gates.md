@@ -63,7 +63,10 @@ Sources consulted agree on one model. Checks that are fast and scoped to the cha
 - **Keep `make check` per commit and only speed it up (xdist, caches).** Rejected as the only measure. It helps, but the per-commit cost would still include coverage, docs-check and the real TFT training on every Task. The sources above say not to put the heaviest checks in the earliest stage.
 - **Change-based test selection (pytest-testmon or pytest-picked) as T1.** Deferred. testmon does not track data or static files such as parquet fixtures or config, or environment changes. It has no official Windows support. It also conflicts with `-m` marker filters, although that caveat comes from a secondary source only. pytest-picked maps by filename only. Slice paths are a coarser selector, but they are predictable and cannot silently miss a changed fixture.
 - **Drop per-commit gating entirely and rely on CI.** Rejected. T1 keeps every commit on a feature branch green for its slice, which the TDD inside-out ordering (skill `task-ordering-hex`) and `git bisect` depend on.
-- **Move the repository to the WSL2 filesystem.** This would remove most of the local 30 min vs 5 min gap. It is out of scope here: it is a per-machine decision about the developer's environment, not a project rule.
+- **Move the repository to the WSL2 filesystem.** It helps, but it is not the main factor.
+  - **Measured on 2026-09-27:** same container and venv, code bind-mounted from NTFS vs copied into a Linux volume, runs interleaved A/B/A. mypy without cache took 103/112 s on the bind mount vs 82 s in the Linux volume. `pytest tests/unit tests/contract -n auto` took 214/257 s vs 149 s. That is roughly 25–40% faster.
+  - **Why the gain is small:** the venv (torch and the other heavy libraries) already lives on a Linux named volume.
+  - **Out of scope here:** it is a per-machine decision about the developer's environment, not a project rule.
 
 ## Consequences
 
