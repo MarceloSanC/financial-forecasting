@@ -724,6 +724,10 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 **O que mudou:** (1) em vez de apagar `_load_dataset` (critério "`grep` vazio" das Tasks 07–10), cada use case mantém um `_load_dataset` fino que lê o store, faz a checagem de vazio com o seu código e delega ao `build_training_grid`; o critério passa a ser "`_load_dataset` não tem lógica de parsing — só leitura, checagem de vazio e delegação". (2) `build_training_grid(rows, *, columns)` não recebe `asset_id`: o filtro de ativo é da leitura do store (partição), como a caracterização mostrou.
 **Por quê:** Checkpoint C — a caracterização da Task 04 chama `_load_dataset`; apagar o método obrigaria reescrever os testes no mesmo commit do refactor, e eles deixariam de proteger a extração. A duplicação que a #99 ataca é a lógica (~55 linhas × 4), não o nome.
 
+### 2026-09-27 — [deviation] Task 07 — I11 da 5.3 substituído pelo grid único — Claude (Opus 5.5)
+**O que mudou:** o invariante I11 da Stage 5.3 ("feature ausente atravessa o port como NaN") deixa de valer para o GBM: ausente no **prefixo** é cortado do treino; ausente no **interior** ergue `InteriorMissingValuesError` antes de o port ser chamado. O teste `test_i11_none_feature_value_reaches_the_port_as_nan` foi reescrito como dois testes do comportamento novo; o caso "alvo não numérico" da caracterização passou a usar string (o `None` de alvo agora é ausente, coberto pelos testes do grid).
+**Por quê:** decisão já tomada no concept (D11) e no ADR 5.5.0004 — sem regra única, TFT (recusa NaN) e GBM (aceita) treinariam sobre conjuntos diferentes; imputar em silêncio foi descartado.
+
 ### 2026-09-27 — Checkpoint C (bloco 01–04) — disposições — Claude (Opus 5.5)
 - C1 (médio) caracterização presa a método que seria apagado → **corrigido** pelo desvio acima + teste do conjunto de colunas GBM = TFT (`task-04-fix`).
 - C2 (médio) fixture com `None` na 1ª linha contrariava "sem NaN" → **corrigido**: fixture sem ausentes; `None`→NaN em teste próprio marcado como mudança prevista (`task-04-fix`).
