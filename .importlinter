@@ -399,33 +399,30 @@ allow_indirect_imports = False
 # PERÍMETRO — o que este contrato NÃO cobre. Está escrito aqui porque comentário
 # mais largo que o gate é o mesmo falso verde de segunda ordem que esta issue
 # existe para matar (LAYOUT §7 diz o mesmo, e é a fonte da verdade):
-#   - `market_data` está FORA da lista `modules`. NÃO é exceção declarada: é
-#     slice NÃO COBERTO — qualquer aresta que o envolva, inclusive uma nova,
-#     passa verde. As 9 arestas `feature_engineering -> market_data.domain.
-#     entities` (Candle/NewsArticle/FundamentalReport em assinatura de port) não
-#     estão declaradas abaixo. A regra que as julga já existe (ADR 0.0.0053:
-#     dados em assinatura de port ficam declarados); incluir `market_data` no
-#     contrato e declarar as 9 arestas é a issue #95 (speculative).
 #   - Imports sob `if TYPE_CHECKING:` não são vistos
 #     (`exclude_type_checking_imports = True`, ver cabeçalho). Hoje os únicos
-#     type-only cross-BC do trio são as assinaturas dos ports de `modeling`
+#     type-only cross-BC são as assinaturas dos ports de `modeling`
 #     (`PredictionPersister`/`RunRecordPersister` anotam o DTO
 #     `PersistPredictionsCommand`/`PersistPredictionsResult`,
 #     `PersistRunRecordResult` e o VO `RunRecord` do `analytics_store`) — o port
-#     é do consumidor, o formato dos dados é do fornecedor (#68).
+#     é do consumidor, o formato dos dados é do fornecedor (#68) — e a anotação
+#     `NewsArticle` do `FinbertSentimentModel` (`feature_engineering` ->
+#     `market_data`).
 #
-# Dentro do perímetro, cada aresta de runtime existente entra como exceção
-# NOMEADA abaixo (12 hoje). Elas não são "ok": são o débito medido, e a lista
-# encolhe conforme as issues de fronteira fecham. Aresta nova entre estes três
-# slices reprova o build — que é o ponto.
+# Os quatro slices estão no perímetro desde a #95 (`market_data` entrou com as
+# suas 8 arestas de runtime declaradas). Cada aresta de runtime existente entra
+# como exceção NOMEADA abaixo (20 hoje). Elas não são "ok": são o débito medido,
+# e a lista encolhe conforme as issues de fronteira fecham. Aresta nova entre
+# estes quatro slices reprova o build — que é o ponto.
 # -----------------------------------------------------------------------------
 [importlinter:contract:bc-independence]
-name = Bounded contexts independentes (modeling / analytics_store / feature_engineering)
+name = Bounded contexts independentes (modeling / analytics_store / feature_engineering / market_data)
 type = independence
 modules =
     financial_forecasting.features.modeling
     financial_forecasting.features.analytics_store
     financial_forecasting.features.feature_engineering
+    financial_forecasting.features.market_data
 ignore_imports =
     # -- modeling -> analytics_store (dono único do target_timestamp, ADR 4.3.0001)
     # O use case de modeling monta o `PersistPredictionsCommand` (DTO do port-in
@@ -470,6 +467,24 @@ ignore_imports =
     financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
     financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.analytics_store.domain.value_objects.run_record
     financial_forecasting.features.modeling.application.use_cases.train_tft -> financial_forecasting.features.feature_engineering.domain.services.feature_registry
+    # -- feature_engineering -> market_data (entidades de bronze como DADOS, #95)
+    # `Candle`/`NewsArticle`/`FundamentalReport` são dataclasses frozen cujo único
+    # método é a validação do `__post_init__` — nenhuma operação de `market_data`
+    # é chamada daqui. Cruzam como tipo de assinatura de port/adapter
+    # (`IndicatorCalculator`, `SentimentModel`), como alvo do mapeamento
+    # bronze -> entidade (`build_dataset`, `score_and_aggregate_sentiment`) e como
+    # leitura de campos (`scoring.build_text`, `FundamentalsAsofPolicy`). É a
+    # mesma classe das arestas de VO `modeling -> analytics_store` acima: dados
+    # declarados, não comportamento — ADR 0.0.0053 item 3; mover as entidades
+    # para `shared/` é o Shared Kernel que a ADR descarta.
+    financial_forecasting.features.feature_engineering.application.ports.out.indicator_calculator -> financial_forecasting.features.market_data.domain.entities.candle
+    financial_forecasting.features.feature_engineering.application.ports.out.sentiment_model -> financial_forecasting.features.market_data.domain.entities.news_article
+    financial_forecasting.features.feature_engineering.adapters.out.pandas_ta.pandas_ta_indicator_calculator -> financial_forecasting.features.market_data.domain.entities.candle
+    financial_forecasting.features.feature_engineering.adapters.out.finbert.scoring -> financial_forecasting.features.market_data.domain.entities.news_article
+    financial_forecasting.features.feature_engineering.application.use_cases.build_dataset -> financial_forecasting.features.market_data.domain.entities.candle
+    financial_forecasting.features.feature_engineering.application.use_cases.build_dataset -> financial_forecasting.features.market_data.domain.entities.fundamental_report
+    financial_forecasting.features.feature_engineering.application.use_cases.score_and_aggregate_sentiment -> financial_forecasting.features.market_data.domain.entities.news_article
+    financial_forecasting.features.feature_engineering.domain.services.fundamentals_asof_policy -> financial_forecasting.features.market_data.domain.entities.fundamental_report
 # `error` é o detector de EXCEÇÃO MORTA: quando uma issue de fronteira remover
 # uma aresta, o ignore correspondente deixa de casar e o build cobra a remoção
 # da linha. É o que faz esta lista encolher sozinha em vez de virar sedimento.
