@@ -1,8 +1,8 @@
 """Value object DatasetContentFingerprint — impressão digital do CONTEÚDO do grid.
 
 Frozen, domínio puro (stdlib-only). Identifica o dado sobre o qual um cohort
-treina pelo conteúdo — ativo, nomes das colunas em ordem, timestamps ISO-8601 e
-os valores de cada coluna — e não pelos bytes do Parquet (que mudam com a versão
+treina pelo conteúdo — ativo, conjunto de nomes das colunas, timestamps ISO-8601
+e os valores de cada coluna — e não pelos bytes do Parquet (que mudam com a versão
 do pyarrow e com metadados). Recebe só as colunas de modelagem do grid já sem o
 prefixo sem valor (valores finitos); o `Hasher` canônico arredonda floats a 10
 casas, então diferenças abaixo de 1e-10 não mudam a impressão digital (Stage
@@ -44,9 +44,11 @@ class DatasetContentFingerprint:
     ) -> DatasetContentFingerprint:
         """Calcula a impressão digital do conteúdo.
 
-        A ordem das colunas entra no payload (lista de nomes); valores de cada
-        coluna devem ter o mesmo tamanho dos timestamps. NaN/inf são recusados
-        pelo hasher canônico.
+        A ordem das colunas NÃO entra: os nomes vão ordenados, porque colunas
+        nomeadas identificam o mesmo conteúdo em qualquer ordem — TFT, GBM e o
+        cohort chegam à mesma impressão digital pelo mesmo conjunto (Checkpoint C,
+        I4). Valores de cada coluna devem ter o mesmo tamanho dos timestamps;
+        NaN/inf são recusados pelo hasher canônico.
         """
         for name, values in columns.items():
             if len(values) != len(timestamps):
@@ -55,7 +57,7 @@ class DatasetContentFingerprint:
                 )
         payload = {
             "asset": asset_id,
-            "columns": list(columns),
+            "columns": sorted(columns),
             "timestamps": list(timestamps),
             "values": {name: list(values) for name, values in columns.items()},
         }

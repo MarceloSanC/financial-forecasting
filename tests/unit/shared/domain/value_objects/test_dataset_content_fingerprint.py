@@ -41,12 +41,22 @@ def test_same_content_same_fingerprint() -> None:
         {"asset_id": "MSFT"},
         {"timestamps": ("2024-01-02T00:00:00+00:00", "2024-01-04T00:00:00+00:00")},
         {"columns": {"f_a": (1.0, 2.5), "target_return": (0.01, 0.02)}},
-        {"columns": {"target_return": (0.01, 0.02), "f_a": (1.0, 2.0)}},
     ],
-    ids=["asset", "timestamp", "value", "column-order"],
+    ids=["asset", "timestamp", "value"],
 )
 def test_any_content_change_changes_the_fingerprint(overrides: dict[str, object]) -> None:
     assert _fp(**overrides) != _fp()
+
+
+@pytest.mark.unit
+def test_column_order_does_not_change_the_fingerprint() -> None:
+    """Colunas nomeadas: o mesmo conteúdo em outra ordem é o mesmo dado."""
+    assert _fp(columns={"target_return": (0.01, 0.02), "f_a": (1.0, 2.0)}) == _fp()
+
+
+@pytest.mark.unit
+def test_renaming_a_column_changes_the_fingerprint() -> None:
+    assert _fp(columns={"f_b": (1.0, 2.0), "target_return": (0.01, 0.02)}) != _fp()
 
 
 @pytest.mark.unit
