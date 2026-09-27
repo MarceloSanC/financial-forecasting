@@ -91,10 +91,15 @@ class QuantileTrainingResult:
     `grids`: `decision_idx -> horizon -> tupla alinhada 1:1 a quantile_levels`
     (mesma forma do `BaselineForecaster` da 5.2). `best_iteration_by_horizon`:
     contagem 1-based de árvores selecionada pela regra do ADR 5.3.0002.
+    `early_stop_loss_by_horizon`: pinball média na grade, na partição de
+    early_stop, na iteração selecionada — a mesma quantidade que a regra do
+    ADR 5.3.0002 minimiza; é o objetivo do sweep exploratório do GBM (Stage
+    5.5, D13). `test_rows` vazio é o modo fit-only: nenhuma grade emitida.
     """
 
     grids: Mapping[int, GridByHorizon]
     best_iteration_by_horizon: Mapping[int, int]
+    early_stop_loss_by_horizon: Mapping[int, float]
 
 
 class QuantileModelTrainer(Protocol):

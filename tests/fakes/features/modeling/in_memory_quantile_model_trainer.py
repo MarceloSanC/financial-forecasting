@@ -122,4 +122,29 @@ class FakeQuantileModelTrainer:
             decision_idx: dict(grid_by_horizon) for decision_idx in test_decision_indices
         }
         best_iterations = dict.fromkeys(train_labels_by_horizon, _FAKE_BEST_ITERATION)
-        return QuantileTrainingResult(grids=grids, best_iteration_by_horizon=best_iterations)
+        losses = {
+            horizon: _grid_mean_pinball(
+                grid_by_horizon[horizon],
+                quantile_levels,
+                early_stop_labels_by_horizon[horizon],
+            )
+            for horizon in grid_by_horizon
+        }
+        return QuantileTrainingResult(
+            grids=grids,
+            best_iteration_by_horizon=best_iterations,
+            early_stop_loss_by_horizon=losses,
+        )
+
+
+def _grid_mean_pinball(
+    grid: Sequence[float], levels: Sequence[float], labels: Sequence[float]
+) -> float:
+    """Pinball média (sobre níveis e rótulos finitos de monitor) da grade constante do fake."""
+    finite = [label for label in labels if math.isfinite(label)]
+    total = sum(
+        max(tau * (label - q), (tau - 1.0) * (label - q))
+        for q, tau in zip(grid, levels, strict=True)
+        for label in finite
+    )
+    return total / (len(finite) * len(levels))

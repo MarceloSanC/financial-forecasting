@@ -89,7 +89,9 @@ class TestGbmTrainingParamsValidation:
 class TestQuantileTrainingResult:
     def test_result_is_frozen(self) -> None:
         result = QuantileTrainingResult(
-            grids={0: {1: (0.1, 0.2)}}, best_iteration_by_horizon={1: 3}
+            grids={0: {1: (0.1, 0.2)}},
+            best_iteration_by_horizon={1: 3},
+            early_stop_loss_by_horizon={1: 0.01},
         )
 
         with pytest.raises(dataclasses.FrozenInstanceError):
@@ -100,7 +102,10 @@ class TestQuantileTrainingResult:
         grids = {5: {1: (-0.01, 0.0, 0.01), 7: (-0.02, 0.0, 0.02)}}
         best = {1: 12, 7: 3}
 
-        result = QuantileTrainingResult(grids=grids, best_iteration_by_horizon=best)
+        result = QuantileTrainingResult(
+            grids=grids, best_iteration_by_horizon=best, early_stop_loss_by_horizon={1: 0.5, 7: 0.7}
+        )
 
         assert result.grids[5][7] == (-0.02, 0.0, 0.02)
         assert result.best_iteration_by_horizon == {1: 12, 7: 3}
+        assert result.early_stop_loss_by_horizon == {1: 0.5, 7: 0.7}
