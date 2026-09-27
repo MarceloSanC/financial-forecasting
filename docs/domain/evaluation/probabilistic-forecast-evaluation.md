@@ -658,8 +658,8 @@ faz é delimitar o que a política pode dizer sem contradizer os scores.
 e reporta rate") e o modeling §7 item 4 leem-se "invalida as métricas de
 **calibração** da linha e reporta a taxa" — o DoD da 6.1 no roadmap foi
 ajuste pedido no PR #98 (seção "Mudanças de roadmap pedidas"; aplicado por
-quem mergear por último); o texto do modeling §7 item 4 é ajustado na próxima
-revisão daquele doc e, até lá, lê-se assim. Isto resolve a tensão T1 do inventário: o modeling §3.4 (Dirac bem-posto,
+quem mergear por último); o texto do modeling §7 item 4 foi ajustado no
+mesmo PR. Isto resolve a tensão T1 do inventário: o modeling §3.4 (Dirac bem-posto,
 penalização informativa) e o DoD 6.1 (invalidar) só eram contraditórios sob a
 leitura "invalidar **tudo**".
 
