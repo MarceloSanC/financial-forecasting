@@ -94,5 +94,20 @@ def test_stop_passes_when_line_declares_the_forks_closed() -> None:
     assert tg.decide(_stop(msg)) is None
 
 
+@pytest.mark.parametrize(
+    "msg",
+    [
+        "B-HORIZON (a ratificar): ainda não decidido",
+        "3 forks a ratificar, a ser resolvido por você",
+        "(a ratificar — B-GATE) será tratado no próximo PR",
+        'As bifurcações "a ratificar" não estão fechadas',
+    ],
+)
+def test_stop_still_blocks_when_closing_word_is_negated_or_future(msg: str) -> None:
+    # a palavra de fechamento sozinha não basta: pendência negada/futura segue bloqueando
+    out = tg.decide(_stop(msg))
+    assert out is not None and out["decision"] == "block"
+
+
 def test_stop_never_blocks_twice() -> None:
     assert tg.decide(_stop("B-GATE a ratificar", active=True)) is None
