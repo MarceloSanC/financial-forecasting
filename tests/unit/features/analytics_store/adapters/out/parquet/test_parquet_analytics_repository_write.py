@@ -16,7 +16,6 @@ só chega na task-05) — este é um unit test do `write`, não do round-trip.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -36,20 +35,10 @@ from financial_forecasting.shared.domain.exceptions.base import (
     ApplicationError,
     DuplicateKeyError,
 )
+from tests.fakes.shared.in_memory_clock import FIXED_NOW, FakeClock
 
 _SILVER = "silver"
-_FIXED_NOW = datetime(2026, 6, 29, 12, 0, 0, tzinfo=UTC)
 _TWO_ROWS = 2
-
-
-class FakeClock:
-    """Clock determinístico (timestamp fixo)."""
-
-    def __init__(self, now: datetime = _FIXED_NOW) -> None:
-        self._now = now
-
-    def now(self) -> datetime:
-        return self._now
 
 
 def _repo(tmp_path: Path) -> ParquetAnalyticsRepository:
@@ -114,7 +103,7 @@ def test_mapper_fills_created_at_utc_via_clock() -> None:
     """A6/I5: o mapper injeta `created_at_utc` do `Clock` (ISO UTC), não do VO."""
     row = run_record_to_row(_run_record(), clock=FakeClock())
 
-    assert row["created_at_utc"] == _FIXED_NOW.isoformat()
+    assert row["created_at_utc"] == FIXED_NOW.isoformat()
     assert row["run_id"] == "run-1"
     assert "created_at_utc" not in {f for f in RunRecord.__dataclass_fields__}
 
@@ -132,7 +121,7 @@ def test_write_does_not_clobber_existing_created_at_utc(tmp_path: Path) -> None:
     distinguem; aqui o valor pré-existente é DIFERENTE do `FakeClock`.
     """
     repo = _repo(tmp_path)
-    preexisting = "2000-01-01T00:00:00+00:00"  # != _FIXED_NOW
+    preexisting = "2000-01-01T00:00:00+00:00"  # != FIXED_NOW
     row = run_record_to_row(_run_record(), clock=FakeClock())
     row["created_at_utc"] = preexisting
 
