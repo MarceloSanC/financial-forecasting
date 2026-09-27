@@ -714,7 +714,7 @@ arquivos_a_criar:
   - tests/integration/features/modeling/test_run_confirmatory_cohort.py
 contratos_introduzidos: [RunConfirmatoryCohort (use case)]
 contratos_consumidos: [TrainTft (5.4), TrainGbmQuantile (5.3), RunBaselines (5.2)]
-definition_of_done: "Candidato (seeds × folds) + GBM (uma execução por fold) + 5 specs de baseline (`zero_return` ≡ RW sem drift) treinados no cohort AAPL com mesmo `parent_sweep_id`; predições alinhadas por target_timestamp; cohort congelado e hasheado; zero seleção por OOS; teste de contrato 'duas seeds → predições idênticas' prova que o GBM é determinístico (entra com uma execução por fold — ADR 0.0.0010); candidato com S = 5 seeds (decisão humana, 2026-09-26), subindo para 10 se, no split exploratório, s_b²/5 > 0,25·EP² (s_b = desvio-padrão entre seeds da pinball média; EP = erro-padrão HAC do DM contra um baseline — doc de domínio evaluation §6.9); S efetivo e s_b registrados no cohort."
+definition_of_done: "Candidato (seeds × folds) + GBM (uma execução por fold) + 5 specs de baseline (`zero_return` ≡ RW sem drift) treinados no cohort AAPL com mesmo `parent_sweep_id`; predições alinhadas por target_timestamp; cohort congelado e hasheado; zero seleção por OOS; teste de contrato 'duas seeds → predições idênticas' prova que o GBM é determinístico (entra com uma execução por fold — ADR 0.0.0010); número de seeds do candidato decidido pelo humano ao congelar o cohort (decisão P de custo de GPU; insumo: razão r entre variância entre seeds e variância dos dados, medida no split exploratório — doc de domínio evaluation §6.9)."
 non_goals: [estatística confirmatória (Step 6), outros ativos]
 complexidade_estimada: M
 gate_mode: strict
