@@ -11,9 +11,13 @@ início gravado uma única vez; resultados de sweep persistem por scope id.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
+from financial_forecasting.features.modeling.adapters.out.filesystem.json_cohort_progress_ledger import (  # noqa: E501
+    JsonCohortProgressLedger,
+)
 from financial_forecasting.features.modeling.application.ports.out.cohort_progress_ledger import (
     CohortProgressLedger,
     CohortRunLockedError,
@@ -26,12 +30,14 @@ _COHORT = "aapl_confirmatory-r0-abcdef123456"
 _OpenLedger = Callable[[], CohortProgressLedger]
 
 
-@pytest.fixture(params=["fake"])
-def open_ledger(request: pytest.FixtureRequest) -> _OpenLedger:
+@pytest.fixture(params=["fake", "real"])
+def open_ledger(request: pytest.FixtureRequest, tmp_path: Path) -> _OpenLedger:
     if request.param == "fake":
         ledger = InMemoryCohortProgressLedger()
         return lambda: ledger
-    raise AssertionError(request.param)  # pragma: no cover
+    return lambda: JsonCohortProgressLedger(
+        artifacts_root=tmp_path / "artifacts", data_root=tmp_path / "data"
+    )
 
 
 @pytest.mark.contract
@@ -108,3 +114,58 @@ def test_sweep_results_persist_by_scope(open_ledger: _OpenLedger) -> None:
     assert results["tft"]["study_id"] == "s-tft"
     assert results["gbm"]["best_trial"] == 2  # noqa: PLR2004
     assert open_ledger().sweep_results("scope-2") == {}
+
+
+# -- só o adapter real: atomicidade e layout ---------------------------------------
+
+
+@pytest.mark.contract
+def test_real_crash_before_replace_keeps_the_previous_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Queda antes do `os.replace` deixa o JSON anterior intacto e sem temporário."""
+    ledger = JsonCohortProgressLedger(artifacts_root=tmp_path / "a", data_root=tmp_path / "d")
+    ledger.mark_completed(_COHORT, "baselines", {"run-a": 1})
+    progress = tmp_path / "a" / "cohorts" / _COHORT / "progress.json"
+    before = progress.read_text(encoding="utf-8")
+
+    def _crash(src: object, dst: object) -> None:
+        raise OSError("simulated crash during replace")
+
+    monkeypatch.setattr(
+        "financial_forecasting.features.modeling.adapters.out.filesystem."
+        "json_cohort_progress_ledger.os.replace",
+        _crash,
+    )
+    with pytest.raises(OSError, match="simulated crash"):
+        ledger.mark_completed(_COHORT, "gbm", {"run-b": 2})
+
+    assert progress.read_text(encoding="utf-8") == before
+    assert list(progress.parent.glob("*.tmp-*")) == []
+
+
+@pytest.mark.contract
+def test_real_lock_lives_in_the_data_root_and_names_its_owner(tmp_path: Path) -> None:
+    ledger = JsonCohortProgressLedger(artifacts_root=tmp_path / "a", data_root=tmp_path / "d")
+    ledger.acquire_writer()
+
+    lock = tmp_path / "d" / ".writer.lock"
+    assert lock.exists()
+    with pytest.raises(CohortRunLockedError, match="host=") as excinfo:
+        other = JsonCohortProgressLedger(artifacts_root=tmp_path / "x", data_root=tmp_path / "d")
+        other.acquire_writer()
+    assert "--break-stale-lock" in str(excinfo.value)
+
+    ledger.release_writer()
+    assert not lock.exists()
+
+
+@pytest.mark.contract
+def test_real_release_does_not_remove_a_lock_held_by_someone_else(tmp_path: Path) -> None:
+    owner = JsonCohortProgressLedger(artifacts_root=tmp_path / "a", data_root=tmp_path / "d")
+    owner.acquire_writer()
+
+    stranger = JsonCohortProgressLedger(artifacts_root=tmp_path / "a", data_root=tmp_path / "d")
+    stranger.release_writer()
+
+    assert (tmp_path / "d" / ".writer.lock").exists()
