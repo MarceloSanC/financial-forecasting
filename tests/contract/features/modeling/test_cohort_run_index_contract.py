@@ -12,13 +12,27 @@ no mesmo arquivo anual não contamina; cohort inexistente → vazio.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from pathlib import Path
 
 import pytest
 
+from financial_forecasting.features.analytics_store.adapters.out.parquet.mappers.run_record_mapper import (  # noqa: E501
+    run_record_to_row,
+)
+from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
+    ParquetAnalyticsRepository,
+)
+from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_cohort_run_index import (  # noqa: E501
+    ParquetCohortRunIndex,
+)
+from financial_forecasting.features.analytics_store.domain.value_objects.run_record import (
+    RunRecord,
+)
 from financial_forecasting.features.modeling.application.ports.out.cohort_run_index import (
     CohortRunIndex,
 )
 from tests.fakes.features.modeling.in_memory_cohort_run_index import InMemoryCohortRunIndex
+from tests.fakes.shared.in_memory_clock import FakeClock
 
 _ASSET = "AAPL"
 _FEATURE_SET = "fs_all"
@@ -72,11 +86,66 @@ def _fake_leg() -> tuple[CohortRunIndex, _SeedRun]:
     return index, seed_run
 
 
-@pytest.fixture(params=["fake"])
-def leg(request: pytest.FixtureRequest) -> tuple[CohortRunIndex, _SeedRun]:
+def _real_leg(tmp_path: Path) -> tuple[CohortRunIndex, _SeedRun]:
+    repository = ParquetAnalyticsRepository(data_root=tmp_path, clock=FakeClock())
+    index = ParquetCohortRunIndex(repository=repository)
+
+    def seed_run(  # noqa: PLR0913
+        *,
+        cohort_id: str,
+        model_version: str,
+        seed: int | None,
+        run_id: str,
+        fold: str,
+        decisions: Sequence[_Decision],
+    ) -> None:
+        record = RunRecord(
+            run_id=run_id,
+            asset=_ASSET,
+            parent_sweep_id=cohort_id,
+            feature_set_name=_FEATURE_SET,
+            config_signature="cfg",
+            split_fingerprint="split",
+            fold=fold,
+            seed=seed,
+            model_version=model_version,
+            schema_version=1,
+        )
+        repository.write(
+            layer="silver", table="dim_run", rows=[run_record_to_row(record, clock=FakeClock())]
+        )
+        facts = [
+            {
+                "schema_version": 1,
+                "run_id": run_id,
+                "model_version": model_version,
+                "asset": _ASSET,
+                "feature_set_name": _FEATURE_SET,
+                "split": "test",
+                "horizon": horizon,
+                "decision_idx": position,
+                "timestamp_utc": decision_ts,
+                "target_timestamp_utc": target_ts,
+                "quantile_level": level,
+                "value_raw": 0.0,
+                "value_guardrail": 0.0,
+                "guardrail_applied": 0,
+                "year": 2024,
+            }
+            for position, (decision_ts, target_ts, horizon) in enumerate(decisions)
+            for level in _LEVELS
+        ]
+        if facts:
+            repository.write(layer="silver", table="fact_oos_predictions", rows=facts)
+
+    return index, seed_run
+
+
+@pytest.fixture(params=["fake", "real"])
+def leg(request: pytest.FixtureRequest, tmp_path: Path) -> tuple[CohortRunIndex, _SeedRun]:
     if request.param == "fake":
         return _fake_leg()
-    raise AssertionError(request.param)  # pragma: no cover
+    return _real_leg(tmp_path)
 
 
 def _read(index: CohortRunIndex, cohort_id: str = _COHORT) -> dict:  # type: ignore[type-arg]
