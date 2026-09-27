@@ -385,12 +385,12 @@ class TrainGbmQuantile:
             feature_names=feature_names,
             train_rows=tuple(feature_rows[idx] for idx in train_indices),
             train_labels_by_horizon={
-                horizon: _labels_from_full_grid(train_indices, returns, horizon)
+                horizon: labels_from_full_grid(train_indices, returns, horizon)
                 for horizon in command.horizons
             },
             early_stop_rows=tuple(feature_rows[idx] for idx in early_stop_indices),
             early_stop_labels_by_horizon={
-                horizon: _labels_from_full_grid(early_stop_indices, returns, horizon)
+                horizon: labels_from_full_grid(early_stop_indices, returns, horizon)
                 for horizon in command.horizons
             },
             test_rows=tuple(feature_rows[idx] for idx in decision_indices),
@@ -470,7 +470,7 @@ class TrainGbmQuantile:
 # -- labels do grid completo (I1/I12) ----------------------------------------------
 
 
-def _labels_from_full_grid(
+def labels_from_full_grid(
     indices: tuple[int, ...], returns: tuple[float, ...], horizon: int
 ) -> tuple[float, ...]:
     """`target_return[idx + horizon]` do array COMPLETO de sessões (I1/I12).

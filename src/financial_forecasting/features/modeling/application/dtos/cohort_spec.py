@@ -30,17 +30,20 @@ from dataclasses import asdict, dataclass
 from itertools import pairwise
 from typing import TYPE_CHECKING
 
+from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
+    validate_dimension_names,
+)
+from financial_forecasting.features.modeling.application.ports.out.quantile_model_trainer import (
+    GbmTrainingParams,
+)
+from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
+    TftTrainingParams,
+)
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import ScopeSpec
 
 if TYPE_CHECKING:
     from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (  # noqa: E501
         SearchDimension,
-    )
-    from financial_forecasting.features.modeling.application.ports.out.quantile_model_trainer import (  # noqa: E501
-        GbmTrainingParams,
-    )
-    from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
-        TftTrainingParams,
     )
     from financial_forecasting.features.modeling.domain.value_objects.baseline_spec import (
         BaselineSpec,
@@ -70,6 +73,9 @@ class SweepPlan:
             raise ValueError("SweepPlan needs a non-empty space for both sweeps")
         if self.n_trials is not None and self.n_trials < 1:
             raise ValueError(f"SweepPlan.n_trials must be >= 1 when set; got {self.n_trials}")
+        # Erro na borda (carga do arquivo do cohort), não só quando o sweep roda.
+        validate_dimension_names(self.tft_space, TftTrainingParams)
+        validate_dimension_names(self.gbm_space, GbmTrainingParams)
 
 
 @dataclass(frozen=True)

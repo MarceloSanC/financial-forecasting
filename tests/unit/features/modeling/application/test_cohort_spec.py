@@ -199,6 +199,12 @@ def test_sweep_plan_validation() -> None:
         replace(_PLAN, n_trials=0)
 
 
+def test_sweep_plan_rejects_a_dimension_of_the_wrong_model_at_load() -> None:
+    """Erro na borda: nome de dimensão inválido barrado ao carregar o plano (A6)."""
+    with pytest.raises(ValueError, match="não é campo de GbmTrainingParams"):
+        replace(_PLAN, gbm_space=(SearchDimension(name="hidden_size", low=8, high=64, kind="int"),))
+
+
 def test_no_field_carries_oos_predictions_or_metrics() -> None:
     """I10 (estrutural): nada no spec nem na proveniência vem de predição OOS.
 

@@ -17,11 +17,18 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 from financial_forecasting.features.modeling.domain.exceptions.cohort import (
     InteriorMissingValuesError,
     NoUsableRowsError,
 )
+from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+    DatasetContentFingerprint,
+)
+
+if TYPE_CHECKING:
+    from financial_forecasting.shared.application.ports.out.hasher import Hasher
 
 
 def _is_finite(value: float | None) -> bool:
@@ -86,6 +93,19 @@ class TrainingGrid:
 
     def column(self, name: str) -> tuple[float, ...]:
         return self.columns[name]
+
+    def content_fingerprint(self, *, hasher: Hasher, asset_id: str) -> str:
+        """Impressão digital do conteúdo do grid (todas as colunas; ordem irrelevante).
+
+        Caminho único para sweeps e cohort compararem o dado (I4): o mesmo grid dá
+        a mesma impressão digital por qualquer use case.
+        """
+        return DatasetContentFingerprint.compute(
+            hasher=hasher,
+            asset_id=asset_id,
+            timestamps=self.timestamps_iso(),
+            columns=self.columns,
+        ).value
 
     def matrix(self, names: Sequence[str]) -> tuple[tuple[float, ...], ...]:
         """Matriz linha-a-linha das colunas `names`, na ordem pedida."""

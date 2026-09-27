@@ -755,4 +755,22 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 **Leitura:** a métrica de avaliação do LightGBM é reduzida em paralelo (ordem de soma não fixa); `deterministic=True` fixa o treino, não essa soma. A D4 (GBM uma execução por fold) se mantém: o que o cohort persiste — as predições — é exato.
 **Disposição:** o teste exige igualdade exata de grades e iteração e `rel=1e-12` na perda. **Direção sugerida:** o sweep do GBM (Task 16) compara objetivos que podem diferir em ~1e-18 entre execuções; empate exato é irrelevante na prática, mas o `best_trial` do Optuna pode divergir entre reexecuções num empate — anotar no runbook que a reprodução do sweep é "mesmo melhor trial até ruído de ulp". **Stage candidata:** esta (Task 36, runbook).
 
+### 2026-09-27 — [finding] Task 14 — correção do diagnóstico da perda não reprodutível — Claude (Opus 5.5)
+**Correção (não reescreve a entrada anterior):** o Checkpoint C mediu que a perda de early_stop do LightGBM varia no último ulp **entre execuções com a mesma seed** (seed 0: `…394309` em três rodadas e `…394308` na quarta), não entre seeds. A causa segue sendo a soma paralela da métrica; o efeito relevante é outro: com a perda como objetivo do sweep, um empate entre trials viraria sorteio e uma reexecução poderia congelar outro `gbm_params`. **Disposição:** os dois sweeps arredondam o objetivo a 12 dígitos significativos antes do `tell` (`stable_objective`); empates ficam exatos e o estudo desempata pelo menor número de trial. O contrato de chamadas idênticas passa a conferir a perda (`rel=1e-12`). A direção "anotar no runbook" da entrada anterior fica substituída por esta correção de código.
+
+### 2026-09-27 — Checkpoint C (bloco 11–16) — disposições — Claude (Opus 5.5)
+- F1 (alto) teste de determinismo vácuo — rótulos de ruído puro davam `best_iteration = 1` e comparavam uma árvore só → **corrigido**: rótulos com sinal e `max(best_iteration) > 1` asserido (`task-14-fix`).
+- F2 (médio) perda não reprodutível entre execuções → **corrigido** (entrada acima; `task-14-fix` e `task-16-fix`).
+- F3 (médio) `expected_runs` prometido na Task 11 e ausente → **corrigido** (`task-11-fix`).
+- F4 (médio) contagem esperada conferida por regra reimplementada → **corrigido**: o teste conta pelo `MultiHorizonPredictionPersister.build` real (`task-11-fix`).
+- F5 (baixo) `h > test_size` e horizontes repetidos → **corrigido**: contagem por deslocamento a partir do fim da grade; repetidos recusados (`task-11-fix`).
+- F6 (médio) sweep do GBM aceitava `h < 1` (vazaria rótulos do fim da série) e horizontes repetidos → **corrigido** nos dois sweeps (`task-16-fix`).
+- F7 (baixo-médio) exigir fold único nos sweeps → **refutado**: o ADR 5.5.0002 descartou mudar o `RunTftSweep` (Alternativa B) e manteve a garantia na geometria passada pelo runner, verificada na Task 28 (espião nos limites do fold); exigir `n_folds == 1` quebraria `TestFoldChoice` da 5.4 contra a decisão registrada.
+- F8 (baixo) docstring do `RunTftSweep` ("o último fold é o mais representativo") contradizia o D2 → **corrigido** (`task-16-fix`).
+- F9 (baixo-médio) impressão digital calculada em cópias nos sweeps e sem teste de igualdade GBM × TFT → **corrigido**: `TrainingGrid.content_fingerprint` como caminho único + teste de igualdade entre os dois sweeps (`task-16-fix`).
+- F10 (baixo) `seed` buscável, nomes repetidos e espaço validado só ao rodar → **corrigido**: `seed` fora, repetidos recusados, `SweepPlan` valida na carga (`task-16-fix`).
+- F11 (baixo) igualdade perda = mínimo da média testada só no helper → **aceito como limitação**: o helper `_grid_mean_at` é o único caminho de cálculo do adapter e o LightGBM não expõe as histórias fora dele; o contrato confere finitude, positividade e estabilidade.
+- F12 (baixo) import de função privada → **corrigido**: `labels_from_full_grid` público (`task-16-fix`).
+- F13 (baixo) texto da Task 12 desatualizado quanto à ordem das colunas → **refutado como edição**: fora de §7 o technical `done` não é editável (`check_technical_postexec.py`); a mudança está registrada no Checkpoint C do bloco 05–10 + 12, acima.
+
 <!-- END: post-execution -->

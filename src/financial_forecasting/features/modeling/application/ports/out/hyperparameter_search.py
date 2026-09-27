@@ -35,6 +35,8 @@ from typing import Protocol
 _INT_KIND = "int"
 _FLOAT_KIND = "float"
 _VALID_KINDS = (_INT_KIND, _FLOAT_KIND)
+_SEED_FIELD = "seed"
+_OBJECTIVE_SIGNIFICANT_DIGITS = 12
 
 
 @dataclass(frozen=True)
@@ -76,7 +78,12 @@ def validate_dimension_names(space: Sequence[SearchDimension], params_type: type
     """
     if not is_dataclass(params_type):
         raise TypeError(f"params_type must be a dataclass; got {params_type!r}")
-    tunable = frozenset(field.name for field in fields(params_type))
+    # `seed` nunca é hiperparâmetro de busca: no GBM não age (D4) e no TFT
+    # buscar seed é escolher sorte — o cohort roda cada seed à parte.
+    tunable = frozenset(field.name for field in fields(params_type)) - {_SEED_FIELD}
+    names = [dimension.name for dimension in space]
+    if len(set(names)) != len(names):
+        raise ValueError(f"search space has repeated dimension names: {names} (C11)")
     for dimension in space:
         if dimension.name not in tunable:
             msg = (
@@ -84,6 +91,18 @@ def validate_dimension_names(space: Sequence[SearchDimension], params_type: type
                 f"campos válidos: {sorted(tunable)} (C11)"
             )
             raise ValueError(msg)
+
+
+def stable_objective(value: float) -> float:
+    """Objetivo arredondado a 12 dígitos significativos antes do `tell`.
+
+    A perda de early_stop do LightGBM varia no último ulp entre execuções (soma
+    paralela da métrica), mesmo com a mesma seed; sem o arredondamento, um empate
+    entre trials viraria sorteio e uma reexecução poderia congelar outro melhor
+    trial. Com ele, empates são exatos e o estudo desempata pelo menor número de
+    trial (Stage 5.5, Checkpoint C).
+    """
+    return float(f"{value:.{_OBJECTIVE_SIGNIFICANT_DIGITS}g}")
 
 
 @dataclass(frozen=True)

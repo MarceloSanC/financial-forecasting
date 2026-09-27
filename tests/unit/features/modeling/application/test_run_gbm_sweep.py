@@ -262,6 +262,8 @@ class TestErrors:
             {"quantile_levels": (0.0, 0.5)},
             {"horizons": ()},
             {"horizons": (1, 3)},
+            {"horizons": (0,)},
+            {"horizons": (1, 1)},
         ],
     )
     def test_invalid_command_raises_before_any_io(self, overrides: dict[str, object]) -> None:
