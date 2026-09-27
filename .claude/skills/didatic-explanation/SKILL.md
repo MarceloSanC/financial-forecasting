@@ -1,6 +1,6 @@
 ---
 name: didatic-explanation
-description: Como explicar conceitos teóricos, arquiteturais ou de domínio ao humano de forma clara e didática. Invocar SEMPRE que for explicar um conceito ao usuário — alinhamento de abordagem no kickoff de Stage (RUNBOOK Passo 1b), walkthrough de concept/ADR, veredito de auditoria, resposta a "me explica X", "o que é", "como funciona", "qual a ideia de" — ANTES de escrever a explicação. Não governa artefatos técnicos (concept/ADR/código mantêm precisão e nomes exatos).
+description: Como explicar conceitos teóricos, arquiteturais ou de domínio ao humano de forma clara e didática. Vale sempre que o texto pede ao humano que entenda uma ideia para julgar ou aprovar algo, qualquer que seja o formato da mensagem. Invocar ANTES de escrever — alinhamento de abordagem no kickoff de Stage (RUNBOOK Passo 1b), walkthrough de concept/ADR, veredito de auditoria, resposta a "me explica X", "o que é", "como funciona", "qual a ideia de"; explicação EMBUTIDA em relatório final, resumo de sessão, corpo de PR ou comentário de issue que o humano lerá para decidir; justificativa de por que algo foi feito, adiado, descartado ou teve o escopo reduzido; e pedido de reexplicação ("não entendi", "como assim", "explica melhor", "de forma mais simples"). Não governa artefatos técnicos (concept/ADR/código mantêm precisão e nomes exatos).
 metadata:
   status: draft
   applies_when:
@@ -104,3 +104,10 @@ não muda o entendimento; o detalhe fino vive no artefato técnico.
   saturar" caiu em desuso porque exigia do humano gerar respostas a frio.
   Apresentar o quadro e colher a reação é o formato de menor custo que
   funciona — e é onde as bifurcações reais aparecem.
+- **Explicação escondida em relatório (sessão 2026-09-27):** o resumo final de
+  uma execução de 4 issues justificou um adiamento em uma linha ("o VO só faz
+  diferença quando a 5.5 misturar modelos") sem dizer o que era a chave, o que
+  o dedup faz nem por que a mistura colapsaria predições — o humano não
+  entendeu. A skill não disparou porque a mensagem era "relatório", não
+  "explicação". Justificativa de decisão/adiamento dentro de relatório É
+  explicação: aplicar a regra 2 (o que é → o que faz → por que importa) ao item.
