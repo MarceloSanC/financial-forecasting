@@ -40,9 +40,16 @@ def _rows(n: int, salt: int) -> tuple[tuple[float, ...], ...]:
     return tuple(tuple(rng.gauss(0.0, 1.0) for _ in _FEATURES) for _ in range(n))
 
 
-def _labels(n: int, salt: int) -> tuple[float, ...]:
+def _labels(rows: tuple[tuple[float, ...], ...], salt: int) -> tuple[float, ...]:
+    """Rótulo com SINAL (combinação linear das features + ruído).
+
+    Com ruído puro o early stopping escolhe a iteração 1 e o teste compararia uma
+    árvore só (Checkpoint C); o sinal força modelos de várias árvores.
+    """
     rng = random.Random(salt)
-    return tuple(rng.gauss(0.0, 0.02) for _ in range(n))
+    return tuple(
+        0.02 * row[0] - 0.01 * row[1] + 0.005 * row[2] + rng.gauss(0.0, 0.002) for row in rows
+    )
 
 
 def _param_sets() -> list[pytest.param]:  # type: ignore[type-arg]
@@ -79,9 +86,9 @@ def test_two_seeds_produce_identical_grids(overrides: dict[str, object]) -> None
             params=GbmTrainingParams(seed=seed, **base),  # type: ignore[arg-type]
             feature_names=_FEATURES,
             train_rows=train_rows,
-            train_labels_by_horizon={h: _labels(120, 10 * h) for h in _HORIZONS},
+            train_labels_by_horizon={h: _labels(train_rows, 10 * h) for h in _HORIZONS},
             early_stop_rows=monitor_rows,
-            early_stop_labels_by_horizon={h: _labels(40, 20 * h) for h in _HORIZONS},
+            early_stop_labels_by_horizon={h: _labels(monitor_rows, 20 * h) for h in _HORIZONS},
             test_rows=test_rows,
             test_decision_indices=tuple(range(15)),
             quantile_levels=_LEVELS,
@@ -90,11 +97,14 @@ def test_two_seeds_produce_identical_grids(overrides: dict[str, object]) -> None
     ]
 
     first, second = results
+    # Sem isto o teste pode degradar em silêncio para "compara uma árvore só".
+    assert max(first.best_iteration_by_horizon.values()) > 1
     assert first.grids == second.grids
     assert first.best_iteration_by_horizon == second.best_iteration_by_horizon
-    # A perda de early_stop vem da métrica de avaliação do LightGBM, somada em
-    # paralelo: difere no último ulp entre execuções (~1e-18), sem efeito nas
-    # predições nem na iteração escolhida — o que o cohort persiste é exato.
+    # A perda de early_stop vem da métrica de avaliação do LightGBM e varia no
+    # último ulp entre EXECUÇÕES (mesmo com a mesma seed), sem efeito nas
+    # predições nem na iteração escolhida — o que o cohort persiste é exato. Os
+    # sweeps arredondam o objetivo antes de informá-lo ao estudo (§7).
     assert first.early_stop_loss_by_horizon == pytest.approx(
         second.early_stop_loss_by_horizon, rel=1e-12
     )

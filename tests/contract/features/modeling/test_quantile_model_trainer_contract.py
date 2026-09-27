@@ -206,6 +206,10 @@ def test_two_identical_calls_produce_identical_results(
 
     assert first.grids == second.grids
     assert first.best_iteration_by_horizon == second.best_iteration_by_horizon
+    # Varia no último ulp entre execuções (métrica somada em paralelo — §7 da 5.5).
+    assert first.early_stop_loss_by_horizon == pytest.approx(
+        second.early_stop_loss_by_horizon, rel=1e-12
+    )
 
 
 # -- I11: labels não finitos excluem o par -----------------------------------------
