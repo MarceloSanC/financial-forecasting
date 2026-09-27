@@ -141,3 +141,6 @@ text/*.xdv
 text/**/*.aux
 text/**/*.bib.bak
 text/Main.pdf
+
+# Claude Code: configuração por máquina (skillOverrides, permissões locais)
+.claude/settings.local.json
