@@ -50,7 +50,7 @@ graph LR
   S62-->S64[6.4-gold-builders]; S63-->S64
   S64-->S65[6.5-prereg-scorecard]; S55-->S65
   S54-->S71[7.1-inference-engine]; S43-->S71
-  S71-->S72[7.2-conformal-cqr]; S51-->S72
+  S71-->S72[7.2-conformal-cqr]; S51-->S72; S61-->S72
   S71-->S73[7.3-explainability]; S61-->S73
   S72-->S74[7.4-inference-api]; S73-->S74
   S65-->S81[8.1-confirmatory-run]; S71-->S81; S72-->S81
@@ -714,7 +714,7 @@ arquivos_a_criar:
   - tests/integration/features/modeling/test_run_confirmatory_cohort.py
 contratos_introduzidos: [RunConfirmatoryCohort (use case)]
 contratos_consumidos: [TrainTft (5.4), TrainGbmQuantile (5.3), RunBaselines (5.2)]
-definition_of_done: "Candidato + GBM + 5 specs de baseline (`zero_return` ≡ RW sem drift) treinados no cohort AAPL (seeds × folds) com mesmo `parent_sweep_id`; predições alinhadas por target_timestamp; cohort congelado e hasheado; zero seleção por OOS."
+definition_of_done: "Candidato (seeds × folds) + GBM (uma execução por fold) + 5 specs de baseline (`zero_return` ≡ RW sem drift) treinados no cohort AAPL com mesmo `parent_sweep_id`; predições alinhadas por target_timestamp; cohort congelado e hasheado; zero seleção por OOS; teste de contrato 'duas seeds → predições idênticas' prova que o GBM é determinístico (entra com uma execução por fold — ADR 0.0.0010); número de seeds do candidato decidido pelo humano ao congelar o cohort (decisão P de custo de GPU; insumo: razão r entre variância entre seeds e variância dos dados, medida no split exploratório — doc de domínio evaluation §6.9)."
 non_goals: [estatística confirmatória (Step 6), outros ativos]
 complexidade_estimada: M
 gate_mode: strict
@@ -749,7 +749,7 @@ arquivos_a_criar:
   - tests/unit/features/evaluation/test_degeneracy_gate.py
 contratos_introduzidos: [CoverageSeries (value-object), PinballScore/CrpsScore/IntervalScore/CoverageMetrics/DegeneracyGate (domain-services), ScoringBackend (port-out)]
 contratos_consumidos: [QuantileForecast (4.3)]
-definition_of_done: "Pinball/CRPS/Winkler batem com sklearn/scoringrules e fixtures analíticas; PICP/MPIW com nominal dinâmico; gate de degeneração (q_low==q_high) invalida métricas da linha e reporta rate, separado do guardrail."
+definition_of_done: "Pinball/CRPS/Winkler batem com sklearn/scoringrules e fixtures analíticas; PICP/MPIW com nominal dinâmico; gate de degeneração (colapso total da grade) invalida as métricas de **calibração** da linha — proper scores seguem computados — e reporta rate, separado do guardrail (doc de domínio evaluation §5.3; ADR 0.0.0011)."
 non_goals: [testes pareados (6.2), backtests de risco (6.3)]
 complexidade_estimada: M
 gate_mode: strict
@@ -800,7 +800,7 @@ arquivos_a_criar:
   - tests/fixtures/r_oracle/{var_test_cases.json}
 contratos_introduzidos: [ChristoffersenTest, KupiecPof, VarDescriptive (domain-services)]
 contratos_consumidos: [CoverageSeries (6.1)]
-definition_of_done: "Christoffersen (LR_uc/ind/cc) e Kupiec batem com R `rugarch::VaRTest`/fixtures; VaR descritivo backtestado por exceedances; métricas DELETAR não existem no domínio; MPIW/win-rate marcadas como descritivas não-inferenciais."
+definition_of_done: "Christoffersen (LR_uc/ind/cc) e Kupiec batem com R `rugarch::VaRTest`/fixtures; LR_uc de 3 estados do par primário (sensibilidade do gate H1 — doc de domínio evaluation §8.5) com fixture analítica; VaR descritivo backtestado por exceedances; métricas DELETAR não existem no domínio; MPIW/win-rate marcadas como descritivas não-inferenciais."
 non_goals: [ES como confirmatório (futuro), métricas heurísticas removidas (não reintroduzir)]
 complexidade_estimada: M
 gate_mode: strict
@@ -910,7 +910,7 @@ arquivos_a_criar:
   - tests/unit/features/inference/test_conformal_embargo.py
   - tests/integration/features/inference/test_cqr_empirical_coverage.py
 contratos_introduzidos: [ConformalCalibrator (domain-service), ConformalBackend (port-out)]
-contratos_consumidos: [WalkForwardSplitter calib partition (5.1), RunInference (7.1)]
+contratos_consumidos: [WalkForwardSplitter calib partition (5.1), RunInference (7.1), CoverageMetrics (6.1)]
 definition_of_done: "CQR calibra no calib dedicado (não no early-stop), por fold/horizonte, com embargo; reporta cobertura EMPÍRICA (etiqueta não diz 'garantida'); variante escolhida pré-registrada em ADR antes do confirmatório; ACI/EnbPI ausentes do caminho confirmatório."
 non_goals: [ACI/EnbPI confirmatórios (travados), conformal como entrega primária]
 complexidade_estimada: M
@@ -1045,7 +1045,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 ## Lacunas conhecidas
 
 - **Variante do CQR (7.2):** split-CQR vs NexCP-ponderada vs não-fazer é deliberada e pré-registrada na própria Stage (overview §11/ADR `0_0_0008`); o roadmap fixa só a postura e os 4 invariantes.
-- **Parâmetros do MCS (6.2):** `B` de bootstrap e grade de sensibilidade de `block_len` (≥h) a fixar no concept de 6.2.
+- **Parâmetros do MCS (6.2):** regra do bloco fixada no doc de domínio evaluation §6.5 (max(h, maior b̂_sb de Politis–White), sensibilidades l = h, √T e moving-block — ADR 0.0.0010); `B` de bootstrap e semente a fixar no concept de 6.2.
 - **Bandas e tolerâncias:** bandas de calibração pré-registradas (H1) e tolerância de equivalência (8.2) a fixar nos concepts de 6.5/8.2.
 - **Fallback de fundamentals (3.3):** janela exata do fallback de disponibilidade a declarar e pré-registrar no concept de 3.3.
 
