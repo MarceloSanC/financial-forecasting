@@ -167,11 +167,11 @@ def test_feature_readers_reject_non_numeric_target(load: _Loader) -> None:
 # -- comportamento que MUDA por desenho nas Tasks 07-10 (grid único, D11) --------
 
 
-_NOT_YET_ON_GRID: list[_Loader] = [TrainTft._load_dataset, RunTftSweep._load_dataset]
-_ON_GRID: list[_Loader] = [TrainGbmQuantile._load_dataset]
+_NOT_YET_ON_GRID: list[_Loader] = [RunTftSweep._load_dataset]
+_ON_GRID: list[_Loader] = [TrainGbmQuantile._load_dataset, TrainTft._load_dataset]
 
 
-@pytest.mark.parametrize("load", _NOT_YET_ON_GRID, ids=["tft", "sweep"])
+@pytest.mark.parametrize("load", _NOT_YET_ON_GRID, ids=["sweep"])
 def test_feature_none_becomes_nan_before_the_single_grid(load: _Loader) -> None:
     """Hoje `None` de feature vira NaN e a linha fica no treino.
 
@@ -200,7 +200,7 @@ def test_gbm_and_tft_consume_the_same_modeling_columns() -> None:
     assert len(tft_columns) == len(set(tft_columns))
 
 
-@pytest.mark.parametrize("load", _ON_GRID, ids=["gbm"])
+@pytest.mark.parametrize("load", _ON_GRID, ids=["gbm", "tft"])
 def test_single_grid_trims_the_warm_up_prefix(load: _Loader) -> None:
     """No grid único, `None` no prefixo sai do treino em vez de virar NaN (D11)."""
     rows = [_row(2, 0.01, 1.0, None), _row(3, 0.02, 2.0, 20.0), _row(4, 0.03, 3.0, 30.0)]
@@ -213,7 +213,7 @@ def test_single_grid_trims_the_warm_up_prefix(load: _Loader) -> None:
     assert matrix == ((2.0, 20.0), (3.0, 30.0))
 
 
-@pytest.mark.parametrize("load", _ON_GRID, ids=["gbm"])
+@pytest.mark.parametrize("load", _ON_GRID, ids=["gbm", "tft"])
 def test_single_grid_rejects_interior_missing_value(load: _Loader) -> None:
     rows = [_row(2, 0.01, 1.0, 10.0), _row(3, 0.02, 2.0, None), _row(4, 0.03, 3.0, 30.0)]
 
