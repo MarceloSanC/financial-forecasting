@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, replace
-from datetime import datetime
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
@@ -46,6 +45,12 @@ from financial_forecasting.features.modeling.application.use_cases.train_tft imp
 )
 from financial_forecasting.features.modeling.domain.exceptions.backend import (
     ModelTrainingError,
+)
+from financial_forecasting.features.modeling.domain.services.training_grid import (
+    build_training_grid,
+)
+from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+    DatasetContentFingerprint,
 )
 
 if TYPE_CHECKING:
@@ -73,7 +78,6 @@ if TYPE_CHECKING:
     from financial_forecasting.shared.application.ports.out.hasher import Hasher
     from financial_forecasting.shared.application.ports.out.medallion_store import (
         MedallionStore,
-        Row,
     )
 
 logger = logging.getLogger(__name__)
@@ -83,6 +87,7 @@ _DATASET_TABLE = "dataset_tft"
 _ARTIFACT_SUBDIR = "tft-sweep"
 _EXPLORATORY_PHASE = "exploratory"
 _INT_KIND = "int"
+_TARGET_COLUMN = "target_return"
 
 
 @dataclass(frozen=True)
@@ -120,6 +125,8 @@ class RunTftSweepResult:
     trials: tuple[SweepTrialSummary, ...]
     best_trial_number: int
     best_params: TftTrainingParams
+    dataset_fingerprint: str
+    """Impressão digital do conteúdo do grid sobre o qual o sweep treinou (I4)."""
 
 
 def _recast(values: Mapping[str, float], space: Sequence[SearchDimension]) -> dict[str, Any]:
@@ -169,7 +176,9 @@ class RunTftSweep:
         unknown_names = unknown_feature_names()
         known_names = known_feature_names()
         feature_names = unknown_names + known_names
-        returns, sessions, feature_rows = self._load_dataset(command.scope, feature_names)
+        returns, sessions, feature_rows, dataset_fingerprint = self._load_dataset(
+            command.scope, feature_names
+        )
 
         folds = self._splitter.split(
             sessions,
@@ -258,6 +267,7 @@ class RunTftSweep:
             trials=tuple(summaries),
             best_trial_number=best.number,
             best_params=best_params,
+            dataset_fingerprint=dataset_fingerprint,
         )
 
     # -- rastreamento (I14) -----------------------------------------------------
@@ -308,8 +318,14 @@ class RunTftSweep:
 
     def _load_dataset(
         self, scope: ScopeSpec, feature_names: tuple[str, ...]
-    ) -> tuple[tuple[float, ...], tuple[date, ...], tuple[tuple[float, ...], ...]]:
-        """Lê o dataset TFT: (target_return, sessões, matriz de features)."""
+    ) -> tuple[tuple[float, ...], tuple[date, ...], tuple[tuple[float, ...], ...], str]:
+        """Lê o dataset TFT pelo grid único: (target_return, sessões, matriz, impressão digital).
+
+        Checa o vazio com o código deste use case (C1), delega ordenação,
+        validação e corte do prefixo sem valor ao `build_training_grid` (D11 da
+        Stage 5.5) e calcula a impressão digital do conteúdo do grid — o
+        congelamento do cohort copia esse valor para a proveniência (I4).
+        """
         rows = self._store.read(
             layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": scope.asset_id}
         )
@@ -318,27 +334,20 @@ class RunTftSweep:
                 f"dataset ({_DATASET_LAYER!r}, {_DATASET_TABLE!r}) is empty for "
                 f"asset {scope.asset_id!r} — nothing to sweep (C1)"
             )
-        missing = tuple(name for name in feature_names if name not in rows[0])
-        if missing:
-            raise ValueError(
-                f"dataset is missing expected feature columns {missing!r} — "
-                "registry x dataset drift (C6)"
-            )
-        parsed = sorted(
-            (
-                (
-                    _timestamp_of(row),
-                    _target_return_of(row),
-                    tuple(_feature_value_of(row, name) for name in feature_names),
-                )
-                for row in rows
-            ),
-            key=lambda triple: triple[0],
+        columns = (*feature_names, _TARGET_COLUMN)
+        grid = build_training_grid(rows, columns=columns)
+        fingerprint = DatasetContentFingerprint.compute(
+            hasher=self._hasher,
+            asset_id=scope.asset_id,
+            timestamps=grid.timestamps_iso(),
+            columns={name: grid.column(name) for name in columns},
         )
-        returns = tuple(value for _, value, _ in parsed)
-        sessions = tuple(ts.date() for ts, _, _ in parsed)
-        feature_rows = tuple(features for _, _, features in parsed)
-        return returns, sessions, feature_rows
+        return (
+            grid.column(_TARGET_COLUMN),
+            grid.sessions(),
+            grid.matrix(feature_names),
+            fingerprint.value,
+        )
 
 
 def _validate_command(command: RunTftSweepCommand) -> None:
@@ -366,24 +375,3 @@ def _validate_command(command: RunTftSweepCommand) -> None:
         )
 
 
-def _timestamp_of(row: Row) -> datetime:
-    value = row.get("timestamp")
-    if not isinstance(value, datetime) or value.tzinfo is None:
-        raise ValueError(f"dataset row 'timestamp' must be a tz-aware datetime; got {value!r}")
-    return value
-
-
-def _target_return_of(row: Row) -> float:
-    value = row.get("target_return")
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValueError(f"dataset row 'target_return' must be numeric; got {value!r}")
-    return float(value)
-
-
-def _feature_value_of(row: Row, column: str) -> float:
-    value = row.get(column)
-    if value is None:
-        return float("nan")
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValueError(f"dataset row {column!r} must be numeric or None; got {value!r}")
-    return float(value)

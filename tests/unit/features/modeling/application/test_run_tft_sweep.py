@@ -266,6 +266,16 @@ class TestAskTellLoop:
         assert result.best_params.hidden_size == round(best.values["hidden_size"])
         assert result.best_params.dropout == pytest.approx(best.values["dropout"])
 
+    def test_result_reports_the_fingerprint_of_the_swept_grid(self, tmp_path: Path) -> None:
+        """O resultado carrega a impressão digital do grid treinado (Stage 5.5, I4)."""
+        use_case, _, _, _ = _build(tmp_path)
+
+        first = use_case(_command())
+        second = use_case(_command())
+
+        assert len(first.dataset_fingerprint) == 64  # noqa: PLR2004 — sha256 hex
+        assert first.dataset_fingerprint == second.dataset_fingerprint
+
     def test_frozen_base_params_are_preserved(self, tmp_path: Path) -> None:
         """O que não está no espaço mantém o valor pré-registrado."""
         use_case, _, trainer, _ = _build(tmp_path)

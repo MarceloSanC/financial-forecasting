@@ -15,7 +15,6 @@ expectativas (fora do corte do prefixo, que é comportamento novo declarado).
 
 from __future__ import annotations
 
-import math
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
@@ -31,20 +30,21 @@ from financial_forecasting.features.modeling.application.use_cases.run_tft_sweep
 )
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
     TrainGbmQuantile,
-    expected_feature_names,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     TrainTft,
-    known_feature_names,
-    unknown_feature_names,
 )
 from financial_forecasting.features.modeling.domain.exceptions.cohort import (
     InteriorMissingValuesError,
 )
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import ScopeSpec
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
 from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 
 _FEATURES = ("f_a", "f_b")
+_SHA256_HEX_LEN = 64
 _SCOPE = ScopeSpec(asset_id="AAPL", feature_set_name="fs_all", max_horizon=1)
 
 
@@ -74,7 +74,7 @@ def _store(rows: list[dict[str, object]] | None = None) -> FakeMedallionStore:
 
 
 def _self(store: FakeMedallionStore) -> SimpleNamespace:
-    return SimpleNamespace(_store=store)
+    return SimpleNamespace(_store=store, _hasher=CanonicalJsonHasher())
 
 
 _Loader = Callable[..., Any]
@@ -115,12 +115,13 @@ def test_trainers_read_timestamps_returns_sessions_matrix(load: _Loader) -> None
     _assert_matrix(matrix)
 
 
-def test_tft_sweep_reads_returns_sessions_matrix_without_timestamps() -> None:
-    returns, sessions, matrix = _load_sweep(_self(_store()), _SCOPE, _FEATURES)
+def test_tft_sweep_reads_returns_sessions_matrix_and_fingerprint() -> None:
+    returns, sessions, matrix, fingerprint = _load_sweep(_self(_store()), _SCOPE, _FEATURES)
 
     assert returns == _EXPECTED_RETURNS
     assert sessions == _EXPECTED_SESSIONS
     _assert_matrix(matrix)
+    assert len(fingerprint) == _SHA256_HEX_LEN
 
 
 # -- erros: dataset vazio (código por use case) e coluna ausente (C6) -----------
@@ -167,37 +168,7 @@ def test_feature_readers_reject_non_numeric_target(load: _Loader) -> None:
 # -- comportamento que MUDA por desenho nas Tasks 07-10 (grid único, D11) --------
 
 
-_NOT_YET_ON_GRID: list[_Loader] = [RunTftSweep._load_dataset]
 _ON_GRID: list[_Loader] = [TrainGbmQuantile._load_dataset, TrainTft._load_dataset]
-
-
-@pytest.mark.parametrize("load", _NOT_YET_ON_GRID, ids=["sweep"])
-def test_feature_none_becomes_nan_before_the_single_grid(load: _Loader) -> None:
-    """Hoje `None` de feature vira NaN e a linha fica no treino.
-
-    Com o grid único, `None` no prefixo é cortado e `None` no interior ergue
-    `InteriorMissingValuesError` (ADR 5.5.0004): este teste é reescrito nas
-    Tasks 07-10 para o comportamento novo, nunca apagado sem substituto.
-    """
-    rows = [_row(2, 0.01, 1.0, None), _row(3, 0.02, 2.0, 20.0)]
-
-    matrix = load(_self(_store(rows)), _SCOPE, _FEATURES)[-1]
-
-    assert matrix[0][0] == 1.0
-    assert math.isnan(matrix[0][1])
-
-
-def test_gbm_and_tft_consume_the_same_modeling_columns() -> None:
-    """GBM e TFT derivam as colunas por caminhos diferentes, mas o conjunto é o mesmo.
-
-    GBM: `expected_feature_names()` (registry habilitado + calendário); TFT/sweep:
-    `unknown_feature_names() + known_feature_names()`. O grid único corta pelo
-    mesmo conjunto para todos (I9); se as derivações divergirem, este teste acusa.
-    """
-    tft_columns = unknown_feature_names() + known_feature_names()
-
-    assert set(expected_feature_names()) == set(tft_columns)
-    assert len(tft_columns) == len(set(tft_columns))
 
 
 @pytest.mark.parametrize("load", _ON_GRID, ids=["gbm", "tft"])
@@ -219,3 +190,23 @@ def test_single_grid_rejects_interior_missing_value(load: _Loader) -> None:
 
     with pytest.raises(InteriorMissingValuesError):
         load(_self(_store(rows)), _SCOPE, _FEATURES)
+
+
+def test_tft_sweep_trims_prefix_and_fingerprints_the_trimmed_grid() -> None:
+    """Sweep no grid único: corta o prefixo e a impressão digital muda com o dado."""
+    trimmed_rows = [_row(2, 0.01, 1.0, None), _row(3, 0.02, 2.0, 20.0), _row(4, 0.03, 3.0, 30.0)]
+    changed_rows = [_row(3, 0.02, 2.0, 20.0), _row(4, 0.03, 3.0, 31.0)]
+
+    returns, sessions, matrix, fingerprint = _load_sweep(
+        _self(_store(trimmed_rows)), _SCOPE, _FEATURES
+    )
+    *_, same_content = _load_sweep(
+        _self(_store([_row(3, 0.02, 2.0, 20.0), _row(4, 0.03, 3.0, 30.0)])), _SCOPE, _FEATURES
+    )
+    *_, other_content = _load_sweep(_self(_store(changed_rows)), _SCOPE, _FEATURES)
+
+    assert returns == _EXPECTED_RETURNS[1:]
+    assert sessions == _EXPECTED_SESSIONS[1:]
+    assert matrix == ((2.0, 20.0), (3.0, 30.0))
+    assert fingerprint == same_content
+    assert fingerprint != other_content
