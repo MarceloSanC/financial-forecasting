@@ -31,8 +31,13 @@ from financial_forecasting.features.modeling.application.use_cases.run_tft_sweep
 )
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
     TrainGbmQuantile,
+    expected_feature_names,
 )
-from financial_forecasting.features.modeling.application.use_cases.train_tft import TrainTft
+from financial_forecasting.features.modeling.application.use_cases.train_tft import (
+    TrainTft,
+    known_feature_names,
+    unknown_feature_names,
+)
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import ScopeSpec
 from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 
@@ -55,7 +60,7 @@ def _store(rows: list[dict[str, object]] | None = None) -> FakeMedallionStore:
     store = FakeMedallionStore()
     seeded = rows if rows is not None else [
         _row(4, 0.03, 3.0, 30.0),
-        _row(2, 0.01, 1.0, None),
+        _row(2, 0.01, 1.0, 10.0),
         _row(3, 0.02, 2.0, 20.0),
     ]
     if seeded:
@@ -85,13 +90,10 @@ _EXPECTED_SESSIONS = (date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 4))
 
 
 def _assert_matrix(matrix: tuple[tuple[float, ...], ...]) -> None:
-    assert len(matrix) == len(_EXPECTED_SESSIONS)
-    assert matrix[0][0] == 1.0
-    assert math.isnan(matrix[0][1])
-    assert matrix[1:] == ((2.0, 20.0), (3.0, 30.0))
+    assert matrix == ((1.0, 10.0), (2.0, 20.0), (3.0, 30.0))
 
 
-# -- happy path: ordem cronológica, só o ativo do escopo, None -> NaN ------------
+# -- happy path (fixture sem valor ausente): ordem cronológica, só o ativo -------
 
 
 def test_run_baselines_reads_timestamps_returns_sessions() -> None:
@@ -157,3 +159,35 @@ def test_feature_readers_reject_non_numeric_target(load: _Loader) -> None:
 
     with pytest.raises(ValueError, match="target_return"):
         load(_self(_store(rows)), _SCOPE, _FEATURES)
+
+
+# -- comportamento que MUDA por desenho nas Tasks 07-10 (grid único, D11) --------
+
+
+@pytest.mark.parametrize("load", _FEATURE_LOADERS, ids=["gbm", "tft", "sweep"])
+def test_feature_none_becomes_nan_before_the_single_grid(load: _Loader) -> None:
+    """Hoje `None` de feature vira NaN e a linha fica no treino.
+
+    Com o grid único, `None` no prefixo é cortado e `None` no interior ergue
+    `InteriorMissingValuesError` (ADR 5.5.0004): este teste é reescrito nas
+    Tasks 07-10 para o comportamento novo, nunca apagado sem substituto.
+    """
+    rows = [_row(2, 0.01, 1.0, None), _row(3, 0.02, 2.0, 20.0)]
+
+    matrix = load(_self(_store(rows)), _SCOPE, _FEATURES)[-1]
+
+    assert matrix[0][0] == 1.0
+    assert math.isnan(matrix[0][1])
+
+
+def test_gbm_and_tft_consume_the_same_modeling_columns() -> None:
+    """GBM e TFT derivam as colunas por caminhos diferentes, mas o conjunto é o mesmo.
+
+    GBM: `expected_feature_names()` (registry habilitado + calendário); TFT/sweep:
+    `unknown_feature_names() + known_feature_names()`. O grid único corta pelo
+    mesmo conjunto para todos (I9); se as derivações divergirem, este teste acusa.
+    """
+    tft_columns = unknown_feature_names() + known_feature_names()
+
+    assert set(expected_feature_names()) == set(tft_columns)
+    assert len(tft_columns) == len(set(tft_columns))
