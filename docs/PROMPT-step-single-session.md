@@ -60,8 +60,8 @@ produziu a fase anterior. Para uma Stage, a sequência de subagentes é:
 | **Checkpoint A** | 2 revisores (lentes distintas) | conformidade · domínio/testabilidade |
 | **3B — Technical** | autor de technical | escreve `technical.md` (Tasks + rastreabilidade) |
 | **Checkpoint B** | revisor | matriz de rastreabilidade (critério → Task) |
-| **4 — Execução** | executor | roda as Tasks em ordem (`make check` por commit) |
-| **Checkpoint C** | revisor (por bloco de 2–3 Tasks) | diff × concept/technical/LAYOUT/skills |
+| **4 — Execução** | executor | roda as Tasks em ordem (`make check-task` por commit — [gates em camadas](RUNBOOK-STAGE-LIFECYCLE.md#gates-em-camadas)) |
+| **Checkpoint C** | revisor (por bloco de 2–3 Tasks) | diff × concept/technical/LAYOUT/skills + `make check-block` |
 | **Auditoria de testes** | auditor de testes | loop até todos "sim" + mutação real |
 
 **Por que isso reduz viés.** O revisor **nunca** compartilha o contexto do autor — não "confia" na

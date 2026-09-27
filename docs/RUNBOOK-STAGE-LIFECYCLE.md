@@ -740,12 +740,47 @@ Para cada Task implementada, revisar diff antes do commit (PIPELINE §9.4):
 
 ```powershell
 # IA escreve os arquivos
-make check          # rodar todos os checks
+make check-task SLICE=<slice>   # T1 — ver §Gates em camadas abaixo
 git add <arquivos-da-task>
 git commit -m "<type>(<scope>): <desc> [$N.$M/task-NN]
 
 Refs #$issue"
 ```
+
+#### Gates em camadas
+
+**Fonte única** de *qual gate roda quando* durante a execução de Stage ou
+issue (ADR 0.0.0055). Os PROMPTs de sessão única e a skill
+`task-ordering-hex` apontam para cá. O gate completo continua obrigatório,
+mas roda no fim da Stage e no CI, não em cada commit: o custo dele não cabe
+no ciclo de uma Task, e a quebra que só ele pega aparece no T2 no máximo
+2–3 commits depois.
+
+| Camada | Quando | Comando | O que cobre |
+|---|---|---|---|
+| **T0** — ciclo TDD | cada vermelho→verde | `pytest <arquivo>::<teste> -x --no-cov` | o comportamento em construção |
+| **T1** — commit da Task | antes de **todo** commit de Task | `make check-task SLICE=<slice>` (vários: `SLICE="modeling shared"`) | ruff, mypy, check_layout, import-linter, fake-parity, port-coverage + testes dos slices tocados, sem `slow` e sem cobertura |
+| **T2** — bloco | no Checkpoint C (a cada 2–3 Tasks) e antes de retomar sessão interrompida | `make check-block` | T1 inteiro + docs-check + suíte **inteira** (inclui `slow`) em paralelo, sem cobertura |
+| **T3** — saída | Passo 10 (fim da Stage/issue) e antes do `git push` que abre o PR | `make check` | gate completo com cobertura ≥ 90% — **idêntico ao CI** |
+| **T4** — CI | todo PR | `make check` (workflow `ci`) | o veredito bloqueante do merge |
+
+Regras:
+
+- **`SLICE` é o que a Task tocou**, em `src/` **e** em `tests/`. Se a Task
+  mexe em `shared/`, no composition root ou em algo que vários slices
+  importam, o T1 dela é `make check-block`: o raio de impacto já não cabe
+  num slice.
+- **Tocou dependência, config de ferramenta, script de gate ou
+  `conftest.py`** (pyproject, uv.lock, `.importlinter`, Makefile,
+  `scripts/check_*.py`, `scripts/arch_baseline.toml`, conftest
+  compartilhado) → T3 nessa mesma Task. O T1 não roda `tests/architecture/`
+  (que testa os gates); é esta regra que os cobre.
+- **T1 vermelho bloqueia o commit**, como antes. T2 vermelho vira commit
+  `fix(<scope>): ... [N.M/task-NN-fix]` antes da próxima Task.
+- **`slow`** marca teste com custo de minutos (treino real). Ele sai só do
+  T1; T2, T3 e T4 rodam tudo. Não use `slow` para esconder teste instável.
+- T3 continua sendo o único alvo cujo verde vale como evidência de gate em
+  PR, auditoria e checklist de saída.
 
 ### Passo 10 — Gate de saída da Stage
 
