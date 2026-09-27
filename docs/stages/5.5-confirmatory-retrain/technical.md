@@ -809,6 +809,34 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 ### 2026-09-27 — [measurement] Task 31 — tempo do ponta a ponta (A6) — Claude (Opus 5.5)
 **Fixture:** 560 sessões XNYS sintéticas a partir de 2019-01-02 (`tests/e2e/fixtures/cohort/raw_cohort_fixture.py`). Materializadas, dão 559 linhas de dataset e 308 sessões no grid útil, depois de cortado o prefixo de aquecimento de 251 linhas. O cohort usa `n_folds = 2`, teste/early_stop/calib de 20 sessões, `embargo = 1`, `horizons = (1, 7)`, 1 seed, `n_trials = 1` e TFT com `max_epochs = 1`.
 **Tempo:** `test_cohort_runner_end_to_end` levou 100,4 s, 80,0 s e 168,6 s em três execuções no container (CPU dividida com outros jobs na terceira). Os três testes de erro somam cerca de 3 s. Folga grande contra o limite de 30 min do job de CI.
-**Comando:** `uv run --no-sync pytest tests/e2e/test_cohort_cli.py -q -p no:warnings --durations=4` → `4 passed in 104.42s`.
+**Comando:** `uv run --no-sync pytest tests/e2e/test_cohort_cli.py -q -p no:warnings --durations=4` → `4 passed in 104.42s`. Dentro do `make check` (com cobertura), a suíte inteira passou a levar ~20 min (antes ~9–14 min).
+
+### 2026-09-27 — [decision:C] Task 32 — faixas do sweep do GBM: a documentação oficial do LightGBM não traz faixa — Claude (Opus 5.5)
+**Contexto:** o D9 diz "faixas da documentação oficial do LightGBM (guia de *parameter tuning*), conferidas no technical". A pesquisa (`evidence-researcher`) e a verificação (`evidence-verifier`), ambas no texto cru da versão pinada no `uv.lock` (LightGBM v4.7.0; optuna-integration v4.9.0), mostram que a premissa é falsa: nem `docs/Parameters-Tuning.rst` nem `docs/Parameters.rst` dão faixa numérica de busca para `num_leaves`, `learning_rate` ou `min_data_in_leaf`.
+**Evidência conferida pelo verificador** (itens 1–7 sustentados; item 8 parcial):
+- Defaults e restrições (`Parameters.rst`):
+  - `num_leaves`: "default = ``31``" e "``1 < num_leaves <= 131072``" (l. 227);
+  - `learning_rate`: "default = ``0.1``" e "``learning_rate > 0.0``" (l. 221);
+  - `min_data_in_leaf`: "default = ``20``" e "``min_data_in_leaf >= 0``" (l. 352); "Can be used to deal with over-fitting" (l. 354).
+- Orientação (`Parameters-Tuning.rst`):
+  - `num_leaves` "is the main parameter to control the complexity" (l. 22); "setting ``num_leaves`` to ``127`` may cause over-fitting, and setting it to ``70`` or ``80`` may get better accuracy" (l. 28);
+  - o ótimo de `min_data_in_leaf` "depends on the number of training samples and ``num_leaves``", e "hundreds or thousands is enough for a large dataset" (l. 31, 33);
+  - "Use small ``learning_rate`` with large ``num_iterations``" (l. 188);
+  - contra over-fitting: "Use small ``num_leaves``" (l. 201) e "Use ``min_data_in_leaf``" (l. 203).
+- Única faixa numérica achada, em implementação T2 (`optuna_integration/lightgbm/_lightgbm_tuner/optimize.py`):
+  - `num_leaves`: `suggest_int("num_leaves", 2, max_num_leaves)` (l. 218), linear, com `max_num_leaves = 2**8` só quando `max_depth` não está definido (l. 216–217);
+  - `min_child_samples` (alias de `min_data_in_leaf`): grade `[5, 10, 25, 50, 100]` (l. 581–582);
+  - `learning_rate` não é ajustado.
+**Decisão** (degrau 4: conservadora, ancorada nos defaults e nas restrições da doc oficial; nenhuma faixa atribuída à doc):
+- `num_leaves` `int` log [8, 64]: contém o default 31, fica abaixo do exemplo de over-fitting (127) e respeita a orientação de folhas poucas para dado pequeno (~1640 linhas úteis no fold 0);
+- `learning_rate` `float` log [0.03, 0.3]: simétrica em log em torno do default 0.1. O piso fica em 0.03, não 0.01, porque o teto `num_boost_round_max = 500` mais uma taxa pequena levaria trials ao teto (a regra "small learning_rate with large num_iterations" pede as duas coisas juntas);
+- `min_data_in_leaf` `int` log [5, 100]: contém o default 20 e coincide com os extremos da grade do tuner do Optuna; a orientação de "centenas ou milhares" vale só para dataset grande.
+**Vigiar na Task 34:** quantos trials do GBM param no teto de 500 rounds (`best_iteration`); se forem muitos, é sinal de que o piso de `learning_rate` ainda restringe.
+**Rascunho e verificação da Task 32:** `config/cohorts/aapl_confirmatory.toml`, revisão 0:
+- `feature_set_name = "fs_all"` (o registry inteiro, mesmo nome que os testes usam com esse sentido);
+- `feature_set_hash = 7df0e1b4…09e0` e `pipeline_version = "2"`, lidos do código;
+- `sampler_seed = 2026`; GBM com `seed = 0`; `n_trials` ausente e `seeds = []` (decisões [P]).
+
+`python -m financial_forecasting.cli run --data-root data/cohorts/aapl --cohort config/cohorts/aapl_confirmatory.toml` → `error: CohortNotFrozenError: cohort 'aapl_confirmatory' r0 is not frozen — run sweep and freeze first (seeds, n_trials, params, provenance and dataset fingerprint)`, exit 2.
 
 <!-- END: post-execution -->

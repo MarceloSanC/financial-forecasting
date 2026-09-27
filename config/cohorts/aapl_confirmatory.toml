@@ -1,0 +1,117 @@
+# Cohort confirmatório AAPL (Stage 5.5) — RASCUNHO, revisão 0.
+# Schema fechado: financial_forecasting.features.modeling.adapters.in.cli.cohort_file.
+# Decisões [P] pendentes (Task 33): sweep.n_trials e seeds.
+# O `freeze` reescreve este arquivo pelo `dump` (estes comentários não sobrevivem);
+# a justificativa de cada valor está no concept e no technical da Stage 5.5.
+name = "aapl_confirmatory"
+revision = 0
+asset_id = "AAPL"
+feature_set_name = "fs_all"
+feature_set_hash = "7df0e1b4d6e93e3edb5695414a47d2d77882a2ffc674d00037f2a9f87a6409e0"
+pipeline_version = "2"
+horizons = [1, 7]
+quantile_levels = [0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98]
+device = "cpu"
+seeds = []
+
+# D6 (tau*n >= 30) e D7 (embargo = max_horizon).
+[geometry]
+n_folds = 6
+test_size = 252
+val_size = 252
+calib_size = 252
+embargo = 7
+
+[sweep]
+sampler_seed = 2026
+
+# D9: heads fixo em 4 (Lim et al. 2021, Tabela 1); demais nos defaults do port.
+[sweep.tft_base_params]
+seed = 0
+max_encoder_length = 60
+hidden_size = 16
+attention_head_size = 4
+dropout = 0.1
+hidden_continuous_size = 8
+learning_rate = 0.03
+max_epochs = 50
+patience = 8
+batch_size = 64
+
+# Defaults da lib (ADR 5.3.0002 / concept 5.3); teto de rounds do mecanismo de parada.
+[sweep.gbm_base_params]
+seed = 0
+num_boost_round_max = 500
+num_leaves = 31
+learning_rate = 0.1
+min_data_in_leaf = 20
+
+# D9 — TFT: faixas de Lim et al. (2021, §6.2, p. 13) mapeadas para int/float.
+[[sweep.tft_space]]
+name = "hidden_size"
+low = 10.0
+high = 320.0
+kind = "int"
+log = true
+
+[[sweep.tft_space]]
+name = "dropout"
+low = 0.1
+high = 0.9
+kind = "float"
+log = false
+
+[[sweep.tft_space]]
+name = "learning_rate"
+low = 0.0001
+high = 0.01
+kind = "float"
+log = true
+
+[[sweep.tft_space]]
+name = "batch_size"
+low = 64.0
+high = 256.0
+kind = "int"
+log = false
+
+# D9 — GBM: a doc oficial do LightGBM não dá faixa de busca; faixas ancoradas
+# nos defaults e nas constraints (decisão registrada no technical §7, Task 32).
+[[sweep.gbm_space]]
+name = "num_leaves"
+low = 8.0
+high = 64.0
+kind = "int"
+log = true
+
+[[sweep.gbm_space]]
+name = "learning_rate"
+low = 0.03
+high = 0.3
+kind = "float"
+log = true
+
+[[sweep.gbm_space]]
+name = "min_data_in_leaf"
+low = 5.0
+high = 100.0
+kind = "int"
+log = true
+
+# Baselines canônicas (ADR 0.0.0052; W = 252 pelo ADR 5.2.0003; lambda = 0.94).
+[[baselines]]
+family = "zero_return"
+
+[[baselines]]
+family = "historical_mean"
+
+[[baselines]]
+family = "ar1"
+
+[[baselines]]
+family = "ewma_vol"
+decay_lambda = 0.94
+
+[[baselines]]
+family = "historical_quantiles"
+window = 252
