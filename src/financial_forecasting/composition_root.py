@@ -511,6 +511,9 @@ class ApplicationDependencies:
     cohort_run_index: CohortRunIndex
     runtime_probe_for: RuntimeProbeFactory
     confirmatory_cohort_for: Callable[[Path, str], RunConfirmatoryCohort]
+    # As colunas de modelagem que o cohort usa em I4 — o `freeze` do CLI usa as
+    # MESMAS, deste campo (uma fonte só para as duas impressões digitais).
+    modeling_columns: tuple[str, ...]
 
 
 def wire_dependencies(
@@ -670,12 +673,15 @@ def wire_dependencies(
     repo_root = cfg.repo_root
 
     def git_probe(cohort_path: Path, device: str) -> RuntimeEnvironmentProbe:
+        # Resolvido contra o diretório corrente — o MESMO arquivo que o CLI leu —,
+        # nunca reinterpretado em relação ao `repo_root`.
         return GitRuntimeEnvironmentProbe(
-            repo_root=repo_root, cohort_file=cohort_path, device=device
+            repo_root=repo_root, cohort_file=cohort_path.resolve(), device=device
         )
 
     runtime_probe_for = runtime_probe_factory or git_probe
     observed_feature_set_hash = feature_set_hash()
+    columns = modeling_columns()
 
     def confirmatory_cohort_for(cohort_path: Path, device: str) -> RunConfirmatoryCohort:
         return RunConfirmatoryCohort(
@@ -688,7 +694,7 @@ def wire_dependencies(
             run_baselines=run_baselines,
             train_gbm=train_gbm_quantile,
             train_tft=train_tft,
-            modeling_columns=modeling_columns(),
+            modeling_columns=columns,
             observed_feature_set_hash=observed_feature_set_hash,
             pipeline_version=PIPELINE_VERSION,
             schema_version=_SILVER_SCHEMA_VERSION,
@@ -717,4 +723,5 @@ def wire_dependencies(
         cohort_run_index=cohort_run_index,
         runtime_probe_for=runtime_probe_for,
         confirmatory_cohort_for=confirmatory_cohort_for,
+        modeling_columns=columns,
     )

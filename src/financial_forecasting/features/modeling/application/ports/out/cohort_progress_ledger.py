@@ -50,7 +50,13 @@ class CohortProgressLedger(Protocol):
         ...
 
     def release_writer(self) -> None:
-        """Libera o lock (idempotente: sem lock, não faz nada)."""
+        """Libera o lock (idempotente: sem lock, não faz nada).
+
+        Invariante: libera só o lock que ESTA instância adquiriu — depois de um
+        `break_stale=True` de outro processo, o dono antigo não apaga o lock do
+        novo (o adapter guarda um token; o fake, de processo único, não tem
+        outro dono possível).
+        """
         ...
 
     def completed_units(self, cohort_id: str) -> Mapping[str, Mapping[str, int]]:

@@ -171,3 +171,18 @@ def test_real_uncommitted_cohort_file_is_an_explicit_error(tmp_path: Path) -> No
 
     with pytest.raises(RuntimeError, match="code identity"):
         probe.snapshot()
+
+
+@pytest.mark.contract
+@pytest.mark.usefixtures("isolated_git")
+def test_real_repo_root_below_the_repository_root_is_an_explicit_error(tmp_path: Path) -> None:
+    """F1/G2 (Checkpoint C 24-31): num subdiretório, os pathspecs do `git status`
+    não casariam `src` e `code_dirty` sairia sempre "false" — recusa em vez disso."""
+    repo = _repo(tmp_path)
+    (repo / "src/pkg/module.py").write_text("x = 2" + chr(10), encoding="utf-8")
+    probe = GitRuntimeEnvironmentProbe(
+        repo_root=repo / "docs", cohort_file="../" + _COHORT_FILE, device="cpu"
+    )
+
+    with pytest.raises(RuntimeError, match="not the repository root"):
+        probe.snapshot()

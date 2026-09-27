@@ -192,6 +192,10 @@ def test_spec_is_frozen_dataclass() -> None:
         ({"quantile_levels": (0.0, 0.5)}, "quantile_levels"),
         ({"seeds": (1, 1)}, "seeds"),
         ({"baseline_specs": ()}, "baseline_specs"),
+        (
+            {"baseline_specs": (*BaselineSpec.canonical_five(), BaselineSpec(family="ar1"))},
+            "repeats a family",
+        ),
     ],
 )
 def test_invalid_spec_is_rejected(overrides: dict[str, object], match: str) -> None:

@@ -25,6 +25,9 @@ import pytest
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
 )
+from financial_forecasting.features.modeling.application.use_cases.run_confirmatory_cohort import (
+    load_training_grid,
+)
 from financial_forecasting.features.modeling.application.use_cases.run_gbm_sweep import (
     RunGbmSweep,
 )
@@ -74,11 +77,15 @@ def _row(day: int, target: float, f_a: float | None, f_b: float | None) -> dict[
 
 def _store(rows: list[dict[str, object]] | None = None) -> FakeMedallionStore:
     store = FakeMedallionStore()
-    seeded = rows if rows is not None else [
-        _row(4, 0.03, 3.0, 30.0),
-        _row(2, 0.01, 1.0, 10.0),
-        _row(3, 0.02, 2.0, 20.0),
-    ]
+    seeded = (
+        rows
+        if rows is not None
+        else [
+            _row(4, 0.03, 3.0, 30.0),
+            _row(2, 0.01, 1.0, 10.0),
+            _row(3, 0.02, 2.0, 20.0),
+        ]
+    )
     if seeded:
         store.seed_read_only(layer="processed", table="dataset_tft", asset="AAPL", rows=seeded)
     other = {**_row(5, 9.9, 9.0, 90.0), "asset_id": "MSFT"}
@@ -311,3 +318,24 @@ def test_both_sweeps_fingerprint_the_same_data_identically() -> None:
     )
 
     assert tft_fingerprint == gbm_fingerprint
+
+
+def test_the_cohort_reader_starts_on_the_same_row_as_the_use_cases() -> None:
+    """I9 / G9 (Checkpoint C 24-31): o grid que o cohort confere em I4
+    (`load_training_grid` com as `modeling_columns` injetadas) é o mesmo que os
+    use cases de treino e as baselines leem."""
+    warm_up_column = modeling_columns()[0]
+    rows = _with_modeling_columns(
+        [_row(2, 0.01, 1.0, 10.0), _row(3, 0.02, 2.0, 20.0), _row(4, 0.03, 3.0, 30.0)]
+    )
+    rows[0][warm_up_column] = None
+
+    cohort_grid = load_training_grid(
+        store=_store(rows), asset_id="AAPL", columns=modeling_columns()
+    )
+    gbm_sessions = TrainGbmQuantile._load_dataset(
+        _self(_store(rows)), _SCOPE, expected_feature_names()
+    )[2]
+    baselines_sessions = _load_baselines(_self(_store(rows)), _SCOPE)[2]
+
+    assert cohort_grid.sessions() == gbm_sessions == baselines_sessions == _EXPECTED_SESSIONS[1:]

@@ -160,6 +160,11 @@ class CohortSpec:
             raise ValueError(f"CohortSpec.seeds must be unique; got {self.seeds}")
         if not self.baseline_specs:
             raise ValueError("CohortSpec.baseline_specs must be non-empty")
+        families = [spec.family for spec in self.baseline_specs]
+        if len(set(families)) != len(families):
+            # Mesma família duas vezes grava sob o mesmo `model_version`: a
+            # contagem por modelo (corrida e `verify`) deixaria de fechar.
+            raise ValueError(f"CohortSpec.baseline_specs repeats a family: {families}")
 
     @property
     def max_horizon(self) -> int:
