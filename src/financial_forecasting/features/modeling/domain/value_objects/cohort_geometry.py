@@ -75,22 +75,35 @@ class CohortGeometry:
     ) -> int:
         """Linhas de predição que um run persiste no fold `fold_index`.
 
-        Em todo fold, cada decisão de teste gera `n_levels` linhas por horizonte;
-        no último fold, as `h` últimas decisões não têm alvo dentro do painel e
-        são puladas pelo persister — pressupõe que a grade termina na última
-        sessão de teste (o splitter ladrilha a cauda).
+        Cada decisão de teste gera `n_levels` linhas por horizonte, exceto as
+        decisões cujo alvo `t + h` cai além do painel — o persister as pula. Com
+        os testes ladrilhados a partir do fim da grade, a decisão do fold `i` na
+        posição `k` do bloco fica a `e = (n_folds - i) * test_size - k` sessões do
+        fim, e tem alvo sse `h < e`: no último fold perdem-se `h` decisões; se
+        `h > test_size`, o penúltimo também perde. Horizontes repetidos são erro
+        (o persister os colapsa por chave).
         """
         if not 0 <= fold_index < self.n_folds:
             raise ValueError(f"fold_index must be in [0, {self.n_folds}); got {fold_index}")
         if not horizons or any(h < 1 for h in horizons):
             raise ValueError(f"horizons must be non-empty positive integers; got {horizons}")
+        if len(set(horizons)) != len(horizons):
+            raise ValueError(f"horizons must be unique; got {horizons}")
         if n_levels < 1:
             raise ValueError(f"n_levels must be >= 1; got {n_levels}")
-        is_last = fold_index == self.n_folds - 1
-        decisions = sum(
-            max(self.test_size - h, 0) if is_last else self.test_size for h in horizons
-        )
+        farthest = (self.n_folds - fold_index) * self.test_size
+        decisions = sum(max(0, min(self.test_size, farthest - h)) for h in horizons)
         return decisions * n_levels
+
+    def expected_runs(self, *, runs_per_fold: int) -> int:
+        """Runs que uma unidade grava: um por fold e por modelo da unidade.
+
+        TFT e GBM: `runs_per_fold = 1`; baselines: `runs_per_fold = 5` (uma spec
+        por família) — base da classificação por contagem (I7).
+        """
+        if runs_per_fold < 1:
+            raise ValueError(f"runs_per_fold must be >= 1; got {runs_per_fold}")
+        return self.n_folds * runs_per_fold
 
     def fold0_train_size(self, *, n_sessions: int, max_horizon: int) -> int:
         """Sessões de treino do fold 0 (o menor treino do cohort) num grid de `n_sessions`."""
