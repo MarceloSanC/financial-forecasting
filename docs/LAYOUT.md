@@ -257,23 +257,18 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 
   **Perímetro do gate hoje** — dito aqui porque doutrina mais larga que o gate é
   falso verde de segunda ordem, o defeito que a issue #60 existe para matar: o
-  contrato `bc-independence` do `.importlinter` cobre **apenas** `modeling`,
-  `analytics_store` e `feature_engineering`. Dentro desse trio, as 12 arestas de
-  runtime existentes estão declaradas UMA A UMA como exceção comentada (débito
-  medido, não permissão) e **uma aresta nova reprova o build**. Fora dele, a regra
-  é doutrina sem gate:
+  contrato `bc-independence` do `.importlinter` cobre os **quatro** slices
+  (`modeling`, `analytics_store`, `feature_engineering`, `market_data`). As 20
+  arestas de runtime existentes estão declaradas UMA A UMA como exceção comentada
+  (débito medido, não permissão) — as 8 `feature_engineering → market_data.domain.
+  entities` (`Candle`, `NewsArticle`, `FundamentalReport`) são dados, pela regra da
+  ADR 0.0.0053 (#95) — e **uma aresta nova reprova o build**. O que o gate não vê:
 
-  - **`market_data` está FORA do contrato.** Não é exceção declarada — é slice
-    **não coberto**: qualquer aresta envolvendo `market_data`, inclusive uma nova,
-    passa verde. As 9 arestas `feature_engineering → market_data.domain.entities`
-    (`Candle`, `NewsArticle`, `FundamentalReport` em assinatura de port) **não**
-    estão declaradas uma a uma. A regra que as julga já existe (ADR 0.0.0053: dados
-    em assinatura de port ficam declarados); incluir `market_data` no contrato e
-    declarar as 9 arestas é a issue #95 (speculative).
   - **Arestas sob `if TYPE_CHECKING:` são invisíveis ao contrato**
     (`exclude_type_checking_imports = True`, ver §3). Hoje as únicas type-only
-    cross-BC do trio são as assinaturas dos ports `PredictionPersister`/
-    `RunRecordPersister` de `modeling` (anotam DTOs/VO do `analytics_store`).
+    cross-slice são as assinaturas dos ports `PredictionPersister`/
+    `RunRecordPersister` de `modeling` (anotam DTOs/VO do `analytics_store`) e a
+    anotação `NewsArticle` do `FinbertSentimentModel` (`feature_engineering`).
 
   **Nota de escopo (ADR 0.0.0053):** esta regra enforça direção de dependência e
   aciclicidade entre slices — NÃO afirma que cada slice é um Bounded Context
