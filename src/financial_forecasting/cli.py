@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import importlib.util
+import logging
 import sys
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -41,9 +42,6 @@ from financial_forecasting.features.market_data.application.use_cases.ingest_fun
 )
 from financial_forecasting.features.market_data.application.use_cases.ingest_news import (
     IngestNewsRequest,
-)
-from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
-    modeling_columns,
 )
 from financial_forecasting.shared.domain.exceptions.base import ApplicationError, DomainError
 from financial_forecasting.shared.infrastructure.config.settings import Settings
@@ -122,6 +120,8 @@ def main(
 ) -> int:
     """Despacha o subcomando; erros esperados viram mensagem e exit code 2."""
     args = _parser().parse_args(argv)
+    # Uma linha por unidade do cohort (início, desfecho, tempo) no stderr.
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     injected = wiring or CliWiring()
     stdout = out or sys.stdout
     stderr = err or sys.stderr
@@ -143,7 +143,9 @@ def main(
                 out=stdout,
             )
         return _dispatch_cohort_command(args, deps, cohort_file, stdout)
-    except (ApplicationError, DomainError, ValueError) as exc:
+    except (ApplicationError, DomainError, ValueError, RuntimeError, OSError, TypeError) as exc:
+        # Erro de execução sai com 2; divergência do `verify` sai com 1
+        # (`EXIT_MISMATCH`): um script distingue "diverge" de "quebrou".
         stderr.write(f"error: {type(exc).__name__}: {exc}\n")
         return _EXIT_ERROR
 
@@ -160,8 +162,9 @@ def _dispatch_cohort_command(
         run_tft_sweep=deps.run_tft_sweep,
         run_gbm_sweep=deps.run_gbm_sweep,
         confirmatory_cohort_for=deps.confirmatory_cohort_for,
-        modeling_columns=modeling_columns(),
+        modeling_columns=deps.modeling_columns,
         load_spec=cohort_file.load,
+        parse_spec=cohort_file.parse,
         dump_spec=cohort_file.dump,
     )
     if args.command == "sweep":
