@@ -88,5 +88,11 @@ def test_stop_passes_on_prose_about_ratification() -> None:
     assert tg.decide(_stop(msg)) is None
 
 
+def test_stop_passes_when_line_declares_the_forks_closed() -> None:
+    # falso positivo real (sessão que fechou a #78): o marcador citado como nome
+    msg = '- **As 11 bifurcações "a ratificar" estão fechadas**, com registro em §10.1 do doc.'
+    assert tg.decide(_stop(msg)) is None
+
+
 def test_stop_never_blocks_twice() -> None:
     assert tg.decide(_stop("B-GATE a ratificar", active=True)) is None
