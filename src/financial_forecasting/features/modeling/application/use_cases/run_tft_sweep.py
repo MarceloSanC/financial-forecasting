@@ -39,6 +39,12 @@ from dataclasses import dataclass, replace
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
+from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
+    validate_dimension_names,
+)
+from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
+    TftTrainingParams,
+)
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     known_feature_names,
     unknown_feature_names,
@@ -64,7 +70,6 @@ if TYPE_CHECKING:
     )
     from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
         TftTrainer,
-        TftTrainingParams,
     )
     from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
         WalkForwardSplitter,
@@ -356,6 +361,7 @@ def _validate_command(command: RunTftSweepCommand) -> None:
         raise ValueError(f"n_trials must be >= 1; got {command.n_trials} (C9)")
     if not command.space:
         raise ValueError("space must declare at least one dimension (C2)")
+    validate_dimension_names(command.space, TftTrainingParams)
 
     levels = command.quantile_levels
     if not levels:
