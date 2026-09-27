@@ -806,4 +806,9 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 - **`materialize` recebe `--cohort`:** o comando da Task 33 no plano (`materialize --data-root …`) não diz de onde vem o ativo, e ele passa a vir do arquivo do cohort, fonte única do `asset_id`. A janela de ingestão é a mesma janela ampla e fixa do calendário do composition root; o que entra no dataset é decidido pelos brutos em `data_root`.
 - **`sweep` retomável por modelo:** um resultado já gravado sob o mesmo scope id não roda de novo. Se o processo cair entre o sweep do TFT e o do GBM, o do TFT não é refeito.
 
+### 2026-09-27 — [measurement] Task 31 — tempo do ponta a ponta (A6) — Claude (Opus 5.5)
+**Fixture:** 560 sessões XNYS sintéticas a partir de 2019-01-02 (`tests/e2e/fixtures/cohort/raw_cohort_fixture.py`). Materializadas, dão 559 linhas de dataset e 308 sessões no grid útil, depois de cortado o prefixo de aquecimento de 251 linhas. O cohort usa `n_folds = 2`, teste/early_stop/calib de 20 sessões, `embargo = 1`, `horizons = (1, 7)`, 1 seed, `n_trials = 1` e TFT com `max_epochs = 1`.
+**Tempo:** `test_cohort_runner_end_to_end` levou 100,4 s, 80,0 s e 168,6 s em três execuções no container (CPU dividida com outros jobs na terceira). Os três testes de erro somam cerca de 3 s. Folga grande contra o limite de 30 min do job de CI.
+**Comando:** `uv run --no-sync pytest tests/e2e/test_cohort_cli.py -q -p no:warnings --durations=4` → `4 passed in 104.42s`.
+
 <!-- END: post-execution -->
