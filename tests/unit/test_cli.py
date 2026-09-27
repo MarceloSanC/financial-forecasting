@@ -189,3 +189,26 @@ def test_cohort_commands_are_dispatched_with_the_wired_dependencies(
     assert deps.ledger._lock_path == tmp_path / "d" / ".writer.lock"
     assert deps.store._data_root == tmp_path / "d"
     assert deps.load_spec(cohort) == _draft()
+
+
+@pytest.mark.unit
+def test_unexpected_runtime_error_exits_2_not_the_mismatch_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """F5/G7 (Checkpoint C 24-31): "o comando quebrou" ≠ "a corrida diverge"."""
+    commands: Any = cli.importlib.import_module(f"{cli._CLI_PACKAGE}.cohort_commands")
+
+    def broken(*args: object, **kwargs: object) -> int:
+        raise RuntimeError("git unavailable")
+
+    monkeypatch.setattr(commands, "verify", broken)
+    err = io.StringIO()
+
+    code = cli.main(
+        ["verify", "--data-root", str(tmp_path / "d"), "--cohort", str(_cohort(tmp_path))],
+        wiring=_wiring(tmp_path),
+        err=err,
+    )
+
+    assert code == _EXIT_ERROR != commands.EXIT_MISMATCH
+    assert "RuntimeError: git unavailable" in err.getvalue()
