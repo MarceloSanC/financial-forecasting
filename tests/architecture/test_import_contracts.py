@@ -442,6 +442,21 @@ _REAL_VIOLATION_CASES = (
         },
         id="bc-independence:modeling-imports-new-analytics-store-edge",
     ),
+    # #95: `market_data` entrou no perímetro — antes, esta aresta NOVA
+    # `feature_engineering -> market_data` passava verde (slice não coberto). O
+    # alvo `Candle` está nas exceções, mas só a partir dos 8 módulos declarados;
+    # de um módulo novo, a aresta reprova.
+    pytest.param(
+        "bc-independence",
+        {
+            "features/feature_engineering/application/_arch_audit_taint_market_data.py": (
+                "from financial_forecasting.features.market_data.domain"
+                ".entities.candle import Candle\n"
+                "\n_use = Candle\n"
+            )
+        },
+        id="bc-independence:feature-engineering-imports-new-market-data-edge",
+    ),
     # ---------------------------------------------------------------------
     # Issue #60 (auditoria) — UM CASO POR MÓDULO PROIBIDO.
     # O `## Escopo` item 3 pedia "um por módulo proibido onde o contrato lista
