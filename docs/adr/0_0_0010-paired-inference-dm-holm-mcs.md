@@ -62,8 +62,10 @@ Closed on 2026-09-26 (doc §10.1).
    transition-based backtests (LR_ind, LR_cc) are per seed, in the profile. The GBM is deterministic in the current adapter
    (`deterministic=True`, no bagging, no feature subsampling), so it enters
    once; Stage 5.5 proves it with a "two seeds → identical predictions"
-   contract test. The **number** of candidate seeds is a P decision (GPU cost)
-   taken when the cohort is frozen (5.5).
+   contract test. The **number** of candidate seeds is a P decision (GPU cost),
+   taken by the human on 2026-09-26: S = 5, raised to 10 if, on the exploratory
+   split, s_b²/5 > 0.25·SE² (s_b = between-seed SD of the per-seed mean pinball;
+   SE = HAC standard error of the DM against a baseline).
 
 ## Alternatives considered
 
