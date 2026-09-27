@@ -130,6 +130,11 @@ def _write_parquet(df: pd.DataFrame, path: Path) -> None:
     mesmo sistema de arquivos): uma queda no meio da regravação de uma partição
     deixa o arquivo anterior intacto em vez de truncar linhas de unidades já
     concluídas que dividem o mesmo arquivo (ADR 5.5.0003, D12 da Stage 5.5).
+
+    Escopo da garantia: atomicidade contra queda do PROCESSO. Não há `fsync`
+    antes da troca, então queda de energia/VM pode, em alguns sistemas de
+    arquivos, persistir o rename antes dos dados — a retomada do cohort reconfere
+    as contagens no silver (ADR 5.5.0003) e acusa esse caso.
     """
     table = pa.Table.from_pandas(df, preserve_index=False)
     temp = _temp_path(path)
