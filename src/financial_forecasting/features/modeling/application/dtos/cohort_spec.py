@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from itertools import pairwise
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
     validate_dimension_names,
@@ -55,6 +55,17 @@ if TYPE_CHECKING:
 
 _HASH_PREFIX = 12
 _FREEZE_FIELDS = ("tft_params", "gbm_params", "provenance", "dataset_fingerprint", "seeds")
+
+
+def _numbers_by_value(value: Any) -> Any:  # noqa: ANN401 — percorre o payload do asdict
+    """Troca float inteiro por int, recursivamente (bool e não finitos intactos)."""
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, dict):
+        return {key: _numbers_by_value(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_numbers_by_value(item) for item in value]
+    return value
 
 
 @dataclass(frozen=True)
@@ -115,21 +126,31 @@ class CohortSpec:
 
     def __post_init__(self) -> None:
         """Validações de forma; a coerência declarado/observado é do `run` (I4)."""
-        for field_name in ("name", "asset_id", "feature_set_name", "feature_set_hash",
-                           "pipeline_version", "device"):
+        for field_name in (
+            "name",
+            "asset_id",
+            "feature_set_name",
+            "feature_set_hash",
+            "pipeline_version",
+            "device",
+        ):
             if not getattr(self, field_name):
                 raise ValueError(f"CohortSpec.{field_name} must be non-empty")
         if self.revision < 0:
             raise ValueError(f"CohortSpec.revision must be >= 0; got {self.revision}")
-        if not self.horizons or any(h < 1 for h in self.horizons) or any(
-            b <= a for a, b in pairwise(self.horizons)
+        if (
+            not self.horizons
+            or any(h < 1 for h in self.horizons)
+            or any(b <= a for a, b in pairwise(self.horizons))
         ):
             raise ValueError(
                 f"CohortSpec.horizons must be positive and strictly increasing; got {self.horizons}"
             )
         levels = self.quantile_levels
-        if not levels or any(not 0.0 < tau < 1.0 for tau in levels) or any(
-            b <= a for a, b in pairwise(levels)
+        if (
+            not levels
+            or any(not 0.0 < tau < 1.0 for tau in levels)
+            or any(b <= a for a, b in pairwise(levels))
         ):
             raise ValueError(
                 "CohortSpec.quantile_levels must be in (0, 1) and strictly increasing; "
@@ -156,12 +177,19 @@ class CohortSpec:
         )
 
     def hash_payload(self) -> dict[str, object]:
-        """Payload canônico do spec inteiro (sem a seed por unidade do TFT)."""
+        """Payload canônico do spec inteiro (sem a seed por unidade do TFT).
+
+        Números entram pelo VALOR: float inteiro (`8.0`) vira `8`. Sem isso, dois
+        specs iguais pela igualdade do dataclass (`8 == 8.0`) — um montado em
+        memória, outro lido do arquivo, que coere para o tipo declarado — teriam
+        hashes diferentes.
+        """
         payload = asdict(self)
         tft = payload.get("tft_params")
         if isinstance(tft, dict):
             tft.pop("seed", None)
-        return payload
+        canonical: dict[str, object] = _numbers_by_value(payload)
+        return canonical
 
     def draft_payload(self) -> dict[str, object]:
         """Payload sem os campos de congelamento — identifica os sweeps."""

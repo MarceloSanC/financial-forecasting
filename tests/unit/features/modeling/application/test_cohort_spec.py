@@ -225,3 +225,29 @@ def test_no_field_carries_oos_predictions_or_metrics() -> None:
     ]
 
     assert not [name for name in names if any(token in name for token in forbidden)]
+
+
+@pytest.mark.unit
+def test_equal_specs_hash_equal_even_when_a_number_is_int_in_one_and_float_in_the_other() -> None:
+    """Lido do arquivo, `low = 8` vira `8.0` (tipo declarado); em memória pode ser `8`."""
+    as_int = _spec()
+    as_float = _spec(
+        sweep=replace(
+            _PLAN,
+            tft_space=(
+                SearchDimension(name="hidden_size", low=10.0, high=320.0, kind="int", log=True),
+            ),
+            gbm_space=(SearchDimension(name="num_leaves", low=8.0, high=128.0, kind="int"),),
+        ),
+    )
+
+    assert as_int == as_float
+    assert _hash(as_int) == _hash(as_float)
+    assert as_int.draft_payload() == as_float.draft_payload()
+
+
+@pytest.mark.unit
+def test_a_non_integral_float_still_changes_the_hash() -> None:
+    changed = _spec(tft_params=TftTrainingParams(seed=0, hidden_size=40, dropout=0.15))
+
+    assert _hash(changed) != _hash(_spec())
