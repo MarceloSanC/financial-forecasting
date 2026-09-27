@@ -197,3 +197,28 @@ def test_optional_fields_none_are_accepted() -> None:
     (scored,) = result.scored
     assert scored.score == pytest.approx(0.3)
     assert scored.trading_day == date(2023, 1, 4)
+
+
+@pytest.mark.unit
+def test_article_after_the_close_of_the_last_day_is_left_out_not_an_error() -> None:
+    """Achado da materialização real (Stage 5.5): notícia depois do fechamento no
+    último dia da janela resolvia para a sessão seguinte, fora do calendário
+    materializado, e a materialização inteira caía. Agora a sessão seguinte é
+    resolvida (calendário com folga) e o artigo sai, por cair fora da janela."""
+    store = _store_with(
+        [
+            _news_row("same-day", datetime(2023, 6, 30, 10, 0, tzinfo=UTC)),
+            _news_row("after-close", datetime(2023, 6, 30, 20, 0, tzinfo=UTC)),
+        ]
+    )
+    request = ScoreAndAggregateSentimentRequest(
+        asset=_ASSET,
+        start=datetime(2023, 6, 1, tzinfo=UTC),
+        end=datetime(2023, 6, 30, tzinfo=UTC),
+        close_hour=time(16, 0),
+    )
+
+    result = _use_case(store, {"same-day": 0.5, "after-close": -0.9}).execute(request)
+
+    assert [item.article_id for item in result.scored] == ["same-day"]
+    assert [(d.day, d.n_articles) for d in result.daily] == [(date(2023, 6, 30), 1)]
