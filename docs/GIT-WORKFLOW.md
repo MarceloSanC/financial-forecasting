@@ -25,9 +25,10 @@ Fluxo de versionamento e CI/CD para projetos colaborativos. Garante rastreabilid
 4. **GitHub CLI (`gh`) preferencial**: usar quando disponível. Fallback para `git` puro se necessário.
 5. **Sem deploy manual**: produção só via merge em `main`. Dev só via merge em `develop`. SSH em prod é proibido.
 6. **Merge commit preserva história**: NUNCA squash, NUNCA rebase no merge. Branches trazem toda sua contexto.
-7. **Até duas branches em voo, cada uma na sua worktree**: no máximo
-   **duas** branches sem PR mergeado ao mesmo tempo, e só se **não
-   conflitam** (critérios em §"Branches em voo"). **Toda** implementação
+7. **Branches em paralelo sem conflito, cada uma na sua worktree**: não há
+   limite de quantidade; uma branch nova só é criada se **não conflita
+   diretamente** com nenhuma branch em voo (critérios em §"Branches em
+   voo"). Se conflita, espera a outra mergear. **Toda** implementação
    roda numa worktree própria criada por `scripts/worktree-new.py`; o
    **checkout principal fica sempre em `develop`, limpo** — nunca se cria
    nem se troca de branch nele (o hook `.claude/hooks/git_guard.py`
@@ -494,25 +495,26 @@ Quando a equipe decide promover `develop` para `main`:
 
 ## Branches em voo
 
-**Regra (Princípios fundamentais #7):** até **duas** branches em voo
-(sem PR mergeado), **cada uma na sua worktree**, e o checkout principal
-sempre livre em `develop`. O limite existe porque paralelismo sem
-isolamento costuma misturar commits via working tree sujo (`git stash`
-vira `git stash drop` errado), pôr PRs disputando o mesmo gate humano e
-deixar a branch antiga esquecida. Worktree resolve o primeiro; o teto de
-duas e o critério de conflito resolvem os outros dois.
+**Regra (Princípios fundamentais #7):** quantas branches em voo (sem PR
+mergeado) forem úteis, **cada uma na sua worktree**, com o checkout
+principal sempre livre em `develop`. **Não há teto de quantidade.** O que
+barra uma branch nova é **conflito direto** com alguma branch em voo —
+conferido **antes de criar a worktree**; havendo conflito, a nova espera a
+outra mergear. Worktree evita misturar commits de escopos diferentes no
+mesmo working tree; o critério de conflito evita PRs que se sobrepõem e
+retrabalho de merge.
 
-**Duas branches só podem voar juntas se não conflitam** — todas:
+**A branch nova não conflita com uma branch em voo quando** — todas:
 
 - nenhuma depende da outra (roadmap "Depende de", issue, ou uma consome
   contrato que a outra cria);
 - os arquivos a criar/modificar (issue/`technical.md`) são disjuntos;
-- nenhuma das duas mexe em ponto compartilhado: port/contrato público,
+- as duas não mexem no mesmo ponto compartilhado: port/contrato público,
   schema persistido, `.importlinter`, `pyproject.toml`/`uv.lock`,
   `composition_root.py`, `docs/roadmap.md`.
 
-Conferência mecânica antes de abrir o PR da segunda (interseção vazia =
-ok): `comm -12 <(git diff --name-only origin/develop...A | sort)
+Conferência mecânica de cada par em voo, de novo antes do PR (interseção
+vazia = ok): `comm -12 <(git diff --name-only origin/develop...A | sort)
 <(git diff --name-only origin/develop...B | sort)`.
 
 ### Criar a worktree (sempre pelo script)
@@ -726,7 +728,7 @@ Exemplo de feedback construtivo:
 - Push de branch com carona de outro escopo: `git log origin/<base>..HEAD` mostra commits que não pertencem ao escopo declarado do branch (ver Etapa 4)
 - Mensagem de commit fora do padrão Conventional Commits **em português** (descrição em PT, escopo em snake/kebab ASCII) ou sem `Refs #<num-issue>` no rodapé quando há issue associada
 - Nome de branch **fora de inglês ASCII kebab-case** (ex.: `feat/42-adicionar-login` ou `feat/42-Add-Login` — deve ser `feat/42-add-google-login`; ver §Princípios fundamentais #3 e [`./CONVENTIONS.md`](./CONVENTIONS.md) §1)
-- Branch criada ou trocada **no checkout principal**, terceira branch em voo, ou duas branches em voo que **conflitam** (critérios em §"Branches em voo"). Exceção: usuário pediu **explicitamente** o fluxo de PR parcial (§"Branches em voo" → §Quando precisar trocar de escopo)
+- Branch criada ou trocada **no checkout principal**, ou branch criada em **conflito direto** com outra em voo (critérios em §"Branches em voo"). Exceção: usuário pediu **explicitamente** o fluxo de PR parcial (§"Branches em voo" → §Quando precisar trocar de escopo)
 - Body de commit de Task sem bullets, ou commit agrupando vários escopos diferentes (deve quebrar em commits separados por escopo mínimo)
 - Iniciar uma Stage (criar branch da Stage, pasta `docs/stages/N.M-<slug>/`, ou rodar prompt da Fase 3A) **sem que a issue correspondente já exista** no backlog do GitHub. Verificação: `gh issue view <num>` deve retornar a issue. Issue-first é Princípio fundamental #1; sem issue verificável, parar e criar a issue primeiro (ver [`./RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFECYCLE.md) Passo 1 + `scripts/check_stage_issue.py` em `make docs-check`)
 

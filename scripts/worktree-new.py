@@ -32,8 +32,9 @@ Convenções respeitadas:
     - Formato `<tipo>/<num-issue>-<slug>` ou Stage
       `<tipo>/<num-issue>-<N-M>-<slug>` — CONVENTIONS.md §4.
     - Base remota: `develop` (feat/fix/refactor/...) ou `main` (hotfix).
-    - Até duas branches em voo, cada uma na sua worktree; o checkout
-      principal fica livre em `develop`. Agente no host (Docker-only):
+    - Branches em paralelo sem limite, desde que sem conflito direto com
+      as em voo; cada uma na sua worktree; o checkout principal fica
+      livre em `develop`. Agente no host (Docker-only):
       `python scripts/worktree-new.py <branch> --no-setup --no-vscode`.
       Ver GIT-WORKFLOW.md §"Branches em voo".
 

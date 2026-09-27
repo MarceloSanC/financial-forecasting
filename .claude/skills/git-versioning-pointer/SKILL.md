@@ -51,14 +51,14 @@ seção correspondente. Cada uma traz três blocos:
 
 ## 🌿 `git checkout -b` (criar branch)
 
-- **LER:** `docs/GIT-WORKFLOW.md` §Branches (incluindo "Revisões pós-Stage") + §"Branches em voo" (até duas sem conflito, cada uma na sua worktree; criar só com `python scripts/worktree-new.py <branch> --no-setup --no-vscode`, nunca `git checkout -b` no checkout principal — o hook `git_guard` recusa); `docs/CONVENTIONS.md` §1 (slug em EN) + §4 (formato de branch de Stage e pós-Stage)
+- **LER:** `docs/GIT-WORKFLOW.md` §Branches (incluindo "Revisões pós-Stage") + §"Branches em voo" (sem limite de quantidade; bloqueia só conflito direto com branch em voo; cada uma na sua worktree; criar só com `python scripts/worktree-new.py <branch> --no-setup --no-vscode`, nunca `git checkout -b` no checkout principal — o hook `git_guard` recusa); `docs/CONVENTIONS.md` §1 (slug em EN) + §4 (formato de branch de Stage e pós-Stage)
 - **CHECK:**
   ```bash
   git branch --show-current                        # se != develop/main, voltar
   gh pr list --head $(git branch --show-current)   # PR aberto na branch atual?
   gh issue view <num>                              # toda branch (Stage ou pós-Stage) exige issue
   ```
-- **GOTCHA:** já há duas branches em voo, ou a nova conflita com a que voa (critérios em §"Branches em voo") → **terminar uma primeiro** (Princípio #7). PR parcial em draft é exceção e só sob pedido explícito do usuário.
+- **GOTCHA:** a nova conflita diretamente com alguma branch em voo (critérios em §"Branches em voo") → **esperar a outra mergear** (Princípio #7). Quantidade de branches em voo não é critério. PR parcial em draft é exceção e só sob pedido explícito do usuário.
 - **GOTCHA (Stage):** branch de Stage exige issue pré-existente no GitHub (Princípio #1 + CONVENTIONS §3). Se `gh issue view <num>` falha, **não criar branch** — voltar e criar a issue primeiro (RUNBOOK-STAGE-LIFECYCLE Passo 1).
 - **GOTCHA (pós-Stage):** branch criada **depois que o PR da Stage já foi mergeado** volta ao formato **genérico** `<tipo>/<num-issue>-<slug>` — **SEM `<N-M>`**. O `<N-M>` é só durante a execução da Stage. Pós-Stage = bug/chore/doc normal, com **nova issue** (não a issue original da Stage). Ver GIT-WORKFLOW §Branches → "Revisões pós-Stage".
 
@@ -126,7 +126,7 @@ seção correspondente. Cada uma traz três blocos:
 | Seção §7 post-execution do technical.md | `CONVENTIONS.md` §3.4 |
 | Gates de PR | `GIT-WORKFLOW.md` §Gates de PR |
 | PR parcial em draft (procedimento) | `GIT-WORKFLOW.md` §"Branches em voo" → §Quando precisar trocar de escopo |
-| Worktrees paralelas (2ª branch, escopos disjuntos) | `GIT-WORKFLOW.md` §"Branches em voo" → §Criar a worktree; `make worktree BRANCH=...` (`scripts/worktree-new.py` / `worktree-rm.py`) |
+| Worktrees paralelas (branches sem conflito entre si) | `GIT-WORKFLOW.md` §"Branches em voo" → §Criar a worktree; `make worktree BRANCH=...` (`scripts/worktree-new.py` / `worktree-rm.py`) |
 | Hotfix | `GIT-WORKFLOW.md` §Hotfix |
 | Release | `GIT-WORKFLOW.md` §Release |
 | Comportamento bloqueante | `GIT-WORKFLOW.md` §Comportamento bloqueante |
