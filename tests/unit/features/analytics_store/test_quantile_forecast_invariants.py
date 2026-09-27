@@ -7,8 +7,8 @@ Prova (concept 4.3 A4, I5/C3/C4; ADR `4_3_0002`):
 - (b) grade já-monotônica → `guardrail_values == raw_values`, `applied = False`;
 - (c) não-finito (`inf`/`nan`) / `None` → valores preservados, `applied = False`;
 - (d) caso base triplet p10/p50/p90 reproduz o `enforce_monotonic_triplet` do old;
-- (e) construção inválida (`len` divergente, níveis não-crescentes/duplicados)
-  → `ValueError`;
+- (e) construção inválida (`len` divergente, níveis não-crescentes/duplicados,
+  níveis fora de `(0, 1)`) → `ValueError`;
 - separação do gate de degeneração (`q_low == q_high` passa intacto).
 """
 
@@ -128,6 +128,33 @@ def test_non_increasing_or_duplicate_levels_raise_value_error(
     """A4 (e)/C3: níveis não estritamente crescentes / duplicados → ValueError."""
     with pytest.raises(ValueError, match="strictly increasing"):
         QuantileForecast.from_raw(levels=bad_levels, raw_values=(0.1, 0.5, 0.9))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "bad_levels",
+    [
+        (0.0, 0.5, 0.9),  # borda inferior inclusiva (0 não é quantil interior)
+        (0.1, 0.5, 1.0),  # borda superior inclusiva
+        (0.1, 0.5, 1.5),  # acima de 1
+        (-0.1, 0.5, 0.9),  # negativo
+        (0.1, math.nan, 0.9),  # nan não é comparável → rejeitado
+    ],
+)
+def test_levels_outside_open_unit_interval_raise_value_error(
+    bad_levels: tuple[float, ...],
+) -> None:
+    """#64: nível fora de `(0, 1)` → ValueError (entra na PK de `fact_oos_predictions`)."""
+    with pytest.raises(ValueError, match=r"in \(0, 1\)"):
+        QuantileForecast.from_raw(levels=bad_levels, raw_values=(0.1, 0.5, 0.9))
+
+
+@pytest.mark.unit
+def test_levels_just_inside_open_unit_interval_are_accepted() -> None:
+    """#64: níveis colados nas bordas, mas interiores, passam (faixa é aberta, não fechada)."""
+    levels = (1e-9, 0.5, 1.0 - 1e-9)
+    forecast = QuantileForecast.from_raw(levels=levels, raw_values=(0.1, 0.5, 0.9))
+    assert forecast.levels == levels
 
 
 @pytest.mark.unit

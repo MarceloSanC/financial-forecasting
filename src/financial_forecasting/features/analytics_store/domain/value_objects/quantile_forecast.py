@@ -68,8 +68,9 @@ class QuantileForecast:
             `QuantileForecast` com `guardrail_values`/`guardrail_applied` resolvidos.
 
         Raises:
-            ValueError: `len(levels) != len(raw_values)`, ou `levels` não estritamente
-                crescente / com duplicatas (C3).
+            ValueError: `len(levels) != len(raw_values)`, `levels` fora de `(0, 1)`
+                (inclui `nan`), ou `levels` não estritamente crescente / com
+                duplicatas (C3).
         """
         if len(levels) != len(raw_values):
             raise ValueError(
@@ -78,6 +79,10 @@ class QuantileForecast:
             )
         if not levels:
             raise ValueError("levels must be non-empty")
+        # Defesa em profundidade: `quantile_level` entra na PK lógica de
+        # `fact_oos_predictions`; a faixa já é validada a montante (#64).
+        if any(not 0.0 < level < 1.0 for level in levels):
+            raise ValueError(f"levels must all be in (0, 1), got {levels}")
         if any(b <= a for a, b in pairwise(levels)):
             raise ValueError(f"levels must be strictly increasing and unique, got {levels}")
 
