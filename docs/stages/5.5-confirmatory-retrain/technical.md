@@ -742,4 +742,12 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 - C6 (baixo) sem `fsync` → **corrigido** como escopo declarado na docstring (atomicidade contra queda do processo; energia coberta pela reconferência de contagens do ADR 5.5.0003).
 - C7 (baixo) limpeza silenciosa → **refutado**: o lock de escritor único impede apagar temporário de outro processo em voo (artefato: ADR 5.5.0003 §Decision "Single writer per `data_root`"); o adapter não tem logger e incluir um só para isso não muda comportamento.
 
+### 2026-09-27 — Checkpoint C (bloco 05–10 + 12) — disposições — Claude (Opus 5.5)
+- F1 (médio) TFT/sweep cortam e (no sweep) calculam a impressão digital na ordem do TFT; o cohort usará a de `modeling_columns()` — hoje coincidem só porque o registry não tem spec `known`; I4 falharia sem mudança real no dado → **corrigido** canonizando a ordem no VO (`DatasetContentFingerprint` ordena os nomes: colunas nomeadas são o mesmo conteúdo em qualquer ordem) + teste de igualdade sweep × `modeling_columns()` com ordem invertida; mutação real (remover a ordenação) derruba 2 testes (`task-12-fix`, `task-09-fix`).
+- F2 (baixo) filtro de `None` morto após o corte, que desalinharia a coluna → **corrigido**: ausente após o corte ergue (`_finite_tail`).
+- F3 (baixo) `TrainingGrid.columns` mutável → **corrigido** com `MappingProxyType`.
+- F4 (baixo) sweep sem teste de ausente no interior → **corrigido**.
+- F5 (info) baselines passam a falhar com ausente no interior → já declarado (concept §4, R6); medido na Task 33.
+- F6 (info) mover `modeling_columns()` para módulo neutro → **refutado**: um módulo novo importando o registry é aresta nova que o `bc-independence` reprova (`.importlinter`, `ignore_imports` lista só `train_gbm_quantile`, `run_baselines`, `train_tft`); a função fica no módulo que já tem a aresta declarada.
+
 <!-- END: post-execution -->
