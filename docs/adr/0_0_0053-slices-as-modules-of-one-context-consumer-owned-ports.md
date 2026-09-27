@@ -5,7 +5,7 @@ when-use: Reference before adding any dependency between two slices under `featu
 keywords: [adr, bounded-context, vertical-slices, modules, dependency-inversion, protocol, duck-typing, anticorruption-layer, shared-kernel, context-map, bc-independence, import-linter, modeling, analytics_store]
 status: accepted
 created_at: 2026-09-14
-updated_at: 2026-09-14
+updated_at: 2026-09-27
 adr_id: 0.0.0053
 decision: The four slices under `features/` (market_data, feature_engineering, modeling, analytics_store) are modules of a single bounded context, not separate contexts — so the rule governing their coupling is layering, dependency direction and acyclicity, not context mapping. When a slice needs behavior from another, it defines the port (a `Protocol`) in its own `application/ports/out/` and the supplier satisfies it structurally without importing the consumer; what may cross the boundary at runtime is data (the supplier's inbound-port DTOs and its value objects), declared edge by edge in the `bc-independence` contract. No Anticorruption Layer and no Shared Kernel are introduced between slices.
 context_stage: 0.0-global
@@ -13,6 +13,8 @@ bounded_context: transversal
 ---
 
 # ADR 0.0.0053 — Slices as modules of one context; consumer-owned ports
+
+> ⚠️ **Errata (2026-09-27):** "Alternatives considered" leaves `market_data` out of `bc-independence` and counts "nine `feature_engineering → market_data.domain.entities` edges … in port signatures". Issue #95 (PR #107) has since put `market_data` in the contract. The edges were 8 at runtime (2 in port signatures, 4 in use cases/domain service, 2 in adapters) plus 1 type-only (`FinbertSentimentModel`, invisible to the contract). The 8 are declared as data under item 3: `Candle`/`NewsArticle`/`FundamentalReport` are frozen dataclasses whose only logic is `__post_init__` validation, so they cross as constructed values, read fields and signature types, like the VOs of item 3. See `.importlinter` (contract 13) and LAYOUT §7.
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
