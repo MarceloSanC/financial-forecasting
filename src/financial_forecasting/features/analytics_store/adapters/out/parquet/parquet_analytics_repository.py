@@ -27,6 +27,7 @@ Layout em disco (concept 4.2 §9):
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -106,10 +107,38 @@ def _materialize_nullable_int(series: pd.Series) -> pd.Series:
     return pd.Series(pd.array(values, dtype="Int64"), index=series.index)
 
 
+def _temp_path(path: Path) -> Path:
+    """Arquivo temporário da gravação atômica, ao lado do destino.
+
+    O sufixo `.tmp-<pid>` NÃO casa com o glob de leitura (`**/*.parquet`) nem com
+    a checagem de vazio (`rglob("*.parquet")`): um temporário deixado por uma
+    queda nunca é lido como dado (ADR 5.5.0003).
+    """
+    return path.with_name(f"{path.name}.tmp-{os.getpid()}")
+
+
+def _remove_stale_temps(path: Path) -> None:
+    """Remove temporários de gravações anteriores interrompidas desta partição."""
+    for stale in path.parent.glob(f"{path.name}.tmp-*"):
+        stale.unlink(missing_ok=True)
+
+
 def _write_parquet(df: pd.DataFrame, path: Path) -> None:
-    """Grava um `DataFrame` como Parquet via pyarrow (sem índice)."""
+    """Grava um `DataFrame` como Parquet via pyarrow (sem índice), de forma atômica.
+
+    Grava num temporário no mesmo diretório e troca por `os.replace` (atômico no
+    mesmo sistema de arquivos): uma queda no meio da regravação de uma partição
+    deixa o arquivo anterior intacto em vez de truncar linhas de unidades já
+    concluídas que dividem o mesmo arquivo (ADR 5.5.0003, D12 da Stage 5.5).
+    """
     table = pa.Table.from_pandas(df, preserve_index=False)
-    pq.write_table(table, path)  # type: ignore[no-untyped-call]
+    temp = _temp_path(path)
+    try:
+        pq.write_table(table, temp)  # type: ignore[no-untyped-call]
+        os.replace(temp, path)
+    except BaseException:
+        temp.unlink(missing_ok=True)
+        raise
 
 
 class ParquetAnalyticsRepository:
@@ -231,8 +260,11 @@ class ParquetAnalyticsRepository:
 
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
+            _remove_stale_temps(path)
             _write_parquet(incoming, path)
             return
+
+        _remove_stale_temps(path)
 
         current = pd.read_parquet(path)
         collisions = self._pk_tuples(current, pk_cols) & self._pk_tuples(incoming, pk_cols)
