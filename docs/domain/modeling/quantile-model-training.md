@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 5 (
 keywords: [domain, modeling, quantile, pinball, baseline, ewma, ar1, historical-quantiles, random-walk, lightgbm, gbm, tft, early-stopping, optuna, hpo, confirmatory-cohort, seeds-folds, rearrangement, quantile-crossing, degenerate-grid]
 status: accepted
 created_at: 2026-07-14
-updated_at: 2026-07-15
+updated_at: 2026-09-26
 bounded_context: modeling
 subdomain: quantile-model-training
 references:
@@ -561,7 +561,10 @@ lado de lá fica no doc de domínio futuro daquele BC:
    Holm, MCS e Christoffersen são teoria do Step 6 e **não são derivados
    aqui**.
 4. **Grade degenerada é assunto do gate de degeneração** (Stage 6.1), que
-   invalida métricas de linhas degeneradas e reporta a taxa — papel
+   invalida as métricas de **calibração** das linhas degeneradas (proper
+   scores seguem computados) e reporta a taxa — semântica fechada no
+   [doc de avaliação §5.3](../evaluation/probabilistic-forecast-evaluation.md)
+   e no [ADR 0.0.0011](../../adr/0_0_0011-preregistration-invariants-and-h1-gate.md) — papel
    **distinto** do guardrail de monotonicidade do ADR 4.3.0002 (§2.4, §3.4):
    o guardrail conserta ordem; o gate detecta ausência de informação
    distribucional.
