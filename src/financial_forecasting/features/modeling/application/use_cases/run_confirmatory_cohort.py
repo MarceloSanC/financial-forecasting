@@ -27,6 +27,10 @@ Cada unidade é então classificada (ADR 5.5.0003):
   `verified_completed` sem treinar; qualquer outro estado → `PartialCohortUnitError`.
 
 A marcação no ledger só acontece depois de o use case da unidade retornar.
+
+`cohort_model_keys` e `load_training_grid` são públicos para o comando `verify`
+e o `freeze` do CLI usarem a MESMA enumeração de modelos e a MESMA leitura do
+grid que a corrida — uma fonte só.
 """
 
 from __future__ import annotations
@@ -52,6 +56,7 @@ from financial_forecasting.features.modeling.application.use_cases.train_tft imp
     TrainTftResult,
 )
 from financial_forecasting.features.modeling.domain.services.training_grid import (
+    TrainingGrid,
     build_training_grid,
 )
 from financial_forecasting.shared.domain.exceptions.base import ApplicationError
@@ -113,9 +118,14 @@ class CompletedUnitCorruptedError(ApplicationError):
 
 @dataclass(frozen=True)
 class RunConfirmatoryCohortCommand:
-    """DTO de entrada — o spec congelado do cohort."""
+    """DTO de entrada — o spec congelado do cohort.
+
+    `break_stale_lock` remove um lock órfão (processo morto) antes de adquirir —
+    decisão explícita do operador (`--break-stale-lock`), nunca automática.
+    """
 
     spec: CohortSpec
+    break_stale_lock: bool = False
 
 
 @dataclass(frozen=True)
@@ -142,6 +152,38 @@ class _Unit:
     key: str
     model_keys: tuple[tuple[str, int | None], ...]
     execute: Callable[[], Mapping[str, int]]
+
+
+def _tft_unit(seed: int) -> str:
+    return f"tft:seed={seed}"
+
+
+def cohort_model_keys(spec: CohortSpec) -> dict[str, tuple[tuple[str, int | None], ...]]:
+    """Unidade → `(model_version, seed)` que ela grava, na ordem da corrida.
+
+    Baselines não têm seed (`None`); o GBM usa a seed dos seus params congelados;
+    cada seed do TFT é uma unidade. Exige o spec congelado (`gbm_params`).
+    """
+    gbm_params = spec.gbm_params
+    if gbm_params is None:
+        raise CohortNotFrozenError(f"cohort {spec.name!r} has no frozen gbm_params")
+    keys: dict[str, tuple[tuple[str, int | None], ...]] = {
+        "baselines": tuple(
+            (f"{BASELINE_MODEL_VERSION_PREFIX}{b.family}", None) for b in spec.baseline_specs
+        ),
+        "gbm": ((GBM_MODEL_VERSION, gbm_params.seed),),
+    }
+    for seed in spec.seeds:
+        keys[_tft_unit(seed)] = ((TFT_MODEL_VERSION, seed),)
+    return keys
+
+
+def load_training_grid(
+    *, store: MedallionStore, asset_id: str, columns: Sequence[str]
+) -> TrainingGrid:
+    """O grid único do ativo, lido do dataset materializado (mesma leitura do treino)."""
+    rows = store.read(layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": asset_id})
+    return build_training_grid(rows, columns=columns)
 
 
 class RunConfirmatoryCohort:
@@ -189,7 +231,7 @@ class RunConfirmatoryCohort:
         cohort_id = spec.cohort_id(cohort_hash)
         scope = spec.scope(cohort_id)
 
-        self._ledger.acquire_writer()
+        self._ledger.acquire_writer(break_stale=command.break_stale_lock)
         try:
             self._check_declarations(spec)
             self._check_environment(cohort_id)
@@ -206,10 +248,9 @@ class RunConfirmatoryCohort:
 
     def _check_declarations(self, spec: CohortSpec) -> None:
         """I4 + geometria: o dado e o código de agora são os que o spec declara."""
-        rows = self._store.read(
-            layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": spec.asset_id}
+        grid = load_training_grid(
+            store=self._store, asset_id=spec.asset_id, columns=self._modeling_columns
         )
-        grid = build_training_grid(rows, columns=self._modeling_columns)
         observed = grid_fingerprint(grid, hasher=self._hasher, asset_id=spec.asset_id)
         if observed != spec.dataset_fingerprint:
             raise DatasetMismatchError(
@@ -271,6 +312,7 @@ class RunConfirmatoryCohort:
         gbm_params = spec.gbm_params
         tft_params = spec.tft_params
         assert gbm_params is not None and tft_params is not None  # is_frozen garante
+        model_keys = cohort_model_keys(spec)
 
         def baselines() -> Mapping[str, int]:
             result = self._run_baselines(
@@ -291,22 +333,11 @@ class RunConfirmatoryCohort:
             return execute
 
         units = [
-            _Unit(
-                key="baselines",
-                model_keys=tuple(
-                    (f"{BASELINE_MODEL_VERSION_PREFIX}{b.family}", None)
-                    for b in spec.baseline_specs
-                ),
-                execute=baselines,
-            ),
-            _Unit(key="gbm", model_keys=((GBM_MODEL_VERSION, gbm_params.seed),), execute=gbm),
+            _Unit(key="baselines", model_keys=model_keys["baselines"], execute=baselines),
+            _Unit(key="gbm", model_keys=model_keys["gbm"], execute=gbm),
         ]
         units += [
-            _Unit(
-                key=f"tft:seed={seed}",
-                model_keys=((TFT_MODEL_VERSION, seed),),
-                execute=tft(seed),
-            )
+            _Unit(key=_tft_unit(seed), model_keys=model_keys[_tft_unit(seed)], execute=tft(seed))
             for seed in spec.seeds
         ]
         return units

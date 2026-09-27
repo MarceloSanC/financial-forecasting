@@ -796,4 +796,14 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 - F11 (baixo) testes: mudança em stage, variáveis de git isoladas, `commit.gpgsign=false`, `n_trials` no rascunho → **corrigidos**.
 - F12 (baixo) "empates exatos" exagerava o efeito do arredondamento → **corrigido**: "reduz", com o limite declarado.
 
+### 2026-09-27 — [finding] Task 28 — hash do cohort dependia de `8` vs `8.0` — Claude (Opus 5.5)
+**O que houve:** o teste dos comandos calculou o scope id do sweep sobre o spec em memória (`SearchDimension(low=8)`), e o comando, sobre o spec lido do arquivo, que converte para o tipo declarado (`low: float` → `8.0`). Os dois specs são iguais pela igualdade do dataclass (`8 == 8.0`), mas o JSON canônico distingue `8` de `8.0`, então o mesmo cohort teria dois hashes.
+**Correção:** `CohortSpec.hash_payload` troca float inteiro por int, recursivamente (`task-17-fix`). Specs iguais passam a ter o mesmo hash, e um float não inteiro continua mudando o hash (dois testes novos em `test_cohort_spec.py`). Nenhum cohort tinha sido congelado antes da correção, então nenhum `cohort_id` publicado muda.
+
+### 2026-09-27 — [deviation] Tasks 28–29 — `--break-stale-lock` no use case, helpers públicos e `materialize --cohort` — Claude (Opus 5.5)
+- **`RunConfirmatoryCohortCommand.break_stale_lock`:** o aceite da Task 31 exige `run --break-stale-lock`, e no `run` quem detém o lock é só o use case (o comando não o adquire). O sinalizador entra no comando do use case e segue para `acquire_writer(break_stale=...)`. A alternativa, o comando do CLI adquirir e soltar o lock antes do use case, deixaria uma janela de corrida.
+- **`cohort_model_keys(spec)` e `load_training_grid(...)` públicos em `run_confirmatory_cohort.py`:** o `verify` e o `freeze` usam a mesma enumeração de modelos e a mesma leitura do grid da corrida, em vez de copiá-las no adapter.
+- **`materialize` recebe `--cohort`:** o comando da Task 33 no plano (`materialize --data-root …`) não diz de onde vem o ativo, e ele passa a vir do arquivo do cohort, fonte única do `asset_id`. A janela de ingestão é a mesma janela ampla e fixa do calendário do composition root; o que entra no dataset é decidido pelos brutos em `data_root`.
+- **`sweep` retomável por modelo:** um resultado já gravado sob o mesmo scope id não roda de novo. Se o processo cair entre o sweep do TFT e o do GBM, o do TFT não é refeito.
+
 <!-- END: post-execution -->
