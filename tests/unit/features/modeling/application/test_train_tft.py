@@ -69,6 +69,7 @@ from tests.fakes.features.analytics_store.in_memory_analytics_repository import 
     FakeAnalyticsRepository,
 )
 from tests.fakes.features.modeling.in_memory_tft_trainer import InMemoryTftTrainer
+from tests.fakes.shared.in_memory_clock import FakeClock
 from tests.fakes.shared.in_memory_experiment_tracker import FakeExperimentTracker
 from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 
@@ -99,9 +100,8 @@ _EXCLUDED_FROM_TYPING = ("time_idx", "timestamp", "asset_id", "target_return")
 _SCOPE = ScopeSpec(asset_id="TEST", feature_set_name="fs_test", max_horizon=2, cohort_id=_COHORT_ID)
 
 
-class _FakeClock:
-    def now(self) -> datetime:
-        return datetime(2026, 8, 9, 12, 0, 0, tzinfo=UTC)
+# Instante do `created_at_utc` write-time (fixo, UTC).
+_CLOCK_NOW = datetime(2026, 8, 9, 12, 0, 0, tzinfo=UTC)
 
 
 @dataclass(frozen=True)
@@ -282,7 +282,7 @@ def _build(
     tracker: Any = None,  # noqa: ANN401 — qualquer dublê do port serve
 ) -> tuple[TrainTft, FakeAnalyticsRepository, InMemoryTftTrainer, Any]:
     """Constrói o use case JÁ com os dublês — nada é injetado por atributo."""
-    repo = FakeAnalyticsRepository(clock=_FakeClock())
+    repo = FakeAnalyticsRepository(clock=FakeClock(_CLOCK_NOW))
     resolved_trainer = trainer if trainer is not None else InMemoryTftTrainer()
     resolved_tracker = tracker if tracker is not None else FakeExperimentTracker()
     use_case = TrainTft(

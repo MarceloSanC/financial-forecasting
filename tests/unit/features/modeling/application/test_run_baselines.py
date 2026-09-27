@@ -70,6 +70,7 @@ from tests.fakes.features.analytics_store.in_memory_analytics_repository import 
 from tests.fakes.features.modeling.in_memory_baseline_forecaster import (
     FakeBaselineForecaster,
 )
+from tests.fakes.shared.in_memory_clock import FakeClock
 from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 
 if TYPE_CHECKING:
@@ -104,11 +105,8 @@ _SCOPE = ScopeSpec(
 )
 
 
-class _FakeClock:
-    """Clock determinístico — só para satisfazer o construtor do fake 4.2 (I5)."""
-
-    def now(self) -> datetime:
-        return datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
+# Instante do `created_at_utc` write-time (fixo, UTC).
+_CLOCK_NOW = datetime(2026, 7, 16, 12, 0, 0, tzinfo=UTC)
 
 
 class _CountingStore(FakeMedallionStore):
@@ -196,7 +194,7 @@ def _build(
     store: FakeMedallionStore | None = None,
     splitter: WalkForwardSplitter | None = None,
 ) -> tuple[RunBaselines, FakeAnalyticsRepository]:
-    repo = FakeAnalyticsRepository(clock=_FakeClock())
+    repo = FakeAnalyticsRepository(clock=FakeClock(_CLOCK_NOW))
     hasher: Hasher = CanonicalJsonHasher()
     use_case = RunBaselines(
         store=store if store is not None else _seeded_store(),
