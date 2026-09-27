@@ -705,4 +705,18 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
 
+### 2026-09-27 — [decision] Tasks 02–04 — verificação em lote do `make check` — Claude (Opus 5.5)
+**Contexto:** o `make check` completo leva ~10 min no container; as Tasks 02 (`.gitignore`), 03 (escrita atômica + testes) e 04 (só testes de caracterização) foram preparadas em sequência na mesma árvore.
+**Decisão:** um `make check` verde sobre a árvore com as três mudanças valida os três commits, aplicados em ordem: cada estado intermediário é um subconjunto que só **remove testes novos** ou a mudança do `.gitignore` (sem efeito em código), e a cobertura continua acima do gate. Testes focados de cada Task rodaram antes (82 do repositório Parquet; 15 de caracterização).
+**Razão:** o rigor do gate é o mesmo; o custo cai de 30 para 10 min. Não se aplica a Tasks que mudam código de produção em sequência — cada uma dessas tem o seu `make check`.
+
+### 2026-09-27 — [decision] Task 04 — divergências entre as 4 leituras do dataset — Claude (Opus 5.5)
+**Contexto:** diff das cópias de `_load_dataset` (`run_baselines.py`, `train_gbm_quantile.py`, `train_tft.py`, `run_tft_sweep.py`) e das auxiliares `_timestamp_of`/`_target_return_of`/`_feature_value_of` (idênticas nas 4).
+**Divergências e disposição:**
+- Código do erro de dataset vazio — `C7` nas baselines, `C1` nos três treinadores (fixado nos testes de cada use case): **intencional**, cada use case mantém a própria checagem de vazio e o seu código; o grid único não repete essa checagem.
+- Baselines não leem nem checam colunas de feature: **muda por decisão da Stage** (concept §4, grid único): na Task 10 passam a checar as colunas de modelagem (C6) e a cortar o prefixo.
+- `RunTftSweep` não devolve os timestamps: **acidental** (não precisava deles); converge ao usar o grid, que devolve tudo.
+- Texto das mensagens (C6, tipos): idêntico; vira uma só no grid.
+**Razão:** preservar os contratos de erro que os testes existentes fixam e convergir só o que não carrega significado.
+
 <!-- END: post-execution -->
