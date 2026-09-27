@@ -65,10 +65,12 @@ Mudanças de classe (são as únicas):
    Motivo: mesmo o GPT-4 fabricou 18% das citações e errou metadados em 24% das reais
    (Walters & Wilder 2023).
 2. Decisão que entra no **veredito**, num **contrato persistido** ou num **port**: despachar um
-   `evidence-verifier` com só `{afirmação, trecho literal, localizador, fonte}` por item; ele
+   `evidence-verifier` por lote de até 6 itens (mais itens → verificadores em paralelo) com só
+   `{afirmação, trecho literal, localizador, fonte}` por item; ele
    lê a fonte bruta e responde `sustenta | parcial | não sustenta`. Verificação por perguntas
    independentes da resposta original reduz alucinação (Chain-of-Verification, Dhuliawala et al.
-   2024). "Não sustenta" → volta ao §3 sem aquela evidência.
+   2024). "Não sustenta" → volta ao §3 sem aquela evidência. "Fonte inacessível" (PDF escaneado,
+   paywall) não sustenta decisão **E**: troque a fonte ou decida como **C** pela escada, sem ela.
 3. **Completude** (decisões do item 2): despachar um `decision-reviewer` com os registros
    `[decision]` e os caminhos do doc/código; ele responde só "o que isto ignora ou contradiz no
    projeto?". Verificar citação não pega omissão — no eval, o tratamento decidiu o gate de H1 sem
