@@ -8,8 +8,9 @@
   parametrize → violação (um `tests/contract` que só importa o fake não conta);
 - port com fake + contrato `[fake, real]` → coberto (id da perna real livre; adapter
   citado via `importlib` conta);
-- o inventário do repo real: exatamente os ports do baseline (`Clock`, `Hasher`,
-  `IdGenerator`; `PredictionPersister`/`RunRecordPersister` desde a #68, até a #93)
+- o inventário do repo real: exatamente os ports do baseline (`Hasher`,
+  `IdGenerator`; `PredictionPersister`/`RunRecordPersister` desde a #68, até a #93;
+  `Clock` saiu na #91 com fake + contrato)
   e mais nenhum — é o que torna o baseline honesto (a #62 nasceu com o
   diagnóstico de que só o `DatasetAssemblerPort` faltava; a #72 fechou esse, e a
   correção pós-verificação da própria issue listou os três).
@@ -150,7 +151,6 @@ def test_real_repo_violations_are_exactly_the_declared_baseline(gate: ModuleType
     violating = sorted(port.name for port in ports if port.violation is not None)
 
     assert violating == [
-        "Clock",
         "Hasher",
         "IdGenerator",
         "PredictionPersister",  # #68: real é use case de outro slice — #93
