@@ -173,7 +173,8 @@ def capture_baselines() -> IdentityTable:
     """Roda `RunBaselines` no cenário fixo e devolve a tabela de identidade."""
     repo = FakeAnalyticsRepository(clock=FakeClock(_CLOCK_NOW))
     use_case = RunBaselines(
-        store=_store(()),
+        # O grid único exige as colunas de modelagem também das baselines (5.5 D11).
+        store=_store(expected_feature_names()),
         splitter=_splitter(),
         forecaster=FakeBaselineForecaster(),
         persist_predictions=PersistPredictions(repository=repo),

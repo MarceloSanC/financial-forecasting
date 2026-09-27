@@ -30,9 +30,13 @@ from financial_forecasting.features.modeling.application.use_cases.run_tft_sweep
 )
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
     TrainGbmQuantile,
+    expected_feature_names,
+    modeling_columns,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     TrainTft,
+    known_feature_names,
+    unknown_feature_names,
 )
 from financial_forecasting.features.modeling.domain.exceptions.cohort import (
     InteriorMissingValuesError,
@@ -73,6 +77,11 @@ def _store(rows: list[dict[str, object]] | None = None) -> FakeMedallionStore:
     return store
 
 
+def _with_modeling_columns(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Completa as rows com todas as colunas de modelagem do registry (valor finito)."""
+    return [{**{name: 1.0 for name in modeling_columns()}, **row} for row in rows]
+
+
 def _self(store: FakeMedallionStore) -> SimpleNamespace:
     return SimpleNamespace(_store=store, _hasher=CanonicalJsonHasher())
 
@@ -100,7 +109,11 @@ def _assert_matrix(matrix: tuple[tuple[float, ...], ...]) -> None:
 
 
 def test_run_baselines_reads_timestamps_returns_sessions() -> None:
-    loaded = _load_baselines(_self(_store()), _SCOPE)
+    rows = _with_modeling_columns(
+        [_row(4, 0.03, 3.0, 30.0), _row(2, 0.01, 1.0, 10.0), _row(3, 0.02, 2.0, 20.0)]
+    )
+
+    loaded = _load_baselines(_self(_store(rows)), _SCOPE)
 
     assert loaded == (_EXPECTED_TIMESTAMPS, _EXPECTED_RETURNS, _EXPECTED_SESSIONS)
 
@@ -146,15 +159,14 @@ def test_feature_readers_missing_column_raises_c6(load: _Loader) -> None:
     assert "f_missing" in str(excinfo.value)
 
 
-def test_run_baselines_ignores_feature_columns() -> None:
-    """As baselines hoje não leem features: coluna de feature ausente não ergue."""
+def test_run_baselines_requires_the_modeling_columns() -> None:
+    """No grid único as baselines exigem as colunas de modelagem (C6) — antes as ignoravam."""
     rows = [
         {"timestamp": datetime(2024, 1, 2, tzinfo=UTC), "asset_id": "AAPL", "target_return": 0.01}
     ]
 
-    loaded = _load_baselines(_self(_store(rows)), _SCOPE)
-
-    assert loaded[1] == (0.01,)
+    with pytest.raises(ValueError, match="C6"):
+        _load_baselines(_self(_store(rows)), _SCOPE)
 
 
 @pytest.mark.parametrize("load", _FEATURE_LOADERS, ids=["gbm", "tft", "sweep"])
@@ -210,3 +222,32 @@ def test_tft_sweep_trims_prefix_and_fingerprints_the_trimmed_grid() -> None:
     assert matrix == ((2.0, 20.0), (3.0, 30.0))
     assert fingerprint == same_content
     assert fingerprint != other_content
+
+
+def test_baselines_start_on_the_same_row_as_the_models() -> None:
+    """I9: com aquecimento numa coluna do registry, baselines e GBM começam juntos."""
+    warm_up_column = modeling_columns()[0]
+    rows = _with_modeling_columns(
+        [_row(2, 0.01, 1.0, 10.0), _row(3, 0.02, 2.0, 20.0), _row(4, 0.03, 3.0, 30.0)]
+    )
+    rows[0][warm_up_column] = None
+
+    baselines_sessions = _load_baselines(_self(_store(rows)), _SCOPE)[2]
+    gbm_sessions = TrainGbmQuantile._load_dataset(
+        _self(_store(rows)), _SCOPE, expected_feature_names()
+    )[2]
+
+    assert baselines_sessions == gbm_sessions == _EXPECTED_SESSIONS[1:]
+
+
+def test_gbm_and_tft_consume_the_same_modeling_columns() -> None:
+    """GBM e TFT derivam as colunas por caminhos diferentes, mas o conjunto é o mesmo.
+
+    GBM: `expected_feature_names()` (registry habilitado + calendário); TFT/sweep:
+    `unknown_feature_names() + known_feature_names()`. O grid único corta pelo
+    mesmo conjunto para todos (I9); se as derivações divergirem, este teste acusa.
+    """
+    tft_columns = unknown_feature_names() + known_feature_names()
+
+    assert set(expected_feature_names()) == set(tft_columns)
+    assert len(tft_columns) == len(set(tft_columns))
