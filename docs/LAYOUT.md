@@ -130,18 +130,32 @@ adapters  →  application  →  domain
 
 ## 4. Features vs Shared
 
+O critério é **quem é dono** do tipo ou da regra, não quantas features o consomem.
+
 **Coloque em `features/<nome>/`** quando:
-- A lógica é específica de um bounded context (ex: cálculo de desconto de pedidos)
-- A entidade tem identidade própria naquele contexto (ex: `Payment`, `Customer`)
+- A lógica é específica de um slice (ex: indicadores técnicos, treino do TFT)
+- O slice **produz** o tipo e mantém as suas invariantes — mesmo que outros slices o
+  consumam (ex: `Candle` é de `market_data`, `QuantileForecast` é de `analytics_store`).
+  O consumidor importa o tipo como **aresta de dados declarada** no contrato
+  `bc-independence`; comportamento entra por port do consumidor (§7, ADR 0.0.0053)
 - O port é consumido apenas por aquela feature
 
-**Coloque em `shared/`** quando:
-- É genuinamente reutilizado por 2+ features (ex: `Clock`, `Hasher`, `Pagination`)
-- É infraestrutura cross-cutting (ex: configuração, logging, factory do FastAPI)
-- É uma abstração de domínio agnóstica (ex: `DomainError`, `NotFoundError`)
+**Coloque em `shared/`** quando **não há slice dono**:
+- Infraestrutura cross-cutting (ex: configuração, logging, `Clock`, `Hasher`, factory do FastAPI)
+- Conceito transversal que nenhum slice produz (ex: `TradingSessions`/calendário de pregão,
+  ADR 2.4.0001; identidade de run `RunId`/fingerprints, ADR 5.2.0004)
+- Abstração de domínio agnóstica (ex: `DomainError`, `NotFoundError`, `Pagination`)
 
-**Regra prática:** em caso de dúvida, comece na feature. Mova para shared apenas quando
-a segunda feature precisar do mesmo código.
+**Por que não "2+ consumidores → shared":** mover um tipo com dono para `shared/` separa-o
+das invariantes e das decisões do slice que o produz (o módulo se organiza pela decisão de
+projeto que esconde — Parnas 1972, p.1056, doi:10.1145/361598.361623) e transforma
+`shared/` num pacote de tipos de negócio sem dono. O que vai para módulo à parte é o
+genérico, "sem traço das especialidades" do domínio (Evans, *DDD Reference* 2015,
+GENERIC SUBDOMAINS, p.41). Shared Kernel não se aplica entre slices de um mesmo
+contexto (ADR 0.0.0053).
+
+**Regra prática:** em caso de dúvida, comece na feature. Um segundo consumidor não é motivo
+para mover: é uma aresta de dados a declarar.
 
 ---
 
@@ -252,8 +266,10 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   `SplitFingerprint` e `DatasetFingerprint` são o único caminho de hash; fora deles ninguém
   chama `hasher.hash_mapping`/`hash_text` (payload hand-rolled num use case é uma segunda
   definição de "o mesmo run" — ADR 5.2.0004). Gate: regra 6 do `scripts/check_layout.py`.
-- **Features não importam de outras features.** Cada slice é uma unidade
-  substituível; o que precisa ser compartilhado sobe para `shared/`.
+- **Features não importam comportamento de outras features.** Cada slice é uma unidade
+  substituível: comportamento de outro slice entra por port definido no consumidor;
+  dados (DTO do port-in e tipos de domínio do slice dono) cruzam como aresta
+  declarada; só o que não tem slice dono sobe para `shared/` (§4).
 
   **Perímetro do gate hoje** — dito aqui porque doutrina mais larga que o gate é
   falso verde de segunda ordem, o defeito que a issue #60 existe para matar: o
