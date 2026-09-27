@@ -28,6 +28,15 @@ Detecção (heurísticas declaradas, todas verificáveis por `--list`):
   classe de adapter que CONSOME o port (o `DatasetAssembler` cita
   `IndicatorCalculator`) também entra na lista — sem falso positivo no gate, porque
   a lista só serve para exigir que o contrato cite ao menos uma delas.
+- **use case de outro slice como real** (#93): um port no consumidor satisfeito por
+  duck-typing pelo USE CASE de outro slice (`modeling.PredictionPersister` ←
+  `analytics_store.PersistPredictions`, #68 / ADR 0.0.0053) não pode citar o port —
+  a inversão é estrutural. Conta como real uma classe PÚBLICA de
+  `src/**/application/use_cases/**` de slice DIFERENTE do port que (a) define todos
+  os métodos do `Protocol` com as MESMAS anotações (filtra `Command`/`Result` do
+  mesmo módulo e o use case irmão com outro `__call__`) e (b) é
+  IMPORTADA por um `tests/contract/**` que também importa o fake e parametriza — o
+  contrato `[fake, real]` é a única fonte que sabe quem satisfaz o port.
 - **contrato `[fake, real]`**: um módulo em `tests/contract/**` que IMPORTA a classe
   do fake E cita (por nome) uma classe de adapter real do port E parametriza
   (`params=`/`parametrize`). O id da perna real é livre (`"real"`, `"duckdb"`…); a
@@ -78,7 +87,10 @@ class PortCoverage:
         if self.fake is None:
             return "sem fake em tests/fakes/** (esperado Fake<X>/InMemory<X>)"
         if not self.adapters:
-            return "nenhum adapter em src/**/adapters/** cita o port"
+            return (
+                "nenhum adapter em src/**/adapters/** cita o port (nem use case de outro "
+                "slice importado por contrato [fake, real])"
+            )
         if self.contract is None:
             return (
                 "fake existe mas nenhum tests/contract/** importa fake + adapter real "
@@ -159,6 +171,90 @@ def real_adapter_classes(port: str, adapter_classes: dict[str, Path]) -> tuple[s
     )
 
 
+_USE_CASES = ("application", "use_cases")
+
+
+def _annotation(node: ast.expr | None) -> str:
+    return ast.unparse(node) if node is not None else "?"
+
+
+def _signature(item: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    """`nome(tipo, ...; kw: tipo) -> retorno` pelas anotações, sem o `self`."""
+    positional = [*item.args.posonlyargs, *item.args.args][1:]
+    params = ", ".join(_annotation(arg.annotation) for arg in positional)
+    keywords = ", ".join(
+        f"{arg.arg}: {_annotation(arg.annotation)}" for arg in item.args.kwonlyargs
+    )
+    return f"{item.name}({params}; {keywords}) -> {_annotation(item.returns)}"
+
+
+def _methods(node: ast.ClassDef) -> frozenset[str]:
+    """Assinaturas (nome + anotações) dos métodos do corpo da classe, sem herança.
+
+    A anotação entra na comparação porque só o nome não separa dois use cases que
+    definem `__call__` (`PersistPredictions` e `PersistRunRecord` satisfariam os dois
+    ports da #68); é a mesma checagem que a tipagem estrutural faz.
+    """
+    return frozenset(
+        _signature(item)
+        for item in node.body
+        if isinstance(item, ast.FunctionDef | ast.AsyncFunctionDef)
+    )
+
+
+def protocol_methods(module: Path, port: str) -> frozenset[str]:
+    """Assinaturas declaradas pelo `Protocol` `port` em `module`."""
+    tree = ast.parse(module.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == port:
+            return _methods(node)
+    return frozenset()
+
+
+def slice_of(path: Path) -> str:
+    """Slice dono de `path`: o nome sob `features/`, ou `shared`/raiz fora de features."""
+    parts = path.parts
+    if "features" in parts:
+        index = parts.index("features")
+        if index + 1 < len(parts):
+            return parts[index + 1]
+    return "shared" if "shared" in parts else ""
+
+
+def use_case_index(src_root: Path) -> dict[str, tuple[Path, frozenset[str]]]:
+    """`{classe pública: (arquivo, métodos)}` sob `application/use_cases/**`."""
+    index: dict[str, tuple[Path, frozenset[str]]] = {}
+    for path in sorted(src_root.rglob("*.py")):
+        parts = path.parts
+        under_use_cases = any(
+            parts[i : i + len(_USE_CASES)] == _USE_CASES
+            for i in range(len(parts) - len(_USE_CASES) + 1)
+        )
+        if not under_use_cases or path.name == "__init__.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
+                index[node.name] = (path, _methods(node))
+    return index
+
+
+def cross_slice_use_cases(
+    port_module: Path,
+    required: frozenset[str],
+    use_cases: dict[str, tuple[Path, frozenset[str]]],
+) -> tuple[str, ...]:
+    """Use cases de OUTRO slice que definem todos os métodos do port (#93)."""
+    if not required:
+        return ()
+    port_slice = slice_of(port_module)
+    return tuple(
+        name
+        for name, (path, methods) in use_cases.items()
+        if slice_of(path) != port_slice and required <= methods
+    )
+
+
 def _snake(name: str) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
 
@@ -184,6 +280,7 @@ def inventory(
     """Inventário completo port → fake → adapters reais → contrato."""
     fakes = class_index(fakes_root)
     adapter_classes = class_index(src_root, only_adapters=True)
+    use_cases = use_case_index(src_root)
     contracts = {
         path: path.read_text(encoding="utf-8") for path in sorted(contract_root.rglob("test_*.py"))
     }
@@ -192,6 +289,21 @@ def inventory(
         fake_class = next((candidate for candidate in fake_names(name) if candidate in fakes), None)
         fake_path = fakes.get(fake_class) if fake_class else None
         adapters = real_adapter_classes(name, adapter_classes)
+        if fake_class is not None:
+            # #93: use case de outro slice só conta se um contrato que importa o
+            # fake e parametriza também o IMPORTA (quem sabe que ele satisfaz o port).
+            candidates = cross_slice_use_cases(module, protocol_methods(module, name), use_cases)
+            two_leg_sources = [
+                source
+                for source in contracts.values()
+                if imports_class(source, fake_class) and _PARAMETRIZATION.search(source)
+            ]
+            adapters += tuple(
+                candidate
+                for candidate in candidates
+                if candidate not in adapters
+                and any(imports_class(source, candidate) for source in two_leg_sources)
+            )
         contract_path: Path | None = None
         if fake_class is not None and adapters:
             stem = _snake(name.removesuffix("Port"))
