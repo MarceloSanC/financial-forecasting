@@ -47,6 +47,9 @@ from financial_forecasting.features.modeling.application.ports.out.hyperparamete
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
     TftTrainingParams,
 )
+from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
+    grid_fingerprint,
+)
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     known_feature_names,
     unknown_feature_names,
@@ -344,7 +347,7 @@ class RunTftSweep:
             grid.column(_TARGET_COLUMN),
             grid.sessions(),
             grid.matrix(feature_names),
-            grid.content_fingerprint(hasher=self._hasher, asset_id=scope.asset_id),
+            grid_fingerprint(grid, hasher=self._hasher, asset_id=scope.asset_id),
         )
 
 

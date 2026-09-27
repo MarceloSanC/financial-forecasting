@@ -139,6 +139,13 @@ def test_draft_payload_ignores_the_freeze_fields() -> None:
     assert draft.draft_payload() == _spec().draft_payload()
 
 
+def test_n_trials_changes_the_draft_payload() -> None:
+    """Rodadas de medição (`--n-trials 1`) caem noutro scope id que o sweep real (§1)."""
+    measured = _spec(sweep=replace(_PLAN, n_trials=1))
+
+    assert measured.draft_payload() != _spec().draft_payload()
+
+
 def test_is_frozen_requires_every_freeze_field() -> None:
     assert _spec().is_frozen()
     for overrides in (

@@ -7,8 +7,10 @@ Foto do ambiente da corrida confirmatória:
 - identidade do código: `git rev-parse HEAD:<caminho>` de `src`, `uv.lock` e do
   arquivo do cohort — hash de CONTEÚDO do que está commitado, então commits só
   de documentação não mudam a foto;
-- `code_dirty`: `git status --porcelain --untracked-files=no` nesses caminhos
-  (mudança rastreada não commitada = `"true"`; arquivo não rastreado não conta).
+- `code_dirty`: `git status --porcelain --untracked-files=all` NESSES caminhos —
+  mudança rastreada não commitada (inclusive em stage) ou arquivo novo não
+  ignorado dentro de `src/` (seria importado) marca `"true"`; fora desses
+  caminhos nada conta (`artifacts/` e `data/` são ignorados pelo git).
 
 Usa o `git` do ambiente e respeita `GIT_DIR`/`GIT_WORK_TREE` — no container, o
 runbook monta o `.git` do checkout principal para a worktree (ADR 5.5.0003).
@@ -39,9 +41,15 @@ class GitRuntimeEnvironmentProbe:
     def __init__(self, *, repo_root: Path | str, cohort_file: Path | str, device: str) -> None:
         self._repo_root = Path(repo_root)
         cohort = Path(cohort_file)
-        self._cohort_path = (
-            cohort.relative_to(self._repo_root) if cohort.is_absolute() else cohort
-        ).as_posix()
+        if cohort.is_absolute():
+            try:
+                cohort = cohort.relative_to(self._repo_root)
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"cohort file {cohort} is outside the repository {self._repo_root} — "
+                    "the code identity is required to anchor a cohort run"
+                ) from exc
+        self._cohort_path = cohort.as_posix()
         self._device = device
 
     def snapshot(self) -> Mapping[str, str]:
@@ -56,7 +64,9 @@ class GitRuntimeEnvironmentProbe:
         snapshot["cpu"] = f"{platform.machine()}/{os.cpu_count()}"
         for key, path in tracked.items():
             snapshot[key] = self._git("rev-parse", f"HEAD:{path}")
-        status = self._git("status", "--porcelain", "--untracked-files=no", "--", *tracked.values())
+        status = self._git(
+            "status", "--porcelain", "--untracked-files=all", "--", *tracked.values()
+        )
         snapshot[DIRTY_KEY] = "true" if status else "false"
         return snapshot
 

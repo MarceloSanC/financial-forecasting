@@ -45,6 +45,7 @@ from financial_forecasting.features.modeling.application.use_cases.run_baselines
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
     TrainGbmQuantileCommand,
     TrainGbmQuantileResult,
+    grid_fingerprint,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     TrainTftCommand,
@@ -209,7 +210,7 @@ class RunConfirmatoryCohort:
             layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": spec.asset_id}
         )
         grid = build_training_grid(rows, columns=self._modeling_columns)
-        observed = grid.content_fingerprint(hasher=self._hasher, asset_id=spec.asset_id)
+        observed = grid_fingerprint(grid, hasher=self._hasher, asset_id=spec.asset_id)
         if observed != spec.dataset_fingerprint:
             raise DatasetMismatchError(
                 f"dataset fingerprint {observed[:12]} != declared "

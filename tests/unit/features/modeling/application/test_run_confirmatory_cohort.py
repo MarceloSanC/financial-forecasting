@@ -58,6 +58,7 @@ from financial_forecasting.features.modeling.application.use_cases.run_confirmat
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
     GbmRunSummary,
     TrainGbmQuantileResult,
+    grid_fingerprint,
     modeling_columns,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
@@ -137,7 +138,7 @@ def _store(rows: list[dict[str, object]] | None = None) -> FakeMedallionStore:
 
 def _fingerprint(rows: list[dict[str, object]] | None = None) -> str:
     grid = build_training_grid(rows or _rows(), columns=modeling_columns())
-    return grid.content_fingerprint(hasher=_HASHER, asset_id=_ASSET)
+    return grid_fingerprint(grid, hasher=_HASHER, asset_id=_ASSET)
 
 
 def _spec(**overrides: object) -> CohortSpec:

@@ -777,4 +777,23 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 **O que houve:** o commit da Task 18 (`6a3f01f`) foi feito com o `make check` falhando em `tests/architecture/test_port_coverage_gate.py::test_real_repo_violations_are_exactly_the_declared_baseline`, que fixa a lista exata de ports em violação (`["Hasher"]`). A entrada temporária do baseline, prevista no plano, precisava entrar também nesse teste — o plano não previa. A falha passou porque o comando de verificação imprimia o código de saída do `echo`, não o do `make`.
 **Correção:** `task-18-fix` inclui `CohortProgressLedger` na lista fixada (sai na Task 19, com a entrada do baseline); as Tasks 20–23 seguem o mesmo par (entrada no port, saída no adapter). A verificação passa a imprimir `MAKE_EXIT` e o commit só roda com `MAKE_EXIT=0`.
 
+### 2026-09-27 — [decision:E] Checkpoint C (bloco 17–23) — arquivo não rastreado em `src/` conta como mudança — Claude (Opus 5.5)
+**Contexto:** concept I5 e A4 dizem "arquivos não rastreados não contam"; a foto usava `--untracked-files=no`. Um módulo novo, não ignorado, dentro de `src/` é importado e muda o código que roda sem aparecer em `code.src` (hash do que está commitado) nem em `code_dirty`.
+**Decisão:** `code_dirty` passa a usar `git status --porcelain --untracked-files=all` restrito a `src/`, `uv.lock` e o arquivo do cohort. O objetivo da regra original — não contar `artifacts/` (ledger, checkpoints) — continua atendido, porque `artifacts/` e `data/` são ignorados pelo git e nunca aparecem no porcelain.
+**Base:** fato verificável sobre o código (E): Python importa qualquer módulo presente em `src/`, rastreado ou não. Registrada aqui como `[decision]` (CONVENTIONS §3.2: depois de iniciada a Fase 4, sem regredir o concept). A redação de I5/A4 no concept fica mais frouxa que o comportamento; a DoD da 5.5 não muda.
+
+### 2026-09-27 — Checkpoint C (bloco 17–23) — disposições — Claude (Opus 5.5)
+- F1 (médio) `release_writer` apagava lock de outro dono após `break_stale` → **corrigido**: token único no lock; libera só com o token próprio + teste real.
+- F2 (médio) resultados de sweep mudavam de forma no JSON só no real → **corrigido**: fake faz a mesma ida e volta; contrato com valor aninhado.
+- F3 (médio) `TrainingGrid.content_fingerprint` no domínio importava port de aplicação (sob `TYPE_CHECKING`) → **corrigido**: helper `grid_fingerprint` na aplicação (`train_gbm_quantile.py`, ao lado de `modeling_columns`), usado pelos dois sweeps e pelo cohort.
+- F4 (médio) não rastreado em `src/` fora da identidade → **corrigido** (decisão acima).
+- F5 (baixo) `dim_run` sem filtro de feature set; `fold` nulo virava `"None"`; `rows` opcional no fake → **corrigido** + teste com seeds do TFT (inclusive 2**40) e baseline de seed nula no mesmo cohort.
+- F6 (baixo) leitura de todos os fatos do ativo na retomada → **aceito** na escala piloto (~230 mil linhas por revisão); projeção por `run_id` fica para quando a memória pesar.
+- F7 (baixo) adapter tipado com a classe irmã → **corrigido**: tipado pelo port `AnalyticsRepository`.
+- F8 (baixo) atomicidade do ledger sem escopo declarado; JSON vazio após queda de SO ergueria erro cru → **corrigido**: docstring com escopo (queda do processo) e erro nomeando o arquivo.
+- F9 (baixo) texto de `environment()` prometia "primeira execução" → **corrigido**: redação alinhada (o use case grava só na primeira).
+- F10 (baixo) construtor do probe `(repo_root, cohort_file, device)` diferente do plano `(repo_root, tracked_paths)` → **registrado** aqui como desvio: os caminhos rastreados são fixos (`src`, `uv.lock`) mais o arquivo do cohort; `device` é o declarado (o adapter do TFT fixa CPU). Caminho de cohort fora do repositório → erro explícito.
+- F11 (baixo) testes: mudança em stage, variáveis de git isoladas, `commit.gpgsign=false`, `n_trials` no rascunho → **corrigidos**.
+- F12 (baixo) "empates exatos" exagerava o efeito do arredondamento → **corrigido**: "reduz", com o limite declarado.
+
 <!-- END: post-execution -->

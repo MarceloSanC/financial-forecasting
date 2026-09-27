@@ -78,10 +78,14 @@ from financial_forecasting.features.modeling.domain.services.operationally_lates
     deduplicate_operationally_latest,
 )
 from financial_forecasting.features.modeling.domain.services.training_grid import (
+    TrainingGrid,
     build_training_grid,
 )
 from financial_forecasting.shared.domain.value_objects.config_signature import (
     ConfigSignature,
+)
+from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+    DatasetContentFingerprint,
 )
 from financial_forecasting.shared.domain.value_objects.run_id import RunId
 
@@ -216,6 +220,21 @@ def modeling_columns() -> tuple[str, ...]:
     tem features próprias (baselines, sweep do GBM, cohort) usa esta função.
     """
     return (*expected_feature_names(), _TARGET_COLUMN)
+
+
+def grid_fingerprint(grid: TrainingGrid, *, hasher: Hasher, asset_id: str) -> str:
+    """Impressão digital do conteúdo do grid — caminho único de sweeps e cohort (I4).
+
+    Todas as colunas do grid (a ordem não importa: o VO ordena os nomes). Fica na
+    aplicação, não no serviço de domínio do grid: o `Hasher` é port de aplicação e
+    o hash só é chamado dentro dos VOs de shared (regra 6 do `check_layout`).
+    """
+    return DatasetContentFingerprint.compute(
+        hasher=hasher,
+        asset_id=asset_id,
+        timestamps=grid.timestamps_iso(),
+        columns=grid.columns,
+    ).value
 
 
 class TrainGbmQuantile:

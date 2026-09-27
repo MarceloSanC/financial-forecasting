@@ -29,7 +29,7 @@ _COHORT_FILE = "config/cohorts/test.toml"
 
 def _git(repo: Path, *args: str) -> None:
     subprocess.run(
-        ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args],
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *args],
         cwd=repo,
         check=True,
         capture_output=True,
@@ -57,8 +57,8 @@ def _repo(tmp_path: Path) -> Path:
 @pytest.fixture
 def isolated_git(monkeypatch: pytest.MonkeyPatch) -> None:
     """O `make check` roda com GIT_DIR/GIT_WORK_TREE da worktree; o repo do teste é outro."""
-    monkeypatch.delenv("GIT_DIR", raising=False)
-    monkeypatch.delenv("GIT_WORK_TREE", raising=False)
+    for variable in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"):
+        monkeypatch.delenv(variable, raising=False)
 
 
 @pytest.fixture(params=["fake", "real"])
@@ -123,11 +123,42 @@ def test_real_tracked_change_in_src_marks_dirty_then_changes_identity(tmp_path: 
 
 @pytest.mark.contract
 @pytest.mark.usefixtures("isolated_git")
-def test_real_untracked_file_does_not_count(tmp_path: Path) -> None:
+def test_real_untracked_file_in_src_counts_as_dirty(tmp_path: Path) -> None:
+    """Módulo novo não ignorado em `src/` seria importado: conta (decisão do Checkpoint C)."""
     repo = _repo(tmp_path)
-    (repo / "src/pkg/new_untracked.py").write_text("y = 1\n", encoding="utf-8")
+    (repo / "src/pkg/new_untracked.py").write_text("y = 1" + chr(10), encoding="utf-8")
+
+    assert _real(repo).snapshot()["code_dirty"] == "true"
+
+
+@pytest.mark.contract
+@pytest.mark.usefixtures("isolated_git")
+def test_real_untracked_file_outside_tracked_paths_does_not_count(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    (repo / "docs/new_untracked.md").write_text("z" + chr(10), encoding="utf-8")
 
     assert _real(repo).snapshot()["code_dirty"] == "false"
+
+
+@pytest.mark.contract
+@pytest.mark.usefixtures("isolated_git")
+def test_real_staged_uncommitted_change_counts_as_dirty(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    (repo / "uv.lock").write_text("lock v2" + chr(10), encoding="utf-8")
+    _git(repo, "add", "uv.lock")
+
+    assert _real(repo).snapshot()["code_dirty"] == "true"
+
+
+@pytest.mark.contract
+@pytest.mark.usefixtures("isolated_git")
+def test_real_cohort_file_outside_the_repo_is_an_explicit_error(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+
+    with pytest.raises(RuntimeError, match="outside the repository"):
+        GitRuntimeEnvironmentProbe(
+            repo_root=repo, cohort_file=tmp_path / "elsewhere.toml", device="cpu"
+        )
 
 
 @pytest.mark.contract
