@@ -50,7 +50,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import asdict, dataclass
-from datetime import datetime
 from itertools import pairwise
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -73,6 +72,9 @@ from financial_forecasting.features.modeling.application.pipeline_version import
 )
 from financial_forecasting.features.modeling.domain.services.operationally_latest_dedup import (
     deduplicate_operationally_latest,
+)
+from financial_forecasting.features.modeling.domain.services.training_grid import (
+    build_training_grid,
 )
 from financial_forecasting.shared.domain.value_objects.config_signature import (
     ConfigSignature,
@@ -109,7 +111,6 @@ if TYPE_CHECKING:
     from financial_forecasting.shared.application.ports.out.hasher import Hasher
     from financial_forecasting.shared.application.ports.out.medallion_store import (
         MedallionStore,
-        Row,
     )
 
 logger = logging.getLogger(__name__)
@@ -125,6 +126,7 @@ _ARTIFACT_SUBDIR = "tft"
 # mudaria `feature_set_hash` e o conjunto que alimenta o dataset (3.5) e o GBM
 # (5.3). Piso declarado; o tratamento geral é a issue #58.
 _CALENDAR_KNOWN_FEATURES = ("day_of_week", "month")
+_TARGET_COLUMN = "target_return"
 # Rótulo de fase do run (I12). Distingue este fluxo da varredura exploratória,
 # que marca `phase='exploratory'` (ADR 5.4.0005) — a separação estrutural é o
 # grafo de dependências do `RunTftSweep`; o rótulo é a segunda camada.
@@ -465,7 +467,12 @@ class TrainTft:
     def _load_dataset(
         self, scope: ScopeSpec, feature_names: tuple[str, ...]
     ) -> tuple[tuple[str, ...], tuple[float, ...], tuple[date, ...], tuple[tuple[float, ...], ...]]:
-        """Lê o dataset TFT: (timestamps ISO, target_return, sessões, matriz)."""
+        """Lê o dataset TFT pelo grid único: (timestamps ISO, target_return, sessões, matriz).
+
+        Checa o vazio com o código deste use case (C1) e delega ordenação,
+        validação e corte do prefixo sem valor ao `build_training_grid` (D11 da
+        Stage 5.5; ADR 5.5.0004) — o mesmo grid dos outros modelos.
+        """
         rows = self._store.read(
             layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": scope.asset_id}
         )
@@ -474,29 +481,13 @@ class TrainTft:
                 f"dataset ({_DATASET_LAYER!r}, {_DATASET_TABLE!r}) is empty for "
                 f"asset {scope.asset_id!r} — nothing to train (C1)"
             )
-        # C6: presença NOMINAL das colunas esperadas (registry x dataset drift).
-        missing = tuple(name for name in feature_names if name not in rows[0])
-        if missing:
-            raise ValueError(
-                f"dataset is missing expected feature columns {missing!r} — "
-                "registry x dataset drift (C6)"
-            )
-        parsed = sorted(
-            (
-                (
-                    _timestamp_of(row),
-                    _target_return_of(row),
-                    tuple(_feature_value_of(row, name) for name in feature_names),
-                )
-                for row in rows
-            ),
-            key=lambda triple: triple[0],
+        grid = build_training_grid(rows, columns=(*feature_names, _TARGET_COLUMN))
+        return (
+            grid.timestamps_iso(),
+            grid.column(_TARGET_COLUMN),
+            grid.sessions(),
+            grid.matrix(feature_names),
         )
-        dataset_timestamps = tuple(ts.isoformat() for ts, _, _ in parsed)
-        returns = tuple(value for _, value, _ in parsed)
-        sessions = tuple(ts.date() for ts, _, _ in parsed)
-        feature_rows = tuple(features for _, _, features in parsed)
-        return dataset_timestamps, returns, sessions, feature_rows
 
     # -- treino de um fold (I4/I7) ---------------------------------------------
 
@@ -654,32 +645,3 @@ def _tracking_params(command: TrainTftCommand, fold: FoldSplit, run_id: str) -> 
         "pipeline_version": PIPELINE_VERSION,
         **asdict(command.params),
     }
-
-
-# -- parsing defensivo das rows do dataset ----------------------------------------
-
-
-def _timestamp_of(row: Row) -> datetime:
-    """Extrai o `timestamp` tz-aware da row (premissa do par read-only da 3.5)."""
-    value = row.get("timestamp")
-    if not isinstance(value, datetime) or value.tzinfo is None:
-        raise ValueError(f"dataset row 'timestamp' must be a tz-aware datetime; got {value!r}")
-    return value
-
-
-def _target_return_of(row: Row) -> float:
-    """Extrai o `target_return` numérico da row (o alvo do passo h é `[t + h]`)."""
-    value = row.get("target_return")
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValueError(f"dataset row 'target_return' must be numeric; got {value!r}")
-    return float(value)
-
-
-def _feature_value_of(row: Row, column: str) -> float:
-    """Extrai um valor de feature: numérico vira float, None vira NaN."""
-    value = row.get(column)
-    if value is None:
-        return float("nan")
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValueError(f"dataset row {column!r} must be numeric or None; got {value!r}")
-    return float(value)

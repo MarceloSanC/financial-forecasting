@@ -727,6 +727,7 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 ### 2026-09-27 — [deviation] Task 07 — I11 da 5.3 substituído pelo grid único — Claude (Opus 5.5)
 **O que mudou:** o invariante I11 da Stage 5.3 ("feature ausente atravessa o port como NaN") deixa de valer para o GBM: ausente no **prefixo** é cortado do treino; ausente no **interior** ergue `InteriorMissingValuesError` antes de o port ser chamado. O teste `test_i11_none_feature_value_reaches_the_port_as_nan` foi reescrito como dois testes do comportamento novo; o caso "alvo não numérico" da caracterização passou a usar string (o `None` de alvo agora é ausente, coberto pelos testes do grid).
 **Por quê:** decisão já tomada no concept (D11) e no ADR 5.5.0004 — sem regra única, TFT (recusa NaN) e GBM (aceita) treinariam sobre conjuntos diferentes; imputar em silêncio foi descartado.
+**Task 08 (TFT):** mesma substituição para a política de ausência da 5.4 ("`None` vira NaN na fronteira do port"): `test_none_feature_reaches_the_port_as_nan` virou dois testes (prefixo cortado; interior ergue antes do treino).
 
 ### 2026-09-27 — Checkpoint C (bloco 01–04) — disposições — Claude (Opus 5.5)
 - C1 (médio) caracterização presa a método que seria apagado → **corrigido** pelo desvio acima + teste do conjunto de colunas GBM = TFT (`task-04-fix`).
