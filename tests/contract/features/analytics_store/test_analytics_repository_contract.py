@@ -22,7 +22,6 @@ que o fake.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
@@ -41,6 +40,7 @@ from financial_forecasting.shared.domain.exceptions.base import (
 from tests.fakes.features.analytics_store.in_memory_analytics_repository import (
     FakeAnalyticsRepository,
 )
+from tests.fakes.shared.in_memory_clock import FIXED_NOW, FakeClock
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -48,18 +48,7 @@ if TYPE_CHECKING:
 _SILVER = "silver"
 _DIM_RUN_SCHEMA_VERSION = 1
 _FACT_OOS_SCHEMA_VERSION = 1
-_FIXED_NOW = datetime(2026, 6, 29, 12, 0, 0, tzinfo=UTC)
 _TWO_ROWS = 2
-
-
-class FakeClock:
-    """Clock determinístico (timestamp fixo) para `created_at_utc` no contract."""
-
-    def __init__(self, now: datetime = _FIXED_NOW) -> None:
-        self._now = now
-
-    def now(self) -> datetime:
-        return self._now
 
 
 # -- row factories (dtypes exatos dos schemas silver 4.1) --------------------
@@ -285,4 +274,4 @@ def test_dim_run_created_at_utc_is_deterministic(repo: AnalyticsRepository) -> N
     rows = repo.read(layer=_SILVER, table="dim_run", filters={"asset": "AAPL"})
 
     assert len(rows) == 1
-    assert rows[0]["created_at_utc"] == _FIXED_NOW.isoformat()
+    assert rows[0]["created_at_utc"] == FIXED_NOW.isoformat()

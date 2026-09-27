@@ -23,7 +23,6 @@ paridade transitivamente (correção registrada na issue #62):
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime
 
 import pytest
 
@@ -55,15 +54,11 @@ from tests.fakes.features.modeling.in_memory_prediction_persister import (
 from tests.fakes.features.modeling.in_memory_run_record_persister import (
     InMemoryRunRecordPersister,
 )
+from tests.fakes.shared.in_memory_clock import FakeClock
 
 _LEVELS = (0.1, 0.5, 0.9)
 _TIMESTAMPS = tuple(f"2025-01-{day:02d}T00:00:00+00:00" for day in (2, 3, 6, 7, 8))
 _LAST_IDX = len(_TIMESTAMPS) - 1
-
-
-class _FakeClock:
-    def now(self) -> datetime:
-        return datetime(2026, 6, 29, 12, 0, 0, tzinfo=UTC)
 
 
 def _forecast(shift: float = 0.0) -> QuantileForecast:
@@ -108,7 +103,7 @@ def _record(**overrides: object) -> RunRecord:
 def prediction_persister(request: pytest.FixtureRequest) -> PredictionPersister:
     if request.param == "fake":
         return InMemoryPredictionPersister()
-    return PersistPredictions(repository=FakeAnalyticsRepository(clock=_FakeClock()))
+    return PersistPredictions(repository=FakeAnalyticsRepository(clock=FakeClock()))
 
 
 def test_complete_windows_count_one_row_per_horizon_and_level(
@@ -150,7 +145,7 @@ def run_record_leg(
     if request.param == "fake":
         fake = InMemoryRunRecordPersister()
         return fake, lambda run_id: fake.records[run_id].model_version
-    repo = FakeAnalyticsRepository(clock=_FakeClock())
+    repo = FakeAnalyticsRepository(clock=FakeClock())
 
     def read_back(run_id: str) -> str:
         [row] = [r for r in repo.read(layer="silver", table="dim_run") if r["run_id"] == run_id]

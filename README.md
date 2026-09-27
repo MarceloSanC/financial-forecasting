@@ -126,7 +126,7 @@ src/financial_forecasting/
 │               └── postgres/ # Repositório SQLAlchemy
 └── shared/                  # Preocupações transversais reutilizáveis
     ├── domain/              # Exceções base, value objects genéricos
-    ├── application/         # Ports compartilhados (Clock, IdGenerator)
+    ├── application/         # Ports compartilhados (Clock, Hasher, calendário…)
     └── infrastructure/      # Implementações de infraestrutura (DB, HTTP, config, logging)
 ```
 

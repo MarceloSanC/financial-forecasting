@@ -84,6 +84,7 @@ from tests.fakes.features.modeling.in_memory_quantile_model_trainer import (
     FakeQuantileModelTrainer,
 )
 from tests.fakes.features.modeling.in_memory_tft_trainer import InMemoryTftTrainer
+from tests.fakes.shared.in_memory_clock import FakeClock
 from tests.fakes.shared.in_memory_experiment_tracker import FakeExperimentTracker
 from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 
@@ -113,9 +114,8 @@ _TFT_PARAMS = TftTrainingParams(seed=7, max_encoder_length=12, max_epochs=3)
 IdentityTable = dict[tuple[str, str], tuple[str, str]]
 
 
-class _FrozenClock:
-    def now(self) -> datetime:
-        return datetime(2026, 9, 12, 12, 0, 0, tzinfo=UTC)
+# Instante do `created_at_utc` write-time (fixo, UTC).
+_CLOCK_NOW = datetime(2026, 9, 12, 12, 0, 0, tzinfo=UTC)
 
 
 def _sessions() -> tuple[date, ...]:
@@ -171,7 +171,7 @@ def _identity_table(repo: FakeAnalyticsRepository) -> IdentityTable:
 
 def capture_baselines() -> IdentityTable:
     """Roda `RunBaselines` no cenário fixo e devolve a tabela de identidade."""
-    repo = FakeAnalyticsRepository(clock=_FrozenClock())
+    repo = FakeAnalyticsRepository(clock=FakeClock(_CLOCK_NOW))
     use_case = RunBaselines(
         store=_store(()),
         splitter=_splitter(),
@@ -195,7 +195,7 @@ def capture_baselines() -> IdentityTable:
 
 def capture_gbm() -> IdentityTable:
     """Roda `TrainGbmQuantile` no cenário fixo e devolve a tabela de identidade."""
-    repo = FakeAnalyticsRepository(clock=_FrozenClock())
+    repo = FakeAnalyticsRepository(clock=FakeClock(_CLOCK_NOW))
     use_case = TrainGbmQuantile(
         store=_store(expected_feature_names()),
         splitter=_splitter(),
@@ -219,7 +219,7 @@ def capture_gbm() -> IdentityTable:
 
 def capture_tft(artifacts_root: Path) -> IdentityTable:
     """Roda `TrainTft` no cenário fixo e devolve a tabela de identidade."""
-    repo = FakeAnalyticsRepository(clock=_FrozenClock())
+    repo = FakeAnalyticsRepository(clock=FakeClock(_CLOCK_NOW))
     use_case = TrainTft(
         store=_store(unknown_feature_names() + known_feature_names()),
         splitter=_splitter(),

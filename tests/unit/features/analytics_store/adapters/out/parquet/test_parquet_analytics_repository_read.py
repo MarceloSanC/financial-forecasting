@@ -9,7 +9,6 @@ disco (round-trip real do adapter).
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
@@ -18,17 +17,10 @@ from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet
 from financial_forecasting.features.analytics_store.adapters.out.parquet.schemas.fact_oos_predictions_schema import (  # noqa: E501
     FACT_OOS_PREDICTIONS,
 )
+from tests.fakes.shared.in_memory_clock import FIXED_NOW, FakeClock
 
 _SILVER = "silver"
-_FIXED_NOW = datetime(2026, 6, 29, 12, 0, 0, tzinfo=UTC)
 _TWO_ROWS = 2
-
-
-class FakeClock:
-    """Clock determinístico (timestamp fixo)."""
-
-    def now(self) -> datetime:
-        return _FIXED_NOW
 
 
 def _repo(tmp_path: Path) -> ParquetAnalyticsRepository:
@@ -53,7 +45,7 @@ def _dim_run_row(
         "fold": fold,
         "seed": 42,
         "model_version": "tft_v1",
-        "created_at_utc": _FIXED_NOW.isoformat(),
+        "created_at_utc": FIXED_NOW.isoformat(),
     }
 
 

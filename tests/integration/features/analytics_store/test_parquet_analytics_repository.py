@@ -12,7 +12,6 @@ reais lendo o disco, o round-trip `parent_sweep_id=None` → `None` e a validaç
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -23,18 +22,11 @@ from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet
     ParquetAnalyticsRepository,
 )
 from financial_forecasting.shared.domain.exceptions.base import DuplicateKeyError
+from tests.fakes.shared.in_memory_clock import FIXED_NOW, FakeClock
 
 _SILVER = "silver"
-_FIXED_NOW = datetime(2026, 6, 29, 12, 0, 0, tzinfo=UTC)
 _TWO_ROWS = 2
 _SEED = 42
-
-
-class FakeClock:
-    """Clock determinístico (timestamp fixo)."""
-
-    def now(self) -> datetime:
-        return _FIXED_NOW
 
 
 def _repo(tmp_path: Path) -> ParquetAnalyticsRepository:
@@ -55,7 +47,7 @@ def _dim_run_row(
         "fold": "fold-0",
         "seed": _SEED,
         "model_version": "tft_v1",
-        "created_at_utc": _FIXED_NOW.isoformat(),
+        "created_at_utc": FIXED_NOW.isoformat(),
     }
 
 
@@ -199,7 +191,7 @@ def test_real_round_trip_parent_sweep_id_none(tmp_path: Path) -> None:
 
     assert len(rows) == 1
     assert rows[0]["parent_sweep_id"] is None
-    assert rows[0]["created_at_utc"] == _FIXED_NOW.isoformat()
+    assert rows[0]["created_at_utc"] == FIXED_NOW.isoformat()
     assert rows[0]["seed"] == _SEED  # int genuíno persiste e volta como inteiro
 
 

@@ -17,8 +17,6 @@ in-memory da 4.2 (fake, NÃO mock; ADR `0_0_0021`):
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 import pytest
 
 from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
@@ -32,6 +30,7 @@ from financial_forecasting.shared.domain.exceptions.base import DuplicateKeyErro
 from tests.fakes.features.analytics_store.in_memory_analytics_repository import (
     FakeAnalyticsRepository,
 )
+from tests.fakes.shared.in_memory_clock import FakeClock
 
 _LAYER = "silver"
 _TABLE = "fact_oos_predictions"
@@ -56,15 +55,8 @@ _DECISION_YEAR = 2024
 _HORIZON_2 = 2
 
 
-class _FakeClock:
-    """Clock determinístico — só para satisfazer o construtor do fake (4.2 I5)."""
-
-    def now(self) -> datetime:
-        return datetime(2026, 6, 29, 12, 0, 0, tzinfo=UTC)
-
-
 def _repo() -> FakeAnalyticsRepository:
-    return FakeAnalyticsRepository(clock=_FakeClock())
+    return FakeAnalyticsRepository(clock=FakeClock())
 
 
 def _command(

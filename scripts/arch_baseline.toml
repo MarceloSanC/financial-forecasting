@@ -22,16 +22,6 @@ key = "Hasher"
 motivo = "Implementação única por desenho (issue #70): o FakeHasher era cópia byte a byte do CanonicalJsonHasher e foi removido; o contrato roda só no adapter real + golden, e os testes de domínio/use case injetam o adapter real (stdlib, determinístico). Um fake aqui seria uma segunda definição de identidade — o oposto do que reprodutibilidade exige."
 issue = 70
 
-[[port_coverage.allow]]
-key = "Clock"
-motivo = "Sem fake nem contract test; o único consumidor (ParquetAnalyticsRepository, created_at UTC via clock injetado — ADR 4.2.0002) é testado injetando um clock fixo ad hoc. Fake + suíte [fake, real] pendentes."
-issue = 91
-
-[[port_coverage.allow]]
-key = "IdGenerator"
-motivo = "Port MORTO: IdGenerator/Uuid4Generator não têm consumidor algum em src/ — nem o composition root os instancia. Destino a decidir (remover ou dar consumidor) — sem fake/contrato até lá."
-issue = 91
-
 # Ports de `modeling` satisfeitos por duck-typing pelo USE CASE de outro slice
 # (`analytics_store.PersistPredictions`/`PersistRunRecord` — issue #68, ADR
 # 0.0.0053). Fake + suíte [fake, real] existem
