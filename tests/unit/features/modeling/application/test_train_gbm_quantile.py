@@ -732,14 +732,31 @@ def test_i7_config_payload_pins_the_ordered_feature_names_and_run_id_has_nine_sl
 
 
 @pytest.mark.unit
-def test_i11_none_feature_value_reaches_the_port_as_nan() -> None:
-    """Feature `None` no dataset vira `nan` na matriz passada ao port (I11)."""
-    import math  # noqa: PLC0415 — uso pontual no assert
+def test_i11_interior_missing_feature_raises_before_training() -> None:
+    """Feature `None` no interior do grid ergue antes de chamar o port.
 
-    target_session = 10  # dentro do train de ambos os folds
-    target_position = 3
+    Substitui o I11 da 5.3 ("ausente atravessa o port como NaN"): o grid único
+    não imputa buracos no meio da série (ADR 5.5.0004).
+    """
+    from financial_forecasting.features.modeling.domain.exceptions.cohort import (  # noqa: PLC0415
+        InteriorMissingValuesError,
+    )
+
     rows = _dataset_rows(_SESSIONS, _returns())
-    rows[target_session][_FEATURE_NAMES[target_position]] = None
+    rows[10][_FEATURE_NAMES[3]] = None
+    trainer = _CapturingTrainer()
+    use_case, _ = _build(store=_seeded_store(rows), trainer=trainer)
+
+    with pytest.raises(InteriorMissingValuesError):
+        use_case(_command())
+    assert trainer.calls == []
+
+
+@pytest.mark.unit
+def test_i11_missing_feature_prefix_is_trimmed_from_training() -> None:
+    """Feature `None` só no início (aquecimento) tira essas linhas do treino (D11)."""
+    rows = _dataset_rows(_SESSIONS, _returns())
+    rows[0][_FEATURE_NAMES[3]] = None
     trainer = _CapturingTrainer()
     use_case, _ = _build(store=_seeded_store(rows), trainer=trainer)
 
@@ -747,12 +764,7 @@ def test_i11_none_feature_value_reaches_the_port_as_nan() -> None:
 
     first_call_train = trainer.calls[0]["train_rows"]
     assert isinstance(first_call_train, tuple)
-    mutated_row = first_call_train[target_session]  # train começa na sessão 0
-    assert math.isnan(mutated_row[target_position])
-    # As demais posições da mesma linha permanecem intactas.
-    assert mutated_row[target_position - 1] == _feature_value(
-        target_session, target_position - 1
-    )
+    assert first_call_train[0][0] == _feature_value(1, 0)
 
 
 # -- I12: label além do grid é bug de chamador, nunca NaN-padding ------------------
