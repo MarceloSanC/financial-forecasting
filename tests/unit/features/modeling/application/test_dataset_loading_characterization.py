@@ -41,9 +41,15 @@ from financial_forecasting.features.modeling.application.use_cases.train_tft imp
 from financial_forecasting.features.modeling.domain.exceptions.cohort import (
     InteriorMissingValuesError,
 )
+from financial_forecasting.features.modeling.domain.services.training_grid import (
+    build_training_grid,
+)
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import ScopeSpec
 from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
     CanonicalJsonHasher,
+)
+from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+    DatasetContentFingerprint,
 )
 from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 
@@ -251,3 +257,35 @@ def test_gbm_and_tft_consume_the_same_modeling_columns() -> None:
 
     assert set(expected_feature_names()) == set(tft_columns)
     assert len(tft_columns) == len(set(tft_columns))
+
+
+def test_tft_sweep_rejects_interior_missing_value() -> None:
+    rows = [_row(2, 0.01, 1.0, 10.0), _row(3, 0.02, 2.0, None), _row(4, 0.03, 3.0, 30.0)]
+
+    with pytest.raises(InteriorMissingValuesError):
+        _load_sweep(_self(_store(rows)), _SCOPE, _FEATURES)
+
+
+def test_sweep_fingerprint_equals_the_fingerprint_over_modeling_columns() -> None:
+    """I4: a impressão digital do sweep (ordem do TFT) = a calculada sobre `modeling_columns()`.
+
+    É a igualdade que o `run` confere entre a proveniência do sweep e o dado do
+    cohort; a ordem das colunas não pode fazê-la falhar sem mudança real no dado.
+    """
+    rows = _with_modeling_columns(
+        [_row(2, 0.01, 1.0, 10.0), _row(3, 0.02, 2.0, 20.0), _row(4, 0.03, 3.0, 30.0)]
+    )
+    # Ordem invertida: simula uma spec `known` fora da ordem do registry — o caso
+    # em que a ordem do TFT deixa de coincidir com a de `modeling_columns()`.
+    tft_features = tuple(reversed(unknown_feature_names() + known_feature_names()))
+
+    *_, sweep_fingerprint = _load_sweep(_self(_store(rows)), _SCOPE, tft_features)
+    grid = build_training_grid(rows, columns=modeling_columns())
+    cohort_fingerprint = DatasetContentFingerprint.compute(
+        hasher=CanonicalJsonHasher(),
+        asset_id=_SCOPE.asset_id,
+        timestamps=grid.timestamps_iso(),
+        columns={name: grid.column(name) for name in modeling_columns()},
+    )
+
+    assert sweep_fingerprint == cohort_fingerprint.value

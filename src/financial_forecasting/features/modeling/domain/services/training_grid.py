@@ -16,6 +16,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
+from types import MappingProxyType
 
 from financial_forecasting.features.modeling.domain.exceptions.cohort import (
     InteriorMissingValuesError,
@@ -138,8 +139,20 @@ def build_training_grid(rows: Sequence[Row], *, columns: Sequence[str]) -> Train
 
     raw = {name: [_numeric_or_missing(row, name) for row in ordered] for name in columns}
     start = usable_start(raw)
-    trimmed = {
-        name: tuple(float(value) for value in values[start:] if value is not None)
-        for name, values in raw.items()
-    }
-    return TrainingGrid(timestamps=timestamps[start:], columns=trimmed, trimmed_prefix=start)
+    trimmed = {name: _finite_tail(name, values[start:]) for name, values in raw.items()}
+    return TrainingGrid(
+        timestamps=timestamps[start:],
+        columns=MappingProxyType(trimmed),
+        trimmed_prefix=start,
+    )
+
+
+def _finite_tail(name: str, values: Sequence[float | None]) -> tuple[float, ...]:
+    """Valores depois do prefixo; `usable_start` já garantiu que são finitos.
+
+    Ausente aqui é violação do invariante (desalinharia a coluna dos
+    timestamps), não dado a pular: ergue em vez de filtrar.
+    """
+    if any(value is None for value in values):
+        raise AssertionError(f"column {name!r} has a missing value after usable_start")
+    return tuple(float(value) for value in values if value is not None)
