@@ -729,6 +729,10 @@ Checkpoint C após: 04, 10, 12/11, 16, 17, 23, 24, 29, 31, 35.
 **Por quê:** decisão já tomada no concept (D11) e no ADR 5.5.0004 — sem regra única, TFT (recusa NaN) e GBM (aceita) treinariam sobre conjuntos diferentes; imputar em silêncio foi descartado.
 **Task 08 (TFT):** mesma substituição para a política de ausência da 5.4 ("`None` vira NaN na fronteira do port"): `test_none_feature_reaches_the_port_as_nan` virou dois testes (prefixo cortado; interior ergue antes do treino).
 
+### 2026-09-27 — [deviation] Tasks 09–10 — teste do conjunto de colunas apagado na 09 e restaurado na 10 — Claude (Opus 5.5)
+**O que houve:** na Task 09, ao remover o teste legado "`None` vira NaN" (nenhum use case restava no caminho antigo), o recorte do arquivo levou junto `test_gbm_and_tft_consume_the_same_modeling_columns` (correção C1 do Checkpoint C), e o `ruff --fix` de F401 removeu os imports que ficaram órfãos. Detectado na Task 10 (F821 ao reusar `expected_feature_names`) e restaurado byte a byte a partir de `ec8c05d` no commit da Task 10.
+**Task 10 — mudanças previstas:** as baselines passam a exigir as colunas de modelagem (C6) e a começar na mesma linha dos modelos; as fixtures de `test_run_baselines.py` (unit e integração) e o golden de identidade ganharam as colunas; o golden de `run_id` das baselines **não** mudou (a identidade delas não depende das features), o que confirma que só o grid mudou.
+
 ### 2026-09-27 — Checkpoint C (bloco 01–04) — disposições — Claude (Opus 5.5)
 - C1 (médio) caracterização presa a método que seria apagado → **corrigido** pelo desvio acima + teste do conjunto de colunas GBM = TFT (`task-04-fix`).
 - C2 (médio) fixture com `None` na 1ª linha contrariava "sem NaN" → **corrigido**: fixture sem ausentes; `None`→NaN em teste próprio marcado como mudança prevista (`task-04-fix`).
