@@ -198,6 +198,7 @@ class _CrossedGridTrainer(FakeQuantileModelTrainer):
         return QuantileTrainingResult(
             grids=grids,
             best_iteration_by_horizon=dict.fromkeys(train_labels_by_horizon, 1),
+            early_stop_loss_by_horizon=dict.fromkeys(train_labels_by_horizon, 0.01),
         )
 
 

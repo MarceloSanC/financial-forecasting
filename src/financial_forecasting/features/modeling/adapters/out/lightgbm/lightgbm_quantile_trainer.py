@@ -106,6 +106,7 @@ class LightgbmQuantileTrainer:
             decision_idx: {} for decision_idx in test_decision_indices
         }
         best_iteration_by_horizon: dict[int, int] = {}
+        early_stop_loss_by_horizon: dict[int, float] = {}
         for horizon in sorted(train_labels_by_horizon):
             fit_matrix, fit_labels = _finite_pairs(train_matrix, train_labels_by_horizon[horizon])
             if fit_labels.shape[0] < params.min_data_in_leaf:
@@ -137,6 +138,9 @@ class LightgbmQuantileTrainer:
 
             best_iteration = _select_best_iteration(histories)
             best_iteration_by_horizon[horizon] = best_iteration
+            early_stop_loss_by_horizon[horizon] = _grid_mean_at(histories, best_iteration)
+            if not test_decision_indices:
+                continue  # fit-only (sweep): nenhuma decisão de teste a emitir
             predictions = [
                 booster.predict(test_matrix, num_iteration=best_iteration) for booster in boosters
             ]
@@ -151,7 +155,9 @@ class LightgbmQuantileTrainer:
             decision_idx: dict(by_horizon) for decision_idx, by_horizon in grids.items()
         }
         return QuantileTrainingResult(
-            grids=frozen_grids, best_iteration_by_horizon=best_iteration_by_horizon
+            grids=frozen_grids,
+            best_iteration_by_horizon=best_iteration_by_horizon,
+            early_stop_loss_by_horizon=early_stop_loss_by_horizon,
         )
 
 
@@ -257,6 +263,11 @@ def _select_best_iteration(histories: Sequence[Sequence[float]]) -> int:
     means = [fmean(history[iteration] for history in histories) for iteration in range(length)]
     best_index = min(range(length), key=lambda iteration: (means[iteration], iteration))
     return best_index + 1
+
+
+def _grid_mean_at(histories: Sequence[Sequence[float]], iteration: int) -> float:
+    """Pinball média da grade na iteração 1-based `iteration` (a que o ADR 5.3.0002 escolhe)."""
+    return fmean(history[iteration - 1] for history in histories)
 
 
 # -- conversões de fronteira -------------------------------------------------------

@@ -25,6 +25,7 @@ from financial_forecasting.features.modeling.adapters.out.lightgbm.lightgbm_quan
     LightgbmQuantileTrainer,
     _booster_params,
     _finite_grid,
+    _grid_mean_at,
     _history_from,
     _select_best_iteration,
 )
@@ -201,6 +202,15 @@ def test_select_best_iteration_tie_breaks_to_the_smallest_iteration() -> None:
     histories = [(1.0, 1.0, 2.0)]  # médias empatam nas iterações 1 e 2
 
     assert _select_best_iteration(histories) == 1
+
+
+def test_early_stop_loss_is_the_grid_mean_at_the_selected_iteration() -> None:
+    """Perda de early_stop = mínimo da média da grade (a quantidade do ADR 5.3.0002)."""
+    histories = [(3.0, 2.0, 1.0, 4.0), (1.0, 2.0, 0.5, 4.0)]  # médias: 2.0, 2.0, 0.75, 4.0
+
+    best = _select_best_iteration(histories)
+
+    assert _grid_mean_at(histories, best) == pytest.approx(0.75)
 
 
 def test_select_best_iteration_rejects_empty_or_ragged_histories() -> None:
