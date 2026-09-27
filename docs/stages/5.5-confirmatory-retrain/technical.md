@@ -883,4 +883,64 @@ Dois revisores de contexto zerado sobre `371d4f5..HEAD`: um com a lente de compo
 **O que houve:** a segunda tentativa encontrou o bronze deixado pela primeira e caiu em 14 s com `DuplicateKeyError: Duplicate logical PK collision in (bronze, candle) … path=data/cohorts/aapl/bronze/candle/asset=AAPL/year=2010/candle.parquet`. A ingestão grava por acréscimo e recusa chave repetida.
 **Disposição:** a recusa é o comportamento certo, porque não sobrescreve nada em silêncio, e o erro nomeia o arquivo. Antes de repetir a `materialize`, o runbook manda apagar as camadas derivadas (`bronze/` e `processed/dataset_tft/`), preservando `raw/` e `processed/fundamentals/`, que são entrada. Aqui foi apagado só o `bronze/` produzido pela tentativa que falhou.
 
+### 2026-09-27 — Checkpoint C (bloco 24–31) — rodada 2 (reverificação das correções) — Claude (Opus 5.5)
+Revisor de contexto zerado sobre `a62209b` e `74e0cc4`, que confirmou 17 dos 20 itens. Os pontos restantes foram corrigidos (`task-31-fix2`):
+- **F4 tinha regressão:** `ensure_ascii=True` escapa caractere fora do BMP como par substituto (`😀`), que o `tomllib` recusa. Um cohort com emoji no nome deixaria de congelar.
+  - **Correção:** `_basic_string` escapa só aspas, barra, controles e DEL, e o resto vai cru em UTF-8.
+  - **Teste:** ida e volta com DEL, controle e U+1F600.
+- **F5 incompleto:** exceções fora da tupla (`KeyError`, `AssertionError`) saíam com 1, que é o `EXIT_MISMATCH`.
+  - **Correção:** um `except Exception` final imprime o traceback e sai com 2.
+  - **Teste:** um `KeyError` sai com 2.
+- **Teste vácuo:** o teste da fábrica do probe tinha cwd igual a `repo_root`.
+  - **Correção:** o teste agora roda com cwd em `sub/` e espera `sub/config/…`.
+- **Duas alegações de cobertura acima não se sustentavam:**
+  - O e2e com `calib_size ≠ val_size` **não** detecta a troca, porque a contagem de linhas depende só de `n_folds`, `test_size` e horizontes. A guarda da troca é o teste unitário `test_every_unit_command_carries_the_spec_geometry_and_grid`; a mudança no e2e só faz o caminho real correr com valores distintos.
+  - A limpeza do temporário do `freeze` não era exercitada. Agora é: `test_freeze_removes_its_temporary_file_when_the_replace_fails`.
+- **Log por unidade (G7):** passou a ter teste (`test_each_unit_logs_its_start_and_outcome`).
+  - Na suíte inteira o teste falhou uma vez: algum teste anterior reconfigura o logging e desliga os loggers já criados. O teste agora religa o logger do módulo.
+  - Conferido no container: no processo do CLI o logger segue ligado depois do import, do `wire_dependencies` e de o MLflow criar o banco SQLite (`after mlflow sqlite init disabled: False`). O rastro por unidade existe na corrida real.
+
+Resíduos declarados:
+- O ledger grava as contagens devolvidas pelo use case, e não as relidas do silver. A divergência entre as duas é pega pelo `verify` e pelo I6 na retomada, então não há buraco de completude.
+- No G5, o `cli.py` importa o composition root e as exceções base de `shared`, além de `Settings`. A justificativa do "aceito" vale mesmo assim: o `cli.py` não instancia nenhum concreto.
+
+### 2026-09-27 — [decision:E] Task 33 — R9: o gate de qualidade recusou o começo da série real; dataset começa em 2010-04-20 — Claude (Opus 5.5)
+**Contexto:** a `materialize` real (depois do achado do sentimento) caiu no check (d) do `DatasetQualityGate`, após 871 s: `Effective warmup exceeds declared warmup_count … revenue: first finite at row 72 > warmup_count 0; … revenue_yoy_growth: first finite at row 324 > warmup_count 252; net_income_yoy_growth: first finite at row 324 > warmup_count 252`. É o risco R9 do concept ("decisão com a medição antes de seguir").
+
+**Medição** (skill `data-shape-evidence`, consulta `scratchpad/t33/measure_start.py` sobre o bronze real):
+- O bronze tem 81 fundamentos, 17 `reported_date` NaT e 1 linha sem valores. É a mesma contagem medida em 2026-09-26, sobre o raw reusado.
+- Primeiro relatório: trimestral, `fiscal_date_end` 2010-03-31, `reported_date` **2010-04-20**.
+- Candles vão de 2010-01-04 a 2025-12-31 (4024). A linha 0 do dataset é 2010-01-05, porque o alvo precisa de t−1.
+- A linha 72 do dataset é 2010-04-20, o que bate com a linha que o gate acusa. A linha 324 é 2011-04-18.
+
+**Opções simuladas sobre as linhas reais:**
+- **(A) Dataset a partir de 2010-04-20** (o primeiro fundamento efetivo):
+  - os fundamentos ficam finitos desde a linha 0, e o YoY na linha 252 (= warmup declarado), então o check (d) passa;
+  - o grid útil começa na mesma sessão que começaria sem o corte (2011-04-18), porque o YoY é quem limita;
+  - diferença residual: indicadores de memória exponencial (EMA, Wilder) partem de um histórico 72 sessões mais curto.
+- **(B) Dataset a partir do primeiro YoY finito:** os indicadores reaqueceriam a partir dali, e o grid útil perderia cerca de 200 sessões.
+- **(C) Afrouxar o gate ou mudar o `warmup_count` declarado:** muda o `feature_set_hash` e desarma a guarda do #83. Descartada.
+
+**Decisão:** (A), pela nova opção `materialize --start AAAA-MM-DD`. Ela corta só o `BuildDatasetRequest`; bronze e sentimento veem os brutos inteiros. O valor 2010-04-20 é um fato do dado (o `reported_date` do primeiro relatório), não uma escolha por desempenho, e fica ancorado pela impressão digital do dataset no cohort e registrado no runbook.
+
+**Verificação:** `materialize --data-root data/cohorts/aapl --cohort config/cohorts/aapl_confirmatory.toml --start 2010-04-20` →
+- `materialized AAPL: 4024 candles, 6921 news, 81 fundamentals` / `dataset rows 3950 (2010-04-21..2025-12-31), feature_set_hash 7df0e1b4…09e0`;
+- exit 0 em 755 s.
+
+### 2026-09-27 — [measurement] Task 33 — dado real materializado (A5/D6) — Claude (Opus 5.5)
+Consulta: `scratchpad/t33/measure.py`, rodada no container com DuckDB sobre o Parquet e pelos use cases. Saída integral em `scratchpad/t33/measure.out`.
+- **Dataset:** 3950 linhas, 2010-04-21 → 2025-12-31, 3950 timestamps distintos, 58 colunas de modelagem.
+- **Linhas reais:**
+  - começo (2010-04-21…27): `rsi_14` nulo, `revenue` = 13.499e9;
+  - corte (2011-04-14…20): todas as colunas finitas desde 2011-04-18; a `revenue` troca de 26.741e9 para 24.667e9 em 2011-04-20, com o relatório de 2011-04-20;
+  - fim (2025-12-24…31): nada nulo.
+- **Prefixo cortado:** 251 linhas, com 29 colunas com NaN nele. As piores: `revenue_yoy_growth` 251, `net_income_yoy_growth` 251, `ema_200` 198, `trend_regime` 111, `ema_100` 98.
+- **NaN interior:** 0 colunas.
+- **Grid útil:** 3699 sessões, 2011-04-18 → 2025-12-31.
+- **Limiar D6:**
+  - treino do fold 0 = 1641 sessões → τ·n = 0,02 × 1641 = **32,8 ≥ 30** (0,1 × 1641 = 164,1). A geometria não precisa ser revista;
+  - OOS por horizonte: 1511 (h=1) e 1505 (h=7) ≥ 30/0,02 = 1500.
+- **Reconciliação do alvo:** `target_return == log(close_t/close_{t−1})` em 3949/3949 linhas (tolerância 1e−9). É o retorno para trás, como documentado. O deslocamento para `t+h` é do modelo (ADR 4.3.0001). Para `log(close_{t+1}/close_t)`: 0/3949.
+- **Impressão digital do grid:** `00e4406dcd96658d557f7d4d86face9874fac42385e3cb182d54c5d2286695bd`.
+
 <!-- END: post-execution -->

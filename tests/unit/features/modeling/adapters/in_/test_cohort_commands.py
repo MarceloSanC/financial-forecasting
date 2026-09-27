@@ -593,3 +593,21 @@ def test_freeze_refuses_a_file_that_would_not_read_back_the_same(harness: _Harne
         commands.freeze(deps, harness.path, out=harness.out)
     assert harness.path.read_text(encoding="utf-8") == before
     assert not list(harness.path.parent.glob("*.tmp-*"))
+
+
+@pytest.mark.unit
+def test_freeze_removes_its_temporary_file_when_the_replace_fails(
+    harness: _Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commands.sweep(harness.deps, harness.path, out=harness.out)
+    before = harness.path.read_text(encoding="utf-8")
+
+    def failing_replace(src: object, dst: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(commands.os, "replace", failing_replace)
+    with pytest.raises(OSError, match="disk full"):
+        commands.freeze(harness.deps, harness.path, out=harness.out)
+
+    assert harness.path.read_text(encoding="utf-8") == before
+    assert not list(harness.path.parent.glob("*.tmp-*"))

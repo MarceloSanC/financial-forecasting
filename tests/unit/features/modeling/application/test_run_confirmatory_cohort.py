@@ -13,6 +13,7 @@ em erro.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -645,3 +646,21 @@ def test_recorded_run_problems_names_each_defect() -> None:
     assert recorded_run_problems(spec, [key], {key: {"a": ("0", rows0, _frozen_targets(0))}}) == [
         f"gbm_quantile seed={_GBM_SEED}: folds [0], expected 0..1"
     ]
+
+
+def test_each_unit_logs_its_start_and_outcome(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """G7 (Checkpoint C 24-31): corrida de horas precisa de rastro por unidade."""
+    # Na suíte inteira, algum teste anterior reconfigura o logging e desliga os
+    # loggers já criados; importado, montado e depois de o MLflow criar o banco,
+    # o logger segue ligado no processo do CLI (conferido no container, §7).
+    monkeypatch.setattr(logging.getLogger(RunConfirmatoryCohort.__module__), "disabled", False)
+    harness = _Harness()
+
+    with caplog.at_level("INFO"):
+        harness.run()
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert "unit gbm: start" in messages
+    assert any(m.startswith("unit tft:seed=22: ran (2 runs,") for m in messages)

@@ -500,7 +500,8 @@ def test_git_probe_receives_the_cohort_path_resolved_against_the_cwd(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """G2 (Checkpoint C 24-31): o probe fotografa o MESMO arquivo que o CLI leu."""
-    monkeypatch.chdir(tmp_path)
+    (tmp_path / "sub").mkdir()
+    monkeypatch.chdir(tmp_path / "sub")  # cwd != repo_root: sem o resolve, perderia "sub/"
     settings = Settings(_env_file=None, data_root=tmp_path / "d", repo_root=tmp_path)
     deps = wire_dependencies(settings=settings)
 
@@ -508,4 +509,4 @@ def test_git_probe_receives_the_cohort_path_resolved_against_the_cwd(
 
     assert isinstance(probe, GitRuntimeEnvironmentProbe)
     assert probe._repo_root == tmp_path.resolve()
-    assert probe._cohort_path == "config/cohorts/x.toml"
+    assert probe._cohort_path == "sub/config/cohorts/x.toml"
