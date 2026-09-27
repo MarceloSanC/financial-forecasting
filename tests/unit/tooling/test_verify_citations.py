@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import urllib.error
+import urllib.request
+from email.message import Message
 from pathlib import Path
 from types import ModuleType
 
@@ -73,6 +76,72 @@ def test_check_arxiv_falls_back_to_arxiv_api_when_datacite_errors(
     monkeypatch.setattr(vc.time, "sleep", lambda _s: None)
     [result] = vc.check_arxiv(["0912.0902"])
     assert result.status == "OK"
+
+
+class _Resp:
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def __enter__(self) -> _Resp:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self._body
+
+
+def _http_error(url: str, code: int) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(url, code, "http error", Message(), None)
+
+
+def test_get_retries_on_arxiv_rate_limit_406(monkeypatch: pytest.MonkeyPatch) -> None:
+    # caso real (sessão da #78): o arXiv responde HTTP 406 sob rajada, não erro de rede
+    calls: list[str] = []
+    sleeps: list[float] = []
+
+    def fake_urlopen(req: urllib.request.Request, timeout: float) -> _Resp:
+        calls.append(req.full_url)
+        if len(calls) == 1:
+            raise _http_error(req.full_url, 406)
+        return _Resp(b"ok")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(vc.time, "sleep", sleeps.append)
+    url = "https://export.arxiv.org/api/query?id_list=0912.0902"
+    assert vc._get(url) == b"ok"
+    assert calls == [url, url]
+    assert sleeps == [5]
+
+
+_DATACITE = (
+    b'{"data": {"attributes": {"titles": [{"title": "Making and Evaluating Point Forecasts"}],'
+    b' "creators": [{"name": "Gneiting, Tilmann", "familyName": "Gneiting"}],'
+    b' "publicationYear": 2009}}}'
+)
+
+
+def test_check_arxiv_datacite_maps_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(vc, "_get", lambda _url: _DATACITE)
+    result = vc._check_arxiv_datacite("0912.0902")
+    assert result == vc.Result(
+        "OK", "arXiv:0912.0902", "2009", "Gneiting", "Making and Evaluating Point Forecasts"
+    )
+
+
+def test_check_arxiv_datacite_404_is_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    def raise_404(url: str) -> bytes:
+        raise _http_error(url, 404)
+
+    monkeypatch.setattr(vc, "_get", raise_404)
+    assert vc._check_arxiv_datacite("9999.99999").status == "NOT_FOUND"
+
+
+def test_check_arxiv_datacite_unexpected_payload_is_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ERROR (não exceção) para o check_arxiv cair na reserva da API do arXiv
+    monkeypatch.setattr(vc, "_get", lambda _url: b'{"errors": [{"status": "500"}]}')
+    assert vc._check_arxiv_datacite("0912.0902").status == "ERROR"
 
 
 def test_extract_arxiv_ids_from_prefix_and_url() -> None:

@@ -145,7 +145,10 @@ def _check_arxiv_datacite(arxiv_id: str) -> Result:
         return Result("NOT_FOUND" if exc.code == _HTTP_NOT_FOUND else "ERROR", ident)
     except (urllib.error.URLError, TimeoutError):
         return Result("ERROR", ident)
-    attrs = json.loads(raw)["data"]["attributes"]
+    try:
+        attrs = json.loads(raw)["data"]["attributes"]
+    except (ValueError, KeyError, TypeError):
+        return Result("ERROR", ident)  # payload inesperado → cai na reserva (API do arXiv)
     titles = attrs.get("titles") or [{}]
     creators = attrs.get("creators") or [{}]
     author = str(creators[0].get("familyName") or creators[0].get("name") or "")
