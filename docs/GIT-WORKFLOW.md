@@ -98,6 +98,11 @@ referenciam esta seção em vez de duplicar a lista:
   `[tool.coverage.report] fail_under = 90`; o pytest falha sozinho se a
   cobertura cair abaixo.
 - **+1 aprovação:** code review obrigatório (`Require approvals: 1`).
+  **Exceção — Step orquestrado:** PR de Stage conduzido pela sessão mestra do
+  [`PROMPT-step-single-session.md`](./PROMPT-step-single-session.md) tem a aprovação
+  **delegada pelo humano** ao gate auditoria `complete` (subagente auditor de contexto
+  zerado, workflow `audit-gate`) + CI verde; a mestra mergeia sozinha (§3.5 do prompt).
+  Os demais gates desta lista continuam valendo.
 - **Branch atualizada:** PR precisa estar à frente da base (`Require
   branches to be up to date`).
 - **Conversas resolvidas:** todos os comentários do code review devem
