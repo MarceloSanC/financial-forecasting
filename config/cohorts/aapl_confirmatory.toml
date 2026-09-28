@@ -1,6 +1,6 @@
 # Cohort confirmatório AAPL (Stage 5.5) — RASCUNHO, revisão 0.
 # Schema fechado: financial_forecasting.features.modeling.adapters.in.cli.cohort_file.
-# Decisões [P] pendentes (Task 33): sweep.n_trials e seeds.
+# Decisões [P] da Task 33 (humano, 2026-09-27): n_trials = 60 nos dois sweeps; seeds 1..10.
 # O `freeze` reescreve este arquivo pelo `dump` (estes comentários não sobrevivem);
 # a justificativa de cada valor está no concept e no technical da Stage 5.5.
 name = "aapl_confirmatory"
@@ -12,7 +12,7 @@ pipeline_version = "2"
 horizons = [1, 7]
 quantile_levels = [0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98]
 device = "cpu"
-seeds = []
+seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 # D6 (tau*n >= 30) e D7 (embargo = max_horizon).
 [geometry]
@@ -23,6 +23,7 @@ calib_size = 252
 embargo = 7
 
 [sweep]
+n_trials = 60
 sampler_seed = 2026
 
 # D9: heads fixo em 4 (Lim et al. 2021, Tabela 1); demais nos defaults do port.
