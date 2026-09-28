@@ -92,6 +92,8 @@ class DmHolmFamilyReport:
     def __post_init__(self) -> None:
         """I7/C8: família fechada, amostra única, Holm e decisão coerentes."""
         validate_alpha(self.alpha)
+        if not isinstance(self.comparisons, tuple):
+            raise ValueError(f"comparisons must be a tuple, got {type(self.comparisons).__name__}")
         if not self.comparisons:
             raise ValueError("a DmHolmFamilyReport needs m >= 1 comparisons")
         comparators = [comparison.comparator for comparison in self.comparisons]
@@ -111,6 +113,11 @@ class DmHolmFamilyReport:
                 raise ValueError(
                     f"comparator {comparison.comparator!r}: adjusted_p_value "
                     f"{comparison.adjusted_p_value} differs from holm_adjust ({expected})"
+                )
+            if not isinstance(comparison.rejected, bool):
+                raise ValueError(
+                    f"comparator {comparison.comparator!r}: rejected must be a bool, got "
+                    f"{comparison.rejected!r}"
                 )
             if comparison.rejected != decision:
                 raise ValueError(

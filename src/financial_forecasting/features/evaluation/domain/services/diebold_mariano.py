@@ -124,6 +124,8 @@ class DieboldMarianoResult:
             raise ValueError(
                 f"horizon_used must be the horizon ({self.horizon}) or 1, got {self.horizon_used}"
             )
+        if not isinstance(self.fallback_applied, bool):
+            raise ValueError(f"fallback_applied must be a bool, got {self.fallback_applied!r}")
         if self.fallback_applied != (self.horizon_used != self.horizon):
             raise ValueError(
                 "fallback_applied must hold exactly when horizon_used != horizon, got "

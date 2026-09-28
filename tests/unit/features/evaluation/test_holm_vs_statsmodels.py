@@ -236,6 +236,16 @@ _INCOHERENT: list[tuple[str, Callable[[DmHolmFamilyReport], object], str]] = [
         "holm_adjust",
     ),
     (
+        "rejected-not-bool",
+        lambda r: _replace_first(r, rejected=int(r.comparisons[0].rejected)),
+        "rejected must be a bool",
+    ),
+    (
+        "comparisons-list",
+        lambda r: dataclasses.replace(r, comparisons=list(r.comparisons)),
+        "must be a tuple",
+    ),
+    (
         "rejected-incoherent",
         lambda r: _replace_first(r, rejected=not r.comparisons[0].rejected),
         "incoherent",

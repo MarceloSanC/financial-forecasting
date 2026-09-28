@@ -299,6 +299,11 @@ _INCOHERENT: list[tuple[str, Callable[[DieboldMarianoResult], DieboldMarianoResu
         "horizon_used",
     ),
     (
+        "fallback-not-bool",
+        lambda r: dataclasses.replace(r, fallback_applied=0),
+        "fallback_applied must be a bool",
+    ),
+    (
         "fallback-without-change",
         lambda r: dataclasses.replace(r, fallback_applied=True),
         "fallback",
