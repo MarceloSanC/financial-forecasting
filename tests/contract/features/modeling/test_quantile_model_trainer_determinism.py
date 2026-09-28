@@ -78,7 +78,10 @@ def _param_sets() -> list[pytest.param]:  # type: ignore[type-arg]
 @pytest.mark.parametrize("overrides", _param_sets())
 def test_two_seeds_produce_identical_grids(overrides: dict[str, object]) -> None:
     trainer = LightgbmQuantileTrainer()
-    train_rows, monitor_rows, test_rows = _rows(120, 1), _rows(40, 2), _rows(15, 3)
+    # Escala do fold 0 do cohort AAPL (1641 treino, 252 early_stop): com 120 linhas,
+    # `min_data_in_leaf = 97` (congelado) não deixa árvore alguma dividir e o teste
+    # cairia na guarda de vacuidade abaixo em vez de comparar modelos reais.
+    train_rows, monitor_rows, test_rows = _rows(1641, 1), _rows(252, 2), _rows(15, 3)
     base = {"num_boost_round_max": 40, **overrides}
 
     results = [
