@@ -1444,4 +1444,17 @@ iterações do Lentz na grade: **56** (menor teto que roda a grade inteira; `_MA
 assintótico `nx > 1e100` (A&S 26.5.4 em log) cobre |x| com x² estourando float64 — é o que
 cobre df = 1 e df = 2 em x = −10¹⁵⁰ no unit.
 
+### 2026-09-28 — [decision] Task 03: C2 nos acessores do VO e ordem de validação da fábrica — Claude (Opus 5.5)
+**Contexto:** decisão de detalhe planejada no §1 ("`differential`/`losses_of` com nome
+desconhecido ou `first == second` → `ValueError`") e um ponto que a Task não fixa: em que
+ordem a fábrica confere modelo sem séries × eixos divergentes.
+**Razão:** aplicada como planejada — `losses_of` e `differential` erguem `ValueError`
+nomeando o modelo desconhecido (e a lista de conhecidos) e `differential(a, a)` ergue
+antes de ler colunas (tokens `pls_unknown_name`, `pls_same_model`). Na fábrica, primeiro
+< 2 modelos, depois **todo** modelo sem séries, e só então os eixos contra a primeira
+série de todas (horizonte → timestamps → grade, na ordem da Task), com a mensagem
+`model '<m>', seed <s>: …`; a referência é a seed 0 do primeiro modelo do mapping, por
+isso um eixo divergente entre modelos é atribuído ao modelo de fora. Reversível, sem efeito
+no contrato (o concept §4 só exige erguer).
+
 <!-- END: post-execution -->
