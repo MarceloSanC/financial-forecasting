@@ -824,7 +824,7 @@ arquivos_a_criar:
   - tests/unit/features/evaluation/gold/test_builder_explicit_deps.py
   - tests/integration/features/evaluation/test_refresh_gold.py
 contratos_introduzidos: [GoldBuilder (port-out), RefreshGold (use case), QualityCheckRegistry (domain-service)]
-contratos_consumidos: [todos os serviços de 6.1/6.2/6.3, AnalyticsRepository (4.2)]
+contratos_consumidos: [todos os serviços de 6.1/6.2/6.3, McsBackend (port-out 6.2: b̂_sb + índices de bootstrap do MCS em produção — ADR 6.2.0004), AnalyticsRepository (4.2)]
 definition_of_done: "Gold builders declaram dependências explícitas (não dict compartilhado); ordem derivada da topologia, não de contrato byte-idêntico; quality checks rodam por registry; gold reconstruível de silver sem re-treino; disposições aplicadas."
 non_goals: [scorecard confirmatório (6.5), plots (8.3)]
 complexidade_estimada: M
