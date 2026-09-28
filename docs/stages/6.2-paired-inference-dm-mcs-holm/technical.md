@@ -1458,9 +1458,22 @@ ordem a fábrica confere modelo sem séries × eixos divergentes.
 nomeando o modelo desconhecido (e a lista de conhecidos) e `differential(a, a)` ergue
 antes de ler colunas (tokens `pls_unknown_name`, `pls_same_model`). Na fábrica, primeiro
 < 2 modelos, depois **todo** modelo sem séries, e só então os eixos contra a primeira
-série de todas (horizonte → timestamps → grade, na ordem da Task), com a mensagem
-`model '<m>', seed <s>: …`; a referência é a seed 0 do primeiro modelo do mapping, por
+série de todas (horizonte → timestamps → grade, na ordem da Task; realizados desde o
+fix do Checkpoint C, entrada abaixo), com a mensagem `model '<m>', seed index <i>: …` (a
+`CoverageSeries` não carrega id de seed — é o índice na sequência); a referência é a seed 0 do primeiro modelo do mapping, por
 isso um eixo divergente entre modelos é atribuído ao modelo de fora. Reversível, sem efeito
 no contrato (o concept §4 só exige erguer).
+
+### 2026-09-28 — [decision] Task 03: fábrica exige o mesmo `realized` em todas as séries (regra aditiva de C1) — Claude (Opus 5.5)
+**Contexto:** o Checkpoint C do bloco 1 achou que `paired_pinball_losses` aceitava séries
+com o mesmo horizonte, timestamps e grade mas **realizados diferentes** (entre seeds ou
+entre modelos): o diferencial d_t passava a medir a diferença de alvo (−0,24 no caso da
+revisão), não a de modelo. O concept C1 lista horizonte, timestamps e grade, não o y_t.
+**Razão:** decisão da sessão mestra — o pareamento de DM/Holm/MCS pressupõe o **mesmo
+y_t** em todas as colunas (doc §6.7: amostra pareada; mesma lógica da grade comum da
+6.1). `series.realized != reference.realized` → `ValueError` nomeando modelo e índice da
+seed, checado depois da grade; casos `realized-between-seeds` e `realized-between-models`
+em `test_factory_mismatch_raises`. Regra **aditiva** (só recusa entrada que antes passava
+em silêncio); não muda assinatura, port nem formato persistido.
 
 <!-- END: post-execution -->

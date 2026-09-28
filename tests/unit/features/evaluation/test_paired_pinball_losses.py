@@ -44,7 +44,8 @@ def _grids(shift: float) -> list[tuple[float, ...]]:
 def _build(make_series: SeriesFactory, shift: float = 0.0, **overrides: object) -> CoverageSeries:
     kwargs: dict[str, object] = {"levels": _DYADIC_LEVELS, "horizon": 1}
     kwargs.update(overrides)
-    return make_series(_grids(shift), _REALIZED, **kwargs)
+    realized = kwargs.pop("realized", _REALIZED)
+    return make_series(_grids(shift), realized, **kwargs)
 
 
 @pytest.mark.unit
@@ -81,17 +82,25 @@ def _mismatch_cases() -> list[Any]:
         ("horizon", {"horizon": 2}, "horizon 2 differs from 1"),
         ("timestamps", {"timestamps": other_timestamps}, "target_timestamps differ"),
         ("grid", {"levels": _OTHER_LEVELS}, "levels .* differ"),
+        # mesmo horizonte, timestamps e grade, outro y_t: o diferencial viria do alvo
+        ("realized", {"realized": (0.25, -0.75, 1.5, 0.0, -1.0)}, "realized values differ"),
     )
     cases = []
     for axis, overrides, message in divergent:
         cases.append(
             pytest.param(
-                "seed", overrides, rf"model 'cand', seed 1: {message}", id=f"{axis}-between-seeds"
+                "seed",
+                overrides,
+                rf"model 'cand', seed index 1: {message}",
+                id=f"{axis}-between-seeds",
             )
         )
         cases.append(
             pytest.param(
-                "model", overrides, rf"model 'comp', seed 0: {message}", id=f"{axis}-between-models"
+                "model",
+                overrides,
+                rf"model 'comp', seed index 0: {message}",
+                id=f"{axis}-between-models",
             )
         )
     return cases

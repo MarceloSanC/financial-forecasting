@@ -10,8 +10,11 @@ Serviço de domínio stdlib-only (concept 6.2 §4, I1/I3, C1; ADR `6_2_0001` ite
   `math.fsum` das S perdas do ponto / S; S = 1 é a identidade (regra B-SEEDS: média de
   perdas, não de previsões);
 - todas as séries, entre seeds **e** entre modelos, têm o mesmo `horizon`, os mesmos
-  `target_timestamps` e a mesma grade `levels` da primeira — senão `ValueError`
-  nomeando modelo e seed (a fábrica valida, nunca alinha);
+  `target_timestamps`, a mesma grade `levels` e os mesmos realizados `realized` da
+  primeira — senão `ValueError` nomeando o modelo e o **índice** da seed na sequência (a
+  `CoverageSeries` não carrega id de seed; a fábrica valida, nunca alinha). O pareamento
+  exige o mesmo y_t em todas as colunas: com alvos diferentes o diferencial d_t mediria o
+  alvo, não o modelo (regra aditiva de C1, technical 6.2 §7);
 - a ordem dos modelos é a do mapping.
 
 Não importa nada de `modeling` e não altera a `CoverageSeries` (6.1).
@@ -42,14 +45,16 @@ def paired_pinball_losses(
 
     Args:
         series_by_model: modelo → S ≥ 1 `CoverageSeries` (uma por seed), todas do mesmo
-            horizonte, timestamps e grade. A ordem das chaves é a ordem dos modelos.
+            horizonte, timestamps, grade e realizados. A ordem das chaves é a ordem dos
+            modelos.
 
     Returns:
         A série pareada do horizonte, uma coluna L_t (média entre seeds) por modelo.
 
     Raises:
         ValueError: < 2 modelos; modelo sem séries; séries com horizonte, timestamps ou
-            grade diferentes (entre seeds ou entre modelos); e as violações do VO (C1).
+            grade ou realizados diferentes (entre seeds ou entre modelos); e as violações do
+            VO (C1).
     """
     if len(series_by_model) < _MIN_MODELS:
         raise ValueError(
@@ -60,8 +65,8 @@ def paired_pinball_losses(
             raise ValueError(f"model {model!r} has no series (needs S >= 1 seeds)")
     reference = next(iter(series_by_model.values()))[0]
     for model, seeds in series_by_model.items():
-        for seed, series in enumerate(seeds):
-            _check_same_axes(reference, series, model=model, seed=seed)
+        for seed_index, series in enumerate(seeds):
+            _check_same_axes(reference, series, model=model, seed_index=seed_index)
     return PairedLossSeries(
         horizon=reference.horizon,
         models=tuple(series_by_model),
@@ -71,22 +76,18 @@ def paired_pinball_losses(
 
 
 def _check_same_axes(
-    reference: CoverageSeries, series: CoverageSeries, *, model: str, seed: int
+    reference: CoverageSeries, series: CoverageSeries, *, model: str, seed_index: int
 ) -> None:
-    """Horizonte, timestamps e grade iguais aos da série de referência (a primeira)."""
+    """Horizonte, timestamps, grade e realizados iguais aos da referência (a primeira)."""
+    where = f"model {model!r}, seed index {seed_index}"
     if series.horizon != reference.horizon:
-        raise ValueError(
-            f"model {model!r}, seed {seed}: horizon {series.horizon} differs from "
-            f"{reference.horizon}"
-        )
+        raise ValueError(f"{where}: horizon {series.horizon} differs from {reference.horizon}")
     if series.target_timestamps != reference.target_timestamps:
-        raise ValueError(
-            f"model {model!r}, seed {seed}: target_timestamps differ from the first series"
-        )
+        raise ValueError(f"{where}: target_timestamps differ from the first series")
     if series.levels != reference.levels:
-        raise ValueError(
-            f"model {model!r}, seed {seed}: levels {series.levels} differ from {reference.levels}"
-        )
+        raise ValueError(f"{where}: levels {series.levels} differ from {reference.levels}")
+    if series.realized != reference.realized:
+        raise ValueError(f"{where}: realized values differ from the first series")
 
 
 def _seed_mean(seeds: Sequence[CoverageSeries]) -> tuple[float, ...]:
