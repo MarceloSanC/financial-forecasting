@@ -5,7 +5,7 @@ when-use: Reference before moving torch into an optional extra, before changing 
 keywords: [adr, torch, pytorch-forecasting, dependencies, cpu-index, uv, ci, smoke-test, skipif, rocm, optional-extra]
 status: accepted
 created_at: 2026-08-09
-updated_at: 2026-08-09
+updated_at: 2026-09-27
 adr_id: "5.4.0003"
 decision: torch, lightning, pytorch-forecasting and optuna enter the main dependencies with torch resolved from the explicit CPU wheel index, and the real TFT smoke test runs in CI without skipif — diverging from ADR 3.2.0002 because the TFT is the object of study, not an auxiliary scorer
 context_stage: 5.4-tft-trainer
@@ -194,6 +194,19 @@ environment or introduce the conflicting-extras arrangement of Alternative B.
   startup cost, not about the dependency being optional.
 - The smoke test must stay fast (target: seconds). If it exceeds ~60 s it is
   marked `slow` and the deviation is recorded.
+- **Note (2026-09-27, Stage 5.5 Task 37): the confirmatory environment is CPU,
+  not ROCm.** The Decision above deferred ROCm to 5.5, which chose to measure
+  before switching (concept 5.5 D8, ADR 5.5.0001). The measurements were taken
+  on the real AAPL data in the Stage's container (12 threads, `torch
+  2.13.0+cpu`). One TFT trial takes 75–806 s depending on the sampled
+  hyperparameters, and one GBM trial takes ≤ 20 s. The full cohort (60-trial
+  sweeps, 10 seeds × 6 folds) fits on CPU even in the expensive corner of the
+  search space. So the human decision at the freeze was **CPU**; the cohort file
+  declares `device = "cpu"` and the environment snapshot records the torch
+  build (technical 5.5 §7, entries "[measurement] Task 33 — custo no CPU" and
+  "[P] Task 33"). The CPU index of this ADR therefore stays the only resolution
+  path. ROCm would still require changing the adapter, which pins
+  `accelerator="cpu"`, and belongs to a future Stage if a cohort ever needs it.
 
 ## References
 
