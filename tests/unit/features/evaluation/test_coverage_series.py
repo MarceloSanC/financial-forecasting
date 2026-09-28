@@ -35,6 +35,8 @@ _TAU_HIGH = 0.98
 _WIDE_LEVELS = (_TAU_LOW, 0.05, 0.1, 0.5, 0.9, 0.95, _TAU_HIGH)
 _HORIZON = 7
 _ONE_IN_FOUR = 0.25
+# Tolerância de simetria do ADR 6.1.0002 item 2 (espelha a constante do VO).
+_SYMMETRY_BOUND = 1e-12
 
 
 @pytest.mark.unit
@@ -187,6 +189,33 @@ def test_asymmetry_just_above_tolerance_raises(make_series: SeriesFactory) -> No
     """C1: a tolerância é 1e-12 — um desvio de 1e-9 já é assimetria."""
     with pytest.raises(ValueError, match="symmetric"):
         make_series([(0.0, 0.0, 0.0)], [0.0], levels=(0.1, 0.5, 0.9 + 1e-9))
+
+
+@pytest.mark.unit
+def test_asymmetry_inside_tolerance_is_accepted(make_series: SeriesFactory) -> None:
+    """Fronteira de 1e-12 (lado de dentro): resíduo medido ~5.0004e-13 -> aceita.
+
+    As grades usuais fecham a soma em 0.0 exato em float64 e não exercitam a
+    tolerância; este caso a exercita de verdade.
+    """
+    levels = (0.1, 0.5, 0.9 + 5e-13)
+    residual = abs(levels[0] + levels[-1] - 1.0)
+    assert 0.0 < residual < _SYMMETRY_BOUND  # premissa numérica do caso
+
+    series = make_series([(0.0, 0.0, 0.0)], [0.0], levels=levels)
+
+    assert series.symmetric_pairs == ((0.1, levels[-1]),)
+
+
+@pytest.mark.unit
+def test_asymmetry_just_outside_tolerance_raises(make_series: SeriesFactory) -> None:
+    """Fronteira de 1e-12 (lado de fora): resíduo medido ~1.99996e-12 -> ergue."""
+    levels = (0.1, 0.5, 0.9 + 2e-12)
+    residual = abs(levels[0] + levels[-1] - 1.0)
+    assert residual > _SYMMETRY_BOUND  # premissa numérica do caso
+
+    with pytest.raises(ValueError, match="symmetric"):
+        make_series([(0.0, 0.0, 0.0)], [0.0], levels=levels)
 
 
 @pytest.mark.unit

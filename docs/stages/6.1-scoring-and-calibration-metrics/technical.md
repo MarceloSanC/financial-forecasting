@@ -884,4 +884,14 @@ já estão nesse contrato. Provado pelo caso
 numeração: o contrato novo é o nº 13 do `.importlinter` e o `bc-independence` passou
 a nº 14 (só o rótulo do comentário; nenhum doc cita o número).
 
+### 2026-09-28 — [decision] Task 02: `CoverageSeries` exige `len(guardrail_values) == len(levels)` por ponto — Claude (Opus 5.5)
+**Contexto:** o ADR 6.1.0002 item 2 lista `forecast.levels == levels` por ponto, mas
+não o tamanho do vetor de valores. `QuantileForecast` é dataclass pública sem
+`__post_init__`: construído direto (fora do `from_raw`), pode ter `levels` corretos e
+`guardrail_values` com outro tamanho — e então `zip` com a grade truncaria em silêncio.
+**Razão:** a série é "alinhada 1:1" (ADR 6.1.0002 item 2; concept I2), o que inclui o
+alinhamento valor↔nível; a checagem ergue `ValueError` nomeando o ponto, coberta por
+`test_guardrail_values_misaligned_with_levels_raise`. Reversível e sem efeito sobre
+séries montadas pelo `from_raw` (que já garante o tamanho).
+
 <!-- END: post-execution -->
