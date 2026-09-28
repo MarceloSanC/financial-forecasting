@@ -1550,4 +1550,16 @@ passa a recusar também `n_points ≤ horizon` (sugestão opcional da revisão; 
 `n-points-not-above-horizon`). Unificação com o `_horizon.py` da 6.3: `[finding]` da
 Task 03 acima, ampliado.
 
+### 2026-09-28 — [decision] Task 04: nota do fallback com Bartlett e premissa da tolerância contra o R — Claude (Opus 5.5)
+**Contexto:** a revisão numérica do Checkpoint C do bloco 2 (146 casos contra o
+`forecast::dm.test` real, zero falhas) registrou dois fatos que o código não dizia.
+**Razão:** (1) com o estimador de Bartlett a variância de longo prazo é positiva
+semidefinida — só zera com d constante, que ergue do mesmo jeito depois do fallback —, então
+o ramo de fallback é observacionalmente equivalente sob Bartlett; comentário de uma linha no
+`diebold_mariano.py` (o ramo segue único, como no `dm.test`). (2) A tolerância declarada
+contra o R (estatística `rel_tol=1e-11`, Task 08) supõe var̂ ≫ ulp(d̄)²: com diferencial
+quase constante (amplitude no ruído de float) a estatística diverge entre implementações
+por arredondamento da soma, enquanto o p-valor sai idêntico (satura em 0/1). A Task 08 não
+gera fixture nesse regime; se um dia gerar, a comparação é só do p-valor.
+
 <!-- END: post-execution -->

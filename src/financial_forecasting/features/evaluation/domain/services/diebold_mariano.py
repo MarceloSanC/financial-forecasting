@@ -178,6 +178,8 @@ def diebold_mariano(
     deviations = [value - mean for value in differences]
     horizon_used = horizon
     variance = _long_run_variance(deviations, horizon, variance_estimator)
+    # Com Bartlett o fallback é observacionalmente equivalente: a variância é PSD e só zera
+    # com d constante, que ergue do mesmo jeito em h = 1 (segue o dm.test, ramo único).
     if variance <= 0.0 and horizon > 1:
         horizon_used = 1
         variance = _long_run_variance(deviations, horizon_used, variance_estimator)
