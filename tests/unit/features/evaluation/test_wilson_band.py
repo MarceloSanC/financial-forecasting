@@ -366,3 +366,45 @@ def test_wilson_invalid_counts_go_through_the_single_validator(
 
     with pytest.raises(ValueError, match="single validator called"):
         wilson_interval(count=10, n=_N_500, band_level=_BAND_95)
+
+
+# --- Níveis além de 95 % (gate H1 a 97,5 % por cauda; 99 %) --------------------------------
+
+# 97,5 % por cauda no gate H1 (doc §4.4, §8.5): τ = 0.02, n = 500 contém o nominal em
+# c ∈ [3, 17] (medido; mais larga que a de 95 %, [4, 16]).
+_BAND_975 = 0.975
+# 99 %: valores de `statsmodels.stats.proportion.proportion_confint(c, n, alpha=0.01,
+# method="wilson")` (statsmodels 0.14.6, gravados com %.17g) — oráculo de biblioteca
+# congelado; o teste unitário não importa statsmodels.
+_BAND_99 = 0.99
+_STATSMODELS_99 = {
+    (10, 500): (0.0090757194692298662, 0.043496451890684164),
+    (7, 250): (0.011004601083307156, 0.069401052529347709),
+}
+
+
+@pytest.mark.unit
+def test_wilson_region_at_975_contains_nominal_on_three_to_seventeen() -> None:
+    """A4/H1: 97,5 % por cauda — contém τ = 0.02 com n = 500 em c ∈ [3, 17], não em 2
+    e 18 (um κ fixo em 1.96 daria a região de 95 %, [4, 16])."""
+    verdicts = {
+        c: WilsonBand.evaluate(
+            horizon=1, count=c, n=_N_500, nominal=_NOMINAL, band_level=_BAND_975
+        ).contains_nominal
+        for c in range(2, 19)
+    }
+
+    assert all(verdicts[c] is True for c in range(3, 18))
+    assert verdicts[2] is False
+    assert verdicts[18] is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("count", "n"), list(_STATSMODELS_99), ids=["c10-n500", "c7-n250"])
+def test_wilson_bcd_at_99_matches_statsmodels(count: int, n: int) -> None:
+    """A4: a 99 % a banda bate com a Wilson do statsmodels (1e-12; medido ≤ 1.4e-17)."""
+    lower, upper = wilson_interval(count=count, n=n, band_level=_BAND_99)
+    expected_lower, expected_upper = _STATSMODELS_99[(count, n)]
+
+    assert abs(lower - expected_lower) <= _ABS_TOL
+    assert abs(upper - expected_upper) <= _ABS_TOL
