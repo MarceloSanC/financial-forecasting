@@ -905,6 +905,21 @@ e o `check_layout.py` também não — tirar o domain de `source_modules` passar
 comentário do contrato no `.importlinter` corrigido ("todos na application" deixou de
 ser verdade). Não muda contrato nem critério; só reforça a prova do A9.
 
+### 2026-09-28 — [decision] Task 04: validação nos kernels por ponto, sequência vazia ergue, grade vazia ergue — Claude (Opus 5.5)
+**Contexto:** duas decisões de detalhe estavam planejadas no §1 (validação C7 também
+nos kernels por ponto; sequência vazia ergue nas funções de série) e uma terceira
+surgiu na execução: `validate_grid_row` com `levels` vazio passaria (tamanhos iguais,
+nenhum nível fora de (0, 1)) e o `crps_quantile` dividiria por K = 0.
+**Razão:** (1) `pinball_loss`, `crps_quantile` e `interval_score` chamam o validador
+único (`validate_level`, `validate_grid_row`, `validate_miscoverage` +
+`validate_interval_bounds`), com um teste C7 por kernel — senão um kernel aceitaria
+`level = 1.5` que a função de série recusa. (2) `validate_pinball_inputs`,
+`validate_crps_inputs` e `validate_interval_inputs` erguem `ValueError` em sequência
+vazia: a média sobre zero pontos é indefinida e os relatórios exigem `n_points ≥ 1`.
+(3) `validate_grid_row` ergue em grade vazia pelo mesmo motivo (média sobre zero
+níveis). As três são pré-condição de kernel, reversíveis, e valem igualmente para o
+fake e os adapters (Tasks 09–11), que chamam o mesmo validador.
+
 ### 2026-09-28 — [decision] Task 06: `DegeneracyReport` exige `n_points ≥ 1`; `tolerance` não-numérica ergue — Claude (Opus 5.5)
 **Contexto:** o `__post_init__` do concept §4 checa máscara/timestamps com tamanho
 `n_points`, `n_degenerate` e `rate == n_degenerate / n_points`, mas não `n_points ≥ 1`;
