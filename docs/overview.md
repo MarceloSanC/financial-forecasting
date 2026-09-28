@@ -5,7 +5,7 @@ when-use: Consultar no início de qualquer nova sessão de detalhamento ou plane
 keywords: [overview, briefing, tft, calibracao, conformal, pinball, medalhao, clean-architecture, forecasting]
 status: draft
 created_at: 2026-06-22
-updated_at: 2026-09-26
+updated_at: 2026-09-28
 project_name: Previsão Probabilística de Retornos Financeiros (TFT)
 stakeholders:
   - Autor / Decisor / Pesquisador: Marcelo Santos (TCC, Eng. Mecatrônica — UFSC)
@@ -101,7 +101,7 @@ O alvo é uma reconstrução greenfield. Apenas os **dados brutos** (candles, ne
 
 Reconstrução incremental seguindo o **fluxo medalhão** (bronze → features/silver → modelagem/treino → gold/estatística → inferência/relatório), cada etapa com gate humano. O princípio organizador é **enforcement-as-test**: as regras de arquitetura viram fitness functions (import-linter espelhando o LAYOUT, mypy strict, checagem de camadas) e a corretude estatística vira **contratos por unidade + oráculo** (fixtures analíticas + biblioteca/R), substituindo o snapshot global "byte-idêntico" que entrincheirava o monólito.
 
-O **domínio** carrega a metodologia como serviços puros sobre value objects tipados (ex.: `PairedLossSeries`, `QuantileForecast`, `CoverageSeries`) com invariantes (alinhada, 1 obs/unidade, monotonicidade). **Bibliotecas confiáveis** entram como adapters por trás de portas: `arch` (MCS, bootstrap, VaR), `statsmodels` (Holm, HAC), `sklearn`/`scoringrules` (pinball, Winkler/CRPS), `statsforecast` (baselines), `LightGBM` (GBM quantílico), `MAPIE` (CQR), `pandas`+`duckdb` (transformações e as-of joins), `pandera` (contratos de schema), `pandas-ta-classic`/TA-Lib (indicadores, validados contra o paper), FinBERT (sentimento, version-pinned), `pydantic-settings` + `mlflow` (config + tracking). Para testes sem lib canônica em Python (Diebold-Mariano, Christoffersen, Kupiec), a postura é **implementação própria fina atrás de porta + golden-tests contra oráculo R + fixtures**.
+O **domínio** carrega a metodologia como serviços puros sobre value objects tipados (ex.: `PairedLossSeries`, `QuantileForecast`, `CoverageSeries`) com invariantes (alinhada, 1 obs/unidade, monotonicidade). **Bibliotecas confiáveis** entram como adapters por trás de portas: `arch` (MCS, bootstrap, VaR), `statsmodels` (Holm, HAC), `sklearn`/`scoringrules` (pinball, Winkler/CRPS), `statsforecast` (baselines), `LightGBM` (GBM quantílico), `MAPIE` (CQR), `pandas`+`duckdb` (transformações e as-of joins), `pandera` (contratos de schema), `pandas-ta-classic`/TA-Lib (indicadores, validados contra o paper), FinBERT (sentimento, version-pinned), `pydantic-settings` + `mlflow` (config + tracking). Para testes sem lib canônica em Python (Diebold-Mariano, Christoffersen, Kupiec), a postura é **implementação própria no domínio (fórmula de registro, stdlib) + golden-tests contra oráculo R lido de fixtures versionadas**; porta só onde há biblioteca Python a envolver (ADR 0.0.0056).
 
 A disciplina anti-p-hacking é estrutural: **pré-registro imutável hasheado** antes do confirmatório (o hash é a âncora), métricas **nunca agregadas entre horizontes**, alinhamento OOS estrito por `target_timestamp`, dedup operationally-latest, e **gate de degeneração** de quantis separado do guardrail de monotonicidade.
 
@@ -110,7 +110,7 @@ A disciplina anti-p-hacking é estrutural: **pré-registro imutável hasheado** 
 | Cód | Risco | Prob | Impacto | Mitigação inicial |
 |---|---|---|---|---|
 | **R-REPRO-1** | Re-treino não reproduz evidência anterior (nova stack numérica) | Média | médio | Equivalência por **tolerância declarada** (ASSUM-4), não bit-identical; deltas documentados |
-| **R-LIBS-1** | Libs de nicho frágeis (DM, Christoffersen, Kupiec) | Média | médio | Wrapper próprio atrás de porta + **oráculo R** + pin de versão + ADR de proveniência |
+| **R-LIBS-1** | Libs de nicho frágeis (DM, Christoffersen, Kupiec) | Média | médio | Implementação própria no domínio + **oráculo R** em fixtures versionadas + pin de versão + ADR de proveniência (ADR 0.0.0056) |
 | **R-CONFORMAL-1** | Conformal frágil em série temporal (permutabilidade violada) | Alta | médio | Reportar cobertura **empírica** (não "garantida") + 4 invariantes (calib set dedicado, por fold/horizonte, embargo, linguagem) |
 | **R-SUPPLY-1** | `pandas-ta` com fonte apagada / sem manutenção | Alta | alto | Migrar para `pandas-ta-classic`/TA-Lib + **validar cada indicador contra o paper** + teste de leakage |
 | **R-SCOPE-1** | Escopo inflar (multi-asset, cripto, intraday, trading) | Média | alto | Gates de escopo; multi-asset só **ready**; cripto/microestrutura como trabalho futuro |
