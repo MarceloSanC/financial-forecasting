@@ -962,4 +962,16 @@ relatório por essa identidade. Além disso, o `PairIntervalScore` passa a ergue
 `miscoverage != 2·τ_l` ou `nominal != 1 - miscoverage` (I5/I7 por construção) e o
 `CrpsReport` se `n_points < 1` ou `label != CRPS_Q_LABEL` (I4 por construção).
 
+### 2026-09-28 — [decision] Task 07: forma da grade no `CoverageReport` lida de `per_level`; `PairCoverage` checa o nominal — Claude (Opus 5.5)
+**Contexto:** o `__post_init__` do concept §4 exige, se aplicável, `len(per_level) == K`
+e `len(per_pair) ==` nº de pares simétricos, mas o `CoverageReport` não carrega a
+grade da série.
+**Razão:** K é lido de `per_level` (≥ 2) e os pares esperados `(τ_k, τ_{K-1-k})` com
+τ_k < 0.5 são derivados dele; `per_pair` tem de casá-los em tamanho **e** identidade
+(um teste por ramo: `per_level` com 0/1 nível, `per_pair` faltando um par). Na mesma
+linha do fix #5 do Checkpoint C do bloco 2, `PairCoverage` ergue se
+`nominal != 1 - 2·τ_l` (I7 por construção). O `CoverageMetrics` consome
+`series.symmetric_pair_indices` (sem remontar a regra par → colunas). Reversível; não
+muda campo nem assinatura do concept §4.
+
 <!-- END: post-execution -->
