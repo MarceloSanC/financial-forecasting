@@ -1411,4 +1411,37 @@ passed, cobertura 98,48 %); a primeira rodada caiu na **coleta** com `OSError: [
 Cannot allocate memory` (pressão de memória do host com outras sessões em paralelo, não
 código) e a segunda, sozinha, ficou verde.
 
+### 2026-09-28 — [decision] Task 02 — medição A14 (t de Student) — Claude (Opus 5.5)
+**Contexto:** re-medição A14.1 com a função final `student_t_cdf` (sondagem fora do repo,
+`scipy.stats.t.cdf` 1.18.0 do venv da 6.2), na grade do §1: df ∈ {1, 2, 3, 4, 5, 7, 10,
+20, 30, 59, 100, 249, 500, 999, 1500, 2000, 2499, 2500} × 1601 valores de x (0 e
+±10⁻¹²…±10³, log). A **primeira** versão (o protótipo do §1 transcrito: log B(a, b) =
+`lgamma(a) + lgamma(b) − lgamma(a + b)` e log(1 − z) por `log`) reproduziu o §1 — abs.
+máx. **3,6e−13** (df = 2000, x = −1,67), rel. máx. na cauda **7,6e−12** —, e 3,6e−13
+passa de 1/10 da tolerância declarada do p-valor (`abs ≤ 1e-12`; o gatilho do §1).
+Causa medida: a subtração `lgamma(df/2) − lgamma(df/2 + ½)` (dois números ~ 5,9e3 com
+ulp ~ 9e−13) no prefator, amplificada no ramo z abaixo do limiar, onde P = 1 − I com
+I ≈ 0,9.
+**Razão:** em vez de afrouxar a tolerância, o prefator passou a seguir o próprio oráculo:
+log B(a, b) pelo ramo "p < 10 ≤ q" do R `src/nmath/lbeta.c` (correção de Stirling,
+8 termos, no argumento grande) e log(z)/log(1 − z) por `log1p` do lado da fração ≤ ½.
+Algoritmo, ramos e contrato inalterados (ADR 6.2.0002 itens 2–3: "prefator com
+`math.lgamma`" continua — o `lgamma(p)` do argumento pequeno). Medição da função final:
+
+| df | abs. máx. | rel. máx. cauda (x < 0, F > 1e−290) |
+|---|---|---|
+| 1 | 2,35e−9 (x ≈ −7e−9: o scipy devolve 0,5; a função = forma fechada ½ + arctan(x)/π) | 4,7e−9 (idem) |
+| 2 – 10 | ≤ 6,1e−16 | ≤ 1,1e−14 |
+| 20 – 249 | ≤ 7,1e−16 | ≤ 9,9e−14 |
+| 500 – 1500 | ≤ 3,3e−15 | ≤ 1,7e−13 |
+| 2000 / 2499 / 2500 | 2,8e−15 / 2,0e−15 / 5,9e−15 | 1,8e−13 / 1,6e−13 / 2,5e−13 |
+
+Global df ≥ 2: abs. **5,9e−15** (1/170 de 1e−12) e rel. na cauda **2,5e−13** (1/400 de
+1e−10) — abaixo de 1/10 das duas tolerâncias. Caudas extremas: df = 999, x = −10 →
+8,354109e−23 (rel 7,2e−15); df = 2499, x = −40 → 3,748606e−271 (rel 1,5e−13). Máximo de
+iterações do Lentz na grade: **56** (menor teto que roda a grade inteira; `_MAX_ITERATIONS
+= 1000`). Custo ~7,5 µs por chamada. Detalhe ancorado no `pt.c` também aplicado: o ramo
+assintótico `nx > 1e100` (A&S 26.5.4 em log) cobre |x| com x² estourando float64 — é o que
+cobre df = 1 e df = 2 em x = −10¹⁵⁰ no unit.
+
 <!-- END: post-execution -->
