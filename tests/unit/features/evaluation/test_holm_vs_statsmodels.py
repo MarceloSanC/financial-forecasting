@@ -161,8 +161,15 @@ def test_family_horizon_propagated() -> None:
 
 @pytest.mark.unit
 def test_family_unknown_candidate_raises() -> None:
-    with pytest.raises(ValueError, match="unknown candidate 'zzz'"):
+    with pytest.raises(ValueError, match="unknown model 'zzz'"):
         HolmCorrection.family(_k7_series(), candidate="zzz", alpha=_ALPHA)
+
+
+@pytest.mark.unit
+def test_family_unknown_candidate_checked_before_alpha() -> None:
+    """Ordem C2 → C4: nome desconhecido ergue mesmo com alpha inválido."""
+    with pytest.raises(ValueError, match="unknown model 'zzz'"):
+        HolmCorrection.family(_k7_series(), candidate="zzz", alpha=2.0)
 
 
 @pytest.mark.unit

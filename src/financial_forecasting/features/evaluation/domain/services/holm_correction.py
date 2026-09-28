@@ -157,8 +157,7 @@ class HolmCorrection:
             ValueError: candidato fora de `series.models` (C2); alpha fora de (0, 1) (C4); e os
                 erros do DM (C3).
         """
-        if candidate not in series.models:
-            raise ValueError(f"unknown candidate {candidate!r}; known models: {series.models}")
+        series.losses_of(candidate)  # C2 pela regra do VO (nome desconhecido), antes do C4
         validate_alpha(alpha)
         comparators = [model for model in series.models if model != candidate]
         results = [
