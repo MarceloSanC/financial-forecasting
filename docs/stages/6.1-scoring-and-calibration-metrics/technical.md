@@ -1040,4 +1040,16 @@ com `per_level` sem o 0.5 e com central 0.3 → `ValueError`; `levels` do relat�
 formado (tamanho, pares) → `ValueError`. Desvio do concept §4: campo novo no
 `DegeneracyReport` (aditivo; nenhum campo existente muda).
 
+### 2026-09-28 — [finding] A12: redação do DoD da 6.1 depende da 5.5 em `develop` — Claude (Opus 5.5)
+**Contexto:** o A12 exige, além dos cinco ADRs `accepted` (verificado), que o DoD da 6.1
+no `roadmap.md` tenha a redação aplicada pela 5.5 ("invalida as métricas de
+**calibração** da linha — proper scores seguem computados"). No fechamento desta
+Stage a 5.5 (`feat/102-5-5-confirmatory-retrain`) ainda não está em `develop`:
+`git show origin/develop:docs/roadmap.md | grep -n "métricas de \*\*calibração\*\*"`
+→ sem ocorrência (exit 1).
+**Razão:** a 6.1 **não** edita o DoD (Pré-condições do §1). O A12 fica pendente dessa
+condição e declarado no PR. **Stage candidata:** 5.5 (`feat/102-5-5-confirmatory-retrain`,
+que traz a redação); quando ela entrar em `develop`, a verificação é o grep acima no
+`develop` — se a 6.1 já estiver mergeada antes, basta o merge da 5.5, sem retoque na 6.1.
+
 <!-- END: post-execution -->
