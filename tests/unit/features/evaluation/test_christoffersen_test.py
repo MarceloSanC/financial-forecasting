@@ -1,4 +1,5 @@
-"""Unit test do `ChristoffersenTest` (trio puro + leitura Kupiec) e do primitivo.
+"""Unit test do `ChristoffersenTest` (trio puro + leitura Kupiec), do primitivo e do
+LR_uc de 3 estados (Task 08; o Monte Carlo está em `test_christoffersen_monte_carlo.py`).
 
 Prova (concept 6.3 A6, I2, I5, I6, I8, I13, C4, C6, C9; ADRs 6.3.0001 itens 4, 7, 8
 e Implementation notes, 6.3.0004 item 2) com fixtures analíticas: as log-somas dos
@@ -20,6 +21,7 @@ from financial_forecasting.features.evaluation.domain.services import (
 )
 from financial_forecasting.features.evaluation.domain.services.chi_square import (
     LR_NEGATIVE_FLOOR,
+    chi_square_sf,
 )
 from financial_forecasting.features.evaluation.domain.services.christoffersen_test import (
     ChristoffersenReport,
@@ -27,10 +29,17 @@ from financial_forecasting.features.evaluation.domain.services.christoffersen_te
     ChristoffersenTest,
     IndependenceStatus,
     christoffersen_statistics,
+    lr_uc_three_state,
+)
+from financial_forecasting.features.evaluation.domain.services.hit_sequences import (
+    HitSequences,
 )
 from financial_forecasting.features.evaluation.domain.services.kupiec_pof import (
     kupiec_pof,
     xlogy,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
+    CoverageSeries,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.hit_sequence import (
     HitKind,
@@ -478,3 +487,163 @@ def test_report_incoherent_p_value_without_statistic_raises(
 
     with pytest.raises(ValueError, match="p_uc must be None exactly when its statistic is None"):
         dataclasses.replace(report, p_uc=0.5)
+
+
+# --- Task 08 — LR_uc de 3 estados (A7, I10, I13, C3) ----------------------------------------
+
+_THREE_RATE = 0.02
+
+
+def _three_state_by_hand(
+    lower: float, upper: float, n: float, lower_rate: float, upper_rate: float
+) -> float:
+    """-2·[l(taxas) - l(p̂)] multinomial, escrito aqui com `math.log` (contagens > 0)."""
+    middle = n - lower - upper
+    null = (
+        lower * math.log(lower_rate)
+        + upper * math.log(upper_rate)
+        + middle * math.log(1 - lower_rate - upper_rate)
+    )
+    fitted = (
+        lower * math.log(lower / n) + upper * math.log(upper / n) + middle * math.log(middle / n)
+    )
+    return -2 * (null - fitted)
+
+
+def _three_state(lower: float, upper: float, n: float) -> float:
+    return lr_uc_three_state(
+        lower_count=lower,
+        upper_count=upper,
+        n=n,
+        lower_rate=_THREE_RATE,
+        upper_rate=_THREE_RATE,
+    )
+
+
+@pytest.mark.unit
+def test_three_state_hand_value() -> None:
+    """A7: (7, 3, 200), taxas 0.02/0.02 — igual às log-somas escritas aqui (≈ 2.1294)."""
+    expected = _three_state_by_hand(7, 3, 200, _THREE_RATE, _THREE_RATE)
+
+    assert _close(_three_state(7, 3, 200), expected)
+    assert round(expected, 4) == 2.1294  # noqa: PLR2004 — technical §1
+
+
+@pytest.mark.unit
+def test_three_state_zero_when_counts_match_rates() -> None:
+    """A7: contagens = n·taxas (4, 4, 200) → exatamente 0.0 (aceita o -0.0 medido)."""
+    assert _three_state(4, 4, 200) == 0.0
+
+
+@pytest.mark.unit
+def test_three_state_chi2_two_degrees_of_freedom() -> None:
+    """A7/I7: o p-valor do 3 estados é χ²(2) pelo `chi_square_sf` = exp(-x/2)."""
+    statistic = _three_state(7, 3, 200)
+
+    assert chi_square_sf(statistic, df=2) == math.exp(-statistic / 2)
+
+
+@pytest.mark.unit
+def test_three_state_real_count_between_integer_neighbours() -> None:
+    """A7/I10: `lower_count` = 7.5 (média entre seeds) fica estritamente entre os
+    valores em 7 e 8, com `upper_count` e `n` fixos (2.1294 < 2.7357 < 3.4114)."""
+    at_7, at_7_5, at_8 = _three_state(7, 3, 200), _three_state(7.5, 3, 200), _three_state(8, 3, 200)
+
+    assert at_7 < at_7_5 < at_8
+    assert _close(at_7_5, _three_state_by_hand(7.5, 3, 200, _THREE_RATE, _THREE_RATE))
+
+
+@pytest.mark.unit
+def test_three_state_floor_clamps_negative_raw_value() -> None:
+    """A7/I13: (1, 3, 6), taxas 1/6 e 0.5 — LR bruto (mesma ordem de operações do
+    kernel) na faixa do piso; o kernel devolve exatamente 0.0."""
+    lower, upper, n, lower_rate, upper_rate = 1, 3, 6, 1 / 6, 0.5
+    middle = n - lower - upper
+    raw = -2.0 * (
+        (
+            xlogy(lower, lower_rate)
+            + xlogy(upper, upper_rate)
+            + xlogy(middle, 1.0 - lower_rate - upper_rate)
+        )
+        - (xlogy(lower, lower / n) + xlogy(upper, upper / n) + xlogy(middle, middle / n))
+    )
+    assert LR_NEGATIVE_FLOOR <= raw < 0.0  # premissa: o piso de fato atua
+
+    result = lr_uc_three_state(
+        lower_count=lower, upper_count=upper, n=n, lower_rate=lower_rate, upper_rate=upper_rate
+    )
+
+    assert result == 0.0
+    assert math.copysign(1.0, result) == 1.0
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("overrides", "match"),
+    [
+        ({"lower_count": -1}, r"lower_count must be in \[0, n="),
+        ({"upper_count": 201}, r"upper_count must be in \[0, n="),
+        ({"n": 0, "lower_count": 0, "upper_count": 0}, "n must be > 0"),
+        ({"lower_count": 150, "upper_count": 60}, "lower_count \\+ upper_count must be <= n"),
+        ({"lower_rate": 0.0}, r"lower_rate must be in \(0, 1\)"),
+        ({"upper_rate": 1.0}, r"upper_rate must be in \(0, 1\)"),
+        ({"lower_rate": 0.5, "upper_rate": 0.5}, "lower_rate \\+ upper_rate must be < 1"),
+        ({"lower_count": math.nan}, "lower_count must be a finite number"),
+        ({"n": True}, "n must be a finite number"),
+        ({"upper_rate": math.inf}, "upper_rate must be a finite number"),
+    ],
+    ids=[
+        "lower-negative",
+        "upper-above-n",
+        "n-zero",
+        "sum-above-n",
+        "lower-rate-zero",
+        "upper-rate-one",
+        "rates-sum-one",
+        "lower-nan",
+        "n-bool",
+        "upper-rate-inf",
+    ],
+)
+def test_three_state_invalid_argument_raises(overrides: dict[str, float], match: str) -> None:
+    """A7/C3: um caso por ramo (inclusive soma das contagens > n e taxas somando 1)."""
+    arguments = {
+        "lower_count": 7,
+        "upper_count": 3,
+        "n": 200,
+        "lower_rate": _THREE_RATE,
+        "upper_rate": _THREE_RATE,
+        **overrides,
+    }
+    with pytest.raises(ValueError, match=match):
+        lr_uc_three_state(**arguments)
+
+
+@pytest.mark.unit
+def test_three_state_composition_with_tail_hit_sequences(
+    make_series: Callable[..., CoverageSeries],
+) -> None:
+    """A7/I10 (Checkpoint B T22): composição que a 6.5 consome — as duas caudas
+    unilaterais da mesma série e tolerância têm o mesmo `n_observed`, e o 3 estados
+    das suas contagens é finito e igual ao valor à mão."""
+    spread = (-0.03, -0.02, -0.01, 0.0, 0.01, 0.02, 0.03)
+    dirac = (0.004,) * 7
+    grids = [spread, dirac, spread, spread, spread, dirac, spread, spread]
+    realized = [-0.04, 0.0, 0.05, -0.035, 0.0, 0.0, 0.031, 0.01]
+    series = make_series(grids, realized)
+    lower = HitSequences.lower_tail(series, level=0.05, tolerance=1e-9)
+    upper = HitSequences.upper_tail(series, level=0.95, tolerance=1e-9)
+
+    statistic = lr_uc_three_state(
+        lower_count=lower.n_violations,
+        upper_count=upper.n_violations,
+        n=lower.n_observed,
+        lower_rate=lower.violation_rate,
+        upper_rate=upper.violation_rate,
+    )
+
+    assert lower.n_observed == upper.n_observed == 6  # noqa: PLR2004
+    assert (lower.n_violations, upper.n_violations) == (2, 2)
+    assert math.isfinite(statistic)
+    expected = _three_state_by_hand(2, 2, 6, lower.violation_rate, upper.violation_rate)
+    assert _close(statistic, expected)

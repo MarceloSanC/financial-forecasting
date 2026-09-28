@@ -1640,4 +1640,33 @@ ramo no `report_incoherent`. Piso do LR_ind: a entrada do §1 (transições
 (1, 2, 3, 6)) deu bruto negativo dentro da faixa com a ordem de operações do serviço
 (o teste confere a premissa antes de exigir `lr_ind == 0.0`); nenhuma varredura.
 
+### 2026-09-28 — [decision] Task 08: custo medido do MC, fixtures congeladas e checagens extras do `MonteCarloPValues` — Claude (Opus 5.5)
+**Contexto:** a Task 08 pede o custo do MC re-medido com a implementação real e
+valores literais de regressão medidos na execução; o C9 do `MonteCarloPValues` lista
+os ramos mínimos.
+**Razão:**
+- **Custo (bloco `timeit` da Task, container de dev, Python 3.12.13):** T = 1 000,
+  p = 0.05, N = 9 999, `min_violations = 2` → **3,24 s** (9 999 tentativas; referência
+  de LR_ind aplicável sem redraw). O protótipo do §1 dava 1,86 s; a diferença é que
+  cada sorteio passa pelo primitivo público `christoffersen_statistics` (valida
+  elementos, conta transições, dois `kupiec_pof` e o status), como o ADR 6.3.0006
+  item 2 exige. Na escala do piloto (~3 s por sequência h+1) o stdlib basta; nenhum
+  atalho sem validação foi criado.
+- **Regressão congelada** (`mc_regression`): sequência T = 40 com violações nas
+  posições 10, 11 e 25, p = 0.05, `min_violations = 3`, seed 20260928, N = 199 →
+  `p_uc = 0.655`, `p_ind = 0.095`, `p_cc = 0.435`, `attempts = 581`.
+- **Referência condicionada** (`conditioned_reference`): a mesma sequência com seed 1
+  → implementação ≡ replay (`p_ind = 0.115`, `attempts = 597`), e a referência não
+  condicionada do replay dá `p_ind = 0.045` (≠); nenhuma troca de seed foi necessária.
+- **Teto** (`mc_cap_reached`): `(T, F) * 10` (10 violações alternadas, matriz não
+  degenerada), p = 0.01, `min_violations = 10`, N = 5 → `attempts = 500`.
+- **3 estados:** o meio usa `middle / n` (e o validador único também valida o meio,
+  cobrindo sub-fluxo); a entrada do piso (1, 3, 6; 1/6, 0.5) deu bruto
+  −1.7763568394002505e-15 (= §1) e o kernel devolve `+0.0`.
+- **Checagens extras do `MonteCarloPValues`** (reversíveis, coerentes com o ADR 6.3.0006
+  item 3): `horizon == 1`; `ind_status == NOT_APPLICABLE` com LR_uc aplicável ⇒
+  `attempts == draws` (sem redraw); `MC_CAP_REACHED` ⇒ `attempts == 100·N`; `attempts`
+  `int`. Um caso por ramo no `mc_incoherent`. Constante pública
+  `MC_ATTEMPTS_CAP_FACTOR = 100`.
+
 <!-- END: post-execution -->

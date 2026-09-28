@@ -22,10 +22,17 @@ stdlib-only (concept 6.3 §4, I2, I5, I6, I8, I13, C4, C6, C9; ADR `6_3_0001` it
   por `chi_square_sf` (df 1 para POF, LR_uc e LR_ind; df 2 para LR_cc);
 - `horizon > 1` marca `independence_descriptive` (B-H7, doc §7.4), salvo na
   sub-série DGT, iid sob a nula de DGT.
+
+Sensibilidades pré-registradas (Task 08): o LR_uc de 3 estados (Christoffersen 1998
+§4.2, χ²(2); contagens reais das duas caudas unilaterais sobre todas as observadas -
+ADR 6.3.0005 item 2) e o p-valor Monte Carlo com desempate de Dufour (2006, Eq. 2.30)
+e referência de LR_ind/LR_cc condicionada ao mesmo evento de aplicabilidade do
+observado (ADR 6.3.0006), só em h = 1 e fora de sub-série DGT.
 """
 
 from __future__ import annotations
 
+import random
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -36,6 +43,7 @@ from financial_forecasting.features.evaluation.domain.services.chi_square import
 )
 from financial_forecasting.features.evaluation.domain.services.count_input_validation import (
     validate_rate,
+    validate_real_count,
 )
 from financial_forecasting.features.evaluation.domain.services.kupiec_pof import (
     kupiec_pof,
@@ -55,6 +63,8 @@ from financial_forecasting.features.evaluation.domain.value_objects.hit_sequence
 
 _DF_ONE = 1
 _N_TRANSITIONS = 4
+# Teto de tentativas do Monte Carlo: 100·N (ADR 6.3.0006 item 3).
+MC_ATTEMPTS_CAP_FACTOR = 100
 _DF_TWO = 2
 
 
@@ -369,6 +379,328 @@ class ChristoffersenTest:
             independence_descriptive=sequence.horizon > 1 and not sequence.is_dgt_subseries,
         )
 
+    @staticmethod
+    def monte_carlo_p_values(
+        sequence: HitSequence, *, min_violations: int, draws: int, seed: int
+    ) -> MonteCarloPValues:
+        """p-valores MC de LR_uc, LR_ind e LR_cc sob Bernoulli(p) iid (ADR 6.3.0006).
+
+        Ordem do RNG (contrato, item 5): um `random.Random(seed)`; U_0; por tentativa,
+        um `random()` por posição **observada**, na ordem (violação ⇔ `< p`; lacunas
+        preservadas), e depois o U_i do sorteio. Referência do LR_uc: os N primeiros
+        sorteios; de LR_ind/LR_cc: os N primeiros sorteios APPLICABLE (mesmo
+        `min_violations`), até o teto de 100·N tentativas (`MC_CAP_REACHED`).
+
+        Raises:
+            ValueError: sub-série DGT ou `horizon > 1` (C5, mensagens distintas);
+                `min_violations`, `draws` ou `seed` inválidos ou `bool` (C4).
+        """
+        if sequence.is_dgt_subseries:
+            raise ValueError(
+                "Monte Carlo p-values are not defined on a DGT sub-series "
+                f"(dgt_offset={sequence.dgt_offset}, dgt_step={sequence.dgt_step})"
+            )
+        if sequence.horizon > 1:
+            raise ValueError(
+                "Monte Carlo p-values require horizon == 1 (the (h-1)-dependence under H0 is "
+                f"a nuisance parameter), got horizon={sequence.horizon}"
+            )
+        validate_min_violations(min_violations)
+        _validate_draws_and_seed(draws, seed)
+        return _monte_carlo(sequence, min_violations=min_violations, draws=draws, seed=seed)
+
 
 def _p_value(statistic: float | None, df: int) -> float | None:
     return None if statistic is None else chi_square_sf(statistic, df=df)
+
+
+def lr_uc_three_state(
+    *, lower_count: float, upper_count: float, n: float, lower_rate: float, upper_rate: float
+) -> float:
+    """LR_uc de 3 estados (Christoffersen 1998 §4.2) - χ²(2) sob a nula.
+
+    Estados: y ≤ q̂_{τ_l} (taxa `lower_rate`), y > q̂_{τ_u} (taxa `upper_rate`) e o
+    meio. `-2·[l(taxas) - l(p̂)]` multinomial com `xlogy` (0·log 0 = 0) e o piso I13.
+    Contagens reais (médias entre seeds) sobre todas as posições observadas (ADR
+    6.3.0005 item 2); a validação é a do validador único dos kernels de contagem.
+
+    Raises:
+        ValueError: contagem/n fora do validador único, `lower_count + upper_count > n`,
+            taxa fora de (0, 1) ou `lower_rate + upper_rate >= 1` (C3).
+    """
+    validate_real_count(lower_count, n, count_field="lower_count", n_field="n")
+    validate_real_count(upper_count, n, count_field="upper_count", n_field="n")
+    if lower_count + upper_count > n:
+        raise ValueError(
+            f"lower_count + upper_count must be <= n={n!r}, got {lower_count!r} + {upper_count!r}"
+        )
+    validate_rate(lower_rate, field="lower_rate")
+    validate_rate(upper_rate, field="upper_rate")
+    if lower_rate + upper_rate >= 1.0:
+        raise ValueError(
+            f"lower_rate + upper_rate must be < 1, got {lower_rate!r} + {upper_rate!r}"
+        )
+    middle = n - lower_count - upper_count
+    validate_real_count(middle, n, count_field="n - lower_count - upper_count", n_field="n")
+    null = (
+        xlogy(lower_count, lower_rate)
+        + xlogy(upper_count, upper_rate)
+        + xlogy(middle, 1.0 - lower_rate - upper_rate)
+    )
+    fitted = (
+        xlogy(lower_count, lower_count / n)
+        + xlogy(upper_count, upper_count / n)
+        + xlogy(middle, middle / n)
+    )
+    return floor_lr_statistic(-2.0 * (null - fitted))
+
+
+class MonteCarloStatus(StrEnum):
+    """Status de um p-valor Monte Carlo (ADR 6.3.0006 item 3)."""
+
+    APPLICABLE = "applicable"
+    NOT_APPLICABLE = "not_applicable"  # estatística observada não aplicável
+    MC_CAP_REACHED = "mc_cap_reached"  # < N sorteios aplicáveis em 100·N tentativas
+
+
+def mc_p_value(
+    *,
+    observed: float,
+    simulated: Sequence[float],
+    uniforms: Sequence[float],
+    observed_uniform: float,
+) -> float:
+    """p-valor Monte Carlo com desempate aleatorizado de Dufour (2006, Eq. 2.30-2.31).
+
+    G̃_N = 1 - (1/N)·Σ1(S_i ≤ S_0) + (1/N)·Σ1(S_i = S_0)·1(U_i ≥ U_0) e
+    p̃ = (N·G̃_N + 1)/(N + 1); "≤" e "=" são comparações **exatas** de float (todas as
+    estatísticas saem do mesmo primitivo, na mesma ordem de operações). Calculado em
+    inteiros: N·G̃_N = N - #(S_i ≤ S_0) + #(S_i = S_0 e U_i ≥ U_0).
+
+    Raises:
+        ValueError: `simulated` e `uniforms` de tamanhos diferentes ou vazios.
+    """
+    draws = len(simulated)
+    if draws < 1 or len(uniforms) != draws:
+        raise ValueError(
+            f"simulated and uniforms must have the same length >= 1, got {draws} and "
+            f"{len(uniforms)}"
+        )
+    at_or_below = sum(1 for value in simulated if value <= observed)
+    ties_kept = sum(
+        1
+        for value, uniform in zip(simulated, uniforms, strict=True)
+        if value == observed and uniform >= observed_uniform
+    )
+    return (draws - at_or_below + ties_kept + 1) / (draws + 1)
+
+
+@dataclass(frozen=True)
+class MonteCarloPValues:
+    """p-valores Monte Carlo de LR_uc, LR_ind e LR_cc, autodescritivos (ADR 6.3.0006).
+
+    Campos: identidade da sequência (`horizon`, `kind`, `levels`, `tolerance`,
+    `includes_degenerate`); `min_violations` (define o evento A de aplicabilidade);
+    `draws` (N), `seed`, `attempts` (sorteios consumidos; 0 sem LR_uc observado);
+    `p_uc`/`uc_status`; `p_ind`, `p_cc`/`ind_status`.
+
+    Raises:
+        ValueError: resultado incoerente (C9), um ramo por invariante.
+    """
+
+    horizon: int
+    kind: HitKind
+    levels: tuple[float, ...]
+    tolerance: float
+    includes_degenerate: bool
+    min_violations: int
+    draws: int
+    seed: int
+    attempts: int
+    p_uc: float | None
+    uc_status: MonteCarloStatus
+    p_ind: float | None
+    p_cc: float | None
+    ind_status: MonteCarloStatus
+
+    def __post_init__(self) -> None:
+        """C9: parâmetros, status, presença dos p-valores e contagem de tentativas."""
+        validate_horizon(self.horizon, field="horizon")
+        if self.horizon != 1:
+            raise ValueError(
+                f"Monte Carlo p-values exist only for horizon == 1, got {self.horizon}"
+            )
+        validate_min_violations(self.min_violations)
+        _validate_draws_and_seed(self.draws, self.seed)
+        for name, p_value in (("p_uc", self.p_uc), ("p_ind", self.p_ind), ("p_cc", self.p_cc)):
+            if p_value is not None and not (is_finite_number(p_value) and 0.0 <= p_value <= 1.0):
+                raise ValueError(f"{name} must be in [0, 1], got {p_value!r}")
+        if self.uc_status is MonteCarloStatus.MC_CAP_REACHED:
+            raise ValueError("uc_status is never MC_CAP_REACHED (every draw has LR_uc)")
+        uc_applicable = self.uc_status is MonteCarloStatus.APPLICABLE
+        if (self.p_uc is not None) != uc_applicable:
+            raise ValueError(
+                f"p_uc must be set exactly when uc_status is APPLICABLE, got p_uc={self.p_uc!r} "
+                f"with {self.uc_status.value}"
+            )
+        ind_applicable = self.ind_status is MonteCarloStatus.APPLICABLE
+        for name, p_value in (("p_ind", self.p_ind), ("p_cc", self.p_cc)):
+            if (p_value is not None) != ind_applicable:
+                raise ValueError(
+                    f"{name} must be set exactly when ind_status is APPLICABLE, got "
+                    f"{name}={p_value!r} with {self.ind_status.value}"
+                )
+        self._check_attempts(uc_applicable=uc_applicable)
+
+    def _check_attempts(self, *, uc_applicable: bool) -> None:
+        cap = MC_ATTEMPTS_CAP_FACTOR * self.draws
+        if type(self.attempts) is not int:
+            raise ValueError(f"attempts must be an int, got {self.attempts!r}")
+        if not uc_applicable:
+            if self.attempts != 0 or self.ind_status is not MonteCarloStatus.NOT_APPLICABLE:
+                raise ValueError(
+                    "without an observed LR_uc nothing is drawn: attempts must be 0 and "
+                    f"ind_status not_applicable, got attempts={self.attempts}, "
+                    f"ind_status={self.ind_status.value}"
+                )
+            return
+        if not self.draws <= self.attempts <= cap:
+            raise ValueError(
+                f"attempts must be in [draws, 100*draws] = [{self.draws}, {cap}], "
+                f"got {self.attempts}"
+            )
+        if self.ind_status is MonteCarloStatus.NOT_APPLICABLE and self.attempts != self.draws:
+            raise ValueError(
+                "with ind_status not_applicable there is no redraw: attempts must equal "
+                f"draws={self.draws}, got {self.attempts}"
+            )
+        if self.ind_status is MonteCarloStatus.MC_CAP_REACHED and self.attempts != cap:
+            raise ValueError(
+                f"mc_cap_reached means the cap was used: attempts must be {cap}, "
+                f"got {self.attempts}"
+            )
+
+
+def _validate_draws_and_seed(draws: int, seed: int) -> None:
+    if type(draws) is not int or draws < 1:
+        raise ValueError(f"draws must be an int >= 1 (not bool), got {draws!r}")
+    if type(seed) is not int:
+        raise ValueError(f"seed must be an int (not bool), got {seed!r}")
+
+
+def _monte_carlo(
+    sequence: HitSequence, *, min_violations: int, draws: int, seed: int
+) -> MonteCarloPValues:
+    """Laço do ADR 6.3.0006 itens 2-5 (parâmetros já validados)."""
+    rate = sequence.violation_rate
+    observed = christoffersen_statistics(
+        violations=sequence.violations, violation_rate=rate, min_violations=min_violations
+    )
+    if observed.lr_uc is None:
+        return _mc_result(
+            sequence,
+            min_violations=min_violations,
+            draws=draws,
+            seed=seed,
+            attempts=0,
+            p_uc=None,
+            p_ind_cc=(None, None),
+            ind_status=MonteCarloStatus.NOT_APPLICABLE,
+        )
+    ind_observed = observed.independence_status is IndependenceStatus.APPLICABLE
+    rng = random.Random(seed)  # simulação reprodutível (não criptográfica)
+    observed_uniform = rng.random()
+    uc_values: list[float] = []
+    uc_uniforms: list[float] = []
+    ind_values: list[float] = []
+    cc_values: list[float] = []
+    ind_uniforms: list[float] = []
+    cap = MC_ATTEMPTS_CAP_FACTOR * draws
+    attempts = 0
+    while attempts < cap and (len(uc_values) < draws or (ind_observed and len(ind_values) < draws)):
+        drawn = tuple(
+            None if value is None else rng.random() < rate for value in sequence.violations
+        )
+        uniform = rng.random()
+        attempts += 1
+        stats = christoffersen_statistics(
+            violations=drawn, violation_rate=rate, min_violations=min_violations
+        )
+        if len(uc_values) < draws and stats.lr_uc is not None:
+            uc_values.append(stats.lr_uc)
+            uc_uniforms.append(uniform)
+        if (
+            ind_observed
+            and len(ind_values) < draws
+            and stats.lr_ind is not None
+            and stats.lr_cc is not None
+        ):
+            ind_values.append(stats.lr_ind)
+            cc_values.append(stats.lr_cc)
+            ind_uniforms.append(uniform)
+    p_uc = mc_p_value(
+        observed=observed.lr_uc,
+        simulated=uc_values,
+        uniforms=uc_uniforms,
+        observed_uniform=observed_uniform,
+    )
+    ind_status = MonteCarloStatus.NOT_APPLICABLE
+    p_ind_cc: tuple[float | None, float | None] = (None, None)
+    if ind_observed and observed.lr_ind is not None and observed.lr_cc is not None:
+        if len(ind_values) == draws:
+            ind_status = MonteCarloStatus.APPLICABLE
+            p_ind_cc = (
+                mc_p_value(
+                    observed=observed.lr_ind,
+                    simulated=ind_values,
+                    uniforms=ind_uniforms,
+                    observed_uniform=observed_uniform,
+                ),
+                mc_p_value(
+                    observed=observed.lr_cc,
+                    simulated=cc_values,
+                    uniforms=ind_uniforms,
+                    observed_uniform=observed_uniform,
+                ),
+            )
+        else:
+            ind_status = MonteCarloStatus.MC_CAP_REACHED
+    return _mc_result(
+        sequence,
+        min_violations=min_violations,
+        draws=draws,
+        seed=seed,
+        attempts=attempts,
+        p_uc=p_uc,
+        p_ind_cc=p_ind_cc,
+        ind_status=ind_status,
+    )
+
+
+def _mc_result(  # noqa: PLR0913 - a sequência + os campos do resultado (keyword-only)
+    sequence: HitSequence,
+    *,
+    min_violations: int,
+    draws: int,
+    seed: int,
+    attempts: int,
+    p_uc: float | None,
+    p_ind_cc: tuple[float | None, float | None],
+    ind_status: MonteCarloStatus,
+) -> MonteCarloPValues:
+    return MonteCarloPValues(
+        horizon=sequence.horizon,
+        kind=sequence.kind,
+        levels=sequence.levels,
+        tolerance=sequence.tolerance,
+        includes_degenerate=sequence.includes_degenerate,
+        min_violations=min_violations,
+        draws=draws,
+        seed=seed,
+        attempts=attempts,
+        p_uc=p_uc,
+        uc_status=MonteCarloStatus.NOT_APPLICABLE if p_uc is None else MonteCarloStatus.APPLICABLE,
+        p_ind=p_ind_cc[0],
+        p_cc=p_ind_cc[1],
+        ind_status=ind_status,
+    )
