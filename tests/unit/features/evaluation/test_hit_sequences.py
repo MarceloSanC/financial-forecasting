@@ -48,6 +48,10 @@ _ABS_TOL = 1e-12
 _TOLERANCE = 1e-9
 _SPREAD = (-0.03, -0.02, -0.01, 0.0, 0.01, 0.02, 0.03)
 _DIRAC = (0.004,) * 7
+# Linha quase degenerada (amplitude 0.005): observada com t = 0.001, mascarada com 0.01.
+_NEAR_DEGENERATE = (0.0, 0.001, 0.002, 0.0025, 0.003, 0.004, 0.005)
+_TIGHT_TOLERANCE = 0.001
+_LOOSE_TOLERANCE = 0.01
 _OUTER_PAIR = (0.05, 0.95)
 _MEDIAN = 0.5
 _WIDE_LEVELS = (0.02, 0.05, 0.5, 0.95, 0.98)
@@ -126,22 +130,45 @@ def test_grid_rates_are_exact_from_the_kind_rule(make_series: SeriesFactory) -> 
 
 
 @pytest.mark.unit
-def test_gate_mask_is_the_gate_of_the_same_series(make_series: SeriesFactory) -> None:
-    """A2/I4: posições `None` == `DegeneracyGate.evaluate(series, tolerance).degenerate`;
+@pytest.mark.parametrize(
+    ("tolerance", "expected_mask"),
+    [
+        (_TIGHT_TOLERANCE, (False, True, False, False, False)),
+        (_LOOSE_TOLERANCE, (False, True, False, True, False)),
+    ],
+    ids=["near-degenerate-observed", "near-degenerate-masked"],
+)
+def test_gate_mask_is_the_gate_of_the_same_series_and_tolerance(
+    make_series: SeriesFactory, tolerance: float, expected_mask: tuple[bool, ...]
+) -> None:
+    """A2/I4: posições `None` == `DegeneracyGate.evaluate(series, tolerance=t).degenerate`
+    para a MESMA t — a linha 3 (amplitude 0.005) fica observada com t = 0.001 e vira
+    `None` com t = 0.01 (um gate com tolerância fixa ou 0 não passaria nos dois casos);
     `tolerance`/`degeneracy_rate` gravados iguais aos do gate; horizonte e timestamps
-    são os da série."""
+    são os da série; as identidades de contagem com o `CoverageMetrics` seguem valendo."""
     series = make_series(
-        [_SPREAD, _DIRAC, _SPREAD, _DIRAC, _SPREAD], [0.015, 0.1, -0.05, -0.2, 0.035], horizon=7
+        [_SPREAD, _DIRAC, _SPREAD, _NEAR_DEGENERATE, _SPREAD],
+        [0.015, 0.1, -0.05, -0.2, 0.035],
+        horizon=7,
     )
-    gate = DegeneracyGate.evaluate(series, tolerance=_TOLERANCE)
+    gate = DegeneracyGate.evaluate(series, tolerance=tolerance)
+    assert gate.degenerate == expected_mask  # premissa: a tolerância decide a linha 3
+    coverage = CoverageMetrics.evaluate(series, tolerance=tolerance)
 
-    for sequence in _all_builders(series, tolerance=_TOLERANCE):
+    interval, lower, upper = _all_builders(series, tolerance=tolerance)
+    for sequence in (interval, lower, upper):
         assert tuple(v is None for v in sequence.violations) == gate.degenerate
-        assert sequence.tolerance == gate.tolerance
+        assert sequence.tolerance == gate.tolerance == tolerance
         assert sequence.degeneracy_rate == gate.rate
         assert sequence.includes_degenerate is False
         assert sequence.horizon == series.horizon
         assert sequence.target_timestamps == series.target_timestamps
+    c_low = dict(coverage.per_level)[0.05]
+    assert abs(lower.n_violations / lower.n_observed - c_low) <= _ABS_TOL
+    c_high = dict(coverage.per_level)[0.95]
+    assert abs(upper.n_violations / upper.n_observed - (1 - c_high)) <= _ABS_TOL
+    picp = coverage.per_pair[0].picp
+    assert abs(interval.n_violations / interval.n_observed - (1 - picp)) <= _ABS_TOL
 
 
 @pytest.mark.unit
