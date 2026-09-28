@@ -17,6 +17,7 @@ from financial_forecasting.features.evaluation.domain.services import (
     coverage_metrics as coverage_metrics_module,
 )
 from financial_forecasting.features.evaluation.domain.services.coverage_metrics import (
+    MPIW_LABEL,
     CoverageMetrics,
     CoverageReport,
     PairCoverage,
@@ -169,6 +170,29 @@ def test_consumes_fa7_predicates_not_an_inline_copy(
 
     assert all(coverage == _ONE for _, coverage in patched.per_level)
     assert all(pair.picp == 0.0 for pair in patched.per_pair)
+
+
+# --- Rótulo descritivo do MPIW (concept 6.3 D10, I9, A11) --------------------------------
+
+
+@pytest.mark.unit
+def test_every_pair_carries_mpiw_label(make_series: SeriesFactory) -> None:
+    """A11/I9: todo `PairCoverage` devolvido pelo serviço traz `MPIW_LABEL`."""
+    report = CoverageMetrics.evaluate(_mixed_series(make_series), tolerance=_TOLERANCE)
+
+    assert report.per_pair
+    assert all(pair.mpiw_label == MPIW_LABEL for pair in report.per_pair)
+    assert MPIW_LABEL == "MPIW — sharpness descritiva, não-inferencial"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("label", ["MPIW", "", MPIW_LABEL + " "], ids=["bare", "empty", "padded"])
+def test_divergent_mpiw_label_raises(label: str) -> None:
+    """A11/I9: rótulo diferente de `MPIW_LABEL` (exato) ergue na construção."""
+    with pytest.raises(ValueError, match="must carry MPIW_LABEL"):
+        PairCoverage(
+            lower_level=0.05, upper_level=0.95, nominal=0.9, picp=_HALF, mpiw=0.1, mpiw_label=label
+        )
 
 
 # --- interval_widths e C8 ---------------------------------------------------------------

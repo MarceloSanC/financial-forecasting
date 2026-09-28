@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Final
 
 from financial_forecasting.features.evaluation.domain.services.degeneracy_gate import (
     DegeneracyGate,
@@ -33,6 +34,10 @@ from financial_forecasting.features.evaluation.domain.value_objects.coverage_ser
     pair_nominal,
 )
 
+# Rótulo do MPIW (concept 6.3 D10, I9): a largura média é sharpness descritiva, sem
+# teste nem banda — o nome não pode circular sem essa qualificação.
+MPIW_LABEL: Final = "MPIW — sharpness descritiva, não-inferencial"
+
 
 @dataclass(frozen=True)
 class PairCoverage:
@@ -43,6 +48,8 @@ class PairCoverage:
         nominal: 1 - 2·τ_l (dinâmico, da grade).
         picp: fração de linhas com l ≤ y ≤ u.
         mpiw: média de u - l, na unidade de y.
+        mpiw_label: `MPIW_LABEL` — o MPIW é sharpness descritiva, não-inferencial
+            (concept 6.3 D10); campo aditivo com default, validado na construção.
     """
 
     lower_level: float
@@ -50,9 +57,13 @@ class PairCoverage:
     nominal: float
     picp: float
     mpiw: float
+    mpiw_label: str = MPIW_LABEL
 
     def __post_init__(self) -> None:
-        """I7: o nominal sai da fórmula única 1 - 2·τ_l; PICP é fração e MPIW é largura."""
+        """I7: o nominal sai da fórmula única 1 - 2·τ_l; PICP é fração e MPIW é largura.
+
+        I9 (6.3): o rótulo do MPIW é exatamente `MPIW_LABEL`.
+        """
         expected = pair_nominal(self.lower_level)
         if self.nominal != expected:
             raise ValueError(
@@ -62,6 +73,8 @@ class PairCoverage:
             raise ValueError(f"picp must be a fraction in [0, 1], got {self.picp}")
         if not self.mpiw >= 0.0:
             raise ValueError(f"mpiw must be a width >= 0, got {self.mpiw}")
+        if self.mpiw_label != MPIW_LABEL:
+            raise ValueError(f"a PairCoverage must carry MPIW_LABEL, got {self.mpiw_label!r}")
 
 
 @dataclass(frozen=True)
