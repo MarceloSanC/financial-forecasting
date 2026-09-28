@@ -1490,4 +1490,18 @@ de `_finite_number.py` (que a 6.3 também editou) não ganhou a contagem de cons
 `check_strictly_increasing` (mesma mensagem, testes existentes seguem valendo) e a
 docstring de `_finite_number.py` passa a listar a `PairedLossSeries` entre os consumidores.
 
+### 2026-09-28 — [decision] Task 04: validador do DM no módulo do enum; `mean_differential` finito no I5 — Claude (Opus 5.5)
+**Contexto:** decisão de detalhe planejada no §1 (onde mora o validador do DM) e dois
+pontos que a Task não fixa: o `__post_init__` do concept (I5) não lista `mean_differential`,
+e `compare` precisa escolher a ordem entre "candidato = comparador" e "nome desconhecido".
+**Razão:** (1) aplicada como planejada — `validate_dm_request` mora em
+`diebold_mariano.py`, ao lado de `DmVarianceEstimator`, e confere nesta ordem: tamanhos,
+T ≥ 2, perdas (finitas, ≥ 0, sem `bool`), `horizon` (int não-bool ≥ 1, depois < T),
+estimador (membro do enum; a string crua `"rectangular"`, igual ao membro por `StrEnum`,
+é recusada por `isinstance`). (2) `DieboldMarianoResult` também recusa `mean_differential`
+não-finito — mesma postura de finitude de `statistic`/`long_run_variance`; reversível.
+(3) `compare` confere candidato = comparador antes de ler colunas; nome desconhecido sai
+do `PairedLossSeries.losses_of` (mensagem única do VO). O fator HLN é a função privada
+`_hln_factor`, testada isolada (T = 10, h = 7 → √0,12) como pede a Task.
+
 <!-- END: post-execution -->
