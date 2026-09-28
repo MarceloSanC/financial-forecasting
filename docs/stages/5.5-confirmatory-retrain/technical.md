@@ -943,4 +943,34 @@ Consulta: `scratchpad/t33/measure.py`, rodada no container com DuckDB sobre o Pa
 - **Reconciliação do alvo:** `target_return == log(close_t/close_{t−1})` em 3949/3949 linhas (tolerância 1e−9). É o retorno para trás, como documentado. O deslocamento para `t+h` é do modelo (ADR 4.3.0001). Para `log(close_{t+1}/close_t)`: 0/3949.
 - **Impressão digital do grid:** `00e4406dcd96658d557f7d4d86face9874fac42385e3cb182d54c5d2286695bd`.
 
+### 2026-09-27 — Checkpoint C (bloco 24–31) — rodada 3 (última) — Claude (Opus 5.5)
+Revisor de contexto zerado sobre `9b6386f` e `fa5adc8`: 5 dos 6 itens foram confirmados.
+- **F4:** a ida e volta pelo `tomllib` foi testada em todos os 1.112.064 pontos de código escalares. Surrogate isolado não vem de arquivo lido, porque a leitura é UTF-8 estrita; se entrasse, a gravação ergueria `UnicodeEncodeError`, sairia com exit 2 e deixaria o original intacto.
+- **F5:** `SystemExit` do argparse e `KeyboardInterrupt` continuam passando.
+- **Fábrica do probe e temporário do `freeze`:** as mutações são mortas pelos testes.
+- **Logger:** nada em `src/` desliga loggers.
+
+Item aberto e **corrigido** (`task-33`, teste): o teste de `--start` trocava o `_materialize` inteiro e passaria mesmo com o valor indo para a ingestão. Agora roda o `_materialize` real com use cases falsos e confere os três pedidos (candles e news na janela ampla, fundamentos sem janela, dataset com o `--start`), mais a liberação do lock. O código já estava certo. Esta foi a última rodada: nenhum achado material ficou aberto.
+
+### 2026-09-27 — [measurement] Task 33 — custo no CPU (insumo das decisões [P]) — Claude (Opus 5.5)
+Container com 12 threads, CPU, torch 2.13.0+cpu.
+- **`sweep --n-trials 1`** (comando do plano, dado real, geometria exploratória): 115 s no total, exit 0.
+  - O trial do TFT sorteou `hidden_size` 21, batch 81, lr 9,0e−3 e dropout 0,43, e levou cerca de 75 s: do `Seed set to 0` às 23:59:39 até a abertura do banco do MLflow às 00:00:54.
+  - O trial do GBM levou ≤ 20 s (`num_leaves` 12, lr 0,078, `min_data_in_leaf` 93).
+  - Resultados gravados sob o scope `aapl_confirmatory-r0-sweep-f1d501d62829`, com `n_trials = 1`. Esse scope é separado do sweep real.
+- **Cantos do espaço D9 do TFT** (`scratchpad/t33/cost_corner.py`, `RunTftSweep` real, sem persistência):
+  - canto barato (hidden 10, batch 255, lr 1e−2): **140 s**;
+  - canto caro (hidden 319, batch 64, lr 1e−4): **806 s**.
+- **Custo estimado da corrida:**
+  - o treino cresce de 1641 (fold 0) a 2901 sessões (fold 5), então os 6 folds somam cerca de 8,3 vezes o custo de um ajuste no fold 0;
+  - por seed do TFT, o custo fica entre ~10 min (params como o trial de 75 s) e ~1,9 h (canto caro);
+  - GBM (6 ajustes) e baselines somam minutos.
+- **Conclusão:** o custo cabe em CPU mesmo no pior caso (10 seeds no canto caro ≈ 19 h de corrida). ROCm **não** é necessário (D8).
+
+### 2026-09-27 — [P] Task 33 — decisões do humano no congelamento — Claude (Opus 5.5)
+Perguntas feitas com o custo medido acima (entrada anterior); respostas do humano:
+- **`n_trials = 60`**, o mesmo para o sweep do TFT e o do GBM (D13). Iguala o orçamento de 60 iterações do paper do TFT (Lim et al. 2021, §6.2). O sweep estimado leva de ~1,6 h a ~14 h.
+- **Seeds do TFT = 1..10** (10 seeds), distintas da seed 0 do sweep. Custo estimado da corrida: de ~1,7 h a ~19 h, conforme os HPs congelados.
+- **Device: CPU.** ROCm não foi necessário: o custo coube.
+
 <!-- END: post-execution -->
