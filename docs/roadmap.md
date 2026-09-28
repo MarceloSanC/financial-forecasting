@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-08-11
-last_reviewed_at: 2026-08-11
+updated_at: 2026-09-28
+last_reviewed_at: 2026-09-28
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -66,7 +66,7 @@ graph LR
 | 3 | Feature engineering e dataset | Dataset TFT reconstruído com features causais (indicadores validados, sentimento, fundamentos as-of, derivadas) + contratos anti-leakage | done | 3.1–3.5 |
 | 4 | Analytics store (silver) | Silver modular (schema por tabela), repositório append-only, persister único de predições multi-horizonte | done | 4.1–4.3 |
 | 5 | Modelagem, baselines e treino | TFT re-treinado + GBM quantílico + baselines naive/estatísticos sobre walk-forward purgado/embargoado; cohort confirmatório AAPL | in_progress | 5.1–5.5 |
-| 6 | Núcleo estatístico confirmatório | Pipeline gold confirmatória: pinball/CRPS/DM/MCS/Holm/PICP-Christoffersen + gates + scorecard pré-registrado, no domínio e validada por oráculo | not_started | 6.1–6.5 |
+| 6 | Núcleo estatístico confirmatório | Pipeline gold confirmatória: pinball/CRPS/DM/MCS/Holm/PICP-Christoffersen + gates + scorecard pré-registrado, no domínio e validada por oráculo | in_progress | 6.1–6.5 |
 | 7 | Inferência, conformal, explicabilidade e API | Motor de inferência + conformal CQR (benchmark) + explicabilidade (VSN/permutação/ablação) servidos por API fina | not_started | 7.1–7.4 |
 | 8 | Reprodução, equivalência e relatório | Protocolo completo em AAPL; equivalência vs evidência anterior auditada; plots e dossiê de rastreabilidade | not_started | 8.1–8.3 |
 
@@ -98,7 +98,7 @@ graph LR
 | `5.3-gbm-quantile-baseline` | modeling | multi (application + adapters/out) | vertical | done | 5.1 |
 | `5.4-tft-trainer` | modeling | multi (application + adapters/out) | vertical | done | 5.1 |
 | `5.5-confirmatory-retrain` | modeling | application (orquestração) | vertical | draft | 5.2, 5.3, 5.4 |
-| `6.1-scoring-and-calibration-metrics` | evaluation | multi (domain + adapters/out) | vertical | draft | 4.3 |
+| `6.1-scoring-and-calibration-metrics` | evaluation | multi (domain + adapters/out) | vertical | done | 4.3 |
 | `6.2-paired-inference-dm-mcs-holm` | evaluation | multi (domain + adapters/out) | vertical | draft | 6.1 |
 | `6.3-calibration-risk-backtests` | evaluation | multi (domain + adapters/out) | vertical | draft | 6.1 |
 | `6.4-gold-builders-and-quality-gates` | evaluation | multi (domain + application + adapters/out) | vertical | draft | 6.2, 6.3 |
