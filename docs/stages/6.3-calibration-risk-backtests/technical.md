@@ -1563,4 +1563,19 @@ recusa `kind` que não seja `HitKind` e `horizon` não-`int`/`bool` (ramos
 `kind-not-hitkind` e `hitseq_horizon_invalid`), e expõe `is_dgt_subseries`
 (`dgt_step is not None`), usado pela checagem da taxa mascarada e pelo MC (C5).
 
+### 2026-09-28 — [decision] Checkpoint C bloco 2: regra de tolerância com dono único em `value_objects/_tolerance.py` — Claude (Opus 5.5)
+**Contexto:** achado LOW (dono da regra) do Checkpoint C — "tolerância finita e ≥ 0"
+estava escrita duas vezes, no `DegeneracyGate._validate_tolerance` (6.1) e no
+`HitSequence._check_mask_description`, com a mesma mensagem; isso escondeu o achado
+MEDIUM da mesma rodada (um `HitSequences` que chamasse o gate com outra tolerância
+não seria distinguido pelo erro).
+**Razão:** disposição `corrigido` em `[6.3/task-05-fix]` — helper privado
+`value_objects/_tolerance.py` (`validate_tolerance(value, *, field)`), no padrão do
+`_finite_number.py` (VO é consumidor; direção serviço → VO). O gate passa
+`field="tolerance"` (mensagem idêntica à da 6.1; testes da 6.1 inalterados) e o VO
+`field="HitSequence.tolerance"`; `invalid_tolerance` do `HitSequences` agora exige a
+mensagem do gate (`^tolerance must be`). Consumo provado por monkeypatch em
+`test_tolerance_rule.py`. Arquivo da 6.1 tocado (`degeneracy_gate.py`), autorizado pela
+sessão mestra.
+
 <!-- END: post-execution -->

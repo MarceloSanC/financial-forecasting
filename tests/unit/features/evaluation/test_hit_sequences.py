@@ -298,7 +298,7 @@ def test_invalid_tolerance_raises(
     series = _mixed_series(make_series)
     kwargs: dict[str, object] = {"pair": _OUTER_PAIR} if builder == "interval" else {"level": 0.05}
 
-    with pytest.raises(ValueError, match="tolerance must be a finite number >= 0"):
+    with pytest.raises(ValueError, match=r"^tolerance must be a finite number >= 0"):
         getattr(HitSequences, builder)(series, tolerance=tolerance, **kwargs)
 
 

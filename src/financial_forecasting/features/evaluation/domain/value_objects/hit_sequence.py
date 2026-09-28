@@ -31,6 +31,9 @@ from itertools import pairwise
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._tolerance import (
+    validate_tolerance,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     pair_miscoverage,
 )
@@ -237,8 +240,7 @@ class HitSequence:
                 raise ValueError(f"violations[{index}] must be a bool or None, got {value!r}")
 
     def _check_mask_description(self) -> None:
-        if not is_finite_number(self.tolerance) or self.tolerance < 0.0:
-            raise ValueError(f"tolerance must be a finite number >= 0, got {self.tolerance!r}")
+        validate_tolerance(self.tolerance, field="HitSequence.tolerance")
         if not is_finite_number(self.degeneracy_rate) or not (0.0 <= self.degeneracy_rate <= 1.0):
             raise ValueError(f"degeneracy_rate must be in [0, 1], got {self.degeneracy_rate!r}")
         n_gaps = len(self.violations) - self.n_observed
