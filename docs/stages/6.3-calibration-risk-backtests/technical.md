@@ -1487,8 +1487,13 @@ revalidação. Provado por `test_coverage_series.py::fa7_at_or_below`,
 consumidos também por LR_ind e LR_uc de 3 estados (Tasks 07/08).
 **Razão:** decisões de detalhe planejadas no §1 — `LR_NEGATIVE_FLOOR = -1e-9` e
 `floor_lr_statistic` moram no módulo-folha `chi_square.py` (valida com o
-`is_finite_number` do slice: não-finito e `bool` erguem; `-0.0` não é `< 0` e volta
-inalterado); `xlogy(x, y)` público em `kupiec_pof.py` (x = 0 → 0.0). O `kupiec_pof`
+`is_finite_number` do slice: não-finito e `bool` erguem; `[−1e-9, 0]` → `+0.0`,
+inclusive `-0.0` — **corrigido** em `[6.3/task-03-fix]` após achado LOW do
+Checkpoint C: a versão original (`value < 0.0`) deixava `-0.0` passar, e
+`kupiec_pof(violations=10, observations=500, violation_rate=0.02)` (x = n·p exato)
+devolvia `-0.0`; o piso passou a `value <= 0.0`, provado por
+`kupiec_floor_exact_null_gives_unsigned_zero` e pelo caso `negative-zero` do
+`chi2_floor`, e vale para LR_ind/3 estados pelo dono único); `xlogy(x, y)` público em `kupiec_pof.py` (x = 0 → 0.0). O `kupiec_pof`
 usa `ℓ(x, n, q) = xlogy(n − x, 1 − q) + xlogy(x, q)` com `q = x/n` literal, na ordem
 de operações do §1: a entrada do piso `kupiec_pof(violations=2, observations=5,
 violation_rate=0.39999999999999997)` deu LR bruto **−8.881784197001252e-16**

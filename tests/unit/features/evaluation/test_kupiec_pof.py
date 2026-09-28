@@ -161,6 +161,16 @@ def test_kupiec_real_count_with_real_observations() -> None:
 
 
 @pytest.mark.unit
+def test_kupiec_floor_exact_null_gives_unsigned_zero() -> None:
+    """I13: x = n·p exato (10 = 500·0.02) dá LR bruto `-2·(a - a) = -0.0`; o piso
+    normaliza para +0.0 (nenhum relatório carrega zero com sinal)."""
+    actual = kupiec_pof(violations=10, observations=500, violation_rate=_KUPIEC_RATE)
+
+    assert actual == 0.0
+    assert math.copysign(1.0, actual) == 1.0
+
+
+@pytest.mark.unit
 def test_kupiec_floor_clamps_negative_raw_statistic() -> None:
     """A5/I13: x = 2, n = 5, p = 0.39999999999999997 — o LR bruto (mesma ordem de
     operações do kernel) é negativo dentro da faixa do piso; o kernel devolve 0.0."""

@@ -57,12 +57,17 @@ def test_chi2_floor_tiny_negative_statistic_is_clamped(df: int) -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize(
-    "value", [_TINY_NEGATIVE, LR_NEGATIVE_FLOOR], ids=["tiny-negative", "floor-inclusive"]
+    "value",
+    [_TINY_NEGATIVE, LR_NEGATIVE_FLOOR, -0.0],
+    ids=["tiny-negative", "floor-inclusive", "negative-zero"],
 )
 def test_chi2_floor_clamps_values_in_floor_band_to_zero(value: float) -> None:
-    """I13: `[LR_NEGATIVE_FLOOR, 0)` → 0.0 — a fronteira -1e-9 é inclusa."""
+    """I13: `[LR_NEGATIVE_FLOOR, 0]` → +0.0 — a fronteira -1e-9 é inclusa e o `-0.0`
+    sai sem sinal (nenhum relatório carrega zero com sinal)."""
     assert LR_NEGATIVE_FLOOR == _CONTRACT_FLOOR
-    assert floor_lr_statistic(value) == 0.0
+    floored = floor_lr_statistic(value)
+    assert floored == 0.0
+    assert math.copysign(1.0, floored) == 1.0
 
 
 @pytest.mark.unit

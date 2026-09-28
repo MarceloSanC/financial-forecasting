@@ -38,7 +38,9 @@ _SUPPORTED_DF: Final = (1, 2)
 def floor_lr_statistic(value: float) -> float:
     """Aplica o piso numérico I13 a uma estatística LR.
 
-    `[LR_NEGATIVE_FLOOR, 0)` → `0.0` (fronteira inclusa); ≥ 0 volta inalterado.
+    `[LR_NEGATIVE_FLOOR, 0]` → `+0.0` (fronteira inclusa; `-0.0` também é
+    normalizado, para nenhum relatório carregar um zero com sinal — o caso de
+    contagens exatamente iguais a n·p dá `-2·(a - a) = -0.0`); > 0 volta inalterado.
 
     Raises:
         ValueError: valor não-finito ou `bool` (predicado único do slice), ou abaixo de
@@ -51,7 +53,7 @@ def floor_lr_statistic(value: float) -> float:
             f"LR statistic {value!r} is below the numerical floor {LR_NEGATIVE_FLOOR} "
             "(negative beyond rounding noise)"
         )
-    if value < 0.0:
+    if value <= 0.0:
         return 0.0
     return value
 
