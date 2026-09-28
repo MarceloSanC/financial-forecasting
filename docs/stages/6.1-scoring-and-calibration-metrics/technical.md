@@ -974,4 +974,16 @@ linha do fix #5 do Checkpoint C do bloco 2, `PairCoverage` ergue se
 `series.symmetric_pair_indices` (sem remontar a regra par → colunas). Reversível; não
 muda campo nem assinatura do concept §4.
 
+### 2026-09-28 — [decision] Task 08: árvore transitiva medida de `scikit-learn`/`scoringrules` — Claude (Opus 5.5)
+**Contexto:** o technical (Task 08, risco do concept §10 e §5) pede medir com
+`git diff uv.lock` o que as duas dependências trazem e registrar `[decision]` se
+`scoringrules` puxar `numba`/`jax` como obrigatória.
+**Razão:** medido — `uv lock` resolveu 177 pacotes (antes 176) e o único pacote novo
+é `scoringrules 0.11.0` (wheel `py3-none-any` de ~96 KB), com dependências
+obrigatórias só `numpy` e `scipy`, ambas já no lock. `scikit-learn 1.9.0` já estava
+no lock como transitiva; mudou só para declarada (`requires-dist`). Nenhum `numba`
+nem `jax` entra: os backends `numba`/`jax`/`torch` do scoringrules são opcionais, e o
+adapter (Task 11) fixa o backend `numpy` explicitamente. `import sklearn,
+scoringrules` → `1.9.0 0.11.0`.
+
 <!-- END: post-execution -->
