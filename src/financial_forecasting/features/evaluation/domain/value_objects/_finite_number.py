@@ -24,7 +24,14 @@ import math
 
 
 def is_finite_number(value: object) -> bool:
-    """`True` só para `int`/`float` não-bool finitos (exclui `None`, `nan`, `inf`, `bool`)."""
+    """`True` só para `int`/`float` não-bool finitos (exclui `None`, `nan`, `inf`, `bool`).
+
+    `int` além do alcance do float64 (ex.: `10**400`) também é `False`: `math.isfinite`
+    ergueria `OverflowError` cru nos consumidores, em vez do `ValueError` nomeado.
+    """
     if isinstance(value, bool) or not isinstance(value, int | float):
         return False
-    return math.isfinite(value)
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False

@@ -44,8 +44,20 @@ def test_real_count_accepts_valid_counts(count: float, n: float) -> None:
         (0, 0, "n must be > 0"),
         (-1, 10, r"count must be in \[0, n=10\]"),
         (11, 10, r"count must be in \[0, n=10\]"),
+        (1e-320, 1e10, r"count/n underflows to 0\.0 with count > 0"),
+        (1, 10**400, "n must be a finite number"),
     ],
-    ids=["count-nan", "count-bool", "n-inf", "n-bool", "n-zero", "count-negative", "count-above"],
+    ids=[
+        "count-nan",
+        "count-bool",
+        "n-inf",
+        "n-bool",
+        "n-zero",
+        "count-negative",
+        "count-above",
+        "ratio-underflow",
+        "n-int-beyond-float",
+    ],
 )
 def test_real_count_rejects_with_named_field(count: float, n: float, match: str) -> None:
     """C3: cada ramo ergue `ValueError` com o nome de campo passado pelo kernel."""

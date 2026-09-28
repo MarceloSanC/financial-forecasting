@@ -1523,4 +1523,18 @@ mudança), as Tasks 04/08 consomem sem cópia. Arquivo fora da lista da Task 03,
 autorizado pela sessão mestra no veredito do Checkpoint C. Provado por
 `test_count_input_validation.py` (ramos com nome de campo + consumo por monkeypatch).
 
+### 2026-09-28 — [deviation] Checkpoint C bloco 1: entradas patológicas de contagem erguem `ValueError` nomeado — Claude (Opus 5.5)
+**Contexto:** achado INFO do Checkpoint C — `kupiec_pof(violations=1e-320,
+observations=1e10)` erguia "math domain error" cru no `xlogy` (`x/n` sub-flui a 0.0
+com x > 0) e `observations=10**400` erguia `OverflowError` cru (`math.isfinite` de
+`int` fora do alcance do float64); e o piso absoluto −1e-9 não dizia até onde vale.
+**Razão:** disposição `corrigido` em `[6.3/task-03-fix]`, ajuste pequeno dentro do
+contrato C3 (argumento inválido → `ValueError` nomeando o campo):
+`is_finite_number` (`value_objects/_finite_number.py`, da 6.1) devolve `False` em
+`OverflowError` (testado em `test_finite_number.py`); `validate_real_count` ergue
+`<count>/<n> underflows to 0.0` quando `count > 0` e `count / n == 0.0` (casos
+`ratio-underflow` no validador e no `kupiec_invalid`). A docstring do
+`floor_lr_statistic` registra o alcance do piso absoluto (cancelamento ~ n·eps: vale
+com folga para n ≲ 1e7). O ADR 6.3.0001 (`accepted`) não foi editado.
+
 <!-- END: post-execution -->

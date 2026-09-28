@@ -42,6 +42,12 @@ def floor_lr_statistic(value: float) -> float:
     normalizado, para nenhum relatório carregar um zero com sinal — o caso de
     contagens exatamente iguais a n·p dá `-2·(a - a) = -0.0`); > 0 volta inalterado.
 
+    Alcance do piso absoluto: o LR é diferença de duas log-verossimilhanças de
+    magnitude ~n, então o erro de cancelamento cresce como n·eps (eps ≈ 2.2e-16) —
+    `-1e-9` cobre o ruído com folga para n ≲ 1e7 (muito acima de T ≤ 500 do oráculo e
+    das séries do piloto). Acima disso um LR bruto negativo além do piso pode ser
+    ruído, não bug (ADR 6.3.0001 item 8, nota do Checkpoint C).
+
     Raises:
         ValueError: valor não-finito ou `bool` (predicado único do slice), ou abaixo de
             `LR_NEGATIVE_FLOOR` (negativo além do ruído de arredondamento).

@@ -22,9 +22,13 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
 def validate_real_count(count: float, n: float, *, count_field: str, n_field: str) -> None:
     """Contagem real `0 ≤ count ≤ n` sobre `n > 0` (ADR 6.3.0005).
 
+    Ergue também quando `count > 0` e `count / n` sub-flui a 0.0 em float64 (ex.:
+    `count = 1e-320`, `n = 1e10`): a verossimilhança em `count / n` pediria `log 0`
+    com peso positivo e o kernel ergueria "math domain error" cru.
+
     Raises:
-        ValueError: não-finito ou `bool`; `n <= 0`; `count` fora de [0, n] — a
-            mensagem nomeia o campo.
+        ValueError: não-finito ou `bool`; `n <= 0`; `count` fora de [0, n]; razão
+            `count / n` sub-fluindo com `count > 0` — a mensagem nomeia o campo.
     """
     for name, value in ((count_field, count), (n_field, n)):
         if not is_finite_number(value):
@@ -33,6 +37,11 @@ def validate_real_count(count: float, n: float, *, count_field: str, n_field: st
         raise ValueError(f"{n_field} must be > 0, got {n!r}")
     if not 0 <= count <= n:
         raise ValueError(f"{count_field} must be in [0, {n_field}={n!r}], got {count!r}")
+    if count > 0 and count / n == 0.0:
+        raise ValueError(
+            f"{count_field}/{n_field} underflows to 0.0 with {count_field} > 0 "
+            f"({count_field}={count!r}, {n_field}={n!r})"
+        )
 
 
 def validate_rate(rate: float, *, field: str) -> None:

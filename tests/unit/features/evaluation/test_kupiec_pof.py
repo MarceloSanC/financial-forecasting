@@ -211,6 +211,11 @@ _VALID = {"violations": 4, "observations": 500, "violation_rate": _KUPIEC_RATE}
         ({"violation_rate": math.nan}, "violation_rate must be a finite number"),
         ({"violation_rate": math.inf}, "violation_rate must be a finite number"),
         ({"violation_rate": True}, "violation_rate must be a finite number"),
+        (
+            {"violations": 1e-320, "observations": 1e10},
+            r"violations/observations underflows to 0\.0",
+        ),
+        ({"observations": 10**400}, "observations must be a finite number"),
     ],
     ids=[
         "observations-zero",
@@ -229,6 +234,8 @@ _VALID = {"violations": 4, "observations": 500, "violation_rate": _KUPIEC_RATE}
         "rate-nan",
         "rate-inf",
         "rate-bool",
+        "ratio-underflow",
+        "observations-int-beyond-float",
     ],
 )
 def test_kupiec_invalid_argument_raises(overrides: dict[str, float], match: str) -> None:
