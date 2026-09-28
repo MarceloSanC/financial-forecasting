@@ -1,11 +1,11 @@
 ---
 title: Prompt — Orquestração de Step em Sessão Mestra (subagentes de contexto zerado + gate de domínio + decisão assistida rica)
-description: Sessão mestra human-in-the-loop que conduz um Step inteiro (grupo de Stages) do roadmap sem escrever artefato próprio — despacha subagentes de contexto zerado para cada fase do PROMPT-stage-single-session (Concept, Technical, Execução e os Checkpoints), resolve cada fork de decisão (pesquisa abordagens → decide sozinho via docs+skills ou pergunta ao humano, sempre registrando ADR), roda a auditoria de Stage em subagente separado com tratamento de findings, e — ao OK do humano — faz o merge, limpa a branch/worktree e inicia a próxima Stage.
-when-use: Conduzir um Step do roadmap do começo ao fim, quando se quer (a) travar as regras de negócio em fonte oficial antes de codar, (b) isolar cada fase e cada revisão em um subagente de contexto zerado para reduzir viés, (c) manter o humano decidindo só o que os docs não resolvem, com explicação didática, e (d) que o próprio orquestrador conduza cada Stage até o merge, encadeando as Stages do Step.
+description: Sessão mestra human-in-the-loop que conduz um Step inteiro (grupo de Stages) do roadmap sem escrever artefato próprio — despacha subagentes de contexto zerado para cada fase do PROMPT-stage-single-session (Concept, Technical, Execução e os Checkpoints), resolve cada fork de decisão (pesquisa abordagens → decide sozinho via docs+skills ou pergunta ao humano, sempre registrando ADR), roda a auditoria de Stage em subagente separado com tratamento de findings e — com a auditoria `complete` e o CI verde — faz o merge sozinha, limpa a branch/worktree e inicia a próxima Stage, sem esperar "segue" do humano.
+when-use: Conduzir um Step do roadmap do começo ao fim, quando se quer (a) travar as regras de negócio em fonte oficial antes de codar, (b) isolar cada fase e cada revisão em um subagente de contexto zerado para reduzir viés, (c) manter o humano decidindo só o que os docs não resolvem, com explicação didática, e (d) que o próprio orquestrador conduza cada Stage até o merge de forma autônoma, encadeando as Stages do Step e parando só nos gatilhos de §Autonomia.
 keywords: [prompt, step, single-session, master, orchestration, subagents, fresh-context, domain-gate, human-in-the-loop, decisao-assistida, adr, stage-audit, bias-mitigation]
 status: accepted
 created_at: 2026-07-05
-updated_at: 2026-07-12
+updated_at: 2026-09-27
 ---
 
 # Prompt — Orquestração de Step em Sessão Mestra
@@ -21,8 +21,8 @@ prompt de nível Stage já existente — não o reimplementa. Uma sessão mestra
   não respondem (§2);
 - **audita cada Stage** em subagente separado, trata os findings, re-audita e fecha a auditoria
   no PR (§3);
-- ao **OK do humano** no relatório, **faz o merge**, limpa branch/worktree e **inicia a próxima
-  Stage** (§3.5).
+- com a auditoria **`complete`** e o CI verde, **faz o merge sozinha**, limpa branch/worktree e
+  **inicia a próxima Stage** (§3.5) — sem esperar OK nem "segue" do humano (§Autonomia).
 
 Sucede a antiga variante INTERATIVA (que operava em nível Stage): herda o DNA *human-in-the-loop
 com disciplina de decisão rica* e o eleva ao Step, adicionando o **gate de domínio** e a
@@ -78,6 +78,29 @@ A mestra coleta a saída de cada subagente, trata os forks, e só então despach
 
 ---
 
+## Autonomia — a mestra não para para pedir "segue"
+
+O humano **autorizou de forma permanente** que a mestra conduza o Step do começo ao fim, merges
+inclusive. **Não encerre o turno** entre fases, entre Stages nem depois de um merge; não peça
+confirmação para seguir; não entregue relatório esperando OK. Progresso vai ao humano como **linha
+curta de status** (Stage/fase atual, PR mergeado), não como pergunta.
+
+**A mestra só para (pergunta ou HALT) nestes casos — e em nenhum outro:**
+
+1. **Fork classe P** da triagem da skill `evidence-resolution` — preferência ou regra de negócio
+   que **não** se resolve por teoria, evidência empírica ou benchmark entre abordagens (§2). Fork
+   E/C se resolve sozinho, com ADR.
+2. **HALT-and-park** (§2): contradição com fonte superior, contrato externo irreversível e ambíguo,
+   gate objetivo que não fecha após tentativa honesta de correção.
+3. **HALT de sourcing** (§1): fórmula load-bearing sem fonte primária.
+4. **Dependência não mergeada:** `depends_on` da próxima Stage ainda em voo em outra branch — a
+   mestra não mergeia trabalho de outra sessão.
+
+Ao retomar de uma parada (humano respondeu), a mestra registra a resposta (ADR, se for fork) e
+**continua sozinha** do ponto onde parou.
+
+---
+
 ## 1. Gate de domínio — pré-requisito do Step (bloqueante)
 
 Antes da **primeira** Stage do Step, tem de existir um documento de domínio
@@ -86,7 +109,7 @@ Antes da **primeira** Stage do Step, tem de existir um documento de domínio
 **camada teórica** que dita *como* cada métrica/regra deve ser calculada e **quais as
 particularidades por caso de uso** — é o que o `concept.md` de cada Stage consome. O `<bc>` é
 nomeado como em `features/<bc>/` (`market_data`, `feature_engineering`, `modeling`,
-`analytics_store`).
+`analytics_store`, `evaluation`).
 
 > **Por que `domain/` e não `audits/`.** Um doc `audits/`
 > ([mesmo ADR](./adr/0_0_0003-formalize-domain-and-audits-doc-categories.md)) diagnostica uma
@@ -239,19 +262,28 @@ Depois do tratamento, o subagente refaz a análise: **está tudo validado para f
   (linha `> **Auditoria:** ...`, CONVENTIONS §3.6) — é o que **destrava o merge** (o workflow
   `audit-gate` do CI falha enquanto não for `complete`).
 
-### 3.4 Relatório ao humano (formato da stage-audit)
+### 3.4 Relatório da Stage (registro, não gate)
 
-Com a auditoria `complete`, a mestra entrega ao humano um **relatório completo e didático do que foi
+Com a auditoria `complete`, a mestra produz um **relatório completo e didático do que foi
 implementado na Stage**, no **mesmo formato do relatório da skill `stage-audit`** (as 6 seções da
 Fase E + status global + conclusão): linguagem clara para quem não acompanhou, jargão glosado, fato
-com `arquivo:linha`/comando→resultado, e a lente de **valor entregue + qualidade de design**. Este
-relatório **é o gate de aprovação humana** e **abre com o bloco "Valide você"** da execução
-(PROMPT-stage §0 do relatório): o humano valida pelos passos antes de ler o resto.
+com `arquivo:linha`/comando→resultado, e a lente de **valor entregue + qualidade de design**. Abre
+com o bloco **"Valide você"** da execução (PROMPT-stage §0 do relatório).
+
+O relatório **não é gate** (§Autonomia): vai como **comentário no PR** antes do merge — o humano lê
+e valida quando quiser, e reabre por issue o que discordar — e alimenta o relatório do Step. No chat,
+só uma linha de status com o link do PR.
 
 ### 3.5 Merge, limpeza e próxima Stage
 
-Ao **OK do humano** no relatório, a mestra executa o fechamento (invocar `git-versioning-pointer`
-antes das operações git):
+A mestra mergeia **sozinha** quando **todas** as condições valem — e verifica cada uma com comando,
+não de memória:
+
+- auditoria `complete` no PR (§3.3) e nenhum finding bloqueante em aberto;
+- CI verde no HEAD do PR (`gh pr checks <num>`), branch à frente de `develop`;
+- nenhuma parada de §Autonomia pendente (fork P sem resposta, HALT) nesta Stage.
+
+Então executa o fechamento (invocar `git-versioning-pointer` antes das operações git):
 
 ```bash
 gh pr merge <num> --merge --delete-branch          # merge + apaga a branch remota
@@ -262,10 +294,12 @@ python scripts/worktree-rm.py <worktree>           # se a Stage rodou em worktre
 Depois: **inicia a próxima Stage** do Step (volta ao Princípio central, despachando os subagentes de
 fase). O ciclo se repete até a última Stage.
 
-> **Override consciente da skill.** A `stage-audit` diz "nunca faz merge — é do usuário, salvo
-> pedido explícito". Aqui o **OK do humano no relatório (§3.4) É o pedido explícito**: a decisão
-> irreversível continua sendo do humano (ele aprova); o orquestrador só **executa** o merge que ele
-> autorizou. Sem o OK, não há merge.
+> **Override consciente da skill e do PROMPT-stage.** A `stage-audit` e o PROMPT-stage dizem "o
+> merge é do usuário, salvo pedido explícito". **Invocar este prompt é o pedido explícito
+> permanente**, válido para todas as Stages do Step: o humano delegou a aprovação ao gate
+> auditoria `complete` (subagente auditor de contexto zerado) + CI verde
+> ([GIT-WORKFLOW §Gates](./GIT-WORKFLOW.md)). Se qualquer condição acima falha, **não há merge** —
+> volta a §3.2, ou para por §Autonomia.
 
 ### Fechamento do Step
 
@@ -281,8 +315,8 @@ de domínio que passou a `accepted`.
 1. **Pré-condições do Step.** Ler `docs/roadmap.md` (recorte do Step: Stages, `depends_on`, BC);
    confirmar que o Step de que depende está `done`. Invocar `git-versioning-pointer` antes de git.
 2. **Gate de domínio (§1).** Doc `domain/<bc>/<subdomain>.md` `accepted` cobre o escopo? Não →
-   fan-out de pesquisa → tratar forks por §2 → humano ratifica → doc `accepted`. **Sem isso, nenhuma
-   Stage começa.**
+   fan-out de pesquisa + verificação adversarial → tratar forks por §2 (só P vai ao humano) → doc
+   `accepted`. **Sem isso, nenhuma Stage começa.**
 3. **Para cada Stage do Step, em ordem de dependência:**
    1. Despachar os **subagentes de fase** (Princípio central): Concept → Checkpoint A → Technical →
       Checkpoint B → Execução → Checkpoint C → Auditoria de testes. Cada **fork** é resolvido por
@@ -290,8 +324,9 @@ de domínio que passou a `accepted`.
       decisão de fork vira **ADR**. A execução fecha os gates de saída e **abre o PR** (canônico).
    2. **Auditoria (§3.1)** em subagente → **tratamento de findings (§3.2)** em subagente →
       **re-auditoria (§3.3)** em loop → **auditoria `complete` no PR**.
-   3. **Relatório ao humano (§3.4).** Humano dá **OK** → **merge + limpeza (§3.5)**.
-   4. Inicia a **próxima Stage**.
+   3. **Relatório da Stage (§3.4)** no PR → condições de §3.5 verificadas → **merge + limpeza
+      (§3.5)**, sem esperar OK.
+   4. Inicia a **próxima Stage** no mesmo turno.
 4. **Fechamento do Step (§ acima).** Todas as Stages mergeadas → Step `done` no roadmap + relatório
    do Step.
 
