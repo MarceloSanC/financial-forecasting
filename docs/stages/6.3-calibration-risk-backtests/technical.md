@@ -1669,4 +1669,17 @@ os ramos mínimos.
   `int`. Um caso por ramo no `mc_incoherent`. Constante pública
   `MC_ATTEMPTS_CAP_FACTOR = 100`.
 
+### 2026-09-28 — [decision] Task 09: `var_tail_for` dono único da re-rotulação; relatório exige a ordem da grade — Claude (Opus 5.5)
+**Contexto:** a regra "τ < 0.5 → cauda inferior, `var_level = 1 − τ`; τ > 0.5 →
+superior, `var_level = τ`; τ = 0.5 ergue" seria escrita no laço do `backtest` e de
+novo no `VarTailBacktest.__post_init__`.
+**Razão:** função de módulo `var_tail_for(level) -> (kind, var_level)` em
+`var_descriptive.py`, consumida pelos dois (valida τ em (0, 1) pelo `validate_rate`
+do validador único). Acréscimos reversíveis ao C9 listado: o `VarTailBacktest` confere
+`backtest.kind`/`backtest.levels` (ramos `backtest-of-another-level` e
+`backtest_kind_mismatch`) e o `VarDescriptiveReport` exige níveis estritamente
+crescentes (a "ordem da grade" do concept §4; ramo `tails-out-of-order`) e horizonte
+pelo `validate_horizon` do slice. `var_level == 0.98` exato em τ = 0.02 e 0.98
+(`1 - 0.02 == 0.98` em float64, como medido no §1).
+
 <!-- END: post-execution -->
