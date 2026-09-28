@@ -1537,16 +1537,22 @@ contrato C3 (argumento inválido → `ValueError` nomeando o campo):
 `floor_lr_statistic` registra o alcance do piso absoluto (cancelamento ~ n·eps: vale
 com folga para n ≲ 1e7). O ADR 6.3.0001 (`accepted`) não foi editado.
 
-### 2026-09-28 — [decision] Task 04: `WilsonBandReport` também confere contagem/n; banda sem recorte a [0, 1] — Claude (Opus 5.5)
+### 2026-09-28 — [decision] Task 04: `WilsonBandReport` também confere contagem/n; banda recortada a [0, 1] — Claude (Opus 5.5)
 **Contexto:** o C9 da Task 04 lista sete ramos do `__post_init__`; nada diz do par
 (`count`, `n`) de um relatório montado à mão (ex.: `applicable = False` com n < 0,
 ou `count > n` num aplicável), nem se os limites de Wilson são recortados a [0, 1].
 **Razão:** o relatório aplicável passa `count`/`n` pelo `validate_real_count` (o
 validador único — nenhuma cópia) e o não aplicável exige `n == 0 and count == 0`
-(o mesmo contrato do `evaluate`), ramos `count-above-n`, `not-applicable-with-count`
-e `not-applicable-with-negative-n` do `wilson_incoherent`. A Eq. (4) de BCD já cai em
-[0, 1]; os limites saem sem recorte (um −1e-18 de arredondamento em c = 0 não muda o
-veredito, e recortar esconderia um erro de fórmula). Reversível.
+com os dois números finitos não-`bool` (o mesmo contrato do `evaluate`), ramos
+`count-above-n`, `not-applicable-with-count`, `not-applicable-with-negative-n` e
+`not-applicable-with-bool-{n,count}` do `wilson_incoherent`. Limites: a versão da
+Task 04 saía **sem recorte**; **corrigido** em `[6.3/task-04-fix]` após achado
+LOW/INFO do Checkpoint C (bloco 2) — c = 0 dava −5.55e-17 e c = n dava
+1.0000000000000002, e a banda persistida é uma proporção: `wilson_interval` devolve
+`(max(0, ·), min(1, ·))` e o relatório exige `0 ≤ lower ≤ upper ≤ 1`. No mesmo fix,
+κ = −Φ⁻¹((1 − nível)/2) (argumento exato; a forma 1 − (1 − nível)/2 virava 1.0 para
+nível = 0.9999999999999999 e o `NormalDist` erguia sem nome de campo) e um teste de
+monkeypatch prova o consumo do `validate_real_count`.
 
 ### 2026-09-28 — [decision] Task 05: `violation_rate_for` dono único da regra do `kind`; `count_transitions` e validações de detalhe do VO — Claude (Opus 5.5)
 **Contexto:** a regra "taxa nominal pelo `kind`" (`pair_miscoverage(τ_l)` / τ /

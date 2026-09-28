@@ -52,7 +52,9 @@ def wilson_interval(*, count: float, n: float, band_level: float) -> tuple[float
     """
     validate_real_count(count, n, count_field="count", n_field="n")
     validate_rate(band_level, field="band_level")
-    kappa = NormalDist().inv_cdf(1.0 - (1.0 - band_level) / 2.0)
+    # κ = -Φ⁻¹((1 - nível)/2): argumento exato em float (a forma 1 - (1 - nível)/2 vira
+    # 1.0 para nível ≈ 1 e o `NormalDist` ergue sem nome de campo).
+    kappa = -NormalDist().inv_cdf((1.0 - band_level) / 2.0)
     kappa_sq = kappa * kappa
     proportion = count / n
     center = (count + kappa_sq / 2.0) / (n + kappa_sq)
@@ -62,7 +64,9 @@ def wilson_interval(*, count: float, n: float, band_level: float) -> tuple[float
         / (n + kappa_sq)
         * math.sqrt(proportion * (1.0 - proportion) + kappa_sq / (4.0 * n))
     )
-    return center - half_width, center + half_width
+    # A Eq. (4) cai em [0, 1]; o recorte só remove o arredondamento das pontas (c = 0
+    # dava -5.55e-17, c = n dava 1.0000000000000002) — a banda persistida é uma proporção.
+    return max(0.0, center - half_width), min(1.0, center + half_width)
 
 
 @dataclass(frozen=True)
@@ -113,7 +117,8 @@ class WilsonBandReport:
             raise ValueError(f"applicable must be (n > 0), got {self.applicable!r} with n={self.n}")
         band = (self.estimate, self.lower, self.upper, self.contains_nominal)
         if not self.applicable:
-            if not (self.n == 0 and self.count == 0):
+            is_zero = all(is_finite_number(v) and v == 0 for v in (self.n, self.count))
+            if not is_zero:
                 raise ValueError(
                     f"a non-applicable WilsonBandReport needs n == 0 and count == 0, got "
                     f"n={self.n!r}, count={self.count!r}"
@@ -135,8 +140,10 @@ class WilsonBandReport:
         expected = self.count / self.n
         if self.estimate != expected:
             raise ValueError(f"estimate must be count / n = {expected}, got {self.estimate}")
-        if not self.lower <= self.upper:
-            raise ValueError(f"lower must be <= upper, got ({self.lower}, {self.upper})")
+        if not 0.0 <= self.lower <= self.upper <= 1.0:
+            raise ValueError(
+                f"the band must satisfy 0 <= lower <= upper <= 1, got ({self.lower}, {self.upper})"
+            )
         verdict = self.lower <= self.nominal <= self.upper
         if self.contains_nominal != verdict:
             raise ValueError(

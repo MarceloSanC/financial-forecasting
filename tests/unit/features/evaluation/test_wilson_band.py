@@ -18,6 +18,9 @@ import math
 
 import pytest
 
+from financial_forecasting.features.evaluation.domain.services import (
+    wilson_band as wilson_band_module,
+)
 from financial_forecasting.features.evaluation.domain.services.wilson_band import (
     WilsonBand,
     WilsonBandReport,
@@ -249,7 +252,9 @@ def test_wilson_incoherent_valid_report_round_trips() -> None:
         ({"contains_nominal": False}, "contains_nominal must be"),
         ({"applicable": False}, r"applicable must be \(n > 0\)"),
         ({"estimate": 0.03}, "estimate must be count / n"),
-        ({"lower": 0.04}, "lower must be <= upper"),
+        ({"lower": 0.04}, "must satisfy 0 <= lower <= upper <= 1"),
+        ({"lower": -0.01, "contains_nominal": True}, "must satisfy 0 <= lower <= upper <= 1"),
+        ({"upper": 1.01}, "must satisfy 0 <= lower <= upper <= 1"),
         ({"serial_dependence_warning": True}, "serial_dependence_warning must be"),
         ({"nominal": 0.0}, r"nominal must be in \(0, 1\)"),
         ({"nominal": 1.0}, r"nominal must be in \(0, 1\)"),
@@ -265,6 +270,8 @@ def test_wilson_incoherent_valid_report_round_trips() -> None:
         "not-applicable-with-n",
         "estimate-not-c-over-n",
         "lower-above-upper",
+        "lower-below-zero",
+        "upper-above-one",
         "warning-incoherent-with-horizon",
         "nominal-zero",
         "nominal-one",
@@ -297,6 +304,8 @@ def _not_applicable() -> WilsonBandReport:
         ({"applicable": True}, r"applicable must be \(n > 0\)"),
         ({"count": 1}, "needs n == 0 and count == 0"),
         ({"n": -1}, "needs n == 0 and count == 0"),
+        ({"n": False}, "needs n == 0 and count == 0"),
+        ({"count": False}, "needs n == 0 and count == 0"),
     ],
     ids=[
         "band-filled-when-not-applicable",
@@ -304,6 +313,8 @@ def _not_applicable() -> WilsonBandReport:
         "applicable-with-n-zero",
         "not-applicable-with-count",
         "not-applicable-with-negative-n",
+        "not-applicable-with-bool-n",
+        "not-applicable-with-bool-count",
     ],
 )
 def test_wilson_incoherent_not_applicable_report_raises(
@@ -313,3 +324,45 @@ def test_wilson_incoherent_not_applicable_report_raises(
     report = _not_applicable()
     with pytest.raises(ValueError, match=match):
         dataclasses.replace(report, **overrides)
+
+
+# --- Pontas da banda, κ exato e consumo do validador único ----------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("count", "bound", "expected"), [(0, 0, 0.0), (_N_500, 1, 1.0)], ids=["c-zero", "c-equals-n"]
+)
+def test_wilson_bcd_band_is_clamped_to_unit_interval(
+    count: int, bound: int, expected: float
+) -> None:
+    """c = 0 e c = n: a ponta sai exatamente 0.0 / 1.0 (sem -5.55e-17 nem 1.0000000000000002)
+    e a banda inteira fica em [0, 1] — a banda persistida é uma proporção."""
+    band = wilson_interval(count=count, n=_N_500, band_level=_BAND_95)
+
+    assert band[bound] == expected
+    assert 0.0 <= band[0] <= band[1] <= 1.0
+
+
+@pytest.mark.unit
+def test_wilson_bcd_band_level_next_to_one_has_finite_kappa() -> None:
+    """κ = -Φ⁻¹((1 - nível)/2): nível = 0.9999999999999999 não degenera em Φ⁻¹(1.0)."""
+    lower, upper = wilson_interval(count=10, n=_N_500, band_level=math.nextafter(1.0, 0.0))
+
+    assert 0.0 < lower < 10 / _N_500 < upper < 1.0
+
+
+@pytest.mark.unit
+def test_wilson_invalid_counts_go_through_the_single_validator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 6.3.0005 item 1: o kernel valida pelo `validate_real_count` (trocar o nome no
+    módulo muda o erro) — nenhuma cópia da regra de contagem real."""
+
+    def _reject(*_: object, **__: object) -> None:
+        raise ValueError("single validator called")
+
+    monkeypatch.setattr(wilson_band_module, "validate_real_count", _reject)
+
+    with pytest.raises(ValueError, match="single validator called"):
+        wilson_interval(count=10, n=_N_500, band_level=_BAND_95)
