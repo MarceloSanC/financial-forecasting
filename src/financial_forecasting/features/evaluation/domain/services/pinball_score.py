@@ -22,6 +22,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from financial_forecasting.features.evaluation.domain.services.scoring_input_validation import (
+    validate_finite,
     validate_level,
     validate_pinball_inputs,
 )
@@ -35,6 +36,7 @@ _MIN_LEVELS = 2
 def pinball_loss(*, realized: float, quantile: float, level: float) -> float:
     """rho_τ(y - q) de um ponto; `level ∉ (0, 1)` ergue `ValueError` (C7)."""
     validate_level(level)
+    validate_finite("pinball point", (realized, quantile))
     residual = realized - quantile
     return level * residual if residual >= 0.0 else (level - 1.0) * residual
 

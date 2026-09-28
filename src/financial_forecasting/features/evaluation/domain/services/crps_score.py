@@ -23,6 +23,7 @@ from financial_forecasting.features.evaluation.domain.services.pinball_score imp
 )
 from financial_forecasting.features.evaluation.domain.services.scoring_input_validation import (
     validate_crps_inputs,
+    validate_finite,
     validate_grid_row,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
@@ -35,6 +36,7 @@ CRPS_Q_LABEL: Final = "CRPS_Q = 2 × pinball média na grade (pesos iguais)"  # 
 def crps_quantile(*, realized: float, quantiles: Sequence[float], levels: Sequence[float]) -> float:
     """CRPS_Q de um ponto: (2/K)·Σ_k rho_{τ_k}; grade inválida ergue `ValueError` (C7)."""
     validate_grid_row(quantiles, levels)
+    validate_finite("realized", (realized,))
     total = math.fsum(
         pinball_loss(realized=realized, quantile=q, level=level)
         for q, level in zip(quantiles, levels, strict=True)

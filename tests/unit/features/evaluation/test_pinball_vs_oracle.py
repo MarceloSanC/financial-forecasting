@@ -232,3 +232,13 @@ def test_mean_pinball_rejects_empty_sequences() -> None:
 def test_mean_pinball_rejects_different_lengths() -> None:
     with pytest.raises(ValueError, match="same length"):
         mean_pinball(realized=[1.0, 2.0], quantiles=[1.0], level=0.5)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("realized", "quantile"), [(math.nan, 0.0), (0.0, math.inf)], ids=["nan-y", "inf-q"]
+)
+def test_pinball_loss_rejects_non_finite_point(realized: float, quantile: float) -> None:
+    """C7: o kernel por ponto também recusa nan/inf (não devolve nan em silêncio)."""
+    with pytest.raises(ValueError, match="must all be finite"):
+        pinball_loss(realized=realized, quantile=quantile, level=0.5)

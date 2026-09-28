@@ -1012,4 +1012,18 @@ a nomear 1 − 2·τ_l como a canônica (exata em float) e a grade do exemplo ex
 ({0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98}). Arquivo fora da lista de Tasks da Stage —
 correção de doc sem mudança de teoria, pedida pela sessão mestra.
 
+### 2026-09-28 — [decision] Task 04 (fix pós-Checkpoint C do bloco 4): finitude no validador único — Claude (Opus 5.5; decisão da sessão mestra)
+**Contexto:** com `nan`/`inf` na entrada as pernas do port divergiam: o sklearn ergue
+(`check_array`), enquanto o domínio (e, portanto, o fake) e a scoringrules devolviam
+`nan`/`inf` — e o docstring do validador afirmava que todas recusam "exatamente as
+mesmas entradas".
+**Razão:** decisão da sessão mestra — a finitude entra no validador único:
+`validate_finite(name, values)`, chamada pelas três validações de série (realizados,
+quantis de cada grade, extremos do intervalo) e pelos kernels por ponto
+(`pinball_loss`, `crps_quantile` via `validate_grid_row`, `interval_score` via
+`validate_interval_bounds`). Todo valor não-finito ou não-número ergue `ValueError`
+com a mesma mensagem nas três pernas, provado por casos C7 novos na suíte de contrato
+(`nan`, `inf`, `-inf` em realizado, quantil e cada extremo). Não muda a assinatura do
+port; estreita o domínio de entrada, coerente com o C2 da `CoverageSeries`.
+
 <!-- END: post-execution -->

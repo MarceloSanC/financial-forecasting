@@ -384,3 +384,27 @@ def test_mean_crps_quantile_rejects_empty_sequence() -> None:
 def test_mean_interval_score_rejects_empty_sequence() -> None:
     with pytest.raises(ValueError, match="empty sequence"):
         mean_interval_score(realized=[], lower=[], upper=[], miscoverage=0.1)
+
+
+@pytest.mark.unit
+def test_crps_quantile_rejects_non_finite_realized() -> None:
+    with pytest.raises(ValueError, match="realized values must all be finite"):
+        crps_quantile(realized=math.nan, quantiles=[0.0, 1.0], levels=[0.25, 0.75])
+
+
+@pytest.mark.unit
+def test_crps_quantile_rejects_non_finite_quantile() -> None:
+    with pytest.raises(ValueError, match="quantile values must all be finite"):
+        crps_quantile(realized=0.0, quantiles=[0.0, math.inf], levels=[0.25, 0.75])
+
+
+@pytest.mark.unit
+def test_interval_score_rejects_non_finite_realized() -> None:
+    with pytest.raises(ValueError, match="realized values must all be finite"):
+        interval_score(realized=math.inf, lower=-0.01, upper=0.01, miscoverage=0.1)
+
+
+@pytest.mark.unit
+def test_interval_score_rejects_non_finite_bound() -> None:
+    with pytest.raises(ValueError, match="interval bound values must all be finite"):
+        interval_score(realized=0.0, lower=math.nan, upper=0.01, miscoverage=0.1)

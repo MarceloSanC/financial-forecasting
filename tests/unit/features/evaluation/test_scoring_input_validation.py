@@ -13,6 +13,7 @@ import pytest
 
 from financial_forecasting.features.evaluation.domain.services.scoring_input_validation import (
     validate_crps_inputs,
+    validate_finite,
     validate_grid_row,
     validate_interval_bounds,
     validate_interval_inputs,
@@ -151,3 +152,62 @@ def test_validators_accept_well_formed_series() -> None:
     validate_pinball_inputs([1.0, 2.0], [0.5, 2.5], 0.5)
     validate_crps_inputs([1.0, 2.0], [[0.0, 1.0], [1.0, 3.0]], [0.25, 0.75])
     validate_interval_inputs([1.0, 2.0], [0.0, 1.0], [2.0, 3.0], 0.5)
+
+
+# --- Finitude (C7): as pernas não podem divergir em nan/inf ------------------------------
+
+_NON_FINITE = [math.nan, math.inf, -math.inf, None, "0.1"]
+_NON_FINITE_IDS = ["nan", "inf", "-inf", "none", "str"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("bad", _NON_FINITE, ids=_NON_FINITE_IDS)
+def test_validate_finite_rejects_non_finite(bad: object) -> None:
+    with pytest.raises(ValueError, match=r"realized values must all be finite.*at index 1"):
+        validate_finite("realized", [0.0, bad])  # type: ignore[list-item]
+
+
+@pytest.mark.unit
+def test_validate_finite_accepts_finite_values() -> None:
+    validate_finite("realized", [0.0, -1.5, 2, 1e300])
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("bad", [math.nan, math.inf], ids=["nan", "inf"])
+def test_validate_pinball_inputs_rejects_non_finite_realized(bad: float) -> None:
+    with pytest.raises(ValueError, match="realized values must all be finite"):
+        validate_pinball_inputs([1.0, bad], [1.0, 2.0], 0.5)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("bad", [math.nan, -math.inf], ids=["nan", "-inf"])
+def test_validate_pinball_inputs_rejects_non_finite_quantile(bad: float) -> None:
+    with pytest.raises(ValueError, match="quantile values must all be finite"):
+        validate_pinball_inputs([1.0, 2.0], [1.0, bad], 0.5)
+
+
+@pytest.mark.unit
+def test_validate_crps_inputs_rejects_non_finite_realized() -> None:
+    with pytest.raises(ValueError, match="realized values must all be finite"):
+        validate_crps_inputs([math.nan], [[0.0, 1.0]], [0.25, 0.75])
+
+
+@pytest.mark.unit
+def test_validate_crps_inputs_rejects_non_finite_grid_value() -> None:
+    with pytest.raises(ValueError, match="quantile values must all be finite"):
+        validate_crps_inputs([0.0], [[0.0, math.inf]], [0.25, 0.75])
+
+
+@pytest.mark.unit
+def test_validate_interval_inputs_rejects_non_finite_realized() -> None:
+    with pytest.raises(ValueError, match="realized values must all be finite"):
+        validate_interval_inputs([math.inf], [0.0], [1.0], 0.1)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("lower", "upper"), [(math.nan, 1.0), (0.0, math.nan), (-math.inf, 1.0), (0.0, math.inf)]
+)
+def test_validate_interval_bounds_rejects_non_finite(lower: float, upper: float) -> None:
+    with pytest.raises(ValueError, match="interval bound values must all be finite"):
+        validate_interval_bounds(lower, upper)

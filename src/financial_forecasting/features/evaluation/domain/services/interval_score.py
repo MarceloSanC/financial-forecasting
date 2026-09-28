@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from financial_forecasting.features.evaluation.domain.services.scoring_input_validation import (
+    validate_finite,
     validate_interval_bounds,
     validate_interval_inputs,
     validate_miscoverage,
@@ -35,6 +36,7 @@ def interval_score(*, realized: float, lower: float, upper: float, miscoverage: 
     """IS_alpha de um ponto (GR 2007 Eq. (43)); alpha ∉ (0, 1) ou `lower > upper` ergue (C7)."""
     validate_miscoverage(miscoverage)
     validate_interval_bounds(lower, upper)
+    validate_finite("realized", (realized,))
     return (
         (upper - lower)
         + _lower_penalty(realized, lower, miscoverage)

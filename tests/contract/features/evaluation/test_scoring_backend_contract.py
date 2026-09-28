@@ -10,7 +10,9 @@ implementação do port concorda, sob tolerância declarada, com:
 - **a implementação de registro do domínio** em grades aleatórias sem empate
   (`random.Random(_SEED)`, K = 7 simétrico, T = 200), nos três métodos;
 - **C7:** nível/miscobertura fora de (0, 1), tamanhos diferentes, grade desalinhada,
-  `lower > upper` e sequência vazia erguem `ValueError`.
+  `lower > upper`, sequência vazia e valor não-finito (`nan`/`inf` em realizado,
+  quantil ou extremo) erguem `ValueError` com a mensagem do validador único — sem
+  isso o sklearn ergueria e as outras pernas devolveriam `nan`/`inf`.
 
 Pernas: `fake` (delega às funções de série do domínio), `sklearn`
 (`SklearnScoring`, Task 10) e `scoringrules` (`ScoringrulesBackend`, Task 11) —
@@ -300,3 +302,63 @@ def test_mean_interval_score_rejects_crossed_bounds(backend: ScoringBackend) -> 
 def test_mean_interval_score_rejects_empty_sequence(backend: ScoringBackend) -> None:
     with pytest.raises(ValueError, match="empty sequence"):
         backend.mean_interval_score(realized=[], lower=[], upper=[], miscoverage=0.1)
+
+
+# --- C7 — valores não-finitos: mesma recusa, com a mensagem do validador ---------------
+
+_BAD = [math.nan, math.inf, -math.inf]
+_BAD_IDS = ["nan", "inf", "-inf"]
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("bad", _BAD, ids=_BAD_IDS)
+def test_mean_pinball_rejects_non_finite_realized(backend: ScoringBackend, bad: float) -> None:
+    with pytest.raises(ValueError, match="realized values must all be finite"):
+        backend.mean_pinball(realized=[0.0, bad], quantiles=[0.0, 0.0], level=0.5)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("bad", _BAD, ids=_BAD_IDS)
+def test_mean_pinball_rejects_non_finite_quantile(backend: ScoringBackend, bad: float) -> None:
+    with pytest.raises(ValueError, match="quantile values must all be finite"):
+        backend.mean_pinball(realized=[0.0, 0.0], quantiles=[0.0, bad], level=0.5)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("bad", _BAD, ids=_BAD_IDS)
+def test_mean_crps_quantile_rejects_non_finite_realized(
+    backend: ScoringBackend, bad: float
+) -> None:
+    with pytest.raises(ValueError, match="realized values must all be finite"):
+        backend.mean_crps_quantile(realized=[bad], quantile_grid=[(0.0, 1.0)], levels=(0.25, 0.75))
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("bad", _BAD, ids=_BAD_IDS)
+def test_mean_crps_quantile_rejects_non_finite_grid_value(
+    backend: ScoringBackend, bad: float
+) -> None:
+    with pytest.raises(ValueError, match="quantile values must all be finite"):
+        backend.mean_crps_quantile(realized=[0.0], quantile_grid=[(0.0, bad)], levels=(0.25, 0.75))
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("bad", _BAD, ids=_BAD_IDS)
+def test_mean_interval_score_rejects_non_finite_realized(
+    backend: ScoringBackend, bad: float
+) -> None:
+    with pytest.raises(ValueError, match="realized values must all be finite"):
+        backend.mean_interval_score(realized=[bad], lower=[-1.0], upper=[1.0], miscoverage=0.1)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize(
+    ("lower", "upper"),
+    [(math.nan, 1.0), (-1.0, math.nan), (-math.inf, 1.0), (-1.0, math.inf)],
+    ids=["nan-lower", "nan-upper", "inf-lower", "inf-upper"],
+)
+def test_mean_interval_score_rejects_non_finite_bound(
+    backend: ScoringBackend, lower: float, upper: float
+) -> None:
+    with pytest.raises(ValueError, match="interval bound values must all be finite"):
+        backend.mean_interval_score(realized=[0.0], lower=[lower], upper=[upper], miscoverage=0.1)
