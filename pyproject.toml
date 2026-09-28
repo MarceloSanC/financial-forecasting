@@ -99,6 +99,21 @@ dependencies = [
     # pela API ask-and-tell (o laço de trials vive no use case RunTftSweep, para
     # que o isolamento exploratório/confirmatório seja auditável na application).
     "optuna>=4.0,<5.0",
+    # Oráculos de scoring probabilístico — Stage 6.1 / ADR 6.1.0001
+    # Pinball, CRPS_Q e interval score são implementados UMA vez, stdlib-only, no
+    # domínio de `evaluation` (implementação de registro); `scikit-learn`
+    # (`mean_pinball_loss`) e `scoringrules` (`quantile_score`/`crps_quantile`/
+    # `interval_score`) são ORÁCULOS atrás do port-out `ScoringBackend` e vivem SÓ
+    # em features/evaluation/adapters/out/scoring/; o gate import-linter
+    # `evaluation-no-scoring-lib-leak` reprova vazamento para application/domain.
+    # Entram em `dependencies` (NÃO num extra) pelo racional do statsforecast/
+    # lightgbm acima: as pernas reais da suíte de contrato `[fake, sklearn,
+    # scoringrules]` rodam no CI, sem `skipif`. `scikit-learn` já vinha transitivo
+    # (1.9.0 no uv.lock); aqui vira declarado. Pins: `scikit-learn` por major (API
+    # estável de `mean_pinball_loss` na série 1.x) e `scoringrules` por minor (0.x, API
+    # ainda pode mudar entre minors); o uv.lock trava o patch dos dois.
+    "scikit-learn>=1.9,<2.0",
+    "scoringrules>=0.11,<0.12",
 ]
 
 [project.optional-dependencies]

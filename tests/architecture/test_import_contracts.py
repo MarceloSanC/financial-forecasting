@@ -68,6 +68,9 @@ _EXPECTED_CONTRACTS = (
     # optuna ao adapter .../out/optuna/ (concept 5.4 I13 / ADRs 5.4.0003 e 5.4.0005).
     "modeling-no-torch-leak",
     "modeling-no-optuna-leak",
+    # Stage 6.1 (A9/I11): sklearn/scoringrules/numpy/scipy confinados aos adapters
+    # features/evaluation/adapters/out/scoring/ (ADR 6.1.0001 item 6).
+    "evaluation-no-scoring-lib-leak",
     # Issue #60: independência entre bounded contexts. `hexagonal-layers` é
     # `type=layers` POR CONTAINER (só ordena camadas DENTRO de cada BC) e o
     # `check_layout.py` só barra adapter<->adapter — nenhum gate cobria import
@@ -457,6 +460,21 @@ _REAL_VIOLATION_CASES = (
         },
         id="bc-independence:feature-engineering-imports-new-market-data-edge",
     ),
+    # Stage 6.1 (A9): `evaluation` entrou no perímetro com UMA aresta declarada
+    # (`coverage_series -> quantile_forecast`). De um módulo novo, uma aresta não
+    # declarada reprova — `PredictionRow` justamente por NÃO estar nas exceções.
+    # Sem o slice em `modules`, este caso ficaria verde.
+    pytest.param(
+        "bc-independence",
+        {
+            "features/evaluation/application/_arch_audit_taint_bc.py": (
+                "from financial_forecasting.features.analytics_store.domain"
+                ".value_objects.prediction_row import PredictionRow\n"
+                "\n_use = PredictionRow\n"
+            )
+        },
+        id="bc-independence:evaluation-imports-new-analytics-store-edge",
+    ),
     # ---------------------------------------------------------------------
     # Issue #60 (auditoria) — UM CASO POR MÓDULO PROIBIDO.
     # O `## Escopo` item 3 pedia "um por módulo proibido onde o contrato lista
@@ -572,6 +590,106 @@ _REAL_VIOLATION_CASES = (
             )
         },
         id="sentiment-no-ml-leak:feature-engineering-application-imports-torch",
+    ),
+    # ---------------------------------------------------------------------
+    # Stage 6.1 (A9) — matrícula do slice `evaluation` em CADA contrato em que
+    # entra. `lint-imports` verde num slice vazio é vácuo: sem estes casos, um
+    # `source_modules` esquecido passaria despercebido (contrato míope).
+    # ---------------------------------------------------------------------
+    # `evaluation-no-scoring-lib-leak`: um caso por módulo proibido na
+    # `application` — no `domain` o caso de `numpy` não discriminaria este
+    # contrato (o `domain-purity` já o reprova) — mais um `sklearn` no `domain`.
+    pytest.param(
+        "evaluation-no-scoring-lib-leak",
+        {
+            "features/evaluation/application/_arch_audit_taint_sklearn.py": (
+                "import sklearn  # violação temporária\n"
+            )
+        },
+        id="evaluation-no-scoring-lib-leak:evaluation-application-imports-sklearn",
+    ),
+    # `scoringrules` pode ainda não estar instalado (entra na Task 08 da 6.1): o
+    # grimp resolve o módulo externo pelo AST, como o caso de `numba` acima.
+    pytest.param(
+        "evaluation-no-scoring-lib-leak",
+        {
+            "features/evaluation/application/_arch_audit_taint_scoringrules.py": (
+                "import scoringrules  # violação temporária\n"
+            )
+        },
+        id="evaluation-no-scoring-lib-leak:evaluation-application-imports-scoringrules",
+    ),
+    pytest.param(
+        "evaluation-no-scoring-lib-leak",
+        {
+            "features/evaluation/application/_arch_audit_taint_numpy.py": (
+                "import numpy  # violação temporária\n"
+            )
+        },
+        id="evaluation-no-scoring-lib-leak:evaluation-application-imports-numpy",
+    ),
+    pytest.param(
+        "evaluation-no-scoring-lib-leak",
+        {
+            "features/evaluation/application/_arch_audit_taint_scipy.py": (
+                "import scipy  # violação temporária\n"
+            )
+        },
+        id="evaluation-no-scoring-lib-leak:evaluation-application-imports-scipy",
+    ),
+    # Matrícula de `evaluation.domain` no contrato: `domain-purity` não proíbe
+    # sklearn/scoringrules/scipy e o `check_layout.py` também não — sem este caso,
+    # tirar o domain de `source_modules` passaria verde (achado do Checkpoint C).
+    pytest.param(
+        "evaluation-no-scoring-lib-leak",
+        {
+            "features/evaluation/domain/_arch_audit_taint_sklearn.py": (
+                "import sklearn  # violação temporária\n"
+            )
+        },
+        id="evaluation-no-scoring-lib-leak:evaluation-domain-imports-sklearn",
+    ),
+    pytest.param(
+        "domain-purity",
+        {
+            "features/evaluation/domain/_arch_audit_taint.py": (
+                "import pandas  # violação temporária\n"
+            )
+        },
+        id="domain-purity:evaluation-domain-imports-pandas",
+    ),
+    # A `application` não é coberta por `domain-purity`: é o que discrimina a
+    # matrícula de `evaluation.application` em `store-no-storage-leak`.
+    pytest.param(
+        "store-no-storage-leak",
+        {
+            "features/evaluation/application/_arch_audit_taint_pandas.py": (
+                "import pandas  # violação temporária\n"
+            )
+        },
+        id="store-no-storage-leak:evaluation-application-imports-pandas",
+    ),
+    # Import de RUNTIME domain -> application (fora de TYPE_CHECKING, que o grimp
+    # ignora) — inverte a direção dentro do container `evaluation`.
+    pytest.param(
+        "hexagonal-layers",
+        {
+            "features/evaluation/domain/_arch_audit_taint_layers.py": (
+                "import financial_forecasting.features.evaluation.application\n"
+                "\n_use = financial_forecasting.features.evaluation.application\n"
+            )
+        },
+        id="hexagonal-layers:evaluation-domain-imports-application",
+    ),
+    pytest.param(
+        "inward-only",
+        {
+            "features/evaluation/application/_arch_audit_taint_inward.py": (
+                "from financial_forecasting.shared.infrastructure.config.settings import Settings\n"
+                "\n_use = Settings\n"
+            )
+        },
+        id="inward-only:evaluation-application-imports-infrastructure",
     ),
 )
 

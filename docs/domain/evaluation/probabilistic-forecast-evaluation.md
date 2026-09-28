@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 6 (
 keywords: [domain, evaluation, pinball, crps, interval-score, winkler, picp, mpiw, reliability, sharpness, degeneracy-gate, diebold-mariano, hln, holm, mcs, christoffersen, kupiec, var, preregistration, scorecard, per-horizon]
 status: accepted
 created_at: 2026-09-12
-updated_at: 2026-09-26
+updated_at: 2026-09-28
 bounded_context: evaluation
 subdomain: probabilistic-forecast-evaluation
 references:
@@ -436,7 +436,11 @@ Pearce, Brintrup, Zaki & Neely (2018, ICML, §3, Eqs. (4)–(7)):
 Para o par (τ_l, τ_u) e F contínua, P(q_{τ_l} < Y ≤ q_{τ_u}) = τ_u − τ_l
 (elementar; Brehmer & Gneiting §3.2 Eq. (4) definem o ETI via quantis e notam
 que só para distribuições **discretas** a cobertura pode diferir). Logo o
-**nominal** do PICP é τ_u − τ_l (0.96 / 0.80 / 0.50 na grade de 7). Com empates
+**nominal** do PICP é τ_u − τ_l, que no par simétrico (τ_l, 1 − τ_l) é igual a
+**1 − 2·τ_l** — a forma canônica, adotada no código por ser exata em float
+(no par (0.05, 0.95), `1 − 2·0.05` reproduz o literal 0.9, enquanto `0.95 − 0.05` dá
+0.8999999999999999): 0.96 / 0.80 / 0.50 na grade de 7 do candidato
+{0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98}. Com empates
 de medida zero, **PICP = ĉ(τ_u) − ĉ(τ_l)** (§2.4): cobertura marginal correta
 nas duas caudas ⇒ PICP nominal, **mas não o inverso** — o PICP é invariante a
 um deslocamento comum da miscobertura das duas caudas (ĉ(τ_l) = τ_l + δ e
