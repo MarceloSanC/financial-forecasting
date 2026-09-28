@@ -1002,4 +1002,14 @@ o technical (Task 09, estrutura de pastas) fixam, e o `check_port_coverage.py` a
 os prefixos `Fake`/`InMemory`; o fake não guarda estado (delega ao domínio), então
 "in-memory" descreveria mal. Sancionado pelo contrato — não é desvio.
 
+### 2026-09-28 — [deviation] Doc de domínio de evaluation §4.2: nominal do PICP na forma canônica 1 − 2·τ_l — Claude (Opus 5.5)
+**Contexto:** o doc `probabilistic-forecast-evaluation.md` §4.2 dizia que o nominal do
+PICP "é τ_u − τ_l (0.96 / 0.80 / 0.50 na grade de 7)", enquanto o concept (I5/I7) e o
+código usam 1 − 2·τ_l; a "grade de 7" do exemplo é a do candidato, não a sintética dos
+testes. Apontado no Checkpoint C do bloco 3.
+**Razão:** as duas formas são iguais em aritmética exata no par simétrico; o doc passa
+a nomear 1 − 2·τ_l como a canônica (exata em float) e a grade do exemplo explicitamente
+({0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98}). Arquivo fora da lista de Tasks da Stage —
+correção de doc sem mudança de teoria, pedida pela sessão mestra.
+
 <!-- END: post-execution -->
