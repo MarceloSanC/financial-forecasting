@@ -944,6 +944,11 @@ sobre relatórios produzidos pelo gate.
 VO, não no serviço). `symmetric_pair_indices` devolve `(k, K-1-k)` alinhado 1:1 com
 `symmetric_pairs` (que passa a derivar dele); IS e gate o consomem e a Task 07 também
 consumirá. Propriedade nova; nada do contrato do concept §4 muda.
+No fix do Checkpoint C do bloco 3, a mesma centralização foi aplicada à fórmula do
+par: `pair_miscoverage(τ_l) = 2·τ_l` e `pair_nominal(τ_l) = 1 - 2·τ_l`, funções de
+módulo ao lado da `CoverageSeries`, são a única escrita da regra (I5/I7) — consumidas
+por `IntervalScore.score`, `PairIntervalScore.__post_init__`, `PairCoverage` e
+`CoverageMetrics` (antes eram 4 cópias).
 
 ### 2026-09-28 — [deviation] Task 05: `IntervalScore.score` decompõe a média em vez de delegar a `mean_interval_score` — Claude (Opus 5.5)
 **Contexto:** o ADR 6.1.0001 itens 1/4 pede que os serviços agreguem pelas **mesmas**

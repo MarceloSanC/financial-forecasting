@@ -184,6 +184,20 @@ class CoverageSeries:
                 raise ValueError(f"point {index}: realized value must be finite, got {realized}")
 
 
+def pair_miscoverage(lower_level: float) -> float:
+    """Miscobertura do par simétrico (τ_l, 1 - τ_l): alpha = 2·τ_l — fórmula única (I5).
+
+    A forma `1 - (τ_u - τ_l)` é igual em aritmética exata mas não em float64 (daria
+    0.10000000000000009 em (0.05, 0.95)); todo serviço usa esta função.
+    """
+    return 2.0 * lower_level
+
+
+def pair_nominal(lower_level: float) -> float:
+    """Cobertura nominal do par simétrico: 1 - 2·τ_l = 1 - `pair_miscoverage` (I7)."""
+    return 1.0 - pair_miscoverage(lower_level)
+
+
 def _is_finite_number(value: object) -> bool:
     """`True` só para `int`/`float` finitos (exclui `None`, `nan`, `inf`, `bool`)."""
     if isinstance(value, bool) or not isinstance(value, int | float):

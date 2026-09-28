@@ -26,6 +26,8 @@ from financial_forecasting.features.evaluation.domain.services.scoring_input_val
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
+    pair_miscoverage,
+    pair_nominal,
 )
 
 
@@ -79,14 +81,16 @@ class PairIntervalScore:
 
     def __post_init__(self) -> None:
         """I5/I7: alpha e nominal saem da fórmula única, nunca de `1 - (τ_u - τ_l)`."""
-        if self.miscoverage != 2.0 * self.lower_level:
+        expected_miscoverage = pair_miscoverage(self.lower_level)
+        if self.miscoverage != expected_miscoverage:
             raise ValueError(
-                f"miscoverage must be 2 * lower_level = {2.0 * self.lower_level}, "
+                f"miscoverage must be 2 * lower_level = {expected_miscoverage}, "
                 f"got {self.miscoverage}"
             )
-        if self.nominal != 1.0 - self.miscoverage:
+        expected_nominal = pair_nominal(self.lower_level)
+        if self.nominal != expected_nominal:
             raise ValueError(
-                f"nominal must be 1 - miscoverage = {1.0 - self.miscoverage}, got {self.nominal}"
+                f"nominal must be 1 - miscoverage = {expected_nominal}, got {self.nominal}"
             )
 
     @property
@@ -122,7 +126,7 @@ class IntervalScore:
         per_pair: list[PairIntervalScore] = []
         pairs = zip(series.symmetric_pairs, series.symmetric_pair_indices, strict=True)
         for (lower_level, upper_level), (k_low, k_high) in pairs:
-            miscoverage = 2.0 * lower_level
+            miscoverage = pair_miscoverage(lower_level)
             lower = [series.scored_values(i)[k_low] for i in range(size)]
             upper = [series.scored_values(i)[k_high] for i in range(size)]
             # Mesmo validador único de `mean_interval_score` (C7; ADR 6.1.0001 item 1).
@@ -134,7 +138,7 @@ class IntervalScore:
                     lower_level=lower_level,
                     upper_level=upper_level,
                     miscoverage=miscoverage,
-                    nominal=1.0 - miscoverage,
+                    nominal=pair_nominal(lower_level),
                     mean_width=math.fsum(high - low for low, high in zip(lower, upper, strict=True))
                     / size,
                     mean_lower_penalty=math.fsum(

@@ -26,6 +26,7 @@ from financial_forecasting.features.evaluation.domain.services.degeneracy_gate i
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
+    pair_nominal,
 )
 
 _MEDIAN_LEVEL = 0.5
@@ -51,10 +52,10 @@ class PairCoverage:
 
     def __post_init__(self) -> None:
         """I7: o nominal sai da fórmula única 1 - 2·τ_l."""
-        if self.nominal != 1.0 - 2.0 * self.lower_level:
+        expected = pair_nominal(self.lower_level)
+        if self.nominal != expected:
             raise ValueError(
-                f"nominal must be 1 - 2 * lower_level = {1.0 - 2.0 * self.lower_level}, "
-                f"got {self.nominal}"
+                f"nominal must be 1 - 2 * lower_level = {expected}, got {self.nominal}"
             )
 
 
@@ -223,7 +224,7 @@ def _pair_coverage(
     return PairCoverage(
         lower_level=lower_level,
         upper_level=upper_level,
-        nominal=1.0 - 2.0 * lower_level,
+        nominal=pair_nominal(lower_level),
         picp=covered / len(kept),
         mpiw=math.fsum(widths) / len(kept),
     )

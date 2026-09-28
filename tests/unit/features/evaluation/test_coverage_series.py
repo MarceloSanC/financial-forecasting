@@ -23,6 +23,8 @@ from financial_forecasting.features.analytics_store.domain.value_objects.quantil
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
+    pair_miscoverage,
+    pair_nominal,
 )
 
 SeriesFactory = Callable[..., CoverageSeries]
@@ -297,3 +299,27 @@ def test_non_finite_realized_raises(make_series: SeriesFactory, bad_value: float
     """C2: `realized` não-finito ergue; a mensagem nomeia o índice do ponto."""
     with pytest.raises(ValueError, match="point 1: realized value must be finite"):
         make_series([_GRID, _GRID], [0.0, bad_value])
+
+
+# --- Fórmula única do par simétrico (I5/I7) ----------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("lower_level", "miscoverage", "nominal"),
+    [(0.02, 0.04, 0.96), (0.05, 0.1, 0.9), (0.1, 0.2, 0.8), (0.25, 0.5, 0.5)],
+)
+def test_pair_miscoverage_and_nominal_are_exact(
+    lower_level: float, miscoverage: float, nominal: float
+) -> None:
+    """alpha = 2·τ_l e nominal = 1 - 2·τ_l por igualdade EXATA de float."""
+    assert pair_miscoverage(lower_level) == miscoverage
+    assert pair_nominal(lower_level) == nominal
+
+
+@pytest.mark.unit
+def test_pair_miscoverage_is_not_the_width_form() -> None:
+    """A forma `1 - (τ_u - τ_l)` diverge em float64; a função única não."""
+    width_form = 1 - (0.95 - 0.05)
+
+    assert width_form != pair_miscoverage(0.05)
