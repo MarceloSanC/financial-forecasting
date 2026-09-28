@@ -107,6 +107,8 @@ class DegeneracyGate:
 
 
 def _validate_tolerance(tolerance: float) -> None:
+    # Cópia privada intencional do predicado de número finito do `QuantileForecast` (4.3):
+    # o helper de lá é privado e importá-lo abriria aresta nova no bc-independence.
     if isinstance(tolerance, bool) or not isinstance(tolerance, int | float):
         raise ValueError(f"tolerance must be a finite number >= 0, got {tolerance!r}")
     if not math.isfinite(tolerance) or tolerance < 0.0:

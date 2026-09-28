@@ -36,6 +36,9 @@ _TOLERANCE = 1e-9
 _HORIZON = 2
 _HALF = 0.5
 _THIRD = 1 / 3
+# Par interno (0.25, 0.75) com gap diádico 0.125 (0.5 - 0.375); amplitude da linha 1.0.
+_DYADIC_INNER_GAP = (0.0, 0.25, 0.375, 0.4375, 0.5, 0.75, 1.0)
+_INNER_GAP = 0.125
 
 
 def _report(**overrides: object) -> DegeneracyReport:
@@ -96,6 +99,36 @@ def test_inner_pair_collapse_is_diagnostic_only(make_series: SeriesFactory) -> N
         (0.1, 0.9, 0.0),
         (0.25, 0.75, _HALF),
     )
+
+
+@pytest.mark.unit
+def test_pair_collapse_counts_zero_gap_with_zero_tolerance(make_series: SeriesFactory) -> None:
+    """A6: a regra por par também é `≤` — gap 0 com `tolerance = 0.0` colapsa (taxa 1)."""
+    series = make_series([_INNER_COLLAPSE], [0.0])
+
+    report = DegeneracyGate.evaluate(series, tolerance=0.0)
+
+    assert report.degenerate == (False,)
+    assert report.pair_collapse_rates[-1] == (0.25, 0.75, 1.0)
+    assert report.pair_collapse_rates[0] == (0.05, 0.95, 0.0)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("tolerance", "expected_rate"),
+    [(_INNER_GAP, 1.0), (_INNER_GAP / 2, 0.0)],
+    ids=["gap-equal-tolerance", "gap-above-tolerance"],
+)
+def test_pair_collapse_dyadic_boundary(
+    make_series: SeriesFactory, tolerance: float, expected_rate: float
+) -> None:
+    """A6: gap diádico 0.125 no par interno — colapsa com tolerância 0.125, não com 0.0625."""
+    series = make_series([_DYADIC_INNER_GAP], [0.3])
+
+    report = DegeneracyGate.evaluate(series, tolerance=tolerance)
+
+    assert report.degenerate == (False,)
+    assert report.pair_collapse_rates[-1] == (0.25, 0.75, expected_rate)
 
 
 @pytest.mark.unit

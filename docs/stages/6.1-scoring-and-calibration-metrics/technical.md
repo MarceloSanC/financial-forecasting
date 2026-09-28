@@ -914,7 +914,12 @@ com `n_points = 0` a checagem de `rate` dividiria por zero (`ZeroDivisionError`,
 pré-condição de `PinballReport`/`IntervalScoreReport`; uma série tem T ≥ 1), com teste
 próprio. No C3, `None` e `bool` também erguem `ValueError` com a mesma mensagem (não
 são número finito; `bool` é subclasse de `int`, mesma postura do `_is_finite_number`
-do 4.3). Reversível, sem efeito sobre relatórios produzidos pelo gate.
+do 4.3). O predicado de "número finito" (`_validate_tolerance` aqui e
+`_is_finite_number` da `CoverageSeries`) é **cópia privada intencional** do helper do
+`QuantileForecast`: ele é privado do `analytics_store` e importá-lo criaria uma aresta
+cross-slice nova no `bc-independence` só por um predicado de 3 linhas — a única aresta
+declarada é a de dados, o próprio VO (ADR 0.0.0053 item 3). Reversível, sem efeito
+sobre relatórios produzidos pelo gate.
 
 ### 2026-09-28 — [decision] Task 02 (fix pós-Checkpoint C do bloco 2): `CoverageSeries.symmetric_pair_indices` — Claude (Opus 5.5)
 **Contexto:** a regra par → colunas do vetor pontuado (`levels.index(τ_l)`,
