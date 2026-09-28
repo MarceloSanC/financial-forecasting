@@ -458,6 +458,12 @@ não é "runbook colapsado" — é "runbook sem revisão". Regras:
   código". **O filtro de severidade continua valendo:** a skill amplia a
   noção de violação de **contrato/comportamento**, não licencia nitpick de
   idioma/estilo.
+  **Pergunta fixa, além das das skills:** *"alguma regra deste diff já
+  existe em outro lugar, ou mora numa camada/BC que não é o dono dela?"*
+  (duplicada entre fake e adapter, decisão de negócio em adapter, BC
+  lendo interno de outro). O import-linter não pega — o import é legal.
+  Pegar aqui custa um `-fix`; na auditoria final custa um refactor
+  (stage-audit Fase D-bis #10).
 
 # AUDITORIA DE TESTES (GATE EXPLÍCITO — NÃO PULAR)
 
