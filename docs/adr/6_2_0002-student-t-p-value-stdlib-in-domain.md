@@ -14,6 +14,8 @@ bounded_context: evaluation
 
 # ADR 6.2.0002 — Student-t p-value in the domain (stdlib)
 
+> ⚠️ **Errata (2026-09-28):** two implementation statements below no longer hold. (1) Decision item 3 says the prefactor is computed "with `math.lgamma`": log B(a, b) follows R's `src/nmath/lbeta.c` instead — for the (½, df/2) argument pair it uses `lgamma(½)` plus a Stirling correction on the large argument, because the plain `lgamma(a) + lgamma(b) − lgamma(a + b)` loses ~1e−12 to cancellation at df ~ 2000 (absolute error 3.6e−13 against scipy, above 1/10 of the declared p-value tolerance); log z and log(1 − z) use `log1p` on the side ≤ ½. (2) "Neutral / trade-offs accepted" says the extreme tails where R switches to its asymptotic formula (x² > 1e100·n) "are not specially handled": the implementation reproduces that `pt.c` branch (A&S 26.5.4 in logs), since without it x² overflows float64 for |x| > ~1e154 and the CDF would return 0. Branches, verification plan and the decision itself are unchanged; measured accuracy: df ≤ 1e4 → abs ≤ 1.5e−14, tail rel ≤ 6.4e−13 — see technical 6.2 §7, Task 02 A14 entry and the Task 02 fix commits.
+
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
 ## Status
