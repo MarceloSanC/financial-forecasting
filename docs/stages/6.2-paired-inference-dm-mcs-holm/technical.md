@@ -1476,4 +1476,18 @@ seed, checado depois da grade; casos `realized-between-seeds` e `realized-betwee
 em `test_factory_mismatch_raises`. Regra **aditiva** (só recusa entrada que antes passava
 em silêncio); não muda assinatura, port nem formato persistido.
 
+### 2026-09-28 — [finding] Task 03: `CoverageSeries` adota o helper `_timestamps` depois do merge de 6.2 e 6.3 — Claude (Opus 5.5)
+**Contexto:** o Checkpoint C do bloco 1 apontou que `PairedLossSeries._check_timestamps`
+era cópia byte a byte da regra da `CoverageSeries` (dono duplicado de uma regra de
+domínio). O fix `[6.2/task-03-fix]` criou `domain/value_objects/_timestamps.py`
+(`check_strictly_increasing`, privado do slice) e a `PairedLossSeries` passou a usá-lo;
+a `CoverageSeries` **não** foi tocada, porque a Stage 6.3 (em paralelo) edita
+`coverage_series.py` e a troca geraria conflito de merge. Pelo mesmo motivo a docstring
+de `_finite_number.py` (que a 6.3 também editou) não ganhou a contagem de consumidores da
+6.2 (`PairedLossSeries`).
+**Razão:** escalado para a próxima Stage que tocar a série depois de 6.2 e 6.3 estarem em
+`develop` — **candidata: 6.4** —: `CoverageSeries._check_timestamps` delega a
+`check_strictly_increasing` (mesma mensagem, testes existentes seguem valendo) e a
+docstring de `_finite_number.py` passa a listar a `PairedLossSeries` entre os consumidores.
+
 <!-- END: post-execution -->

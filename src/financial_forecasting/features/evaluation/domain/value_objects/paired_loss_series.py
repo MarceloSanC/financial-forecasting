@@ -12,7 +12,7 @@ com as invariantes verificadas **uma vez**, na construção (ADR `0_0_0020`):
   aceita h = T (a variância retangular e o fator HLN seriam identicamente 0 e o
   fallback ficaria decidido por ruído de arredondamento);
 - `target_timestamps` estritamente crescentes (uma observação por ponto; comparação de
-  string ISO, como a `CoverageSeries`);
+  string ISO — regra única em `_timestamps.check_strictly_increasing`);
 - toda coluna com T perdas finitas e ≥ 0.
 
 O VO **valida, nunca monta** (ADR `6_2_0001` item 4): nenhuma interseção, reindexação
@@ -26,10 +26,12 @@ o construtor aceita quaisquer perdas ≥ 0 (testes, perfis descritivos).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from itertools import pairwise
 
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
+)
+from financial_forecasting.features.evaluation.domain.value_objects._timestamps import (
+    check_strictly_increasing,
 )
 
 _MIN_MODELS = 2
@@ -126,12 +128,7 @@ class PairedLossSeries:
             )
 
     def _check_timestamps(self) -> None:
-        for index, (previous, current) in enumerate(pairwise(self.target_timestamps), 1):
-            if current <= previous:
-                raise ValueError(
-                    "target_timestamps must be strictly increasing (unique and ordered): "
-                    f"point {index} has {current!r} after {previous!r}"
-                )
+        check_strictly_increasing(self.target_timestamps)
 
     def _check_losses(self) -> None:
         if len(self.losses) != len(self.models):
