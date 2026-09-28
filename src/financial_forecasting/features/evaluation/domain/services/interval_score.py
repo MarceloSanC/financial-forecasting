@@ -1,0 +1,144 @@
+"""Serviço de domínio `IntervalScore` — IS_alpha por par simétrico da grade (doc §3.3).
+
+Implementação de **registro** (ADR `6_1_0001`), stdlib-only. Para o intervalo
+central [l, u] de miscobertura alpha (Gneiting & Raftery 2007, Eq. (43)):
+
+    IS_alpha(l, u; y) = (u - l) + (2/alpha)(l - y)·1{y < l} + (2/alpha)(y - u)·1{y > u}
+
+Convenções (concept 6.1 I5/I7): os pares são (τ_k, 1 - τ_k) com τ_k < 0.5, lidos de
+`series.symmetric_pairs`; alpha = 2·τ_l e nominal = 1 - 2·τ_l — fórmula única (a forma
+`1 - (τ_u - τ_l)` daria 0.10000000000000009 em (0.05, 0.95)). Não escalado e sem WIS
+agregado. As médias são sobre **todas** as linhas — proper score, a degeneração não
+exclui nada (ADR 0.0.0011); por isso `mean_width` difere do MPIW da cobertura quando
+há linha degenerada (D8).
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+from financial_forecasting.features.evaluation.domain.services.scoring_input_validation import (
+    validate_interval_bounds,
+    validate_interval_inputs,
+    validate_miscoverage,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
+    CoverageSeries,
+)
+
+
+def interval_score(*, realized: float, lower: float, upper: float, miscoverage: float) -> float:
+    """IS_alpha de um ponto (GR 2007 Eq. (43)); alpha ∉ (0, 1) ou `lower > upper` ergue (C7)."""
+    validate_miscoverage(miscoverage)
+    validate_interval_bounds(lower, upper)
+    return (
+        (upper - lower)
+        + _lower_penalty(realized, lower, miscoverage)
+        + _upper_penalty(realized, upper, miscoverage)
+    )
+
+
+def mean_interval_score(
+    *,
+    realized: Sequence[float],
+    lower: Sequence[float],
+    upper: Sequence[float],
+    miscoverage: float,
+) -> float:
+    """Média do IS_alpha sobre a série; entrada inválida ergue `ValueError` (C7)."""
+    validate_interval_inputs(realized, lower, upper, miscoverage)
+    scores = (
+        interval_score(realized=y, lower=low, upper=high, miscoverage=miscoverage)
+        for y, low, high in zip(realized, lower, upper, strict=True)
+    )
+    return math.fsum(scores) / len(realized)
+
+
+@dataclass(frozen=True)
+class PairIntervalScore:
+    """IS_alpha de um par simétrico, decomposto nos três termos médios (todas as linhas).
+
+    Campos:
+        lower_level / upper_level: o par (τ_l, τ_u) da grade.
+        miscoverage: alpha = 2·τ_l.
+        nominal: 1 - 2·τ_l.
+        mean_width: média de u - l.
+        mean_lower_penalty: média de (2/alpha)(l - y)·1{y < l}.
+        mean_upper_penalty: média de (2/alpha)(y - u)·1{y > u}.
+    """
+
+    lower_level: float
+    upper_level: float
+    miscoverage: float
+    nominal: float
+    mean_width: float
+    mean_lower_penalty: float
+    mean_upper_penalty: float
+
+    @property
+    def mean_score(self) -> float:
+        """IS_alpha médio, **definido** como a soma dos três termos médios (I5)."""
+        return self.mean_width + self.mean_lower_penalty + self.mean_upper_penalty
+
+
+@dataclass(frozen=True)
+class IntervalScoreReport:
+    """IS_alpha de uma série x horizonte, um `PairIntervalScore` por par simétrico."""
+
+    horizon: int
+    n_points: int
+    per_pair: tuple[PairIntervalScore, ...]
+
+    def __post_init__(self) -> None:
+        """C4: relatório mal-formado ergue."""
+        if not self.per_pair:
+            raise ValueError("an IntervalScoreReport needs at least one symmetric pair")
+        if self.n_points < 1:
+            raise ValueError(f"an IntervalScoreReport needs n_points >= 1, got {self.n_points}")
+
+
+class IntervalScore:
+    """IS_alpha sobre uma `CoverageSeries`, por par simétrico, lendo o pós-guardrail (I3)."""
+
+    @staticmethod
+    def score(series: CoverageSeries) -> IntervalScoreReport:
+        """Um `PairIntervalScore` por `series.symmetric_pairs`, médias sobre as T linhas."""
+        size = series.n_points
+        per_pair: list[PairIntervalScore] = []
+        for lower_level, upper_level in series.symmetric_pairs:
+            k_low = series.levels.index(lower_level)
+            k_high = series.levels.index(upper_level)
+            miscoverage = 2.0 * lower_level
+            widths: list[float] = []
+            lower_penalties: list[float] = []
+            upper_penalties: list[float] = []
+            for index, y in enumerate(series.realized):
+                values = series.scored_values(index)
+                low, high = values[k_low], values[k_high]
+                widths.append(high - low)
+                lower_penalties.append(_lower_penalty(y, low, miscoverage))
+                upper_penalties.append(_upper_penalty(y, high, miscoverage))
+            per_pair.append(
+                PairIntervalScore(
+                    lower_level=lower_level,
+                    upper_level=upper_level,
+                    miscoverage=miscoverage,
+                    nominal=1.0 - 2.0 * lower_level,
+                    mean_width=math.fsum(widths) / size,
+                    mean_lower_penalty=math.fsum(lower_penalties) / size,
+                    mean_upper_penalty=math.fsum(upper_penalties) / size,
+                )
+            )
+        return IntervalScoreReport(
+            horizon=series.horizon, n_points=series.n_points, per_pair=tuple(per_pair)
+        )
+
+
+def _lower_penalty(realized: float, lower: float, miscoverage: float) -> float:
+    return (2.0 / miscoverage) * (lower - realized) if realized < lower else 0.0
+
+
+def _upper_penalty(realized: float, upper: float, miscoverage: float) -> float:
+    return (2.0 / miscoverage) * (realized - upper) if realized > upper else 0.0
