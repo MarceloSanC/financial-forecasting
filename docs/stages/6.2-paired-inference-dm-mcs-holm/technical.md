@@ -1562,4 +1562,36 @@ quase constante (amplitude no ruído de float) a estatística diverge entre impl
 por arredondamento da soma, enquanto o p-valor sai idêntico (satura em 0/1). A Task 08 não
 gera fixture nesse regime; se um dia gerar, a comparação é só do p-valor.
 
+### 2026-09-28 — [decision] Task 06 — medição A14 (tamanho mínimo de optimal_block_length) — Claude (Opus 5.5)
+**Contexto:** re-medição A14.3 com o `arch` 8.0.0 instalado pela Task 01 (numpy 2.5.0),
+sondagem fora do repo com avisos numéricos capturados (`np.errstate(all="warn")` +
+`warnings.catch_warnings`), `arch.bootstrap.optimal_block_length(x)["stationary"]`.
+**Razão:** confirma o §1 item 4 e fixa `MIN_BLOCK_LENGTH_OBS = 11`:
+
+| n | séries normais com aviso ou erro (de 200) | exemplo de saída |
+|---|---|---|
+| 1 | 200 | `nan` |
+| 2 – 7 | 200 | `ValueError` do `arch` |
+| 8 – 10 | 200 | número espúrio (3,0; 3,0; 4,0) com divisão por zero |
+| 11 – 15 | **0** | — |
+
+Robustez n = 11..60 × 50 séries por família (séries constantes puladas — o validador as
+barra): normal 0/2500, AR(1) φ = 0,9 0/2500, t₂ 0/2500, binária {0, 1} 0/2500, inteiros
+−2..2 **5/2500** com aviso (séries inteiras com cauda demeaned nula — a guarda
+`ArithmeticError` do adapter, decisão de detalhe do §1 para a Task 12); nenhuma saída
+não-finita ou negativa. A série de 22 pontos `[1, −1, 0, …, 0]` do §1 reproduz: 12 avisos e
+8,0. Constante: 0,0 → `nan` (14 avisos); 0,3 → 7,81 sem aviso (o ADR 6.2.0004 cita 10,51
+para outro tamanho) — o validador de série não constante é necessário para a paridade.
+
+### 2026-09-28 — [decision] Task 06: `seed ≥ 0` no `validate_bootstrap_request` — Claude (Opus 5.5)
+**Contexto:** o concept §4 e a Task pedem `seed` int não-bool, sem faixa. A sondagem da
+medição acima mostrou que `StationaryBootstrap(3, np.arange(10), seed=-1)` ergue
+`ValueError: expected non-negative integer` (o `numpy.random.default_rng` do `arch`),
+enquanto o fake (`random.Random(seed)`) aceitaria −1: sem faixa, C9 (paridade de erro no
+port) quebraria na Task 12.
+**Razão:** o validador único exige `seed ≥ 0` (caso `seed-negative` em
+`bootstrap_request_invalid` e `request-invalid` na construção do VO). Regra aditiva — só
+recusa entrada que o gerador de registro já recusa —; reversível; não muda assinatura
+nem formato.
+
 <!-- END: post-execution -->
