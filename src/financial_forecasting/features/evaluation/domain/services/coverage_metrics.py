@@ -115,29 +115,18 @@ class CoverageReport:
             raise ValueError("a non-applicable CoverageReport must have per_pair == ()")
 
     def _check_grid_shape(self) -> None:
-        # Os pares da série vêm do gate embutido (`pair_collapse_rates` carrega os
-        # (τ_l, τ_u) na ordem de `symmetric_pairs`) — nada de remontar a regra do par
-        # aqui. Com p pares, K ∈ {2p, 2p+1} (o nível central só existe com K ímpar) e os
-        # níveis de `per_level`, fora o central, são exatamente os τ dos pares, em ordem.
-        gate_pairs = tuple((low, high) for low, high, _ in self.degeneracy.pair_collapse_rates)
-        n_pairs = len(gate_pairs)
+        # A grade é a do gate embutido (`degeneracy.levels`, a da própria série): os
+        # níveis de `per_level` têm de ser EXATAMENTE esses, na ordem — inclusive o
+        # central —, e `per_pair` os pares do gate. Nada de remontar a regra do par.
         levels = tuple(level for level, _ in self.per_level)
-        if len(levels) not in (2 * n_pairs, 2 * n_pairs + 1):
+        if levels != self.degeneracy.levels:
             raise ValueError(
-                f"per_level must hold the K in {{{2 * n_pairs}, {2 * n_pairs + 1}}} levels of "
-                f"the gate's {n_pairs} symmetric pairs, got {len(levels)}"
-            )
-        outer = levels[:n_pairs] + levels[len(levels) - n_pairs :]
-        expected = tuple(low for low, _ in gate_pairs) + tuple(
-            high for _, high in reversed(gate_pairs)
-        )
-        if outer != expected:
-            raise ValueError(
-                f"per_level levels {levels} do not hold the gate pairs {gate_pairs} in order"
+                f"per_level levels {levels} must equal the gate levels {self.degeneracy.levels}"
             )
         for level, coverage in self.per_level:
             if not 0.0 <= coverage <= 1.0:
                 raise ValueError(f"coverage at level {level} must be in [0, 1], got {coverage}")
+        gate_pairs = tuple((low, high) for low, high, _ in self.degeneracy.pair_collapse_rates)
         pairs = tuple((pair.lower_level, pair.upper_level) for pair in self.per_pair)
         if pairs != gate_pairs:
             raise ValueError(

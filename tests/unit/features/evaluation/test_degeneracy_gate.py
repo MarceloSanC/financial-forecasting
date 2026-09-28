@@ -48,6 +48,7 @@ def _report(**overrides: object) -> DegeneracyReport:
         "n_points": 2,
         "target_timestamps": ("2024-01-02T00:00:00+00:00", "2024-01-03T00:00:00+00:00"),
         "tolerance": 0.0,
+        "levels": (0.05, 0.5, 0.95),
         "degenerate": (True, False),
         "n_degenerate": 1,
         "rate": 0.5,
@@ -273,6 +274,31 @@ def test_report_with_inconsistent_rate_raises() -> None:
 def test_report_with_zero_points_raises() -> None:
     with pytest.raises(ValueError, match="n_points >= 1"):
         _report(n_points=0, degenerate=(), target_timestamps=(), n_degenerate=0, rate=0.0)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "levels", [(), (0.5,), (0.05, 0.1, 0.5, 0.9, 0.95)], ids=["empty", "one", "two-pairs"]
+)
+def test_report_with_levels_of_wrong_size_raises(levels: tuple[float, ...]) -> None:
+    """C4: K < 2 ou K fora de {2p, 2p+1} para os p pares de `pair_collapse_rates`."""
+    with pytest.raises(ValueError, match="levels must hold K >= 2"):
+        _report(levels=levels)
+
+
+@pytest.mark.unit
+def test_report_with_levels_not_matching_the_pairs_raises() -> None:
+    """C4: K certo, mas os τ extremos não são os do par declarado."""
+    with pytest.raises(ValueError, match="do not match the pairs"):
+        _report(levels=(0.1, 0.5, 0.9))
+
+
+@pytest.mark.unit
+def test_report_carries_the_series_levels(make_series: SeriesFactory) -> None:
+    """Rastro de auditoria: `levels` é a grade da série de origem."""
+    series = make_series([_SPREAD], [0.0])
+
+    assert DegeneracyGate.evaluate(series, tolerance=0.0).levels == series.levels
 
 
 @pytest.mark.unit

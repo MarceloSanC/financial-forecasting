@@ -1026,4 +1026,18 @@ com a mesma mensagem nas três pernas, provado por casos C7 novos na suíte de c
 (`nan`, `inf`, `-inf` em realizado, quantil e cada extremo). Não muda a assinatura do
 port; estreita o domínio de entrada, coerente com o C2 da `CoverageSeries`.
 
+### 2026-09-28 — [deviation] Task 06/07 (fix pós-Checkpoint C do bloco 4): `DegeneracyReport.levels` — Claude (Opus 5.5; decisão da sessão mestra)
+**Contexto:** o `CoverageReport._check_grid_shape` conferia os pares contra o gate
+embutido, mas não conseguia detectar `per_level` sem a mediana ou com um nível central
+errado: o gate só carregava os pares, não a grade.
+**Razão:** decisão da sessão mestra — o `DegeneracyReport` ganha o campo aditivo
+`levels: tuple[float, ...]` (a grade da série de origem, rastro de auditoria como
+`target_timestamps`/`tolerance`), validado no `__post_init__` (K ≥ 2, K ∈ {2p, 2p+1}
+para os p pares de `pair_collapse_rates`, níveis fora o central iguais aos τ dos pares
+em ordem). O `CoverageReport` passa a exigir `per_level` com níveis **exatamente**
+iguais a `degeneracy.levels` e `per_pair` igual aos pares do gate. Testes: série K = 7
+com `per_level` sem o 0.5 e com central 0.3 → `ValueError`; `levels` do relatório mal
+formado (tamanho, pares) → `ValueError`. Desvio do concept §4: campo novo no
+`DegeneracyReport` (aditivo; nenhum campo existente muda).
+
 <!-- END: post-execution -->

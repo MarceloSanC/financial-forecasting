@@ -26,6 +26,8 @@ from financial_forecasting.features.evaluation.domain.value_objects.coverage_ser
     CoverageSeries,
 )
 
+_MIN_LEVELS = 2
+
 
 @dataclass(frozen=True)
 class DegeneracyReport:
@@ -36,6 +38,8 @@ class DegeneracyReport:
         n_points: T.
         target_timestamps: os da série de origem (auditoria da máscara).
         tolerance: a tolerância absoluta usada.
+        levels: a grade de níveis da série de origem (auditoria; K >= 2, coerente com
+            os pares de `pair_collapse_rates`).
         degenerate: máscara por linha, alinhada à série.
         n_degenerate: soma da máscara.
         rate: `n_degenerate / n_points` — sempre reportada.
@@ -48,6 +52,7 @@ class DegeneracyReport:
     n_points: int
     target_timestamps: tuple[str, ...]
     tolerance: float
+    levels: tuple[float, ...]
     degenerate: tuple[bool, ...]
     n_degenerate: int
     rate: float
@@ -76,6 +81,25 @@ class DegeneracyReport:
                 f"rate={self.rate} differs from n_degenerate / n_points = "
                 f"{self.n_degenerate / self.n_points}"
             )
+        self._check_levels_match_pairs()
+
+    def _check_levels_match_pairs(self) -> None:
+        # A grade e os pares vêm da mesma série: com p pares, K ∈ {2p, 2p+1} (o nível
+        # central só existe com K ímpar) e os níveis, fora o central, são os τ dos pares
+        # em ordem — do extremo para dentro à esquerda, de dentro para fora à direita.
+        n_pairs = len(self.pair_collapse_rates)
+        size = len(self.levels)
+        if size < _MIN_LEVELS or size not in (2 * n_pairs, 2 * n_pairs + 1):
+            raise ValueError(
+                f"levels must hold K >= {_MIN_LEVELS} levels, K in "
+                f"{{{2 * n_pairs}, {2 * n_pairs + 1}}} for {n_pairs} pairs, got {self.levels}"
+            )
+        outer = self.levels[:n_pairs] + self.levels[size - n_pairs :]
+        expected = tuple(low for low, _, _ in self.pair_collapse_rates) + tuple(
+            high for _, high, _ in reversed(self.pair_collapse_rates)
+        )
+        if outer != expected:
+            raise ValueError(f"levels {self.levels} do not match the pairs of pair_collapse_rates")
 
 
 class DegeneracyGate:
@@ -99,6 +123,7 @@ class DegeneracyGate:
             n_points=series.n_points,
             target_timestamps=series.target_timestamps,
             tolerance=tolerance,
+            levels=series.levels,
             degenerate=degenerate,
             n_degenerate=n_degenerate,
             rate=n_degenerate / series.n_points,

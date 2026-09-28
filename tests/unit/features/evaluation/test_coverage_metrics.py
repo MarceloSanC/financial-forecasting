@@ -401,7 +401,7 @@ def test_applicable_with_per_level_of_wrong_size_raises(
     make_series: SeriesFactory, size: int
 ) -> None:
     report = _valid_report(make_series)
-    with pytest.raises(ValueError, match="per_level must hold the K in"):
+    with pytest.raises(ValueError, match="must equal the gate levels"):
         dataclasses.replace(report, per_level=report.per_level[:size])
 
 
@@ -426,7 +426,7 @@ def test_coherent_grid_that_differs_from_the_gate_raises(make_series: SeriesFact
         for low, high in ((0.05, 0.95), (0.1, 0.9))
     )
 
-    with pytest.raises(ValueError, match="per_level must hold the K in"):
+    with pytest.raises(ValueError, match="must equal the gate levels"):
         dataclasses.replace(report, per_level=per_level, per_pair=per_pair)
 
 
@@ -436,8 +436,30 @@ def test_per_level_with_other_levels_than_the_gate_raises(make_series: SeriesFac
     report = _valid_report(make_series)
     levels = (0.05, 0.1, 0.2, 0.5, 0.8, 0.9, 0.95)
 
-    with pytest.raises(ValueError, match="do not hold the gate pairs"):
+    with pytest.raises(ValueError, match="must equal the gate levels"):
         dataclasses.replace(report, per_level=tuple((level, _HALF) for level in levels))
+
+
+@pytest.mark.unit
+def test_per_level_missing_the_median_raises(make_series: SeriesFactory) -> None:
+    """C4: K = 7 no gate; `per_level` sem o 0.5 (6 níveis, pares intactos) ergue."""
+    report = _valid_report(make_series)
+    per_level = tuple(entry for entry in report.per_level if entry[0] != _HALF)
+
+    with pytest.raises(ValueError, match="must equal the gate levels"):
+        dataclasses.replace(report, per_level=per_level)
+
+
+@pytest.mark.unit
+def test_per_level_with_wrong_central_level_raises(make_series: SeriesFactory) -> None:
+    """C4: nível central 0.3 no lugar de 0.5 (pares intactos) ergue."""
+    report = _valid_report(make_series)
+    per_level = tuple(
+        (0.3, cov) if level == _HALF else (level, cov) for level, cov in report.per_level
+    )
+
+    with pytest.raises(ValueError, match="must equal the gate levels"):
+        dataclasses.replace(report, per_level=per_level)
 
 
 @pytest.mark.unit
