@@ -66,6 +66,11 @@ containers =
     # (placeholder p/ 5.2+) — daí `(adapters)` opcional + `exhaustive = False` toleram a
     # ausência de adapters e a application ainda vazia.
     financial_forecasting.features.modeling
+    # Stage 6.1 (concept 6.1 A9/I11 / ADR 6.1.0001 / LAYOUT §3): novo BC evaluation entra
+    # como container layered. Nasce com domain (VO CoverageSeries + serviços de scoring),
+    # application (port-out ScoringBackend) e adapters/out/scoring — nesta Task ainda
+    # vazios; `(adapters)` opcional + `exhaustive = False` toleram as camadas esparsas.
+    financial_forecasting.features.evaluation
 exhaustive = False
 
 # -----------------------------------------------------------------------------
@@ -104,6 +109,11 @@ source_modules =
     # pelo caso `domain-purity:modeling-domain-imports-pandas` do teste de arquitetura.
     # A única referência a application é o tipo `Hasher` sob TYPE_CHECKING (não runtime).
     financial_forecasting.features.modeling.domain
+    # Stage 6.1 (concept 6.1 I11 / ADR 6.1.0001 item 6): o domain de evaluation
+    # (CoverageSeries + PinballScore/CrpsScore/IntervalScore/DegeneracyGate/
+    # CoverageMetrics) é stdlib-only + o VO QuantileForecast do 4.3; `import pandas`/
+    # `numpy` aqui REPROVA — caso `domain-purity:evaluation-domain-imports-pandas`.
+    financial_forecasting.features.evaluation.domain
 forbidden_modules =
     pandas
     pyarrow
@@ -144,6 +154,9 @@ source_modules =
     financial_forecasting.features.analytics_store.domain
     financial_forecasting.features.modeling.application
     financial_forecasting.features.modeling.domain
+    # Stage 6.1 (concept 6.1 A9): caso `inward-only:evaluation-application-imports-infrastructure`.
+    financial_forecasting.features.evaluation.application
+    financial_forecasting.features.evaluation.domain
 forbidden_modules =
     financial_forecasting.shared.infrastructure
 
@@ -234,6 +247,13 @@ source_modules =
     # Provado por quebra intencional revertida (Task 08 / A9).
     financial_forecasting.features.modeling.application
     financial_forecasting.features.modeling.domain
+    # Stage 6.1 (technical 6.1 §1, decisão de detalhe; reforça o concept 6.1 I11): estende
+    # a `features.evaluation.{application,domain}`. O concept A9 não lista este contrato,
+    # mas nenhum dos listados fecha pandas/pyarrow/duckdb/pandera na application do BC — o
+    # port-out ScoringBackend troca só primitivos. Caso
+    # `store-no-storage-leak:evaluation-application-imports-pandas`.
+    financial_forecasting.features.evaluation.application
+    financial_forecasting.features.evaluation.domain
 forbidden_modules =
     pandas
     pyarrow
@@ -378,8 +398,32 @@ source_modules =
 forbidden_modules =
     optuna
 allow_indirect_imports = False
+
+# Contrato 13 — evaluation-no-scoring-lib-leak (type = forbidden) — Stage 6.1 (A9/I11)
+# Mesma postura do contrato 9 (`modeling-no-statsforecast-leak`) para o BC evaluation:
+# as fórmulas de pinball/CRPS_Q/IS são implementadas UMA vez, stdlib-only, no domínio
+# (implementação de registro); `sklearn` e `scoringrules` são oráculos atrás do port-out
+# `ScoringBackend` (Protocol de primitivos) e vivem APENAS nos adapters
+# features/evaluation/adapters/out/scoring/ (concept 6.1 I11 / ADR 6.1.0001 item 6).
+# `numpy`/`scipy` entram porque são a pilha numérica que essas libs arrastam. O
+# `domain-purity` já cobre `numpy` no domain — o que este contrato acrescenta é a
+# camada `application` do BC e os outros três módulos (`sklearn`, `scoringrules`,
+# `scipy`), que nenhum outro contrato lista. `_REAL_VIOLATION_CASES` tem um caso POR
+# módulo, todos na application (o domain não discriminaria o `numpy`).
+[importlinter:contract:evaluation-no-scoring-lib-leak]
+name = Application/domain de evaluation não importam sklearn/scoringrules/numpy/scipy (só os adapters)
+type = forbidden
+source_modules =
+    financial_forecasting.features.evaluation.application
+    financial_forecasting.features.evaluation.domain
+forbidden_modules =
+    sklearn
+    scoringrules
+    numpy
+    scipy
+allow_indirect_imports = False
 # -----------------------------------------------------------------------------
-# Contrato 13 — bc-independence (type = independence) — issue #60
+# Contrato 14 — bc-independence (type = independence) — issue #60
 # LAYOUT §7 (regra de ouro "Features não importam de outras features", emendada
 # junto com este contrato — a fonte da verdade vem primeiro). Nenhum contrato
 # cobria isso: o

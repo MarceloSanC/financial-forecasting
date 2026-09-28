@@ -868,4 +868,20 @@ Tasks 04, 05 ─► Task 08 (deps) ─► Task 09 (port + fake + suíte; baselin
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
 
+> Preenchida durante/após a Fase 4. Apenas esta seção é editável após
+> `status: done`. Cada entrada carrega data + autor.
+
+### 2026-09-28 — [decision] Task 01: `store-no-storage-leak` também cobre `evaluation.{application,domain}` — Claude (Opus 5.5)
+**Contexto:** o concept A9 lista os contratos em que `evaluation` entra
+(`hexagonal-layers`, `domain-purity`, `inward-only`, `bc-independence` e o novo
+`evaluation-no-scoring-lib-leak`); nenhum deles fecha `pandas`/`pyarrow`/`duckdb`/
+`pandera` na `application` do slice.
+**Razão:** decisão de detalhe planejada no §1 — o slice entra também em
+`store-no-storage-leak`, reforçando a I11 ("`evaluation.domain` e
+`evaluation.application` importam só stdlib + o VO do 4.3"). Todos os outros slices
+já estão nesse contrato. Provado pelo caso
+`store-no-storage-leak:evaluation-application-imports-pandas`. Efeito colateral de
+numeração: o contrato novo é o nº 13 do `.importlinter` e o `bc-independence` passou
+a nº 14 (só o rótulo do comentário; nenhum doc cita o número).
+
 <!-- END: post-execution -->
