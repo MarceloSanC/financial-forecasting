@@ -1537,4 +1537,15 @@ contrato C3 (argumento inválido → `ValueError` nomeando o campo):
 `floor_lr_statistic` registra o alcance do piso absoluto (cancelamento ~ n·eps: vale
 com folga para n ≲ 1e7). O ADR 6.3.0001 (`accepted`) não foi editado.
 
+### 2026-09-28 — [decision] Task 04: `WilsonBandReport` também confere contagem/n; banda sem recorte a [0, 1] — Claude (Opus 5.5)
+**Contexto:** o C9 da Task 04 lista sete ramos do `__post_init__`; nada diz do par
+(`count`, `n`) de um relatório montado à mão (ex.: `applicable = False` com n < 0,
+ou `count > n` num aplicável), nem se os limites de Wilson são recortados a [0, 1].
+**Razão:** o relatório aplicável passa `count`/`n` pelo `validate_real_count` (o
+validador único — nenhuma cópia) e o não aplicável exige `n == 0 and count == 0`
+(o mesmo contrato do `evaluate`), ramos `count-above-n`, `not-applicable-with-count`
+e `not-applicable-with-negative-n` do `wilson_incoherent`. A Eq. (4) de BCD já cai em
+[0, 1]; os limites saem sem recorte (um −1e-18 de arredondamento em c = 0 não muda o
+veredito, e recortar esconderia um erro de fórmula). Reversível.
+
 <!-- END: post-execution -->
