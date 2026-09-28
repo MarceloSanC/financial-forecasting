@@ -1516,8 +1516,15 @@ do `PairedLossSeries.losses_of` (mensagem única do VO). O fator HLN é a funç�
 mostrou que a cópia `value <= alpha` em `family` trocada por `<` sobrevivia à suíte: na
 família não há p-valor de DM exatamente na fronteira.
 **Razão:** regra com dono único — `family` e o `__post_init__` tiram a decisão de
-`holm_reject(p_values, alpha=...)`, e o teste de fronteira (`holm_boundary_rejects`)
-protege as duas. O `__post_init__` confere nesta ordem: α (validador único), m ≥ 1,
+`holm_reject(p_values, alpha=...)`. **Corrigido no Checkpoint C do bloco 2:** o texto
+original dizia que o teste `holm_boundary_rejects` protegia as duas — não protegia (ele
+chama `holm_reject` direto, e o fixture k = 7 da família dava `rejected` todo `False`, então
+o mutante `rejected=(False,)*m` sobrevivia). O commit `[6.2/task-05-extra]` acrescenta dois
+casos **da família**: um candidato dominante contra "bad*" e indistinguível de "twin*"
+(`rejected` misto — True/False — em cada α ∈ {0,01; 0,025; 0,05; 0,10; 0,20}) e a fronteira
+com α igual ao menor p̃ da própria família (rejeita esse, não o seguinte). p̃ exatamente
+igual a um α do conjunto registrado não é construível com p-valores de DM (seriam
+p = α/m exatos), por isso a fronteira usa o p̃ observado. O `__post_init__` confere nesta ordem: α (validador único), m ≥ 1,
 comparadores únicos, candidato fora deles, mesma amostra (horizonte/T) e estimador de cada
 DM, ajustado `==` `holm_adjust` (igualdade exata: mesma operação) e decisão. `family`
 confere o candidato (C2) antes de α. `validate_p_values`/`validate_alpha` moram em

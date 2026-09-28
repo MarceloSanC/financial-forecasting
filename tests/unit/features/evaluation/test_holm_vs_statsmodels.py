@@ -150,6 +150,54 @@ def test_family_k7_all_comparators(estimator: DmVarianceEstimator) -> None:
     )
 
 
+_DOMINANT_POINTS = 30
+_DOMINANT_SEED = 7
+_REGISTERED_ALPHAS = (0.01, 0.025, 0.05, 0.10, 0.20)
+
+
+def _dominant_series() -> PairedLossSeries:
+    """Candidato muito melhor que "bad*" (d̄ ≈ -0,7) e indistinguível de "twin*" (d̄ ≈ 0)."""
+    rng = random.Random(_DOMINANT_SEED)
+    cand = [rng.uniform(0.5, 1.5) for _ in range(_DOMINANT_POINTS)]
+    bad = [[c + 0.6 + rng.uniform(0.0, 0.2) for c in cand] for _ in range(2)]
+    twin = [[c + rng.uniform(-0.2, 0.2) for c in cand] for _ in range(2)]
+    return PairedLossSeries(
+        horizon=1,
+        models=("bad1", "twin1", "cand", "bad2", "twin2"),
+        target_timestamps=tuple(f"2024-03-{day:02d}" for day in range(1, _DOMINANT_POINTS + 1)),
+        losses=(tuple(bad[0]), tuple(twin[0]), tuple(cand), tuple(bad[1]), tuple(twin[1])),
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("alpha", _REGISTERED_ALPHAS)
+def test_family_mixed_rejection_at_registered_alphas(alpha: float) -> None:
+    """A família rejeita contra os dominados e não contra os gêmeos, em cada alpha registrado."""
+    series = _dominant_series()
+    report = HolmCorrection.family(series, candidate="cand", alpha=alpha)
+    decisions = {c.comparator: c.rejected for c in report.comparisons}
+    assert decisions == {"bad1": True, "twin1": False, "bad2": True, "twin2": False}
+    p_values = [comparison.dm.p_value for comparison in report.comparisons]
+    assert tuple(decisions.values()) == holm_reject(p_values, alpha=alpha)
+
+
+@pytest.mark.unit
+def test_family_boundary_rejects_when_adjusted_equals_alpha() -> None:
+    """Na família, p̃ = alpha exato rejeita (registro p̃ <= alpha) e o p̃ seguinte não."""
+    series = _dominant_series()
+    adjusted = sorted(
+        {
+            c.adjusted_p_value
+            for c in HolmCorrection.family(series, candidate="cand", alpha=0.5).comparisons
+        }
+    )
+    boundary = adjusted[0]
+    assert 0.0 < boundary < adjusted[1]
+    report = HolmCorrection.family(series, candidate="cand", alpha=boundary)
+    for comparison in report.comparisons:
+        assert comparison.rejected is (comparison.adjusted_p_value == boundary)
+
+
 @pytest.mark.unit
 def test_family_horizon_propagated() -> None:
     """I1: o relatório carrega o horizonte e o T da série (um horizonte por família)."""
