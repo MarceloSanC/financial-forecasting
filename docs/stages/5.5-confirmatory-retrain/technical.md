@@ -973,4 +973,34 @@ Perguntas feitas com o custo medido acima (entrada anterior); respostas do human
 - **Seeds do TFT = 1..10** (10 seeds), distintas da seed 0 do sweep. Custo estimado da corrida: de ~1,7 h a ~19 h, conforme os HPs congelados.
 - **Device: CPU.** ROCm não foi necessário: o custo coube.
 
+### 2026-09-28 — Auditoria de testes (gate antes da saída) — Claude (Opus 5.5)
+Um subagente de contexto zerado, que não escreveu os testes, respondeu o questionário e aplicou mutações reais numa cópia dentro do container, com o worktree montado `:ro`.
+- **Itens 1, 2, 4, 5 e 6** — satisfeitos, com âncoras por critério:
+  - A1–A6 têm teste no caminho feliz;
+  - A7–A9 não são testáveis em código (execução real e documentação);
+  - os três ports novos têm contrato `[fake, real]`;
+  - o e2e roda o CLI com adapters reais;
+  - os erros chegam ao CLI com exit 2 nomeado.
+- **Item 3, mutação real** — 12 mutações:
+  - 6 morreram: a, b, c, i, j, m;
+  - 6 **sobreviveram**:
+    - (d) run marcado no ledger que sumiu do silver;
+    - (e) `freeze` com sweeps em datasets diferentes;
+    - (f) `freeze` sem conferir `fits`;
+    - (g) fronteira de `fits` em 1 sessão de treino;
+    - (h) ordem I4 → I5;
+    - (k) o probe deixar de fora o arquivo do cohort no `code_dirty` — a mais grave, porque fere o I5/A4.
+- **Testes adicionados** (`task-38-extra`), um por mutação sobrevivente e por lacuna apontada:
+  - `test_real_tracked_change_in_the_cohort_file_marks_dirty_then_changes_identity` (k);
+  - `test_completed_unit_whose_run_vanished_from_silver_is_reported_corrupted` (d);
+  - `test_declaration_mismatch_records_no_environment` (h);
+  - `test_baselines_with_a_missing_family_are_partial` (I7);
+  - `test_freeze_refuses_sweeps_on_different_datasets` (e);
+  - `test_freeze_refuses_a_geometry_that_does_not_fit` (f);
+  - `test_fits_boundary_is_one_training_session` (g);
+  - `test_cohort_errors_exit_2_naming_the_error`, parametrizado nos 8 erros do §6;
+  - no e2e, `run` com mudança não commitada em `src/` → exit 2 `EnvironmentMismatchError`: o I5 pelo CLI com o probe real.
+- **Reexecução das 6 mutações** sobre os testes novos: todas morrem, com `1 failed, 89 passed` em cada uma de d, e, f, g, h e k. Nenhuma lacuna ficou aberta.
+- **Achado de código:** nenhum. As lacunas eram só de teste, e nenhuma mutação expôs defeito em `src/`.
+
 <!-- END: post-execution -->

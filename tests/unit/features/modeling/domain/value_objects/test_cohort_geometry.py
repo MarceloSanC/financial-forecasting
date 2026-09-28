@@ -195,3 +195,14 @@ def test_invalid_geometry_is_rejected(kwargs: dict[str, int]) -> None:
 def test_expected_rows_rejects_invalid_arguments(kwargs: dict[str, object], match: str) -> None:
     with pytest.raises(ValueError, match=match):
         _SMALL.expected_prediction_rows(**kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_fits_boundary_is_one_training_session() -> None:
+    """Auditoria de testes (mutação g): na geometria AAPL, 1512 (OOS) + 252 + 252 +
+    3 x 14 (gaps) = 2058 sessões consumidas — 2059 deixa 1 de treino, 2058 deixa 0."""
+    aapl = CohortGeometry(n_folds=6, test_size=252, val_size=252, calib_size=252, embargo=7)
+
+    aapl.fits(n_sessions=2059, max_horizon=7)
+    with pytest.raises(GeometryDoesNotFitError):
+        aapl.fits(n_sessions=2058, max_horizon=7)

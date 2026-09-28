@@ -60,6 +60,9 @@ from financial_forecasting.features.modeling.application.use_cases.train_gbm_qua
     grid_fingerprint,
     modeling_columns,
 )
+from financial_forecasting.features.modeling.domain.exceptions.cohort import (
+    GeometryDoesNotFitError,
+)
 from financial_forecasting.features.modeling.domain.services.training_grid import (
     build_training_grid,
 )
@@ -611,3 +614,31 @@ def test_freeze_removes_its_temporary_file_when_the_replace_fails(
 
     assert harness.path.read_text(encoding="utf-8") == before
     assert not list(harness.path.parent.glob("*.tmp-*"))
+
+
+@pytest.mark.unit
+def test_freeze_refuses_sweeps_on_different_datasets(harness: _Harness) -> None:
+    """Auditoria de testes (mutação e)."""
+    commands.sweep(harness.deps, harness.path, out=harness.out)
+    scope_id = harness.scope_id(_draft())
+    gbm = dict(harness.ledger.sweep_results(scope_id)["gbm"])
+    gbm["dataset_fingerprint"] = "0" * 64
+    harness.ledger.record_sweep_result(scope_id, "gbm", gbm)
+    before = harness.path.read_text(encoding="utf-8")
+
+    with pytest.raises(DatasetMismatchError, match="different datasets"):
+        commands.freeze(harness.deps, harness.path, out=harness.out)
+    assert harness.path.read_text(encoding="utf-8") == before
+
+
+@pytest.mark.unit
+def test_freeze_refuses_a_geometry_that_does_not_fit(tmp_path: Path) -> None:
+    """Auditoria de testes (mutação f): não se publica âncora de cohort que não roda."""
+    big = CohortGeometry(n_folds=20, test_size=10, val_size=8, calib_size=6, embargo=1)
+    harness = _Harness(tmp_path, _draft(geometry=big), _rows())
+    commands.sweep(harness.deps, harness.path, out=harness.out)
+    before = harness.path.read_text(encoding="utf-8")
+
+    with pytest.raises(GeometryDoesNotFitError):
+        commands.freeze(harness.deps, harness.path, out=harness.out)
+    assert harness.path.read_text(encoding="utf-8") == before
