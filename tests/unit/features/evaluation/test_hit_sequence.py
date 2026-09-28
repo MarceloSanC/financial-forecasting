@@ -254,6 +254,33 @@ def test_dgt_partition_h3_t8_positions_gaps_and_identity(
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("violations", "horizon", "expected"),
+    [
+        ((T, F, F, F, None, T, F, T), _H3, ((T, F, F), (F, None, T), (F, T))),
+        ((T, T, F, None, F), 2, ((T, F, F), (T, None))),
+    ],
+    ids=["h3-asymmetric", "h2-asymmetric"],
+)
+def test_dgt_partition_keeps_position_order_on_asymmetric_subseries(
+    make_hit_sequence: HitSequenceFactory,
+    violations: tuple[bool | None, ...],
+    horizon: int,
+    expected: tuple[tuple[bool | None, ...], ...],
+) -> None:
+    """A1/I8: sub-séries não-palíndromas (h = 3 e h = 2) — cada uma na ordem das
+    posições j, j + h, …; uma partição que invertesse ou reordenasse as posições falha."""
+    sequence = make_hit_sequence(violations, horizon=horizon)
+
+    parts = sequence.dgt_partition()
+
+    assert tuple(part.violations for part in parts) == expected
+    assert all(part.violations != part.violations[::-1] for part in parts)
+    for offset, part in enumerate(parts):
+        assert part.target_timestamps == sequence.target_timestamps[offset::horizon]
+
+
+@pytest.mark.unit
 def test_dgt_partition_h3_t2_gives_two_subseries(make_hit_sequence: HitSequenceFactory) -> None:
     """A1/I8: min(h, T) sub-séries não-vazias — h = 3, T = 2 → 2."""
     sequence = make_hit_sequence((T, F), horizon=_H3)
