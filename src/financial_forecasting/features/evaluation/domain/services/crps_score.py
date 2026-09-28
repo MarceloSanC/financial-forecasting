@@ -73,6 +73,13 @@ class CrpsReport:
     crps_q: float
     label: str = CRPS_Q_LABEL
 
+    def __post_init__(self) -> None:
+        """C4/I4: relatório sem ponto ou sem o rótulo da aproximação ergue."""
+        if self.n_points < 1:
+            raise ValueError(f"a CrpsReport needs n_points >= 1, got {self.n_points}")
+        if self.label != CRPS_Q_LABEL:
+            raise ValueError(f"a CrpsReport must carry CRPS_Q_LABEL, got {self.label!r}")
+
 
 class CrpsScore:
     """CRPS_Q sobre uma `CoverageSeries`, lendo o vetor pós-guardrail (I3)."""

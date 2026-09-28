@@ -77,6 +77,18 @@ class PairIntervalScore:
     mean_lower_penalty: float
     mean_upper_penalty: float
 
+    def __post_init__(self) -> None:
+        """I5/I7: alpha e nominal saem da fórmula única, nunca de `1 - (τ_u - τ_l)`."""
+        if self.miscoverage != 2.0 * self.lower_level:
+            raise ValueError(
+                f"miscoverage must be 2 * lower_level = {2.0 * self.lower_level}, "
+                f"got {self.miscoverage}"
+            )
+        if self.nominal != 1.0 - self.miscoverage:
+            raise ValueError(
+                f"nominal must be 1 - miscoverage = {1.0 - self.miscoverage}, got {self.nominal}"
+            )
+
     @property
     def mean_score(self) -> float:
         """IS_alpha médio, **definido** como a soma dos três termos médios (I5)."""
@@ -105,29 +117,36 @@ class IntervalScore:
     @staticmethod
     def score(series: CoverageSeries) -> IntervalScoreReport:
         """Um `PairIntervalScore` por `series.symmetric_pairs`, médias sobre as T linhas."""
+        realized = series.realized
         size = series.n_points
         per_pair: list[PairIntervalScore] = []
         pairs = zip(series.symmetric_pairs, series.symmetric_pair_indices, strict=True)
         for (lower_level, upper_level), (k_low, k_high) in pairs:
             miscoverage = 2.0 * lower_level
-            widths: list[float] = []
-            lower_penalties: list[float] = []
-            upper_penalties: list[float] = []
-            for index, y in enumerate(series.realized):
-                values = series.scored_values(index)
-                low, high = values[k_low], values[k_high]
-                widths.append(high - low)
-                lower_penalties.append(_lower_penalty(y, low, miscoverage))
-                upper_penalties.append(_upper_penalty(y, high, miscoverage))
+            lower = [series.scored_values(i)[k_low] for i in range(size)]
+            upper = [series.scored_values(i)[k_high] for i in range(size)]
+            # Mesmo validador único de `mean_interval_score` (C7; ADR 6.1.0001 item 1).
+            # A média é decomposta nos três termos (I5) em vez de delegada — o
+            # `mean_score` é a soma deles; a ponte com `mean_interval_score` é testada.
+            validate_interval_inputs(realized, lower, upper, miscoverage)
             per_pair.append(
                 PairIntervalScore(
                     lower_level=lower_level,
                     upper_level=upper_level,
                     miscoverage=miscoverage,
-                    nominal=1.0 - 2.0 * lower_level,
-                    mean_width=math.fsum(widths) / size,
-                    mean_lower_penalty=math.fsum(lower_penalties) / size,
-                    mean_upper_penalty=math.fsum(upper_penalties) / size,
+                    nominal=1.0 - miscoverage,
+                    mean_width=math.fsum(high - low for low, high in zip(lower, upper, strict=True))
+                    / size,
+                    mean_lower_penalty=math.fsum(
+                        _lower_penalty(y, low, miscoverage)
+                        for y, low in zip(realized, lower, strict=True)
+                    )
+                    / size,
+                    mean_upper_penalty=math.fsum(
+                        _upper_penalty(y, high, miscoverage)
+                        for y, high in zip(realized, upper, strict=True)
+                    )
+                    / size,
                 )
             )
         return IntervalScoreReport(

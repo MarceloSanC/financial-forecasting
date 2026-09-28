@@ -925,4 +925,21 @@ VO, não no serviço). `symmetric_pair_indices` devolve `(k, K-1-k)` alinhado 1:
 `symmetric_pairs` (que passa a derivar dele); IS e gate o consomem e a Task 07 também
 consumirá. Propriedade nova; nada do contrato do concept §4 muda.
 
+### 2026-09-28 — [deviation] Task 05: `IntervalScore.score` decompõe a média em vez de delegar a `mean_interval_score` — Claude (Opus 5.5)
+**Contexto:** o ADR 6.1.0001 itens 1/4 pede que os serviços agreguem pelas **mesmas**
+funções de série que o fake delega (`PinballScore` usa `mean_pinball`, `CrpsScore`
+usa `mean_crps_quantile`). A I5 do concept, porém, **define** `mean_score` como
+`mean_width + mean_lower_penalty + mean_upper_penalty` — os três termos médios do
+`PairIntervalScore` —, o que `mean_interval_score` (um escalar) não entrega. O
+Checkpoint C do bloco 2 apontou a divergência.
+**Razão:** a decomposição da I5 fica; o que o ADR protege é garantido de outro modo.
+(1) A entrada de cada par passa pelo **mesmo** validador único
+(`validate_interval_inputs`) que `mean_interval_score` usa (C7). (2) A ponte
+`mean_score ≈ mean_interval_score` (tolerância declarada 1e-12) é testada em série
+aleatória sem empate, em série mista com linhas degeneradas e na fixture cruzada do
+A1b — o oráculo de biblioteca, que cobre `mean_interval_score`, fica ligado ao
+relatório por essa identidade. Além disso, o `PairIntervalScore` passa a erguer se
+`miscoverage != 2·τ_l` ou `nominal != 1 - miscoverage` (I5/I7 por construção) e o
+`CrpsReport` se `n_points < 1` ou `label != CRPS_Q_LABEL` (I4 por construção).
+
 <!-- END: post-execution -->

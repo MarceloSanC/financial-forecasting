@@ -17,6 +17,7 @@ import pytest
 
 from financial_forecasting.features.evaluation.domain.services.crps_score import (
     CRPS_Q_LABEL,
+    CrpsReport,
     CrpsScore,
     crps_quantile,
     mean_crps_quantile,
@@ -52,6 +53,11 @@ _PAIR_05 = (0.05, 0.95)
 _MISCOVERAGE_05 = 0.1
 _NOMINAL_05 = 0.9
 _HORIZON = 5
+_A1B_RAW = (
+    (0.03, -0.02, -0.01, 0.0, 0.01, 0.02, -0.03),  # extremos trocados
+    (-0.03, -0.02, -0.01, 0.0, 0.01, 0.02, 0.03),
+)
+_A1B_REALIZED = (0.025, -0.001)
 
 
 def _close(actual: float, expected: float) -> bool:
@@ -61,6 +67,21 @@ def _close(actual: float, expected: float) -> bool:
 def _rho(u: float, tau: float) -> float:
     """rho_τ(u) na forma max, escrita à parte do domínio."""
     return tau * max(u, 0.0) + (1.0 - tau) * max(-u, 0.0)
+
+
+def _pair(**overrides: float) -> PairIntervalScore:
+    """Um `PairIntervalScore` coerente para (0.05, 0.95), com campos sobrescrevíveis."""
+    fields = {
+        "lower_level": 0.05,
+        "upper_level": 0.95,
+        "miscoverage": _MISCOVERAGE_05,
+        "nominal": _NOMINAL_05,
+        "mean_width": 0.02,
+        "mean_lower_penalty": 0.0,
+        "mean_upper_penalty": 0.0,
+    }
+    fields.update(overrides)
+    return PairIntervalScore(**fields)
 
 
 def _random_series(make_series: SeriesFactory, *, levels: tuple[float, ...]) -> CoverageSeries:
@@ -180,16 +201,30 @@ def test_interval_score_on_dirac_is_fifty_times_abs_error(
     assert _close(pair.mean_score, _DIRAC_FACTOR * abs(y - x))
 
 
+def _a1b_series(make_series: SeriesFactory) -> CoverageSeries:
+    """Fixture cruzada do A1b: extremos trocados no bruto (o guardrail reordena)."""
+    return make_series(list(_A1B_RAW), list(_A1B_REALIZED))
+
+
 @pytest.mark.unit
-def test_pair_mean_score_matches_mean_interval_score(make_series: SeriesFactory) -> None:
-    """A4/I5: `mean_score` (soma dos termos) ≈ `mean_interval_score` da mesma coluna."""
-    series = _random_series(make_series, levels=_LEVELS)
+@pytest.mark.parametrize("kind", ["random", "mixed-degenerate", "a1b-crossed"])
+def test_pair_mean_score_matches_mean_interval_score(make_series: SeriesFactory, kind: str) -> None:
+    """A4/I5: `mean_score` (soma dos termos, I5) ≈ `mean_interval_score` da mesma coluna.
+
+    É a ponte entre a decomposição do `IntervalScore.score` e a função de série que o
+    fake delega (ADR 6.1.0001 item 4): série aleatória sem empate, série mista com
+    linhas degeneradas (largura 0) e a fixture cruzada do A1b.
+    """
+    builders = {
+        "random": lambda: _random_series(make_series, levels=_LEVELS),
+        "mixed-degenerate": lambda: _mixed_series(make_series),
+        "a1b-crossed": lambda: _a1b_series(make_series),
+    }
+    series = builders[kind]()
 
     report = IntervalScore.score(series)
 
-    for pair in report.per_pair:
-        k_low = _LEVELS.index(pair.lower_level)
-        k_high = _LEVELS.index(pair.upper_level)
+    for pair, (k_low, k_high) in zip(report.per_pair, series.symmetric_pair_indices, strict=True):
         expected = mean_interval_score(
             realized=series.realized,
             lower=[series.scored_values(i)[k_low] for i in range(series.n_points)],
@@ -224,6 +259,34 @@ def test_miscoverage_and_nominal_are_exact_for_05_95(make_series: SeriesFactory)
 
 
 @pytest.mark.unit
+def test_pair_interval_score_with_miscoverage_not_twice_lower_level_raises() -> None:
+    """I5: `miscoverage` != 2·τ_l ergue (ex.: a forma `1 - (τ_u - τ_l)`)."""
+    with pytest.raises(ValueError, match=r"miscoverage must be 2 \* lower_level"):
+        _pair(miscoverage=1 - (0.95 - 0.05))
+
+
+@pytest.mark.unit
+def test_pair_interval_score_with_nominal_not_one_minus_miscoverage_raises() -> None:
+    """I7: `nominal` != 1 - miscoverage ergue."""
+    with pytest.raises(ValueError, match="nominal must be 1 - miscoverage"):
+        _pair(nominal=0.95)
+
+
+@pytest.mark.unit
+def test_crps_report_with_zero_points_raises() -> None:
+    """C4: `CrpsReport` com `n_points = 0` ergue."""
+    with pytest.raises(ValueError, match="n_points >= 1"):
+        CrpsReport(horizon=1, n_points=0, crps_q=0.1)
+
+
+@pytest.mark.unit
+def test_crps_report_without_the_label_raises() -> None:
+    """I4 por construção: o rótulo não pode ser trocado nem omitido."""
+    with pytest.raises(ValueError, match="must carry CRPS_Q_LABEL"):
+        CrpsReport(horizon=1, n_points=2, crps_q=0.1, label="CRPS")
+
+
+@pytest.mark.unit
 def test_interval_score_report_without_pairs_raises() -> None:
     """C4: `per_pair = ()` ergue."""
     with pytest.raises(ValueError, match="at least one symmetric pair"):
@@ -233,17 +296,8 @@ def test_interval_score_report_without_pairs_raises() -> None:
 @pytest.mark.unit
 def test_interval_score_report_with_zero_points_raises() -> None:
     """C4: `n_points = 0` ergue."""
-    pair = PairIntervalScore(
-        lower_level=0.05,
-        upper_level=0.95,
-        miscoverage=0.1,
-        nominal=0.9,
-        mean_width=0.02,
-        mean_lower_penalty=0.0,
-        mean_upper_penalty=0.0,
-    )
     with pytest.raises(ValueError, match="n_points >= 1"):
-        IntervalScoreReport(horizon=1, n_points=0, per_pair=(pair,))
+        IntervalScoreReport(horizon=1, n_points=0, per_pair=(_pair(),))
 
 
 # --- A1b — pontua-se o rearranjado ----------------------------------------------------
@@ -253,12 +307,9 @@ def test_interval_score_report_with_zero_points_raises() -> None:
 def test_interval_and_crps_score_guardrail_not_raw(make_series: SeriesFactory) -> None:
     """A1b: com raw cruzado no par extremo, IS (e CRPS_Q) conferem com o cálculo sobre
     `guardrail_values` e diferem do cálculo sobre `raw_values`."""
-    raw = [
-        (0.03, -0.02, -0.01, 0.0, 0.01, 0.02, -0.03),  # extremos trocados
-        (-0.03, -0.02, -0.01, 0.0, 0.01, 0.02, 0.03),
-    ]
-    realized = [0.025, -0.001]
-    series = make_series(raw, realized)
+    raw = list(_A1B_RAW)
+    realized = list(_A1B_REALIZED)
+    series = _a1b_series(make_series)
     alpha = 2 * _LEVELS[0]
 
     pair = IntervalScore.score(series).per_pair[0]
