@@ -1504,4 +1504,18 @@ LR chega a ≈ 460.
 mais estrita; declarada em `_ABS_TOL` no módulo de teste (ADR 0.0.0021). Reversível
 (sem âncora explícita no concept para absoluta × relativa).
 
+### 2026-09-28 — [decision] Checkpoint C bloco 1: validador único de contagem real dos kernels — Claude (Opus 5.5)
+**Contexto:** achado MEDIUM do Checkpoint C (bloco 1) — o `kupiec_pof` escrevia inline
+"finito não-`bool`, 0 ≤ x ≤ n, n > 0, taxa em (0, 1)", e as Tasks 04
+(`wilson_interval`) e 08 (`lr_uc_three_state`) copiariam a regra, que o ADR 6.3.0005
+item 1 define uma vez para os três kernels.
+**Razão:** disposição `corrigido` em `[6.3/task-03-fix]` — módulo novo
+`domain/services/count_input_validation.py` (`validate_real_count(count, n, *,
+count_field, n_field)` e `validate_rate(rate, *, field)`), no padrão do
+`scoring_input_validation` da 6.1 (validador único dos kernels de scoring). O
+`kupiec_pof` consome agora (mensagens idênticas; `kupiec_invalid` verde sem
+mudança), as Tasks 04/08 consomem sem cópia. Arquivo fora da lista da Task 03,
+autorizado pela sessão mestra no veredito do Checkpoint C. Provado por
+`test_count_input_validation.py` (ramos com nome de campo + consumo por monkeypatch).
+
 <!-- END: post-execution -->

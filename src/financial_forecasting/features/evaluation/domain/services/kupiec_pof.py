@@ -23,8 +23,9 @@ import math
 from financial_forecasting.features.evaluation.domain.services.chi_square import (
     floor_lr_statistic,
 )
-from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
-    is_finite_number,
+from financial_forecasting.features.evaluation.domain.services.count_input_validation import (
+    validate_rate,
+    validate_real_count,
 )
 
 
@@ -52,23 +53,11 @@ def kupiec_pof(*, violations: float, observations: float, violation_rate: float)
     Raises:
         ValueError: argumento não-finito ou `bool`, `observations <= 0`, `violations`
             fora de [0, observations] ou `violation_rate` fora de (0, 1) (C3); LR bruto
-            negativo além do piso (I13).
+            negativo além do piso (I13). A validação é a do validador único dos
+            kernels de contagem (`count_input_validation`).
     """
-    for name, value in (
-        ("violations", violations),
-        ("observations", observations),
-        ("violation_rate", violation_rate),
-    ):
-        if not is_finite_number(value):
-            raise ValueError(f"{name} must be a finite number, got {value!r}")
-    if observations <= 0:
-        raise ValueError(f"observations must be > 0, got {observations!r}")
-    if not 0 <= violations <= observations:
-        raise ValueError(
-            f"violations must be in [0, observations={observations!r}], got {violations!r}"
-        )
-    if not 0.0 < violation_rate < 1.0:
-        raise ValueError(f"violation_rate must be in (0, 1), got {violation_rate!r}")
+    validate_real_count(violations, observations, count_field="violations", n_field="observations")
+    validate_rate(violation_rate, field="violation_rate")
     observed_rate = violations / observations
     raw = -2.0 * (
         _binomial_log_likelihood(violations, observations, violation_rate)
