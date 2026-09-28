@@ -75,6 +75,109 @@ def violation_rate_for(kind: HitKind, levels: Sequence[float]) -> float:
     return 1.0 - levels[0]
 
 
+def validate_kind_and_levels(kind: HitKind, levels: Sequence[float]) -> None:
+    """`kind` é `HitKind`; `levels` tem 2 (intervalo, par simétrico τ_l < τ_u) ou 1 nível."""
+    if not isinstance(kind, HitKind):
+        raise ValueError(f"kind must be a HitKind, got {kind!r}")
+    expected_size = _LEVELS_SIZE[kind]
+    if len(levels) != expected_size:
+        raise ValueError(
+            f"levels must have {expected_size} element(s) for kind={kind.value}, got {levels}"
+        )
+    if kind is HitKind.INTERVAL and not (levels[0] < levels[1] and is_symmetric_pair(*levels)):
+        raise ValueError(
+            "levels of an interval must be a symmetric pair (tau_l, tau_u) of the grid "
+            f"with tau_l < tau_u, got {levels}"
+        )
+
+
+def validate_violation_rate(kind: HitKind, levels: Sequence[float], violation_rate: float) -> None:
+    """`violation_rate` igual (exato) à regra do `kind` (`violation_rate_for`) e em (0, 1)."""
+    expected_rate = violation_rate_for(kind, levels)
+    if violation_rate != expected_rate:
+        raise ValueError(
+            f"violation_rate must equal the {kind.value} rule of the grid = "
+            f"{expected_rate!r}, got {violation_rate!r}"
+        )
+    if not 0.0 < violation_rate < 1.0:
+        raise ValueError(f"violation_rate must be in (0, 1), got {violation_rate!r}")
+
+
+def validate_includes_degenerate(includes_degenerate: bool) -> None:
+    """A variante (`includes_degenerate`) é `bool` - `1`/`0` não são variante."""
+    if type(includes_degenerate) is not bool:
+        raise ValueError(f"includes_degenerate must be a bool, got {includes_degenerate!r}")
+
+
+def validate_mask_description(
+    *, tolerance: float, degeneracy_rate: float, includes_degenerate: bool, tolerance_field: str
+) -> None:
+    """Autodescrição da máscara: tolerância (regra única), taxa em [0, 1], variante `bool`."""
+    validate_tolerance(tolerance, field=tolerance_field)
+    if not is_finite_number(degeneracy_rate) or not (0.0 <= degeneracy_rate <= 1.0):
+        raise ValueError(f"degeneracy_rate must be in [0, 1], got {degeneracy_rate!r}")
+    validate_includes_degenerate(includes_degenerate)
+
+
+def validate_dgt_fields(*, dgt_offset: int | None, dgt_step: int | None, horizon: int) -> None:
+    """Sub-série DGT: ambos ou nenhum; `int` não-`bool`; `dgt_step == horizon ≥ 2`;
+    `0 ≤ dgt_offset < dgt_step` (decisões de detalhe do technical §1)."""
+    if (dgt_offset is None) != (dgt_step is None):
+        raise ValueError(
+            f"dgt_offset and dgt_step must be both set or both None, got "
+            f"dgt_offset={dgt_offset!r}, dgt_step={dgt_step!r}"
+        )
+    if dgt_offset is None or dgt_step is None:
+        return
+    for name, value in (("dgt_offset", dgt_offset), ("dgt_step", dgt_step)):
+        if type(value) is not int:
+            raise ValueError(f"{name} must be an int (not bool), got {value!r}")
+    if dgt_step != horizon:
+        raise ValueError(f"dgt_step must equal horizon={horizon}, got {dgt_step}")
+    if dgt_step < _DGT_MIN_STEP:
+        raise ValueError(
+            f"dgt_step must be >= {_DGT_MIN_STEP} (horizon = 1 has no DGT sub-series), "
+            f"got {dgt_step}"
+        )
+    if not 0 <= dgt_offset < dgt_step:
+        raise ValueError(f"dgt_offset must be in [0, dgt_step={dgt_step}), got {dgt_offset}")
+
+
+def belongs_to_dgt_partition(dgt_step: int | None) -> bool:
+    """Predicado único de "sub-série DGT" (`dgt_step` preenchido; pares já validados)."""
+    return dgt_step is not None
+
+
+def validate_hit_identity(  # noqa: PLR0913 - um parâmetro por campo da identidade (keyword-only)
+    *,
+    horizon: int,
+    kind: HitKind,
+    levels: Sequence[float],
+    violation_rate: float,
+    tolerance: float,
+    degeneracy_rate: float,
+    includes_degenerate: bool,
+    dgt_offset: int | None,
+    dgt_step: int | None,
+    tolerance_field: str,
+) -> None:
+    """Identidade autodescritiva de uma sequência de violações (D8) - regra única.
+
+    Consumida pela `HitSequence` e pelos relatórios que a copiam
+    (`ChristoffersenReport`), que são persistidos como autodescritivos.
+    """
+    validate_horizon(horizon, field="horizon")
+    validate_kind_and_levels(kind, levels)
+    validate_violation_rate(kind, levels, violation_rate)
+    validate_mask_description(
+        tolerance=tolerance,
+        degeneracy_rate=degeneracy_rate,
+        includes_degenerate=includes_degenerate,
+        tolerance_field=tolerance_field,
+    )
+    validate_dgt_fields(dgt_offset=dgt_offset, dgt_step=dgt_step, horizon=horizon)
+
+
 def validate_violation_elements(violations: Sequence[object]) -> None:
     """Todo elemento é `bool` ou `None` (`1`, `0`, `"x"` erguem) - regra única do slice.
 
@@ -156,11 +259,20 @@ class HitSequence:
         """C1: um ramo por caso, mensagens nomeando o campo ou a posição."""
         self._check_lengths()
         self._check_timestamps()
-        self._check_horizon()
-        self._check_kind_and_rate()
+        validate_hit_identity(
+            horizon=self.horizon,
+            kind=self.kind,
+            levels=self.levels,
+            violation_rate=self.violation_rate,
+            tolerance=self.tolerance,
+            degeneracy_rate=self.degeneracy_rate,
+            includes_degenerate=self.includes_degenerate,
+            dgt_offset=self.dgt_offset,
+            dgt_step=self.dgt_step,
+            tolerance_field="HitSequence.tolerance",
+        )
         self._check_elements()
-        self._check_mask_description()
-        self._check_dgt()
+        self._check_gaps()
 
     @property
     def n_observed(self) -> int:
@@ -179,8 +291,8 @@ class HitSequence:
 
     @property
     def is_dgt_subseries(self) -> bool:
-        """`True` numa sub-série da partição DGT (`dgt_step` preenchido)."""
-        return self.dgt_step is not None
+        """`True` numa sub-série da partição DGT (`belongs_to_dgt_partition`)."""
+        return belongs_to_dgt_partition(self.dgt_step)
 
     def dgt_partition(self) -> tuple[HitSequence, ...]:
         """Sub-séries DGT {j, j+h, …}, j = 0..min(h, T)-1; `horizon == 1` → `(self,)`.
@@ -235,45 +347,10 @@ class HitSequence:
                     f"{index} has {current!r} after {previous!r}"
                 )
 
-    def _check_horizon(self) -> None:
-        validate_horizon(self.horizon, field="horizon")
-
-    def _check_kind_and_rate(self) -> None:
-        if not isinstance(self.kind, HitKind):
-            raise ValueError(f"kind must be a HitKind, got {self.kind!r}")
-        expected_size = _LEVELS_SIZE[self.kind]
-        if len(self.levels) != expected_size:
-            raise ValueError(
-                f"levels must have {expected_size} element(s) for kind={self.kind.value}, "
-                f"got {self.levels}"
-            )
-        if self.kind is HitKind.INTERVAL and not (
-            self.levels[0] < self.levels[1] and is_symmetric_pair(*self.levels)
-        ):
-            raise ValueError(
-                "levels of an interval must be a symmetric pair (tau_l, tau_u) of the grid "
-                f"with tau_l < tau_u, got {self.levels}"
-            )
-        expected_rate = violation_rate_for(self.kind, self.levels)
-        if self.violation_rate != expected_rate:
-            raise ValueError(
-                f"violation_rate must equal the {self.kind.value} rule of the grid = "
-                f"{expected_rate!r}, got {self.violation_rate!r}"
-            )
-        if not 0.0 < self.violation_rate < 1.0:
-            raise ValueError(f"violation_rate must be in (0, 1), got {self.violation_rate!r}")
-
     def _check_elements(self) -> None:
         validate_violation_elements(self.violations)
 
-    def _check_mask_description(self) -> None:
-        validate_tolerance(self.tolerance, field="HitSequence.tolerance")
-        if not is_finite_number(self.degeneracy_rate) or not (0.0 <= self.degeneracy_rate <= 1.0):
-            raise ValueError(f"degeneracy_rate must be in [0, 1], got {self.degeneracy_rate!r}")
-        if type(self.includes_degenerate) is not bool:
-            raise ValueError(
-                f"includes_degenerate must be a bool, got {self.includes_degenerate!r}"
-            )
+    def _check_gaps(self) -> None:
         n_gaps = len(self.violations) - self.n_observed
         if self.includes_degenerate:
             self._check_without_gaps_variant(n_gaps)
@@ -301,25 +378,3 @@ class HitSequence:
                 f"position is None, got degeneracy_rate={self.degeneracy_rate!r} with "
                 f"{n_gaps} of {size} positions None"
             )
-
-    def _check_dgt(self) -> None:
-        offset, step = self.dgt_offset, self.dgt_step
-        if (offset is None) != (step is None):
-            raise ValueError(
-                f"dgt_offset and dgt_step must be both set or both None, got "
-                f"dgt_offset={offset!r}, dgt_step={step!r}"
-            )
-        if offset is None or step is None:
-            return
-        for name, value in (("dgt_offset", offset), ("dgt_step", step)):
-            if type(value) is not int:
-                raise ValueError(f"{name} must be an int (not bool), got {value!r}")
-        if step != self.horizon:
-            raise ValueError(f"dgt_step must equal horizon={self.horizon}, got {step}")
-        if step < _DGT_MIN_STEP:
-            raise ValueError(
-                f"dgt_step must be >= {_DGT_MIN_STEP} (horizon = 1 has no DGT sub-series), "
-                f"got {step}"
-            )
-        if not 0 <= offset < step:
-            raise ValueError(f"dgt_offset must be in [0, dgt_step={step}), got {offset}")

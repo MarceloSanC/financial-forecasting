@@ -55,12 +55,19 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     validate_horizon,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._tolerance import (
+    validate_tolerance,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.hit_sequence import (
     HitKind,
     HitSequence,
+    belongs_to_dgt_partition,
     count_observed,
     count_transitions,
     count_violations,
+    validate_hit_identity,
+    validate_includes_degenerate,
+    validate_kind_and_levels,
     validate_violation_elements,
 )
 
@@ -299,8 +306,19 @@ class ChristoffersenReport:
     independence_descriptive: bool
 
     def __post_init__(self) -> None:
-        """C9: horizonte, status, p-valores e leitura descritiva coerentes."""
-        validate_horizon(self.horizon, field="horizon")
+        """C9: identidade copiada (regra do VO), status, p-valores e leitura descritiva."""
+        validate_hit_identity(
+            horizon=self.horizon,
+            kind=self.kind,
+            levels=self.levels,
+            violation_rate=self.violation_rate,
+            tolerance=self.tolerance,
+            degeneracy_rate=self.degeneracy_rate,
+            includes_degenerate=self.includes_degenerate,
+            dgt_offset=self.dgt_offset,
+            dgt_step=self.dgt_step,
+            tolerance_field="ChristoffersenReport.tolerance",
+        )
         validate_min_violations(self.min_violations)
         stats = self.statistics
         expected_status = independence_status_for(
@@ -321,7 +339,7 @@ class ChristoffersenReport:
             ("p_cc", self.p_cc, stats.lr_cc, _DF_TWO),
         ):
             _check_p_value(name, p_value, statistic, df)
-        expected_descriptive = self.horizon > 1 and self.dgt_offset is None
+        expected_descriptive = self.horizon > 1 and not belongs_to_dgt_partition(self.dgt_step)
         if self.independence_descriptive != expected_descriptive:
             raise ValueError(
                 "independence_descriptive must be (horizon > 1 and not a DGT sub-series) = "
@@ -531,6 +549,9 @@ class MonteCarloPValues:
             raise ValueError(
                 f"Monte Carlo p-values exist only for horizon == 1, got {self.horizon}"
             )
+        validate_kind_and_levels(self.kind, self.levels)
+        validate_tolerance(self.tolerance, field="MonteCarloPValues.tolerance")
+        validate_includes_degenerate(self.includes_degenerate)
         validate_min_violations(self.min_violations)
         _validate_draws_and_seed(self.draws, self.seed)
         for name, p_value in (("p_uc", self.p_uc), ("p_ind", self.p_ind), ("p_cc", self.p_cc)):

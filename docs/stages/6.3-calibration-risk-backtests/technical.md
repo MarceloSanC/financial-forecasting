@@ -1693,4 +1693,21 @@ primitivo; consumo provado por monkeypatch nos dois módulos
 (`test_single_counting_of_observed_and_violations`,
 `test_single_counting_in_the_hit_sequence`).
 
+### 2026-09-28 — [decision] Checkpoint C bloco 3: relatórios validam a identidade copiada pela regra única do VO — Claude (Opus 5.5)
+**Contexto:** achados LOW — (4) o `ChristoffersenReport` decidia "sub-série DGT" por
+`dgt_offset is None` e o `evaluate` por `is_dgt_subseries`; (5) `ChristoffersenReport`
+e `MonteCarloPValues` aceitavam identidade incoerente (taxa 0.3 numa cauda inferior
+em 0.05, tolerância −1, `degeneracy_rate` 7, `kind` `'x'`, `INTERVAL` com um nível,
+`includes_degenerate=1`), embora sejam persistidos como autodescritivos (D8).
+**Razão:** disposição `corrigido` em `[6.3/task-07-fix]`. As regras de identidade da
+`HitSequence` viraram funções de módulo em `value_objects/hit_sequence.py`
+(`validate_kind_and_levels`, `validate_violation_rate`, `validate_includes_degenerate`,
+`validate_mask_description`, `validate_dgt_fields` e a composição
+`validate_hit_identity`), mais o predicado único `belongs_to_dgt_partition(dgt_step)`
+(usado pela propriedade `is_dgt_subseries` e pelo relatório). A `HitSequence` e o
+`ChristoffersenReport` chamam `validate_hit_identity` (campo de tolerância nomeado por
+consumidor); o `MonteCarloPValues` chama as partes que tem (`kind`/`levels`,
+tolerância, variante). Um caso por ramo em `report_incoherent_identity` e
+`mc_incoherent_identity`; consumo provado por monkeypatch.
+
 <!-- END: post-execution -->

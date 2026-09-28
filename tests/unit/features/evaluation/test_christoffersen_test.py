@@ -722,3 +722,61 @@ def test_three_state_composition_with_tail_hit_sequences(
     assert math.isfinite(statistic)
     expected = _three_state_by_hand(2, 2, 6, lower.violation_rate, upper.violation_rate)
     assert _close(statistic, expected)
+
+
+# --- C9 — identidade copiada da sequência (D8; Checkpoint C bloco 3) ------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("overrides", "match"),
+    [
+        ({"violation_rate": 0.3}, "violation_rate must equal the lower_tail rule"),
+        ({"tolerance": -1.0}, r"ChristoffersenReport\.tolerance must be a finite number >= 0"),
+        ({"degeneracy_rate": 7.0}, r"degeneracy_rate must be in \[0, 1\]"),
+        ({"kind": "x"}, "kind must be a HitKind"),
+        ({"kind": HitKind.INTERVAL}, r"levels must have 2 element\(s\) for kind=interval"),
+        ({"includes_degenerate": 1}, "includes_degenerate must be a bool"),
+        ({"dgt_offset": 0}, "dgt_offset and dgt_step must be both set"),
+        ({"dgt_offset": 0, "dgt_step": 2}, "dgt_step must equal horizon=1"),
+    ],
+    ids=[
+        "rate-not-the-kind-rule",
+        "tolerance-negative",
+        "degeneracy-rate-above-one",
+        "kind-not-hitkind",
+        "interval-with-one-level",
+        "includes-degenerate-int",
+        "dgt-only-offset",
+        "dgt-step-not-horizon",
+    ],
+)
+def test_report_incoherent_identity_raises(
+    make_hit_sequence: HitSequenceFactory, overrides: dict[str, object], match: str
+) -> None:
+    """C9/D8: o relatório persistido valida a identidade copiada pela regra do VO."""
+    report = _hand_report(make_hit_sequence)
+
+    with pytest.raises(ValueError, match=match):
+        dataclasses.replace(report, **overrides)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_report_incoherent_identity_through_the_vo_rule(
+    make_hit_sequence: HitSequenceFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dono único: o relatório valida a identidade por `validate_hit_identity` do VO e a
+    leitura descritiva por `belongs_to_dgt_partition` (trocar os nomes muda o resultado)."""
+    report = _hand_report(make_hit_sequence)
+
+    def _reject(**_: object) -> None:
+        raise ValueError("single identity rule called")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(christoffersen_test_module, "validate_hit_identity", _reject)
+        with pytest.raises(ValueError, match="single identity rule called"):
+            dataclasses.replace(report)
+    with monkeypatch.context() as patch:
+        patch.setattr(christoffersen_test_module, "belongs_to_dgt_partition", lambda _: True)
+        with pytest.raises(ValueError, match="independence_descriptive must be"):
+            dataclasses.replace(report, horizon=7, independence_descriptive=True)

@@ -490,3 +490,27 @@ def test_mc_incoherent_status_attempts_raise(
 
     with pytest.raises(ValueError, match=match):
         dataclasses.replace(result, **overrides)  # type: ignore[arg-type]
+
+
+# --- C9 — identidade copiada da sequência (D8; Checkpoint C bloco 3) ------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("overrides", "match"),
+    [
+        ({"kind": "x"}, "kind must be a HitKind"),
+        ({"levels": (0.05, 0.95)}, r"levels must have 1 element\(s\) for kind=lower_tail"),
+        ({"tolerance": -1.0}, r"MonteCarloPValues\.tolerance must be a finite number >= 0"),
+        ({"includes_degenerate": 1}, "includes_degenerate must be a bool"),
+    ],
+    ids=["kind-not-hitkind", "levels-size", "tolerance-negative", "includes-degenerate-int"],
+)
+def test_mc_incoherent_identity_raises(
+    make_hit_sequence: HitSequenceFactory, overrides: dict[str, object], match: str
+) -> None:
+    """C9/D8: o resultado persistido valida a identidade copiada pelas regras do VO."""
+    result = _applicable(make_hit_sequence)
+
+    with pytest.raises(ValueError, match=match):
+        dataclasses.replace(result, **overrides)  # type: ignore[arg-type]
