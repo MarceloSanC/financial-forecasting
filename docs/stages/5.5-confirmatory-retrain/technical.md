@@ -1003,4 +1003,18 @@ Um subagente de contexto zerado, que não escreveu os testes, respondeu o questi
 - **Reexecução das 6 mutações** sobre os testes novos: todas morrem, com `1 failed, 89 passed` em cada uma de d, e, f, g, h e k. Nenhuma lacuna ficou aberta.
 - **Achado de código:** nenhum. As lacunas eram só de teste, e nenhuma mutação expôs defeito em `src/`.
 
+### 2026-09-28 — [finding] Task 34 — sweep interrompido pelo desligamento do host; não retoma no meio do estudo — Claude (Opus 5.5)
+**O que houve:** o sweep de 60 trials começou em 2026-09-28T00:41 UTC.
+- Ritmo: trials 1–20 em ~50 min e 20–28 em ~70 min (o TPE explorando a região cara do espaço).
+- Às 23:41 (horário local) de 27/09, o host foi desligado pelo menu Iniciar. O log de sistema tem o evento 1074 ("Desligado do computador … pelo usuário … Outro (não planejada)") e o 6006 às 23:42.
+- O desligamento derrubou o Docker e o container no trial 28 (exit 255, sem OOM).
+
+**Consequência:** o estudo do Optuna vive em memória, e o sweep só grava o resultado ao fim dos 60 trials. Os 28 trials se perderam e nada foi gravado sob o scope. O lock ficou órfão, com dono no container morto.
+
+**Ação:**
+- `sweep --break-stale-lock` desde o zero, em 2026-09-28T09:57 UTC. O TPE com `sampler_seed` fixa refaz a mesma sequência de sorteios.
+- O dono do lock foi conferido como morto antes da quebra: o container tinha saído.
+
+**Limitação declarada:** o sweep é retomável por **modelo** (TFT gravado não refaz), não por **trial**. Retomar trial a trial exigiria persistir o estudo (storage do Optuna) e fica fora desta Stage. O `run` é retomável por unidade. Uma queda no meio de uma seed do TFT perde só aquela unidade (até ~2 h no canto caro). Operacionalmente: o host fica ligado durante sweep e run (runbook).
+
 <!-- END: post-execution -->
