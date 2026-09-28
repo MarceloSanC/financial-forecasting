@@ -1393,4 +1393,22 @@ Tasks 01–12 ─► (rebase em origin/develop) ─► Task 13 (docs)
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
 
+> Preenchida durante/após a Fase 4. Apenas esta seção é editável após
+> `status: done`. Cada entrada carrega data + autor.
+
+### 2026-09-28 — [decision] Task 01: árvore transitiva de `arch`/`statsmodels` medida no `uv.lock` — Claude (Opus 5.5)
+**Contexto:** a Task 01 pede medir a árvore transitiva com `git diff uv.lock` e conferir
+que o `statsforecast` segue resolvendo com `statsmodels` 0.15.
+**Razão:** `uv lock` resolveu 181 pacotes; o diff traz exatamente **4 pacotes novos** —
+`arch` 8.0.0 (deps: numpy, packaging, pandas, scipy, statsmodels — todas já no lock),
+`formulaic` 1.2.2 (exigido pelo `statsmodels` 0.15; deps novas só as duas abaixo, o resto
+— narwhals, numpy, pandas, scipy, typing-extensions — já no lock), `interface-meta` 2.0.1
+e `wrapt` 2.5.0 — e **1 atualização**, `statsmodels` 0.14.6 → 0.15.0 (transitiva via
+`statsforecast`, que exige `>=0.14.5`: a 0.15 satisfaz). Nenhum pacote removido. `uv sync
+--inexact --extra dev` só no volume `ff-step62-venv`. O `make check` (T3) passou com a
+suíte inteira — inclusive a de `modeling`/`statsforecast` sob `statsmodels` 0.15 (2697
+passed, cobertura 98,48 %); a primeira rodada caiu na **coleta** com `OSError: [Errno 12]
+Cannot allocate memory` (pressão de memória do host com outras sessões em paralelo, não
+código) e a segunda, sozinha, ficou verde.
+
 <!-- END: post-execution -->

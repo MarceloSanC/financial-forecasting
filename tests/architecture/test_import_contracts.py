@@ -71,6 +71,9 @@ _EXPECTED_CONTRACTS = (
     # Stage 6.1 (A9/I11): sklearn/scoringrules/numpy/scipy confinados aos adapters
     # features/evaluation/adapters/out/scoring/ (ADR 6.1.0001 item 6).
     "evaluation-no-scoring-lib-leak",
+    # Stage 6.2 (A12/I11): arch/statsmodels confinados aos adapters
+    # features/evaluation/adapters/out/inference/ (ADRs 6.2.0003 e 6.2.0004).
+    "evaluation-no-inference-lib-leak",
     # Issue #60: independência entre bounded contexts. `hexagonal-layers` é
     # `type=layers` POR CONTAINER (só ordena camadas DENTRO de cada BC) e o
     # `check_layout.py` só barra adapter<->adapter — nenhum gate cobria import
@@ -648,6 +651,37 @@ _REAL_VIOLATION_CASES = (
             )
         },
         id="evaluation-no-scoring-lib-leak:evaluation-domain-imports-sklearn",
+    ),
+    # Stage 6.2 (A12) — `evaluation-no-inference-lib-leak`: um caso por módulo
+    # proibido na `application` e um `arch` no `domain`, que prova a matrícula de
+    # `evaluation.domain` (nem `domain-purity` nem o `check_layout.py` proíbem
+    # arch/statsmodels ali — lição do Checkpoint C da 6.1).
+    pytest.param(
+        "evaluation-no-inference-lib-leak",
+        {
+            "features/evaluation/application/_arch_audit_taint_arch.py": (
+                "import arch  # violação temporária\n"
+            )
+        },
+        id="evaluation-no-inference-lib-leak:evaluation-application-imports-arch",
+    ),
+    pytest.param(
+        "evaluation-no-inference-lib-leak",
+        {
+            "features/evaluation/application/_arch_audit_taint_statsmodels.py": (
+                "import statsmodels  # violação temporária\n"
+            )
+        },
+        id="evaluation-no-inference-lib-leak:evaluation-application-imports-statsmodels",
+    ),
+    pytest.param(
+        "evaluation-no-inference-lib-leak",
+        {
+            "features/evaluation/domain/_arch_audit_taint_arch.py": (
+                "import arch  # violação temporária\n"
+            )
+        },
+        id="evaluation-no-inference-lib-leak:evaluation-domain-imports-arch",
     ),
     pytest.param(
         "domain-purity",

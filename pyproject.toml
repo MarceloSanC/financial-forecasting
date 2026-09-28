@@ -114,6 +114,22 @@ dependencies = [
     # ainda pode mudar entre minors); o uv.lock trava o patch dos dois.
     "scikit-learn>=1.9,<2.0",
     "scoringrules>=0.11,<0.12",
+    # Oráculos de inferência pareada — Stage 6.2 / ADRs 6.2.0003-6.2.0004 e 0.0.0056
+    # DM/HLN, Holm e o procedimento 'R' do MCS são implementados UMA vez, stdlib-only,
+    # no domínio de `evaluation` (implementação de registro). `statsmodels` é o
+    # ORÁCULO de DM (HAC) e Holm (`multipletests`) atrás do port-out
+    # `InferenceBackend`; `arch` é o gerador DE REGISTRO dos índices de bootstrap
+    # (estacionário/moving-block) e da estimativa b̂_sb de Politis-White atrás do
+    # port-out `McsBackend`. Vivem SÓ em features/evaluation/adapters/out/inference/;
+    # o gate import-linter `evaluation-no-inference-lib-leak` reprova vazamento para
+    # application/domain. Entram em `dependencies` (NÃO num extra) pelo racional do
+    # scikit-learn/scoringrules acima: as pernas reais das suítes de contrato
+    # `[fake, statsmodels]`/`[fake, arch]` e o teste de integração contra `arch.MCS`
+    # rodam no CI, sem `skipif`. `statsmodels` deixa de ser só transitiva (vinha via
+    # statsforecast). Pinados por minor (`statsmodels`, 0.x) e por major (`arch`); o
+    # uv.lock trava o patch dos dois.
+    "arch>=8,<9",
+    "statsmodels>=0.15,<0.16",
 ]
 
 [project.optional-dependencies]
