@@ -109,7 +109,9 @@ dependencies = [
     # Entram em `dependencies` (NÃO num extra) pelo racional do statsforecast/
     # lightgbm acima: as pernas reais da suíte de contrato `[fake, sklearn,
     # scoringrules]` rodam no CI, sem `skipif`. `scikit-learn` já vinha transitivo
-    # (1.9.0 no uv.lock); aqui vira declarado. Pinados por minor; uv.lock trava o patch.
+    # (1.9.0 no uv.lock); aqui vira declarado. Pins: `scikit-learn` por major (API
+    # estável de `mean_pinball_loss` na série 1.x) e `scoringrules` por minor (0.x, API
+    # ainda pode mudar entre minors); o uv.lock trava o patch dos dois.
     "scikit-learn>=1.9,<2.0",
     "scoringrules>=0.11,<0.12",
 ]
