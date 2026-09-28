@@ -186,3 +186,24 @@ def test_real_repo_root_below_the_repository_root_is_an_explicit_error(tmp_path:
 
     with pytest.raises(RuntimeError, match="not the repository root"):
         probe.snapshot()
+
+
+@pytest.mark.contract
+@pytest.mark.usefixtures("isolated_git")
+def test_real_tracked_change_in_the_cohort_file_marks_dirty_then_changes_identity(
+    tmp_path: Path,
+) -> None:
+    """Auditoria de testes (mutação k): o arquivo do cohort entra na identidade e
+    no `code_dirty` — editar o spec sem commitar não pode passar por árvore limpa."""
+    repo = _repo(tmp_path)
+    before = _real(repo).snapshot()
+
+    (repo / _COHORT_FILE).write_text("name = 'changed'" + chr(10), encoding="utf-8")
+    dirty = _real(repo).snapshot()
+    _git(repo, "commit", "-q", "-am", "cohort")
+    after = _real(repo).snapshot()
+
+    assert dirty["code_dirty"] == "true"
+    assert after["code_dirty"] == "false"
+    assert after["code.cohort_file"] != before["code.cohort_file"]
+    assert after["code.src"] == before["code.src"]

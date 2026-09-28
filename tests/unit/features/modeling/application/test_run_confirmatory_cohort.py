@@ -664,3 +664,53 @@ def test_each_unit_logs_its_start_and_outcome(
     messages = [record.getMessage() for record in caplog.records]
     assert "unit gbm: start" in messages
     assert any(m.startswith("unit tft:seed=22: ran (2 runs,") for m in messages)
+
+
+def test_completed_unit_whose_run_vanished_from_silver_is_reported_corrupted() -> None:
+    """Auditoria de testes (mutação d): run marcado no ledger que sumiu do silver."""
+    harness = _Harness()
+    harness.run()
+    cohort_id = _cohort_id(_spec())
+    harness.index._runs[(cohort_id, _ASSET, _FEATURE_SET)][("gbm_quantile", _GBM_SEED)].pop(
+        f"gbm_quantile-s{_GBM_SEED}-f0"
+    )
+
+    with pytest.raises(CompletedUnitCorruptedError, match="no rows"):
+        harness.run()
+
+
+def test_declaration_mismatch_records_no_environment() -> None:
+    """Auditoria de testes (mutação h): I4 roda antes de I5 — um spec que não bate
+    com o dado não grava ambiente nem instante de início no ledger."""
+    harness = _Harness()
+    spec = _spec(feature_set_hash="e" * 64)
+
+    with pytest.raises(CohortDeclarationMismatchError):
+        harness.run(spec)
+
+    assert harness.ledger.environment(_cohort_id(spec)) is None
+    assert harness.ledger.run_started_at(_cohort_id(spec)) is None
+
+
+def test_baselines_with_a_missing_family_are_partial() -> None:
+    """Auditoria de testes (I7): 4 das 5 famílias completas no silver é parcial."""
+    harness = _Harness()
+    for baseline in _BASELINES[:-1]:
+        for fold in range(_GEOMETRY.n_folds):
+            harness.index.record(
+                asset_id=_ASSET,
+                feature_set_name=_FEATURE_SET,
+                cohort_id=_cohort_id(_spec()),
+                model_version=baseline.model_version,
+                seed=None,
+                run_id=f"{baseline.family}-{fold}",
+                fold=str(fold),
+                targets_by_horizon=_targets(fold),
+                rows=_GEOMETRY.expected_prediction_rows(
+                    fold_index=fold, horizons=_HORIZONS, n_levels=len(_LEVELS)
+                ),
+            )
+
+    with pytest.raises(PartialCohortUnitError, match="baselines"):
+        harness.run()
+    assert [unit for unit, _ in harness.calls] == []

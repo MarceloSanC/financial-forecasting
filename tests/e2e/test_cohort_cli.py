@@ -242,6 +242,14 @@ def test_cohort_runner_end_to_end(world: _World) -> None:
     # segunda execução, ledger e checkpoints no disco: pula tudo
     assert set(_unit_statuses(world.ok("run")).values()) == {"skipped_completed"}
 
+    # I5 pelo CLI com o probe real: mudança não commitada em src/ é recusada
+    module = world.repo / "src" / "pkg" / "__init__.py"
+    module.write_text("x = 2" + chr(10), encoding="utf-8")
+    code, _, err = world.cli("run")
+    assert code == _EXIT_ERROR
+    assert "EnvironmentMismatchError" in err
+    world.git("checkout", "--", "src/pkg/__init__.py")
+
     # lock órfão: recusa; --break-stale-lock libera
     (world.data / ".writer.lock").write_text(
         json.dumps({"pid": 999999, "host": "dead", "started_at": "t", "token": "orphan"}),

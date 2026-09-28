@@ -305,3 +305,45 @@ def test_materialize_start_cuts_only_the_dataset_not_the_ingestion() -> None:
     assert requests["dataset"].start == date(2010, 4, 20)
     assert requests["dataset"].end == cli._MATERIALIZE_END.date()
     assert not deps.cohort_ledger.is_locked
+
+
+_SECTION6_ERRORS = [
+    ("CohortNotFrozenError", "run_confirmatory_cohort"),
+    ("DatasetMismatchError", "run_confirmatory_cohort"),
+    ("CohortDeclarationMismatchError", "run_confirmatory_cohort"),
+    ("EnvironmentMismatchError", "run_confirmatory_cohort"),
+    ("CompletedUnitCorruptedError", "run_confirmatory_cohort"),
+    ("PartialCohortUnitError", "run_confirmatory_cohort"),
+    ("GeometryDoesNotFitError", "cohort_domain"),
+    ("InteriorMissingValuesError", "cohort_domain"),
+]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("name", "module"), _SECTION6_ERRORS, ids=[n for n, _ in _SECTION6_ERRORS])
+def test_cohort_errors_exit_2_naming_the_error(
+    name: str, module: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Auditoria de testes: cada erro do §6 chega ao operador com exit 2 e nome."""
+    modules = {
+        "run_confirmatory_cohort": "financial_forecasting.features.modeling.application."
+        "use_cases.run_confirmatory_cohort",
+        "cohort_domain": "financial_forecasting.features.modeling.domain.exceptions.cohort",
+    }
+    error_type = getattr(cli.importlib.import_module(modules[module]), name)
+    commands: Any = cli.importlib.import_module(f"{cli._CLI_PACKAGE}.cohort_commands")
+
+    def raising(*args: object, **kwargs: object) -> int:
+        raise error_type.__new__(error_type)
+
+    monkeypatch.setattr(commands, "run", raising)
+    err = io.StringIO()
+
+    code = cli.main(
+        ["run", "--data-root", str(tmp_path / "d"), "--cohort", str(_cohort(tmp_path))],
+        wiring=_wiring(tmp_path),
+        err=err,
+    )
+
+    assert code == _EXIT_ERROR
+    assert f"error: {name}" in err.getvalue()
