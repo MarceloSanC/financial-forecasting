@@ -967,17 +967,21 @@ relatório por essa identidade. Além disso, o `PairIntervalScore` passa a ergue
 `miscoverage != 2·τ_l` ou `nominal != 1 - miscoverage` (I5/I7 por construção) e o
 `CrpsReport` se `n_points < 1` ou `label != CRPS_Q_LABEL` (I4 por construção).
 
-### 2026-09-28 — [decision] Task 07: forma da grade no `CoverageReport` lida de `per_level`; `PairCoverage` checa o nominal — Claude (Opus 5.5)
+### 2026-09-28 — [decision] Task 07: forma da grade do `CoverageReport` conferida contra o gate embutido; faixas de ĉ/PICP/MPIW — Claude (Opus 5.5)
 **Contexto:** o `__post_init__` do concept §4 exige, se aplicável, `len(per_level) == K`
-e `len(per_pair) ==` nº de pares simétricos, mas o `CoverageReport` não carrega a
-grade da série.
-**Razão:** K é lido de `per_level` (≥ 2) e os pares esperados `(τ_k, τ_{K-1-k})` com
-τ_k < 0.5 são derivados dele; `per_pair` tem de casá-los em tamanho **e** identidade
-(um teste por ramo: `per_level` com 0/1 nível, `per_pair` faltando um par). Na mesma
-linha do fix #5 do Checkpoint C do bloco 2, `PairCoverage` ergue se
-`nominal != 1 - 2·τ_l` (I7 por construção). O `CoverageMetrics` consome
-`series.symmetric_pair_indices` (sem remontar a regra par → colunas). Reversível; não
-muda campo nem assinatura do concept §4.
+e `len(per_pair) ==` nº de pares simétricos. O relatório não tem um campo `levels`,
+mas **carrega os pares da série**: o `DegeneracyReport` embutido traz
+`pair_collapse_rates` com os `(τ_l, τ_u)` na ordem de `symmetric_pairs`.
+**Razão:** a forma é derivada do gate embutido, sem remontar a regra do par (a versão
+da Task 07 re-derivava os pares de `per_level` com uma cópia da regra "τ < 0.5" —
+corrigido no fix do Checkpoint C do bloco 3): com p pares do gate, `per_level` tem
+K ∈ {2p, 2p+1} níveis cujos τ, fora o central, são exatamente os dos pares, em ordem;
+`per_pair` casa os pares do gate em tamanho e identidade. Um teste por ramo, inclusive
+`per_level`/`per_pair` coerentes entre si (K = 5, 2 pares) mas diferentes do gate
+(3 pares) → `ValueError`. Também: ĉ e PICP em [0, 1] e MPIW ≥ 0 (`nan` ergue);
+`PairCoverage` ergue se `nominal != pair_nominal(τ_l)` (I7 por construção). O
+`CoverageMetrics` consome `series.symmetric_pair_indices` e `pair_nominal`. Reversível;
+não muda campo nem assinatura do concept §4.
 
 ### 2026-09-28 — [decision] Task 08: árvore transitiva medida de `scikit-learn`/`scoringrules` — Claude (Opus 5.5)
 **Contexto:** o technical (Task 08, risco do concept §10 e §5) pede medir com

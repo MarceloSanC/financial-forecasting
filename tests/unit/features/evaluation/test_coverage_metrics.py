@@ -30,6 +30,7 @@ from financial_forecasting.features.evaluation.domain.services.pinball_score imp
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
+    pair_nominal,
 )
 
 SeriesFactory = Callable[..., CoverageSeries]
@@ -44,6 +45,9 @@ _SPREAD = (-0.03, -0.02, -0.01, 0.0, 0.01, 0.02, 0.03)
 _WIDE = (-0.06, -0.04, -0.02, 0.0, 0.02, 0.04, 0.06)
 _DIRAC = (0.004,) * 7
 _HORIZON = 4
+# Linha de amplitude exatamente 0.25 (diádica): degenerada com tolerância 0.25.
+_DYADIC_SPREAD_ROW = (0.25, 0.25, 0.3125, 0.375, 0.4375, 0.5, 0.5)
+_DYADIC_TOLERANCE = 0.25
 _HALF = 0.5
 _ONE_THIRD = 1 / 3
 _TWO_THIRDS = 2 / 3
@@ -138,6 +142,24 @@ def test_nominal_is_exact_from_the_grid(
 
 
 # --- interval_widths e C8 ---------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_mpiw_and_widths_ignore_degenerate_row_with_nonzero_width(
+    make_series: SeriesFactory,
+) -> None:
+    """MPIW e `interval_widths` somam SÓ as linhas não-degeneradas (numerador e
+    denominador): a linha degenerada tem largura 0.25 ≠ 0 (tolerância 0.25, diádica),
+    então uma soma sobre as T linhas com denominador das mantidas daria outro valor."""
+    wide = (-0.5, -0.25, -0.125, 0.0, 0.125, 0.25, 0.5)  # largura do par externo 1.0
+    series = make_series([wide, _DYADIC_SPREAD_ROW, wide], [0.0, 0.3, 0.1])
+
+    report = CoverageMetrics.evaluate(series, tolerance=_DYADIC_TOLERANCE)
+    widths = CoverageMetrics.interval_widths(series, tolerance=_DYADIC_TOLERANCE, pair=(0.05, 0.95))
+
+    assert report.degeneracy.degenerate == (False, True, False)
+    assert report.per_pair[0].mpiw == 1.0
+    assert widths == (1.0, 1.0)
 
 
 @pytest.mark.unit
@@ -379,15 +401,69 @@ def test_applicable_with_per_level_of_wrong_size_raises(
     make_series: SeriesFactory, size: int
 ) -> None:
     report = _valid_report(make_series)
-    with pytest.raises(ValueError, match="per_level must hold the K >= 2"):
+    with pytest.raises(ValueError, match="per_level must hold the K in"):
         dataclasses.replace(report, per_level=report.per_level[:size])
 
 
 @pytest.mark.unit
 def test_applicable_with_per_pair_of_wrong_size_raises(make_series: SeriesFactory) -> None:
     report = _valid_report(make_series)
-    with pytest.raises(ValueError, match="one entry per symmetric pair"):
+    with pytest.raises(ValueError, match="one entry per symmetric pair of the gate"):
         dataclasses.replace(report, per_pair=report.per_pair[:-1])
+
+
+@pytest.mark.unit
+def test_coherent_grid_that_differs_from_the_gate_raises(make_series: SeriesFactory) -> None:
+    """C4: `per_level` (K = 5) e `per_pair` (2 pares) coerentes ENTRE SI, mas o gate
+    embutido tem 3 pares (K = 7) — a grade do relatório tem de ser a do gate."""
+    report = _valid_report(make_series)
+    levels = (0.05, 0.1, 0.5, 0.9, 0.95)
+    per_level = tuple((level, _HALF) for level in levels)
+    per_pair = tuple(
+        PairCoverage(
+            lower_level=low, upper_level=high, nominal=pair_nominal(low), picp=_HALF, mpiw=0.1
+        )
+        for low, high in ((0.05, 0.95), (0.1, 0.9))
+    )
+
+    with pytest.raises(ValueError, match="per_level must hold the K in"):
+        dataclasses.replace(report, per_level=per_level, per_pair=per_pair)
+
+
+@pytest.mark.unit
+def test_per_level_with_other_levels_than_the_gate_raises(make_series: SeriesFactory) -> None:
+    """C4: K = 7 como o gate, mas com τ que não são os dos pares do gate."""
+    report = _valid_report(make_series)
+    levels = (0.05, 0.1, 0.2, 0.5, 0.8, 0.9, 0.95)
+
+    with pytest.raises(ValueError, match="do not hold the gate pairs"):
+        dataclasses.replace(report, per_level=tuple((level, _HALF) for level in levels))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("coverage", [-0.1, 1.5, math.nan], ids=["negative", "above-one", "nan"])
+def test_per_level_coverage_outside_unit_interval_raises(
+    make_series: SeriesFactory, coverage: float
+) -> None:
+    report = _valid_report(make_series)
+    per_level = ((report.per_level[0][0], coverage), *report.per_level[1:])
+
+    with pytest.raises(ValueError, match=r"must be in \[0, 1\]"):
+        dataclasses.replace(report, per_level=per_level)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("picp", [-0.1, 1.5, math.nan], ids=["negative", "above-one", "nan"])
+def test_pair_coverage_with_picp_outside_unit_interval_raises(picp: float) -> None:
+    with pytest.raises(ValueError, match="picp must be a fraction"):
+        PairCoverage(lower_level=0.05, upper_level=0.95, nominal=0.9, picp=picp, mpiw=0.1)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("mpiw", [-0.1, math.nan], ids=["negative", "nan"])
+def test_pair_coverage_with_negative_mpiw_raises(mpiw: float) -> None:
+    with pytest.raises(ValueError, match="mpiw must be a width"):
+        PairCoverage(lower_level=0.05, upper_level=0.95, nominal=0.9, picp=_HALF, mpiw=mpiw)
 
 
 @pytest.mark.unit

@@ -29,9 +29,6 @@ from financial_forecasting.features.evaluation.domain.value_objects.coverage_ser
     pair_nominal,
 )
 
-_MEDIAN_LEVEL = 0.5
-_MIN_LEVELS = 2
-
 
 @dataclass(frozen=True)
 class PairCoverage:
@@ -51,12 +48,16 @@ class PairCoverage:
     mpiw: float
 
     def __post_init__(self) -> None:
-        """I7: o nominal sai da fórmula única 1 - 2·τ_l."""
+        """I7: o nominal sai da fórmula única 1 - 2·τ_l; PICP é fração e MPIW é largura."""
         expected = pair_nominal(self.lower_level)
         if self.nominal != expected:
             raise ValueError(
                 f"nominal must be 1 - 2 * lower_level = {expected}, got {self.nominal}"
             )
+        if not 0.0 <= self.picp <= 1.0:
+            raise ValueError(f"picp must be a fraction in [0, 1], got {self.picp}")
+        if not self.mpiw >= 0.0:
+            raise ValueError(f"mpiw must be a width >= 0, got {self.mpiw}")
 
 
 @dataclass(frozen=True)
@@ -114,21 +115,34 @@ class CoverageReport:
             raise ValueError("a non-applicable CoverageReport must have per_pair == ()")
 
     def _check_grid_shape(self) -> None:
-        # O relatório não carrega a grade: K é lido de `per_level`, e os pares esperados
-        # (τ_k, τ_{K-1-k}) com τ_k < 0.5 são derivados dele — tamanho e identidade.
+        # Os pares da série vêm do gate embutido (`pair_collapse_rates` carrega os
+        # (τ_l, τ_u) na ordem de `symmetric_pairs`) — nada de remontar a regra do par
+        # aqui. Com p pares, K ∈ {2p, 2p+1} (o nível central só existe com K ímpar) e os
+        # níveis de `per_level`, fora o central, são exatamente os τ dos pares, em ordem.
+        gate_pairs = tuple((low, high) for low, high, _ in self.degeneracy.pair_collapse_rates)
+        n_pairs = len(gate_pairs)
         levels = tuple(level for level, _ in self.per_level)
-        if len(levels) < _MIN_LEVELS:
+        if len(levels) not in (2 * n_pairs, 2 * n_pairs + 1):
             raise ValueError(
-                f"per_level must hold the K >= {_MIN_LEVELS} grid levels, got {len(levels)}"
+                f"per_level must hold the K in {{{2 * n_pairs}, {2 * n_pairs + 1}}} levels of "
+                f"the gate's {n_pairs} symmetric pairs, got {len(levels)}"
             )
-        size = len(levels)
-        expected_pairs = tuple(
-            (levels[k], levels[size - 1 - k]) for k in range(size) if levels[k] < _MEDIAN_LEVEL
+        outer = levels[:n_pairs] + levels[len(levels) - n_pairs :]
+        expected = tuple(low for low, _ in gate_pairs) + tuple(
+            high for _, high in reversed(gate_pairs)
         )
-        pairs = tuple((pair.lower_level, pair.upper_level) for pair in self.per_pair)
-        if pairs != expected_pairs:
+        if outer != expected:
             raise ValueError(
-                f"per_pair must hold one entry per symmetric pair {expected_pairs}, got {pairs}"
+                f"per_level levels {levels} do not hold the gate pairs {gate_pairs} in order"
+            )
+        for level, coverage in self.per_level:
+            if not 0.0 <= coverage <= 1.0:
+                raise ValueError(f"coverage at level {level} must be in [0, 1], got {coverage}")
+        pairs = tuple((pair.lower_level, pair.upper_level) for pair in self.per_pair)
+        if pairs != gate_pairs:
+            raise ValueError(
+                f"per_pair must hold one entry per symmetric pair of the gate {gate_pairs}, "
+                f"got {pairs}"
             )
 
 
