@@ -1535,7 +1535,9 @@ contrato C3 (argumento inválido → `ValueError` nomeando o campo):
 `<count>/<n> underflows to 0.0` quando `count > 0` e `count / n == 0.0` (casos
 `ratio-underflow` no validador e no `kupiec_invalid`). A docstring do
 `floor_lr_statistic` registra o alcance do piso absoluto (cancelamento ~ n·eps: vale
-com folga para n ≲ 1e7). O ADR 6.3.0001 (`accepted`) não foi editado.
+para n ≲ 1e6 — a primeira versão desta entrada e da docstring dizia 1e7; **corrigido**
+em `[6.3/task-03-fix]` após o Checkpoint C do bloco 2 medir cancelamento além de −1e-9
+em 76 de 2000 sorteios com n = 1e7). O ADR 6.3.0001 (`accepted`) não foi editado.
 
 ### 2026-09-28 — [decision] Task 04: `WilsonBandReport` também confere contagem/n; banda recortada a [0, 1] — Claude (Opus 5.5)
 **Contexto:** o C9 da Task 04 lista sete ramos do `__post_init__`; nada diz do par

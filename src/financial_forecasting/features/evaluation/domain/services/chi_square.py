@@ -44,9 +44,10 @@ def floor_lr_statistic(value: float) -> float:
 
     Alcance do piso absoluto: o LR é diferença de duas log-verossimilhanças de
     magnitude ~n, então o erro de cancelamento cresce como n·eps (eps ≈ 2.2e-16) —
-    `-1e-9` cobre o ruído com folga para n ≲ 1e7 (muito acima de T ≤ 500 do oráculo e
-    das séries do piloto). Acima disso um LR bruto negativo além do piso pode ser
-    ruído, não bug (ADR 6.3.0001 item 8, nota do Checkpoint C).
+    `-1e-9` cobre o ruído para n ≲ 1e6 (muito acima de T ≤ 500 do oráculo e das
+    séries do piloto). Em n = 1e7 o cancelamento medido já passou de -1e-9 em 76 de
+    2000 sorteios (Checkpoint C, bloco 2): acima de ~1e6 um LR bruto negativo além do
+    piso pode ser ruído, não bug (ADR 6.3.0001 item 8).
 
     Raises:
         ValueError: valor não-finito ou `bool` (predicado único do slice), ou abaixo de
