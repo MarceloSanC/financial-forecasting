@@ -26,6 +26,10 @@ _CHI2_1_CRITICAL = 3.841458820694124
 _CHI2_2_CRITICAL = 5.991464547107979
 _TINY_NEGATIVE = -1e-14
 _BELOW_FLOOR = -2e-9
+# Pontos extras por df (independentes da forma fechada do kernel): exp(-1) para df = 2 e
+# P(|Z| > 1) = 2·(1 - Φ(1)) = 0.31731050786291410… para df = 1 (tabela da normal).
+_TIGHT_ABS_TOL = 1e-15
+_P_ABS_Z_ABOVE_ONE = 0.3173105078629141
 # I13 / ADR 6.3.0001 item 8: o valor do piso fixado pelo contrato.
 _CONTRACT_FLOOR = -1e-9
 
@@ -39,6 +43,17 @@ _CONTRACT_FLOOR = -1e-9
 def test_chi2_critical_value_gives_five_percent(statistic: float, df: int) -> None:
     """A3/I7: o valor crítico de 5 % devolve 0.05 (±1e-12) pela forma fechada."""
     assert abs(chi_square_sf(statistic, df=df) - _FIVE_PERCENT) <= _ABS_TOL
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("statistic", "df", "expected"),
+    [(2.0, 2, math.exp(-1.0)), (1.0, 1, _P_ABS_Z_ABOVE_ONE)],
+    ids=["df2-at-2", "df1-at-1"],
+)
+def test_chi2_critical_extra_points_pin_each_df(statistic: float, df: int, expected: float) -> None:
+    """Um segundo ponto por df: P(χ²₂ > 2) = exp(-1) e P(χ²₁ > 1) = P(|Z| > 1) (±1e-15)."""
+    assert abs(chi_square_sf(statistic, df=df) - expected) <= _TIGHT_ABS_TOL
 
 
 @pytest.mark.unit
