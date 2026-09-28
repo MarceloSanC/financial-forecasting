@@ -1021,7 +1021,7 @@ mesmas entradas".
 `validate_finite(name, values)`, chamada pelas três validações de série (realizados,
 quantis de cada grade, extremos do intervalo) e pelos kernels por ponto
 (`pinball_loss`, `crps_quantile` via `validate_grid_row`, `interval_score` via
-`validate_interval_bounds`). Todo valor não-finito ou não-número ergue `ValueError`
+`validate_interval_bounds`). Todo valor não-finito, não-número ou `bool` ergue `ValueError`
 com a mesma mensagem nas três pernas, provado por casos C7 novos na suíte de contrato
 (`nan`, `inf`, `-inf` em realizado, quantil e cada extremo). Não muda a assinatura do
 port; estreita o domínio de entrada, coerente com o C2 da `CoverageSeries`.

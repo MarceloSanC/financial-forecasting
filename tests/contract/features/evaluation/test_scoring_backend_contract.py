@@ -306,8 +306,8 @@ def test_mean_interval_score_rejects_empty_sequence(backend: ScoringBackend) -> 
 
 # --- C7 — valores não-finitos: mesma recusa, com a mensagem do validador ---------------
 
-_BAD = [math.nan, math.inf, -math.inf]
-_BAD_IDS = ["nan", "inf", "-inf"]
+_BAD: list[float] = [math.nan, math.inf, -math.inf, True]
+_BAD_IDS = ["nan", "inf", "-inf", "bool"]
 
 
 @pytest.mark.contract

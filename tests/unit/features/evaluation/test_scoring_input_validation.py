@@ -156,8 +156,8 @@ def test_validators_accept_well_formed_series() -> None:
 
 # --- Finitude (C7): as pernas não podem divergir em nan/inf ------------------------------
 
-_NON_FINITE = [math.nan, math.inf, -math.inf, None, "0.1"]
-_NON_FINITE_IDS = ["nan", "inf", "-inf", "none", "str"]
+_NON_FINITE = [math.nan, math.inf, -math.inf, None, "0.1", True, False]
+_NON_FINITE_IDS = ["nan", "inf", "-inf", "none", "str", "true", "false"]
 
 
 @pytest.mark.unit
