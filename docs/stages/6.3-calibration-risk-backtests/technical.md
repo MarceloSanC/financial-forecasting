@@ -1472,4 +1472,36 @@ Tasks 01–11 ─► Task 12 (docs descrevem o que existe; rebase antes)
 > Preenchida durante/após a Fase 4. Apenas esta seção é editável após
 > `status: done`. Cada entrada carrega data + autor.
 
+### 2026-09-28 — [decision] Task 01: predicados FA7 sem validação própria — Claude (Opus 5.5)
+**Contexto:** `is_at_or_below`/`is_inside_closed` são chamados por ponto dentro dos
+laços do `CoverageMetrics` (e, na Task 06, do `HitSequences`).
+**Razão:** decisão de detalhe planejada no §1 — os valores chegam já validados pela
+`CoverageSeries` (C2 da 6.1: realizados e quantis pós-guardrail finitos); os
+predicados são `realized <= quantile` e `lower <= realized <= upper`, sem
+revalidação. Provado por `test_coverage_series.py::fa7_at_or_below`,
+`::fa7_inside_closed` e pela troca por monkeypatch em
+`test_coverage_metrics.py::consumes_fa7_predicates` (commit d37cd37).
+
+### 2026-09-28 — [decision] Task 03: piso I13 com dono único em `chi_square.py`; `xlogy` público em `kupiec_pof.py` — Claude (Opus 5.5)
+**Contexto:** o piso `[−1e-9, 0)` → 0.0 e a convenção `0·log 0 = 0` serão
+consumidos também por LR_ind e LR_uc de 3 estados (Tasks 07/08).
+**Razão:** decisões de detalhe planejadas no §1 — `LR_NEGATIVE_FLOOR = -1e-9` e
+`floor_lr_statistic` moram no módulo-folha `chi_square.py` (valida com o
+`is_finite_number` do slice: não-finito e `bool` erguem; `-0.0` não é `< 0` e volta
+inalterado); `xlogy(x, y)` público em `kupiec_pof.py` (x = 0 → 0.0). O `kupiec_pof`
+usa `ℓ(x, n, q) = xlogy(n − x, 1 − q) + xlogy(x, q)` com `q = x/n` literal, na ordem
+de operações do §1: a entrada do piso `kupiec_pof(violations=2, observations=5,
+violation_rate=0.39999999999999997)` deu LR bruto **−8.881784197001252e-16**
+(medido na execução, igual ao §1) e o kernel devolve exatamente `0.0`; nenhuma
+varredura de entrada alternativa foi necessária.
+
+### 2026-09-28 — [decision] Task 03: tolerância do A5 é absoluta (1e-12) — Claude (Opus 5.5)
+**Contexto:** o A5 pede "igual (1e-12)" à expressão (6) sem dizer se é absoluta ou
+relativa; na grade do teste (n ∈ {10, 25, 60}, p ∈ {0.02, 0.05, 0.3}, x = 1..n−1) o
+LR chega a ≈ 460.
+**Razão:** diferença máxima medida entre log-somas e o log do produto:
+5.684e-14 (x = 40, n = 60, p = 0.02, LR ≈ 237) — cabe em 1e-12 absoluto, a leitura
+mais estrita; declarada em `_ABS_TOL` no módulo de teste (ADR 0.0.0021). Reversível
+(sem âncora explícita no concept para absoluta × relativa).
+
 <!-- END: post-execution -->
