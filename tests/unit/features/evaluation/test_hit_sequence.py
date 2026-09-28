@@ -322,9 +322,9 @@ def test_hitseq_horizon_is_preserved(make_hit_sequence: HitSequenceFactory, hori
 @pytest.mark.parametrize(
     ("horizon", "match"),
     [
-        (0, "horizon must be >= 1"),
-        (True, "horizon must be an int"),
-        (1.0, "horizon must be an int"),
+        (0, "horizon must be an int >= 1"),
+        (True, "horizon must be an int >= 1"),
+        (1.0, "horizon must be an int >= 1"),
     ],
     ids=["zero", "bool", "float"],
 )

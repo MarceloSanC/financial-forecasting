@@ -1578,4 +1578,25 @@ mensagem do gate (`^tolerance must be`). Consumo provado por monkeypatch em
 `test_tolerance_rule.py`. Arquivo da 6.1 tocado (`degeneracy_gate.py`), autorizado pela
 sessão mestra.
 
+### 2026-09-28 — [decision] Checkpoint C bloco 2: regra de horizonte com dono único em `value_objects/_horizon.py` — Claude (Opus 5.5)
+**Contexto:** achado LOW (dono da regra) — "horizonte `int` não-`bool` ≥ 1" estava
+escrito em `HitSequence._check_horizon` e `wilson_band._check_horizon`, e as Tasks
+07–09 (relatórios de Christoffersen, MC e VaR) precisariam dele de novo.
+**Razão:** disposição `corrigido` em `[6.3/task-05-fix]` — helper privado
+`value_objects/_horizon.py` (`validate_horizon(value, *, field)`, mensagem
+`<field> must be an int >= 1`), consumido agora pela `HitSequence` e pelo
+`WilsonBand`/`WilsonBandReport` e, nas Tasks 07–09, pelos relatórios novos. A
+`CoverageSeries` (6.1) não foi tocada. Consumo provado por monkeypatch em
+`test_horizon_rule.py`.
+
+### 2026-09-28 — [finding] `CoverageSeries` adota os helpers `_horizon`/`_timestamps` depois do merge da 6.2 e da 6.3 — candidata Stage 6.4 — Claude (Opus 5.5)
+**Contexto:** a `CoverageSeries` (6.1) mantém a forma mais fraca do horizonte
+(`horizon < 1`, aceita `True`) e a cópia byte a byte da regra de timestamps
+crescentes; a 6.3 criou `value_objects/_horizon.py` e a 6.2 cria, em paralelo,
+`value_objects/_timestamps.py`.
+**Razão:** trocar a `CoverageSeries` agora colidiria com as duas Stages em voo (a 6.3
+já edita `coverage_series.py`, a 6.2 cria o helper de timestamps). Escalado para
+depois do merge das duas — candidata Stage 6.4: a `CoverageSeries` passa a consumir
+`validate_horizon` e `check_strictly_increasing`, sem cópia.
+
 <!-- END: post-execution -->

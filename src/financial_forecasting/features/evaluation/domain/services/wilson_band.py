@@ -33,6 +33,9 @@ from financial_forecasting.features.evaluation.domain.services.count_input_valid
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
+    validate_horizon,
+)
 
 
 def wilson_interval(*, count: float, n: float, band_level: float) -> tuple[float, float]:
@@ -60,11 +63,6 @@ def wilson_interval(*, count: float, n: float, band_level: float) -> tuple[float
         * math.sqrt(proportion * (1.0 - proportion) + kappa_sq / (4.0 * n))
     )
     return center - half_width, center + half_width
-
-
-def _check_horizon(horizon: int) -> None:
-    if isinstance(horizon, bool) or not isinstance(horizon, int) or horizon < 1:
-        raise ValueError(f"horizon must be an int >= 1, got {horizon!r}")
 
 
 @dataclass(frozen=True)
@@ -103,7 +101,7 @@ class WilsonBandReport:
 
     def __post_init__(self) -> None:
         """C9: horizonte, taxas, aplicabilidade, banda e aviso coerentes entre si."""
-        _check_horizon(self.horizon)
+        validate_horizon(self.horizon, field="horizon")
         validate_rate(self.nominal, field="nominal")
         validate_rate(self.band_level, field="band_level")
         if self.serial_dependence_warning != (self.horizon > 1):
@@ -161,7 +159,7 @@ class WilsonBand:
                 fora de (0, 1), não-finitos ou `bool`; contagem inválida (C3); n = 0
                 com count ≠ 0.
         """
-        _check_horizon(horizon)
+        validate_horizon(horizon, field="horizon")
         validate_rate(nominal, field="nominal")
         validate_rate(band_level, field="band_level")
         warning = horizon > 1

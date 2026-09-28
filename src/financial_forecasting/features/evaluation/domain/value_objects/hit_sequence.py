@@ -31,6 +31,9 @@ from itertools import pairwise
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
+    validate_horizon,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._tolerance import (
     validate_tolerance,
 )
@@ -211,10 +214,7 @@ class HitSequence:
                 )
 
     def _check_horizon(self) -> None:
-        if isinstance(self.horizon, bool) or not isinstance(self.horizon, int):
-            raise ValueError(f"horizon must be an int, got {self.horizon!r}")
-        if self.horizon < 1:
-            raise ValueError(f"horizon must be >= 1, got {self.horizon}")
+        validate_horizon(self.horizon, field="horizon")
 
     def _check_kind_and_rate(self) -> None:
         if not isinstance(self.kind, HitKind):
