@@ -72,9 +72,12 @@ tests/
 │   └── features/<feature>/
 ├── e2e/                            # Sobem a app completa via HTTP
 │   └── features/<feature>/
-└── fakes/                          # Implementações fake dos ports para uso em testes
-    └── features/<feature>/
-        └── in_memory_<entity>_repository.py
+├── fakes/                          # Implementações fake dos ports para uso em testes
+│   └── features/<feature>/
+│       └── in_memory_<entity>_repository.py
+├── fixtures/                       # Dados de teste versionados (lidos só por integration)
+│   └── r_oracle/                   # Oráculo R: <unidade>.{json,R,sessionInfo.txt} + Dockerfile (ADR 6.2.0006)
+└── architecture/                   # Testes dos próprios gates (import-linter, layout, fake-parity, port-coverage)
 
 migrations/
 ├── alembic.ini

@@ -1622,4 +1622,28 @@ própria execução achou vivo `T_R < T*` → `≤` (nenhuma réplica empatava):
 mutante "var̂ com divisor B − 1" é **equivalente**: escala todos os t e t* pelo mesmo fator
 e não muda p nem ordem (o relatório não expõe t).
 
+### 2026-09-28 — [decision] Task 08: casos da fixture `dm_test_cases`, chave `warning` e medição contra o R — Claude (Opus 5.5)
+**Contexto:** a Task fixa os cenários e o schema da unidade, não os dados nem o que gravar
+do aviso de fallback nos casos de erro.
+**Razão:** (1) **17 casos**, gerados uma vez com `docker build -t ff-r-oracle:4.4.1
+tests/fixtures/r_oracle` + `Rscript dm_test_cases.R` (imagem construída do `Dockerfile`
+versionado, byte-idêntico ao ADR 6.2.0006 item 2): T = 60 × h ∈ {1, 7} × {acf, bartlett}
+× candidato melhor/pior (8; perdas independentes |N(0,1)| com escala 0,8/1,2 — sinal
+moderado, p entre 0,02 e 0,995, para exercitar a t fora da saturação); T = 250, h = 7,
+acf, dependência AR(1) (1); T = 8 com h = 1 e h = 2 (2); fallback h = 7 → 1 por busca
+determinística de seed (T = 20; a seed 1 já cai no fallback) e o mesmo dado com Bartlett,
+que não cai (2); fallback analítico d = ±1, T = 10, h = 2 (1); erros: d constante com
+h = 2 (aviso de fallback e depois "Variance of DM statistic is zero"), h > T (T = 6, h = 7)
+e variância nula com h = 1 (3). Nenhum caso h = T (o `.R` faz `stopifnot(h != T)`). (2)
+Casos de sucesso gravam `expected.warning` (texto do aviso do R ou `null`); casos de erro
+gravam `expected_error` e, no nível do caso, `warning` — chave extra que o teste genérico
+ignora (ele só lê `provenance` e os objetos `{"dec", "hex"}`). (3) O golden test confere
+só que o domínio **ergue** `ValueError` nos casos de erro: as mensagens do domínio não são
+as do R (a de h > T é a do dono `_paired_inputs`). (4) Medição, domínio (entradas via
+`float.fromhex`) × R: estatística rel. máx. **5,1e−16**, p abs. máx. **6,7e−16** e t
+isolada (`student_t_cdf` sobre a S1* do R × `pt`) abs. máx. **6,7e−16** — muito abaixo das
+tolerâncias do §1 (1e−11 / 1e−12). (5) `_fixture_problems` também reporta "Dockerfile not
+found" quando falta o `Dockerfile` ao lado do JSON (a regra 7 não teria com o que comparar);
+o `LAYOUT.md` §2 ganhou `tests/fixtures/r_oracle/` e `tests/architecture/` na árvore.
+
 <!-- END: post-execution -->
