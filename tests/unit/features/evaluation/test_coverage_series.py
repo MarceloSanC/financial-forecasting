@@ -323,3 +323,19 @@ def test_pair_miscoverage_is_not_the_width_form() -> None:
     width_form = 1 - (0.95 - 0.05)
 
     assert width_form != pair_miscoverage(0.05)
+
+
+@pytest.mark.unit
+def test_bool_values_are_not_finite_numbers(make_series: SeriesFactory) -> None:
+    """C2: `bool` é subclasse de `int` mas não é valor de retorno — `realized=True` ergue."""
+    with pytest.raises(ValueError, match="point 0: realized value must be finite"):
+        make_series([_GRID], [True])
+
+
+@pytest.mark.unit
+def test_bool_guardrail_value_is_not_a_finite_number(make_series: SeriesFactory) -> None:
+    """C2: o 4.3 preserva um `bool` bruto sem reordenar (não é número finito para ele);
+    a série recusa esse valor pontuado."""
+    grid = (*_GRID[:3], True, *_GRID[4:])
+    with pytest.raises(ValueError, match="point 0: guardrail values must all be finite"):
+        make_series([grid], [0.0])
