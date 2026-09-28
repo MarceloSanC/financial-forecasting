@@ -501,3 +501,27 @@ def test_valid_report_round_trips(make_series: SeriesFactory) -> None:
     report = _valid_report(make_series)
 
     assert dataclasses.replace(report) == report
+
+
+def _centered_grid(width: float) -> tuple[float, ...]:
+    """Grade de 7 níveis centrada em 0 cujo par (0.05, 0.95) tem largura `width` exata."""
+    half = width / 2
+    return (-half, -half / 2, -half / 4, 0.0, half / 4, half / 2, half)
+
+
+@pytest.mark.unit
+def test_interval_widths_preserve_series_order(make_series: SeriesFactory) -> None:
+    """`interval_widths` devolve as larguras na ORDEM da série (não ordenadas nem
+    invertidas), pulando a linha degenerada — sequência não-palíndroma, Dirac no meio."""
+    grids = [
+        _centered_grid(0.02),
+        _centered_grid(0.06),
+        _DIRAC,
+        _centered_grid(0.04),
+        _centered_grid(0.10),
+    ]
+    series = make_series(grids, [0.0, 0.0, 0.0, 0.0, 0.0])
+
+    widths = CoverageMetrics.interval_widths(series, tolerance=0.0, pair=(0.05, 0.95))
+
+    assert widths == (0.02, 0.06, 0.04, 0.10)
