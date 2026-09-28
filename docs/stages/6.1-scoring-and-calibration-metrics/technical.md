@@ -894,4 +894,15 @@ alinhamento valor↔nível; a checagem ergue `ValueError` nomeando o ponto, cobe
 `test_guardrail_values_misaligned_with_levels_raise`. Reversível e sem efeito sobre
 séries montadas pelo `from_raw` (que já garante o tamanho).
 
+### 2026-09-28 — [deviation] Task 01: caso real de `evaluation.domain` no `evaluation-no-scoring-lib-leak` — Claude (Opus 5.5)
+**Contexto:** a Task 01 especificou os quatro casos do contrato novo só na
+`application`. O Checkpoint C do bloco 1 apontou que nada provava a matrícula de
+`evaluation.domain` nele: `domain-purity` não proíbe `sklearn`/`scoringrules`/`scipy`
+e o `check_layout.py` também não — tirar o domain de `source_modules` passaria verde.
+**Razão:** lacuna de especificação fechada em `fix(...) [6.1/task-01-fix]`: caso
+`evaluation-no-scoring-lib-leak:evaluation-domain-imports-sklearn`
+(`features/evaluation/domain/_arch_audit_taint_sklearn.py`, `import sklearn`) e o
+comentário do contrato no `.importlinter` corrigido ("todos na application" deixou de
+ser verdade). Não muda contrato nem critério; só reforça a prova do A9.
+
 <!-- END: post-execution -->

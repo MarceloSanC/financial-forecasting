@@ -596,9 +596,9 @@ _REAL_VIOLATION_CASES = (
     # entra. `lint-imports` verde num slice vazio é vácuo: sem estes casos, um
     # `source_modules` esquecido passaria despercebido (contrato míope).
     # ---------------------------------------------------------------------
-    # `evaluation-no-scoring-lib-leak`: um caso por módulo proibido, todos na
+    # `evaluation-no-scoring-lib-leak`: um caso por módulo proibido na
     # `application` — no `domain` o caso de `numpy` não discriminaria este
-    # contrato (o `domain-purity` já o reprova).
+    # contrato (o `domain-purity` já o reprova) — mais um `sklearn` no `domain`.
     pytest.param(
         "evaluation-no-scoring-lib-leak",
         {
@@ -636,6 +636,18 @@ _REAL_VIOLATION_CASES = (
             )
         },
         id="evaluation-no-scoring-lib-leak:evaluation-application-imports-scipy",
+    ),
+    # Matrícula de `evaluation.domain` no contrato: `domain-purity` não proíbe
+    # sklearn/scoringrules/scipy e o `check_layout.py` também não — sem este caso,
+    # tirar o domain de `source_modules` passaria verde (achado do Checkpoint C).
+    pytest.param(
+        "evaluation-no-scoring-lib-leak",
+        {
+            "features/evaluation/domain/_arch_audit_taint_sklearn.py": (
+                "import sklearn  # violação temporária\n"
+            )
+        },
+        id="evaluation-no-scoring-lib-leak:evaluation-domain-imports-sklearn",
     ),
     pytest.param(
         "domain-purity",

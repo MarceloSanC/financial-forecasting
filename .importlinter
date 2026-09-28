@@ -409,7 +409,9 @@ allow_indirect_imports = False
 # `domain-purity` já cobre `numpy` no domain — o que este contrato acrescenta é a
 # camada `application` do BC e os outros três módulos (`sklearn`, `scoringrules`,
 # `scipy`), que nenhum outro contrato lista. `_REAL_VIOLATION_CASES` tem um caso POR
-# módulo, todos na application (o domain não discriminaria o `numpy`).
+# módulo na application (lá o `numpy` discrimina este contrato) e um caso `sklearn` no
+# domain, que prova a matrícula de `evaluation.domain` (nem `domain-purity` nem o
+# `check_layout.py` proíbem sklearn/scoringrules/scipy ali).
 [importlinter:contract:evaluation-no-scoring-lib-leak]
 name = Application/domain de evaluation não importam sklearn/scoringrules/numpy/scipy (só os adapters)
 type = forbidden
