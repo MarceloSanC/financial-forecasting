@@ -1504,4 +1504,20 @@ não-finito — mesma postura de finitude de `statistic`/`long_run_variance`; re
 do `PairedLossSeries.losses_of` (mensagem única do VO). O fator HLN é a função privada
 `_hln_factor`, testada isolada (T = 10, h = 7 → √0,12) como pede a Task.
 
+### 2026-09-28 — [decision] Task 05: decisão de Holm só por `holm_reject`; ordem do I7 no relatório — Claude (Opus 5.5)
+**Contexto:** a Task fixa `holm_reject` (p̃ ≤ α) e o `__post_init__` de
+`DmHolmFamilyReport` ("rejected ⇔ adjusted ≤ alpha"), mas não diz se `family` e o
+`__post_init__` reescrevem a comparação. Uma sondagem de mutantes da própria execução
+mostrou que a cópia `value <= alpha` em `family` trocada por `<` sobrevivia à suíte: na
+família não há p-valor de DM exatamente na fronteira.
+**Razão:** regra com dono único — `family` e o `__post_init__` tiram a decisão de
+`holm_reject(p_values, alpha=...)`, e o teste de fronteira (`holm_boundary_rejects`)
+protege as duas. O `__post_init__` confere nesta ordem: α (validador único), m ≥ 1,
+comparadores únicos, candidato fora deles, mesma amostra (horizonte/T) e estimador de cada
+DM, ajustado `==` `holm_adjust` (igualdade exata: mesma operação) e decisão. `family`
+confere o candidato (C2) antes de α. `validate_p_values`/`validate_alpha` moram em
+`inference_input_validation.py` (decisão de detalhe do §1 aplicada). Na mesma sondagem, os
+mutantes do DM "fallback em < 0" e "HLN com o h pedido após o fallback" sobreviviam — fechados
+pelo caso à mão do commit `[6.2/task-04-extra]`.
+
 <!-- END: post-execution -->
