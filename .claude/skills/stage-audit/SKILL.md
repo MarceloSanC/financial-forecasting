@@ -37,7 +37,9 @@ Procedimento para **auditar uma Stage** depois que ela é declarada
 > workflow `audit-gate` (CI) falha enquanto o status não for `complete` —
 > gravar `complete` é o que **destrava o merge**. Auditoria sem marca no
 > PR **não existe** para quem decide o merge.
-> **Nunca faz merge** — é do usuário, salvo pedido explícito. O push da fase
+> **Nunca faz merge** — é do usuário, salvo pedido explícito (a sessão mestra
+> do [PROMPT-step](../../../docs/PROMPT-step-single-session.md) §3.5 **é**
+> pedido explícito permanente: mergeia sozinha com auditoria `complete`). O push da fase
 > de aplicação vai **apenas para a branch do PR sob auditoria** (nunca outra):
 > se for branch de outra sessão, `git show` para ler e `checkout` + `push`
 > **só nessa branch** para aplicar.
