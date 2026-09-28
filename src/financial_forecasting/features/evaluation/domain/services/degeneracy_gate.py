@@ -118,12 +118,11 @@ def _pair_collapse_rates(
 ) -> tuple[tuple[float, float, float | None], ...]:
     kept = [i for i, is_degenerate in enumerate(degenerate) if not is_degenerate]
     rates: list[tuple[float, float, float | None]] = []
-    for lower_level, upper_level in series.symmetric_pairs:
+    pairs = zip(series.symmetric_pairs, series.symmetric_pair_indices, strict=True)
+    for (lower_level, upper_level), (k_low, k_high) in pairs:
         if not kept:
             rates.append((lower_level, upper_level, None))
             continue
-        k_low = series.levels.index(lower_level)
-        k_high = series.levels.index(upper_level)
         collapsed = sum(
             1
             for i in kept

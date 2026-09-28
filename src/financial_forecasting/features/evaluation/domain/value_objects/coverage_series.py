@@ -91,12 +91,20 @@ class CoverageSeries:
         série (não `1 - τ_l` recalculado), de modo que o casamento por igualdade
         exata de float com um par da grade funciona.
         """
-        size = len(self.levels)
         return tuple(
-            (self.levels[k], self.levels[size - 1 - k])
-            for k in range(size)
-            if self.levels[k] < _MEDIAN_LEVEL
+            (self.levels[k_low], self.levels[k_high])
+            for k_low, k_high in self.symmetric_pair_indices
         )
+
+    @property
+    def symmetric_pair_indices(self) -> tuple[tuple[int, int], ...]:
+        """Colunas `(k, K-1-k)` de cada par, alinhadas 1:1 com `symmetric_pairs`.
+
+        Fonte única da regra par → colunas do vetor pontuado: os serviços (IS, gate,
+        cobertura) indexam `scored_values(i)` por aqui, sem remontar a regra.
+        """
+        size = len(self.levels)
+        return tuple((k, size - 1 - k) for k in range(size) if self.levels[k] < _MEDIAN_LEVEL)
 
     @property
     def guardrail_applied_rate(self) -> float:

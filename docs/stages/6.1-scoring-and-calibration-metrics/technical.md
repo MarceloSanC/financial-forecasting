@@ -916,4 +916,13 @@ próprio. No C3, `None` e `bool` também erguem `ValueError` com a mesma mensage
 são número finito; `bool` é subclasse de `int`, mesma postura do `_is_finite_number`
 do 4.3). Reversível, sem efeito sobre relatórios produzidos pelo gate.
 
+### 2026-09-28 — [decision] Task 02 (fix pós-Checkpoint C do bloco 2): `CoverageSeries.symmetric_pair_indices` — Claude (Opus 5.5)
+**Contexto:** a regra par → colunas do vetor pontuado (`levels.index(τ_l)`,
+`levels.index(τ_u)`) estava repetida em `IntervalScore.score` e no
+`DegeneracyGate`, e a Task 07 (`CoverageMetrics`) a repetiria uma terceira vez.
+**Razão:** a regra é da grade, logo do VO (ADR 6.1.0002 item 4: valores derivados no
+VO, não no serviço). `symmetric_pair_indices` devolve `(k, K-1-k)` alinhado 1:1 com
+`symmetric_pairs` (que passa a derivar dele); IS e gate o consomem e a Task 07 também
+consumirá. Propriedade nova; nada do contrato do concept §4 muda.
+
 <!-- END: post-execution -->

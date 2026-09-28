@@ -61,6 +61,25 @@ def test_symmetric_pairs_on_seven_level_grid(make_series: SeriesFactory) -> None
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    "levels",
+    [_LEVELS, (0.1, 0.25, 0.75, 0.9), (0.02, 0.05, 0.1, 0.5, 0.9, 0.95, 0.98)],
+    ids=["seven-odd", "four-even", "wide"],
+)
+def test_symmetric_pair_indices_align_with_symmetric_pairs(
+    make_series: SeriesFactory, levels: tuple[float, ...]
+) -> None:
+    """Colunas `(k, K-1-k)` alinhadas 1:1 aos pares: `levels[k]` reproduz cada par."""
+    series = make_series([(0.0,) * len(levels)], [0.0], levels=levels)
+
+    indices = series.symmetric_pair_indices
+
+    assert len(indices) == len(series.symmetric_pairs)
+    assert tuple((levels[low], levels[high]) for low, high in indices) == (series.symmetric_pairs)
+    assert all(low + high == len(levels) - 1 for low, high in indices)
+
+
+@pytest.mark.unit
 def test_guardrail_applied_rate_on_seven_level_grid(make_series: SeriesFactory) -> None:
     """A1: fração de pontos com `guardrail_applied` (1 de 4 cruzado → 0.25)."""
     series = make_series([_GRID, _CROSSED, _GRID, _GRID], [0.0, 0.0, 0.0, 0.0])

@@ -107,9 +107,8 @@ class IntervalScore:
         """Um `PairIntervalScore` por `series.symmetric_pairs`, médias sobre as T linhas."""
         size = series.n_points
         per_pair: list[PairIntervalScore] = []
-        for lower_level, upper_level in series.symmetric_pairs:
-            k_low = series.levels.index(lower_level)
-            k_high = series.levels.index(upper_level)
+        pairs = zip(series.symmetric_pairs, series.symmetric_pair_indices, strict=True)
+        for (lower_level, upper_level), (k_low, k_high) in pairs:
             miscoverage = 2.0 * lower_level
             widths: list[float] = []
             lower_penalties: list[float] = []
