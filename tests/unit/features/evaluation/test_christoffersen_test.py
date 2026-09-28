@@ -38,6 +38,9 @@ from financial_forecasting.features.evaluation.domain.services.kupiec_pof import
     kupiec_pof,
     xlogy,
 )
+from financial_forecasting.features.evaluation.domain.value_objects import (
+    hit_sequence as hit_sequence_module,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
 )
@@ -222,6 +225,47 @@ def test_single_counting_through_the_vo_function(monkeypatch: pytest.MonkeyPatch
     )
 
     assert stats.transitions == (1, 1, 1, 1)
+
+
+@pytest.mark.unit
+def test_single_counting_of_observed_and_violations(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Checkpoint C bloco 3: n_observed/n_violations e a regra de elemento do primitivo
+    vêm das funções do VO (`count_observed`, `count_violations`,
+    `validate_violation_elements`) - trocar os nomes no módulo muda o resultado."""
+    monkeypatch.setattr(christoffersen_test_module, "count_observed", lambda _: 9)
+    monkeypatch.setattr(christoffersen_test_module, "count_violations", lambda _: 3)
+
+    stats = christoffersen_statistics(
+        violations=(F, T, F, F, T, F), violation_rate=_P, min_violations=0
+    )
+
+    assert (stats.n_observed, stats.n_violations) == (9, 3)
+
+    def _reject(_: object) -> None:
+        raise ValueError("single element rule called")
+
+    monkeypatch.setattr(christoffersen_test_module, "validate_violation_elements", _reject)
+    with pytest.raises(ValueError, match="single element rule called"):
+        christoffersen_statistics(violations=(F, T), violation_rate=_P, min_violations=0)
+
+
+@pytest.mark.unit
+def test_single_counting_in_the_hit_sequence(
+    make_hit_sequence: HitSequenceFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A `HitSequence` usa as mesmas funções (dono único no módulo do VO)."""
+    sequence = make_hit_sequence((F, T, F))
+    monkeypatch.setattr(hit_sequence_module, "count_observed", lambda _: 7)
+    monkeypatch.setattr(hit_sequence_module, "count_violations", lambda _: 2)
+
+    assert (sequence.n_observed, sequence.n_violations) == (7, 2)
+
+    def _reject(_: object) -> None:
+        raise ValueError("single element rule called")
+
+    monkeypatch.setattr(hit_sequence_module, "validate_violation_elements", _reject)
+    with pytest.raises(ValueError, match="single element rule called"):
+        make_hit_sequence((F, T))
 
 
 # --- I6 — status e precedência --------------------------------------------------------------

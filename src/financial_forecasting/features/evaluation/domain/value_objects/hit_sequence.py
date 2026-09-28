@@ -75,6 +75,27 @@ def violation_rate_for(kind: HitKind, levels: Sequence[float]) -> float:
     return 1.0 - levels[0]
 
 
+def validate_violation_elements(violations: Sequence[object]) -> None:
+    """Todo elemento é `bool` ou `None` (`1`, `0`, `"x"` erguem) - regra única do slice.
+
+    `type(v) is bool`: `int` não é violação. Consumida pela `HitSequence` e pelo
+    primitivo `christoffersen_statistics` (chamado também fora de uma `HitSequence`).
+    """
+    for index, value in enumerate(violations):
+        if value is not None and type(value) is not bool:
+            raise ValueError(f"violations[{index}] must be a bool or None, got {value!r}")
+
+
+def count_observed(violations: Sequence[bool | None]) -> int:
+    """Posições não-`None` (o n da banda de Wilson e do Kupiec POF) - contagem única."""
+    return sum(1 for value in violations if value is not None)
+
+
+def count_violations(violations: Sequence[bool | None]) -> int:
+    """Violações (`True`) entre as observadas (o x do Kupiec POF) - contagem única."""
+    return sum(1 for value in violations if value is True)
+
+
 def count_transitions(violations: Sequence[bool | None]) -> tuple[int, int, int, int]:
     """(n00, n01, n10, n11) sobre pares consecutivos **ambos** observados (ADR 6.3.0004).
 
@@ -144,12 +165,12 @@ class HitSequence:
     @property
     def n_observed(self) -> int:
         """Posições não-`None` — o n da banda de Wilson e do Kupiec POF (I4)."""
-        return sum(1 for value in self.violations if value is not None)
+        return count_observed(self.violations)
 
     @property
     def n_violations(self) -> int:
         """Violações (`True`) entre as observadas — o x do Kupiec POF."""
-        return sum(1 for value in self.violations if value is True)
+        return count_violations(self.violations)
 
     @property
     def transition_counts(self) -> tuple[int, int, int, int]:
@@ -243,9 +264,7 @@ class HitSequence:
             raise ValueError(f"violation_rate must be in (0, 1), got {self.violation_rate!r}")
 
     def _check_elements(self) -> None:
-        for index, value in enumerate(self.violations):
-            if value is not None and type(value) is not bool:
-                raise ValueError(f"violations[{index}] must be a bool or None, got {value!r}")
+        validate_violation_elements(self.violations)
 
     def _check_mask_description(self) -> None:
         validate_tolerance(self.tolerance, field="HitSequence.tolerance")

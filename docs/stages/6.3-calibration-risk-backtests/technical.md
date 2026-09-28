@@ -1682,4 +1682,15 @@ crescentes (a "ordem da grade" do concept §4; ramo `tails-out-of-order`) e hori
 pelo `validate_horizon` do slice. `var_level == 0.98` exato em τ = 0.02 e 0.98
 (`1 - 0.02 == 0.98` em float64, como medido no §1).
 
+### 2026-09-28 — [decision] Checkpoint C bloco 3: regra de elemento e contagens de observadas/violações com dono único no VO — Claude (Opus 5.5)
+**Contexto:** achado LOW (dono da regra) — "elemento é `bool` ou `None`" e as contagens
+`n_observed`/`n_violations` estavam escritas na `HitSequence` e de novo no primitivo
+`christoffersen_statistics`.
+**Razão:** disposição `corrigido` em `[6.3/task-07-fix]` — funções de módulo em
+`value_objects/hit_sequence.py` (`validate_violation_elements`, `count_observed`,
+`count_violations`), ao lado de `count_transitions`, consumidas pelo VO e pelo
+primitivo; consumo provado por monkeypatch nos dois módulos
+(`test_single_counting_of_observed_and_violations`,
+`test_single_counting_in_the_hit_sequence`).
+
 <!-- END: post-execution -->

@@ -58,7 +58,10 @@ from financial_forecasting.features.evaluation.domain.value_objects._horizon imp
 from financial_forecasting.features.evaluation.domain.value_objects.hit_sequence import (
     HitKind,
     HitSequence,
+    count_observed,
     count_transitions,
+    count_violations,
+    validate_violation_elements,
 )
 
 _DF_ONE = 1
@@ -216,11 +219,9 @@ def christoffersen_statistics(
     """
     validate_rate(violation_rate, field="violation_rate")
     validate_min_violations(min_violations)
-    for index, value in enumerate(violations):
-        if value is not None and type(value) is not bool:
-            raise ValueError(f"violations[{index}] must be a bool or None, got {value!r}")
-    n_observed = sum(1 for value in violations if value is not None)
-    n_violations = sum(1 for value in violations if value is True)
+    validate_violation_elements(violations)
+    n_observed = count_observed(violations)
+    n_violations = count_violations(violations)
     transitions = count_transitions(violations)
     _, n01, _, n11 = transitions
     n_pairs = sum(transitions)
