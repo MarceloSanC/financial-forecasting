@@ -58,6 +58,9 @@ _P_LEVELS = (_P,)
 _HAND = (F, F, T, F, F, F, T, T, F, F, T, F)
 _HAND_TRANSITIONS = (4, 3, 3, 1)
 _HAND_VIOLATIONS = 4
+# Literais da fixture (Checkpoint C bloco 3): LR_cc e p_cc = exp(-LR_cc/2), arredondados.
+_HAND_LR_CC = 1.94012
+_HAND_P_CC = 0.379061
 # Piso I13 do LR_ind (technical §1): transições (1, 2, 3, 6), bruto ≈ -1.78e-15.
 _FLOOR_SEQUENCE = (T, T, T, T, T, T, T, F, F, T, F, T, F)
 _H7 = 7
@@ -96,6 +99,26 @@ def test_trio_hand_matches_log_sums_written_here(make_hit_sequence: HitSequenceF
     assert stats.lr_uc is not None and _close(stats.lr_uc, lr_uc)
     assert stats.lr_ind is not None and _close(stats.lr_ind, lr_ind)
     assert stats.lr_cc is not None and _close(stats.lr_cc, lr_uc + lr_ind)
+
+
+@pytest.mark.unit
+def test_trio_hand_p_values_follow_the_chi2_formulas_written_here(
+    make_hit_sequence: HitSequenceFactory,
+) -> None:
+    """A6/I7: p-valores pelas fórmulas fechadas escritas NO teste - df 1: erfc(√(x/2));
+    df 2: exp(-x/2) - e literais da fixture (LR_cc ≈ 1.94012, p_cc ≈ 0.379061). Um
+    mapa estatística → df trocado no serviço não passa (o `__post_init__` usa o mesmo)."""
+    report = _hand_report(make_hit_sequence)
+    stats = report.statistics
+    assert stats.kupiec_pof is not None and stats.lr_uc is not None
+    assert stats.lr_ind is not None and stats.lr_cc is not None
+
+    assert report.kupiec_pof_p_value == math.erfc(math.sqrt(stats.kupiec_pof / 2))
+    assert report.p_uc == math.erfc(math.sqrt(stats.lr_uc / 2))
+    assert report.p_ind == math.erfc(math.sqrt(stats.lr_ind / 2))
+    assert report.p_cc == math.exp(-stats.lr_cc / 2)
+    assert round(stats.lr_cc, 5) == _HAND_LR_CC
+    assert report.p_cc is not None and round(report.p_cc, 6) == _HAND_P_CC
 
 
 @pytest.mark.unit
