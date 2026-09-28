@@ -5,6 +5,8 @@ não-degeneradas** (ADR `0_0_0011`; concept 6.1 I8):
 
 - ĉ(τ_k) = média de 1{y ≤ q̂_{τ_k}} — empate conta como coberto (I6);
 - PICP do par (τ_l, τ_u) = média de 1{l ≤ y ≤ u} — bordas inclusas (I6);
+- os dois indicadores vêm dos predicados FA7 de dono único `is_at_or_below` e
+  `is_inside_closed` (`coverage_series.py`; concept 6.3 I3) — nenhuma cópia aqui;
 - MPIW = média de u - l, na unidade de y;
 - nominal = 1 - 2·τ_l, derivado da grade da série (I7), nunca constante do código.
 
@@ -26,6 +28,8 @@ from financial_forecasting.features.evaluation.domain.services.degeneracy_gate i
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
+    is_at_or_below,
+    is_inside_closed,
     pair_nominal,
 )
 
@@ -161,7 +165,11 @@ class CoverageMetrics:
         per_level = tuple(
             (
                 level,
-                sum(1 for i in kept if series.realized[i] <= series.scored_values(i)[k])
+                sum(
+                    1
+                    for i in kept
+                    if is_at_or_below(series.realized[i], series.scored_values(i)[k])
+                )
                 / n_evaluated,
             )
             for k, level in enumerate(series.levels)
@@ -221,7 +229,7 @@ def _pair_coverage(
     for i in kept:
         values = series.scored_values(i)
         low, high = values[k_low], values[k_high]
-        if low <= series.realized[i] <= high:
+        if is_inside_closed(series.realized[i], low, high):
             covered += 1
         widths.append(high - low)
     return PairCoverage(

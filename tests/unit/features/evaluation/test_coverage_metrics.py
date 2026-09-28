@@ -13,6 +13,9 @@ from collections.abc import Callable
 
 import pytest
 
+from financial_forecasting.features.evaluation.domain.services import (
+    coverage_metrics as coverage_metrics_module,
+)
 from financial_forecasting.features.evaluation.domain.services.coverage_metrics import (
     CoverageMetrics,
     CoverageReport,
@@ -139,6 +142,33 @@ def test_nominal_is_exact_from_the_grid(
     report = CoverageMetrics.evaluate(series, tolerance=_TOLERANCE)
 
     assert tuple(pair.nominal for pair in report.per_pair) == expected
+
+
+# --- Predicados FA7 com dono único (concept 6.3 I3) -------------------------------------
+
+
+@pytest.mark.unit
+def test_consumes_fa7_predicates_not_an_inline_copy(
+    make_series: SeriesFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """I3 (6.3): o serviço lê ĉ e PICP pelos predicados de `coverage_series.py` — trocar
+    o nome no namespace do módulo muda o resultado, logo não há cópia própria da regra.
+
+    Sem o patch, a série mista dá ĉ(0.05) = 0 e PICP externo = 2/3; com
+    `is_at_or_below → True` todo ĉ vira 1.0 e com `is_inside_closed → False` todo PICP
+    vira 0.0.
+    """
+    series = _mixed_series(make_series)
+    baseline = CoverageMetrics.evaluate(series, tolerance=_TOLERANCE)
+    assert dict(baseline.per_level)[0.05] == 0.0
+    assert baseline.per_pair[0].picp == _TWO_THIRDS
+
+    monkeypatch.setattr(coverage_metrics_module, "is_at_or_below", lambda *_: True)
+    monkeypatch.setattr(coverage_metrics_module, "is_inside_closed", lambda *_: False)
+    patched = CoverageMetrics.evaluate(series, tolerance=_TOLERANCE)
+
+    assert all(coverage == _ONE for _, coverage in patched.per_level)
+    assert all(pair.picp == 0.0 for pair in patched.per_pair)
 
 
 # --- interval_widths e C8 ---------------------------------------------------------------

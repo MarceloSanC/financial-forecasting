@@ -198,3 +198,26 @@ def pair_miscoverage(lower_level: float) -> float:
 def pair_nominal(lower_level: float) -> float:
     """Cobertura nominal do par simétrico: 1 - 2·τ_l = 1 - `pair_miscoverage` (I7)."""
     return 1.0 - pair_miscoverage(lower_level)
+
+
+def is_at_or_below(realized: float, quantile: float) -> bool:
+    """Indicador 1{y ≤ q̂} — regra única de empate FA7 da cauda (doc §4.5; concept 6.3 I3).
+
+    Empate `y == q̂` **conta** como "abaixo ou no quantil". Consumidores: o
+    `CoverageMetrics` (ĉ(τ)) e o `HitSequences` (violação da cauda inferior); a
+    violação da cauda superior é `not is_at_or_below(y, q̂_τ)` — no empate, não é
+    violação. Sem validação própria: recebe valores já validados pela
+    `CoverageSeries` (C2 da 6.1).
+    """
+    return realized <= quantile
+
+
+def is_inside_closed(realized: float, lower: float, upper: float) -> bool:
+    """Indicador [l ≤ y ≤ u] do intervalo **fechado** — regra única FA7 (doc §4.5; I3).
+
+    As duas bordas contam como dentro (`y == l` ou `y == u` não é violação).
+    Consumidores: o `CoverageMetrics` (PICP) e o `HitSequences` (violação do intervalo
+    = `not is_inside_closed(...)`). Sem validação própria (valores já validados pela
+    `CoverageSeries`).
+    """
+    return lower <= realized <= upper
