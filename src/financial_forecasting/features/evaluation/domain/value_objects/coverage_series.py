@@ -140,7 +140,7 @@ class CoverageSeries:
             raise ValueError(f"levels must be strictly increasing and unique, got {levels}")
         size = len(levels)
         for k in range(size):
-            if abs(levels[k] + levels[size - 1 - k] - 1.0) > _SYMMETRY_TOLERANCE:
+            if not is_symmetric_pair(levels[k], levels[size - 1 - k]):
                 raise ValueError(
                     f"levels must be symmetric (tau_k + tau_(K+1-k) == 1 within "
                     f"{_SYMMETRY_TOLERANCE}), got {levels}"
@@ -184,6 +184,15 @@ class CoverageSeries:
                 )
             if not is_finite_number(realized):
                 raise ValueError(f"point {index}: realized value must be finite, got {realized}")
+
+
+def is_symmetric_pair(lower_level: float, upper_level: float) -> bool:
+    """`τ_l + τ_u == 1` dentro da tolerância de representação float64 da grade (1e-12).
+
+    Regra única da simetria (ADR 6.1.0002 item 2): a `CoverageSeries` a aplica a cada
+    par da grade e a `HitSequence` (6.3) ao par de um `HitKind.INTERVAL`.
+    """
+    return abs(lower_level + upper_level - 1.0) <= _SYMMETRY_TOLERANCE
 
 
 def pair_miscoverage(lower_level: float) -> float:

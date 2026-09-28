@@ -38,6 +38,7 @@ from financial_forecasting.features.evaluation.domain.value_objects._tolerance i
     validate_tolerance,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
+    is_symmetric_pair,
     pair_miscoverage,
 )
 
@@ -225,6 +226,13 @@ class HitSequence:
                 f"levels must have {expected_size} element(s) for kind={self.kind.value}, "
                 f"got {self.levels}"
             )
+        if self.kind is HitKind.INTERVAL and not (
+            self.levels[0] < self.levels[1] and is_symmetric_pair(*self.levels)
+        ):
+            raise ValueError(
+                "levels of an interval must be a symmetric pair (tau_l, tau_u) of the grid "
+                f"with tau_l < tau_u, got {self.levels}"
+            )
         expected_rate = violation_rate_for(self.kind, self.levels)
         if self.violation_rate != expected_rate:
             raise ValueError(
@@ -243,12 +251,13 @@ class HitSequence:
         validate_tolerance(self.tolerance, field="HitSequence.tolerance")
         if not is_finite_number(self.degeneracy_rate) or not (0.0 <= self.degeneracy_rate <= 1.0):
             raise ValueError(f"degeneracy_rate must be in [0, 1], got {self.degeneracy_rate!r}")
-        n_gaps = len(self.violations) - self.n_observed
-        if self.includes_degenerate and 0 < n_gaps < len(self.violations):
+        if type(self.includes_degenerate) is not bool:
             raise ValueError(
-                "includes_degenerate=True allows gaps only when every position is None "
-                f"(fully degenerate series), got {n_gaps} of {len(self.violations)}"
+                f"includes_degenerate must be a bool, got {self.includes_degenerate!r}"
             )
+        n_gaps = len(self.violations) - self.n_observed
+        if self.includes_degenerate:
+            self._check_without_gaps_variant(n_gaps)
         # Na sub-série DGT a taxa é a da série de origem, não a das posições da sub-série.
         if not self.includes_degenerate and not self.is_dgt_subseries:
             expected = n_gaps / len(self.violations)
@@ -257,6 +266,22 @@ class HitSequence:
                     f"degeneracy_rate must be n_None / T = {expected!r} in the masked "
                     f"variant, got {self.degeneracy_rate!r}"
                 )
+
+    def _check_without_gaps_variant(self, n_gaps: int) -> None:
+        # Variante "sem lacunas": nenhuma lacuna, salvo série 100 % degenerada, e a taxa
+        # do gate é 1.0 exatamente quando todas as posições são None (ADR 6.3.0004 item 4).
+        size = len(self.violations)
+        if 0 < n_gaps < size:
+            raise ValueError(
+                "includes_degenerate=True allows gaps only when every position is None "
+                f"(fully degenerate series), got {n_gaps} of {size}"
+            )
+        if (n_gaps == size) != (self.degeneracy_rate == 1.0):
+            raise ValueError(
+                "includes_degenerate=True requires degeneracy_rate == 1.0 exactly when every "
+                f"position is None, got degeneracy_rate={self.degeneracy_rate!r} with "
+                f"{n_gaps} of {size} positions None"
+            )
 
     def _check_dgt(self) -> None:
         offset, step = self.dgt_offset, self.dgt_step
@@ -267,6 +292,9 @@ class HitSequence:
             )
         if offset is None or step is None:
             return
+        for name, value in (("dgt_offset", offset), ("dgt_step", step)):
+            if type(value) is not int:
+                raise ValueError(f"{name} must be an int (not bool), got {value!r}")
         if step != self.horizon:
             raise ValueError(f"dgt_step must equal horizon={self.horizon}, got {step}")
         if step < _DGT_MIN_STEP:

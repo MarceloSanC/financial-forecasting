@@ -67,7 +67,7 @@ _H7 = 7
         ),
         (
             (T,),
-            {"kind": HitKind.INTERVAL, "levels": (0.6, 0.4)},
+            {"kind": HitKind.UPPER_TAIL, "levels": (1.0,)},
             r"violation_rate must be in \(0, 1\)",
         ),
         ((T, 1), {}, r"violations\[1\] must be a bool or None, got 1"),
@@ -86,6 +86,34 @@ _H7 = 7
         ((T, F), {"horizon": 2, "dgt_offset": -1, "dgt_step": 2}, r"dgt_offset must be in \[0"),
         ((T, F), {"horizon": 3, "dgt_offset": 0, "dgt_step": 2}, "dgt_step must equal horizon=3"),
         ((T, F), {"horizon": 1, "dgt_offset": 0, "dgt_step": 1}, "dgt_step must be >= 2"),
+        (
+            (T,),
+            {"kind": HitKind.INTERVAL, "levels": (0.05, 0.9), "violation_rate": 0.1},
+            "levels of an interval must be a symmetric pair",
+        ),
+        (
+            (T,),
+            {"kind": HitKind.INTERVAL, "levels": (0.95, 0.05), "violation_rate": 1.9},
+            "levels of an interval must be a symmetric pair",
+        ),
+        ((T, F), {"includes_degenerate": 1}, "includes_degenerate must be a bool"),
+        (
+            (None, None),
+            {"includes_degenerate": True, "degeneracy_rate": 0.5},
+            r"requires degeneracy_rate == 1\.0 exactly when every position is None",
+        ),
+        (
+            (T, F),
+            {"includes_degenerate": True, "degeneracy_rate": 1.0},
+            r"requires degeneracy_rate == 1\.0 exactly when every position is None",
+        ),
+        (
+            (T, F),
+            {"horizon": 2, "dgt_offset": False, "dgt_step": 2},
+            r"dgt_offset must be an int \(not bool\)",
+        ),
+        ((T, F), {"horizon": 2, "dgt_offset": 0.0, "dgt_step": 2}, "dgt_offset must be an int"),
+        ((T, F), {"horizon": 1, "dgt_offset": 0, "dgt_step": True}, "dgt_step must be an int"),
     ],
     ids=[
         "lengths-differ",
@@ -111,6 +139,14 @@ _H7 = 7
         "dgt-offset-negative",
         "dgt-step-not-horizon",
         "dgt-step-one",
+        "interval-levels-not-symmetric",
+        "interval-levels-reversed",
+        "includes-degenerate-not-bool",
+        "all-none-variant-rate-below-one",
+        "without-gaps-variant-rate-one",
+        "dgt-offset-bool",
+        "dgt-offset-float",
+        "dgt-step-bool",
     ],
 )
 def test_hitseq_invalid_construction_raises(

@@ -1599,4 +1599,20 @@ já edita `coverage_series.py`, a 6.2 cria o helper de timestamps). Escalado par
 depois do merge das duas — candidata Stage 6.4: a `CoverageSeries` passa a consumir
 `validate_horizon` e `check_strictly_increasing`, sem cópia.
 
+### 2026-09-28 — [decision] Checkpoint C bloco 2: `HitSequence` recusa par não-simétrico, variante sem lacunas incoerente e DGT não-`int` — Claude (Opus 5.5)
+**Contexto:** achado LOW — o VO aceitava estados inválidos: `levels[1]` do
+`INTERVAL` sem conferência; `includes_degenerate=True` sem amarrar
+`degeneracy_rate == 1.0` a "todas as posições `None`"; `includes_degenerate`,
+`dgt_offset` e `dgt_step` sem checagem de tipo.
+**Razão:** disposição `corrigido` em `[6.3/task-05-fix]`. Para o par, a regra de
+simetria da grade (ADR 6.1.0002 item 2, 1e-12) ganhou dono único público,
+`is_symmetric_pair` em `coverage_series.py`, consumido pelo `_check_levels` da
+`CoverageSeries` (troca de uma linha, sem mudança de comportamento; testes da 6.1
+inalterados) e pela `HitSequence` (`INTERVAL` exige `τ_l < τ_u` e par simétrico).
+Variante sem lacunas: `degeneracy_rate == 1.0` ⇔ todas `None` — vale também na
+sub-série DGT (a partição de uma série toda `None` só produz sub-séries todas `None`).
+Tipos: `includes_degenerate` `bool`; `dgt_offset`/`dgt_step` `int` não-`bool`. Um
+caso por ramo no `hitseq_invalid`; o caso `rate-outside-unit-interval` passou a usar
+cauda superior em τ = 1.0 (o intervalo (0.6, 0.4) agora cai no ramo do par).
+
 <!-- END: post-execution -->
