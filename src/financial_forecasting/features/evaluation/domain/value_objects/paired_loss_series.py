@@ -27,15 +27,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
-    is_finite_number,
+from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
+    check_horizon,
+    check_loss,
+    check_points,
+    differential,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._timestamps import (
     check_strictly_increasing,
 )
 
 _MIN_MODELS = 2
-_MIN_POINTS = 2
 
 
 @dataclass(frozen=True)
@@ -84,9 +86,7 @@ class PairedLossSeries:
         """
         if first == second:
             raise ValueError(f"differential needs two distinct models, got {first!r} twice")
-        first_column = self.losses_of(first)
-        second_column = self.losses_of(second)
-        return tuple(a - b for a, b in zip(first_column, second_column, strict=True))
+        return differential(self.losses_of(first), self.losses_of(second))
 
     def model_pairs(self) -> tuple[tuple[str, str], ...]:
         """Pares não-ordenados `(models[i], models[j])`, i < j, na ordem de `models`."""
@@ -103,9 +103,7 @@ class PairedLossSeries:
             raise ValueError(f"unknown model {model!r}; known models: {self.models}") from None
 
     def _check_horizon(self) -> None:
-        horizon = self.horizon
-        if isinstance(horizon, bool) or not isinstance(horizon, int) or horizon < 1:
-            raise ValueError(f"horizon must be an int >= 1, got {horizon!r}")
+        check_horizon(self.horizon)
 
     def _check_models(self) -> None:
         if len(self.models) < _MIN_MODELS:
@@ -119,13 +117,7 @@ class PairedLossSeries:
             raise ValueError(f"model names must be unique, got {self.models}")
 
     def _check_points(self) -> None:
-        n_points = self.n_points
-        if n_points < _MIN_POINTS:
-            raise ValueError(f"a PairedLossSeries needs T >= {_MIN_POINTS} points, got {n_points}")
-        if n_points <= self.horizon:
-            raise ValueError(
-                f"T must be greater than the horizon (T > h), got T={n_points} and h={self.horizon}"
-            )
+        check_points(self.n_points, self.horizon)
 
     def _check_timestamps(self) -> None:
         check_strictly_increasing(self.target_timestamps)
@@ -142,8 +134,4 @@ class PairedLossSeries:
                     f"model {name!r}: {len(column)} losses for T={self.n_points} points"
                 )
             for index, loss in enumerate(column):
-                if not is_finite_number(loss) or loss < 0.0:
-                    raise ValueError(
-                        f"model {name!r}, point {index}: loss must be a finite number "
-                        f">= 0, got {loss!r}"
-                    )
+                check_loss(loss, where=f"model {name!r}, point {index}")

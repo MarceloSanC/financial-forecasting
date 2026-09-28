@@ -1489,6 +1489,11 @@ de `_finite_number.py` (que a 6.3 também editou) não ganhou a contagem de cons
 `develop` — **candidata: 6.4** —: `CoverageSeries._check_timestamps` delega a
 `check_strictly_increasing` (mesma mensagem, testes existentes seguem valendo) e a
 docstring de `_finite_number.py` passa a listar a `PairedLossSeries` entre os consumidores.
+**Ampliado no Checkpoint C do bloco 2:** unificar também a regra de horizonte (int
+não-bool ≥ 1) de `value_objects/_paired_inputs.py` (6.2) com o `value_objects/_horizon.py`
+que a 6.3 cria em paralelo e com o `_check_horizon` da `CoverageSeries` — três escritas da
+mesma regra depois do merge das duas Stages (candidata: 6.4). O nome `_paired_inputs.py`
+foi escolhido para não colidir com o `_horizon.py` da 6.3.
 
 ### 2026-09-28 — [decision] Task 04: validador do DM no módulo do enum; `mean_differential` finito no I5 — Claude (Opus 5.5)
 **Contexto:** decisão de detalhe planejada no §1 (onde mora o validador do DM) e dois
@@ -1519,5 +1524,23 @@ confere o candidato (C2) antes de α. `validate_p_values`/`validate_alpha` moram
 `inference_input_validation.py` (decisão de detalhe do §1 aplicada). Na mesma sondagem, os
 mutantes do DM "fallback em < 0" e "HLN com o h pedido após o fallback" sobreviviam — fechados
 pelo caso à mão do commit `[6.2/task-04-extra]`.
+
+### 2026-09-28 — [decision] Tasks 03/04: regras de horizonte, T, perda e d_t num dono único (`_paired_inputs`) — Claude (Opus 5.5)
+**Contexto:** o Checkpoint C do bloco 2 apontou as mesmas regras escritas mais de uma vez
+na branch: "horizon int ≥ 1 não-bool" (VO, `validate_dm_request`, `DieboldMarianoResult`),
+"perda finita ≥ 0" (VO, validador do DM), "T ≥ 2"/"T > h" com `_MIN_POINTS` duplicado, e
+d_t = L_a − L_b escrito no VO e no primitivo.
+**Razão:** criado `domain/value_objects/_paired_inputs.py` (privado do slice, direção
+serviço → VO) com `check_horizon`, `check_points` (T ≥ 2 e T > h), `check_loss` e
+`differential`; consumidores: `PairedLossSeries` (`_check_*` e `differential`),
+`validate_dm_request`, `DieboldMarianoResult.__post_init__` e o primitivo
+`diebold_mariano` (d_t). Efeitos: (1) a ordem do validador do DM passa a ser tamanhos →
+horizonte → T (≥ 2, > h) → perdas → estimador (substitui a ordem da entrada da Task 04;
+cada caso de C3 tem um só defeito, então nenhum teste muda de ramo); (2) as mensagens
+viram as do dono (`paired losses need T >= 2 points`, `T must be greater than the horizon
+(T > h)`, `<onde>: loss must be a finite number >= 0`); (3) o `DieboldMarianoResult`
+passa a recusar também `n_points ≤ horizon` (sugestão opcional da revisão; caso
+`n-points-not-above-horizon`). Unificação com o `_horizon.py` da 6.3: `[finding]` da
+Task 03 acima, ampliado.
 
 <!-- END: post-execution -->

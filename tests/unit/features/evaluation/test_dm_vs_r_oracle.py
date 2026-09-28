@@ -286,7 +286,12 @@ _INCOHERENT: list[tuple[str, Callable[[DieboldMarianoResult], DieboldMarianoResu
     (
         "n-points-one",
         lambda r: dataclasses.replace(r, n_points=1, degrees_of_freedom=0),
-        "n_points",
+        "T >= 2",
+    ),
+    (
+        "n-points-not-above-horizon",
+        lambda r: dataclasses.replace(r, horizon=4, horizon_used=4),
+        r"T > h\), got T=4 and h=4",
     ),
     (
         "horizon-used-other",

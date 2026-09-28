@@ -34,11 +34,15 @@ from financial_forecasting.features.evaluation.domain.services.student_t import 
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
+    check_horizon,
+    check_loss,
+    check_points,
+    differential,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
 )
-
-_MIN_POINTS = 2
 
 
 class DmVarianceEstimator(StrEnum):
@@ -57,9 +61,11 @@ def validate_dm_request(
 ) -> None:
     """Validador único do DM (primitivo, fake e adapter) — C3.
 
+    As regras de horizonte, T e perda são as do VO (`_paired_inputs`, dono único).
+
     Raises:
-        ValueError: tamanhos diferentes; T < 2; perda não-finita, não-número, `bool` ou
-            negativa; `horizon` não-int, `bool`, < 1 ou ≥ T; estimador fora de
+        ValueError: tamanhos diferentes; `horizon` não-int, `bool` ou < 1; T < 2 ou
+            T ≤ h; perda não-finita, não-número, `bool` ou negativa; estimador fora de
             `DmVarianceEstimator` (string crua inclusive).
     """
     n_points = len(candidate_losses)
@@ -68,18 +74,11 @@ def validate_dm_request(
             "candidate and comparator losses must have the same length, got "
             f"{n_points} and {len(comparator_losses)}"
         )
-    if n_points < _MIN_POINTS:
-        raise ValueError(f"the DM test needs T >= {_MIN_POINTS} points, got {n_points}")
+    check_horizon(horizon)
+    check_points(n_points, horizon)
     for name, losses in (("candidate", candidate_losses), ("comparator", comparator_losses)):
         for index, loss in enumerate(losses):
-            if not is_finite_number(loss) or loss < 0.0:
-                raise ValueError(
-                    f"{name} loss at point {index} must be a finite number >= 0, got {loss!r}"
-                )
-    if isinstance(horizon, bool) or not isinstance(horizon, int) or horizon < 1:
-        raise ValueError(f"horizon must be an int >= 1, got {horizon!r}")
-    if horizon >= n_points:
-        raise ValueError(f"horizon must be < T (T > h), got h={horizon} and T={n_points}")
+            check_loss(loss, where=f"{name}, point {index}")
     if not isinstance(variance_estimator, DmVarianceEstimator):
         raise ValueError(
             f"variance_estimator must be a DmVarianceEstimator, got {variance_estimator!r}"
@@ -119,10 +118,8 @@ class DieboldMarianoResult:
 
     def __post_init__(self) -> None:
         """I5: horizonte efetivo, graus de liberdade, variância, estatística e p-valor."""
-        if isinstance(self.horizon, bool) or not isinstance(self.horizon, int) or self.horizon < 1:
-            raise ValueError(f"horizon must be an int >= 1, got {self.horizon!r}")
-        if self.n_points < _MIN_POINTS:
-            raise ValueError(f"n_points must be >= {_MIN_POINTS}, got {self.n_points}")
+        check_horizon(self.horizon)
+        check_points(self.n_points, self.horizon)
         if self.horizon_used not in (self.horizon, 1):
             raise ValueError(
                 f"horizon_used must be the horizon ({self.horizon}) or 1, got {self.horizon_used}"
@@ -173,12 +170,10 @@ def diebold_mariano(
         horizon=horizon,
         variance_estimator=variance_estimator,
     )
-    differential = [
-        cand - comp for cand, comp in zip(candidate_losses, comparator_losses, strict=True)
-    ]
-    n_points = len(differential)
-    mean = math.fsum(differential) / n_points
-    deviations = [value - mean for value in differential]
+    differences = differential(candidate_losses, comparator_losses)
+    n_points = len(differences)
+    mean = math.fsum(differences) / n_points
+    deviations = [value - mean for value in differences]
     horizon_used = horizon
     variance = _long_run_variance(deviations, horizon, variance_estimator)
     if variance <= 0.0 and horizon > 1:
