@@ -145,6 +145,22 @@ def test_dm_fallback_alternating_not_under_bartlett() -> None:
 
 
 @pytest.mark.unit
+def test_dm_fallback_at_exactly_zero_variance_recomputes_hln() -> None:
+    """var̂ = 0 exato com h = 2 também cai no fallback (≤ 0, não < 0), com HLN de h = 1.
+
+    d = (1,5; -0,5; 0,5; 0,5): d̄ = 0,5, desvios (1, -1, 0, 0), gamma_0 = ½, gamma_1 = -¼ →
+    retangular h = 2: (½ - ½)/4 = 0 → h = 1: var̂ = ½/4 = 0,125; HLN(4, 1) = √0,75 →
+    S1* = √0,75·0,5/√0,125 = √1,5 (com o HLN de h = 2, √0,375, daria √0,75).
+    """
+    result = _run((2.5, 0.5, 1.5, 1.5), (1.0, 1.0, 1.0, 1.0), 2, _RECT)
+    assert result.fallback_applied
+    assert result.horizon_used == 1
+    assert result.long_run_variance == 0.125  # noqa: PLR2004 — valor à mão
+    assert abs(result.statistic - math.sqrt(1.5)) <= _ABS_TOL
+    assert abs(result.p_value - _t3_cdf(math.sqrt(1.5))) <= _P_ABS_TOL
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("horizon", [1, 2])
 @pytest.mark.parametrize("estimator", [_RECT, _BART])
 def test_dm_constant_differential_raises(horizon: int, estimator: DmVarianceEstimator) -> None:
