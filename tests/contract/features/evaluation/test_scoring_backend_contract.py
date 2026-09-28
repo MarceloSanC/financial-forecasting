@@ -12,9 +12,11 @@ implementação do port concorda, sob tolerância declarada, com:
 - **C7:** nível/miscobertura fora de (0, 1), tamanhos diferentes, grade desalinhada,
   `lower > upper` e sequência vazia erguem `ValueError`.
 
-Pernas: `fake` (delega às funções de série do domínio) nesta Task; a Task 10
-acrescenta `sklearn` e a Task 11 `scoringrules` — **sem `skipif`**: as libs são
-dependências do projeto desde a Task 08, então perna pulada é perna quebrada.
+Pernas: `fake` (delega às funções de série do domínio), `sklearn`
+(`SklearnScoring`, Task 10) e `scoringrules` (Task 11) — **sem `skipif`**: as libs
+são dependências do projeto desde a Task 08, então perna pulada é perna quebrada.
+Toda perna devolve `float` **nativo** (`type(v) is float`): `numpy.float64` passaria
+num `isinstance(v, float)` e violaria a promessa do port.
 """
 
 from __future__ import annotations
@@ -25,6 +27,9 @@ from collections.abc import Callable
 
 import pytest
 
+from financial_forecasting.features.evaluation.adapters.out.scoring.sklearn_scoring import (
+    SklearnScoring,
+)
 from financial_forecasting.features.evaluation.application.ports.out.scoring_backend import (
     ScoringBackend,
 )
@@ -55,6 +60,7 @@ _SKLEARN_LEVEL = 0.1
 
 _FACTORIES: dict[str, Callable[[], ScoringBackend]] = {
     "fake": FakeScoringBackend,
+    "sklearn": SklearnScoring,
 }
 
 
@@ -89,8 +95,26 @@ def test_mean_pinball_official_sklearn_fixtures(
 ) -> None:
     value = backend.mean_pinball(realized=_SKLEARN_Y, quantiles=quantiles, level=_SKLEARN_LEVEL)
 
-    assert isinstance(value, float)
+    assert type(value) is float
     assert _close(value, expected)
+
+
+@pytest.mark.contract
+def test_every_method_returns_native_float(backend: ScoringBackend) -> None:
+    """O port promete `float` nativo — nunca `numpy.float64` (que passa em isinstance)."""
+    realized, grids = _random_grids()
+    values = (
+        backend.mean_pinball(realized=realized, quantiles=[g[0] for g in grids], level=0.05),
+        backend.mean_crps_quantile(realized=realized, quantile_grid=grids, levels=_LEVELS),
+        backend.mean_interval_score(
+            realized=realized,
+            lower=[g[0] for g in grids],
+            upper=[g[-1] for g in grids],
+            miscoverage=0.1,
+        ),
+    )
+
+    assert all(type(value) is float for value in values)
 
 
 @pytest.mark.contract

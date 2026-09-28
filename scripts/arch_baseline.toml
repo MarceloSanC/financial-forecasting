@@ -21,8 +21,3 @@ allow = []
 key = "Hasher"
 motivo = "Implementação única por desenho (issue #70): o FakeHasher era cópia byte a byte do CanonicalJsonHasher e foi removido; o contrato roda só no adapter real + golden, e os testes de domínio/use case injetam o adapter real (stdlib, determinístico). Um fake aqui seria uma segunda definição de identidade — o oposto do que reprodutibilidade exige."
 issue = 70
-
-[[port_coverage.allow]]
-key = "ScoringBackend"
-motivo = "Janela transitória do ADR 6.1.0005: port criado uma Task antes do primeiro adapter real (regra port != adapter); fake e suíte de contrato já existem. Removido na 6.1 Task 10 (SklearnScoring), junto com o assert de test_port_coverage_gate.py."
-issue = 77

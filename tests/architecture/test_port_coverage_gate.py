@@ -274,12 +274,7 @@ def test_real_repo_violations_are_exactly_the_declared_baseline(gate: ModuleType
     ports = gate.inventory()
     violating = sorted(port.name for port in ports if port.violation is not None)
 
-    # JANELA TRANSITÓRIA (ADR 6.1.0005): o port `ScoringBackend` nasce na Stage 6.1
-    # Task 09 com fake e suíte de contrato, mas sem adapter real (regra port != adapter);
-    # a Task 10 (primeiro adapter real, `SklearnScoring`) volta esta lista a ["Hasher"]
-    # e remove a entrada de `scripts/arch_baseline.toml` — a reversão é forçada pelo
-    # gate (entrada morta reprova) e por este assert.
-    assert violating == ["Hasher", "ScoringBackend"]
+    assert violating == ["Hasher"]
     assert len(ports) >= 19  # noqa: PLR2004 — os 19 ports-out do repo hoje (#91 removeu IdGenerator)
 
 
