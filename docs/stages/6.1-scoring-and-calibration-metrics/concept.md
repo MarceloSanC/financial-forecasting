@@ -660,7 +660,7 @@ erDiagram
   cada relatório traz `horizon` e `n_points = T` da série. (I1, I8)
 - [ ] **A11** — `make check` verde; cobertura ≥ 90 % global e por arquivo
   tocado da Stage; mypy `--strict` e `check_layout.py` verdes. (I11)
-- [ ] **A12** — Quatro ADRs `accepted` (6.1.0001–0004). O DoD da 6.1 vale na
+- [ ] **A12** — Cinco ADRs `accepted` (6.1.0001–0005; a 0005 veio do technical). O DoD da 6.1 vale na
   redação já aplicada pela 5.5 (`roadmap.md:763` da branch
   `feat/102-5-5-confirmatory-retrain`: "invalida as métricas de **calibração**
   da linha — proper scores seguem computados").
