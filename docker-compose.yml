@@ -57,6 +57,14 @@ services:
       # Venv vive em volume nomeado (nao no host) para evitar conflito
       # entre wheels Linux do container e ferramentas Windows/macOS no host.
       - app-venv:/app/.venv
+      # Caches de ferramenta fora do bind mount (ADR 0.0.0055 / issue #110): no
+      # Docker Desktop do Windows cada leitura/escrita do bind mount cruza a
+      # fronteira Windows->WSL2; os caches do mypy/pytest/ruff/import-linter são
+      # milhares de arquivos pequenos e ficam muito mais rápidos em volume Linux.
+      - cache-mypy:/app/.mypy_cache
+      - cache-pytest:/app/.pytest_cache
+      - cache-ruff:/app/.ruff_cache
+      - cache-import-linter:/app/.import_linter_cache
     # === BEGIN: app-depends-postgres (managed by init-project.py) ===
     # depends_on:
     #   postgres:
@@ -92,6 +100,13 @@ services:
 
 volumes:
   app-venv:
+  # Caches de ferramenta da stack do checkout principal. Worktrees rodadas por
+  # `docker run` avulso NÃO montam estes volumes: o cache do import-linter não é
+  # seguro sob concorrência, então cada worktree fica com o seu próprio.
+  cache-mypy:
+  cache-pytest:
+  cache-ruff:
+  cache-import-linter:
   # === BEGIN: postgres-volume (managed by init-project.py) ===
   # postgres-data:
   # === END: postgres-volume ===

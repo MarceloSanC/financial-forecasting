@@ -184,7 +184,10 @@ Para cada sub-task em ordem:
    - **Irreversível ou caro** (port shape, contrato externo, formato persistido) →
      PERGUNTA antes de codar.
 3. **Implementar** e dar resumo conciso do que foi feito antes de commitar.
-4. **Rodar checks da sub-task.** Se falhar:
+4. **Rodar checks da sub-task:** `make check-task SLICE=<slices tocados>`
+   (T1) antes do commit; `make check` completo só no gate de saída.
+   Camadas e exceções: [RUNBOOK §Gates em camadas](RUNBOOK-STAGE-LIFECYCLE.md#gates-em-camadas).
+   Se falhar:
    - Ajuste menor (import faltando, type hint) → corrige.
    - Problema de design → PARA e reporta.
 5. **Registrar decisão/achado** se algo surgir na execução que não estava na issue:

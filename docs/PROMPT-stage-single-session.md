@@ -347,8 +347,12 @@ Para cada Task em ordem:
    commitar?" nem esperar aprovação de diff — a revisão vem dos Checkpoints
    A/B/C e da Auditoria de Testes, subagentes independentes). Só interrompa
    se cair num ponto de parada do §Princípio de Autonomia.
-5. **Rodar checks da Task.** Baseline inegociável: **`make check` verde
-   antes de todo commit**, além dos checks específicos da Task. Se falhar:
+5. **Rodar checks da Task.** Baseline inegociável: **T1 verde antes de
+   todo commit** — `make check-task SLICE=<slices tocados>` — além dos
+   checks específicos da Task. As camadas (qual gate roda quando, e quando
+   o T1 de uma Task sobe para `check-block` ou `make check`) têm fonte
+   única em [RUNBOOK §Gates em camadas](RUNBOOK-STAGE-LIFECYCLE.md#gates-em-camadas).
+   Se falhar:
    - Ajuste menor (import faltando, type hint) → corrige.
    - Problema de design → PARA e reporta.
 6. **Registrar em §7 do technical** qualquer entrada surgida na execução,
@@ -374,7 +378,9 @@ subagente revisa o diff acumulado do bloco
 technical + LAYOUT **+ as skills do `skills_hint` da Stage + a regra de
 idioma de código** (ver §Revisão → "Lente do Checkpoint C"; protocolo
 geral na mesma seção). Correções viram commit
-`fix(<scope>): <desc> [<N.M>/task-NN-fix]`.
+`fix(<scope>): <desc> [<N.M>/task-NN-fix]`. O checkpoint também roda
+**`make check-block`** (T2) sobre o HEAD do bloco — é ele que pega a
+quebra em slice não tocado, que o T1 não enxerga.
 
 **Regressão mid-stage:** se uma Task revelar que Task anterior foi
 implementada errada:
@@ -733,9 +739,10 @@ fonte mais alta na hierarquia.**
    → **pausa antes da Fase 4 só se o usuário pediu no kickoff** (default:
    seguir direto).
 5. **Fase 4**: criar arquivo de estado; para cada Task: re-hidratar →
-   implementar → checks + `make check` → registrar §7 se necessário →
-   commit `<type>(<scope>): <desc> [<N.M>/task-NN]` → atualizar estado.
-   **Checkpoint C** a cada 2–3 Tasks.
+   implementar → checks + `make check-task` (T1) → registrar §7 se
+   necessário → commit `<type>(<scope>): <desc> [<N.M>/task-NN]` →
+   atualizar estado. **Checkpoint C** + `make check-block` (T2) a cada
+   2–3 Tasks; `make check` (T3) no gate de saída.
 6. **Auditoria de testes** (subagente independente + mutação real):
    loop até todos os itens "sim". Testes faltantes viram Tasks extras
    com commit dedicado.

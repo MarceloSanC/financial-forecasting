@@ -78,6 +78,17 @@ VIOLATION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         re.compile(r"\]\([^)]*boilerplate/layout-files"),
         "link para boilerplate/layout-files (caminho do repo-template; quebrado aqui)",
     ),
+    (
+        # Sync #110: o gate completo por commit foi trocado por camadas
+        # (ADR 0.0.0055). PROMPT-stage §5 e PROMPT-step §Fase 4 carregavam
+        # a regra antiga; paráfrase dela reintroduz os ~30 min por Task.
+        re.compile(
+            r"make check`?\**\s*(verde\s*\**\s*)?(antes de (todo|cada) commit|por (commit|Task))",
+            re.IGNORECASE,
+        ),
+        "gate completo por commit/Task: o canônico é o modelo em camadas "
+        "(RUNBOOK §Gates em camadas; `make check-task` por Task, `make check` no fim)",
+    ),
 )
 
 

@@ -17,6 +17,33 @@ from sqlalchemy.engine import Engine
 
 from financial_forecasting.shared.infrastructure.http.app import create_app
 
+# Testes que leem (ou escrevem temporariamente) a árvore REAL de `src/`: a
+# injeção de violação em `test_import_contracts.py` grava módulos-probe em
+# `src/` e os gates de layout/port-coverage/fake-parity varrem a mesma árvore.
+# Em workers paralelos um enxergaria a injeção do outro — ficam num worker só.
+_REAL_SRC_TREE_DIR = "architecture"
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Agrupa os testes para o `--dist loadgroup` do pytest-xdist (ADR 0.0.0055).
+
+    - `tests/architecture/**` → um grupo só (compartilham a árvore real de `src/`);
+    - demais → um grupo por arquivo, a semântica de `--dist loadfile`: fixtures
+      module-scoped caras (ex.: o treino real do TFT) rodam uma vez, não por worker.
+
+    `tryfirst` porque o xdist lê o marker no seu próprio `modifyitems`. Sem xdist
+    o marker é inerte.
+    """
+    for item in items:
+        if item.get_closest_marker("xdist_group") is not None:
+            continue
+        parts = item.path.parts
+        in_real_tree = "tests" in parts and _REAL_SRC_TREE_DIR in parts
+        # nodeid até o `::` = caminho relativo do arquivo (sufixo legível no -v)
+        group = "real-src-tree" if in_real_tree else item.nodeid.split("::", 1)[0]
+        item.add_marker(pytest.mark.xdist_group(name=group))
+
 
 @pytest.fixture(scope="session")
 def test_engine() -> Engine:
