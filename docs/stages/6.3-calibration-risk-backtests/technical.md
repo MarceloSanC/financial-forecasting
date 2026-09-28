@@ -1623,4 +1623,21 @@ Tipos: `includes_degenerate` `bool`; `dgt_offset`/`dgt_step` `int` não-`bool`. 
 caso por ramo no `hitseq_invalid`; o caso `rate-outside-unit-interval` passou a usar
 cauda superior em τ = 1.0 (o intervalo (0.6, 0.4) agora cai no ramo do par).
 
+### 2026-09-28 — [decision] Task 07: coerência do relatório recalcula status e p-valores; helpers de `min_violations` e status públicos — Claude (Opus 5.5)
+**Contexto:** o C9 da Task 07 lista os ramos mínimos dos dois `__post_init__`; o
+relatório também carrega `min_violations` e as estatísticas, dos quais o status e os
+p-valores são função.
+**Razão:** decisões de detalhe do §1 aplicadas (o primitivo valida elementos `bool`/
+`None`; conta pela `count_transitions` do VO; piso antes de guardar; `lr_cc` composto
+depois do piso). Acréscimos reversíveis, sem mudar contrato: (1) a regra de
+`min_violations` (`int` não-`bool` ≥ 0) e a ordem de status têm dono único público no
+módulo — `validate_min_violations` e `independence_status_for` —, que o MC (Task 08)
+reusa; (2) o `ChristoffersenReport` confere `independence_status ==
+independence_status_for(transitions, n_violations, min_violations)` e cada p-valor
+`== chi_square_sf(estatística, df)` (além de [0, 1] e da presença); (3) o
+`ChristoffersenStatistics` exige contagens `int` ≥ 0 e LR finitas ≥ 0. Um caso por
+ramo no `report_incoherent`. Piso do LR_ind: a entrada do §1 (transições
+(1, 2, 3, 6)) deu bruto negativo dentro da faixa com a ordem de operações do serviço
+(o teste confere a premissa antes de exigir `lr_ind == 0.0`); nenhuma varredura.
+
 <!-- END: post-execution -->
