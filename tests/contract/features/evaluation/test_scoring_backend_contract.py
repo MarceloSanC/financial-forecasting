@@ -13,8 +13,9 @@ implementação do port concorda, sob tolerância declarada, com:
   `lower > upper` e sequência vazia erguem `ValueError`.
 
 Pernas: `fake` (delega às funções de série do domínio), `sklearn`
-(`SklearnScoring`, Task 10) e `scoringrules` (Task 11) — **sem `skipif`**: as libs
-são dependências do projeto desde a Task 08, então perna pulada é perna quebrada.
+(`SklearnScoring`, Task 10) e `scoringrules` (`ScoringrulesBackend`, Task 11) —
+**sem `skipif`**: as libs são dependências do projeto desde a Task 08, então perna
+pulada é perna quebrada.
 Toda perna devolve `float` **nativo** (`type(v) is float`): `numpy.float64` passaria
 num `isinstance(v, float)` e violaria a promessa do port.
 """
@@ -27,6 +28,9 @@ from collections.abc import Callable
 
 import pytest
 
+from financial_forecasting.features.evaluation.adapters.out.scoring.scoringrules_backend import (
+    ScoringrulesBackend,
+)
 from financial_forecasting.features.evaluation.adapters.out.scoring.sklearn_scoring import (
     SklearnScoring,
 )
@@ -61,6 +65,7 @@ _SKLEARN_LEVEL = 0.1
 _FACTORIES: dict[str, Callable[[], ScoringBackend]] = {
     "fake": FakeScoringBackend,
     "sklearn": SklearnScoring,
+    "scoringrules": ScoringrulesBackend,
 }
 
 
