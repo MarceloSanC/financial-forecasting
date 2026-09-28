@@ -61,6 +61,8 @@ _HAND_VIOLATIONS = 4
 # Literais da fixture (Checkpoint C bloco 3): LR_cc e p_cc = exp(-LR_cc/2), arredondados.
 _HAND_LR_CC = 1.94012
 _HAND_P_CC = 0.379061
+# LR_ind das transições (4, 1, 2, 0) (valor de referência do Checkpoint C bloco 3).
+_FIRST_OBSERVATION_LR_IND = 0.7376042206558466
 # Piso I13 do LR_ind (technical §1): transições (1, 2, 3, 6), bruto ≈ -1.78e-15.
 _FLOOR_SEQUENCE = (T, T, T, T, T, T, T, F, F, T, F, T, F)
 _H7 = 7
@@ -180,10 +182,16 @@ def test_first_observation_violation_is_outside_the_pure_n1() -> None:
         6 * math.log(1 - _P) + 2 * math.log(_P) - (6 * math.log(6 / 8) + 2 * math.log(2 / 8))
     )
 
+    # LR_ind com n01 ≠ n10 (1 ≠ 2): π̂ = (n01 + n11)/Σ = 1/7 (margem da COLUNA "vai para
+    # violação"), π̂01 = 1/5, π̂11 = 0 — uma nula pela margem da linha daria outro valor.
+    lr_ind = -2 * (6 * math.log(6 / 7) + math.log(1 / 7) - (4 * math.log(4 / 5) + math.log(1 / 5)))
+
     assert stats.transitions == (4, 1, 2, 0)
     assert stats.lr_uc is not None and _close(stats.lr_uc, pure)
     assert stats.kupiec_pof is not None and _close(stats.kupiec_pof, pof)
     assert not _close(stats.lr_uc, stats.kupiec_pof)
+    assert stats.lr_ind is not None and _close(stats.lr_ind, lr_ind)
+    assert _close(stats.lr_ind, _FIRST_OBSERVATION_LR_IND)
 
 
 # --- I5 — lacunas no primitivo e contagem única ---------------------------------------------
