@@ -1439,8 +1439,14 @@ Algoritmo, ramos e contrato inalterados (ADR 6.2.0002 itens 2–3: "prefator com
 Global df ≥ 2: abs. **5,9e−15** (1/170 de 1e−12) e rel. na cauda **2,5e−13** (1/400 de
 1e−10) — abaixo de 1/10 das duas tolerâncias. Caudas extremas: df = 999, x = −10 →
 8,354109e−23 (rel 7,2e−15); df = 2499, x = −40 → 3,748606e−271 (rel 1,5e−13). Máximo de
-iterações do Lentz na grade: **56** (menor teto que roda a grade inteira; `_MAX_ITERATIONS
-= 1000`). Custo ~7,5 µs por chamada. Detalhe ancorado no `pt.c` também aplicado: o ramo
+iterações do Lentz na grade log: 56 — **corrigido no Checkpoint C do bloco 1**: a grade log
+não passa pelo pior ponto, x logo abaixo do limiar da simetria 8.17.4 (z = 3/(df + 5), onde
+a fração contínua converge mais devagar); a revisão achou 72 (df = 999, x ≈ −1,73) e a
+busca adensada em torno do limiar (df ≤ 2500, passos relativos de 2,5e−3 e 2e−5 em x) dá
+**86** (df = 1012, x ≈ −1,81) — o teto `_MAX_ITERATIONS = 1000` fica ~12× acima. Domínio
+validado contra `mpmath` (60 dígitos, x ∈ [−20, 0) passo 0,05): df ≤ 1e4 → abs ≤ 1,5e−14,
+rel ≤ 6,4e−13; df 1e5 → rel 6,1e−12; df 1e6 → rel 5,7e−11; df 1e7 → rel 5,3e−10 (abs
+1,1e−11) — o docstring declara df ≤ ~1e4. Custo ~7,5 µs por chamada. Detalhe ancorado no `pt.c` também aplicado: o ramo
 assintótico `nx > 1e100` (A&S 26.5.4 em log) cobre |x| com x² estourando float64 — é o que
 cobre df = 1 e df = 2 em x = −10¹⁵⁰ no unit.
 

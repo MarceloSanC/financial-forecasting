@@ -18,7 +18,11 @@ o seu complemento são calculados **direto** (`x²/(df+x²)` e `df/(df+x²)`), n
 simetria 8.17.4 escolhe — a cauda nunca é `½·(1 - I)` por subtração de dois números
 próximos de 1 (armadilha medida no technical 6.2 §1: df = 999, x = -10 daria 0 em vez
 de 8,35e-23). O ramo de aproximação normal do `pt.c` (df > 4e5) não é reproduzido: o DM
-usa df = T - 1 ≤ alguns milhares (a precisão foi medida em df 1-2500).
+usa df = T - 1 ≤ alguns milhares.
+
+Domínio validado (medição A14 contra `mpmath`, technical 6.2 §7): **df ≤ ~1e4** — erro
+absoluto ≤ 1,5e-14 e relativo na cauda ≤ 6,4e-13. Acima disso a precisão degrada
+devagar (df 1e5: rel 6e-12; df 1e7: rel 5e-10, abs 1e-11) — fora do uso do DM.
 
 Função especial: I_z(a, b) pela fração contínua DLMF 8.17.22 (coeficientes 8.17.23),
 avaliada pelo método de Lentz modificado, com prefator z^a(1 - z)^b/(a·B(a, b)) em log;
@@ -40,9 +44,9 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
     is_finite_number,
 )
 
-# Teto de iterações do Lentz: ~18x o máximo medido (56 iterações em df 1-2500 x |x| até
-# 10³; technical 6.2 §1). Constante de módulo para que o teste de C5 force a
-# não-convergência por `monkeypatch`.
+# Teto de iterações do Lentz: ~12x o máximo medido (86 iterações, df ≤ 2500, no pior
+# ponto — x logo abaixo do limiar da simetria 8.17.4, z = 3/(df + 5); technical 6.2 §7).
+# Constante de módulo para que o teste de C5 force a não-convergência por `monkeypatch`.
 _MAX_ITERATIONS = 1000
 
 # Critério de parada do Lentz: |Δ_m - 1| ≤ ε da máquina (float64).
