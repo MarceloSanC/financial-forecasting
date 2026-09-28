@@ -1548,4 +1548,19 @@ e `not-applicable-with-negative-n` do `wilson_incoherent`. A Eq. (4) de BCD já 
 [0, 1]; os limites saem sem recorte (um −1e-18 de arredondamento em c = 0 não muda o
 veredito, e recortar esconderia um erro de fórmula). Reversível.
 
+### 2026-09-28 — [decision] Task 05: `violation_rate_for` dono único da regra do `kind`; `count_transitions` e validações de detalhe do VO — Claude (Opus 5.5)
+**Contexto:** a regra "taxa nominal pelo `kind`" (`pair_miscoverage(τ_l)` / τ /
+`1.0 - τ`) seria escrita duas vezes — na validação do VO (Task 05) e no construtor
+`HitSequences` (Task 06) — e uma terceira na fábrica de teste.
+**Razão:** função de módulo `violation_rate_for(kind, levels)` em
+`value_objects/hit_sequence.py`, consumida pelo `__post_init__`, pelo
+`HitSequences` (Task 06) e pela fábrica `build_hit_sequence` do conftest — mesmo
+princípio de dono único do `pair_miscoverage` (concept D1, I2). Decisões de detalhe
+planejadas no §1 aplicadas: `count_transitions` de módulo (dono único; o VO delega);
+tolerância por `is_finite_number` e ≥ 0; DGT com `dgt_step == horizon`,
+`dgt_step ≥ 2`, `0 ≤ dgt_offset < dgt_step`. Acréscimos reversíveis: o VO também
+recusa `kind` que não seja `HitKind` e `horizon` não-`int`/`bool` (ramos
+`kind-not-hitkind` e `hitseq_horizon_invalid`), e expõe `is_dgt_subseries`
+(`dgt_step is not None`), usado pela checagem da taxa mascarada e pelo MC (C5).
+
 <!-- END: post-execution -->

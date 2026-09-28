@@ -1,0 +1,276 @@
+"""VO `HitSequence` — a sequência de violações de uma série x horizonte (primitivo único).
+
+Value object de domínio **frozen, stdlib-only** (concept 6.3 §4, I2, I4, I5, I8, C1;
+ADR `6_3_0001` item 1; ADR `6_3_0004`). Carrega, para **um** (modelo, horizonte), o
+indicador de **violação** por linha alinhada da `CoverageSeries`:
+
+- `True` = violação, `False` = sem violação, `None` = linha mascarada pelo
+  `DegeneracyGate` (lacuna — a sequência continua 1:1 com os timestamps, I4);
+- a taxa nominal de violação sai da grade pela regra do `kind`
+  (`violation_rate_for`, dono único): `pair_miscoverage(τ_l)` no intervalo, τ na
+  cauda inferior, 1 - τ na superior — nunca de constante do código (I2);
+- a autodescrição de quando for persistida (padrão ADR 6.1.0004): a `tolerance` do
+  gate, a `degeneracy_rate` da série de origem, `includes_degenerate` e, numa
+  sub-série DGT, `dgt_offset`/`dgt_step`.
+
+Transições (n00, n01, n10, n11) só entre posições consecutivas **ambas observadas**
+(ADR 6.3.0004 item 2): `count_transitions` é a única escrita da regra das lacunas,
+consumida por `HitSequence.transition_counts` e pelo serviço de LR.
+
+`dgt_partition` implementa a partição de Diebold, Gunther & Tay (1998, §6) para
+h > 1: sub-séries {j, j+h, j+2h, …}, j = 0..min(h, T)-1, iid sob a nula de DGT (I8).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from enum import StrEnum
+from itertools import pairwise
+
+from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
+    is_finite_number,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
+    pair_miscoverage,
+)
+
+_DGT_MIN_STEP = 2
+
+
+class HitKind(StrEnum):
+    """O que conta como violação na linha (regra FA7 do `HitSequences`, doc §4.5).
+
+    - `INTERVAL`: violação = `not is_inside_closed(y, l, u)`; taxa = `pair_miscoverage(τ_l)`;
+    - `LOWER_TAIL`: violação = `is_at_or_below(y, q̂_τ)`; taxa = τ;
+    - `UPPER_TAIL`: violação = `not is_at_or_below(y, q̂_τ)`; taxa = 1 - τ.
+    """
+
+    INTERVAL = "interval"
+    LOWER_TAIL = "lower_tail"
+    UPPER_TAIL = "upper_tail"
+
+
+_LEVELS_SIZE = {HitKind.INTERVAL: 2, HitKind.LOWER_TAIL: 1, HitKind.UPPER_TAIL: 1}
+
+
+def violation_rate_for(kind: HitKind, levels: Sequence[float]) -> float:
+    """Taxa nominal de violação pela regra do `kind` (I2) — única escrita da regra.
+
+    `pair_miscoverage(levels[0])` (= 2·τ_l) no intervalo, `levels[0]` na cauda
+    inferior e `1.0 - levels[0]` na superior. Consumida pela validação do VO e pelo
+    construtor `HitSequences`, para a taxa gravada e a conferida serem a mesma conta.
+    """
+    if kind is HitKind.INTERVAL:
+        return pair_miscoverage(levels[0])
+    if kind is HitKind.LOWER_TAIL:
+        return levels[0]
+    return 1.0 - levels[0]
+
+
+def count_transitions(violations: Sequence[bool | None]) -> tuple[int, int, int, int]:
+    """(n00, n01, n10, n11) sobre pares consecutivos **ambos** observados (ADR 6.3.0004).
+
+    n_ij conta t com `violations[t-1] == i` e `violations[t] == j`; um par com `None`
+    em qualquer ponta não conta (a lacuna quebra a transição). Sem lacunas, é a
+    convenção pura t = 2..T. Dono único da regra: o VO e o serviço de LR a consomem.
+    """
+    n00 = n01 = n10 = n11 = 0
+    for previous, current in pairwise(violations):
+        if previous is None or current is None:
+            continue
+        if previous:
+            if current:
+                n11 += 1
+            else:
+                n10 += 1
+        elif current:
+            n01 += 1
+        else:
+            n00 += 1
+    return n00, n01, n10, n11
+
+
+@dataclass(frozen=True)
+class HitSequence:
+    """Sequência de violações de uma série x horizonte, com lacunas da máscara.
+
+    Campos:
+        horizon: rótulo da série de origem (≥ 1).
+        kind: `HitKind` — intervalo, cauda inferior ou superior.
+        levels: `(τ_l, τ_u)` no intervalo; `(τ,)` nas caudas.
+        violation_rate: p_viol em (0, 1), igual (exato) a `violation_rate_for`.
+        target_timestamps: os das posições desta sequência, estritamente crescentes.
+        violations: 1:1 com as posições; `None` = linha mascarada.
+        tolerance: a do gate que produziu a máscara (finita, ≥ 0).
+        degeneracy_rate: taxa do gate na série de origem, em [0, 1].
+        includes_degenerate: `True` ⇒ nenhum `None`, salvo série 100 % degenerada.
+        dgt_offset: j da sub-série DGT; `None` fora da partição.
+        dgt_step: h da partição; `None` fora da partição.
+
+    Raises:
+        ValueError: em qualquer caso de C1 (concept 6.3 §6), na construção.
+    """
+
+    horizon: int
+    kind: HitKind
+    levels: tuple[float, ...]
+    violation_rate: float
+    target_timestamps: tuple[str, ...]
+    violations: tuple[bool | None, ...]
+    tolerance: float
+    degeneracy_rate: float
+    includes_degenerate: bool
+    dgt_offset: int | None = None
+    dgt_step: int | None = None
+
+    def __post_init__(self) -> None:
+        """C1: um ramo por caso, mensagens nomeando o campo ou a posição."""
+        self._check_lengths()
+        self._check_timestamps()
+        self._check_horizon()
+        self._check_kind_and_rate()
+        self._check_elements()
+        self._check_mask_description()
+        self._check_dgt()
+
+    @property
+    def n_observed(self) -> int:
+        """Posições não-`None` — o n da banda de Wilson e do Kupiec POF (I4)."""
+        return sum(1 for value in self.violations if value is not None)
+
+    @property
+    def n_violations(self) -> int:
+        """Violações (`True`) entre as observadas — o x do Kupiec POF."""
+        return sum(1 for value in self.violations if value is True)
+
+    @property
+    def transition_counts(self) -> tuple[int, int, int, int]:
+        """(n00, n01, n10, n11) sobre pares consecutivos observados (`count_transitions`)."""
+        return count_transitions(self.violations)
+
+    @property
+    def is_dgt_subseries(self) -> bool:
+        """`True` numa sub-série da partição DGT (`dgt_step` preenchido)."""
+        return self.dgt_step is not None
+
+    def dgt_partition(self) -> tuple[HitSequence, ...]:
+        """Sub-séries DGT {j, j+h, …}, j = 0..min(h, T)-1; `horizon == 1` → `(self,)`.
+
+        Cada sub-série mantém `horizon`, `kind`, `levels`, `violation_rate`,
+        `tolerance`, `includes_degenerate` e a `degeneracy_rate` da série de origem,
+        com os timestamps e violações das suas posições (lacunas preservadas).
+
+        Raises:
+            ValueError: chamada numa sub-série DGT (sem re-partição, I8).
+        """
+        if self.is_dgt_subseries:
+            raise ValueError(
+                f"dgt_partition cannot be applied to a DGT sub-series "
+                f"(dgt_offset={self.dgt_offset}, dgt_step={self.dgt_step})"
+            )
+        if self.horizon == 1:
+            return (self,)
+        step = self.horizon
+        return tuple(
+            HitSequence(
+                horizon=self.horizon,
+                kind=self.kind,
+                levels=self.levels,
+                violation_rate=self.violation_rate,
+                target_timestamps=self.target_timestamps[offset::step],
+                violations=self.violations[offset::step],
+                tolerance=self.tolerance,
+                degeneracy_rate=self.degeneracy_rate,
+                includes_degenerate=self.includes_degenerate,
+                dgt_offset=offset,
+                dgt_step=step,
+            )
+            for offset in range(min(step, len(self.violations)))
+        )
+
+    def _check_lengths(self) -> None:
+        n_violations, n_timestamps = len(self.violations), len(self.target_timestamps)
+        if n_violations != n_timestamps:
+            raise ValueError(
+                f"violations and target_timestamps must align 1:1, got lengths "
+                f"{n_violations} and {n_timestamps}"
+            )
+        if n_violations == 0:
+            raise ValueError("a HitSequence needs at least one position (T >= 1)")
+
+    def _check_timestamps(self) -> None:
+        for index, (previous, current) in enumerate(pairwise(self.target_timestamps), 1):
+            if current <= previous:
+                raise ValueError(
+                    "target_timestamps must be strictly increasing: position "
+                    f"{index} has {current!r} after {previous!r}"
+                )
+
+    def _check_horizon(self) -> None:
+        if isinstance(self.horizon, bool) or not isinstance(self.horizon, int):
+            raise ValueError(f"horizon must be an int, got {self.horizon!r}")
+        if self.horizon < 1:
+            raise ValueError(f"horizon must be >= 1, got {self.horizon}")
+
+    def _check_kind_and_rate(self) -> None:
+        if not isinstance(self.kind, HitKind):
+            raise ValueError(f"kind must be a HitKind, got {self.kind!r}")
+        expected_size = _LEVELS_SIZE[self.kind]
+        if len(self.levels) != expected_size:
+            raise ValueError(
+                f"levels must have {expected_size} element(s) for kind={self.kind.value}, "
+                f"got {self.levels}"
+            )
+        expected_rate = violation_rate_for(self.kind, self.levels)
+        if self.violation_rate != expected_rate:
+            raise ValueError(
+                f"violation_rate must equal the {self.kind.value} rule of the grid = "
+                f"{expected_rate!r}, got {self.violation_rate!r}"
+            )
+        if not 0.0 < self.violation_rate < 1.0:
+            raise ValueError(f"violation_rate must be in (0, 1), got {self.violation_rate!r}")
+
+    def _check_elements(self) -> None:
+        for index, value in enumerate(self.violations):
+            if value is not None and type(value) is not bool:
+                raise ValueError(f"violations[{index}] must be a bool or None, got {value!r}")
+
+    def _check_mask_description(self) -> None:
+        if not is_finite_number(self.tolerance) or self.tolerance < 0.0:
+            raise ValueError(f"tolerance must be a finite number >= 0, got {self.tolerance!r}")
+        if not is_finite_number(self.degeneracy_rate) or not (0.0 <= self.degeneracy_rate <= 1.0):
+            raise ValueError(f"degeneracy_rate must be in [0, 1], got {self.degeneracy_rate!r}")
+        n_gaps = len(self.violations) - self.n_observed
+        if self.includes_degenerate and 0 < n_gaps < len(self.violations):
+            raise ValueError(
+                "includes_degenerate=True allows gaps only when every position is None "
+                f"(fully degenerate series), got {n_gaps} of {len(self.violations)}"
+            )
+        # Na sub-série DGT a taxa é a da série de origem, não a das posições da sub-série.
+        if not self.includes_degenerate and not self.is_dgt_subseries:
+            expected = n_gaps / len(self.violations)
+            if self.degeneracy_rate != expected:
+                raise ValueError(
+                    f"degeneracy_rate must be n_None / T = {expected!r} in the masked "
+                    f"variant, got {self.degeneracy_rate!r}"
+                )
+
+    def _check_dgt(self) -> None:
+        offset, step = self.dgt_offset, self.dgt_step
+        if (offset is None) != (step is None):
+            raise ValueError(
+                f"dgt_offset and dgt_step must be both set or both None, got "
+                f"dgt_offset={offset!r}, dgt_step={step!r}"
+            )
+        if offset is None or step is None:
+            return
+        if step != self.horizon:
+            raise ValueError(f"dgt_step must equal horizon={self.horizon}, got {step}")
+        if step < _DGT_MIN_STEP:
+            raise ValueError(
+                f"dgt_step must be >= {_DGT_MIN_STEP} (horizon = 1 has no DGT sub-series), "
+                f"got {step}"
+            )
+        if not 0 <= offset < step:
+            raise ValueError(f"dgt_offset must be in [0, dgt_step={step}), got {offset}")
