@@ -905,4 +905,15 @@ e o `check_layout.py` também não — tirar o domain de `source_modules` passar
 comentário do contrato no `.importlinter` corrigido ("todos na application" deixou de
 ser verdade). Não muda contrato nem critério; só reforça a prova do A9.
 
+### 2026-09-28 — [decision] Task 06: `DegeneracyReport` exige `n_points ≥ 1`; `tolerance` não-numérica ergue — Claude (Opus 5.5)
+**Contexto:** o `__post_init__` do concept §4 checa máscara/timestamps com tamanho
+`n_points`, `n_degenerate` e `rate == n_degenerate / n_points`, mas não `n_points ≥ 1`;
+com `n_points = 0` a checagem de `rate` dividiria por zero (`ZeroDivisionError`, não o
+`ValueError` do C4). O C3 fala em tolerância "negativa ou não-finita".
+**Razão:** `n_points ≥ 1` entra como primeira checagem do `__post_init__` (mesma
+pré-condição de `PinballReport`/`IntervalScoreReport`; uma série tem T ≥ 1), com teste
+próprio. No C3, `None` e `bool` também erguem `ValueError` com a mesma mensagem (não
+são número finito; `bool` é subclasse de `int`, mesma postura do `_is_finite_number`
+do 4.3). Reversível, sem efeito sobre relatórios produzidos pelo gate.
+
 <!-- END: post-execution -->
