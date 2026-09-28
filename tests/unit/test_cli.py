@@ -13,6 +13,7 @@ import io
 import json
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -23,6 +24,9 @@ from financial_forecasting.features.feature_engineering.application.ports.out.se
 )
 from tests.fakes.features.feature_engineering.in_memory_sentiment_model import (
     InMemorySentimentModel,
+)
+from tests.fakes.features.modeling.in_memory_cohort_progress_ledger import (
+    InMemoryCohortProgressLedger,
 )
 from tests.fakes.features.modeling.in_memory_runtime_environment_probe import (
     InMemoryRuntimeEnvironmentProbe,
@@ -256,3 +260,48 @@ def test_any_other_unexpected_exception_also_exits_2_with_the_traceback(
     assert code == _EXIT_ERROR
     assert "Traceback" in err.getvalue()
     assert "KeyError" in err.getvalue()
+
+
+@pytest.mark.unit
+def test_materialize_start_cuts_only_the_dataset_not_the_ingestion() -> None:
+    """Rodada 3 do Checkpoint C 24-31: roda o `_materialize` real com use cases
+    falsos e confere os TRÊS pedidos — `--start` só pode chegar ao dataset."""
+    requests: dict[str, Any] = {}
+
+    def recorder(name: str, result: object) -> SimpleNamespace:
+        def execute(request: object) -> object:
+            requests[name] = request
+            return result
+
+        return SimpleNamespace(execute=execute)
+
+    ingested = SimpleNamespace(ingested=1)
+    deps: Any = SimpleNamespace(
+        cohort_ledger=InMemoryCohortProgressLedger(),
+        ingest_candles=recorder("candles", ingested),
+        ingest_news=recorder("news", ingested),
+        ingest_fundamentals=recorder("fundamentals", ingested),
+        build_dataset=recorder(
+            "dataset",
+            SimpleNamespace(
+                n_rows=1, start=date(2010, 4, 21), end=date(2025, 12, 31), feature_set_hash="h"
+            ),
+        ),
+    )
+
+    code = cli._materialize(
+        deps,
+        asset_id="AAPL",
+        sentiment_injected=True,
+        break_stale_lock=False,
+        out=io.StringIO(),
+        dataset_start=date(2010, 4, 20),
+    )
+
+    assert code == 0
+    assert requests["candles"].start == cli._MATERIALIZE_START
+    assert requests["news"].start == cli._MATERIALIZE_START
+    assert requests["fundamentals"].start is None
+    assert requests["dataset"].start == date(2010, 4, 20)
+    assert requests["dataset"].end == cli._MATERIALIZE_END.date()
+    assert not deps.cohort_ledger.is_locked
