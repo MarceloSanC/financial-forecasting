@@ -995,4 +995,11 @@ nem `jax` entra: os backends `numba`/`jax`/`torch` do scoringrules são opcionai
 adapter (Task 11) fixa o backend `numpy` explicitamente. `import sklearn,
 scoringrules` → `1.9.0 0.11.0`.
 
+### 2026-09-28 — [decision] Task 09: nome do fake `FakeScoringBackend` em `fake_scoring_backend.py` — Claude (Opus 5.5)
+**Contexto:** os fakes do BC `modeling` usam o módulo `in_memory_*.py`.
+**Razão:** o nome `FakeScoringBackend`/`fake_scoring_backend.py` é o que o concept §4 e
+o technical (Task 09, estrutura de pastas) fixam, e o `check_port_coverage.py` aceita
+os prefixos `Fake`/`InMemory`; o fake não guarda estado (delega ao domínio), então
+"in-memory" descreveria mal. Sancionado pelo contrato — não é desvio.
+
 <!-- END: post-execution -->

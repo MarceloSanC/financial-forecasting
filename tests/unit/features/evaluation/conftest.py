@@ -23,7 +23,8 @@ from financial_forecasting.features.evaluation.domain.value_objects.coverage_ser
     CoverageSeries,
 )
 
-# Grade simétrica de 7 níveis (a do candidato): 3 pares + a mediana.
+# Grade simétrica sintética de 7 níveis (3 pares + a mediana), só para teste. NÃO é a do
+# candidato: essa é {0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98} (doc de domínio de modeling).
 SEVEN_LEVELS: tuple[float, ...] = (0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95)
 _EPOCH = datetime(2024, 1, 2, tzinfo=UTC)
 

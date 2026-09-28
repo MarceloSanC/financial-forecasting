@@ -228,6 +228,13 @@ def test_mean_crps_quantile_rejects_misaligned_grid(backend: ScoringBackend) -> 
 
 
 @pytest.mark.contract
+def test_mean_crps_quantile_rejects_empty_grid(backend: ScoringBackend) -> None:
+    """C7: grade vazia (K = 0) ergue — a média (2/K)·soma é indefinida."""
+    with pytest.raises(ValueError, match="at least one level"):
+        backend.mean_crps_quantile(realized=[0.0], quantile_grid=[()], levels=())
+
+
+@pytest.mark.contract
 def test_mean_crps_quantile_rejects_empty_sequence(backend: ScoringBackend) -> None:
     with pytest.raises(ValueError, match="empty sequence"):
         backend.mean_crps_quantile(realized=[], quantile_grid=[], levels=(0.25, 0.75))
