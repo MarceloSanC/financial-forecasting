@@ -33,12 +33,14 @@ contrato `bc-independence` (ADR `0_0_0053` item 3; ADR `6_1_0002` item 3).
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from itertools import pairwise
 
 from financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast import (
     QuantileForecast,
+)
+from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
+    is_finite_number,
 )
 
 # Tolerância da simetria da grade: representação float64 (ADR 6.1.0002 item 2). Aceita
@@ -172,7 +174,7 @@ class CoverageSeries:
                 raise ValueError(
                     f"point {index}: {len(values)} guardrail values for {len(self.levels)} levels"
                 )
-            if any(not _is_finite_number(value) for value in values):
+            if any(not is_finite_number(value) for value in values):
                 raise ValueError(
                     f"point {index}: guardrail values must all be finite, got {values}"
                 )
@@ -180,7 +182,7 @@ class CoverageSeries:
                 raise ValueError(
                     f"point {index}: guardrail values must be non-decreasing, got {values}"
                 )
-            if not _is_finite_number(realized):
+            if not is_finite_number(realized):
                 raise ValueError(f"point {index}: realized value must be finite, got {realized}")
 
 
@@ -196,10 +198,3 @@ def pair_miscoverage(lower_level: float) -> float:
 def pair_nominal(lower_level: float) -> float:
     """Cobertura nominal do par simétrico: 1 - 2·τ_l = 1 - `pair_miscoverage` (I7)."""
     return 1.0 - pair_miscoverage(lower_level)
-
-
-def _is_finite_number(value: object) -> bool:
-    """`True` só para `int`/`float` finitos (exclui `None`, `nan`, `inf`, `bool`)."""
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return False
-    return math.isfinite(value)

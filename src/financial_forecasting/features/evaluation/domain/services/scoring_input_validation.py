@@ -18,8 +18,11 @@ suíte de contrato).
 
 from __future__ import annotations
 
-import math
 from collections.abc import Sequence
+
+from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
+    is_finite_number,
+)
 
 
 def validate_level(level: float) -> None:
@@ -37,7 +40,7 @@ def validate_miscoverage(miscoverage: float) -> None:
 def validate_finite(name: str, values: Sequence[float]) -> None:
     """Todo valor de `values` é número finito (`nan`, `inf`, `bool` e não-número erguem)."""
     for index, value in enumerate(values):
-        if not _is_finite(value):
+        if not is_finite_number(value):
             raise ValueError(f"{name} values must all be finite, got {value!r} at index {index}")
 
 
@@ -110,14 +113,3 @@ def _check_same_length(**sequences: Sequence[object]) -> None:
     lengths = {name: len(values) for name, values in sequences.items()}
     if len(set(lengths.values())) != 1:
         raise ValueError(f"sequences must have the same length, got {lengths}")
-
-
-def _is_finite(value: object) -> bool:
-    # `bool` é subclasse de `int` e `math.isfinite(True)` é True, mas não é valor de
-    # retorno nem de quantil — mesma postura da `CoverageSeries` (C2).
-    if isinstance(value, bool):
-        return False
-    try:
-        return math.isfinite(value)  # type: ignore[arg-type]
-    except TypeError:
-        return False

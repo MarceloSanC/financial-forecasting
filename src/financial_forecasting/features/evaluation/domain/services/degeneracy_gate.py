@@ -19,9 +19,11 @@ ADR `6_1_0003`. stdlib-only. Regras (concept 6.1 I8/I9, C3/C6):
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
+from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
+    is_finite_number,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
 )
@@ -132,12 +134,10 @@ class DegeneracyGate:
 
 
 def _validate_tolerance(tolerance: float) -> None:
-    # Cópia privada intencional do predicado de número finito do `QuantileForecast` (4.3):
-    # o helper de lá é privado e importá-lo abriria aresta nova no bc-independence.
-    if isinstance(tolerance, bool) or not isinstance(tolerance, int | float):
+    # Predicado único de número finito do slice (`_finite_number`), o mesmo da
+    # `CoverageSeries` e do validador dos kernels.
+    if not is_finite_number(tolerance) or tolerance < 0.0:
         raise ValueError(f"tolerance must be a finite number >= 0, got {tolerance!r}")
-    if not math.isfinite(tolerance) or tolerance < 0.0:
-        raise ValueError(f"tolerance must be a finite number >= 0, got {tolerance}")
 
 
 def _pair_collapse_rates(

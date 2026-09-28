@@ -935,6 +935,8 @@ do 4.3). O predicado de "número finito" (`_validate_tolerance` aqui e
 cross-slice nova no `bc-independence` só por um predicado de 3 linhas — a única aresta
 declarada é a de dados, o próprio VO (ADR 0.0.0053 item 3). Reversível, sem efeito
 sobre relatórios produzidos pelo gate.
+*Atualização (auditoria da Stage, F1):* as cópias internas do slice foram unificadas
+num predicado único — ver a entrada "[decision] Task 04 (fix da auditoria F1)" abaixo.
 
 ### 2026-09-28 — [decision] Task 02 (fix pós-Checkpoint C do bloco 2): `CoverageSeries.symmetric_pair_indices` — Claude (Opus 5.5)
 **Contexto:** a regra par → colunas do vetor pontuado (`levels.index(τ_l)`,
@@ -1051,5 +1053,27 @@ Stage a 5.5 (`feat/102-5-5-confirmatory-retrain`) ainda não está em `develop`:
 condição e declarado no PR. **Stage candidata:** 5.5 (`feat/102-5-5-confirmatory-retrain`,
 que traz a redação); quando ela entrar em `develop`, a verificação é o grep acima no
 `develop` — se a 6.1 já estiver mergeada antes, basta o merge da 5.5, sem retoque na 6.1.
+
+### 2026-09-28 — [decision] Task 04 (fix da auditoria F1): predicado único de número finito no slice — Claude (Opus 5.5)
+**Contexto:** a auditoria da Stage (F1) achou o predicado "número finito" escrito três
+vezes no slice com semânticas diferentes: `_is_finite_number` da `CoverageSeries`
+(exige `int`/`float` não-bool), `_is_finite` do validador único (`math.isfinite` sob
+`try`, que aceitava `Decimal`, `Fraction` e escalares numpy fora da hierarquia de
+`float`, como `numpy.float32`) e o `isinstance` inline de `_validate_tolerance` no
+`DegeneracyGate`. A mesma entrada (`Decimal("0.01")`) passava pelo validador dos
+kernels e era recusada pela série.
+**Razão:** uma regra, um dono (mesma postura de `pair_miscoverage`/`pair_nominal`):
+`is_finite_number` em `features/evaluation/domain/value_objects/_finite_number.py`
+(módulo privado do slice), consumido pelos três. Semântica escolhida: **só `int`/`float`
+não-bool e finitos** — a que o VO (C2) e o gate (C3) já aplicavam e a que o port
+declara (`Sequence[float]`); estreita o validador, que deixa de aceitar
+`Decimal`/`Fraction`/`numpy.float32` (`numpy.float64` segue aceito, é subclasse de
+`float`). Nenhum call-site de produção nem teste passava esses tipos. Mora em
+`value_objects/` porque o primeiro dono é a `CoverageSeries` e a direção interna do
+domínio é serviço → VO; segue cópia intencional (não import) do helper privado do
+`QuantileForecast` do 4.3 (ADR 0.0.0053 item 3). Provado por
+`tests/unit/features/evaluation/test_finite_number.py`: `Decimal`/`Fraction` recusados
+pelos três consumidores e subclasse de `float` aceita pelos três. Reversível; não muda
+assinatura de port nem campo de relatório.
 
 <!-- END: post-execution -->
