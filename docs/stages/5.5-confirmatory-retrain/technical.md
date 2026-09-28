@@ -1017,4 +1017,25 @@ Um subagente de contexto zerado, que não escreveu os testes, respondeu o questi
 
 **Limitação declarada:** o sweep é retomável por **modelo** (TFT gravado não refaz), não por **trial**. Retomar trial a trial exigiria persistir o estudo (storage do Optuna) e fica fora desta Stage. O `run` é retomável por unidade. Uma queda no meio de uma seed do TFT perde só aquela unidade (até ~2 h no canto caro). Operacionalmente: o host fica ligado durante sweep e run (runbook).
 
+### 2026-09-28 — [measurement] Task 34 — sweeps reais, congelamento e A3 com os params congelados — Claude (Opus 5.5)
+**Rebase antes do congelamento.** O technical proíbe rebase entre o congelamento e o fim da corrida. Por isso a branch foi rebaseada em `origin/develop` (#110: gates em camadas, `pytest-xdist`; nada em `src/`) com o sweep já rodando e antes do `freeze`.
+- O processo do sweep já tinha carregado código e dado.
+- O `make check` pós-rebase passou: `2563 passed … Total coverage: 98.78%`, `MAKE_EXIT=0`.
+- A branch foi publicada em seguida.
+
+**Sweeps** (`cli sweep`, `n_trials = 60` nos dois): `ELAPSED_S=37182` (~10,3 h), exit 0. Scope `aapl_confirmatory-r0-sweep-5fd7882fe815`.
+- **TFT:** melhor trial 11, objetivo 0,00651115179062. Params: `hidden_size = 197`, `batch_size = 111`, `dropout = 0,1201`, `learning_rate = 9,54e−4`, `attention_head_size = 4`, `max_encoder_length = 60`, `max_epochs = 50`, `patience = 8`. O ritmo caiu de ~2,5 para ~12 min por trial, com o TPE favorecendo modelos grandes.
+- **GBM:** melhor trial 1, objetivo 0,00326423732705. Params: `num_leaves = 9`, `learning_rate = 0,0905`, `min_data_in_leaf = 97`, `num_boost_round_max = 500`.
+- A mesma impressão digital nos dois: `00e4406d…95bd`, igual à medida na Task 33.
+
+**Congelamento** (`cli freeze`):
+- `frozen aapl_confirmatory-r0-665f45d9169a` / `hash 665f45d9169aba576d194e73d45c0508f51f231f573c4de283c96fc5847365b1`;
+- exit 0; a ida e volta do arquivo foi conferida pelo próprio comando.
+
+**[finding] A3 com os params congelados:**
+- A primeira reexecução falhou na **guarda de vacuidade** (`assert 1 > 1`: `best_iteration_by_horizon = {1: 1, 7: 1}`), não na igualdade das grades.
+- Causa: com 120 linhas sintéticas de treino, `min_data_in_leaf = 97` impede qualquer divisão, porque um split pede ≥ 194 linhas. O ajuste vira uma árvore de folha única.
+- Correção no teste (`task-34`): o fixture passou à escala do fold 0 do cohort (1641 treino, 252 early_stop).
+- Reexecução: `pytest tests/contract/features/modeling/test_quantile_model_trainer_determinism.py -v` → `4 passed`, inclusive `[aapl-cohort-frozen] PASSED`. As grades são idênticas entre as seeds 0 e 12345, com mais de uma árvore. O GBM continua rodando uma vez por fold (D4).
+
 <!-- END: post-execution -->
