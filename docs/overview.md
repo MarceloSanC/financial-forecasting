@@ -5,7 +5,7 @@ when-use: Consultar no início de qualquer nova sessão de detalhamento ou plane
 keywords: [overview, briefing, tft, calibracao, conformal, pinball, medalhao, clean-architecture, forecasting]
 status: draft
 created_at: 2026-06-22
-updated_at: 2026-09-26
+updated_at: 2026-09-27
 project_name: Previsão Probabilística de Retornos Financeiros (TFT)
 stakeholders:
   - Autor / Decisor / Pesquisador: Marcelo Santos (TCC, Eng. Mecatrônica — UFSC)
@@ -53,6 +53,7 @@ O alvo é uma reconstrução greenfield. Apenas os **dados brutos** (candles, ne
 ### Premissas
 - **ASSUM-1:** os dados brutos de AAPL de coleta anterior são íntegros e podem ser reusados como bronze imutável.
 - **ASSUM-2:** o ambiente AMD ROCm permite re-treinar o TFT com custo aceitável para o cohort confirmatório de AAPL.
+  - *Nota (2026-09-27, Stage 5.5):* o cohort confirmatório roda em **CPU**, não em ROCm. O custo foi medido no dado real antes do congelamento: um trial do TFT leva de 75 s a 806 s, e o cohort inteiro (sweeps de 60 trials, 10 seeds × 6 folds) cabe em CPU. Com esse número, o humano decidiu por CPU. A premissa perde o objeto, mas não é violada: o ROCm deixou de ser necessário. Registro: technical 5.5 §7; ADR 5.4.0003, nota da Task 37.
 - **ASSUM-3:** chaves de API (Alpha Vantage) seguem disponíveis para re-ingestão pontual de bronze, se necessário.
 - **ASSUM-4:** equivalência com evidências anteriores é aferida com **tolerância declarada** (não bit-identical), por ser re-treino com nova stack numérica.
 - **ASSUM-5:** orientador/banca aceitam refutação como resultado científico válido.
