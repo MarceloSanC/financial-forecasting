@@ -273,12 +273,16 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 
   **Perímetro do gate hoje** — dito aqui porque doutrina mais larga que o gate é
   falso verde de segunda ordem, o defeito que a issue #60 existe para matar: o
-  contrato `bc-independence` do `.importlinter` cobre os **quatro** slices
-  (`modeling`, `analytics_store`, `feature_engineering`, `market_data`). As 20
-  arestas de runtime existentes estão declaradas UMA A UMA como exceção comentada
-  (débito medido, não permissão) — as 8 `feature_engineering → market_data.domain.
-  entities` (`Candle`, `NewsArticle`, `FundamentalReport`) são dados, pela regra da
-  ADR 0.0.0053 (#95) — e **uma aresta nova reprova o build**. O que o gate não vê:
+  contrato `bc-independence` do `.importlinter` cobre os **cinco** slices
+  (`modeling`, `analytics_store`, `feature_engineering`, `market_data`,
+  `evaluation` — este desde a Stage 6.1). As 21 arestas de runtime existentes
+  estão declaradas UMA A UMA como exceção comentada (débito medido, não
+  permissão) — as 8 `feature_engineering → market_data.domain.entities`
+  (`Candle`, `NewsArticle`, `FundamentalReport`, #95) e a
+  `evaluation.domain → analytics_store.domain.value_objects.quantile_forecast`
+  (o VO `QuantileForecast` guardado pela `CoverageSeries`, Stage 6.1 / ADR
+  6.1.0002) são dados, pela regra da ADR 0.0.0053 — e **uma aresta nova reprova
+  o build**. O que o gate não vê:
 
   - **Arestas sob `if TYPE_CHECKING:` são invisíveis ao contrato**
     (`exclude_type_checking_imports = True`, ver §3). Hoje as únicas type-only

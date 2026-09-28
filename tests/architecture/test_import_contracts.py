@@ -460,6 +460,21 @@ _REAL_VIOLATION_CASES = (
         },
         id="bc-independence:feature-engineering-imports-new-market-data-edge",
     ),
+    # Stage 6.1 (A9): `evaluation` entrou no perímetro com UMA aresta declarada
+    # (`coverage_series -> quantile_forecast`). De um módulo novo, uma aresta não
+    # declarada reprova — `PredictionRow` justamente por NÃO estar nas exceções.
+    # Sem o slice em `modules`, este caso ficaria verde.
+    pytest.param(
+        "bc-independence",
+        {
+            "features/evaluation/application/_arch_audit_taint_bc.py": (
+                "from financial_forecasting.features.analytics_store.domain"
+                ".value_objects.prediction_row import PredictionRow\n"
+                "\n_use = PredictionRow\n"
+            )
+        },
+        id="bc-independence:evaluation-imports-new-analytics-store-edge",
+    ),
     # ---------------------------------------------------------------------
     # Issue #60 (auditoria) — UM CASO POR MÓDULO PROIBIDO.
     # O `## Escopo` item 3 pedia "um por módulo proibido onde o contrato lista
