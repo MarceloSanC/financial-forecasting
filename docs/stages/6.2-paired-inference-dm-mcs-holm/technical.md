@@ -1594,4 +1594,32 @@ port) quebraria na Task 12.
 recusa entrada que o gerador de registro já recusa —; reversível; não muda assinatura
 nem formato.
 
+### 2026-09-28 — [decision] Task 07 — medição A14 (custo do MCS) — Claude (Opus 5.5)
+**Contexto:** re-medição A14.2 com a implementação final de `ModelConfidenceSet.evaluate`
+(sondagem fora do repo, container de dev): T = 1000, k = 7, reps = 1000, índices
+estacionários gerados com `random.Random` (bloco médio 10), três rodadas.
+**Razão:** `evaluate` leva **0,40–0,43 s**; a construção do `BootstrapIndices` (validação
+de 10⁶ posições) 0,07–0,11 s; gerar os índices em stdlib 0,18–0,28 s. Bem abaixo do teto de
+10 s da Task (sem `[finding]` de desempenho) e da mesma ordem do protótipo do §1 (0,45 s).
+Sanidade de paridade antecipada da Task 12, na mesma sondagem: domínio sobre os índices de
+`StationaryBootstrap`/`MovingBlockBootstrap` do `arch` 8.0.0 × `arch.MCS(method="R")`,
+T = 250, k = 4, reps = 1000, seeds {1, 7}, blocos {3, 10}: **8/8 com a mesma ordem de
+eliminação e p-valores MCS idênticos**.
+
+### 2026-09-28 — [decision] Task 07: `McsReport` reusa os validadores de dono único; `T_R` sobre i ≠ j — Claude (Opus 5.5)
+**Contexto:** decisão de detalhe planejada no §1 (o `__post_init__` confere a parte interna
+do I9) e dois pontos de implementação.
+**Razão:** (1) o `__post_init__` usa os donos únicos já existentes — `validate_alpha`,
+`check_horizon`/`check_points` (`_paired_inputs`) e `validate_bootstrap_request` (com
+`n_obs = n_points`, então `seed ≥ 0`, esquema do enum e bloco < T no moving-block valem no
+relatório também) — mais `reps ≥ MIN_MCS_REPS`, `generator` não-vazio, ≥ 2 eliminações em
+tuple com nomes únicos, passos em [0, 1], máximo acumulado exato, último = 1,0 e `included`
+tuple sem repetição igual a {m : p̂ ≥ α}. (2) T_R e T*_R são o máximo sobre os pares
+ordenados i ≠ j; o `arch` inclui a diagonal (t_ii = 0), mas como t_ji = −t_ij (exato em
+float: negação) o máximo sobre i ≠ j já é ≥ 0 — mesmo número. (3) A sondagem de mutantes da
+própria execução achou vivo `T_R < T*` → `≤` (nenhuma réplica empatava): fechado pelo caso
+`test_mcs_boundary_included_counts_only_strict_exceedance` (réplica com t* = t exato). O
+mutante "var̂ com divisor B − 1" é **equivalente**: escala todos os t e t* pelo mesmo fator
+e não muda p nem ordem (o relatório não expõe t).
+
 <!-- END: post-execution -->
