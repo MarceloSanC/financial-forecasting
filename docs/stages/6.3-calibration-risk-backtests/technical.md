@@ -1605,7 +1605,7 @@ crescentes; a 6.3 criou `value_objects/_horizon.py` e a 6.2 cria, em paralelo,
 **Razão:** trocar a `CoverageSeries` agora colidiria com as duas Stages em voo (a 6.3
 já edita `coverage_series.py`, a 6.2 cria o helper de timestamps). Escalado para
 depois do merge das duas — candidata Stage 6.4: a `CoverageSeries` passa a consumir
-`validate_horizon` e `check_strictly_increasing`, sem cópia.
+`validate_horizon` e `check_strictly_increasing`, sem cópia. Atualização pós-merge da 6.2 (auditoria da 6.3, F3): a `HitSequence` já consome o `_timestamps.check_strictly_increasing` da 6.2 (`[6.3/task-05-fix]`); a `CoverageSeries` segue → 6.4.
 
 ### 2026-09-28 — [decision] Checkpoint C bloco 2: `HitSequence` recusa par não-simétrico, variante sem lacunas incoerente e DGT não-`int` — Claude (Opus 5.5)
 **Contexto:** achado LOW — o VO aceitava estados inválidos: `levels[1]` do

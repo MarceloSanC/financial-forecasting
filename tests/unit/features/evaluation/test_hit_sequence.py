@@ -52,7 +52,7 @@ _H7 = 7
         (
             (T, F),
             {"target_timestamps": ("2024-01-02", "2024-01-02")},
-            "position 1 has '2024-01-02' after '2024-01-02'",
+            "point 1 has '2024-01-02' after '2024-01-02'",
         ),
         ((T, F), {"kind": "lower_tail", "violation_rate": 0.05}, "kind must be a HitKind"),
         (

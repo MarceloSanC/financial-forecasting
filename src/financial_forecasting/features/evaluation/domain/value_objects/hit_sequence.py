@@ -35,6 +35,9 @@ from financial_forecasting.features.evaluation.domain.value_objects._horizon imp
     is_multi_step,
     validate_horizon,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._timestamps import (
+    check_strictly_increasing,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._tolerance import (
     validate_tolerance,
 )
@@ -338,12 +341,7 @@ class HitSequence:
             raise ValueError("a HitSequence needs at least one position (T >= 1)")
 
     def _check_timestamps(self) -> None:
-        for index, (previous, current) in enumerate(pairwise(self.target_timestamps), 1):
-            if current <= previous:
-                raise ValueError(
-                    "target_timestamps must be strictly increasing: position "
-                    f"{index} has {current!r} after {previous!r}"
-                )
+        check_strictly_increasing(self.target_timestamps)
 
     def _check_elements(self) -> None:
         validate_violation_elements(self.violations)
