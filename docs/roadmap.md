@@ -863,6 +863,7 @@ arquivos_a_modificar:
   - src/financial_forecasting/features/evaluation/domain/services/paired_pinball_losses.py
   - src/financial_forecasting/features/evaluation/domain/value_objects/bootstrap_indices.py
   - src/financial_forecasting/features/evaluation/domain/services/model_confidence_set.py
+  - src/financial_forecasting/features/evaluation/domain/value_objects/_timestamps.py
   - src/financial_forecasting/shared/adapters/out/parquet/parquet_medallion_store.py
   - tests/fakes/shared/in_memory_medallion_store.py
   - src/financial_forecasting/composition_root.py
