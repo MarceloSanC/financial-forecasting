@@ -380,6 +380,40 @@ def test_prov_generated_at_invalid_date(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
+def test_prov_dec_hex_superset_not_recognized_dhexact(tmp_path: Path) -> None:
+    """Só objetos com chaves **exatamente** {dec, hex} são números do Step: um superconjunto
+    (chave extra) não é conferido — mesmo com dec != hex."""
+
+    def edit(data: dict[str, Any]) -> None:
+        data["cases"][0]["inputs"]["annotated"] = {"dec": [1.0], "hex": ["0x1p+1"], "unit": "x"}
+
+    assert _problems_after(tmp_path, edit) == []
+
+
+@pytest.mark.integration
+def test_prov_dockerfile_missing_dfmiss(tmp_path: Path) -> None:
+    json_path = _mini_repo(tmp_path)
+    (json_path.parent / "Dockerfile").unlink()
+    assert _fixture_problems(json_path, repo_root=tmp_path) == [
+        "Dockerfile not found next to the fixture"
+    ]
+
+
+@pytest.mark.integration
+def test_prov_dockerfile_multi_from_dfmulti(tmp_path: Path) -> None:
+    """Dois FROM (build multi-stage) não identificam uma imagem: reprova."""
+    json_path = _mini_repo(tmp_path)
+    dockerfile = json_path.parent / "Dockerfile"
+    dockerfile.write_text(
+        "FROM rocker/r-ver:4.4.1\nFROM rocker/r-ver:4.4.1\nRUN true\n", encoding="utf-8"
+    )
+    assert _fixture_problems(json_path, repo_root=tmp_path) == [
+        "image 'rocker/r-ver:4.4.1' differs from the Dockerfile FROM "
+        "['rocker/r-ver:4.4.1', 'rocker/r-ver:4.4.1']"
+    ]
+
+
+@pytest.mark.integration
 def test_prov_extra_key_allowed(tmp_path: Path) -> None:
     """Chaves extras (ex.: `t_max` da 6.3) não são violação."""
     assert _problems_after(tmp_path, lambda data: data["provenance"].update(t_max=500)) == []
