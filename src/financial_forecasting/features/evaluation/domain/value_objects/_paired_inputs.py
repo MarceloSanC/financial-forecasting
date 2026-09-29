@@ -7,7 +7,9 @@ e o `DieboldMarianoResult` checam (concept 6.2 I2/I5, C1/C3; ADR `6_2_0001` item
 - `check_points`: T ≥ 2 (df da t_{T-1} ≥ 1) e **T > h** (divergência deliberada do R,
   que aceita h = T — ADR `6_2_0001`);
 - `check_loss`: perda finita (sem `bool`/`None`) e ≥ 0 (o R pontuaria |L|);
-- `differential`: d_t = L_first,t - L_second,t, a única escrita do diferencial.
+- `differential`: d_t = L_first,t - L_second,t, a única escrita do diferencial;
+- `is_constant`: série com todos os valores iguais (a pré-condição var > 0 do MCS e do
+  `validate_block_length_request`).
 
 Fica em `value_objects/` porque o primeiro dono das regras é o VO e a direção interna
 do domínio é serviço → VO. Não se chama `_horizon.py`: a Stage 6.3, em paralelo, cria um
@@ -51,3 +53,8 @@ def check_loss(loss: float, *, where: str) -> None:
 def differential(first: Sequence[float], second: Sequence[float]) -> tuple[float, ...]:
     """d_t = first_t - second_t, ponto a ponto (tamanhos iguais)."""
     return tuple(a - b for a, b in zip(first, second, strict=True))
+
+
+def is_constant(values: Sequence[float]) -> bool:
+    """`True` se todos os valores são iguais (sequência não-vazia)."""
+    return all(value == values[0] for value in values)

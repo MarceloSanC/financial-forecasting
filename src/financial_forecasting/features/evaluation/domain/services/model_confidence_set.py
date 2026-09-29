@@ -41,10 +41,12 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
     check_horizon,
     check_points,
+    is_constant,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
     BootstrapIndices,
     BootstrapScheme,
+    check_generator,
     validate_bootstrap_request,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
@@ -111,8 +113,7 @@ class McsReport:
         )
         if self.reps < MIN_MCS_REPS:
             raise ValueError(f"reps must be >= {MIN_MCS_REPS}, got {self.reps}")
-        if not isinstance(self.generator, str) or not self.generator:
-            raise ValueError(f"generator must be a non-empty str, got {self.generator!r}")
+        check_generator(self.generator)
         self._check_eliminations()
         self._check_included()
 
@@ -195,8 +196,7 @@ class ModelConfidenceSet:
                 f"bootstrap n_obs ({bootstrap.n_obs}) must equal T ({series.n_points})"
             )
         for first, second in series.model_pairs():
-            differential = series.differential(first, second)
-            if all(value == differential[0] for value in differential):
+            if is_constant(series.differential(first, second)):
                 raise ValueError(
                     f"models {first!r} and {second!r} have a constant loss differential "
                     "(the MCS needs var(L_i - L_j) > 0)"

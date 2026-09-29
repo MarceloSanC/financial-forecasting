@@ -1494,6 +1494,12 @@ não-bool ≥ 1) de `value_objects/_paired_inputs.py` (6.2) com o `value_objects
 que a 6.3 cria em paralelo e com o `_check_horizon` da `CoverageSeries` — três escritas da
 mesma regra depois do merge das duas Stages (candidata: 6.4). O nome `_paired_inputs.py`
 foi escolhido para não colidir com o `_horizon.py` da 6.3.
+**Ampliado no Checkpoint C do bloco 3:** a regra "int não-bool ≥ mínimo" tem hoje uma 4ª
+escrita, `_check_int` de `bootstrap_indices.py` (`n_obs`/`block_size`/`reps`/`seed`), além
+de `check_horizon` (`_paired_inputs`), do `_horizon.py` da 6.3 e do `_check_horizon` da
+`CoverageSeries` — unificar as quatro num predicado do slice na mesma Stage (candidata:
+6.4). "generator não-vazio" (`check_generator`) e "série constante" (`is_constant`) já
+foram unificados na 6.2 (fix do Checkpoint C do bloco 3).
 
 ### 2026-09-28 — [decision] Task 04: validador do DM no módulo do enum; `mean_differential` finito no I5 — Claude (Opus 5.5)
 **Contexto:** decisão de detalhe planejada no §1 (onde mora o validador do DM) e dois

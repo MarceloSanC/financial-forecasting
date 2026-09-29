@@ -33,6 +33,9 @@ from typing import Final
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
+    is_constant,
+)
 
 MIN_BLOCK_LENGTH_OBS: Final = 11
 
@@ -87,8 +90,14 @@ def validate_block_length_request(series: Sequence[float]) -> None:
     for index, value in enumerate(series):
         if not is_finite_number(value):
             raise ValueError(f"series[{index}] must be a finite number, got {value!r}")
-    if all(value == series[0] for value in series):
+    if is_constant(series):
         raise ValueError("optimal_block_length needs a non-constant series")
+
+
+def check_generator(generator: object) -> None:
+    """Proveniência do gerador de índices: `str` não-vazia (VO e `McsReport`)."""
+    if not isinstance(generator, str) or not generator:
+        raise ValueError(f"generator must be a non-empty str, got {generator!r}")
 
 
 @dataclass(frozen=True)
@@ -126,8 +135,7 @@ class BootstrapIndices:
             seed=self.seed,
             scheme=self.scheme,
         )
-        if not isinstance(self.generator, str) or not self.generator:
-            raise ValueError(f"generator must be a non-empty str, got {self.generator!r}")
+        check_generator(self.generator)
         n_obs = self.n_obs
         for rep, row in enumerate(self.indices):
             if not isinstance(row, tuple):
