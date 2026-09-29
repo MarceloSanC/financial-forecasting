@@ -71,8 +71,7 @@ def validate_mcs_reps(reps: int) -> None:
     """
     if reps < MIN_MCS_REPS:
         raise ValueError(
-            f"reps must be >= {MIN_MCS_REPS} (the MCS needs reps >= {MIN_MCS_REPS}), "
-            f"got {reps!r}"
+            f"reps must be >= {MIN_MCS_REPS} (the MCS needs reps >= {MIN_MCS_REPS}), got {reps!r}"
         )
 
 
