@@ -1697,4 +1697,19 @@ no teste de integração `test_arch_block_length_arithmetic_error`. Leitura da c
 reps = 1000) passaram na primeira rodada com ordem de eliminação e p-valores MCS `==` aos
 do `arch.MCS`.
 
+### 2026-09-29 — [decision] Task 13: rebase sem efeito e `arquivos_a_criar` com a lista real — Claude (Opus 5.5)
+**Contexto:** a Task pede `git fetch origin && git rebase origin/develop` antes das
+edições (a 6.3 edita linhas vizinhas) e o `arquivos_a_criar` do roadmap §6.2 igual à lista
+real do §1.
+**Razão:** (1) `origin/develop` não avançou desde a base da branch (`ee1c428`): o rebase
+foi no-op ("up to date"), sem conflito nem `[deviation]` — o mapa de conflitos do §5 fica
+para o rebase do PR, se a 6.3 mergear antes. (2) A lista real inclui, além da do §1, os
+helpers privados nascidos nos Checkpoints C (`value_objects/_paired_inputs.py`,
+`_timestamps.py`) e `adapters/out/inference/__init__.py`; as fixtures R vêm como
+`dm_test_cases.{R, json, sessionInfo.txt}` + `Dockerfile` (o grep do §3 procura o prefixo
+`r_oracle/dm_test_cases`). (3) Doc de domínio: além dos itens da Task, a linha
+"Convenção do projeto" do §6.5 passou a citar b_opt de Politis & White §3.2 Eq. (6); as
+referências novas (Bernardi & Catania 2018; NIST DLMF §8.17) entram no bloco "Inferência
+pareada:" do §11.2 e no item do doc de avaliação do overview §10 (ADR 0.0.0003).
+
 <!-- END: post-execution -->
