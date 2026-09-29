@@ -1952,4 +1952,14 @@ toda linha — é chamado **primeiro** no `ParquetGoldStore.publish` e no
 publish_rejects_incoherent_generation` (duas pernas). O `_publish` da suíte passou a
 montar tabelas e manifesto da partição alvo.
 
+### 2026-09-29 — [decision] Checkpoint C bloco 3 (B1): rollback da troca no `ParquetGoldStore` — Claude (Opus 5.5)
+**Contexto:** se o segundo `os.replace` (`.staging` → `current`) falhasse, a partição
+ficava sem `current/` até o próximo refresh.
+**Razão:** a segunda troca roda num `try`: `OSError` → `os.replace(.previous,
+current)` e re-raise (a geração anterior segue viva, C9). E a limpeza inicial do
+`publish`, ao achar `.previous/MANIFEST.json` sem `current/` (crash entre as trocas),
+restaura `.previous/` antes de apagar sobras. Testes só-do-real:
+`real_failure_keeps_current_on_swap_error` e
+`real_failure_keeps_current_after_crash_between_swaps`.
+
 <!-- END: post-execution -->

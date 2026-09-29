@@ -16,7 +16,9 @@ Concept 6.4 D8, C3, C9; ADR `6_4_0005` itens 2, 5 e 6. Layout por partição:
    (`json.dumps(manifest.as_mapping(), sort_keys=True, indent=2)`, em
    `_write_manifest`);
 4. `os.replace(current, .previous)` se `current/` existe; `os.replace(.staging,
-   current)`;
+   current)` — se esta segunda troca falhar, `.previous/` volta a `current/` e o erro
+   propaga (rollback); um `publish` que encontra `.previous/MANIFEST.json` sem
+   `current/` (crash entre as trocas) restaura `.previous/` antes de limpar;
 5. `shutil.rmtree(.previous)` — `OSError` aqui vira `logger.warning` e o `publish`
    retorna normalmente (a geração nova já está viva; o próximo `publish` limpa).
 
@@ -92,6 +94,9 @@ class ParquetGoldStore:
         check_generation(partition, tables, manifest)
         root = self.partition_root(partition)
         staging, current, previous = root / _STAGING, root / _CURRENT, root / _PREVIOUS
+        if not current.exists() and (previous / MANIFEST_NAME).exists():
+            # crash entre as duas trocas: a geração anterior completa volta a ser a viva
+            os.replace(previous, current)
         for leftover in (staging, previous):
             if leftover.exists():
                 shutil.rmtree(leftover)
@@ -101,7 +106,12 @@ class ParquetGoldStore:
         _write_manifest(staging / MANIFEST_NAME, manifest)
         if current.exists():
             os.replace(current, previous)
-        os.replace(staging, current)
+        try:
+            os.replace(staging, current)
+        except OSError:
+            if previous.exists() and not current.exists():
+                os.replace(previous, current)  # rollback: a geração anterior segue viva
+            raise
         if previous.exists():
             try:
                 shutil.rmtree(previous)

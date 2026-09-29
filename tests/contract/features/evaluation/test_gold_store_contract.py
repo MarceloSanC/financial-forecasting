@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
@@ -281,6 +282,55 @@ def test_real_failure_keeps_current(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         store.publish(partition=_PARTITION, tables=newer, manifest=_manifest(newer))
     assert _files(current) == before
     assert MANIFEST_NAME in before
+
+
+@pytest.mark.contract
+def test_real_failure_keeps_current_on_swap_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """2ª troca (`.staging` → `current`) falha: rollback de `.previous` e o erro propaga."""
+    store = ParquetGoldStore(tmp_path)
+    first = [_table("gold_quality_checks", 4)]
+    store.publish(partition=_PARTITION, tables=first, manifest=_manifest(first))
+    current = store.current_dir(_PARTITION)
+    before = _files(current)
+    real_replace = os.replace
+
+    def _refuse_staging(src: str | Path, dst: str | Path) -> None:
+        if Path(src).name == ".staging":
+            raise OSError("rename refused (simulated)")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", _refuse_staging)
+    second = [_table("gold_quality_checks", 2, offset=7.0)]
+    with pytest.raises(OSError, match="rename refused"):
+        store.publish(partition=_PARTITION, tables=second, manifest=_manifest(second))
+    monkeypatch.undo()
+    assert _files(current) == before
+    assert not (store.partition_root(_PARTITION) / ".previous").exists()
+
+
+@pytest.mark.contract
+def test_real_failure_keeps_current_after_crash_between_swaps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Crash entre as trocas (só `.previous/` completo): o `publish` seguinte o restaura."""
+    store = ParquetGoldStore(tmp_path)
+    first = [_table("gold_quality_checks", 4)]
+    store.publish(partition=_PARTITION, tables=first, manifest=_manifest(first))
+    root = store.partition_root(_PARTITION)
+    before = _files(root / "current")
+    os.replace(root / "current", root / ".previous")
+
+    def _broken(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
+        raise OSError("disk full (simulated)")
+
+    monkeypatch.setattr(parquet_gold_store_module, "_write_table", _broken)
+    second = [_table("gold_quality_checks", 2)]
+    with pytest.raises(OSError, match="disk full"):
+        store.publish(partition=_PARTITION, tables=second, manifest=_manifest(second))
+    assert _files(root / "current") == before
+    assert not (root / ".previous").exists()
 
 
 @pytest.mark.contract
