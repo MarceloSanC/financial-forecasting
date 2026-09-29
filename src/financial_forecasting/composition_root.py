@@ -239,6 +239,10 @@ _CALENDAR_WINDOW_END = date(2035, 12, 31)
 # uma migração de schema sem atualizar esta constante quebra o `make check`.
 _SILVER_SCHEMA_VERSION = 1
 
+# Device em que os trainers rodam: o adapter do TFT fixa `accelerator="cpu"` e o
+# LightGBM roda em CPU. O cohort que declarar outro device é recusado (I4).
+_TRAINERS_DEVICE = "cpu"
+
 # Fábrica do probe de ambiente: (caminho do arquivo do cohort, device) → probe.
 RuntimeProbeFactory = Callable[[Path, str], RuntimeEnvironmentProbe]
 
@@ -698,6 +702,7 @@ def wire_dependencies(
             observed_feature_set_hash=observed_feature_set_hash,
             pipeline_version=PIPELINE_VERSION,
             schema_version=_SILVER_SCHEMA_VERSION,
+            supported_device=_TRAINERS_DEVICE,
         )
 
     return ApplicationDependencies(

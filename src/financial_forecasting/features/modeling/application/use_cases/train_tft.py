@@ -118,7 +118,7 @@ logger = logging.getLogger(__name__)
 _DATASET_LAYER = "processed"
 _DATASET_TABLE = "dataset_tft"
 _SPLIT = "test"
-_MODEL_VERSION = "tft_quantile"
+MODEL_VERSION = "tft_quantile"
 _ARTIFACT_SUBDIR = "tft"
 
 # Calendário como covariáveis CONHECIDAS (D4/I2). Declarado aqui e não na
@@ -367,7 +367,7 @@ class TrainTft:
                     PersistPredictionsCommand(
                         run_id=run_id,
                         split=_SPLIT,
-                        model_version=_MODEL_VERSION,
+                        model_version=MODEL_VERSION,
                         asset=command.scope.asset_id,
                         feature_set_name=command.scope.feature_set_name,
                         schema_version=command.schema_version,
@@ -385,7 +385,7 @@ class TrainTft:
             summaries.append(
                 TftRunSummary(
                     run_id=run_id,
-                    model_version=_MODEL_VERSION,
+                    model_version=MODEL_VERSION,
                     fold_index=fold.fold_index,
                     rows_written=rows_written,
                     rows_skipped=rows_skipped,
@@ -427,12 +427,12 @@ class TrainTft:
             "monitored_decisions": float(training.monitored_decision_count),
         }
         tags = {
-            "model_version": _MODEL_VERSION,
+            "model_version": MODEL_VERSION,
             "phase": _CONFIRMATORY_PHASE,
             "fold": str(fold.fold_index),
         }
         try:
-            tracking_run_id = self._tracker.start_run(run_name=f"{_MODEL_VERSION}-{run_id}")
+            tracking_run_id = self._tracker.start_run(run_name=f"{MODEL_VERSION}-{run_id}")
             self._tracker.log_params(params)
             for epoch, loss in enumerate(training.val_loss_by_epoch):
                 self._tracker.log_metrics({"val_loss": loss}, step=epoch)
@@ -563,7 +563,7 @@ class TrainTft:
             trial_number=None,  # só o sweep tem trials, e ele não persiste runs
             fold=str(fold.fold_index),
             seed=command.params.seed,
-            model_version=_MODEL_VERSION,
+            model_version=MODEL_VERSION,
             config_signature=config_signature.value,
             split_signature=fold.fingerprint.value,
             pipeline_version=PIPELINE_VERSION,
@@ -587,7 +587,7 @@ class TrainTft:
             split_fingerprint=fold.fingerprint.value,
             fold=str(fold.fold_index),
             seed=command.params.seed,
-            model_version=_MODEL_VERSION,
+            model_version=MODEL_VERSION,
             schema_version=command.schema_version,
         )
         # `analytics_store` grava (dono de `dim_run`); `created_at_utc` é do adapter (4.2 I5).
@@ -641,7 +641,7 @@ def _tracking_params(command: TrainTftCommand, fold: FoldSplit, run_id: str) -> 
         "val_size": command.val_size,
         "calib_size": command.calib_size,
         "embargo": command.embargo,
-        "model_version": _MODEL_VERSION,
+        "model_version": MODEL_VERSION,
         "pipeline_version": PIPELINE_VERSION,
         **asdict(command.params),
     }

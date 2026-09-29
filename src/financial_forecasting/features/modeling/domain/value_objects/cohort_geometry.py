@@ -95,16 +95,6 @@ class CohortGeometry:
         decisions = sum(max(0, min(self.test_size, farthest - h)) for h in horizons)
         return decisions * n_levels
 
-    def expected_runs(self, *, runs_per_fold: int) -> int:
-        """Runs que uma unidade grava: um por fold e por modelo da unidade.
-
-        TFT e GBM: `runs_per_fold = 1`; baselines: `runs_per_fold = 5` (uma spec
-        por família) — base da classificação por contagem (I7).
-        """
-        if runs_per_fold < 1:
-            raise ValueError(f"runs_per_fold must be >= 1; got {runs_per_fold}")
-        return self.n_folds * runs_per_fold
-
     def fold0_train_size(self, *, n_sessions: int, max_horizon: int) -> int:
         """Sessões de treino do fold 0 (o menor treino do cohort) num grid de `n_sessions`."""
         gap = max_horizon + self.embargo

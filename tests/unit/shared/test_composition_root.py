@@ -449,6 +449,7 @@ def test_confirmatory_cohort_is_built_per_cohort_path_with_the_git_probe(tmp_pat
     assert cohort._observed_feature_set_hash == feature_set_hash()
     assert cohort._pipeline_version == PIPELINE_VERSION
     assert cohort._schema_version == _SILVER_SCHEMA_VERSION
+    assert cohort._supported_device == "cpu"
 
 
 @pytest.mark.unit

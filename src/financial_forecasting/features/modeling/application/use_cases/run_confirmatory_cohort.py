@@ -49,9 +49,15 @@ from financial_forecasting.features.modeling.application.use_cases.run_baselines
     RunBaselinesResult,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
+    MODEL_VERSION as GBM_USE_CASE_MODEL_VERSION,
+)
+from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
     TrainGbmQuantileCommand,
     TrainGbmQuantileResult,
     grid_fingerprint,
+)
+from financial_forecasting.features.modeling.application.use_cases.train_tft import (
+    MODEL_VERSION as TFT_USE_CASE_MODEL_VERSION,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     TrainTftCommand,
@@ -86,10 +92,10 @@ if TYPE_CHECKING:
 _LOG = logging.getLogger(__name__)
 _DATASET_LAYER = "processed"
 _DATASET_TABLE = "dataset_tft"
-# `model_version` que o GBM e o TFT gravam (fixado em teste contra os use cases);
-# o dos baselines vem de `BaselineSpec.model_version`.
-GBM_MODEL_VERSION = "gbm_quantile"
-TFT_MODEL_VERSION = "tft_quantile"
+# `model_version` que o GBM e o TFT gravam — o dono é o use case de cada um; o dos
+# baselines vem de `BaselineSpec.model_version`.
+GBM_MODEL_VERSION = GBM_USE_CASE_MODEL_VERSION
+TFT_MODEL_VERSION = TFT_USE_CASE_MODEL_VERSION
 
 _RAN = "ran"
 _SKIPPED = "skipped_completed"
@@ -278,6 +284,7 @@ class RunConfirmatoryCohort:
         observed_feature_set_hash: str,
         pipeline_version: str,
         schema_version: int,
+        supported_device: str,
     ) -> None:
         self._store = store
         self._hasher = hasher
@@ -292,6 +299,7 @@ class RunConfirmatoryCohort:
         self._observed_feature_set_hash = observed_feature_set_hash
         self._pipeline_version = pipeline_version
         self._schema_version = schema_version
+        self._supported_device = supported_device
 
     def __call__(self, command: RunConfirmatoryCohortCommand) -> RunConfirmatoryCohortResult:
         spec = command.spec
@@ -339,6 +347,13 @@ class RunConfirmatoryCohort:
             raise CohortDeclarationMismatchError(
                 f"feature_set_hash {spec.feature_set_hash[:12]} != registry "
                 f"{self._observed_feature_set_hash[:12]}"
+            )
+        if spec.device != self._supported_device:
+            # O probe grava o device DECLARADO; sem esta igualdade, um spec com
+            # "rocm" rodaria em CPU e carimbaria "rocm" no hash e no ledger.
+            raise CohortDeclarationMismatchError(
+                f"device {spec.device!r} declared, but the trainers run on "
+                f"{self._supported_device!r}"
             )
         if spec.pipeline_version != self._pipeline_version:
             raise CohortDeclarationMismatchError(

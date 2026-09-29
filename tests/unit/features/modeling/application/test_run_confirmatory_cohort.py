@@ -224,6 +224,7 @@ class _Harness:
             observed_feature_set_hash=_FEATURE_SET_HASH,
             pipeline_version=PIPELINE_VERSION,
             schema_version=1,
+            supported_device="cpu",
         )
 
     def _persist(
@@ -339,9 +340,9 @@ def test_tft_units_get_their_own_seed_and_the_frozen_params() -> None:
     assert all(p.hidden_size == 24 for p in tft_params)  # noqa: PLR2004
 
 
-def test_model_versions_match_the_use_cases() -> None:
-    assert module.GBM_MODEL_VERSION == train_gbm_quantile._MODEL_VERSION
-    assert module.TFT_MODEL_VERSION == train_tft._MODEL_VERSION
+def test_model_versions_come_from_the_use_cases() -> None:
+    assert module.GBM_MODEL_VERSION is train_gbm_quantile.MODEL_VERSION
+    assert module.TFT_MODEL_VERSION is train_tft.MODEL_VERSION
 
 
 def test_resume_skips_completed_units_after_reconfirming_counts() -> None:
@@ -373,8 +374,9 @@ def test_unfrozen_spec_is_refused_before_anything() -> None:
         ({"dataset_fingerprint": "0" * 64}, DatasetMismatchError),
         ({"feature_set_hash": "e" * 64}, CohortDeclarationMismatchError),
         ({"pipeline_version": "999"}, CohortDeclarationMismatchError),
+        ({"device": "rocm"}, CohortDeclarationMismatchError),
     ],
-    ids=["dataset", "feature-set-hash", "pipeline-version"],
+    ids=["dataset", "feature-set-hash", "pipeline-version", "device"],
 )
 def test_declared_differs_from_observed(overrides: dict[str, object], error: type) -> None:
     harness = _Harness()

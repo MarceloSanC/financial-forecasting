@@ -137,18 +137,6 @@ def sweep(
         max_horizon=spec.max_horizon,
         cohort_id=scope_id,
     )
-    common = {
-        "scope": scope,
-        "n_trials": budget,
-        "seed": plan.sampler_seed,
-        "horizons": spec.horizons,
-        "quantile_levels": spec.quantile_levels,
-        "n_folds": geometry.n_folds,
-        "test_size": geometry.test_size,
-        "val_size": geometry.val_size,
-        "calib_size": geometry.calib_size,
-        "embargo": geometry.embargo,
-    }
     deps.ledger.acquire_writer(break_stale=break_stale_lock)
     try:
         done = deps.ledger.sweep_results(scope_id)
@@ -159,7 +147,16 @@ def sweep(
                 RunTftSweepCommand(
                     base_params=plan.tft_base_params,
                     space=plan.tft_space,
-                    **common,  # type: ignore[arg-type]
+                    scope=scope,
+                    n_trials=budget,
+                    seed=plan.sampler_seed,
+                    horizons=spec.horizons,
+                    quantile_levels=spec.quantile_levels,
+                    n_folds=geometry.n_folds,
+                    test_size=geometry.test_size,
+                    val_size=geometry.val_size,
+                    calib_size=geometry.calib_size,
+                    embargo=geometry.embargo,
                 )
             )
             deps.ledger.record_sweep_result(scope_id, _TFT, _sweep_record(tft, budget))
@@ -171,7 +168,16 @@ def sweep(
                 RunGbmSweepCommand(
                     base_params=plan.gbm_base_params,
                     space=plan.gbm_space,
-                    **common,  # type: ignore[arg-type]
+                    scope=scope,
+                    n_trials=budget,
+                    seed=plan.sampler_seed,
+                    horizons=spec.horizons,
+                    quantile_levels=spec.quantile_levels,
+                    n_folds=geometry.n_folds,
+                    test_size=geometry.test_size,
+                    val_size=geometry.val_size,
+                    calib_size=geometry.calib_size,
+                    embargo=geometry.embargo,
                 )
             )
             deps.ledger.record_sweep_result(scope_id, _GBM, _sweep_record(gbm, budget))
@@ -258,6 +264,8 @@ def freeze(
         spec.geometry.fits(n_sessions=len(grid.timestamps), max_horizon=spec.max_horizon)
         frozen = replace(
             spec,
+            # `best_params` volta do JSON como dict[str, object]; os tipos são
+            # conferidos pela ida e volta do arquivo logo abaixo (F3 do Checkpoint C).
             tft_params=TftTrainingParams(**_params(tft)),  # type: ignore[arg-type]
             gbm_params=GbmTrainingParams(**_params(gbm)),  # type: ignore[arg-type]
             provenance=SweepProvenance(

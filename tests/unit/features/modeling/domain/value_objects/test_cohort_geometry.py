@@ -131,13 +131,6 @@ def test_expected_rows_match_the_real_persister_on_the_real_splitter(
         )
 
 
-def test_expected_runs_per_unit() -> None:
-    assert _AAPL.expected_runs(runs_per_fold=1) == 6  # noqa: PLR2004 — TFT/GBM
-    assert _AAPL.expected_runs(runs_per_fold=5) == 30  # noqa: PLR2004 — 5 baselines
-    with pytest.raises(ValueError, match="runs_per_fold"):
-        _AAPL.expected_runs(runs_per_fold=0)
-
-
 def test_aapl_cohort_expected_rows_per_fold() -> None:
     per_fold = [
         _AAPL.expected_prediction_rows(fold_index=i, horizons=_HORIZONS, n_levels=_N_LEVELS)

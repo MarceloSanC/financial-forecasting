@@ -121,7 +121,7 @@ if TYPE_CHECKING:
 _DATASET_LAYER = "processed"
 _DATASET_TABLE = "dataset_tft"
 _SPLIT = "test"
-_MODEL_VERSION = "gbm_quantile"
+MODEL_VERSION = "gbm_quantile"
 
 # Colunas de calendário incluídas como ordinais (ADR 5.3.0003 — paridade com o
 # TFT known covariates) e colunas do dataset que NUNCA viram feature (I10).
@@ -332,7 +332,7 @@ class TrainGbmQuantile:
                     PersistPredictionsCommand(
                         run_id=run_id,
                         split=_SPLIT,
-                        model_version=_MODEL_VERSION,
+                        model_version=MODEL_VERSION,
                         asset=command.scope.asset_id,
                         feature_set_name=command.scope.feature_set_name,
                         schema_version=command.schema_version,
@@ -346,7 +346,7 @@ class TrainGbmQuantile:
             summaries.append(
                 GbmRunSummary(
                     run_id=run_id,
-                    model_version=_MODEL_VERSION,
+                    model_version=MODEL_VERSION,
                     fold_index=fold.fold_index,
                     rows_written=rows_written,
                     rows_skipped=rows_skipped,
@@ -455,7 +455,7 @@ class TrainGbmQuantile:
             trial_number=None,  # só o sweep tem trials, e ele não persiste runs
             fold=str(fold.fold_index),
             seed=command.params.seed,
-            model_version=_MODEL_VERSION,
+            model_version=MODEL_VERSION,
             config_signature=config_signature.value,
             split_signature=fold.fingerprint.value,
             pipeline_version=PIPELINE_VERSION,
@@ -479,7 +479,7 @@ class TrainGbmQuantile:
             split_fingerprint=fold.fingerprint.value,
             fold=str(fold.fold_index),
             seed=command.params.seed,
-            model_version=_MODEL_VERSION,
+            model_version=MODEL_VERSION,
             schema_version=command.schema_version,
         )
         # `analytics_store` grava (dono de `dim_run`); `created_at_utc` é do adapter (4.2 I5).
