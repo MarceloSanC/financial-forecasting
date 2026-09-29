@@ -275,7 +275,8 @@ def test_real_repo_violations_are_exactly_the_declared_baseline(gate: ModuleType
     violating = sorted(port.name for port in ports if port.violation is not None)
 
     assert violating == ["Hasher"]
-    assert len(ports) >= 19  # noqa: PLR2004 — os 19 ports-out do repo hoje (#91 removeu IdGenerator)
+    # piso do inventário: 24 ports-out hoje (a Stage 6.4 somou GoldStore e GoldBuilder)
+    assert len(ports) >= 24  # noqa: PLR2004
 
 
 def test_real_repo_consumer_ports_resolve_to_the_supplier_use_cases(gate: ModuleType) -> None:
