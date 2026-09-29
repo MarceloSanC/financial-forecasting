@@ -1748,4 +1748,54 @@ que a varredura o acusa. Após o Checkpoint C bloco 1 (achados M2/L3): `seeds`/`
 campo) e o VO guarda `MappingProxyType(dict(v))` — mutar o dict de origem depois da
 construção não altera o VO validado (`samples_mappings_frozen_copy`).
 
+### 2026-09-29 — [finding] Checkpoint C bloco 1 (I3) → Task 07: tipo de `reps` antes do piso do MCS — Claude (Opus 5.5)
+**Contexto:** `validate_mcs_reps` (Task 01) só compara `reps < MIN_MCS_REPS`; não
+checa tipo (`True`, `1000.5`, `"x"` passam ou erguem `TypeError`). No `McsReport` e no
+`evaluate` o tipo já foi validado antes (`validate_bootstrap_request` / `BootstrapIndices`).
+**Encaminhamento:** na Task 07, o `RefreshParameters.__post_init__` chama
+`validate_bootstrap_parameters(reps=…, seed=…)` **antes** de `validate_mcs_reps(reps)`,
+e o teste `parameters_owner_messages` cobre `reps=True`/`1000.0` com a mensagem do
+dono do tipo.
+
+### 2026-09-29 — [decision] Task 04: valor não-finito em `value_guardrail` ergue (não é achado) — Claude (Opus 5.5)
+**Contexto:** fork levantado no Checkpoint C bloco 1 (B6): um ponto alinhado em I3–I10
+mas com `value_guardrail` não-finito — achado de alinhamento ou exceção?
+**Razão (docs primeiro):** o D1 ("achados em vez de exceção") cobre as regras de
+alinhamento I3–I10, que têm dono no `SeriesAssembly` e um tipo no `AlignmentKind`
+(19 valores, contrato do concept §4 — criar um 20º mudaria o contrato). Finitude não é
+regra de alinhamento: o dono é a `CoverageSeries`, e o ADR 6.1.0002 decide o caso —
+item 5 "Non-finite ⇒ raise, never drop" e o contexto "the modeling adapters already
+raise on non-finite emission (5.2/5.3 C5), so a non-finite value reaching evaluation
+is an upstream invariant violation, not a data condition". Logo o `ValueError` da
+`CoverageSeries` propaga pelo `assemble` (C7 do concept: erro fora de C2–C6 propaga,
+nada é publicado). Sem ADR novo: a decisão já tem dono (ADR 6.1.0002). Provado por
+`test_series_assembly.py::test_non_finite_guardrail_raises_not_finding`.
+
+### 2026-09-29 — [decision] Task 04: detalhes do `SeriesAssembly` — Claude (Opus 5.5)
+**Contexto:** escolhas abaixo do limiar do concept, feitas ao implementar a sequência
+do §2 Task 04.
+**Razão:**
+- **Erro de chamada (`ValueError`), não achado:** `run_id` repetido nos `runs` (PK do
+  `dim_run`) e registro cujo `run_id` não está nos `runs` (a leitura descarta os fatos
+  fora do cohort — ADR 6.4.0004 item 2; e `seed`/`fold` do registro vêm da junção com o
+  `dim_run`, então o registro sem run não existe numa chamada correta).
+- **Escopo dos achados:** `multiple_feature_sets` e `required_model_missing`/
+  `fold_coverage` sem horizonte; `grid_divergent` um por horizonte (`model=None`,
+  detalhe com a grade de cada modelo); `model_version_mismatch` por (horizonte, run);
+  `duplicate_point`, `decision_index_mismatch`, `horizon_label_mismatch`,
+  `grid_incomplete`, `guardrail_flag_mismatch` por ponto; `common_sample_too_short` por
+  horizonte. Achados idênticos (mesmo tipo, escopo e detalhe — ex. um por nível do
+  mesmo ponto) são deduplicados; o `alignment_check` (Task 05) agrega as ocorrências
+  por (tipo, escopo).
+- **Série (modelo, seed)** = união dos runs (folds) do par; o universo de pares vem
+  dos `runs`. Folds do par vêm dos `runs` (o run sem predição é `orphan_run`, não
+  `fold_coverage`).
+- **`common_points`** registra (h, T) só com T ≥ 1 (interseção vazia fica só no
+  achado — pedido do Checkpoint C bloco 1, B6); o T mínimo consulta
+  `check_points(T, h)` e `MIN_BLOCK_LENGTH_OBS` (donos 6.2) e a mensagem do dono vai no
+  `detail`.
+- **Fixture:** `gold/conftest.py::make_cohort` guarda o ponto especial em
+  `Cohort.special` (valores persistidos fora do `from_raw`), e os mutadores são
+  funções puras sobre o `Cohort` imutável.
+
 <!-- END: post-execution -->
