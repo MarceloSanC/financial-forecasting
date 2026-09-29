@@ -262,3 +262,12 @@ def test_tail_incoherent_report_mixed_settings_raise(
 
     with pytest.raises(ValueError, match="same tolerance and min_violations"):
         VarDescriptiveReport(horizon=1, tails=tails)
+
+
+@pytest.mark.unit
+def test_tail_incoherent_report_duplicate_level_raises(make_series: SeriesFactory) -> None:
+    """C9: nível repetido não é a ordem (estritamente crescente) da grade."""
+    report = _report(make_series)
+
+    with pytest.raises(ValueError, match="grid order"):
+        VarDescriptiveReport(horizon=1, tails=(report.tails[0], report.tails[0]))

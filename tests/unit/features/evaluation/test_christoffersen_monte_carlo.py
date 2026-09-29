@@ -514,3 +514,15 @@ def test_mc_incoherent_identity_raises(
 
     with pytest.raises(ValueError, match=match):
         dataclasses.replace(result, **overrides)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_mc_incoherent_attempts_bool_raises(make_hit_sequence: HitSequenceFactory) -> None:
+    """C9: `attempts` é `int` - `True` (== 1) não é contagem de tentativas."""
+    result = ChristoffersenTest.monte_carlo_p_values(
+        make_hit_sequence((True,)), min_violations=0, draws=1, seed=1
+    )
+    assert result.attempts == 0
+
+    with pytest.raises(ValueError, match="attempts must be an int"):
+        dataclasses.replace(result, attempts=True)
