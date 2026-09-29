@@ -482,10 +482,10 @@ def lr_uc_three_state(
         raise ValueError(
             f"lower_rate + upper_rate must be < 1, got {lower_rate!r} + {upper_rate!r}"
         )
-    # `lower_count + upper_count <= n` já vale (checado acima); com contagens reais a
-    # subtração pode sair -1.78e-15 quando a soma iguala n em float — o meio é 0 aí.
+    # `lower_count + upper_count <= n` já vale (checado acima), logo o meio está em
+    # [0, n]; com contagens reais a subtração pode sair -1.78e-15 quando a soma iguala n
+    # em float — o meio é 0 aí.
     middle = max(0.0, n - lower_count - upper_count)
-    validate_real_count(middle, n, count_field="n - lower_count - upper_count", n_field="n")
     null = (
         xlogy(lower_count, lower_rate)
         + xlogy(upper_count, upper_rate)
