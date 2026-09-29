@@ -832,7 +832,7 @@ skills_hint: [ddd-tactical-patterns, hex-arch-python]
 
 #### Stage 6.4 — `6.4-gold-builders-and-quality-gates`
 
-**Descrição humana:** Gold builders modulares (sobre silver) com **dependências explícitas** (sem dict mutável) ordenadas por `graphlib`; montagem única das séries alinhadas (`SeriesAssembly`, achados em vez de exceção) nas duas amostras (série completa e interseção comum); quality checks como registry com severidade declarada (alinhamento e pré-condições estatísticas bloqueiam; degeneração e proveniência do realizado só reportam); MCS em produção com parâmetros explícitos e `preregistration_ref`. Gold reconstruível via DuckDB sem re-treino, publicado por geração inteira (staging, manifesto por último, troca de pasta).
+**Descrição humana:** Gold builders modulares (sobre silver) com **dependências explícitas** (sem dict mutável) ordenadas por `graphlib`; montagem única das séries alinhadas (`SeriesAssembly`, achados em vez de exceção) nas duas amostras (série completa e interseção comum); quality checks como registry com severidade declarada (alinhamento e pré-condições estatísticas bloqueiam; degeneração e proveniência do realizado só reportam); MCS em produção com parâmetros explícitos e `preregistration_ref`. Realizado lido pela grade de treino da 5.5 (a mesma origem do `decision_idx` gravado), conferida contra o fingerprint congelado do cohort. Gold reconstruível via DuckDB sem re-treino, publicado por geração inteira (staging, manifesto por último, troca de pasta).
 
 **Descrição para IA:**
 ```yaml
@@ -846,11 +846,15 @@ arquivos_a_criar:
   - src/financial_forecasting/features/evaluation/domain/services/quality_checks/{__init__.py, registry.py, alignment_check.py, statistical_preconditions_check.py, degeneracy_check.py, realized_provenance_check.py}
   - src/financial_forecasting/features/evaluation/application/dtos/refresh_gold.py
   - src/financial_forecasting/features/evaluation/application/ports/out/{gold_store.py, gold_builder.py, silver_table_reader.py}
+  - src/financial_forecasting/features/evaluation/application/ports/out/training_grid_reader.py
+  - src/financial_forecasting/features/modeling/application/use_cases/read_training_grid.py
   - src/financial_forecasting/features/evaluation/application/use_cases/refresh_gold.py
   - src/financial_forecasting/features/evaluation/adapters/out/duckdb/parquet_gold_store.py
   - src/financial_forecasting/features/evaluation/adapters/out/duckdb/gold_builders/{__init__.py, quality_checks.py, metrics_by_run.py, calibration_table.py, dm_results.py, mcs_results.py}
   - tests/fakes/features/evaluation/{in_memory_gold_store.py, fake_gold_builder.py, fake_silver_table_reader.py}
+  - tests/fakes/features/evaluation/fake_training_grid_reader.py
   - tests/contract/features/evaluation/{test_gold_store_contract.py, test_gold_builder_contract.py, test_silver_table_reader_contract.py, _gold_inputs.py}
+  - tests/contract/features/evaluation/test_training_grid_reader_contract.py
   - tests/unit/features/evaluation/gold/{_cohort_factory.py, conftest.py, test_gold_value_objects.py, test_series_assembly.py, test_quality_checks.py, test_horizon_reports.py, test_builder_explicit_deps.py, test_refresh_gold_dtos.py, test_refresh_gold_use_case.py}
   - tests/unit/shared/domain/test_path_identifier.py
   - tests/integration/features/evaluation/test_refresh_gold.py
@@ -862,10 +866,15 @@ arquivos_a_modificar:
   - src/financial_forecasting/shared/adapters/out/parquet/parquet_medallion_store.py
   - tests/fakes/shared/in_memory_medallion_store.py
   - src/financial_forecasting/composition_root.py
+  - src/financial_forecasting/features/analytics_store/adapters/out/parquet/parquet_analytics_repository.py
   - .importlinter
-contratos_introduzidos: [SeriesAssembly, HorizonReports, gold_build_order, QualityCheckRegistry (domain-services), ForecastRecord, CohortRun, RealizedReturns, AssembledCohort, QualityCheckResult (value-objects), GoldBuilder, GoldStore, SilverTableReader (ports-out), RefreshGold (use case), validate_path_identifier (shared)]
-contratos_consumidos: [serviços de 6.1/6.2/6.3 (PinballScore, CrpsScore, IntervalScore, CoverageMetrics, DegeneracyGate, paired_pinball_losses, HolmCorrection, ModelConfidenceSet, HitSequences, ChristoffersenTest, WilsonBand), McsBackend (port-out 6.2: b̂_sb + índices de bootstrap do MCS em produção — ADR 6.2.0004), ParquetAnalyticsRepository como real do SilverTableReader (ADR 0.0.0053), MedallionStore (par read-only dataset_tft), DatasetFingerprint/Hasher (1.4), Clock, validate_mcs_reps, validate_bootstrap_parameters, MIN_MODELS]
-definition_of_done: "RefreshGold regenera por inteiro a geração gold de um cohort a partir do silver e do dataset: ordem dos builders por dependências declaradas (grafo inválido falha antes de qualquer leitura), séries montadas uma vez com achados de alinhamento publicados em gold_quality_checks (refresh BLOCKED só com essa tabela), pré-condições estatísticas no domínio antes da fábrica e do backend, cinco tabelas confirmatórias com preregistration_ref, manifesto por último e rerun com as mesmas linhas — provado por contrato [fake, real] dos três ports e e2e via DuckDB."
+  - docs/LAYOUT.md
+  - tests/architecture/test_port_coverage_gate.py
+  - tests/architecture/test_import_contracts.py
+  - tests/architecture/test_unit_evaluation_purity.py
+contratos_introduzidos: [SeriesAssembly, HorizonReports, gold_build_order, QualityCheckRegistry (domain-services), ForecastRecord, CohortRun, RealizedReturns, AssembledCohort, QualityCheckResult (value-objects), GoldBuilder, GoldStore, SilverTableReader, TrainingGridReader (ports-out), RefreshGold (use case), ReadTrainingGrid (use case da modeling, real do TrainingGridReader — ADR 6.4.0009), validate_path_identifier (shared)]
+contratos_consumidos: [serviços de 6.1/6.2/6.3 (PinballScore, CrpsScore, IntervalScore, CoverageMetrics, DegeneracyGate, paired_pinball_losses, HolmCorrection, ModelConfidenceSet, HitSequences, ChristoffersenTest, WilsonBand), McsBackend (port-out 6.2: b̂_sb + índices de bootstrap do MCS em produção — ADR 6.2.0004), ParquetAnalyticsRepository como real do SilverTableReader (ADR 0.0.0053), TrainingGrid/load_training_grid/modeling_columns (5.5, via ReadTrainingGrid), DatasetContentFingerprint/Hasher, Clock, validate_mcs_reps, validate_bootstrap_parameters, MIN_MODELS]
+definition_of_done: "RefreshGold regenera por inteiro a geração gold de um cohort a partir do silver e do realizado lido pela grade de treino da 5.5 (fingerprint do cohort conferido; divergente ergue antes de qualquer efeito): ordem dos builders por dependências declaradas (grafo inválido falha antes de qualquer leitura), séries montadas uma vez com achados de alinhamento publicados em gold_quality_checks (refresh BLOCKED só com essa tabela), pré-condições estatísticas no domínio antes da fábrica e do backend, cinco tabelas confirmatórias com preregistration_ref, manifesto por último e rerun com as mesmas linhas — provado por contrato [fake, real] dos quatro ports, e2e via DuckDB e refresh COMPLETED sobre o cohort real."
 non_goals: [scorecard confirmatório (6.5), plots (8.3), execução do cohort real (8.1)]
 complexidade_estimada: M
 gate_mode: strict
