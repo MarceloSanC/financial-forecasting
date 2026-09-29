@@ -252,6 +252,12 @@ def test_manifest_mapping() -> None:
         ({"n_runs": True}, "n_runs must be an int >= 0"),
         ({"started_at": datetime(2026, 9, 29)}, "timezone-aware"),
         ({"window_deficits": [("tft", 3)]}, "window_deficits must be a Mapping"),
+        ({"started_at": datetime(2026, 9, 29, 13, 0, tzinfo=UTC)}, "is after finished_at"),
+        ({"dataset_fingerprint": "ab" * 32}, "must be a DatasetFingerprint"),
+        ({"realized_returns_fsum": math.inf}, "realized_returns_fsum must be a finite"),
+        ({"realized_returns_fsum": None}, "realized_returns_fsum must be a finite"),
+        ({"horizons": [1, 7]}, "horizons must be a tuple"),
+        ({"build_order": ["quality_checks"]}, "build_order must be a tuple"),
     ):
         with pytest.raises(ValueError, match=message):
             _manifest(**changes)

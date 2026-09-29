@@ -289,7 +289,8 @@ class GoldManifest:
     """O manifesto de uma geração (ADR `6_4_0005` item 8).
 
     Raises:
-        ValueError: campo de tipo errado, contagem negativa ou timestamp sem fuso.
+        ValueError: campo de tipo errado, contagem negativa, soma do realizado não-finita,
+            timestamp sem fuso ou início depois do fim.
     """
 
     status: RefreshStatus
@@ -317,6 +318,11 @@ class GoldManifest:
             if not isinstance(value, Mapping):
                 raise ValueError(f"{name} must be a Mapping, got {type(value).__name__}")
             object.__setattr__(self, name, MappingProxyType(dict(value)))
+        self._check_counts()
+        self._check_identity()
+        self._check_times()
+
+    def _check_counts(self) -> None:
         for table, count in self.rows_by_table.items():
             if isinstance(count, bool) or not isinstance(count, int) or count < 0:
                 raise ValueError(f"rows_by_table[{table!r}] must be an int >= 0, got {count!r}")
@@ -324,10 +330,30 @@ class GoldManifest:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise ValueError(f"{name} must be an int >= 0, got {value!r}")
+        fsum = self.realized_returns_fsum
+        if not is_finite_number(fsum):
+            raise ValueError(f"realized_returns_fsum must be a finite number, got {fsum!r}")
+
+    def _check_identity(self) -> None:
+        fingerprint = self.dataset_fingerprint
+        if not isinstance(fingerprint, DatasetFingerprint):
+            raise ValueError(
+                f"dataset_fingerprint must be a DatasetFingerprint, got {fingerprint!r}"
+            )
+        for name in ("horizons", "build_order"):
+            if not isinstance(getattr(self, name), tuple):
+                raise ValueError(f"{name} must be a tuple, got {getattr(self, name)!r}")
+
+    def _check_times(self) -> None:
         for name in ("started_at", "finished_at"):
             value = getattr(self, name)
             if not isinstance(value, datetime) or value.tzinfo is None:
                 raise ValueError(f"{name} must be a timezone-aware datetime, got {value!r}")
+        if self.started_at > self.finished_at:
+            raise ValueError(
+                f"started_at {self.started_at.isoformat()} is after finished_at "
+                f"{self.finished_at.isoformat()}"
+            )
 
     def as_mapping(self) -> dict[str, object]:
         """A única serialização do manifesto (JSON-safe; o store grava com `sort_keys`)."""
