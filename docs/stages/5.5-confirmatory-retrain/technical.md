@@ -1038,4 +1038,25 @@ Um subagente de contexto zerado, que não escreveu os testes, respondeu o questi
 - Correção no teste (`task-34`): o fixture passou à escala do fold 0 do cohort (1641 treino, 252 early_stop).
 - Reexecução: `pytest tests/contract/features/modeling/test_quantile_model_trainer_determinism.py -v` → `4 passed`, inclusive `[aapl-cohort-frozen] PASSED`. As grades são idênticas entre as seeds 0 e 12345, com mais de uma árvore. O GBM continua rodando uma vez por fold (D4).
 
+**Âncora (A7):**
+- tag `cohort/aapl_confirmatory-r0-665f45d9169a` → `223260509e2bb005276a9fbb0fe476c8644958dc`. Conferido com `git ls-remote --tags origin "cohort/*"`, que imprime `223260509e2bb005276a9fbb0fe476c8644958dc refs/tags/cohort/aapl_confirmatory-r0-665f45d9169a`;
+- comentário na #102 com o `cohort_id` e o hash completo: `gh api … issues/102/comments --jq '… .created_at'` → **`2026-09-28T20:27:09Z`**.
+
+**Desvio de processo:** entre o push do congelamento e o fim da corrida, `origin/develop` avançou (#112, Stage 6.1, com código novo em `src/features/evaluation`). O branch foi publicado **sem** novo rebase: o technical proíbe rebase entre as Tasks 34 e 35, porque mudar `src/` mudaria a identidade do código e o I5 recusaria a retomada. O rebase exigido pelo PR fica para depois da corrida.
+
+### 2026-09-29 — [measurement] Task 35 — corrida confirmatória real, cega, e verificação por contagem (A8) — Claude (Opus 5.5)
+`cli run --data-root data/cohorts/aapl --cohort config/cohorts/aapl_confirmatory.toml`, num container destacado, com o `.git` montado somente leitura e a árvore limpa (`code_dirty false`).
+- **`run_started_at`** (ledger `artifacts/cohorts/aapl_confirmatory-r0-665f45d9169a/progress.json`): **`2026-09-28T20:27:37.076694+00:00`**, 28 s **depois** do `created_at` do comentário-âncora (`2026-09-28T20:27:09Z`). A ordem exigida pelo cegamento se confirma.
+- **Unidades** (log por unidade), todas `ran`, `EXIT=0`, `ELAPSED_S=68334` (~19 h):
+  - `baselines`: 30 runs, 105560 linhas, 822,7 s;
+  - `gbm`: 6 runs, 21112 linhas, 234,8 s;
+  - `tft:seed=1…10`: cada uma com 6 runs e 21112 linhas, entre 5320,8 s e 10434,5 s. As duas primeiras (~2,9 h) foram mais lentas que as demais (~1,5–1,8 h).
+- **Verificação** (`cli verify`), `VERIFY_EXIT=0`:
+  ```
+  cohort aapl_confirmatory-r0-665f45d9169a: 16 models x 6 folds; rows expected 337792, observed 337792
+  OK
+  ```
+  São 5 baselines + GBM + 10 seeds do TFT = 16 modelos × 21112 linhas. O ledger tem as 12 unidades marcadas, e o `verify` confere contagens, folds, horizontes, alvos entre modelos e ledger.
+- **Nenhuma métrica** foi calculada sobre este `parent_sweep_id`. O `verify` lê só contagens e timestamps de alvo.
+
 <!-- END: post-execution -->
