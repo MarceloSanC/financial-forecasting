@@ -46,7 +46,8 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
 # Tolerância da simetria da grade: representação float64 (ADR 6.1.0002 item 2). Aceita
 # (0.02, …, 0.98) apesar de `1 - 0.98 != 0.02` em float.
 _SYMMETRY_TOLERANCE = 1e-12
-_MEDIAN_LEVEL = 0.5
+# Nível central da grade: não forma par simétrico nem é cauda de VaR.
+MEDIAN_LEVEL = 0.5
 
 
 @dataclass(frozen=True)
@@ -106,7 +107,7 @@ class CoverageSeries:
         cobertura) indexam `scored_values(i)` por aqui, sem remontar a regra.
         """
         size = len(self.levels)
-        return tuple((k, size - 1 - k) for k in range(size) if self.levels[k] < _MEDIAN_LEVEL)
+        return tuple((k, size - 1 - k) for k in range(size) if self.levels[k] < MEDIAN_LEVEL)
 
     @property
     def guardrail_applied_rate(self) -> float:
@@ -146,7 +147,7 @@ class CoverageSeries:
                     f"{_SYMMETRY_TOLERANCE}), got {levels}"
                 )
         # Vazia ou só {0.5}: nenhum par simétrico — IS, PICP e nominal indefinidos.
-        if not levels or levels[0] >= _MEDIAN_LEVEL:
+        if not levels or levels[0] >= MEDIAN_LEVEL:
             raise ValueError(
                 f"levels must hold at least one symmetric pair (tau_1 < 0.5), got {levels}"
             )

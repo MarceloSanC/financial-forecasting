@@ -35,6 +35,7 @@ from financial_forecasting.features.evaluation.domain.value_objects._horizon imp
     validate_horizon,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
+    MEDIAN_LEVEL,
     CoverageSeries,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.hit_sequence import (
@@ -43,7 +44,6 @@ from financial_forecasting.features.evaluation.domain.value_objects.hit_sequence
 )
 
 VAR_DESCRIPTIVE_LABEL: Final = "VaR descritivo — sem claim de gestão de risco"
-_MEDIAN_LEVEL = 0.5
 
 
 def var_tail_for(level: float) -> tuple[HitKind, float]:
@@ -53,9 +53,9 @@ def var_tail_for(level: float) -> tuple[HitKind, float]:
         ValueError: τ fora de (0, 1) ou τ = 0.5 (a mediana não é cauda).
     """
     validate_rate(level, field="level")
-    if level == _MEDIAN_LEVEL:
+    if level == MEDIAN_LEVEL:
         raise ValueError("level 0.5 (the median) is not a VaR tail")
-    if level < _MEDIAN_LEVEL:
+    if level < MEDIAN_LEVEL:
         return HitKind.LOWER_TAIL, 1.0 - level
     return HitKind.UPPER_TAIL, level
 
@@ -163,7 +163,7 @@ class VarDescriptive:
         """
         tails: list[VarTailBacktest] = []
         for level in series.levels:
-            if level == _MEDIAN_LEVEL:
+            if level == MEDIAN_LEVEL:
                 continue
             kind, var_level = var_tail_for(level)
             build = (

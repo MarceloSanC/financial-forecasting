@@ -13,7 +13,15 @@ merge das Stages 6.2 e 6.3 (`[finding]` no technical 6.3 §7).
 from __future__ import annotations
 
 
-def validate_horizon(value: int, *, field: str) -> None:
-    """Ergue `ValueError` se `value` não for `int` não-`bool` ≥ 1 (mensagem nomeia o campo)."""
+def validate_positive_int(value: int, *, field: str) -> None:
+    """Ergue `ValueError` se `value` não for `int` não-`bool` ≥ 1 (mensagem nomeia o campo).
+
+    Regra única de "inteiro positivo" do slice: horizonte e o N (`draws`) do Monte Carlo.
+    """
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise ValueError(f"{field} must be an int >= 1, got {value!r}")
+
+
+def validate_horizon(value: int, *, field: str) -> None:
+    """Horizonte é inteiro positivo (`validate_positive_int`) - nome do conceito no slice."""
+    validate_positive_int(value, field=field)

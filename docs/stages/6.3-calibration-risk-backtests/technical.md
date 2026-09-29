@@ -1720,4 +1720,19 @@ relatório seja de **uma** série.
 único do VO); o `VarDescriptiveReport` exige um único par (`tolerance`,
 `min_violations`) entre as caudas. Um teste por ramo no `tail_incoherent`.
 
+### 2026-09-28 — [decision] Checkpoint C bloco 3: mapa p-valor→df, mediana e "inteiro positivo" com dono único — Claude (Opus 5.5)
+**Contexto:** achado INFO — o mapa estatística→df estava escrito no `evaluate` e no
+`__post_init__` do relatório (o mutante `_DF_TWO = 1` sobrevivia); `_MEDIAN_LEVEL`
+redefinido em `var_descriptive.py`; a regra de `draws ≥ 1` duplicava a de horizonte;
+faltava prova de que os relatórios novos consomem `validate_horizon`.
+**Razão:** disposição `corrigido` em `[6.3/task-08-fix]` — `_P_VALUE_FIELDS` (campo,
+estatística, df) é o único mapa, usado pelos dois; `MEDIAN_LEVEL` passa a público em
+`coverage_series.py` (renomeado de `_MEDIAN_LEVEL`, mesmos usos) e o
+`var_descriptive.py` o importa; `_horizon.py` ganha `validate_positive_int`
+(`validate_horizon` delega a ela; `draws` a usa — mensagem `draws must be an int >= 1`);
+`test_horizon_rule_is_consumed_by_the_new_reports` prova o consumo pelo
+`ChristoffersenReport` (via identidade do VO), `MonteCarloPValues` e
+`VarDescriptiveReport`. O mutante do df de LR_cc morre pelo teste de fórmulas do
+commit `test(...) [6.3/task-07-fix]` desta rodada.
+
 <!-- END: post-execution -->

@@ -36,6 +36,7 @@ import random
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Final
 
 from financial_forecasting.features.evaluation.domain.services.chi_square import (
     chi_square_sf,
@@ -54,6 +55,7 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
 )
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     validate_horizon,
+    validate_positive_int,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._tolerance import (
     validate_tolerance,
@@ -71,11 +73,18 @@ from financial_forecasting.features.evaluation.domain.value_objects.hit_sequence
     validate_violation_elements,
 )
 
-_DF_ONE = 1
 _N_TRANSITIONS = 4
 # Teto de tentativas do Monte Carlo: 100·N (ADR 6.3.0006 item 3).
 MC_ATTEMPTS_CAP_FACTOR = 100
-_DF_TWO = 2
+# Único mapa campo de p-valor -> (estatística, graus de liberdade da χ²): POF, LR_uc e
+# LR_ind têm 1; LR_cc tem 2 (Christoffersen 1998 §3.3). Usado pelo `evaluate` e pelo
+# `__post_init__` do relatório.
+_P_VALUE_FIELDS: Final = (
+    ("kupiec_pof_p_value", "kupiec_pof", 1),
+    ("p_uc", "lr_uc", 1),
+    ("p_ind", "lr_ind", 1),
+    ("p_cc", "lr_cc", 2),
+)
 
 
 class IndependenceStatus(StrEnum):
@@ -332,13 +341,8 @@ class ChristoffersenReport:
                 f"and min_violations={self.min_violations}, got "
                 f"{stats.independence_status.value}"
             )
-        for name, p_value, statistic, df in (
-            ("kupiec_pof_p_value", self.kupiec_pof_p_value, stats.kupiec_pof, _DF_ONE),
-            ("p_uc", self.p_uc, stats.lr_uc, _DF_ONE),
-            ("p_ind", self.p_ind, stats.lr_ind, _DF_ONE),
-            ("p_cc", self.p_cc, stats.lr_cc, _DF_TWO),
-        ):
-            _check_p_value(name, p_value, statistic, df)
+        for field, statistic, df in _P_VALUE_FIELDS:
+            _check_p_value(field, getattr(self, field), getattr(stats, statistic), df)
         expected_descriptive = self.horizon > 1 and not belongs_to_dgt_partition(self.dgt_step)
         if self.independence_descriptive != expected_descriptive:
             raise ValueError(
@@ -379,6 +383,10 @@ class ChristoffersenTest:
             violation_rate=sequence.violation_rate,
             min_violations=min_violations,
         )
+        p_values = {
+            field: _p_value(getattr(stats, statistic), df)
+            for field, statistic, df in _P_VALUE_FIELDS
+        }
         return ChristoffersenReport(
             horizon=sequence.horizon,
             kind=sequence.kind,
@@ -391,10 +399,10 @@ class ChristoffersenTest:
             dgt_step=sequence.dgt_step,
             min_violations=min_violations,
             statistics=stats,
-            kupiec_pof_p_value=_p_value(stats.kupiec_pof, _DF_ONE),
-            p_uc=_p_value(stats.lr_uc, _DF_ONE),
-            p_ind=_p_value(stats.lr_ind, _DF_ONE),
-            p_cc=_p_value(stats.lr_cc, _DF_TWO),
+            kupiec_pof_p_value=p_values["kupiec_pof_p_value"],
+            p_uc=p_values["p_uc"],
+            p_ind=p_values["p_ind"],
+            p_cc=p_values["p_cc"],
             independence_descriptive=sequence.horizon > 1 and not sequence.is_dgt_subseries,
         )
 
@@ -604,8 +612,7 @@ class MonteCarloPValues:
 
 
 def _validate_draws_and_seed(draws: int, seed: int) -> None:
-    if type(draws) is not int or draws < 1:
-        raise ValueError(f"draws must be an int >= 1 (not bool), got {draws!r}")
+    validate_positive_int(draws, field="draws")
     if type(seed) is not int:
         raise ValueError(f"seed must be an int (not bool), got {seed!r}")
 
