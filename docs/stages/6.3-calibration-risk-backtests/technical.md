@@ -1843,4 +1843,31 @@ dgt_step=)` e `monte_carlo_defined_for(horizon)` em `christoffersen_test.py`,
 `serial_dependence_warning_for(horizon)` em `wilson_band.py`. Teste no limiar h = 2
 (`test_horizon_rule_multi_step_threshold_at_two`, com prova de consumo por monkeypatch).
 
+### 2026-09-29 — [finding] A10/C8: teste de proveniência da 6.2 ausente nesta branch — `PENDENTE`, merge bloqueado — Claude (Opus 5.5)
+**Contexto:** o gate de saída (§3) imprimiu `PENDENTE: A10/C8 — teste de proveniência da
+6.2 ausente` — `tests/integration/features/evaluation/test_r_oracle_provenance.py` nasce
+no PR da 6.2 (`feat/114-6-2-paired-inference-dm-mcs-holm`), ainda fora de `develop`.
+**Razão:** como o §Pré-condições prevê, o A10 fica **desmarcado** no PR e o merge da 6.3
+fica bloqueado até a 6.2 estar em `develop`: então rebasear esta branch, resolver os
+conflitos do mapa do §5 (roadmap, doc de domínio, overview) e rodar o teste da 6.2 sobre
+`var_test_cases.json` (fix em `[6.3/task-10-fix]` se reprovar). Evidência prévia: o
+`_fixture_problems` desse teste, rodado a partir da worktree irmã sem versionar, devolve
+`[]` sobre a fixture atual. Stage candidata: **esta mesma (6.3), no rebase do PR**.
+
+### 2026-09-29 — [decision] Fechamento: extras da re-verificação final e gate de saída — Claude (Opus 5.5)
+**Contexto:** a re-verificação final (Checkpoint C após os achados A–H e a auditoria de
+testes 6/6) pediu quatro retoques mínimos antes do gate.
+**Razão:** `[6.3/task-07-extra]` — `status_each` ganha (T, T, F) (só a linha 0 vazia) e
+(F, T, T) (só a coluna 0 vazia), matando os mutantes N2a/N2b; `[6.3/task-08-fix]` —
+removida a validação morta do meio no LR_uc de 3 estados (sem ramo alcançável depois de
+`lower + upper <= n` e `max(0, ·)`); `[6.3/task-05-fix]` — a partição DGT consome
+`is_multi_step` (sai `_DGT_MIN_STEP`), então o limiar multi-passo é de fato único no
+slice; `[6.3/task-11-fix]` — o segundo banner de errata do ADR 6.3.0003 no formato de
+CONVENTIONS. Gate de saída (§3) em `origin/develop` = `ee1c428` (rebase no-op): `make
+check` 3244 passed / 23 skipped, cobertura 98,66 % global e 100 % nos 31 arquivos do
+slice; oráculo 125 passed, zero `SKIPPED`; laço de tokens verde; `lint-imports` 14
+contratos mantidos; bloco Host verde; `git grep -n "<prefixo do host>" -- docs/ tests/
+src/` vazio. A primeira rodada do `make check` caiu por ENOMEM (outro check pesado em
+paralelo no host) e foi repetida sozinha.
+
 <!-- END: post-execution -->

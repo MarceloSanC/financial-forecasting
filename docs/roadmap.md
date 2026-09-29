@@ -100,7 +100,7 @@ graph LR
 | `5.5-confirmatory-retrain` | modeling | application (orquestração) | vertical | draft | 5.2, 5.3, 5.4 |
 | `6.1-scoring-and-calibration-metrics` | evaluation | multi (domain + adapters/out) | vertical | done | 4.3 |
 | `6.2-paired-inference-dm-mcs-holm` | evaluation | multi (domain + adapters/out) | vertical | done | 6.1 |
-| `6.3-calibration-risk-backtests` | evaluation | domain | vertical | draft | 6.1 |
+| `6.3-calibration-risk-backtests` | evaluation | domain | vertical | done | 6.1 |
 | `6.4-gold-builders-and-quality-gates` | evaluation | multi (domain + application + adapters/out) | vertical | draft | 6.2, 6.3 |
 | `6.5-preregistration-and-scorecard` | evaluation | multi (domain + application) | vertical | draft | 6.4, 5.5 |
 | `7.1-inference-engine` | inference | multi (application + adapters/out) | vertical | draft | 5.4, 4.3 |
