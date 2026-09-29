@@ -1120,7 +1120,7 @@ Um subagente de contexto zerado, que não escreveu os testes, respondeu o questi
   - o `cohort_id` é o nome do diretório (`artifacts/cohorts/<cohort_id>/`);
   - o hash completo está na âncora pública (tag + comentário);
   - duplicá-los dentro do arquivo não acrescenta verificação.
-- **F8** (observação, issue separada) — o `materialize --start 2010-04-20` não fica no arquivo do cohort → **escalado para issue separada**, depois de buscar no backlog. Mudar agora alteraria o hash do cohort congelado. O valor segue ancorado pela impressão digital do dataset e documentado no runbook.
+- **F8** (observação, issue separada) — o `materialize --start 2010-04-20` não fica no arquivo do cohort → **escalado para a issue #122**, depois de buscar no backlog. Mudar agora alteraria o hash do cohort congelado. O valor segue ancorado pela impressão digital do dataset e documentado no runbook.
 - **F9** (observação) — linha de auditoria no corpo do PR e checklist → **aplicado** no PR #121.
 - **Aprendizado → skill** (proposta do auditor, registrada e não aplicada nesta Stage): na `stage-audit`, conceito "Verificação assimétrica" — "para cada campo que entra num hash/ledger como 'observado', achar a linha que o LÊ do mundo real — eco do declarado não é observação".
 
