@@ -1735,4 +1735,28 @@ estatística, df) é o único mapa, usado pelos dois; `MEDIAN_LEVEL` passa a pú
 `VarDescriptiveReport`. O mutante do df de LR_cc morre pelo teste de fórmulas do
 commit `test(...) [6.3/task-07-fix]` desta rodada.
 
+### 2026-09-28 — [decision] Task 10: receita da fixture com a errata do ADR 6.3.0003 (`lr_uc_internal`) e categoria `t2_feed_error` — Claude (Opus 5.5)
+**Contexto:** achado LOW do Checkpoint C (bloco 3): o `VaRTest` falha no feed t ≥ 2 em
+sequências APPLICABLE com o feed inteiro válido (I_1 = 1 e violações nas pontas) —
+justamente os casos que o A10 quer comparar; a receita da Task 10 só gravava o erro.
+**Razão:** disposição `corrigido` (errata append-only no ADR 6.3.0003, commit
+`[6.3/--]`) — quando o feed t ≥ 2 falha, o gerador grava também
+`from_t2.lr_uc_internal = rugarch:::.LR.uc(p, T − 1, sum(v[-1]))` (a função que o
+`uc.LRstat` desse feed chamaria; `.LR.uc` nunca falha com T − 1 ≥ 1), e a nova
+categoria `t2_feed_error` (`[1, 0, 1]`, `[0, 1, 0]`, violações só em t = 1 e 2) se
+soma às cinco exigidas; `r_error_first_and_last` também cai nesse caso. A pré-checagem
+da Task ganhou a asserção "todo feed t ≥ 2 com erro traz `lr_uc_internal` finito". A
+Task 11 compara o trio em todo caso com o feed inteiro válido e a política
+"erro do R ⇔ status ≠ APPLICABLE" só no feed inteiro.
+Execução medida: 32 casos (iid 12, clustered 6, first_violation 3, n11_zero 3,
+r_error 5, t2_feed_error 3); I_1 = 1 com |uc(t ≥ 2) − uc(inteira)| > 0.1 em
+`first_violation_p0.05_T250` (0.0252 × 0.1827), `first_violation_p0.02_T100`,
+`first_violation_p0.1_T50` e `n11_zero_first`; o validador `_fixture_problems` da 6.2
+(copiado da worktree irmã, sem versionar) devolve `[]` sobre `var_test_cases.json`.
+Notas: `docker build` da Task reconstruiu a imagem `ff-r-oracle:4.4.1` a partir do
+`Dockerfile` byte-idêntico (snapshot CRAN `p3m.dev/cran/__linux__/jammy/2024-10-30`;
+`rugarch_1.5-3`, `jsonlite_1.8.9` no `sessionInfo`); `generated_at = 2026-09-29` é o
+`Sys.Date()` do container (UTC); `provenance.command` é o literal executado no host
+(caminho absoluto `pwd -W`), como a Task manda.
+
 <!-- END: post-execution -->

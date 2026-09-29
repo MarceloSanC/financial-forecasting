@@ -1,0 +1,38 @@
+R version 4.4.1 (2024-06-14)
+Platform: x86_64-pc-linux-gnu
+Running under: Ubuntu 22.04.5 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3 
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so;  LAPACK version 3.10.0
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C              
+ [3] LC_TIME=en_US.UTF-8        LC_COLLATE=en_US.UTF-8    
+ [5] LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                 
+ [9] LC_ADDRESS=C               LC_TELEPHONE=C            
+[11] LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+time zone: Etc/UTC
+tzcode source: system (glibc)
+
+attached base packages:
+[1] parallel  stats     graphics  grDevices utils     datasets  methods  
+[8] base     
+
+other attached packages:
+[1] jsonlite_1.8.9 rugarch_1.5-3 
+
+loaded via a namespace (and not attached):
+ [1] GeneralizedHyperbolic_0.8-6 xts_0.14.1                 
+ [3] numDeriv_2016.8-1.1         Matrix_1.7-0               
+ [5] lattice_0.22-6              truncnorm_1.0-9            
+ [7] spd_2.0-1                   ks_1.14.3                  
+ [9] mclust_6.1.1                zoo_1.8-12                 
+[11] fracdiff_1.5-3              KernSmooth_2.23-24         
+[13] DistributionUtils_0.6-1     mvtnorm_1.3-1              
+[15] nloptr_2.1.1                grid_4.4.1                 
+[17] compiler_4.4.1              SkewHyperbolic_0.4-2       
+[19] pracma_2.4.4                Rcpp_1.0.13                
+[21] MASS_7.3-60.2               Rsolnp_1.16                
