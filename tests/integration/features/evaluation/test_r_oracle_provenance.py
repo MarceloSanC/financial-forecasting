@@ -6,10 +6,12 @@ só do bloco `provenance` e dos objetos `{"dec", "hex"}`, nunca dos nomes de cam
 Uma regra por item:
 
 1. chave obrigatória de `provenance` ausente;
-2. `generator` inexistente (caminho relativo à **raiz do repo**);
-3. `session_info` inexistente (caminho relativo ao **JSON**);
-4. `r_version` sem `R version <v> ` no `sessionInfo`;
-5. pacote de `packages` sem `<nome>_<versão>` no `sessionInfo`;
+2. `generator` absoluto ou inexistente (caminho relativo à **raiz do repo**);
+3. `session_info` absoluto ou inexistente (caminho relativo ao **JSON**);
+4. `r_version` sem `R version <v> (` no `sessionInfo`;
+5. `packages` vazio, ou pacote sem o token **inteiro** `<nome>_<versão>` no `sessionInfo`
+   (ancorado em espaço/borda de linha: `forecast_8.23` e `cast_8.23.0` não casam
+   `forecast_8.23.0`);
 6. objeto `{"dec", "hex"}` (varredura recursiva) com formas diferentes (escalar x lista,
    listas de tamanhos diferentes) ou `float(dec) != float.fromhex(hex)`;
 7. `image` diferente da imagem do `FROM` do `Dockerfile` ao lado do JSON;
@@ -50,6 +52,7 @@ _REQUIRED_KEYS = (
 )
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _DEC_HEX_KEYS = {"dec", "hex"}
+_ABSOLUTE_PATH = re.compile(r"^(?:[/\\]|[A-Za-z]:)")
 
 
 def _fixture_problems(json_path: Path, *, repo_root: Path) -> list[str]:
@@ -59,8 +62,12 @@ def _fixture_problems(json_path: Path, *, repo_root: Path) -> list[str]:
     problems = [
         f"missing provenance key {key!r}" for key in _REQUIRED_KEYS if key not in provenance
     ]
-    if "generator" in provenance and not (repo_root / provenance["generator"]).is_file():
-        problems.append(f"generator not found: {provenance['generator']}")
+    if "generator" in provenance:
+        generator = provenance["generator"]
+        if _is_absolute(generator):
+            problems.append(f"generator must be relative to the repo root, got {generator!r}")
+        elif not (repo_root / generator).is_file():
+            problems.append(f"generator not found: {generator}")
     session_text = _session_info_text(json_path, provenance, problems)
     if session_text is not None:
         problems.extend(_version_problems(provenance, session_text))
@@ -75,6 +82,11 @@ def _session_info_text(
 ) -> str | None:
     if "session_info" not in provenance:
         return None
+    if _is_absolute(provenance["session_info"]):
+        problems.append(
+            f"session_info must be relative to the JSON, got {provenance['session_info']!r}"
+        )
+        return None
     path = json_path.parent / provenance["session_info"]
     if not path.is_file():
         problems.append(f"session_info not found: {provenance['session_info']}")
@@ -84,12 +96,25 @@ def _session_info_text(
 
 def _version_problems(provenance: dict[str, Any], session_text: str) -> list[str]:
     problems = []
-    if "r_version" in provenance and f"R version {provenance['r_version']} " not in session_text:
+    if "r_version" in provenance and f"R version {provenance['r_version']} (" not in session_text:
         problems.append(f"r_version {provenance['r_version']} not in sessionInfo")
-    for name, version in provenance.get("packages", {}).items():
-        if f"{name}_{version}" not in session_text:
+    if "packages" not in provenance:
+        return problems
+    packages = provenance["packages"]
+    if not isinstance(packages, dict) or not packages:
+        return [*problems, f"packages must be a non-empty mapping, got {packages!r}"]
+    for name, version in packages.items():
+        # token inteiro do sessionInfo: "forecast_8.23" não casa "forecast_8.23.0" nem
+        # "cast_8.23.0" casa "forecast_8.23.0"
+        token = re.escape(f"{name}_{version}")
+        if not re.search(rf"(?:^|\s){token}(?:\s|$)", session_text, re.MULTILINE):
             problems.append(f"package {name}_{version} not in sessionInfo")
     return problems
+
+
+def _is_absolute(path: object) -> bool:
+    """Caminho absoluto em POSIX ou Windows (`/x`, barra invertida, `C:...`): exige-se relativo."""
+    return not isinstance(path, str) or bool(_ABSOLUTE_PATH.match(path))
 
 
 def _image_problems(json_path: Path, provenance: dict[str, Any]) -> list[str]:
@@ -243,6 +268,58 @@ def test_prov_package_version_mismatch(tmp_path: Path) -> None:
         tmp_path, lambda data: data["provenance"]["packages"].update(forecast="8.24.0")
     )
     assert problems == ["package forecast_8.24.0 not in sessionInfo"]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("packages", "expected"),
+    [
+        pytest.param(
+            {"forecast": "8.23", "jsonlite": "1.8.9"},
+            "package forecast_8.23 not in sessionInfo",
+            id="version-prefix",
+        ),
+        pytest.param(
+            {"forecast": "8.23.0", "jsonlite": "1.8"},
+            "package jsonlite_1.8 not in sessionInfo",
+            id="version-prefix-jsonlite",
+        ),
+        pytest.param(
+            {"cast": "8.23.0", "jsonlite": "1.8.9"},
+            "package cast_8.23.0 not in sessionInfo",
+            id="name-suffix",
+        ),
+        pytest.param({}, "packages must be a non-empty mapping, got {}", id="empty"),
+    ],
+)
+def test_prov_package_token_anchored(
+    tmp_path: Path, packages: dict[str, str], expected: str
+) -> None:
+    problems = _problems_after(tmp_path, lambda data: data["provenance"].update(packages=packages))
+    assert problems == [expected]
+
+
+@pytest.mark.integration
+def test_prov_r_version_prefix_rejected(tmp_path: Path) -> None:
+    """ "4.4" é prefixo de "4.4.1": a checagem exige `R version <v> (`."""
+    problems = _problems_after(tmp_path, lambda data: data["provenance"].update(r_version="4.4"))
+    assert problems == ["r_version 4.4 not in sessionInfo"]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "path", ["/abs/dm_test_cases.R", r"\\server\dm.R", "C:/repo/dm_test_cases.R"]
+)
+def test_prov_absolute_generator_rejected(tmp_path: Path, path: str) -> None:
+    problems = _problems_after(tmp_path, lambda data: data["provenance"].update(generator=path))
+    assert problems == [f"generator must be relative to the repo root, got {path!r}"]
+
+
+@pytest.mark.integration
+def test_prov_absolute_session_info_rejected(tmp_path: Path) -> None:
+    path = "/work/dm_test_cases.sessionInfo.txt"
+    problems = _problems_after(tmp_path, lambda data: data["provenance"].update(session_info=path))
+    assert problems == [f"session_info must be relative to the JSON, got {path!r}"]
 
 
 @pytest.mark.integration
