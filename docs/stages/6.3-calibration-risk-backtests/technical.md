@@ -1870,4 +1870,40 @@ contratos mantidos; bloco Host verde; `git grep -n "<prefixo do host>" -- docs/ 
 src/` vazio. A primeira rodada do `make check` caiu por ENOMEM (outro check pesado em
 paralelo no host) e foi repetida sozinha.
 
+### 2026-09-29 — [decision] A10/C8 fechado depois do merge da 6.2 (PR #116) — Claude (Opus 5.5)
+**Contexto:** fecha o `[finding]` "A10/C8 … `PENDENTE`" acima: a 6.2 entrou em `develop`
+(merge `8c364f7`) com `tests/integration/features/evaluation/test_r_oracle_provenance.py`.
+**Razão:** esta branch foi rebaseada em `origin/develop` = `8c364f7`, com conflitos só em
+docs, resolvidos mantendo os dois lados:
+- `docs/roadmap.md`: a linha da 6.2 `done` e a linha da 6.3 com `camada_alvo: domain`,
+  duas vezes — no commit da Task 12 e no `stage 6.3: complete`;
+- `docs/overview.md` §10: as duas inserções na mesma linha — Bernardi-Catania 2018 e DLMF
+  §8.17 da 6.2; Dufour 2006 e BCP 2011 da 6.3;
+- doc de domínio §11.3: os bullets `arch` e `forecast::dm.test` da 6.2 e o bullet
+  `rugarch::VaRTest` da 6.3.
+
+O `Dockerfile` é byte-idêntico e não conflitou; os greps da Task 12 seguem verdes. Depois
+do rebase, o venv `ff-step6-venv` foi sincronizado uma vez com o lock rebaseado
+(`uv sync --inexact --extra dev`: `arch` 8.0.0, `statsmodels` 0.15.0).
+
+Evidência:
+- o teste de proveniência da 6.2 dá `36 passed`, inclusive
+  `test_prov_real_fixture_clean[var_test_cases.json] PASSED`;
+- o bloco A10 do §3 não imprime mais `PENDENTE`;
+- o gate de pureza dos unitários da 6.2 (`tests/architecture/test_unit_evaluation_purity.py`)
+  dá `2 passed` sobre os testes unitários da 6.3.
+
+A10 validado.
+
+### 2026-09-29 — [deviation] Concept I12/C8 × erratas do ADR 6.3.0003 — Claude (Opus 5.5)
+**Contexto:** achado F4 da auditoria da 6.3. O concept (I12, C8) diz que "caso em que o R
+falha" em qualquer feed não é valor de oráculo.
+**Razão:** as duas erratas append-only do ADR 6.3.0003 refinam isso:
+- quando só o feed t ≥ 2 falha, o LR_uc puro vem de `rugarch:::.LR.uc(p, T − 1, Σ_{t≥2} I_t)`,
+  a mesma função do `uc.LRstat` desse feed;
+- a equivalência "erro do R ⇔ status ≠ APPLICABLE" vale nos dois feeds.
+
+O concept fica congelado; o ADR 6.3.0003 é a fonte autoritativa, e a nota está no corpo do
+PR #115.
+
 <!-- END: post-execution -->
