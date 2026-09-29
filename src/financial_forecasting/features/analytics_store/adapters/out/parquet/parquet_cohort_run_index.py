@@ -66,6 +66,8 @@ class ParquetCohortRunIndex:
             if run_id not in run_ids:
                 continue
             rows_by_run[run_id] += 1
+            # Linha do silver chega como Mapping[str, object]; o schema pandera
+            # do fato já garante `horizon` inteiro (o ignore é só do tipo estático).
             horizon = int(fact["horizon"])  # type: ignore[call-overload]
             targets_by_run[run_id].setdefault(horizon, set()).add(str(fact["target_timestamp_utc"]))
 
@@ -73,6 +75,7 @@ class ParquetCohortRunIndex:
         for run in runs:
             run_id = str(run["run_id"])
             seed = run["seed"]
+            # Idem: `seed` de `dim_run` é inteiro ou nulo pelo schema (ignore estático).
             key = (str(run["model_version"]), int(seed) if seed is not None else None)  # type: ignore[call-overload]
             targets = {h: frozenset(ts) for h, ts in targets_by_run[run_id].items()}
             fold = run.get("fold")
