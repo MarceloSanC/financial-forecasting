@@ -653,3 +653,26 @@ def test_horizon_label_short_mismatch() -> None:
     )
     [finding] = _only(_assemble(cohort), AlignmentKind.HORIZON_LABEL_MISMATCH)
     assert _scope(finding) == (2, "gbm", None)
+
+
+@pytest.mark.unit
+def test_run_with_only_val_rows_orphaned() -> None:
+    """Run cujas linhas são todas `val` continua órfão: só `split = "test"` conta (I3)."""
+    cohort = make_cohort()
+    extra = CohortRun(
+        run_id="gbm-extra",
+        model="gbm",
+        seed=None,
+        fold="f0",
+        feature_set_name="fs-core",
+        config_signature="sig-gbm",
+    )
+    val_rows = tuple(
+        dataclasses.replace(r, run_id="gbm-extra", split="val")
+        for r in cohort.records
+        if of_series("gbm", None, 1)(r)
+    )
+    cohort = dataclasses.replace(add_records(cohort, *val_rows), runs=(*cohort.runs, extra))
+    [finding] = _only(_assemble(cohort), AlignmentKind.ORPHAN_RUN)
+    assert _scope(finding) == (None, "gbm", None)
+    assert "gbm-extra" in finding.detail
