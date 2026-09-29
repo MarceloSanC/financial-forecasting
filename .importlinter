@@ -424,8 +424,30 @@ forbidden_modules =
     numpy
     scipy
 allow_indirect_imports = False
+
+# Contrato 14 — evaluation-no-inference-lib-leak (type = forbidden) — Stage 6.2 (I11/A12)
+# Mesma postura do contrato 13 para a inferência pareada: DM/HLN, Holm e o procedimento
+# 'R' do MCS são implementados UMA vez, stdlib-only, no domínio (implementação de
+# registro); `statsmodels` (oráculo de DM/Holm atrás do port-out `InferenceBackend`) e
+# `arch` (gerador de registro dos índices de bootstrap e de b̂_sb atrás do port-out
+# `McsBackend`) vivem APENAS em features/evaluation/adapters/out/inference/ (concept
+# 6.2 I11 / ADRs 6.2.0003 e 6.2.0004). `scipy`/`numpy` já estão no contrato 13 e
+# `pandas` no `store-no-storage-leak` — não se repetem aqui. `_REAL_VIOLATION_CASES`
+# tem um caso por módulo na application e um caso `arch` no domain, que prova a
+# matrícula de `evaluation.domain` (nem `domain-purity` nem o `check_layout.py`
+# proíbem arch/statsmodels ali).
+[importlinter:contract:evaluation-no-inference-lib-leak]
+name = Application/domain de evaluation não importam arch/statsmodels (só os adapters)
+type = forbidden
+source_modules =
+    financial_forecasting.features.evaluation.application
+    financial_forecasting.features.evaluation.domain
+forbidden_modules =
+    arch
+    statsmodels
+allow_indirect_imports = False
 # -----------------------------------------------------------------------------
-# Contrato 14 — bc-independence (type = independence) — issue #60
+# Contrato 15 — bc-independence (type = independence) — issue #60
 # LAYOUT §7 (regra de ouro "Features não importam de outras features", emendada
 # junto com este contrato — a fonte da verdade vem primeiro). Nenhum contrato
 # cobria isso: o

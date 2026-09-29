@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-09-28
-last_reviewed_at: 2026-09-28
+updated_at: 2026-09-29
+last_reviewed_at: 2026-09-29
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -99,7 +99,7 @@ graph LR
 | `5.4-tft-trainer` | modeling | multi (application + adapters/out) | vertical | done | 5.1 |
 | `5.5-confirmatory-retrain` | modeling | application (orquestração) | vertical | draft | 5.2, 5.3, 5.4 |
 | `6.1-scoring-and-calibration-metrics` | evaluation | multi (domain + adapters/out) | vertical | done | 4.3 |
-| `6.2-paired-inference-dm-mcs-holm` | evaluation | multi (domain + adapters/out) | vertical | draft | 6.1 |
+| `6.2-paired-inference-dm-mcs-holm` | evaluation | multi (domain + adapters/out) | vertical | done | 6.1 |
 | `6.3-calibration-risk-backtests` | evaluation | multi (domain + adapters/out) | vertical | draft | 6.1 |
 | `6.4-gold-builders-and-quality-gates` | evaluation | multi (domain + application + adapters/out) | vertical | draft | 6.2, 6.3 |
 | `6.5-preregistration-and-scorecard` | evaluation | multi (domain + application) | vertical | draft | 6.4, 5.5 |
@@ -758,7 +758,7 @@ skills_hint: [ddd-tactical-patterns, hex-arch-python, dmls-ch05-model-developmen
 
 #### Stage 6.2 — `6.2-paired-inference-dm-mcs-holm`
 
-**Descrição humana:** Inferência pareada como domínio sobre `PairedLossSeries`: DM (HAC/Newey-West + correção HLN, one-sided, lag=h−1) atrás de porta + **oráculo R `dm.test`**; MCS via `arch` (corrige o bug de eliminação); Holm via `statsmodels`. Aplica os gates A (pinball), B (sem top-50), C (família Holm), F (dedup).
+**Descrição humana:** Inferência pareada como domínio sobre `PairedLossSeries` (VO T × k de perdas L_t de um horizonte): DM unilateral com variância de longo prazo retangular (h − 1 lags) + correção HLN e p-valor da t_{T−1} em stdlib; Holm sobre a família do candidato no horizonte; MCS de HLN (2011), estatística 'R', sobre índices de bootstrap. Postura do ADR 0.0.0056: DM/Holm/MCS são implementados **no domínio**; `statsmodels` (DM/Holm) e `arch` (índices de bootstrap e b̂_sb) são **oráculos atrás de port** (`InferenceBackend`, `McsBackend`), e o R `forecast::dm.test` entra como **fixture versionada com proveniência testada**. Convenções do doc de domínio §9.3: a perda pareada é L_t (pinball médio na grade, média entre seeds); um único candidato por família (sem seleção entre candidatos); família de Holm fechada por horizonte (o candidato contra todos os outros modelos da mesma amostra); uma observação por `target_timestamp`.
 
 **Descrição para IA:**
 ```yaml
@@ -766,17 +766,22 @@ stage_id: 6.2-paired-inference-dm-mcs-holm
 bounded_context: evaluation
 camada_alvo: multi (domain + adapters/out)
 arquivos_a_criar:
-  - src/financial_forecasting/features/evaluation/domain/value_objects/paired_loss_series.py
-  - src/financial_forecasting/features/evaluation/domain/services/{diebold_mariano.py, holm_correction.py, model_confidence_set.py}
-  - src/financial_forecasting/features/evaluation/application/ports/out/{inference_backend.py}
-  - src/financial_forecasting/features/evaluation/adapters/out/inference/{statsmodels_hac.py, arch_mcs.py, dm_wrapper.py}
-  - tests/unit/features/evaluation/test_dm_vs_r_oracle.py
-  - tests/unit/features/evaluation/test_mcs_vs_arch.py
-  - tests/unit/features/evaluation/test_holm_vs_statsmodels.py
-  - tests/fixtures/r_oracle/{dm_test_cases.json, mcs_cases.json}
-contratos_introduzidos: [PairedLossSeries (value-object), DieboldMariano/HolmCorrection/ModelConfidenceSet (domain-services), InferenceBackend (port-out)]
-contratos_consumidos: [PinballScore (6.1), ScopeSpec/dedup (5.1)]
-definition_of_done: "DM (HAC+HLN, one-sided, lag=h-1) bate com R `dm.test`/fixtures; MCS bate com `arch`; Holm bate com `statsmodels`; gates A/B/C/F aplicados (loss=pinball, sem top-50, família correta com split_signature, série deduplicada); `PairedLossSeries` valida alinhamento."
+  - src/financial_forecasting/features/evaluation/domain/value_objects/{paired_loss_series.py, bootstrap_indices.py, _paired_inputs.py, _timestamps.py}
+  - src/financial_forecasting/features/evaluation/domain/services/{student_t.py, paired_pinball_losses.py, diebold_mariano.py, inference_input_validation.py, holm_correction.py, model_confidence_set.py}
+  - src/financial_forecasting/features/evaluation/application/ports/out/{inference_backend.py, mcs_backend.py}
+  - src/financial_forecasting/features/evaluation/adapters/out/inference/{__init__.py, statsmodels_hac.py, arch_mcs.py}
+  - tests/unit/features/evaluation/{test_student_t.py, test_paired_loss_series.py, test_paired_pinball_losses.py, test_dm_vs_r_oracle.py, test_inference_input_validation.py, test_holm_vs_statsmodels.py, test_bootstrap_indices.py, test_mcs_vs_arch.py}
+  - tests/fakes/features/evaluation/{fake_inference_backend.py, fake_mcs_backend.py}
+  - tests/contract/features/evaluation/{test_inference_backend_contract.py, test_mcs_backend_contract.py}
+  - tests/integration/features/evaluation/{test_r_oracle_provenance.py, test_dm_r_oracle_fixtures.py, test_mcs_vs_arch.py}
+  - tests/fixtures/r_oracle/dm_test_cases.{R, json, sessionInfo.txt}
+  - tests/fixtures/r_oracle/Dockerfile
+# Desvio de caminho (concept 6.2 D7): os testes "vs oráculo" de tests/unit/ mantêm o nome
+# do roadmap, mas são só analíticos (unit não importa lib nem lê arquivo); statsmodels e
+# arch entram nas suítes de contrato e na integração; o R, nas fixtures + integração.
+contratos_introduzidos: [PairedLossSeries, BootstrapIndices (value-objects), paired_pinball_losses, student_t_cdf, DieboldMariano, HolmCorrection, ModelConfidenceSet (domain-services), InferenceBackend, McsBackend (ports-out)]
+contratos_consumidos: [CoverageSeries, PinballScore (6.1)]
+definition_of_done: "DM/HLN do domínio reproduz o R `forecast::dm.test` nas fixtures versionadas (proveniência testada) e o statsmodels HAC na suíte de contrato; Holm do domínio igual ao `multipletests(method='holm')`; MCS 'R' do domínio sobre índices do `arch` com a mesma ordem de eliminação e p-valores do `arch.MCS`; `PairedLossSeries` valida alinhamento (T > h, timestamps únicos e crescentes, perdas ≥ 0) e a fábrica monta L_t com média entre seeds; um único candidato por família de Holm, fechada por horizonte."
 non_goals: [Christoffersen/Kupiec (6.3), scorecard (6.5)]
 complexidade_estimada: M
 gate_mode: strict
@@ -824,7 +829,7 @@ arquivos_a_criar:
   - tests/unit/features/evaluation/gold/test_builder_explicit_deps.py
   - tests/integration/features/evaluation/test_refresh_gold.py
 contratos_introduzidos: [GoldBuilder (port-out), RefreshGold (use case), QualityCheckRegistry (domain-service)]
-contratos_consumidos: [todos os serviços de 6.1/6.2/6.3, AnalyticsRepository (4.2)]
+contratos_consumidos: [todos os serviços de 6.1/6.2/6.3, McsBackend (port-out 6.2: b̂_sb + índices de bootstrap do MCS em produção — ADR 6.2.0004), AnalyticsRepository (4.2)]
 definition_of_done: "Gold builders declaram dependências explícitas (não dict compartilhado); ordem derivada da topologia, não de contrato byte-idêntico; quality checks rodam por registry; gold reconstruível de silver sem re-treino; disposições aplicadas."
 non_goals: [scorecard confirmatório (6.5), plots (8.3)]
 complexidade_estimada: M

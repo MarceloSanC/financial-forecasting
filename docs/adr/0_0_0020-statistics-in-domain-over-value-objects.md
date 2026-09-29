@@ -5,7 +5,7 @@ when-use: Reference when deciding where a metric/test belongs (domain vs adapter
 keywords: [adr, domain, value-object, statistics, pinball, crps, dm, mcs, ports, adapters, pure-function]
 status: accepted
 created_at: 2026-06-29
-updated_at: 2026-06-29
+updated_at: 2026-09-28
 adr_id: "0.0.0020"
 decision: Confirmatory statistics are pure domain services over typed value objects; numeric/statistical libraries live behind ports in adapters
 context_stage: 1.1-bootstrap
@@ -19,6 +19,8 @@ bounded_context: transversal
 ## Status
 
 `accepted`
+
+> Amended by [ADR 0.0.0056](./0_0_0056-own-statistics-in-domain-r-oracle-as-fixtures.md) (2026-09-28): the second Decision bullet's "thin own-implementation sits behind a port" now reads "own implementation in the domain; port only where a Python library exists; R oracle as versioned fixtures".
 
 ## Context
 
