@@ -15,12 +15,16 @@ espúrio (o `arch` 8.0.0 devolveria 8,0 com 12 avisos).
 
 from __future__ import annotations
 
+import random
 from datetime import UTC, datetime, timedelta
 
+import arch
 import numpy as np
 import pytest
-from arch.bootstrap import MCS
+from arch.bootstrap import MCS, MovingBlockBootstrap, StationaryBootstrap
+from arch.bootstrap import optimal_block_length as arch_optimal_block_length
 
+from financial_forecasting.features.evaluation.adapters.out.inference import arch_mcs
 from financial_forecasting.features.evaluation.adapters.out.inference.arch_mcs import ArchMcs
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     ModelConfidenceSet,
@@ -100,3 +104,51 @@ def test_arch_block_length_arithmetic_error() -> None:
     """[1, -1, 0, ..., 0] (22 pontos) passa pelo validador; o arch divide por zero."""
     with pytest.raises(ArithmeticError, match="numerically undefined"):
         ArchMcs().optimal_block_length(series=[1.0, -1.0] + [0.0] * 20)
+
+
+def _ar1_series() -> list[float]:
+    """A mesma AR(1) da suíte de contrato: Random(622026), phi = 0,6, 250 pontos."""
+    rng = random.Random(62_2026)
+    series = [rng.gauss(0.0, 1.0)]
+    for _ in range(249):
+        series.append(0.6 * series[-1] + rng.gauss(0.0, 1.0))
+    return series
+
+
+@pytest.mark.integration
+def test_arch_block_length_uses_stationary_column_sbcol() -> None:
+    """O adapter lê a coluna "stationary" (b̂_sb), não a "circular" (b̂_cb)."""
+    series = _ar1_series()
+    table = arch_optimal_block_length(np.asarray(series))
+    stationary = float(table["stationary"].iloc[0])
+    circular = float(table["circular"].iloc[0])
+    assert stationary != circular
+    assert ArchMcs().optimal_block_length(series=series) == stationary
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("scheme", "cls"),
+    [
+        (BootstrapScheme.STATIONARY, StationaryBootstrap),
+        (BootstrapScheme.MOVING_BLOCK, MovingBlockBootstrap),
+    ],
+)
+def test_arch_generator_records_version_and_class_genver(
+    scheme: BootstrapScheme, cls: type
+) -> None:
+    indices = ArchMcs().bootstrap_indices(n_obs=20, block_size=3, reps=2, seed=1, scheme=scheme)
+    assert indices.generator == f"arch {arch.__version__} {cls.__name__} / numpy default_rng"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("value", [float("nan"), -1.0, float("inf")])
+def test_arch_block_length_nonfinite_guard_nfguard(
+    monkeypatch: pytest.MonkeyPatch, value: float
+) -> None:
+    """Resultado não-finito ou negativo do arch vira ArithmeticError, nunca o número."""
+    frame = arch_optimal_block_length(np.asarray(_ar1_series()))
+    frame.loc[:, "stationary"] = value
+    monkeypatch.setattr(arch_mcs, "optimal_block_length", lambda _series: frame)
+    with pytest.raises(ArithmeticError, match="returned"):
+        ArchMcs().optimal_block_length(series=_ar1_series())
