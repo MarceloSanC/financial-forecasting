@@ -2696,4 +2696,13 @@ letra da regra, a medição é uma exposição, ainda que nenhum valor tenha sid
 P1. Aceitar como exposição nula declarada no pré-registro ou regenerar / usar um novo
 cohort. Nada desta Stage depende da escolha.
 
+### 2026-09-29 — [finding] §3 "Resíduo herdado" resolvido no `develop` — Claude (Opus 5.5)
+**Contexto:** o parágrafo "Resíduo herdado (revisão de execução)" do §3 diz que o grep
+de caminho do host reprova por causa do `docs/runbooks/confirmatory-cohort-aapl.md` da
+5.5. O §3 é histórico aprovado e não é editado depois de `done`
+(`check_technical_postexec`).
+**Encaminhamento:** o parágrafo está **obsoleto**. O `develop` corrigiu o runbook
+(issue #123, PR #124), e esta branch está sobre essa correção. O grep passa, e o gate não
+foi afrouxado. Registrado na auditoria (F5).
+
 <!-- END: post-execution -->
