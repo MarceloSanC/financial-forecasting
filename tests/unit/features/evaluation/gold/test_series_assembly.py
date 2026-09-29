@@ -637,3 +637,19 @@ def test_invalid_call_raises_structural_runs(
     cohort = mutate(make_cohort())
     with pytest.raises(ValueError, match=message):
         _assemble(cohort)
+
+
+@pytest.mark.unit
+def test_horizon_label_short_mismatch() -> None:
+    """Decisão uma sessão DEPOIS (índice coerente): alvo a h - 1 sessões também é achado."""
+    cohort = make_cohort()
+    target = targets_of(cohort, "gbm", None, 2)[6]
+    cohort = replace_records(
+        cohort,
+        at_point("gbm", None, 2, target),
+        lambda r: dataclasses.replace(
+            r, decision_idx=r.decision_idx + 1, decision_timestamp=session(r.decision_idx + 1)
+        ),
+    )
+    [finding] = _only(_assemble(cohort), AlignmentKind.HORIZON_LABEL_MISMATCH)
+    assert _scope(finding) == (2, "gbm", None)
