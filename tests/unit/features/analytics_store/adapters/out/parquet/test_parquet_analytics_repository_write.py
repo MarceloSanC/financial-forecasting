@@ -355,3 +355,140 @@ def test_dim_run_upserts_by_policy_without_flag(tmp_path: Path) -> None:
     df = pd.read_parquet(path)
     assert len(df) == 1
     assert df.iloc[0]["model_version"] == "v2"
+
+
+# -- gravação atômica (Stage 5.5, D12 / ADR 5.5.0003) --------------------------
+
+
+def _fact_oos_path(tmp_path: Path) -> Path:
+    return (
+        tmp_path
+        / "silver"
+        / "fact_oos_predictions"
+        / "asset=AAPL"
+        / "feature_set_name=fs_all"
+        / "year=2024"
+        / "fact_oos_predictions.parquet"
+    )
+
+
+def test_failed_replace_keeps_previous_partition_intact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Queda na troca do arquivo deixa a partição anterior íntegra e sem temporário."""
+    repo = _repo(tmp_path)
+    repo.write(
+        layer=_SILVER, table="fact_oos_predictions", rows=[_fact_oos_row(quantile_level=0.1)]
+    )
+    path = _fact_oos_path(tmp_path)
+    before = pd.read_parquet(path)
+
+    def _crash(src: object, dst: object) -> None:
+        raise OSError("simulated crash during replace")
+
+    monkeypatch.setattr(
+        "financial_forecasting.features.analytics_store.adapters.out.parquet."
+        "parquet_analytics_repository.os.replace",
+        _crash,
+    )
+    with pytest.raises(OSError, match="simulated crash"):
+        repo.write(
+            layer=_SILVER, table="fact_oos_predictions", rows=[_fact_oos_row(quantile_level=0.9)]
+        )
+
+    pd.testing.assert_frame_equal(pd.read_parquet(path), before)
+    assert list(path.parent.glob("*.tmp-*")) == []
+
+
+def test_stale_temp_file_is_not_read_as_data(tmp_path: Path) -> None:
+    """Temporário deixado por queda anterior não entra na leitura nem na checagem de vazio."""
+    repo = _repo(tmp_path)
+    path = _fact_oos_path(tmp_path)
+    path.parent.mkdir(parents=True)
+    stale = path.with_name(f"{path.name}.tmp-99999")
+    stale.write_bytes(b"not a parquet file")
+
+    assert repo.read(layer=_SILVER, table="fact_oos_predictions") == []
+
+
+def test_write_removes_stale_temp_files(tmp_path: Path) -> None:
+    """A próxima gravação da partição remove temporários remanescentes."""
+    repo = _repo(tmp_path)
+    repo.write(
+        layer=_SILVER, table="fact_oos_predictions", rows=[_fact_oos_row(quantile_level=0.1)]
+    )
+    path = _fact_oos_path(tmp_path)
+    stale = path.with_name(f"{path.name}.tmp-99999")
+    stale.write_bytes(b"leftover")
+
+    repo.write(
+        layer=_SILVER, table="fact_oos_predictions", rows=[_fact_oos_row(quantile_level=0.9)]
+    )
+
+    assert not stale.exists()
+    assert len(pd.read_parquet(path)) == _TWO_ROWS
+
+
+def test_valid_stale_temp_next_to_partition_is_not_read(tmp_path: Path) -> None:
+    """Temporário VÁLIDO ao lado da partição real não entra na leitura do DuckDB.
+
+    O temporário é um Parquet legítimo com outra linha: se o glob de leitura
+    passasse a casá-lo, a regressão apareceria como dado a mais (não como erro de
+    parse), e a leitura acontece sem nova gravação (nada o removeria antes).
+    """
+    repo = _repo(tmp_path)
+    repo.write(
+        layer=_SILVER, table="fact_oos_predictions", rows=[_fact_oos_row(quantile_level=0.1)]
+    )
+    path = _fact_oos_path(tmp_path)
+    other = pd.DataFrame([_fact_oos_row(run_id="run-ghost", quantile_level=0.9)])
+    other.to_parquet(path.with_name(f"{path.name}.tmp-99999"), index=False)
+
+    rows = repo.read(layer=_SILVER, table="fact_oos_predictions")
+
+    assert [row["run_id"] for row in rows] == ["run-1"]
+
+
+def test_first_write_removes_stale_temp_files(tmp_path: Path) -> None:
+    """Temporário remanescente sem arquivo final é limpo na primeira gravação."""
+    repo = _repo(tmp_path)
+    path = _fact_oos_path(tmp_path)
+    path.parent.mkdir(parents=True)
+    stale = path.with_name(f"{path.name}.tmp-99999")
+    stale.write_bytes(b"leftover")
+
+    repo.write(
+        layer=_SILVER, table="fact_oos_predictions", rows=[_fact_oos_row(quantile_level=0.1)]
+    )
+
+    assert not stale.exists()
+    assert len(pd.read_parquet(path)) == 1
+
+
+def test_crash_while_writing_temp_keeps_previous_partition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Queda no meio da escrita do temporário (arquivo parcial) não toca a partição."""
+    repo = _repo(tmp_path)
+    repo.write(
+        layer=_SILVER, table="fact_oos_predictions", rows=[_fact_oos_row(quantile_level=0.1)]
+    )
+    path = _fact_oos_path(tmp_path)
+    before = pd.read_parquet(path)
+
+    def _partial_write(table: object, where: Path) -> None:
+        Path(where).write_bytes(b"PAR1-truncated")
+        raise OSError("simulated crash while writing")
+
+    monkeypatch.setattr(
+        "financial_forecasting.features.analytics_store.adapters.out.parquet."
+        "parquet_analytics_repository.pq.write_table",
+        _partial_write,
+    )
+    with pytest.raises(OSError, match="while writing"):
+        repo.write(
+            layer=_SILVER, table="fact_oos_predictions", rows=[_fact_oos_row(quantile_level=0.9)]
+        )
+
+    pd.testing.assert_frame_equal(pd.read_parquet(path), before)
+    assert list(path.parent.glob("*.tmp-*")) == []

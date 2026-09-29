@@ -266,6 +266,16 @@ class TestAskTellLoop:
         assert result.best_params.hidden_size == round(best.values["hidden_size"])
         assert result.best_params.dropout == pytest.approx(best.values["dropout"])
 
+    def test_result_reports_the_fingerprint_of_the_swept_grid(self, tmp_path: Path) -> None:
+        """O resultado carrega a impressão digital do grid treinado (Stage 5.5, I4)."""
+        use_case, _, _, _ = _build(tmp_path)
+
+        first = use_case(_command())
+        second = use_case(_command())
+
+        assert len(first.dataset_fingerprint) == 64  # noqa: PLR2004 — sha256 hex
+        assert first.dataset_fingerprint == second.dataset_fingerprint
+
     def test_frozen_base_params_are_preserved(self, tmp_path: Path) -> None:
         """O que não está no espaço mantém o valor pré-registrado."""
         use_case, _, trainer, _ = _build(tmp_path)
@@ -304,6 +314,17 @@ class TestErrorCases:
 
         with pytest.raises(ValueError, match="space"):
             use_case(_command(space=()))
+
+    def test_dimension_name_outside_tft_params_raises_before_any_io(
+        self, tmp_path: Path
+    ) -> None:
+        """C11 no use case: o nome é validado contra `TftTrainingParams` (Stage 5.5)."""
+        use_case, store, _, _ = _build(tmp_path)
+        gbm_only = (SearchDimension(name="num_leaves", low=4, high=64, kind="int"),)
+
+        with pytest.raises(ValueError, match="não é campo de TftTrainingParams"):
+            use_case(_command(space=gbm_only))
+        assert store.read_calls == 0
 
     def test_all_trials_failing_raises(self, tmp_path: Path) -> None:
         class _AlwaysFailing(InMemoryTftTrainer):
@@ -500,6 +521,8 @@ class TestDatasetErrors:
             pytest.param({"quantile_levels": (0.5, 0.1)}, id="niveis-nao-crescentes"),
             pytest.param({"horizons": ()}, id="horizons-vazio"),
             pytest.param({"horizons": (1, 9)}, id="horizonte-acima-do-max-do-scope"),
+            pytest.param({"horizons": (0,)}, id="horizonte-zero"),
+            pytest.param({"horizons": (1, 1)}, id="horizonte-repetido"),
         ],
     )
     def test_invalid_command_raises_before_any_io(

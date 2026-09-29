@@ -168,6 +168,32 @@ def test_best_iteration_is_one_based_and_bounded_by_the_ceiling(
     )
 
 
+@pytest.mark.contract
+def test_early_stop_loss_is_finite_and_positive_per_horizon(
+    trainer: QuantileModelTrainer,
+) -> None:
+    """Objetivo do sweep do GBM (Stage 5.5, D13): uma perda de early_stop por horizonte."""
+    import math  # noqa: PLC0415 — uso pontual no assert
+
+    result = _train(trainer)
+
+    assert set(result.early_stop_loss_by_horizon) == set(_HORIZONS)
+    assert all(
+        math.isfinite(loss) and loss > 0 for loss in result.early_stop_loss_by_horizon.values()
+    )
+
+
+@pytest.mark.contract
+def test_fit_only_mode_emits_no_grid_but_reports_the_loss(
+    trainer: QuantileModelTrainer,
+) -> None:
+    """`test_rows` vazio (sweep): nenhuma grade, perda de early_stop presente."""
+    result = _train(trainer, test_rows=(), test_decision_indices=())
+
+    assert result.grids == {}
+    assert set(result.early_stop_loss_by_horizon) == set(_HORIZONS)
+
+
 # -- determinismo (I4) -------------------------------------------------------------
 
 
@@ -180,6 +206,10 @@ def test_two_identical_calls_produce_identical_results(
 
     assert first.grids == second.grids
     assert first.best_iteration_by_horizon == second.best_iteration_by_horizon
+    # Varia no último ulp entre execuções (métrica somada em paralelo — §7 da 5.5).
+    assert first.early_stop_loss_by_horizon == pytest.approx(
+        second.early_stop_loss_by_horizon, rel=1e-12
+    )
 
 
 # -- I11: labels não finitos excluem o par -----------------------------------------

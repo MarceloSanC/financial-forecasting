@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from statistics import mean, pstdev
 
 from financial_forecasting.features.feature_engineering.application.ports.out.sentiment_model import (  # noqa: E501
@@ -40,6 +40,11 @@ from financial_forecasting.shared.application.ports.out.medallion_store import (
 from financial_forecasting.shared.domain.services.trading_calendar import TradingCalendar
 
 _BRONZE = "bronze"
+# Folga do calendário além do fim da janela: um artigo publicado depois do
+# fechamento no ÚLTIMO dia pertence à sessão seguinte, que precisa existir no
+# calendário para ser resolvida (e então sai, por cair fora da janela). Duas
+# semanas cobrem qualquer sequência de feriados da XNYS.
+_CALENDAR_TAIL_PAD = timedelta(days=14)
 _NEWS_TABLE = "news"
 
 
@@ -108,6 +113,9 @@ class ScoreAndAggregateSentiment:
         calendar = self._build_calendar(request)
 
         scored = self._build_scored(articles, scores, request.close_hour, calendar)
+        # Artigo cujo dia de pregão cai depois da janela não entra no grid dela.
+        last_day = request.end.date()
+        scored = [item for item in scored if item.trading_day <= last_day]
         daily = self._aggregate_daily(request.asset, scored)
         return ScoreAndAggregateSentimentResult(
             scored=scored,
@@ -143,7 +151,7 @@ class ScoreAndAggregateSentiment:
     def _build_calendar(self, request: ScoreAndAggregateSentimentRequest) -> TradingCalendar:
         """Materializa as sessões da janela e injeta o VO no `TradingCalendar`."""
         sessions = self._calendar_provider.sessions(
-            start=request.start.date(), end=request.end.date()
+            start=request.start.date(), end=request.end.date() + _CALENDAR_TAIL_PAD
         )
         return TradingCalendar(sessions)
 

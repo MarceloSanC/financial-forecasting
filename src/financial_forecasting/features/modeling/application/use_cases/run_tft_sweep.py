@@ -22,11 +22,12 @@ predições no mesmo armazém do confirmatório, a separação passaria a depend
 todo leitor futuro aplicar o filtro certo — e um filtro esquecido no Step 6
 reintroduziria exatamente o viés que o desenho elimina.
 
-**Qual fold a varredura usa:** o ÚLTIMO. É o de janela de treino mais longa e
-histórico mais recente, portanto o mais representativo do regime em que o
-candidato será treinado no confirmatório. Explorar sobre todos os folds
-multiplicaria o custo por `n_folds` sem mudar a natureza exploratória do
-resultado.
+**Qual fold a varredura usa:** o ÚLTIMO da geometria recebida. No cohort
+confirmatório (Stage 5.5, D2; ADR 5.5.0002) o runner passa a geometria
+exploratória — um único fold cujo treino e early_stop são os do fold 0 — para
+que nenhum dado pontuado pelo confirmatório entre na busca (Raschka 2018 §3-4).
+Com a geometria confirmatória, o último fold treinaria sobre os testes dos
+folds anteriores: a garantia é da geometria passada, conferida no runner.
 
 Casos de erro (concept §6): C2 (comando inválido antes de qualquer I/O — os
 mesmos limites do `TrainTft`), C9 (`n_trials < 1`, ou todos os trials falharam).
@@ -36,16 +37,28 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, replace
-from datetime import datetime
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
+from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
+    stable_objective,
+    validate_dimension_names,
+)
+from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
+    TftTrainingParams,
+)
+from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
+    grid_fingerprint,
+)
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     known_feature_names,
     unknown_feature_names,
 )
 from financial_forecasting.features.modeling.domain.exceptions.backend import (
     ModelTrainingError,
+)
+from financial_forecasting.features.modeling.domain.services.training_grid import (
+    build_training_grid,
 )
 
 if TYPE_CHECKING:
@@ -59,7 +72,6 @@ if TYPE_CHECKING:
     )
     from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
         TftTrainer,
-        TftTrainingParams,
     )
     from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
         WalkForwardSplitter,
@@ -73,7 +85,6 @@ if TYPE_CHECKING:
     from financial_forecasting.shared.application.ports.out.hasher import Hasher
     from financial_forecasting.shared.application.ports.out.medallion_store import (
         MedallionStore,
-        Row,
     )
 
 logger = logging.getLogger(__name__)
@@ -83,6 +94,7 @@ _DATASET_TABLE = "dataset_tft"
 _ARTIFACT_SUBDIR = "tft-sweep"
 _EXPLORATORY_PHASE = "exploratory"
 _INT_KIND = "int"
+_TARGET_COLUMN = "target_return"
 
 
 @dataclass(frozen=True)
@@ -120,6 +132,8 @@ class RunTftSweepResult:
     trials: tuple[SweepTrialSummary, ...]
     best_trial_number: int
     best_params: TftTrainingParams
+    dataset_fingerprint: str
+    """Impressão digital do conteúdo do grid sobre o qual o sweep treinou (I4)."""
 
 
 def _recast(values: Mapping[str, float], space: Sequence[SearchDimension]) -> dict[str, Any]:
@@ -169,7 +183,9 @@ class RunTftSweep:
         unknown_names = unknown_feature_names()
         known_names = known_feature_names()
         feature_names = unknown_names + known_names
-        returns, sessions, feature_rows = self._load_dataset(command.scope, feature_names)
+        returns, sessions, feature_rows, dataset_fingerprint = self._load_dataset(
+            command.scope, feature_names
+        )
 
         folds = self._splitter.split(
             sessions,
@@ -181,7 +197,8 @@ class RunTftSweep:
             embargo=command.embargo,
             hasher=self._hasher,
         )
-        # Último fold: janela de treino mais longa e histórico mais recente.
+        # Último fold da geometria recebida — no cohort, o único (geometria
+        # exploratória, D2 da Stage 5.5).
         fold = folds[-1]
         index_by_session = {day.isoformat(): idx for idx, day in enumerate(sessions)}
         train_indices = tuple(index_by_session[day] for day in fold.train)
@@ -233,7 +250,7 @@ class RunTftSweep:
                 logger.exception("trial %s falhou e foi descartado da varredura", trial.number)
                 self._search.fail(trial_number=trial.number)
                 continue
-            objective = training.best_val_loss
+            objective = stable_objective(training.best_val_loss)
             self._search.tell(trial_number=trial.number, objective_value=objective)
             self._track_trial(command, study_id, trial.number, params, objective)
             summaries.append(
@@ -258,6 +275,7 @@ class RunTftSweep:
             trials=tuple(summaries),
             best_trial_number=best.number,
             best_params=best_params,
+            dataset_fingerprint=dataset_fingerprint,
         )
 
     # -- rastreamento (I14) -----------------------------------------------------
@@ -308,8 +326,14 @@ class RunTftSweep:
 
     def _load_dataset(
         self, scope: ScopeSpec, feature_names: tuple[str, ...]
-    ) -> tuple[tuple[float, ...], tuple[date, ...], tuple[tuple[float, ...], ...]]:
-        """Lê o dataset TFT: (target_return, sessões, matriz de features)."""
+    ) -> tuple[tuple[float, ...], tuple[date, ...], tuple[tuple[float, ...], ...], str]:
+        """Lê o dataset TFT pelo grid único: (target_return, sessões, matriz, impressão digital).
+
+        Checa o vazio com o código deste use case (C1), delega ordenação,
+        validação e corte do prefixo sem valor ao `build_training_grid` (D11 da
+        Stage 5.5) e calcula a impressão digital do conteúdo do grid — o
+        congelamento do cohort copia esse valor para a proveniência (I4).
+        """
         rows = self._store.read(
             layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": scope.asset_id}
         )
@@ -318,27 +342,13 @@ class RunTftSweep:
                 f"dataset ({_DATASET_LAYER!r}, {_DATASET_TABLE!r}) is empty for "
                 f"asset {scope.asset_id!r} — nothing to sweep (C1)"
             )
-        missing = tuple(name for name in feature_names if name not in rows[0])
-        if missing:
-            raise ValueError(
-                f"dataset is missing expected feature columns {missing!r} — "
-                "registry x dataset drift (C6)"
-            )
-        parsed = sorted(
-            (
-                (
-                    _timestamp_of(row),
-                    _target_return_of(row),
-                    tuple(_feature_value_of(row, name) for name in feature_names),
-                )
-                for row in rows
-            ),
-            key=lambda triple: triple[0],
+        grid = build_training_grid(rows, columns=(*feature_names, _TARGET_COLUMN))
+        return (
+            grid.column(_TARGET_COLUMN),
+            grid.sessions(),
+            grid.matrix(feature_names),
+            grid_fingerprint(grid, hasher=self._hasher, asset_id=scope.asset_id),
         )
-        returns = tuple(value for _, value, _ in parsed)
-        sessions = tuple(ts.date() for ts, _, _ in parsed)
-        feature_rows = tuple(features for _, _, features in parsed)
-        return returns, sessions, feature_rows
 
 
 def _validate_command(command: RunTftSweepCommand) -> None:
@@ -347,6 +357,7 @@ def _validate_command(command: RunTftSweepCommand) -> None:
         raise ValueError(f"n_trials must be >= 1; got {command.n_trials} (C9)")
     if not command.space:
         raise ValueError("space must declare at least one dimension (C2)")
+    validate_dimension_names(command.space, TftTrainingParams)
 
     levels = command.quantile_levels
     if not levels:
@@ -359,6 +370,10 @@ def _validate_command(command: RunTftSweepCommand) -> None:
         )
     if not command.horizons:
         raise ValueError("horizons must be non-empty (C2)")
+    if any(h < 1 for h in command.horizons) or len(set(command.horizons)) != len(
+        command.horizons
+    ):
+        raise ValueError(f"horizons must be unique and >= 1; got {command.horizons} (C2)")
     if max(command.horizons) > command.scope.max_horizon:
         raise ValueError(
             f"max(horizons)={max(command.horizons)} exceeds "
@@ -366,24 +381,3 @@ def _validate_command(command: RunTftSweepCommand) -> None:
         )
 
 
-def _timestamp_of(row: Row) -> datetime:
-    value = row.get("timestamp")
-    if not isinstance(value, datetime) or value.tzinfo is None:
-        raise ValueError(f"dataset row 'timestamp' must be a tz-aware datetime; got {value!r}")
-    return value
-
-
-def _target_return_of(row: Row) -> float:
-    value = row.get("target_return")
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValueError(f"dataset row 'target_return' must be numeric; got {value!r}")
-    return float(value)
-
-
-def _feature_value_of(row: Row, column: str) -> float:
-    value = row.get(column)
-    if value is None:
-        return float("nan")
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValueError(f"dataset row {column!r} must be numeric or None; got {value!r}")
-    return float(value)

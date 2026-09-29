@@ -46,6 +46,9 @@ from financial_forecasting.features.modeling.application.use_cases.run_baselines
     RunBaselinesCommand,
     RunBaselinesResult,
 )
+from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
+    expected_feature_names,
+)
 from financial_forecasting.features.modeling.domain.value_objects.baseline_spec import (
     BaselineSpec,
 )
@@ -117,6 +120,8 @@ def _seed_dataset(data_root: Path, sessions: Sequence[date]) -> None:
             ],
             "asset_id": [_ASSET] * len(sessions),
             "target_return": list(_returns(len(sessions))),
+            # Colunas de modelagem: o grid único as exige também das baselines (5.5 D11).
+            **{name: [1.0] * len(sessions) for name in expected_feature_names()},
         }
     )
     target_dir = data_root / "processed" / "dataset_tft" / _ASSET

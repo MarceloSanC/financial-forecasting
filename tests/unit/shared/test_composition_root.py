@@ -17,8 +17,10 @@ import pytest
 
 from financial_forecasting.composition_root import (
     _DATASET_MAX_NAN_RATIO_PER_FEATURE,
+    _SILVER_SCHEMA_VERSION,
     ApplicationDependencies,
     _LazyFinbertSentimentModel,
+    _LazyLightgbmQuantileTrainer,
     _LazyOptunaSearch,
     _LazyPfTftTrainer,
     _LazyStatsforecastBaselineForecaster,
@@ -26,6 +28,12 @@ from financial_forecasting.composition_root import (
 )
 from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
     ParquetAnalyticsRepository,
+)
+from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_cohort_run_index import (  # noqa: E501
+    ParquetCohortRunIndex,
+)
+from financial_forecasting.features.analytics_store.adapters.out.parquet.schemas.silver_registry import (  # noqa: E501
+    SILVER_REGISTRY,
 )
 from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
     PersistPredictions,
@@ -48,6 +56,34 @@ from financial_forecasting.features.feature_engineering.application.use_cases.bu
 from financial_forecasting.features.feature_engineering.domain.services.dataset_quality_gate import (  # noqa: E501
     DatasetQualityGateConfig,
 )
+from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
+    feature_set_hash,
+)
+from financial_forecasting.features.market_data.adapters.out.parquet.parquet_fundamental_fetcher import (  # noqa: E501
+    ParquetFundamentalFetcher,
+)
+from financial_forecasting.features.market_data.adapters.out.parquet.parquet_raw_candle_fetcher import (  # noqa: E501
+    ParquetRawCandleFetcher,
+)
+from financial_forecasting.features.market_data.adapters.out.parquet.parquet_raw_news_fetcher import (  # noqa: E501
+    ParquetRawNewsFetcher,
+)
+from financial_forecasting.features.market_data.application.use_cases.ingest_candles import (
+    IngestCandles,
+)
+from financial_forecasting.features.market_data.application.use_cases.ingest_fundamentals import (
+    IngestFundamentals,
+)
+from financial_forecasting.features.market_data.application.use_cases.ingest_news import (
+    IngestNews,
+)
+from financial_forecasting.features.modeling.adapters.out.filesystem.json_cohort_progress_ledger import (  # noqa: E501
+    JsonCohortProgressLedger,
+)
+from financial_forecasting.features.modeling.adapters.out.runtime.git_runtime_environment_probe import (  # noqa: E501
+    GitRuntimeEnvironmentProbe,
+)
+from financial_forecasting.features.modeling.application.pipeline_version import PIPELINE_VERSION
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
     HyperparameterSearch,
 )
@@ -57,8 +93,17 @@ from financial_forecasting.features.modeling.application.ports.out.tft_trainer i
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
 )
+from financial_forecasting.features.modeling.application.use_cases.run_confirmatory_cohort import (
+    RunConfirmatoryCohort,
+)
+from financial_forecasting.features.modeling.application.use_cases.run_gbm_sweep import (
+    RunGbmSweep,
+)
 from financial_forecasting.features.modeling.application.use_cases.run_tft_sweep import (
     RunTftSweep,
+)
+from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
+    modeling_columns,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     TrainTft,
@@ -75,6 +120,9 @@ from financial_forecasting.shared.adapters.out.parquet.parquet_medallion_store i
 )
 from financial_forecasting.shared.infrastructure.clock.system_clock import SystemClock
 from financial_forecasting.shared.infrastructure.config.settings import Settings
+from tests.fakes.features.modeling.in_memory_runtime_environment_probe import (
+    InMemoryRuntimeEnvironmentProbe,
+)
 
 
 @pytest.mark.unit
@@ -310,3 +358,156 @@ def test_lazy_tft_proxies_expose_the_port_surface_without_building(tmp_path: Pat
     # Uma chamada real construiria o delegate — não é o que se testa aqui; o
     # e2e de `tests/integration/features/modeling/test_train_tft.py` faz isso.
     assert tmp_path.exists()
+
+
+@pytest.mark.unit
+def test_wire_dependencies_wires_local_ingestion_under_data_root(tmp_path: Path) -> None:
+    """Stage 5.5 Task 25: os brutos são lidos sob `data_root`, e o bronze vai ao store."""
+    settings = Settings(_env_file=None, data_root=tmp_path)
+
+    deps = wire_dependencies(settings=settings)
+
+    assert isinstance(deps.ingest_candles, IngestCandles)
+    assert isinstance(deps.ingest_news, IngestNews)
+    assert isinstance(deps.ingest_fundamentals, IngestFundamentals)
+    for use_case in (deps.ingest_candles, deps.ingest_news, deps.ingest_fundamentals):
+        assert use_case._store is deps.store
+    candles = deps.ingest_candles._fetcher
+    news = deps.ingest_news._fetcher
+    fundamentals = deps.ingest_fundamentals._fetcher
+    assert isinstance(candles, ParquetRawCandleFetcher)
+    assert isinstance(news, ParquetRawNewsFetcher)
+    assert isinstance(fundamentals, ParquetFundamentalFetcher)
+    assert candles._parquet_path("AAPL") == (
+        tmp_path / "raw" / "market" / "candles" / "AAPL" / "candles_AAPL_1d.parquet"
+    )
+    assert news._parquet_path("AAPL") == tmp_path / "raw" / "news" / "AAPL" / "news_AAPL.parquet"
+    assert fundamentals._parquet_path("AAPL") == (
+        tmp_path / "processed" / "fundamentals" / "AAPL" / "fundamentals_AAPL.parquet"
+    )
+
+
+@pytest.mark.unit
+def test_wire_dependencies_wires_run_gbm_sweep_without_persistence(tmp_path: Path) -> None:
+    """Stage 5.5 Task 26 / I14: o sweep do GBM, como o do TFT, não tem por onde gravar."""
+    settings = Settings(_env_file=None, data_root=tmp_path, artifacts_root=tmp_path / "art")
+
+    deps = wire_dependencies(settings=settings)
+
+    sweep = deps.run_gbm_sweep
+    assert isinstance(sweep, RunGbmSweep)
+    assert sweep._store is deps.store
+    assert sweep._hasher is deps.hasher
+    assert sweep._tracker is deps.tracker
+    assert isinstance(sweep._splitter, WalkForwardSplitter)
+    assert isinstance(sweep._trainer, _LazyLightgbmQuantileTrainer)
+    assert isinstance(sweep._search, _LazyOptunaSearch)
+    assert sweep._search is not deps.run_tft_sweep._search  # um estudo por sweep
+    assert not hasattr(sweep, "_persist_predictions")
+    assert not hasattr(sweep, "_persist_run_record")
+    assert not hasattr(sweep, "_analytics_repository")
+
+
+@pytest.mark.unit
+def test_wire_dependencies_wires_cohort_ledger_and_run_index(tmp_path: Path) -> None:
+    settings = Settings(_env_file=None, data_root=tmp_path / "d", artifacts_root=tmp_path / "a")
+
+    deps = wire_dependencies(settings=settings)
+
+    ledger = deps.cohort_ledger
+    assert isinstance(ledger, JsonCohortProgressLedger)
+    assert ledger._cohorts_dir == tmp_path / "a" / "cohorts"
+    assert ledger._lock_path == tmp_path / "d" / ".writer.lock"
+    index = deps.cohort_run_index
+    assert isinstance(index, ParquetCohortRunIndex)
+    assert index._repository is deps.analytics_repository
+
+
+@pytest.mark.unit
+def test_confirmatory_cohort_is_built_per_cohort_path_with_the_git_probe(tmp_path: Path) -> None:
+    """Sem fábrica injetada, o probe é o do git sobre `settings.repo_root`."""
+    repo = tmp_path / "repo"
+    settings = Settings(
+        _env_file=None, data_root=tmp_path / "d", artifacts_root=tmp_path / "a", repo_root=repo
+    )
+    deps = wire_dependencies(settings=settings)
+
+    cohort = deps.confirmatory_cohort_for(repo / "config" / "cohorts" / "x.toml", "cpu")
+
+    assert isinstance(cohort, RunConfirmatoryCohort)
+    probe = cohort._probe
+    assert isinstance(probe, GitRuntimeEnvironmentProbe)
+    assert probe._repo_root == repo
+    assert cohort._store is deps.store
+    assert cohort._hasher is deps.hasher
+    assert cohort._ledger is deps.cohort_ledger
+    assert cohort._run_index is deps.cohort_run_index
+    assert cohort._run_baselines is deps.run_baselines
+    assert cohort._train_gbm is deps.train_gbm_quantile
+    assert cohort._train_tft is deps.train_tft
+    assert cohort._modeling_columns == modeling_columns()
+    assert cohort._observed_feature_set_hash == feature_set_hash()
+    assert cohort._pipeline_version == PIPELINE_VERSION
+    assert cohort._schema_version == _SILVER_SCHEMA_VERSION
+    assert cohort._supported_device == "cpu"
+
+
+@pytest.mark.unit
+def test_injected_probe_factory_and_sentiment_model_replace_the_real_ones(tmp_path: Path) -> None:
+    """Os dois pontos de injeção do e2e: nada de torch nem do git do processo."""
+    calls: list[tuple[Path, str]] = []
+    fake_probe = InMemoryRuntimeEnvironmentProbe()
+
+    def factory(cohort_path: Path, device: str) -> InMemoryRuntimeEnvironmentProbe:
+        calls.append((cohort_path, device))
+        return fake_probe
+
+    sentiment = _LazyFinbertSentimentModel()
+    settings = Settings(_env_file=None, data_root=tmp_path, artifacts_root=tmp_path / "a")
+
+    deps = wire_dependencies(
+        settings=settings, sentiment_model=sentiment, runtime_probe_factory=factory
+    )
+    cohort = deps.confirmatory_cohort_for(tmp_path / "c.toml", "cpu")
+
+    assert deps.sentiment_model is sentiment
+    assert deps.runtime_probe_for is factory
+    assert cohort._probe is fake_probe
+    assert calls == [(tmp_path / "c.toml", "cpu")]
+
+
+@pytest.mark.unit
+def test_silver_schema_version_matches_every_silver_table() -> None:
+    """A versão gravada em `dim_run` não pode divergir dos schemas do adapter."""
+    versions = {table.schema_version for table in SILVER_REGISTRY.values()}
+
+    assert versions == {_SILVER_SCHEMA_VERSION}
+
+
+@pytest.mark.unit
+def test_modeling_columns_are_exposed_once_for_run_and_freeze(tmp_path: Path) -> None:
+    """G5 (Checkpoint C 24-31): uma fonte só para as duas impressões digitais de I4."""
+    settings = Settings(_env_file=None, data_root=tmp_path, repo_root=tmp_path)
+    deps = wire_dependencies(settings=settings)
+
+    cohort = deps.confirmatory_cohort_for(tmp_path / "c.toml", "cpu")
+
+    assert deps.modeling_columns == modeling_columns()
+    assert cohort._modeling_columns == deps.modeling_columns
+
+
+@pytest.mark.unit
+def test_git_probe_receives_the_cohort_path_resolved_against_the_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """G2 (Checkpoint C 24-31): o probe fotografa o MESMO arquivo que o CLI leu."""
+    (tmp_path / "sub").mkdir()
+    monkeypatch.chdir(tmp_path / "sub")  # cwd != repo_root: sem o resolve, perderia "sub/"
+    settings = Settings(_env_file=None, data_root=tmp_path / "d", repo_root=tmp_path)
+    deps = wire_dependencies(settings=settings)
+
+    probe = deps.runtime_probe_for(Path("config") / "cohorts" / "x.toml", "cpu")
+
+    assert isinstance(probe, GitRuntimeEnvironmentProbe)
+    assert probe._repo_root == tmp_path.resolve()
+    assert probe._cohort_path == "sub/config/cohorts/x.toml"

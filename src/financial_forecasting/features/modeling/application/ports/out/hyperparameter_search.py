@@ -28,27 +28,26 @@ Contrato semântico:
   case — declarado aqui para os dois lados não suporem o contrário.
 """
 
+import typing
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, is_dataclass
 from typing import Protocol
-
-from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
-    TftTrainingParams,
-)
 
 _INT_KIND = "int"
 _FLOAT_KIND = "float"
 _VALID_KINDS = (_INT_KIND, _FLOAT_KIND)
-_TUNABLE_FIELDS = frozenset(field.name for field in fields(TftTrainingParams))
+_KIND_BY_TYPE: dict[object, str] = {int: _INT_KIND, float: _FLOAT_KIND}
+_SEED_FIELD = "seed"
+_OBJECTIVE_SIGNIFICANT_DIGITS = 12
 
 
 @dataclass(frozen=True)
 class SearchDimension:
-    """Uma dimensão do espaço de busca (C11 validado na construção).
+    """Uma dimensão do espaço de busca (forma validada na construção — C11).
 
-    `name` tem de ser um campo de `TftTrainingParams`: sem essa checagem, um
-    nome errado só apareceria como `TypeError` opaco na hora de montar os params
-    do trial, longe da causa.
+    A dimensão valida só a FORMA (kind, faixa, escala log). O nome é validado
+    contra o tipo de params de quem usa o espaço — `validate_dimension_names` —,
+    porque o mesmo port serve ao sweep do TFT e ao do GBM (Stage 5.5, D13).
     """
 
     name: str
@@ -69,12 +68,55 @@ class SearchDimension:
             # biblioteca; barrar aqui dá erro no lugar certo.
             msg = f"low deve ser >= 1 para kind='int' com log=True; recebido {self.low} (C11)"
             raise ValueError(msg)
-        if self.name not in _TUNABLE_FIELDS:
+
+
+def validate_dimension_names(space: Sequence[SearchDimension], params_type: type) -> None:
+    """C11 — todo nome do espaço tem de ser campo do dataclass de params do sweep.
+
+    Sem essa checagem, um nome errado só apareceria como `TypeError` opaco na hora
+    de montar os params do trial, longe da causa. Chamado pelo use case de cada
+    sweep, antes de qualquer I/O, com o seu tipo (`TftTrainingParams`,
+    `GbmTrainingParams`).
+    """
+    if not is_dataclass(params_type):
+        raise TypeError(f"params_type must be a dataclass; got {params_type!r}")
+    # `seed` nunca é hiperparâmetro de busca: no GBM não age (D4) e no TFT
+    # buscar seed é escolher sorte — o cohort roda cada seed à parte.
+    tunable = frozenset(field.name for field in fields(params_type)) - {_SEED_FIELD}
+    names = [dimension.name for dimension in space]
+    if len(set(names)) != len(names):
+        raise ValueError(f"search space has repeated dimension names: {names} (C11)")
+    field_types = typing.get_type_hints(params_type)
+    for dimension in space:
+        if dimension.name not in tunable:
             msg = (
-                f"name {self.name!r} não é campo de TftTrainingParams; "
-                f"campos válidos: {sorted(_TUNABLE_FIELDS)} (C11)"
+                f"name {dimension.name!r} não é campo de {params_type.__name__}; "
+                f"campos válidos: {sorted(tunable)} (C11)"
             )
             raise ValueError(msg)
+        # O `kind` tem de casar com o tipo do campo: `kind="float"` num campo int
+        # sortearia 7.53 para `num_leaves`, que o dataclass aceitaria sem reclamar.
+        expected_kind = _KIND_BY_TYPE.get(field_types[dimension.name])
+        if expected_kind is not None and dimension.kind != expected_kind:
+            msg = (
+                f"dimension {dimension.name!r} has kind {dimension.kind!r} but "
+                f"{params_type.__name__}.{dimension.name} is {expected_kind} (C11)"
+            )
+            raise ValueError(msg)
+
+
+def stable_objective(value: float) -> float:
+    """Objetivo arredondado a 12 dígitos significativos antes do `tell`.
+
+    A perda de early_stop do LightGBM varia no último ulp entre execuções (soma
+    paralela da métrica), mesmo com a mesma seed; sem o arredondamento, um empate
+    entre trials viraria sorteio e uma reexecução poderia congelar outro melhor
+    trial. O arredondamento REDUZ esse risco: quase-empates viram empates exatos,
+    desempatados pelo menor número de trial; ruído que cruza a fronteira do 12º
+    dígito ainda pode mudar o valor, o que só troca o melhor trial se outro estiver
+    a ~1e-12 relativo (Stage 5.5, Checkpoint C).
+    """
+    return float(f"{value:.{_OBJECTIVE_SIGNIFICANT_DIGITS}g}")
 
 
 @dataclass(frozen=True)

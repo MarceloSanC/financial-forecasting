@@ -46,7 +46,6 @@ ergue no serviço 5.1).
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime
 from itertools import pairwise
 from typing import TYPE_CHECKING
 
@@ -65,8 +64,14 @@ from financial_forecasting.features.feature_engineering.domain.services.feature_
 from financial_forecasting.features.modeling.application.pipeline_version import (
     PIPELINE_VERSION,
 )
+from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
+    modeling_columns,
+)
 from financial_forecasting.features.modeling.domain.services.operationally_latest_dedup import (
     deduplicate_operationally_latest,
+)
+from financial_forecasting.features.modeling.domain.services.training_grid import (
+    build_training_grid,
 )
 from financial_forecasting.shared.domain.value_objects.config_signature import (
     ConfigSignature,
@@ -101,7 +106,6 @@ if TYPE_CHECKING:
     from financial_forecasting.shared.application.ports.out.hasher import Hasher
     from financial_forecasting.shared.application.ports.out.medallion_store import (
         MedallionStore,
-        Row,
     )
 
 _DATASET_LAYER = "processed"
@@ -112,6 +116,7 @@ _SPLIT = "test"
 # quantile_level) é a chave de alinhamento; o último campo (decision_idx) é o rank.
 _StructuralEntry = tuple[str, int, int, float, int]
 _ALIGNMENT_KEY_WIDTH = 4
+_TARGET_COLUMN = "target_return"
 
 
 @dataclass(frozen=True)
@@ -236,7 +241,13 @@ class RunBaselines:
     def _load_dataset(
         self, scope: ScopeSpec
     ) -> tuple[tuple[str, ...], tuple[float, ...], tuple[date, ...]]:
-        """Lê o dataset TFT e extrai (timestamps ISO, target_return, sessões)."""
+        """Lê o dataset TFT pelo grid único: (timestamps ISO, target_return, sessões).
+
+        Checa o vazio com o código deste use case (C7) e delega ao
+        `build_training_grid` com as colunas de modelagem de todos os modelos:
+        as baselines começam na mesma linha do GBM e do TFT (D11 da Stage 5.5;
+        mudança de comportamento declarada no concept §4).
+        """
         rows = self._store.read(
             layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": scope.asset_id}
         )
@@ -245,14 +256,8 @@ class RunBaselines:
                 f"dataset ({_DATASET_LAYER!r}, {_DATASET_TABLE!r}) is empty for "
                 f"asset {scope.asset_id!r} — nothing to forecast (C7)"
             )
-        parsed = sorted(
-            ((_timestamp_of(row), _target_return_of(row)) for row in rows),
-            key=lambda pair: pair[0],
-        )
-        dataset_timestamps = tuple(ts.isoformat() for ts, _ in parsed)
-        returns = tuple(value for _, value in parsed)
-        sessions = tuple(ts.date() for ts, _ in parsed)
-        return dataset_timestamps, returns, sessions
+        grid = build_training_grid(rows, columns=modeling_columns())
+        return grid.timestamps_iso(), grid.column(_TARGET_COLUMN), grid.sessions()
 
     # -- fluxo por spec ---------------------------------------------------------
 
@@ -439,22 +444,3 @@ def _validate_command(command: RunBaselinesCommand) -> None:
     model_versions = [spec.model_version for spec in command.specs]
     if len(set(model_versions)) != len(model_versions):
         raise ValueError(f"specs must not share model_version; got {model_versions} (C2)")
-
-
-# -- parsing defensivo das rows do dataset ----------------------------------------
-
-
-def _timestamp_of(row: Row) -> datetime:
-    """Extrai o `timestamp` tz-aware da row (premissa do par read-only da 3.5)."""
-    value = row.get("timestamp")
-    if not isinstance(value, datetime) or value.tzinfo is None:
-        raise ValueError(f"dataset row 'timestamp' must be a tz-aware datetime; got {value!r}")
-    return value
-
-
-def _target_return_of(row: Row) -> float:
-    """Extrai o `target_return` numérico da row (r_t das fórmulas do doc §3)."""
-    value = row.get("target_return")
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValueError(f"dataset row 'target_return' must be numeric; got {value!r}")
-    return float(value)

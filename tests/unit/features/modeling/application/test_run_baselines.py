@@ -40,6 +40,9 @@ from financial_forecasting.features.modeling.application.use_cases.run_baselines
     RunBaselinesCommand,
     _assert_zero_removal,
 )
+from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
+    expected_feature_names,
+)
 from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
     WalkForwardSplitter,
 )
@@ -153,6 +156,8 @@ def _dataset_rows(sessions: Sequence[date], returns: Sequence[float]) -> list[di
             "timestamp": datetime(day.year, day.month, day.day, tzinfo=UTC),
             "asset_id": _SCOPE.asset_id,
             "target_return": value,
+            # Colunas de modelagem: o grid único as exige também das baselines (5.5 D11).
+            **{name: 1.0 for name in expected_feature_names()},
         }
         for day, value in zip(sessions, returns, strict=True)
     ]

@@ -28,14 +28,32 @@ lazy** (`_LazyStatsforecastBaselineForecaster` — statsforecast só carrega no
 primeiro `forecast`, precedente FinBERT), `PersistPredictions` +
 `PersistRunRecord` (issue #68) sobre o `ParquetAnalyticsRepository` (silver) e o
 `Hasher` 1.4.
+
+Stage 5.5 (Task 25): a ingestão LOCAL do BC `market_data` — `IngestCandles`,
+`IngestNews` e `IngestFundamentals` sobre os fetchers Parquet que leem os brutos
+sob `data_root` (`raw/market/candles`, `raw/news`, `processed/fundamentals`) —
+é wirada para o runner do cohort materializar o bronze a partir dos brutos.
+
+Stage 5.5 (Task 26): `RunGbmSweep` (sem persistência, como o sweep do TFT), o
+ledger JSON e o índice de runs do cohort, e o `RunConfirmatoryCohort`. O probe
+do ambiente depende do CAMINHO do arquivo do cohort, que só existe depois de o
+CLI ler os argumentos: por isso o contêiner expõe fábricas —
+`runtime_probe_for(cohort_path, device)` e `confirmatory_cohort_for(cohort_path,
+device)` — em vez de instâncias. `wire_dependencies` aceita, opcionalmente, o
+modelo de sentimento e a fábrica do probe (fakes nos testes e no e2e); sem eles,
+monta os reais — não há condicional de produção.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 
 from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
     ParquetAnalyticsRepository,
+)
+from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_cohort_run_index import (  # noqa: E501
+    ParquetCohortRunIndex,
 )
 from financial_forecasting.features.analytics_store.application.ports.out.analytics_repository import (  # noqa: E501
     AnalyticsRepository,
@@ -76,12 +94,46 @@ from financial_forecasting.features.feature_engineering.application.use_cases.sc
 from financial_forecasting.features.feature_engineering.domain.services.dataset_quality_gate import (  # noqa: E501
     DatasetQualityGateConfig,
 )
+from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
+    feature_set_hash,
+)
+from financial_forecasting.features.market_data.adapters.out.parquet.parquet_fundamental_fetcher import (  # noqa: E501
+    ParquetFundamentalFetcher,
+)
+from financial_forecasting.features.market_data.adapters.out.parquet.parquet_raw_candle_fetcher import (  # noqa: E501
+    ParquetRawCandleFetcher,
+)
+from financial_forecasting.features.market_data.adapters.out.parquet.parquet_raw_news_fetcher import (  # noqa: E501
+    ParquetRawNewsFetcher,
+)
+from financial_forecasting.features.market_data.application.use_cases.ingest_candles import (
+    IngestCandles,
+)
+from financial_forecasting.features.market_data.application.use_cases.ingest_fundamentals import (
+    IngestFundamentals,
+)
+from financial_forecasting.features.market_data.application.use_cases.ingest_news import (
+    IngestNews,
+)
 from financial_forecasting.features.market_data.domain.entities.news_article import (
     NewsArticle,
 )
+from financial_forecasting.features.modeling.adapters.out.filesystem.json_cohort_progress_ledger import (  # noqa: E501
+    JsonCohortProgressLedger,
+)
+from financial_forecasting.features.modeling.adapters.out.runtime.git_runtime_environment_probe import (  # noqa: E501
+    GitRuntimeEnvironmentProbe,
+)
+from financial_forecasting.features.modeling.application.pipeline_version import PIPELINE_VERSION
 from financial_forecasting.features.modeling.application.ports.out.baseline_forecaster import (
     BaselineForecaster,
     GridByHorizon,
+)
+from financial_forecasting.features.modeling.application.ports.out.cohort_progress_ledger import (
+    CohortProgressLedger,
+)
+from financial_forecasting.features.modeling.application.ports.out.cohort_run_index import (
+    CohortRunIndex,
 )
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
     HyperparameterSearch,
@@ -93,6 +145,9 @@ from financial_forecasting.features.modeling.application.ports.out.quantile_mode
     QuantileModelTrainer,
     QuantileTrainingResult,
 )
+from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
+    RuntimeEnvironmentProbe,
+)
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
     TftTrainer,
     TftTrainingParams,
@@ -101,11 +156,18 @@ from financial_forecasting.features.modeling.application.ports.out.tft_trainer i
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
 )
+from financial_forecasting.features.modeling.application.use_cases.run_confirmatory_cohort import (
+    RunConfirmatoryCohort,
+)
+from financial_forecasting.features.modeling.application.use_cases.run_gbm_sweep import (
+    RunGbmSweep,
+)
 from financial_forecasting.features.modeling.application.use_cases.run_tft_sweep import (
     RunTftSweep,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
     TrainGbmQuantile,
+    modeling_columns,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     TrainTft,
@@ -170,6 +232,19 @@ _DATASET_MAX_NAN_RATIO_PER_FEATURE = 0.02
 # risco na tabela do technical 5.2 §5 — não muda o contrato do use case).
 _CALENDAR_WINDOW_START = date(1990, 1, 1)
 _CALENDAR_WINDOW_END = date(2035, 12, 31)
+
+# Versão dos schemas silver gravada em `dim_run` pelos runs do cohort confirmatório
+# (Stage 5.5, Task 26). Espelha a versão das tabelas do adapter Parquet
+# (`schemas/*_schema.py`); o teste do composition root prende a igualdade, então
+# uma migração de schema sem atualizar esta constante quebra o `make check`.
+_SILVER_SCHEMA_VERSION = 1
+
+# Device em que os trainers rodam: o adapter do TFT fixa `accelerator="cpu"` e o
+# LightGBM roda em CPU. O cohort que declarar outro device é recusado (I4).
+_TRAINERS_DEVICE = "cpu"
+
+# Fábrica do probe de ambiente: (caminho do arquivo do cohort, device) → probe.
+RuntimeProbeFactory = Callable[[Path, str], RuntimeEnvironmentProbe]
 
 
 class _LazyFinbertSentimentModel:
@@ -410,6 +485,10 @@ class ApplicationDependencies:
     hasher: Hasher
     tracker: ExperimentTracker
     store: MedallionStore
+    # BC market_data (Stage 5.5, Task 25): ingestão local dos brutos para o bronze.
+    ingest_candles: IngestCandles
+    ingest_news: IngestNews
+    ingest_fundamentals: IngestFundamentals
     # BC feature_engineering (Stage 3.5, I8): ports tipando os 3 adapters + o use case.
     indicator_calculator: IndicatorCalculator
     sentiment_model: SentimentModel
@@ -428,9 +507,25 @@ class ApplicationDependencies:
     # isolamento exploratório/confirmatório é estrutural (ADR 5.4.0005).
     train_tft: TrainTft
     run_tft_sweep: RunTftSweep
+    # BC modeling (Stage 5.5, Task 26): sweep do GBM (sem persistência, como o do
+    # TFT), ledger e índice de runs do cohort, e as fábricas que dependem do
+    # caminho do arquivo do cohort (conhecido só depois do parse dos argumentos).
+    run_gbm_sweep: RunGbmSweep
+    cohort_ledger: CohortProgressLedger
+    cohort_run_index: CohortRunIndex
+    runtime_probe_for: RuntimeProbeFactory
+    confirmatory_cohort_for: Callable[[Path, str], RunConfirmatoryCohort]
+    # As colunas de modelagem que o cohort usa em I4 — o `freeze` do CLI usa as
+    # MESMAS, deste campo (uma fonte só para as duas impressões digitais).
+    modeling_columns: tuple[str, ...]
 
 
-def wire_dependencies(settings: Settings | None = None) -> ApplicationDependencies:
+def wire_dependencies(
+    settings: Settings | None = None,
+    *,
+    sentiment_model: SentimentModel | None = None,
+    runtime_probe_factory: RuntimeProbeFactory | None = None,
+) -> ApplicationDependencies:
     """Monta o grafo de dependências completo e retorna o contêiner pronto.
 
     Chamado uma única vez na inicialização da aplicação (dentro de `create_app()`).
@@ -444,15 +539,36 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
     Os campos de `ApplicationDependencies` são tipados pelos PORTS, não pelos
     concretos (I9). `BuildDataset` é montado com os adapters REAIS (não fakes), o
     que resolve os findings F2 de wiring deferido (I8/A7).
+
+    `sentiment_model` e `runtime_probe_factory` (Stage 5.5) são os dois pontos de
+    injeção do runner do cohort: omitidos, entram o FinBERT lazy e o
+    `GitRuntimeEnvironmentProbe` sobre `settings.repo_root`; o e2e injeta fakes
+    (sem torch e sem depender do git do processo).
     """
     cfg = settings or get_settings()
     hasher = CanonicalJsonHasher()
     tracker = MlflowTracker(tracking_uri=cfg.mlflow_tracking_uri)
     store = ParquetMedallionStore(data_root=cfg.data_root)
 
+    # BC market_data (Stage 5.5, Task 25): ingestão LOCAL — os fetchers Parquet leem
+    # os brutos já baixados sob `data_root` (nenhuma chamada de rede no runner) e os
+    # use cases gravam o bronze no MESMO store que o `BuildDataset` lê.
+    ingest_candles = IngestCandles(
+        fetcher=ParquetRawCandleFetcher(raw_root=cfg.data_root / "raw" / "market" / "candles"),
+        store=store,
+    )
+    ingest_news = IngestNews(
+        fetcher=ParquetRawNewsFetcher(raw_root=cfg.data_root / "raw" / "news"),
+        store=store,
+    )
+    ingest_fundamentals = IngestFundamentals(
+        fetcher=ParquetFundamentalFetcher(root=cfg.data_root / "processed" / "fundamentals"),
+        store=store,
+    )
+
     # BC feature_engineering — 3 adapters + assembler + use case (Stage 3.5, I8).
     indicator_calculator = PandasTaIndicatorCalculator()
-    sentiment_model = _LazyFinbertSentimentModel()
+    sentiment_model = sentiment_model or _LazyFinbertSentimentModel()
     asof_join = AsofJoinDuckdbAdapter()
     dataset_assembler = DatasetAssembler(dataset_root=cfg.data_root / "processed" / "dataset_tft")
     calendar_provider = ExchangeCalendarsProvider()
@@ -541,10 +657,61 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
         artifacts_root=cfg.artifacts_root,
     )
 
+    # BC modeling (Stage 5.5, Task 26): o sweep do GBM espelha o do TFT — mesmo
+    # splitter e store, trainer LightGBM lazy, busca própria, NENHUMA porta de
+    # persistência (I14). O cohort orquestra os três use cases de treino acima,
+    # com o ledger no `artifacts_root` (lock no `data_root`) e o índice de runs
+    # sobre o MESMO repositório silver onde eles gravam.
+    run_gbm_sweep = RunGbmSweep(
+        store=store,
+        splitter=splitter,
+        trainer=_LazyLightgbmQuantileTrainer(),
+        search=_LazyOptunaSearch(),
+        tracker=tracker,
+        hasher=hasher,
+    )
+    cohort_ledger = JsonCohortProgressLedger(
+        artifacts_root=cfg.artifacts_root, data_root=cfg.data_root
+    )
+    cohort_run_index = ParquetCohortRunIndex(repository=analytics_repository)
+    repo_root = cfg.repo_root
+
+    def git_probe(cohort_path: Path, device: str) -> RuntimeEnvironmentProbe:
+        # Resolvido contra o diretório corrente — o MESMO arquivo que o CLI leu —,
+        # nunca reinterpretado em relação ao `repo_root`.
+        return GitRuntimeEnvironmentProbe(
+            repo_root=repo_root, cohort_file=cohort_path.resolve(), device=device
+        )
+
+    runtime_probe_for = runtime_probe_factory or git_probe
+    observed_feature_set_hash = feature_set_hash()
+    columns = modeling_columns()
+
+    def confirmatory_cohort_for(cohort_path: Path, device: str) -> RunConfirmatoryCohort:
+        return RunConfirmatoryCohort(
+            store=store,
+            hasher=hasher,
+            clock=SystemClock(),
+            ledger=cohort_ledger,
+            run_index=cohort_run_index,
+            probe=runtime_probe_for(cohort_path, device),
+            run_baselines=run_baselines,
+            train_gbm=train_gbm_quantile,
+            train_tft=train_tft,
+            modeling_columns=columns,
+            observed_feature_set_hash=observed_feature_set_hash,
+            pipeline_version=PIPELINE_VERSION,
+            schema_version=_SILVER_SCHEMA_VERSION,
+            supported_device=_TRAINERS_DEVICE,
+        )
+
     return ApplicationDependencies(
         hasher=hasher,
         tracker=tracker,
         store=store,
+        ingest_candles=ingest_candles,
+        ingest_news=ingest_news,
+        ingest_fundamentals=ingest_fundamentals,
         indicator_calculator=indicator_calculator,
         sentiment_model=sentiment_model,
         asof_join=asof_join,
@@ -556,4 +723,10 @@ def wire_dependencies(settings: Settings | None = None) -> ApplicationDependenci
         train_gbm_quantile=train_gbm_quantile,
         train_tft=train_tft,
         run_tft_sweep=run_tft_sweep,
+        run_gbm_sweep=run_gbm_sweep,
+        cohort_ledger=cohort_ledger,
+        cohort_run_index=cohort_run_index,
+        runtime_probe_for=runtime_probe_for,
+        confirmatory_cohort_for=confirmatory_cohort_for,
+        modeling_columns=columns,
     )

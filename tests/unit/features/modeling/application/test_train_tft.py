@@ -637,16 +637,35 @@ def test_emission_outside_the_requested_range_raises(tmp_path: Path) -> None:
         use_case(_command())
 
 
-def test_none_feature_reaches_the_port_as_nan(tmp_path: Path) -> None:
-    """Política de ausência: `None` no dataset vira NaN na fronteira do port."""
+def test_none_feature_in_prefix_is_trimmed_from_training(tmp_path: Path) -> None:
+    """Política de ausência do grid único: `None` no início sai do treino (D11).
+
+    Substitui "None vira NaN na fronteira do port": o TFT recusa NaN e o grid
+    único corta o prefixo sem valor para todos os modelos (ADR 5.5.0004).
+    """
     use_case, _, trainer, _ = _build(
         tmp_path, store=_seeded_store(_dataset_rows(none_feature_at=0))
     )
 
     use_case(_command())
 
-    value = trainer.calls[0]["rows"][0][0]
-    assert value != value  # NaN != NaN  # noqa: PLR0124
+    first_value = trainer.calls[0]["rows"][0][0]
+    assert first_value == 1.0 + 1 / 100.0  # linha 1 (a 0 foi cortada), feature 0
+
+
+def test_none_feature_in_interior_raises_before_training(tmp_path: Path) -> None:
+    """`None` no meio da série ergue antes de chamar o port (sem imputação)."""
+    from financial_forecasting.features.modeling.domain.exceptions.cohort import (  # noqa: PLC0415
+        InteriorMissingValuesError,
+    )
+
+    use_case, _, trainer, _ = _build(
+        tmp_path, store=_seeded_store(_dataset_rows(none_feature_at=5))
+    )
+
+    with pytest.raises(InteriorMissingValuesError):
+        use_case(_command())
+    assert trainer.calls == []
 
 
 def test_zero_removal_guard_raises_when_dedup_removed_entries() -> None:
