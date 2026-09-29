@@ -16,6 +16,9 @@ from collections.abc import Callable
 
 import pytest
 
+from financial_forecasting.features.evaluation.domain.value_objects._timestamps import (
+    check_strictly_increasing,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
     AlignmentFinding,
     AlignmentKind,
@@ -150,8 +153,8 @@ def test_cohort_run_accepts_deterministic_model() -> None:
         pytest.param(_TS, (0.0,) * 3, "must align", id="length"),
         pytest.param((_TS[0], ""), (0.0, 0.0), r"timestamps\[1\] must be", id="ts-empty"),
         pytest.param((_TS[0], 5), (0.0, 0.0), r"timestamps\[1\] must be", id="ts-not-str"),
-        pytest.param((_TS[1], _TS[0]), (0.0, 0.0), "strictly increasing", id="ts-order"),
-        pytest.param((_TS[0], _TS[0]), (0.0, 0.0), "strictly increasing", id="ts-repeat"),
+        pytest.param((_TS[1], _TS[0]), (0.0, 0.0), "^timestamps must be strictly", id="ts-order"),
+        pytest.param((_TS[0], _TS[0]), (0.0, 0.0), "^timestamps must be strictly", id="ts-repeat"),
         pytest.param(_TS[:2], (0.0, math.nan), r"returns\[1\] must be a finite", id="nan"),
         pytest.param(_TS[:2], (0.0, math.inf), r"returns\[1\] must be a finite", id="inf"),
         pytest.param(_TS[:2], (0.0, True), r"returns\[1\] must be a finite", id="bool"),
@@ -160,6 +163,15 @@ def test_cohort_run_accepts_deterministic_model() -> None:
 def test_realized_invalid_raises(timestamps: object, returns: object, message: str) -> None:
     with pytest.raises(ValueError, match=message):
         RealizedReturns(timestamps=timestamps, returns=returns)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_realized_invalid_order_names_field_default_kept() -> None:
+    """O helper nomeia o campo pedido; o padrão das séries da 6.2/6.3 fica intacto."""
+    with pytest.raises(ValueError, match=r"^target_timestamps must be strictly"):
+        check_strictly_increasing((_TS[1], _TS[0]))
+    with pytest.raises(ValueError, match=r"^timestamps must be strictly"):
+        check_strictly_increasing((_TS[1], _TS[0]), field="timestamps")
 
 
 @pytest.mark.unit

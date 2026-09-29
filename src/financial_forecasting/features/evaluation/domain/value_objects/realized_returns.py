@@ -60,7 +60,7 @@ class RealizedReturns:
         for index, timestamp in enumerate(self.timestamps):
             if not isinstance(timestamp, str) or not timestamp:
                 raise ValueError(f"timestamps[{index}] must be a non-empty str, got {timestamp!r}")
-        check_strictly_increasing(self.timestamps)
+        check_strictly_increasing(self.timestamps, field="timestamps")
         for index, value in enumerate(self.returns):
             if not is_finite_number(value):
                 raise ValueError(f"returns[{index}] must be a finite number, got {value!r}")
