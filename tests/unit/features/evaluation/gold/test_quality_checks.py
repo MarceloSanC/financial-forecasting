@@ -646,3 +646,22 @@ def test_provenance_grid_prefix_detail() -> None:
     for bad in (-1, True, 1.0):
         with pytest.raises(ValueError, match="grid_trimmed_prefix must be an int >= 0"):
             dataclasses.replace(base, grid_trimmed_prefix=bad)
+
+
+@pytest.mark.unit
+def test_preconditions_mixed_reasons_order() -> None:
+    """Dois motivos no mesmo horizonte: um FAIL por motivo, na ordem do enum."""
+    base = _context(_three_model_cohort())
+    pairs = base.paired[1].model_pairs()
+    estimates = (
+        _undefined(pairs[0], UndefinedReason.INVALID_SERIES, "too short"),
+        _undefined(pairs[1], UndefinedReason.CONSTANT_DIFFERENTIAL, "d constant"),
+        BlockEstimate(pair=pairs[2], value=1.5, reason=None, detail=""),
+    )
+    context = dataclasses.replace(base, block_estimates={**base.block_estimates, 1: estimates})
+    failed = [
+        (r.kind, r.occurrences)
+        for r in StatisticalPreconditionsCheck().run(context)
+        if r.horizon == 1
+    ]
+    assert failed == [("constant_differential", 1), ("invalid_series", 1)]
