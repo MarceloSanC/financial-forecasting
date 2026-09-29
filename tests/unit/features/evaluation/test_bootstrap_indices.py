@@ -167,3 +167,17 @@ def test_indices_frozen() -> None:
     indices = _indices()
     with pytest.raises(dataclasses.FrozenInstanceError):
         indices.seed = 8  # type: ignore[misc]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("indices", "message"),
+    [
+        pytest.param(list(_ROWS), "indices must be a tuple", id="outer-list"),
+        pytest.param((_ROWS[0], list(_ROWS[1]), _ROWS[2]), "row 1 must be a tuple", id="row-list"),
+    ],
+)
+def test_indices_mutable_container_rejected(indices: object, message: str) -> None:
+    """Lista validada poderia ser mutada depois (ex.: índice 99 com n_obs = 5)."""
+    with pytest.raises(ValueError, match=message):
+        _indices(indices=indices)

@@ -15,12 +15,14 @@ com as invariantes verificadas **uma vez**, na construção (ADR `0_0_0020`):
   string ISO — regra única em `_timestamps.check_strictly_increasing`);
 - toda coluna com T perdas finitas e ≥ 0.
 
-O VO **valida, nunca monta** (ADR `6_2_0001` item 4): nenhuma interseção, reindexação
-ou dedup — entrada desalinhada é erro. Também **não** checa var(L_i - L_j) > 0: um par
-de comparadores com diferencial constante não bloqueia o DM/Holm do horizonte; é
-pré-condição do MCS (I8; doc §6.5, convenção #16). Que as colunas sejam L_t (pinball
-médio na grade, média entre seeds) é garantia da fábrica `paired_pinball_losses` (I3);
-o construtor aceita quaisquer perdas ≥ 0 (testes, perfis descritivos).
+Todos os contêineres são `tuple` (inclusive cada coluna): uma lista validada ainda
+poderia ser mutada depois da construção. O VO **valida, nunca monta** (ADR `6_2_0001`
+item 4): nenhuma interseção, reindexação ou dedup — entrada desalinhada é erro. Também
+**não** checa var(L_i - L_j) > 0: um par de comparadores com diferencial constante não
+bloqueia o DM/Holm do horizonte; é pré-condição do MCS (I8; doc §6.5, convenção #16).
+Que as colunas sejam L_t (pinball médio na grade, média entre seeds) é garantia da
+fábrica `paired_pinball_losses` (I3); o construtor aceita quaisquer perdas ≥ 0 (testes,
+perfis descritivos).
 """
 
 from __future__ import annotations
@@ -63,6 +65,7 @@ class PairedLossSeries:
 
     def __post_init__(self) -> None:
         """Valida as invariantes na ordem do technical 6.2 Task 03."""
+        self._check_containers()
         self._check_horizon()
         self._check_models()
         self._check_points()
@@ -101,6 +104,17 @@ class PairedLossSeries:
             return self.models.index(model)
         except ValueError:
             raise ValueError(f"unknown model {model!r}; known models: {self.models}") from None
+
+    def _check_containers(self) -> None:
+        # tuple (imutável) em todo contêiner: lista validada ainda poderia ser mutada depois
+        for name in ("models", "target_timestamps", "losses"):
+            if not isinstance(getattr(self, name), tuple):
+                raise ValueError(
+                    f"{name} must be a tuple, got {type(getattr(self, name)).__name__}"
+                )
+        for index, column in enumerate(self.losses):
+            if not isinstance(column, tuple):
+                raise ValueError(f"losses[{index}] must be a tuple, got {type(column).__name__}")
 
     def _check_horizon(self) -> None:
         check_horizon(self.horizon)

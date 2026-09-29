@@ -145,3 +145,27 @@ def test_pls_frozen() -> None:
     series = _series()
     with pytest.raises(dataclasses.FrozenInstanceError):
         series.horizon = 2  # type: ignore[misc]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        pytest.param({"models": ["a", "b", "c"]}, "models must be a tuple", id="models"),
+        pytest.param(
+            {"target_timestamps": list(_TIMESTAMPS)}, "target_timestamps must be", id="timestamps"
+        ),
+        pytest.param(
+            {"losses": [_LOSSES_A, _LOSSES_B, _LOSSES_C]}, "losses must be a tuple", id="losses"
+        ),
+        pytest.param(
+            {"losses": (_LOSSES_A, list(_LOSSES_B), _LOSSES_C)},
+            r"losses\[1\] must be a tuple",
+            id="column",
+        ),
+    ],
+)
+def test_pls_mutable_container_rejected(overrides: dict[str, object], message: str) -> None:
+    """Lista validada poderia ser mutada depois (ex.: perda -5,0): só tuple é aceito."""
+    with pytest.raises(ValueError, match=message):
+        _series(**overrides)

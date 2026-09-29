@@ -116,7 +116,9 @@ class BootstrapIndices:
     indices: tuple[tuple[int, ...], ...]
 
     def __post_init__(self) -> None:
-        """C6: pedido, proveniência e cada linha de índices."""
+        """C6: pedido, proveniência e cada linha de índices (tuple, imutável)."""
+        if not isinstance(self.indices, tuple):
+            raise ValueError(f"indices must be a tuple, got {type(self.indices).__name__}")
         validate_bootstrap_request(
             n_obs=self.n_obs,
             block_size=self.block_size,
@@ -128,6 +130,8 @@ class BootstrapIndices:
             raise ValueError(f"generator must be a non-empty str, got {self.generator!r}")
         n_obs = self.n_obs
         for rep, row in enumerate(self.indices):
+            if not isinstance(row, tuple):
+                raise ValueError(f"row {rep} must be a tuple, got {type(row).__name__}")
             if len(row) != n_obs:
                 raise ValueError(f"row {rep}: {len(row)} indices for n_obs={n_obs}")
             for position in row:
