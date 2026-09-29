@@ -1971,4 +1971,16 @@ domínio, varrido pelo gate de pureza); o `gold/conftest.py` só a reexporta. Os
 unitários do gold e o `_gold_inputs.py` importam o módulo neutro. Sem mudança de
 comportamento.
 
+### 2026-09-29 — [decision] Checkpoint C bloco 3 (M-1/B5): schema literal dos cinco builders — Claude (Opus 5.5)
+**Contexto:** a suíte dos builders não fixava chave nem conjunto de colunas (mutantes de
+renomear/remover coluna e de reordenar `_KEY` sobreviviam).
+**Razão:** token acrescentado à Task 10: `test_gold_builder_contract.py::
+tables_match_schema` (`test_real_tables_match_schema`, um caso por builder real) — a
+chave e o conjunto de colunas são cópia literal do §1 "Tabelas gold", mais `asset`/
+`parent_sweep_id` em todas e `preregistration_ref` nas quatro confirmatórias. O
+`calibration_rows_match_reports` passou a conferir também, na linha de intervalo sem
+lacunas: `violation_rate` (≠ `degeneracy_rate`), `tolerance`, `degeneracy_rate`,
+`n_points`, primeiro/último `target_timestamp`, `wilson_applicable`,
+`wilson_estimate`, `serial_dependence_warning`, n00–n11 e LR/p.
+
 <!-- END: post-execution -->

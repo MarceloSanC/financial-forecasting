@@ -321,6 +321,49 @@ def test_calibration_rows_match_reports() -> None:
         band_level=0.95,
     )
     assert (interval["var_level"], interval["var_label"]) == (None, None)
+    # linha "sem lacunas" (includes_degenerate=True) do intervalo: todos os campos
+    [gapless] = [
+        c
+        for c in series.calibration
+        if c.christoffersen.levels == (0.05, 0.95)
+        and c.christoffersen.includes_degenerate
+        and c.christoffersen.dgt_step is None
+    ]
+    g_report, g_stats, g_band = (
+        gapless.christoffersen,
+        gapless.christoffersen.statistics,
+        gapless.wilson[0],
+    )
+    assert (
+        interval["n00"],
+        interval["n01"],
+        interval["n10"],
+        interval["n11"],
+    ) == g_stats.transitions
+    assert (interval["lr_uc"], interval["p_uc"], interval["lr_ind"], interval["p_ind"]) == (
+        g_stats.lr_uc,
+        g_report.p_uc,
+        g_stats.lr_ind,
+        g_report.p_ind,
+    )
+    assert (interval["lr_cc"], interval["p_cc"]) == (g_stats.lr_cc, g_report.p_cc)
+    assert (interval["violation_rate"], interval["tolerance"], interval["degeneracy_rate"]) == (
+        g_report.violation_rate,
+        g_report.tolerance,
+        g_report.degeneracy_rate,
+    )
+    assert interval["violation_rate"] != interval["degeneracy_rate"]
+    assert (
+        interval["n_points"],
+        interval["first_target_timestamp"],
+        interval["last_target_timestamp"],
+    ) == (series.n_points, series.first_target_timestamp, series.last_target_timestamp)
+    assert interval["first_target_timestamp"] != interval["last_target_timestamp"]
+    assert (
+        interval["wilson_applicable"],
+        interval["wilson_estimate"],
+        interval["serial_dependence_warning"],
+    ) == (g_band.applicable, g_band.estimate, g_band.serial_dependence_warning)
     assert all(r["dgt_step"] is None for r in table.rows if r["horizon"] == 1)
     expected = sum(
         len(c.wilson) for r in inputs.horizon_reports for s in r.series for c in s.calibration
@@ -414,3 +457,129 @@ def test_row_keys_unique(builder: GoldBuilder) -> None:
     table = builder.build(completed_inputs())
     keys = [tuple(row[column] for column in table.key) for row in table.rows]
     assert len(keys) == len(set(keys))
+
+
+# Chave e colunas LITERAIS do technical 6.4 §1 "Tabelas gold" (cópia deliberada: a
+# suíte reprova renomear/remover coluna ou reordenar a chave do builder).
+_PARTITION_COLUMNS = {"asset", "parent_sweep_id"}
+_PREREG = {"preregistration_ref"}
+_SCHEMAS: dict[str, tuple[tuple[str, ...], set[str]]] = {
+    "quality_checks": (
+        ("check", "kind", "horizon", "model", "seed"),
+        {"severity", "outcome", "occurrences", "value", "detail"} | _PARTITION_COLUMNS,
+    ),
+    "metrics_by_run": (
+        ("model", "seed", "horizon", "sample", "metric", "level_low", "level_high"),
+        {
+            "value",
+            "label",
+            "n_points",
+            "first_target_timestamp",
+            "last_target_timestamp",
+            "degeneracy_tolerance",
+        }
+        | _PARTITION_COLUMNS
+        | _PREREG,
+    ),
+    "calibration_table": (
+        (
+            "model",
+            "seed",
+            "horizon",
+            "sample",
+            "kind",
+            "level_low",
+            "level_high",
+            "includes_degenerate",
+            "dgt_offset",
+            "dgt_step",
+            "band_level",
+        ),
+        {
+            "n_points",
+            "first_target_timestamp",
+            "last_target_timestamp",
+            "violation_rate",
+            "tolerance",
+            "degeneracy_rate",
+            "min_violations",
+            "n_observed",
+            "n_violations",
+            "n00",
+            "n01",
+            "n10",
+            "n11",
+            "kupiec_pof",
+            "kupiec_pof_p_value",
+            "lr_uc",
+            "p_uc",
+            "lr_ind",
+            "p_ind",
+            "lr_cc",
+            "p_cc",
+            "independence_status",
+            "independence_descriptive",
+            "wilson_applicable",
+            "wilson_estimate",
+            "wilson_lower",
+            "wilson_upper",
+            "wilson_contains_nominal",
+            "serial_dependence_warning",
+            "var_level",
+            "var_label",
+        }
+        | _PARTITION_COLUMNS
+        | _PREREG,
+    ),
+    "dm_results": (
+        ("horizon", "variance_estimator", "candidate", "comparator"),
+        {
+            "n_points",
+            "common_first_target_timestamp",
+            "common_last_target_timestamp",
+            "mean_differential",
+            "long_run_variance",
+            "statistic",
+            "degrees_of_freedom",
+            "p_value",
+            "horizon_used",
+            "fallback_applied",
+            "adjusted_p_value",
+            "rejected",
+            "alpha",
+        }
+        | _PARTITION_COLUMNS
+        | _PREREG,
+    ),
+    "mcs_results": (
+        ("horizon", "scheme", "model"),
+        {
+            "elimination_rank",
+            "step_p_value",
+            "mcs_p_value",
+            "included",
+            "alpha",
+            "statistic",
+            "reps",
+            "seed",
+            "block_size",
+            "generator",
+            "n_points",
+            "max_block_estimate",
+            "block_estimates",
+        }
+        | _PARTITION_COLUMNS
+        | _PREREG,
+    ),
+}
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("name", list(_SCHEMAS))
+def test_real_tables_match_schema(name: str) -> None:
+    """Chave e conjunto de colunas de cada tabela real = o §1 do technical, literalmente."""
+    builder = BUILDERS[name]()
+    table = builder.build(completed_inputs())
+    key, others = _SCHEMAS[name]
+    assert table.key == key
+    assert set(table.columns) == set(key) | others
