@@ -2,9 +2,10 @@
 
 "Unit = sem I/O" (marcador do `pyproject.toml`) e bibliotecas só via adapter no contrato
 ou diretamente na integração: nenhum `tests/unit/features/evaluation/*.py` importa
-`arch`/`statsmodels`/`scipy`/`numpy` ou um módulo `*.adapters.*`, nem chama `open`,
-`read_text`, `read_bytes` ou `json.load`. Verificado pela AST (não por grep: um nome num
-docstring ou comentário não conta, e `from x import y as z` não escapa).
+`arch`/`statsmodels`/`scipy`/`numpy`/`sklearn`/`scoringrules` ou um módulo
+`*.adapters.*`, nem chama `open`, `read_text`, `read_bytes` ou `json.load`. Verificado
+pela AST (não por grep: um nome num docstring ou comentário não conta, e
+`from x import y as z` não escapa).
 """
 
 from __future__ import annotations
@@ -13,7 +14,8 @@ import ast
 from pathlib import Path
 
 _UNIT_DIR = Path(__file__).resolve().parents[1] / "unit" / "features" / "evaluation"
-_FORBIDDEN_ROOTS = {"arch", "statsmodels", "scipy", "numpy"}
+# Os mesmos módulos do grep de pureza do technical 6.2 §3 (Host).
+_FORBIDDEN_ROOTS = {"arch", "statsmodels", "scipy", "numpy", "sklearn", "scoringrules"}
 _FORBIDDEN_CALLS = {"open", "read_text", "read_bytes", "load"}
 
 
