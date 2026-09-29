@@ -832,7 +832,7 @@ skills_hint: [ddd-tactical-patterns, hex-arch-python]
 
 #### Stage 6.4 — `6.4-gold-builders-and-quality-gates`
 
-**Descrição humana:** Gold builders modulares (sobre silver) com **dependências explícitas** (sem dict mutável), aplicando as disposições; quality checks como registry modular. Gold reconstruível via DuckDB sem re-treino.
+**Descrição humana:** Gold builders modulares (sobre silver) com **dependências explícitas** (sem dict mutável) ordenadas por `graphlib`; montagem única das séries alinhadas (`SeriesAssembly`, achados em vez de exceção) nas duas amostras (série completa e interseção comum); quality checks como registry com severidade declarada (alinhamento e pré-condições estatísticas bloqueiam; degeneração e proveniência do realizado só reportam); MCS em produção com parâmetros explícitos e `preregistration_ref`. Gold reconstruível via DuckDB sem re-treino, publicado por geração inteira (staging, manifesto por último, troca de pasta).
 
 **Descrição para IA:**
 ```yaml
@@ -840,16 +840,33 @@ stage_id: 6.4-gold-builders-and-quality-gates
 bounded_context: evaluation
 camada_alvo: multi (domain + application + adapters/out)
 arquivos_a_criar:
-  - src/financial_forecasting/features/evaluation/application/ports/out/gold_builder.py
+  - src/financial_forecasting/shared/domain/services/path_identifier.py
+  - src/financial_forecasting/features/evaluation/domain/value_objects/{forecast_record.py, cohort_run.py, realized_returns.py, assembled_cohort.py, quality_check_result.py, block_estimate.py}
+  - src/financial_forecasting/features/evaluation/domain/services/{series_assembly.py, horizon_reports.py, gold_build_order.py}
+  - src/financial_forecasting/features/evaluation/domain/services/quality_checks/{__init__.py, registry.py, alignment_check.py, statistical_preconditions_check.py, degeneracy_check.py, realized_provenance_check.py}
+  - src/financial_forecasting/features/evaluation/application/dtos/refresh_gold.py
+  - src/financial_forecasting/features/evaluation/application/ports/out/{gold_store.py, gold_builder.py, silver_table_reader.py}
   - src/financial_forecasting/features/evaluation/application/use_cases/refresh_gold.py
-  - src/financial_forecasting/features/evaluation/adapters/out/duckdb/gold_builders/{metrics_by_run.py, calibration_table.py, dm_results.py, mcs_results.py}
-  - src/financial_forecasting/features/evaluation/domain/services/quality_checks/{registry.py, degeneracy_check.py, alignment_check.py}
-  - tests/unit/features/evaluation/gold/test_builder_explicit_deps.py
+  - src/financial_forecasting/features/evaluation/adapters/out/duckdb/parquet_gold_store.py
+  - src/financial_forecasting/features/evaluation/adapters/out/duckdb/gold_builders/{__init__.py, quality_checks.py, metrics_by_run.py, calibration_table.py, dm_results.py, mcs_results.py}
+  - tests/fakes/features/evaluation/{in_memory_gold_store.py, fake_gold_builder.py, fake_silver_table_reader.py}
+  - tests/contract/features/evaluation/{test_gold_store_contract.py, test_gold_builder_contract.py, test_silver_table_reader_contract.py, _gold_inputs.py}
+  - tests/unit/features/evaluation/gold/{_cohort_factory.py, conftest.py, test_gold_value_objects.py, test_series_assembly.py, test_quality_checks.py, test_horizon_reports.py, test_builder_explicit_deps.py, test_refresh_gold_dtos.py, test_refresh_gold_use_case.py}
+  - tests/unit/shared/domain/test_path_identifier.py
   - tests/integration/features/evaluation/test_refresh_gold.py
-contratos_introduzidos: [GoldBuilder (port-out), RefreshGold (use case), QualityCheckRegistry (domain-service)]
-contratos_consumidos: [todos os serviços de 6.1/6.2/6.3, McsBackend (port-out 6.2: b̂_sb + índices de bootstrap do MCS em produção — ADR 6.2.0004), AnalyticsRepository (4.2)]
-definition_of_done: "Gold builders declaram dependências explícitas (não dict compartilhado); ordem derivada da topologia, não de contrato byte-idêntico; quality checks rodam por registry; gold reconstruível de silver sem re-treino; disposições aplicadas."
-non_goals: [scorecard confirmatório (6.5), plots (8.3)]
+arquivos_a_modificar:
+  - src/financial_forecasting/features/evaluation/domain/value_objects/paired_loss_series.py
+  - src/financial_forecasting/features/evaluation/domain/services/paired_pinball_losses.py
+  - src/financial_forecasting/features/evaluation/domain/value_objects/bootstrap_indices.py
+  - src/financial_forecasting/features/evaluation/domain/services/model_confidence_set.py
+  - src/financial_forecasting/shared/adapters/out/parquet/parquet_medallion_store.py
+  - tests/fakes/shared/in_memory_medallion_store.py
+  - src/financial_forecasting/composition_root.py
+  - .importlinter
+contratos_introduzidos: [SeriesAssembly, HorizonReports, gold_build_order, QualityCheckRegistry (domain-services), ForecastRecord, CohortRun, RealizedReturns, AssembledCohort, QualityCheckResult (value-objects), GoldBuilder, GoldStore, SilverTableReader (ports-out), RefreshGold (use case), validate_path_identifier (shared)]
+contratos_consumidos: [serviços de 6.1/6.2/6.3 (PinballScore, CrpsScore, IntervalScore, CoverageMetrics, DegeneracyGate, paired_pinball_losses, HolmCorrection, ModelConfidenceSet, HitSequences, ChristoffersenTest, WilsonBand), McsBackend (port-out 6.2: b̂_sb + índices de bootstrap do MCS em produção — ADR 6.2.0004), ParquetAnalyticsRepository como real do SilverTableReader (ADR 0.0.0053), MedallionStore (par read-only dataset_tft), DatasetFingerprint/Hasher (1.4), Clock, validate_mcs_reps, validate_bootstrap_parameters, MIN_MODELS]
+definition_of_done: "RefreshGold regenera por inteiro a geração gold de um cohort a partir do silver e do dataset: ordem dos builders por dependências declaradas (grafo inválido falha antes de qualquer leitura), séries montadas uma vez com achados de alinhamento publicados em gold_quality_checks (refresh BLOCKED só com essa tabela), pré-condições estatísticas no domínio antes da fábrica e do backend, cinco tabelas confirmatórias com preregistration_ref, manifesto por último e rerun com as mesmas linhas — provado por contrato [fake, real] dos três ports e e2e via DuckDB."
+non_goals: [scorecard confirmatório (6.5), plots (8.3), execução do cohort real (8.1)]
 complexidade_estimada: M
 gate_mode: strict
 skills_hint: [hex-arch-python, repository-pattern, composition-root]
@@ -858,6 +875,8 @@ skills_hint: [hex-arch-python, repository-pattern, composition-root]
 #### Stage 6.5 — `6.5-preregistration-and-scorecard`
 
 **Descrição humana:** Pré-registro imutável hasheado (hipóteses, métrica primária, regra de decisão, bandas, baselines, gates) + `gold_model_comparison_confirmatory_scorecard` que aplica a regra **mecanicamente**, separando vencedor primário de perfil. `academic_decision_ready` só verdadeiro com todos os gates satisfeitos.
+
+**Leitura do gold (nota da 6.4):** ler `current/MANIFEST.json` primeiro e cada tabela como arquivo único **sem** inferência de partição hive (`partitioning=None` no pyarrow, `hive_partitioning = false` no DuckDB — os segmentos `asset=`/`parent_sweep_id=` do caminho colidem com as colunas de mesmo nome); tabela com zero linhas tem schema vazio (usar o `rows_by_table` do manifesto).
 
 **Descrição para IA:**
 ```yaml

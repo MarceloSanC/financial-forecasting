@@ -2038,4 +2038,31 @@ Task 11.
   horizontes do run, então o `gold_quality_checks` traz um `interior_gap` por horizonte.
   Tabelas lidas por DuckDB com `hive_partitioning = false` (o `[finding]` da Task 08).
 
+### 2026-09-29 — [deviation] Task 13: nota de leitura do gold também no roadmap §Stage 6.5 — Claude (Opus 5.5)
+**Contexto:** a Task 13 edita só a seção `#### Stage 6.4`; o Checkpoint C bloco 3 pediu
+que o `[finding]` da Task 08 (leitura sem partição hive) chegasse também ao consumidor.
+**Razão:** uma linha "Leitura do gold (nota da 6.4)" antes do YAML da §Stage 6.5 —
+ler o `MANIFEST.json` primeiro, cada tabela sem inferência de partição
+(`partitioning=None` / `hive_partitioning = false`) e tabela sem linhas com schema
+vazio. Não altera arquivos, contratos nem DoD da 6.5 (a redação da linha 6.5 segue
+encaminhada abaixo); ADRs 6.4.0001–0008 intocados.
+
+### 2026-09-29 — [finding] Encaminhamentos do concept §7 para a 6.5/8.3 — Claude (Opus 5.5)
+**Contexto:** concept §7 "Encaminhamentos para a 6.5".
+**Encaminhamento:** (a) o roadmap §Stage 6.5 lista em `contratos_consumidos` os
+serviços de 6.1–6.3 como se o scorecard os recomputasse; com a 6.4 o scorecard **lê
+o gold** (tabelas + manifesto) e só recomputa o que é dele (médias entre seeds, gate
+H1, 3 estados sobre contagens médias) — candidata: 6.5, redação da sua linha; (b) a 6.5
+fornece o `preregistration_ref` e os valores de `RefreshParameters` (hoje literais
+declarados nos testes) e decide quais perfis de §Fora do escopo entram (cada um é
+trabalho de séries + builder, não só builder; plots na 8.3).
+
+### 2026-09-29 — [finding] Novo ponto de chamada "int ≥ 0" para a #118 (`window_deficits`) — Claude (Opus 5.5)
+**Contexto:** decisão de detalhe do §1: `window_deficits` é validado no
+`SeriesAssembly._check_call` (int não-`bool` ≥ 0 por modelo) porque não há validador
+público "int ≥ 0" e o ADR 6.4.0006 veda nova escrita no DTO.
+**Encaminhamento:** issue #118 (unificação da regra de inteiros): incluir este ponto
+de chamada ao lado de `validate_min_violations`, `decision_idx` (`ForecastRecord`) e
+das contagens do `GoldManifest`/`QualityCheckResult`.
+
 <!-- END: post-execution -->
