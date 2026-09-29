@@ -23,7 +23,8 @@ DTOs de aplicação **frozen** (concept 6.4 §4 "Application", C2, C3, I16, I17;
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -264,6 +265,18 @@ class GoldTable:
                 "(sorted, no repeated key)"
             )
         object.__setattr__(self, "rows", tuple(frozen))
+
+    @classmethod
+    def sorted_by_key(cls, name: str, key: tuple[str, ...], rows: Iterable[Row]) -> GoldTable:
+        """Ordena `rows` pela chave (a mesma regra da validação) e constrói a tabela.
+
+        Linhas sem alguma coluna da chave ou com tipos misturados seguem sem ordenar:
+        a validação do construtor as recusa com a mensagem própria.
+        """
+        materialized = list(rows)
+        with suppress(KeyError, TypeError):
+            materialized.sort(key=lambda row: _key_of(row, key))
+        return cls(name, key, tuple(materialized))
 
     @property
     def columns(self) -> tuple[str, ...]:

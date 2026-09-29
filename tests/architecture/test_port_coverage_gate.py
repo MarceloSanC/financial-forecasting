@@ -274,7 +274,9 @@ def test_real_repo_violations_are_exactly_the_declared_baseline(gate: ModuleType
     ports = gate.inventory()
     violating = sorted(port.name for port in ports if port.violation is not None)
 
-    assert violating == ["Hasher"]
+    # ADR 6.1.0005: janela de UM commit — `GoldBuilder` (port da 6.4 Task 09) sem adapter
+    # real até a Task 10, que remove a entrada do baseline e volta a lista a ["Hasher"].
+    assert violating == ["GoldBuilder", "Hasher"]
     assert len(ports) >= 19  # noqa: PLR2004 — os 19 ports-out do repo hoje (#91 removeu IdGenerator)
 
 

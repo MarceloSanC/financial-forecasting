@@ -316,3 +316,20 @@ def test_gold_inputs_status_coherence() -> None:
         dataclasses.replace(blocked, status="BLOCKED")
     with pytest.raises(ValueError, match="block_estimates must be a Mapping"):
         dataclasses.replace(blocked, block_estimates=[])
+
+
+@pytest.mark.unit
+def test_table_key_order_sorted_by_key() -> None:
+    """`sorted_by_key` ordena pela mesma regra (None primeiro) e deixa a validação falar."""
+    rows = [_row("b", 0), _row("a", 2), _row(None, None), _row("a", None)]
+    table = GoldTable.sorted_by_key("gold_x", ("model", "seed"), rows)
+    assert [(r["model"], r["seed"]) for r in table.rows] == [
+        (None, None),
+        ("a", None),
+        ("a", 2),
+        ("b", 0),
+    ]
+    with pytest.raises(ValueError, match="key columns"):
+        GoldTable.sorted_by_key("gold_x", ("horizon",), rows)
+    with pytest.raises(ValueError, match="mix types"):
+        GoldTable.sorted_by_key("gold_x", ("seed",), [_row("a", 1), {**_row("a", 1), "seed": "x"}])

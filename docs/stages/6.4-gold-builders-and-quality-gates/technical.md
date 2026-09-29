@@ -1900,4 +1900,23 @@ de montar caminho); uma escrita só do layout. `_write_table`/`_write_manifest` 
 duas funções de escrita do módulo (espiadas pela suíte); `pq.write_table` leva o
 `type: ignore[no-untyped-call]` do precedente `ParquetAnalyticsRepository`.
 
+### 2026-09-29 — [decision] Task 09: `GoldTable.sorted_by_key` e os `GoldInputs` de teste — Claude (Opus 5.5)
+**Contexto:** os builders (fake e reais) precisam entregar linhas ordenadas pela chave,
+e a regra "None antes de qualquer valor" já tem dono no `GoldTable` (Task 07).
+**Razão:**
+- **`GoldTable.sorted_by_key(name, key, rows)`** ordena pela mesma função de chave da
+  validação e constrói a tabela; linha sem coluna da chave ou com tipos misturados
+  segue sem ordenar para o construtor recusar com a própria mensagem — nenhum builder
+  reescreve a ordenação.
+- **`_gold_inputs.py`** reusa a fábrica `make_cohort` do `gold/conftest.py` (módulo
+  puro) com `gbm`, `naive` (baseline pontual: grade toda igual, 100 % degenerado) e
+  `tft` (seeds 1 e 2), h ∈ {1, 2}; `completed_inputs()` encadeia montagem → checks →
+  `HorizonReports` → b̂_sb do `FakeMcsBackend` (2,5) → MCS por (h, esquema), e
+  `blocked_inputs()` remove um ponto interno (`interior_gap`). Resultados em `cache`
+  (os `GoldInputs` são frozen); o "inputs intactos" do `builder_pure_mapping` compara o
+  `repr` antes/depois (o `deepcopy` não copia `MappingProxyType`).
+- **`FakeGoldBuilder`**: uma linha por nome de check (`key = ("check",)`), com
+  `preregistration_ref` só quando não roda bloqueado; registra os `GoldInputs` em
+  `calls`.
+
 <!-- END: post-execution -->
