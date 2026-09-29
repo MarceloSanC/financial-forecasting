@@ -3,7 +3,7 @@ title: Technical — Stage 6.2 — Inferência pareada (Diebold–Mariano/HLN, H
 description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), TDD inside-out no BC evaluation (2ª fatia — domain stdlib + dois ports-out de oráculo + adapters statsmodels/arch + fixtures do oráculo R)
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
 keywords: [technical, plano de execução, paired-inference-dm-mcs-holm, evaluation, paired-loss-series, student-t, diebold-mariano, hln, holm, mcs, bootstrap-indices, inference-backend, mcs-backend, statsmodels, arch, r-oracle, dm-test, importlinter, port-coverage]
-status: done
+status: draft
 created_at: 2026-09-28
 updated_at: 2026-09-28
 stage_id: 6.2-paired-inference-dm-mcs-holm
