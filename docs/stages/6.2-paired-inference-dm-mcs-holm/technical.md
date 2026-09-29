@@ -1681,4 +1681,20 @@ estatística rel. máx. 1,2e−15, var̂ rel. máx. 2,1e−15, p abs. máx. 3,3e
 1,5e−14 (scipy × `student_t_cdf`); Holm ajustado `==` e `reject` igual nos 5 alphas × 200
 listas.
 
+### 2026-09-29 — [decision] Task 12: `ArchMcs.optimal_block_length` ergue `ArithmeticError` em vez de devolver o número espúrio — Claude (Opus 5.5)
+**Contexto:** decisão de detalhe planejada no §1 (ADR 6.2.0004 itens 3 e 5): séries que
+passam pelo `validate_block_length_request` (≥ 11 pontos, finitas, não constantes) ainda
+podem levar o `_single_optimal_block` do `arch` 8.0.0 a dividir por zero — a série de 22
+pontos `[1, −1, 0, …, 0]` dá 8,0 com 12 avisos; na medição da Task 06, 5/2500 séries
+inteiras −2..2 avisam.
+**Razão:** aplicada como planejada — a chamada roda sob `np.errstate(divide="raise",
+invalid="raise")`; `FloatingPointError`, resultado não-finito ou negativo → `ArithmeticError`
+("numerically undefined"), declarado no docstring do port `McsBackend` (Task 11) como a
+falha numérica do backend real. Não é caso de paridade (o fake devolve a constante): vive
+no teste de integração `test_arch_block_length_arithmetic_error`. Leitura da coluna
+`"stationary"` (`optimal_block_length(...)["stationary"].iloc[0]`), não `b_sb`. Os 8 ids de
+`test_mcs_matches_arch` (2 esquemas × seeds {1, 7} × blocos {3, 10}; T = 250, k = 4,
+reps = 1000) passaram na primeira rodada com ordem de eliminação e p-valores MCS `==` aos
+do `arch.MCS`.
+
 <!-- END: post-execution -->

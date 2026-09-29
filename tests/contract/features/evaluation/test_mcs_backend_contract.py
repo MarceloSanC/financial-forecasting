@@ -25,6 +25,7 @@ from collections.abc import Callable
 
 import pytest
 
+from financial_forecasting.features.evaluation.adapters.out.inference.arch_mcs import ArchMcs
 from financial_forecasting.features.evaluation.application.ports.out.mcs_backend import (
     McsBackend,
 )
@@ -45,6 +46,7 @@ _AR_PHI = 0.6
 
 _FACTORIES: dict[str, Callable[[], McsBackend]] = {
     "fake": FakeMcsBackend,
+    "arch": ArchMcs,
 }
 
 
