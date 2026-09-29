@@ -800,13 +800,16 @@ camada_alvo: domain
 arquivos_a_criar:
   - src/financial_forecasting/features/evaluation/domain/services/{christoffersen_test.py, kupiec_pof.py, var_descriptive.py}
   - src/financial_forecasting/features/evaluation/domain/value_objects/hit_sequence.py
-  - src/financial_forecasting/features/evaluation/domain/services/{hit_sequences.py, wilson_band.py, chi_square.py}
+  - src/financial_forecasting/features/evaluation/domain/services/{hit_sequences.py, wilson_band.py, chi_square.py, count_input_validation.py}
+  - src/financial_forecasting/features/evaluation/domain/value_objects/{_horizon.py, _tolerance.py}
   - tests/integration/features/evaluation/test_christoffersen_vs_rugarch.py
   - tests/integration/features/evaluation/test_kupiec_vs_oracle.py
   - tests/fixtures/r_oracle/var_test_cases.{json,R,sessionInfo.txt} + tests/fixtures/r_oracle/Dockerfile (formato do Step, ADR 6.2.0006)
 arquivos_a_modificar:
   - src/financial_forecasting/features/evaluation/domain/value_objects/coverage_series.py (predicados FA7 is_at_or_below / is_inside_closed)
   - src/financial_forecasting/features/evaluation/domain/services/coverage_metrics.py (consome os predicados; MPIW_LABEL)
+  - src/financial_forecasting/features/evaluation/domain/services/degeneracy_gate.py (tolerância pela regra única de _tolerance.py)
+  - src/financial_forecasting/features/evaluation/domain/value_objects/_finite_number.py (int além do float64 não é número finito)
 contratos_introduzidos: [HitSequence (value-object), HitSequences, WilsonBand, chi_square_sf, kupiec_pof (kernel; o POF é também o campo kupiec_pof de ChristoffersenStatistics), ChristoffersenTest, lr_uc_three_state, MonteCarloPValues / mc_p_value, VarDescriptive (domain-services), predicados FA7 is_at_or_below / is_inside_closed, MPIW_LABEL]
 contratos_consumidos: [CoverageSeries, pair_miscoverage, DegeneracyGate, CoverageReport / PairCoverage, is_finite_number (6.1)]
 definition_of_done: "Christoffersen (LR_uc/LR_ind/LR_cc, convenção pura) e Kupiec POF batem **exatamente** (a menos de arredondamento) com `rugarch::VaRTest` congelado — LR_uc no *feed* a partir de t = 2, LR_ind = cc − uc no *feed* inteiro — e com fixtures analíticas; LR_cc = LR_uc + LR_ind exata; banda de Wilson bate com BCD 2001 Eq. (4) e aceita contagens médias; VaR descritivo backtestado por exceedances unilaterais por cauda; casos-limite são resultados de domínio 'não aplicável'; MPIW e VaR rotulados como descritivos não-inferenciais; as métricas heurísticas do projeto antigo (`prob_up`, a métrica `confidence`, ES, `expected_move`, `downside`, win-rate) não existem no slice `evaluation`."
