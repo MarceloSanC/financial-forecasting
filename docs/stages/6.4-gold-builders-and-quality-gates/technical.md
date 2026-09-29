@@ -2669,4 +2669,31 @@ na ponta do branch: `make check` 4672 passed / 23 skipped, cobertura 99,23 %; A1
 `lint-imports` 15 contratos mantidos, 0 quebrados; laço de tokens 91 passed; bloco Host
 verde; grep de privacidade vazio.
 
+### 2026-09-29 — [finding] Exposição de cegamento (B-ORDEM) na medição real da Task 15 — Claude (Opus 5.5)
+**Contexto:** a medição A15 (Task 15) rodou o `RefreshGold` até `COMPLETED` sobre uma
+cópia do cohort confirmatório `aapl_confirmatory-r0-665f45d9169a` **antes** do
+pré-registro da 6.5. Portanto **computou** as tabelas confirmatórias
+(`gold_metrics_by_run`, `gold_calibration_table`, `gold_dm_results`,
+`gold_mcs_results`). A execução foi num container efêmero (`docker run --rm`), com a
+cópia e o gold numa pasta temporária interna do container, descartados com ele.
+Foram impressos **só**:
+- o status;
+- as durações e as contagens por etapa;
+- o `rows_by_table`;
+- o `grid_trimmed_prefix`;
+- a igualdade do fingerprint;
+- o resumo do realizado (número de sessões, datas, `fsum` do `target_return` — dado,
+  não desempenho);
+- o `gold_quality_checks` agrupado por (check, `kind`, outcome) com as contagens.
+
+**Nenhum** valor de métrica, p-valor ou taxa (pinball, CRPS, PICP/Wilson, Kupiec/LR, DM,
+MCS, taxa de degeneração) foi lido ou impresso. A sonda do Checkpoint C bloco 4 terminou
+`BLOCKED` (sem DM, MCS nem relatórios) e imprimiu só contagens de achados.
+**Por que importa:** o doc de domínio §8.2 (B-ORDEM, ADR 0.0.0011) diz "ver predições
+OOS brutas antes do hash não é violação; **computar** métricas confirmatórias é". Pela
+letra da regra, a medição é uma exposição, ainda que nenhum valor tenha sido visto.
+**Encaminhamento:** decisão humana (classe P) na 6.5, Checkpoint A — issue #127, fork
+P1. Aceitar como exposição nula declarada no pré-registro ou regenerar / usar um novo
+cohort. Nada desta Stage depende da escolha.
+
 <!-- END: post-execution -->
