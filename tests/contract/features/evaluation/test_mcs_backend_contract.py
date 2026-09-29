@@ -137,11 +137,18 @@ def test_moving_block_contiguity(backend: McsBackend, n_obs: int, block_size: in
 
 @pytest.mark.contract
 def test_stationary_wraparound(backend: McsBackend) -> None:
-    """n_obs = 5, l = 3, reps = 200: alguma linha passa de n_obs - 1 para 0 (bloco circular)."""
-    indices = _draw(backend, scheme=_STATIONARY, n_obs=5, block_size=3, reps=200)
-    assert any(
-        (row[t], row[t + 1]) == (4, 0) for row in indices.indices for t in range(len(row) - 1)
-    )
+    """n_obs = 5, l = 3, reps = 200: depois de n_obs - 1 o bloco continua em 0 (circular).
+
+    P(próximo = 0 | atual = 4) = (1 - 1/l) + (1/l)·(1/n_obs) ≈ 0,73 com a volta circular;
+    sem ela (bloco truncado no fim) só o reinício aleatório levaria a 0: ≈ 0,07.
+    """
+    indices = _draw(backend, scheme=_STATIONARY, n_obs=5, block_size=3, reps=200, seed=11)
+    last = 4
+    after_last = [
+        row[t + 1] for row in indices.indices for t in range(len(row) - 1) if row[t] == last
+    ]
+    assert len(after_last) >= 100  # noqa: PLR2004 — amostra suficiente para a frequência
+    assert after_last.count(0) / len(after_last) >= 0.5  # noqa: PLR2004
 
 
 def _ar1_series() -> list[float]:
