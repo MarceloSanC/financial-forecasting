@@ -94,6 +94,7 @@ _RUN = CohortRun(
         pytest.param({"horizon": True}, "horizon must be an int >= 1", id="horizon-bool"),
         pytest.param({"decision_idx": -1}, "decision_idx must be an int >= 0", id="idx-negative"),
         pytest.param({"decision_idx": False}, "decision_idx must be", id="idx-bool"),
+        pytest.param({"decision_idx": 1.0}, "decision_idx must be", id="idx-float"),
         pytest.param({"quantile_level": math.nan}, "quantile_level must be", id="level-nan"),
         pytest.param({"quantile_level": 1}, "quantile_level must be", id="level-int"),
         pytest.param({"quantile_level": True}, "quantile_level must be", id="level-bool"),
@@ -351,6 +352,11 @@ def _incoherent_cases() -> list[object]:
             id="full-keys",
         ),
         pytest.param(
+            lambda ms: {"common": {"gbm": (common(ms),)}},
+            "common keys must be the models",
+            id="common-keys",
+        ),
+        pytest.param(
             lambda ms: {"seeds": {"gbm": (), "tft": (1, 2)}}, "seeds must be a non-empty", id="s0"
         ),
         pytest.param(
@@ -361,6 +367,11 @@ def _incoherent_cases() -> list[object]:
         ),
         pytest.param(
             lambda ms: {"seeds": {"gbm": (None,), "tft": (1, 1)}}, "sorted and unique", id="s-rep"
+        ),
+        pytest.param(
+            lambda ms: {"seeds": {"gbm": (None,), "tft": (1, None)}},
+            "sorted and unique",
+            id="s-none-last",
         ),
         pytest.param(
             lambda ms: {"full": {"gbm": (full(ms),), "tft": (full(ms),)}},
@@ -387,6 +398,11 @@ def _incoherent_cases() -> list[object]:
             lambda ms: {"common": {"gbm": (common(ms, _TS),), "tft": (common(ms), common(ms))}},
             "must have T=3 points",
             id="common-length",
+        ),
+        pytest.param(
+            lambda ms: {"n_common": 4},
+            "must have T=4 points",
+            id="n-common-only",
         ),
         pytest.param(
             lambda ms: {"common_first_target_timestamp": _TS[0]},
@@ -430,6 +446,21 @@ def test_samples_mappings_frozen_copy(make_series: SeriesFactory) -> None:
 def test_samples_coherent_accepted(make_series: SeriesFactory) -> None:
     samples = _samples(make_series)
     assert samples.n_common == samples.common["tft"][1].n_points
+
+
+@pytest.mark.unit
+def test_samples_coherent_accepts_none_seed_first(make_series: SeriesFactory) -> None:
+    """`None` (modelo determinístico) ordena antes de qualquer seed int."""
+    fields = _samples_fields(make_series)
+    full = fields["full"]["tft"]  # type: ignore[index]
+    common = fields["common"]["tft"]  # type: ignore[index]
+    samples = _samples(
+        make_series,
+        seeds={"gbm": (None,), "tft": (None, 1)},
+        full={"gbm": full[:1], "tft": full},
+        common={"gbm": common[:1], "tft": common},
+    )
+    assert samples.seeds["tft"] == (None, 1)
 
 
 def _report(
