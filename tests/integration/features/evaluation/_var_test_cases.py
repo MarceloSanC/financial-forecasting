@@ -69,6 +69,18 @@ def _feed(raw: dict[str, Any]) -> OracleFeed:
     )
 
 
+def parse_violations(raw: list[Any]) -> tuple[bool, ...]:
+    """Violações 0/1 **inteiras** do JSON como `bool`; booleano JSON ou outro valor ergue.
+
+    `true`/`false` do JSON viram `bool` do Python, que é subclasse de `int` e passaria
+    num `value == 1`: o formato do Step exige inteiros (ADR 6.2.0006 item 1).
+    """
+    for index, value in enumerate(raw):
+        if type(value) is not int or value not in (0, 1):
+            raise ValueError(f"violations[{index}] must be a JSON integer 0 or 1, got {value!r}")
+    return tuple(value == 1 for value in raw)
+
+
 @cache
 def load_var_test_cases() -> VarTestFixture:
     """Lê e tipa a fixture (uma leitura por processo)."""
@@ -79,7 +91,7 @@ def load_var_test_cases() -> VarTestFixture:
             description=raw["description"],
             category=raw["category"],
             violation_rate=float.fromhex(raw["violation_rate"]["hex"]),
-            violations=tuple(value == 1 for value in raw["violations"]),
+            violations=parse_violations(raw["violations"]),
             whole=_feed(raw["whole"]),
             from_t2=_feed(raw["from_t2"]),
         )

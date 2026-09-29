@@ -5,9 +5,10 @@ Prova (concept 6.3 A10, I12, C8; ADR 6.3.0002 item 4; ADR 6.3.0003 e a sua errat
 - LR_uc puro == `uc.LRstat` do *feed* t ≥ 2 (ou, se esse *feed* falha, o
   `lr_uc_internal` = `rugarch:::.LR.uc(p, T - 1, sum(v[-1]))` gravado pelo gerador);
 - LR_ind == `cc.LRstat - uc.LRstat` do *feed* inteiro; LR_cc == a soma;
-- erro do R no *feed* inteiro ⇔ `independence_status` ≠ APPLICABLE (a matriz de
-  transição perde um símbolo exatamente onde o `table(head, tail)` do R perde); valor
-  de *feed* com erro nunca é esperado (C8);
+- erro do R em cada *feed* ⇔ `independence_status` ≠ APPLICABLE do primitivo sobre
+  a mesma sequência (inteira; `violations[1:]` para o t ≥ 2) — a matriz de transição
+  perde um símbolo exatamente onde o `table(head, tail)` do R perde; valor de *feed* com
+  erro nunca é esperado (C8);
 - ao menos um caso I_1 = 1 em que a convenção importa (|uc(t ≥ 2) - uc(inteira)| > 0.1).
 
 Tolerância de **arredondamento** (o R usa log do produto; o domínio, log-somas), nunca
@@ -16,6 +17,7 @@ O(1/T). `min_violations = 0`: a aplicabilidade é só a da matriz de transição
 
 from __future__ import annotations
 
+import json
 import math
 
 import pytest
@@ -26,9 +28,11 @@ from financial_forecasting.features.evaluation.domain.services.christoffersen_te
     christoffersen_statistics,
 )
 from tests.integration.features.evaluation._var_test_cases import (
+    FIXTURE_PATH,
     OracleFeed,
     VarTestCase,
     load_var_test_cases,
+    parse_violations,
 )
 
 pytestmark = pytest.mark.integration
@@ -77,13 +81,20 @@ def test_trio_two_feeds_matches_rugarch(case: VarTestCase) -> None:
     assert _close(stats.lr_cc, expected_uc + expected_ind)
 
 
-@pytest.mark.parametrize("case", _WHOLE_OK, ids=lambda case: case.id)
-def test_lr_ind_whole_feed_even_when_t2_fails(case: VarTestCase) -> None:
-    """A10 (Checkpoint B T14): LR_ind == `cc - uc` do *feed* inteiro em todo caso com
-    ele válido — inclusive quando o *feed* t ≥ 2 falha (n11_zero em t = 1/T, pontas)."""
-    assert case.whole.uc_lrstat is not None and case.whole.cc_lrstat is not None
+@pytest.mark.parametrize("case", _ALL, ids=lambda case: case.id)
+def test_r_error_policy_t2_feed_and_lr_ind_whole_feed(case: VarTestCase) -> None:
+    """A10/C8, metade t ≥ 2 da política: erro do R no *feed* t ≥ 2 ⇔ o primitivo sobre
+    `violations[1:]` não é APPLICABLE (a matriz perde um símbolo onde o `table` do R
+    perde). E (Checkpoint B T14) com o *feed* inteiro válido e o t ≥ 2 falhando, o LR_ind
+    ainda bate com `cc - uc` do *feed* inteiro."""
+    tail = christoffersen_statistics(
+        violations=case.violations[1:], violation_rate=case.violation_rate, min_violations=0
+    )
 
-    assert _close(_stats(case).lr_ind, case.whole.cc_lrstat - case.whole.uc_lrstat)
+    assert (not case.from_t2.ok) == (tail.independence_status is not IndependenceStatus.APPLICABLE)
+    if case.whole.ok and not case.from_t2.ok:
+        assert case.whole.uc_lrstat is not None and case.whole.cc_lrstat is not None
+        assert _close(_stats(case).lr_ind, case.whole.cc_lrstat - case.whole.uc_lrstat)
 
 
 def test_lr_ind_whole_feed_covers_failing_t2_feed() -> None:
@@ -140,7 +151,16 @@ def test_first_violation_gap_the_convention_matters() -> None:
 
 
 def test_fixture_guard_limits_and_categories() -> None:
-    """A10: T ≤ `t_max` = 500 em todo caso e cada categoria do gerador presente."""
+    """A10: T ≤ `t_max` = 500 em todo caso, cada categoria do gerador presente e as
+    violações do JSON são inteiros 0/1 (booleano JSON é recusado pelo carregador)."""
+    raw = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    assert all(
+        type(value) is int and value in (0, 1)
+        for case in raw["cases"]
+        for value in case["violations"]
+    )
+    with pytest.raises(ValueError, match="must be a JSON integer 0 or 1"):
+        parse_violations([0, True, 1])
     assert _FIXTURE.provenance["t_max"] == _T_MAX
     assert all(_T_MIN <= len(case.violations) <= _T_MAX for case in _ALL)
     assert {case.category for case in _ALL} == _CATEGORIES

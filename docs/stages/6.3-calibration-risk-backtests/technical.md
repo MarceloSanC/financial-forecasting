@@ -1747,7 +1747,8 @@ categoria `t2_feed_error` (`[1, 0, 1]`, `[0, 1, 0]`, violações só em t = 1 e 
 soma às cinco exigidas; `r_error_first_and_last` também cai nesse caso. A pré-checagem
 da Task ganhou a asserção "todo feed t ≥ 2 com erro traz `lr_uc_internal` finito". A
 Task 11 compara o trio em todo caso com o feed inteiro válido e a política
-"erro do R ⇔ status ≠ APPLICABLE" só no feed inteiro.
+"erro do R ⇔ status ≠ APPLICABLE" nos dois feeds (a metade t ≥ 2 foi restaurada no
+Checkpoint C bloco 4 — ver a entrada da Task 11).
 Execução medida: 32 casos (iid 12, clustered 6, first_violation 3, n11_zero 3,
 r_error 5, t2_feed_error 3); I_1 = 1 com |uc(t ≥ 2) − uc(inteira)| > 0.1 em
 `first_violation_p0.05_T250` (0.0252 × 0.1827), `first_violation_p0.02_T100`,
@@ -1760,7 +1761,7 @@ Notas: `docker build` da Task reconstruiu a imagem `ff-r-oracle:4.4.1` a partir 
 literal executado no host (com caminho absoluto) — substituído pelo comando portável
 em `[6.3/task-10-fix]` (ver a entrada `[deviation]` do Checkpoint C bloco 4).
 
-### 2026-09-28 — [decision] Task 11: trio comparado em todo caso com o feed inteiro válido; política de erro só no feed inteiro — Claude (Opus 5.5)
+### 2026-09-28 — [decision] Task 11: trio comparado em todo caso com o feed inteiro válido; política de erro nos dois feeds — Claude (Opus 5.5)
 **Contexto:** a Task 11 previa o `trio_two_feeds` só com os dois feeds válidos e o
 `r_error_policy` também sobre o feed t ≥ 2 (`violations[1:]`); a errata do ADR 6.3.0003
 (Checkpoint C, bloco 3) grava `lr_uc_internal` quando o feed t ≥ 2 falha e restringe a
@@ -1768,8 +1769,16 @@ equivalência "erro do R ⇔ status ≠ APPLICABLE" ao feed inteiro.
 **Razão:** `trio_two_feeds` roda em **todo** caso com o feed inteiro válido (28 dos 32),
 com o LR_uc esperado = `uc.LRstat` do t ≥ 2 ou, se ele falhou, `lr_uc_internal`
 (`_pure_uc_expected`; nunca valor de feed com erro — C8); `r_error_policy` roda nos 32
-casos, com a equivalência só no feed inteiro e, nos casos com erro, `lr_ind`/`lr_cc`
-`None`, POF definido (`-2·T·log(1 − p)` com x = 0) e LR_uc puro == `lr_uc_internal`.
+casos nos **dois** feeds: no inteiro, erro ⇔ status ≠ APPLICABLE e, nos casos com erro,
+`lr_ind`/`lr_cc` `None`, POF definido (`-2·T·log(1 − p)` com x = 0) e LR_uc puro ==
+`lr_uc_internal`; no t ≥ 2, erro ⇔ status de `violations[1:]` ≠ APPLICABLE (32/32; os 8
+erros do t ≥ 2 são DEGENERATE_TRANSITION_MATRIX). A primeira versão desta Task só
+testava o feed inteiro — metade t ≥ 2 **restaurada** em `[6.3/task-11-fix]` (achado do
+Checkpoint C bloco 4), no mesmo teste que absorveu o `lr_ind_whole_feed` (o LR_ind do
+feed inteiro já é conferido pelo `trio_two_feeds`; a asserção distinta que sobrou — caso
+com o feed inteiro válido e o t ≥ 2 com erro — ficou no teste
+`r_error_policy_t2_feed_and_lr_ind_whole_feed`). O carregador passou a recusar booleano
+JSON nas violações (`parse_violations`), conferido pelo `fixture_guard`.
 Medido: 121 testes de oráculo verdes, zero `SKIPPED`, sob `_ORACLE_ABS_TOL = 1e-10`. O
 carregador é o módulo privado `_var_test_cases.py` (decisão de detalhe do §1), com
 `@functools.cache` (uma leitura por processo).
