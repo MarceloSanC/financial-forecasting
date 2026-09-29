@@ -3,7 +3,7 @@ title: Concept — Stage 6.4 — Gold builders modulares e quality gates (montag
 description: Use case RefreshGold do BC evaluation que lê o silver por um port do consumidor e o realizado pelo par read-only do MedallionStore, monta as séries alinhadas num serviço de domínio dono único das regras de alinhamento, roda o registry de quality checks (alinhamento, pré-condições estatísticas, degeneração, proveniência), chama os serviços de 6.1/6.2/6.3 e o McsBackend em produção, mapeia os relatórios em cinco tabelas por builders ordenados por graphlib e publica a geração inteira do cohort com manifesto e troca de diretório
 when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; ao ler as tabelas gold na 6.5; ao questionar de onde vem o realizado, por que o dedup não é reaplicado, o que um refresh bloqueado publica, como um leitor sabe que o gold está completo ou como a ordem dos builders é decidida
 keywords: [concept, gold-builders-and-quality-gates, evaluation, gold, refresh-gold, series-assembly, alignment, quality-checks, registry, graphlib, duckdb, parquet, manifest, staging, mcs, silver, dataset-tft, realized, dataset-fingerprint, preregistration]
-status: draft
+status: done
 created_at: 2026-09-29
 updated_at: 2026-09-29
 stage_id: 6.4-gold-builders-and-quality-gates
@@ -330,8 +330,9 @@ Adapters (`evaluation/adapters/out/duckdb/`):
   `DmVarianceEstimator`, `ModelConfidenceSet`, `BootstrapIndices`,
   `BootstrapScheme`, `McsBackend`, `MIN_BLOCK_LENGTH_OBS`, `MIN_MCS_REPS`,
   `check_points`, `is_constant`, `validate_block_length_request`,
-  `validate_alpha`, `MIN_MODELS` e `validate_bootstrap_parameters` (os dois
-  últimos tornados públicos nesta Stage, D9) — 6.2.
+  `validate_alpha`, `MIN_MODELS` (do VO `PairedLossSeries`),
+  `validate_bootstrap_parameters` e `validate_mcs_reps` (os três últimos
+  tornados públicos nesta Stage, D9) — 6.2.
 - `validate_tolerance` (6.1/6.3, `_tolerance.py`) — 6.1.
 - `HitSequences`, `HitSequence` (`dgt_partition`), `ChristoffersenTest`,
   `WilsonBand`, `var_tail_for`, `validate_min_violations`, `validate_rate`
@@ -383,8 +384,8 @@ Adapters (`evaluation/adapters/out/duckdb/`):
   `check_points`; `MIN_BLOCK_LENGTH_OBS` para o b̂_sb do MCS).
 - **I11 — Pré-condições estatísticas** (doc §6.5), avaliadas **no domínio
   antes** de qualquer chamada que as validaria erguendo: (i) k ≥
-  `MIN_MODELS` (constante pública do dono, `paired_pinball_losses`) antes da
-  fábrica; (ii) por par, `is_constant` do diferencial e
+  `MIN_MODELS` (constante pública do primeiro dono, o VO `PairedLossSeries`,
+  que a fábrica `paired_pinball_losses` passa a importar) antes da fábrica; (ii) por par, `is_constant` do diferencial e
   `validate_block_length_request` (6.2, públicos) antes do backend — falha vira
   "estimativa indefinida" sem chamar o backend; (iii) do backend, só
   `ArithmeticError` do `optimal_block_length` vira estimativa indefinida; o
@@ -427,8 +428,8 @@ Adapters (`evaluation/adapters/out/duckdb/`):
   `gold_build_order`, **antes** de qualquer leitura.
 - **C2 — Parâmetro inválido** → `ValueError` na construção de
   `RefreshParameters`, por validadores públicos donos (`validate_tolerance`,
-  `validate_bootstrap_parameters`, `validate_alpha`, `validate_rate`,
-  `validate_min_violations`), antes de qualquer leitura; um manifesto
+  `validate_bootstrap_parameters`, `validate_mcs_reps`, `validate_alpha`,
+  `validate_rate`, `validate_min_violations`), antes de qualquer leitura; um manifesto
   `BLOCKED` nunca carrega parâmetro inválido.
 - **C3 — Identificador inválido** (`asset`/`parent_sweep_id` fora de
   `^[A-Za-z0-9._-]+$`) → `ValueError` antes de montar qualquer caminho.
@@ -624,12 +625,18 @@ Adapters (`evaluation/adapters/out/duckdb/`):
     `gold_build_order` (domain-services), `ForecastRecord`, `CohortRun`,
     `RealizedReturns`, `AssembledCohort`, `QualityCheckResult`
     (value-objects), `SilverTableReader`, `GoldStore` (ports-out);
-  - `arquivos_a_modificar` (mudanças mínimas em arquivos da 6.2): 
-    `domain/services/paired_pinball_losses.py` (`_MIN_MODELS` → `MIN_MODELS`
-    público, para o passo de pré-condição) e
+  - `arquivos_a_modificar` (mudanças mínimas em arquivos da 6.2):
+    `domain/value_objects/paired_loss_series.py` (`_MIN_MODELS` →
+    `MIN_MODELS` público — o VO é o primeiro dono) e
+    `domain/services/paired_pinball_losses.py` (apaga a sua cópia
+    `_MIN_MODELS` e importa `MIN_MODELS` do VO, direção serviço → VO);
     `domain/value_objects/bootstrap_indices.py` (extrai
     `validate_bootstrap_parameters(*, reps, seed)` público de
     `validate_bootstrap_request`, que passa a chamá-lo; mesmas mensagens);
+    `domain/services/model_confidence_set.py` (extrai
+    `validate_mcs_reps(reps)` público para a regra `reps ≥ MIN_MCS_REPS`,
+    hoje escrita duas vezes — `McsReport.__post_init__` e
+    `ModelConfidenceSet.evaluate` —, e os dois pontos passam a consumi-lo);
   - `contratos_consumidos`: `AnalyticsRepository (4.2)` passa a ser
     "`ParquetAnalyticsRepository` como real do `SilverTableReader` (ADR
     0.0.0053)"; entram `MedallionStore` (par read-only dataset_tft),
@@ -765,10 +772,14 @@ erDiagram
 - [ ] `RefreshParameters` sem default: construção sem algum campo falha;
       `preregistration_ref` vazio, tupla vazia ou repetida, tolerância, α,
       nível de banda, `min_violations`, reps ou seed inválidos erguem **na
-      construção** pela mensagem do validador dono (`validate_bootstrap_request`
-      segue com as mesmas mensagens depois da extração de
-      `validate_bootstrap_parameters`; `MIN_MODELS` público com o mesmo
-      valor);
+      construção** pela mensagem do validador dono (reps inválido ergue pela
+      mensagem de `validate_mcs_reps`; `validate_bootstrap_request` segue com
+      as mesmas mensagens depois da extração de
+      `validate_bootstrap_parameters`; `McsReport` e
+      `ModelConfidenceSet.evaluate` passam a usar `validate_mcs_reps`, e os
+      testes da 6.2 que casam as mensagens antigas são conferidos na Task;
+      `MIN_MODELS` do VO é o único, com o mesmo valor, e a fábrica o
+      importa);
       o `preregistration_ref` aparece no manifesto e nas linhas das tabelas
       confirmatórias.
 - [ ] `SilverTableReader`, `GoldBuilder` e `GoldStore` têm fake e suíte de
@@ -816,7 +827,7 @@ erDiagram
       6.4.0001–6.4.0008 (`accepted`); D9 aplica pedido sem alternativa real.
 - [x] Dependências de Stages anteriores estão satisfeitas (`done`)? — 6.1, 6.2
       e 6.3 mergeadas em `develop`.
-- [x] Stage cabe em ~3–12 Tasks (ver [`CONVENTIONS.md`](../../CONVENTIONS.md) §6)? — estimativa 12, no teto da faixa (ROADMAP-1 nomeia a 6.4 Stage densa): VOs de entrada; montagem (regras); montagem (amostras); registry + 4 checks (com os dois ajustes públicos da 6.2); relatórios; `gold_build_order` + ports (`SilverTableReader`, `GoldBuilder`, `GoldStore`) + DTOs; `ParquetGoldStore`; builders ×2; use case; wiring + e2e; roadmap.
+- [x] Stage cabe em ~3–12 Tasks (ver [`CONVENTIONS.md`](../../CONVENTIONS.md) §6)? — estimativa 12, no teto da faixa (ROADMAP-1 nomeia a 6.4 Stage densa): VOs de entrada; montagem (regras); montagem (amostras); registry + 4 checks (com os três ajustes públicos da 6.2); relatórios; `gold_build_order` + ports (`SilverTableReader`, `GoldBuilder`, `GoldStore`) + DTOs; `ParquetGoldStore`; builders ×2; use case; wiring + e2e; roadmap.
 - [x] Riscos críticos têm mitigação plausível? — §10.
 - [x] Cada mecanismo novo passou pelo **teste da solução mais direta**: não é caso especial/tipo/métrica novo remendando, local, um sintoma que recorre em outros consumidores e teria tratamento mais simples/geral em outra camada (concern compartilhado). Captura assim → piso declarado + issue, não solução local. — A montagem, concern que recorre nos cinco builders e nos checks, tem um dono (D1) e os checks só traduzem o relatório dele; o realizado reusa o par read-only do `MedallionStore` em vez de um port novo (D3; concept 5.2 D3) e a leitura dele é uma função única, com a duplicação do modeling encaminhada à #99 como piso declarado; o dedup operationally-latest **não** é reaplicado nem embrulhado porque, na chave do silver, só devolveria a entrada ou ergueria (D2); a regra "int ≥ mínimo" com várias escritas vai para a #118 em vez de ganhar outra cópia no DTO (ADR 6.4.0006); o alinhamento temporal continua dono único da 4.3 (índice de sessões, sem `TradingCalendar` nem timedelta); a identidade do dataset usa o VO `DatasetFingerprint` existente (o hash do arquivo vai para a #120, sem hash feito à mão fora dos VOs de `shared`); a média entre seeds é a da fábrica da 6.2; os builders só mapeiam relatórios e a atomicidade da publicação mora num único adapter (`ParquetGoldStore`), não em cada builder; a DAG é `graphlib` da stdlib, não framework.
 - [x] O canal de emissão das métricas novas está declarado (último

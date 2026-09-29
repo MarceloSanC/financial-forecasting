@@ -86,8 +86,11 @@ Evidence (verified 2026-09-29):
    does not depend on path parsing (ADR 0.0.0022; engines only in the
    adapter).
 3. **Order of side effects** (orchestrator-design: guards before writes):
-   validate the build order (ADR 6.4.0001) → read → assemble → checks → if not
-   blocked, every report and the MCS → builders map to tables →
+   validate the build order (ADR 6.4.0001) → validate the identifiers → read →
+   assemble → preconditions domain step (k ≥ `MIN_MODELS`, factory only if k
+   suffices, per-pair `is_constant` and `validate_block_length_request`,
+   backend only for the pairs that pass — ADR 6.4.0002 item 4) → checks → if
+   not blocked, every report and the MCS → builders map to tables →
    `GoldStore.publish`. Any exception before `publish` leaves `current/`
    untouched (the previous generation stays live and still self-describes
    what produced it).

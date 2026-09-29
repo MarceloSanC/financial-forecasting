@@ -82,8 +82,10 @@ alerts that are either spammy or not actionable" — two levels, not one.
    raising (`paired_pinball_losses` raises for k < `MIN_MODELS`;
    `ArchMcs.optimal_block_length` calls `validate_block_length_request`
    first):
-   - (i) k ≥ `MIN_MODELS` (public constant of the owner,
-     `paired_pinball_losses`) is checked before the factory is called;
+   - (i) k ≥ `MIN_MODELS` (public constant of its first owner, the
+     `PairedLossSeries` VO, which the `paired_pinball_losses` factory now
+     imports instead of keeping its own copy) is checked before the factory is
+     called;
    - (ii) per pair of the seed-averaged `PairedLossSeries`, `is_constant` on
      the differential and `validate_block_length_request` (public, 6.2) are
      evaluated in the domain; a failing pair gets an undefined estimate

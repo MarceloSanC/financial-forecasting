@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-09-29
 updated_at: 2026-09-29
 adr_id: 6.4.0006
-decision: RefreshGold takes a frozen RefreshParameters DTO (application/dtos) whose fields — preregistration reference, degeneracy tolerance, Wilson band levels, min_violations, Holm candidate and α, DM variance estimators, MCS α, reps, seed and bootstrap schemes — have no default; the DTO checks presence and structure (non-empty, unique tuples; non-empty strings) and all are validated at construction by public owner validators (validate_tolerance, validate_rate, validate_min_violations, validate_alpha, the new public validate_bootstrap_parameters split out of validate_bootstrap_request, and MIN_MCS_REPS), so no manifest — BLOCKED included — ever carries an invalid value; the values belong to the 6.5 preregistration, which supplies the reference; a single int MCS seed is used for every horizon and every scheme and is persisted with each MCS report.
+decision: RefreshGold takes a frozen RefreshParameters DTO (application/dtos) whose fields — preregistration reference, degeneracy tolerance, Wilson band levels, min_violations, Holm candidate and α, DM variance estimators, MCS α, reps, seed and bootstrap schemes — have no default; the DTO checks presence and structure (non-empty, unique tuples; non-empty strings) and all are validated at construction by public owner validators (validate_tolerance, validate_rate, validate_min_violations, validate_alpha, the new public validate_bootstrap_parameters split out of validate_bootstrap_request, and the new public validate_mcs_reps extracted in model_confidence_set), so no manifest — BLOCKED included — ever carries an invalid value; the values belong to the 6.5 preregistration, which supplies the reference; a single int MCS seed is used for every horizon and every scheme and is persisted with each MCS report.
 context_stage: 6.4-gold-builders-and-quality-gates
 bounded_context: evaluation
 ---
@@ -77,7 +77,11 @@ The "int non-bool ≥ minimum" rule has several writings in the slice
    - `validate_bootstrap_parameters(*, reps, seed)` — a public function split
      out of `validate_bootstrap_request` in `bootstrap_indices.py` (which
      then calls it, with the same messages; a small declared change to a 6.2
-     file) — and `reps ≥ MIN_MCS_REPS`.
+     file);
+   - `validate_mcs_reps(reps)` — a public function extracted in
+     `model_confidence_set.py` for `reps ≥ MIN_MCS_REPS`, today written
+     inline twice (`McsReport.__post_init__` and `ModelConfidenceSet.evaluate`,
+     both of which then consume it), so the DTO is not a third copy.
 
    No rule is re-written in the DTO (issue #118 keeps the unification of the
    integer rule).
@@ -127,9 +131,9 @@ The "int non-bool ≥ minimum" rule has several writings in the slice
 
 - Callers before 6.5 (tests, e2e) must spell every parameter, including a
   literal preregistration reference.
-- Two small public-surface changes in 6.2 files (`MIN_MODELS`,
-  `validate_bootstrap_parameters`), declared in the concept's
-  `arquivos_a_modificar`.
+- Small public-surface changes in 6.2 files (`MIN_MODELS` of the
+  `PairedLossSeries` VO, now the single owner; `validate_bootstrap_parameters`;
+  `validate_mcs_reps`), declared in the concept's `arquivos_a_modificar`.
 
 ## References
 
