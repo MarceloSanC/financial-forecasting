@@ -146,15 +146,18 @@ def test_orphan_run() -> None:
 
 @pytest.mark.unit
 def test_model_version_mismatch() -> None:
+    """Dois pontos (7 níveis cada) do mesmo run: UM achado por (horizonte, run)."""
     cohort = make_cohort()
-    target = targets_of(cohort, "tft", 2, 1)[3]
+    targets = targets_of(cohort, "tft", 2, 1)[3:5]
     cohort = replace_records(
         cohort,
-        at_point("tft", 2, 1, target),
+        lambda r: any(at_point("tft", 2, 1, target)(r) for target in targets),
         lambda r: dataclasses.replace(r, model="tft-v2"),
     )
     findings = _only(_assemble(cohort), AlignmentKind.MODEL_VERSION_MISMATCH)
-    assert {_scope(f) for f in findings} == {(1, "tft", 2)}
+    assert len(findings) == 1
+    assert _scope(findings[0]) == (1, "tft", 2)
+    assert run_id("tft", 2, "f0") in findings[0].detail
 
 
 # --- uma observação por ponto (I4) -----------------------------------------------------
