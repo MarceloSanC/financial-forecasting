@@ -2609,4 +2609,16 @@ público "int ≥ 0").
 **Encaminhamento:** issue #118 — incluir os dois pontos na unificação da regra de
 inteiros.
 
+### 2026-09-29 — [deviation] Revisão de execução: revert do concept pela variante `revision-from-execution` — Claude (Opus 5.5)
+**Contexto:** a regressão da revisão de execução (ADR 6.4.0009) reverteu o concept com
+`chore(concept): revert to draft — revision-from-execution: …` (commit `b481aae`);
+CONVENTIONS §3.2/§4 descrevem para o concept só a variante `revision-from-technical`
+(a `revision-from-execution` é a do technical).
+**Razão:** a causa veio da execução (Checkpoint C bloco 4, ALTA-1: a 5.5 mergeada em
+`develop` mudou a origem do `decision_idx`), não da Fase 3B; a variante nomeia a causa
+real. O hook `commit-msg` aceitou o subject; nenhuma aprovação foi pulada (o concept e o
+technical foram re-aprovados pelos commits reservados `b1b3db4` e `68cef87`). Em
+consequência, os ADRs 6.4.0002 (item 6) e 6.4.0005 (item 8) ganharam uma linha de
+emenda datada apontando o ADR 6.4.0009 (status `accepted` intacto).
+
 <!-- END: post-execution -->

@@ -129,6 +129,7 @@ Evidence (verified 2026-09-29):
    4), the count of cohort runs read, the build order, and the start and
    end timestamps of the refresh. The timestamps come from the injected
    `Clock` and are the only fields that differ between two identical reruns.
+   > **Amended 2026-09-29:** the manifest records the `DatasetContentFingerprint` of the training grid and `grid_trimmed_prefix` instead of the `DatasetFingerprint` — see [ADR 6.4.0009](6_4_0009-realized-from-modeling-training-grid-via-consumer-port.md).
 9. **No content hash of the silver** in this Stage: it would need a new
    shared identity VO (LAYOUT §7) with no consumer in the DoD; the manifest
    records the cohort id and run count, and 6.5's preregistration hash or 8.1
