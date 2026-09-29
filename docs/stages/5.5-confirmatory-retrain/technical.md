@@ -1086,4 +1086,42 @@ Um subagente de contexto zerado, que não escreveu os testes, respondeu o questi
 - concept e technical `done`;
 - concept sem retoque retrospectivo pendente. Os desvios de redação (I5 e não rastreados) ficaram registrados como `[decision]` neste §7.
 
+### 2026-09-29 — Auditoria da Stage (skill `stage-audit`, agente Opus 5.5 de contexto zerado) — disposições — Claude (Opus 5.5)
+**Veredito do auditor:** aprovada com findings, **sem blocker**.
+- Recalculou o hash a partir do TOML versionado e ele bate com a âncora.
+- A identidade do código gravada no ledger é idêntica à árvore da tag.
+- A ordem âncora < `run_started_at` confere.
+- Nenhuma métrica foi calculada.
+
+- **F1** (médio) — o `device` declarado nunca era conferido contra o real; o probe grava o valor declarado → **corrigido**:
+  - quinta igualdade de I4 no `RunConfirmatoryCohort`: `supported_device`, injetado pelo composition root (`_TRAINERS_DEVICE = "cpu"`, porque o adapter do TFT fixa `accelerator="cpu"`);
+  - spec com outro device → `CohortDeclarationMismatchError` antes de treinar, com caso novo em `test_declared_differs_from_observed[device]`;
+  - não muda o hash do cohort congelado (`device = "cpu"`).
+- **F2** (baixo) — a foto do ambiente da corrida só existia no disco local → **corrigido**. O bloco `environment` do ledger `artifacts/cohorts/aapl_confirmatory-r0-665f45d9169a/progress.json`:
+  ```
+  code.cohort_file 6d7c8b82ef98cf27cabc985c53b710dbfba303ea
+  code.src         0f1fc299d03f780522809152507c6fca7caeadb7
+  code.uv_lock     896b6cb28d7e258e9312a8701bd66895d1d9b4c7
+  code_dirty false | cpu x86_64/12 | device cpu | torch_threads 6
+  python 3.12.13 | torch 2.13.0+cpu | lightning 2.6.5 | pytorch-forecasting 1.8.0
+  lightgbm 4.7.0 | optuna 4.9.0 | statsforecast 2.1.1 | numpy 2.5.0 | pandas 2.3.3
+  pyarrow 24.0.0 | exchange-calendars 4.13.2
+  ```
+  `git ls-tree 2232605 src uv.lock config/cohorts/aapl_confirmatory.toml` devolve exatamente `0f1fc299…`, `896b6cb2…` e `6d7c8b82…`: a corrida usou o código e o spec da tag.
+- **F3** (baixo) — runbook como `draft` e sem o passo de reprodução → **corrigido**:
+  - `status: accepted` e `updated_at: 2026-09-29`;
+  - nova seção "Reproduce the published cohort": `git checkout cohort/<id>`, porque o HEAD pós-rebase tem outro `src/` e outro `uv.lock` e o I5 recusaria.
+- **F4** (baixo) — `CohortGeometry.expected_runs` sem call-site de produção → **corrigido**: método e teste removidos. A contagem por modelo é de `recorded_run_problems`.
+- **F5** (baixo) — literais de `model_version` do GBM e do TFT repetidos fora do dono → **corrigido**: `MODEL_VERSION` público em `train_gbm_quantile.py` e `train_tft.py`, e o cohort importa. O teste de igualdade virou `is`.
+- **F6** (baixo) — silenciadores de tipo:
+  - `**common` + `type: ignore` no `sweep` → **corrigido**, com campos nomeados;
+  - `type: ignore[call-overload]` no índice de runs e `**_params` no `freeze` → **justificados** em linha: são linhas do silver e JSON tipados como `object`, e os tipos são garantidos pelo schema e pela ida e volta do arquivo.
+- **F7** (baixo) — o `progress.json` não grava `cohort_id` nem `cohort_hash`, que o concept §9 prometia → **registrado aqui como desvio**, sem código:
+  - o `cohort_id` é o nome do diretório (`artifacts/cohorts/<cohort_id>/`);
+  - o hash completo está na âncora pública (tag + comentário);
+  - duplicá-los dentro do arquivo não acrescenta verificação.
+- **F8** (observação, issue separada) — o `materialize --start 2010-04-20` não fica no arquivo do cohort → **escalado para issue separada**, depois de buscar no backlog. Mudar agora alteraria o hash do cohort congelado. O valor segue ancorado pela impressão digital do dataset e documentado no runbook.
+- **F9** (observação) — linha de auditoria no corpo do PR e checklist → **aplicado** no PR #121.
+- **Aprendizado → skill** (proposta do auditor, registrada e não aplicada nesta Stage): na `stage-audit`, conceito "Verificação assimétrica" — "para cada campo que entra num hash/ledger como 'observado', achar a linha que o LÊ do mundo real — eco do declarado não é observação".
+
 <!-- END: post-execution -->

@@ -3,9 +3,9 @@ title: Runbook — Confirmatory cohort run (AAPL)
 description: Step-by-step procedure to materialize the AAPL data, run the exploratory sweeps, freeze and anchor the confirmatory cohort, run it resumably and verify it by counts
 when-use: When producing (or reproducing) the Stage 5.5 confirmatory cohort for AAPL, when resuming a run that stopped, or when remediating a partially persisted unit by opening a new cohort revision
 keywords: [runbook, confirmatory-cohort, aapl, materialize, sweep, freeze, anchor, resume, verify, blinding]
-status: draft
+status: accepted
 created_at: 2026-09-27
-updated_at: 2026-09-27
+updated_at: 2026-09-29
 runbook_id: confirmatory-cohort-aapl
 triggers:
   - Stage 5.5 real run (Tasks 33–35)
@@ -247,6 +247,30 @@ OK
 The 16 models are 5 baselines, the GBM and 10 TFT seeds. The expected rows
 come from 21112 per model (5 × 3528 + 3472) × 16 models = 337792. `verify`
 reads only counts and target timestamps, never metrics.
+
+## Reproduce the published cohort
+
+The published cohort is anchored at the tag, not at the branch head:
+
+```bash
+git checkout cohort/aapl_confirmatory-r0-665f45d9169a    # commit 2232605
+```
+
+Later commits (the rebase onto `develop`, other Stages) change `src/` and
+`uv.lock`. Run from a later head, `run` would refuse with
+`EnvironmentMismatchError`, because the code identity differs from the
+recorded one.
+
+To reproduce the cohort:
+1. Check out the tag.
+2. Rebuild the image and a venv from that `uv.lock`.
+3. Materialize with the same `--start 2010-04-20`. The dataset fingerprint
+   must be `00e4406d…95bd`, otherwise `run` refuses with
+   `DatasetMismatchError`.
+4. Run Steps 9–10 against a fresh `artifacts/` and silver.
+
+The recorded environment (library versions, CPU, torch threads) is in
+technical §7, entry "Auditoria da Stage", F2.
 
 ## Verification
 
