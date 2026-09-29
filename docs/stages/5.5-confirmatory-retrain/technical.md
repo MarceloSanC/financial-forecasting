@@ -1059,4 +1059,31 @@ Um subagente de contexto zerado, que não escreveu os testes, respondeu o questi
   São 5 baselines + GBM + 10 seeds do TFT = 16 modelos × 21112 linhas. O ledger tem as 12 unidades marcadas, e o `verify` confere contagens, folds, horizontes, alvos entre modelos e ledger.
 - **Nenhuma métrica** foi calculada sobre este `parent_sweep_id`. O `verify` lê só contagens e timestamps de alvo.
 
+### 2026-09-29 — [measurement] Gate de saída da Stage — Claude (Opus 5.5)
+**Rebase pós-corrida:** `git rebase origin/develop`, permitido depois da Task 35.
+- Dois conflitos de documentação:
+  - `roadmap.md`: ficaram as datas e as linhas 6.x do develop, a linha 5.5 desta Stage, o bloco 6.3 do develop (que já traz o LR_uc de 3 estados pedido pela #78) e a cláusula de cegamento na DoD da 6.5;
+  - `overview.md`: só a data.
+- A tag `cohort/aapl_confirmatory-r0-665f45d9169a` continua apontando para o commit original do congelamento (`2232605`), mantido vivo no remoto pela tag.
+
+**Verificações automatizadas** (branch rebaseado):
+- `make check` → `MAKE_EXIT=0`, `All checks passed!`, `4224 passed, 23 skipped … in 1639.44s`, `Total coverage: 99.08%`.
+- `python scripts/check_technical_postexec.py docs/stages/5.5-confirmatory-retrain/technical.md` → `OK — 1 arquivo(s) validado(s).`, exit 0.
+- `git diff origin/develop -- scripts/arch_baseline.toml` → vazio (0 linhas).
+- Cobertura por arquivo tocado pela Stage (`coverage report --include=<33 arquivos de src/>`):
+  - todos ≥ 95%;
+  - os menores: `run_gbm_sweep.py` 95%, `json_cohort_progress_ledger.py` 96%, `git_runtime_environment_probe.py` 96%, `composition_root.py` 97%;
+  - total 99%.
+
+**Verificações funcionais:**
+- `verify` → `VERIFY_EXIT=0`, `rows expected 337792, observed 337792`, `OK` (Task 35).
+- Segunda execução do `run`, antes do rebase e com a mesma identidade de código → `RUN2_EXIT=0`, 12 de 12 unidades `skipped_completed`, com as contagens reconferidas no silver (I6).
+- Tag no remoto e comentário na #102 (`2026-09-28T20:27:09Z`) anteriores ao `run_started_at` (`2026-09-28T20:27:37Z`).
+
+**Checklist:**
+- ADRs 5.5.0001–0004 `accepted`;
+- runbook criado;
+- concept e technical `done`;
+- concept sem retoque retrospectivo pendente. Os desvios de redação (I5 e não rastreados) ficaram registrados como `[decision]` neste §7.
+
 <!-- END: post-execution -->
