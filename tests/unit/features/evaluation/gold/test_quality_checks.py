@@ -69,7 +69,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.quality_chec
 from financial_forecasting.shared.domain.value_objects.dataset_fingerprint import (
     DatasetFingerprint,
 )
-from tests.unit.features.evaluation.gold.conftest import (
+from tests.unit.features.evaluation.gold._cohort_factory import (
     Cohort,
     make_cohort,
     of_series,

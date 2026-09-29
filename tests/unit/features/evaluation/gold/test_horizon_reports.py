@@ -59,7 +59,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.hit_sequence
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
 )
-from tests.unit.features.evaluation.gold.conftest import (
+from tests.unit.features.evaluation.gold._cohort_factory import (
     Cohort,
     make_cohort,
     replace_records,

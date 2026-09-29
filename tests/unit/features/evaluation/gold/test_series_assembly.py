@@ -32,7 +32,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.forecast_rec
 from financial_forecasting.features.evaluation.domain.value_objects.realized_returns import (
     RealizedReturns,
 )
-from tests.unit.features.evaluation.gold.conftest import (
+from tests.unit.features.evaluation.gold._cohort_factory import (
     DEFAULT_HORIZONS,
     GOLD_LEVELS,
     Cohort,

@@ -1962,4 +1962,13 @@ restaura `.previous/` antes de apagar sobras. Testes só-do-real:
 `real_failure_keeps_current_on_swap_error` e
 `real_failure_keeps_current_after_crash_between_swaps`.
 
+### 2026-09-29 — [deviation] Checkpoint C bloco 3 (B6/L1): fábrica de cohort em `gold/_cohort_factory.py` — Claude (Opus 5.5)
+**Contexto:** o §1/§2 põem a fábrica `make_cohort` em `gold/conftest.py`; a suíte de
+contrato (`_gold_inputs.py`, Task 09) a importava de um conftest.
+**Razão:** a fábrica e os mutadores foram para o módulo neutro
+`tests/unit/features/evaluation/gold/_cohort_factory.py` (sem `test_`, stdlib +
+domínio, varrido pelo gate de pureza); o `gold/conftest.py` só a reexporta. Os testes
+unitários do gold e o `_gold_inputs.py` importam o módulo neutro. Sem mudança de
+comportamento.
+
 <!-- END: post-execution -->

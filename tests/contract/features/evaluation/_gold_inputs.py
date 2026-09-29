@@ -2,7 +2,7 @@
 
 Módulo privado (sem `test_`, importado absolutamente). Monta os insumos dos builders
 **só com o domínio** + `FakeMcsBackend`, a partir de um cohort sintético pequeno
-(`make_cohort` do `gold/conftest.py`): 2 horizontes, candidato `tft` com 2 seeds, `gbm`
+(`make_cohort` de `gold/_cohort_factory.py`): 2 horizontes, candidato `tft` com 2 seeds, `gbm`
 e um baseline pontual `naive` (grade toda igual em todo ponto — 100 % degenerado).
 
 - `completed_inputs()`: montagem sem achado → checks → `HorizonReports` por horizonte →
@@ -74,7 +74,7 @@ from financial_forecasting.shared.domain.value_objects.dataset_fingerprint impor
     DatasetFingerprint,
 )
 from tests.fakes.features.evaluation.fake_mcs_backend import FakeMcsBackend
-from tests.unit.features.evaluation.gold.conftest import (
+from tests.unit.features.evaluation.gold._cohort_factory import (
     Cohort,
     at_point,
     drop_records,
