@@ -10,7 +10,7 @@
     "cran_snapshot": "https://p3m.dev/cran/__linux__/jammy/2024-10-30",
     "generated_at": "2026-09-29",
     "session_info": "var_test_cases.sessionInfo.txt",
-    "command": "docker run --rm -v \"C:/Users/Marcelo/Documents/Code/financial-forecasting-worktrees/feat-113-6-3-calibration-risk-backtests/tests/fixtures/r_oracle:/work\" -w /work ff-r-oracle:4.4.1 Rscript var_test_cases.R",
+    "command": "docker build -t ff-r-oracle:4.4.1 tests/fixtures/r_oracle && docker run --rm -v \"$PWD/tests/fixtures/r_oracle:/work\" -w /work ff-r-oracle:4.4.1 Rscript var_test_cases.R",
     "t_max": 500
   },
   "cases": [
@@ -232,25 +232,25 @@
     },
     {
       "id": "clustered_p0.02_T250",
-      "description": "Markov pi01 = 0.01, pi11 = 0.3, taxa nominal 0.02, T = 250, seed 20273928",
+      "description": "Markov pi01 = 0.01, pi11 = 0.3, taxa nominal 0.02, T = 250, seed 20273932 (n11 >= 2)",
       "category": "clustered",
       "violation_rate": {
         "dec": 0.02,
         "hex": "0x1.47ae147ae147bp-6"
       },
-      "violations": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "violations": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0],
       "whole": {
-        "uc_lrstat": 2.371422740149959,
-        "cc_lrstat": 2.4038117580491165
+        "uc_lrstat": 0.72698245146621276,
+        "cc_lrstat": 22.66460197390797
       },
       "from_t2": {
-        "uc_lrstat": 2.3471140136033291,
-        "cc_lrstat": 2.3796346970719742
+        "uc_lrstat": 0.74349152485966785,
+        "cc_lrstat": 22.648964584749042
       }
     },
     {
       "id": "clustered_p0.02_T500",
-      "description": "Markov pi01 = 0.01, pi11 = 0.3, taxa nominal 0.02, T = 500, seed 20274928",
+      "description": "Markov pi01 = 0.01, pi11 = 0.3, taxa nominal 0.02, T = 500, seed 20274928 (n11 >= 2)",
       "category": "clustered",
       "violation_rate": {
         "dec": 0.02,
@@ -268,7 +268,7 @@
     },
     {
       "id": "clustered_p0.05_T250",
-      "description": "Markov pi01 = 0.025, pi11 = 0.3, taxa nominal 0.05, T = 250, seed 20275928",
+      "description": "Markov pi01 = 0.025, pi11 = 0.3, taxa nominal 0.05, T = 250, seed 20275928 (n11 >= 2)",
       "category": "clustered",
       "violation_rate": {
         "dec": 0.050000000000000003,
@@ -286,7 +286,7 @@
     },
     {
       "id": "clustered_p0.05_T500",
-      "description": "Markov pi01 = 0.025, pi11 = 0.3, taxa nominal 0.05, T = 500, seed 20276928",
+      "description": "Markov pi01 = 0.025, pi11 = 0.3, taxa nominal 0.05, T = 500, seed 20276928 (n11 >= 2)",
       "category": "clustered",
       "violation_rate": {
         "dec": 0.050000000000000003,
@@ -304,7 +304,7 @@
     },
     {
       "id": "clustered_p0.1_T250",
-      "description": "Markov pi01 = 0.05, pi11 = 0.3, taxa nominal 0.1, T = 250, seed 20277928",
+      "description": "Markov pi01 = 0.05, pi11 = 0.3, taxa nominal 0.1, T = 250, seed 20277928 (n11 >= 2)",
       "category": "clustered",
       "violation_rate": {
         "dec": 0.10000000000000001,
@@ -322,7 +322,7 @@
     },
     {
       "id": "clustered_p0.1_T500",
-      "description": "Markov pi01 = 0.05, pi11 = 0.3, taxa nominal 0.1, T = 500, seed 20278928",
+      "description": "Markov pi01 = 0.05, pi11 = 0.3, taxa nominal 0.1, T = 500, seed 20278928 (n11 >= 2)",
       "category": "clustered",
       "violation_rate": {
         "dec": 0.10000000000000001,

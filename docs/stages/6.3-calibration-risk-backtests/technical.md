@@ -1756,8 +1756,9 @@ r_error 5, t2_feed_error 3); I_1 = 1 com |uc(t ≥ 2) − uc(inteira)| > 0.1 em
 Notas: `docker build` da Task reconstruiu a imagem `ff-r-oracle:4.4.1` a partir do
 `Dockerfile` byte-idêntico (snapshot CRAN `p3m.dev/cran/__linux__/jammy/2024-10-30`;
 `rugarch_1.5-3`, `jsonlite_1.8.9` no `sessionInfo`); `generated_at = 2026-09-29` é o
-`Sys.Date()` do container (UTC); `provenance.command` é o literal executado no host
-(caminho absoluto `pwd -W`), como a Task manda.
+`Sys.Date()` do container (UTC). O `provenance.command` desta primeira geração era o
+literal executado no host (com caminho absoluto) — substituído pelo comando portável
+em `[6.3/task-10-fix]` (ver a entrada `[deviation]` do Checkpoint C bloco 4).
 
 ### 2026-09-28 — [decision] Task 11: trio comparado em todo caso com o feed inteiro válido; política de erro só no feed inteiro — Claude (Opus 5.5)
 **Contexto:** a Task 11 previa o `trio_two_feeds` só com os dois feeds válidos e o
@@ -1789,5 +1790,26 @@ domínio §7.6 (mecânica do MC), §7.7 (receita dos dois feeds, com a errata do
 `rugarch::VaRTest` do §11.3; overview §10 com as duas fontes (DOI) e `updated_at`.
 Nenhuma convenção mudada. Correção nesta mesma entrada de §7: a entrada da Task 11
 dizia "24 dos 32" casos com feed inteiro válido; são **28 dos 32** (corrigido acima).
+
+### 2026-09-28 — [deviation] Checkpoint C bloco 4: `provenance.command` portável (sem caminho do host) e `clustered` com n11 ≥ 2 — Claude (Opus 5.5)
+**Contexto:** achado LOW (repo público) — a Task 10 mandava gravar o literal executado
+(`$(pwd -W)` via `FF_R_ORACLE_COMMAND`), o que versionou um caminho absoluto do host
+(`C:/Users/…`) em `var_test_cases.json`, e o comando gravado não reproduzia (faltavam o
+`docker build`, o `MSYS_NO_PATHCONV=1` e a variável que o gerador exigia). Achado INFO:
+`clustered_p0.02_T250` tinha n11 = 0 (não era agrupado de fato).
+**Razão:** disposição `corrigido` em `[6.3/task-10-fix]`, desviando da receita do
+technical (`pwd -W` + `FF_R_ORACLE_COMMAND`): o gerador perdeu o mecanismo da variável
+e grava o comando constante e portável na forma do `dm_test_cases.json` da 6.2 —
+`docker build -t ff-r-oracle:4.4.1 tests/fixtures/r_oracle && docker run --rm -v
+"$PWD/tests/fixtures/r_oracle:/work" -w /work ff-r-oracle:4.4.1 Rscript
+var_test_cases.R` (o cabeçalho do gerador explica o ajuste do Git Bash). Na mesma
+regeneração, a categoria `clustered` passou a exigir n11 ≥ 2: só
+`clustered_p0.02_T250` mudou de sorteio (seed 20273932, 7 violações, n11 = 4); os
+outros cinco `clustered` mudaram só a descrição, e os demais 26 casos e o
+`provenance` (fora `command`) ficaram byte-idênticos. Verificado: pré-checagem da
+Task 10 verde; `_fixture_problems` da 6.2 (worktree irmã) = `[]`;
+`git grep -n "C:/Users" -- tests/` sem ocorrências (em `docs/` só restam as linhas
+203–204 do bloco de ambiente do §1 deste technical, congelado desde a aprovação — fora
+do alcance da §7).
 
 <!-- END: post-execution -->

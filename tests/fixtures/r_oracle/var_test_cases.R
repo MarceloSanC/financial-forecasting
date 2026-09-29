@@ -1,12 +1,13 @@
 # Gerador determinístico da unidade de oráculo R `var_test_cases` (Stage 6.3).
 #
 # Oráculo: rugarch::VaRTest (Christoffersen 1998 / Kupiec 1995) congelado como fixture
-# (ADR 6.3.0002); formato da fixture do Step: ADR 6.2.0006. Uso (host com Docker, raiz
-# do repo; o literal executado vai para provenance.command via FF_R_ORACLE_COMMAND):
-#   docker build -t ff-r-oracle:4.4.1 tests/fixtures/r_oracle
-#   CMD="docker run --rm -v \"$(pwd -W)/tests/fixtures/r_oracle:/work\" -w /work ff-r-oracle:4.4.1 Rscript var_test_cases.R"
-#   MSYS_NO_PATHCONV=1 docker run --rm -e FF_R_ORACLE_COMMAND="$CMD" \
-#     -v "$(pwd -W)/tests/fixtures/r_oracle:/work" -w /work ff-r-oracle:4.4.1 Rscript var_test_cases.R
+# (ADR 6.3.0002); formato da fixture do Step: ADR 6.2.0006. Uso (host com Docker, a
+# partir da raiz do repo — o mesmo comando portável gravado em provenance.command, na
+# forma do `dm_test_cases.R` da 6.2; no Git Bash do Windows prefixe
+# `MSYS_NO_PATHCONV=1` e use `$(pwd -W)` no lugar de `$PWD`):
+#   docker build -t ff-r-oracle:4.4.1 tests/fixtures/r_oracle &&
+#   docker run --rm -v "$PWD/tests/fixtures/r_oracle:/work" -w /work \
+#     ff-r-oracle:4.4.1 Rscript var_test_cases.R
 #
 # Grava `var_test_cases.json` (provenance + casos) e `var_test_cases.sessionInfo.txt`.
 #
@@ -30,9 +31,6 @@ suppressPackageStartupMessages({
 
 T_MAX <- 500L
 BASE_SEED <- 20260928L
-
-command <- Sys.getenv("FF_R_ORACLE_COMMAND")
-stopifnot(nzchar(command))
 
 verbatim <- function(text) structure(text, class = "json")
 
@@ -125,7 +123,9 @@ for (p in c(0.01, 0.02, 0.05, 0.1)) {
   }
 }
 
-# 2. clustered: cadeia de Markov com pi01 = p/2 e pi11 = 0.3 (violações agrupadas).
+# 2. clustered: cadeia de Markov com pi01 = p/2 e pi11 = 0.3 (violações agrupadas); só
+# sorteios com ao menos duas transições 1 -> 1 (n11 >= 2), para o caso ser agrupado de fato.
+n11 <- function(v) sum(head(v, -1L) == 1L & tail(v, -1L) == 1L)
 markov <- function(n, p01, p11) {
   v <- integer(n)
   v[1] <- rbinom(1L, 1L, p01)
@@ -141,10 +141,11 @@ for (p in c(0.02, 0.05, 0.1)) {
       set.seed(seed)
       markov(n, p / 2, 0.3)
     }
-    hit <- search_seed(BASE_SEED + 1000L * block, draw, both_feeds_ok(p))
+    accept <- function(v) both_feeds_ok(p)(v) && n11(v) >= 2L
+    hit <- search_seed(BASE_SEED + 1000L * block, draw, accept)
     add(make_case(
       sprintf("clustered_p%s_T%d", format(p), n),
-      sprintf("Markov pi01 = %s, pi11 = 0.3, taxa nominal %s, T = %d, seed %d",
+      sprintf("Markov pi01 = %s, pi11 = 0.3, taxa nominal %s, T = %d, seed %d (n11 >= 2)",
               format(p / 2), format(p), n, hit$seed),
       "clustered", p, hit$v
     ))
@@ -225,7 +226,11 @@ provenance <- list(
   cran_snapshot = getOption("repos")[["CRAN"]],
   generated_at = format(Sys.Date(), "%Y-%m-%d"),
   session_info = "var_test_cases.sessionInfo.txt",
-  command = command,
+  command = paste(
+    "docker build -t ff-r-oracle:4.4.1 tests/fixtures/r_oracle &&",
+    "docker run --rm -v \"$PWD/tests/fixtures/r_oracle:/work\" -w /work",
+    "ff-r-oracle:4.4.1 Rscript var_test_cases.R"
+  ),
   t_max = T_MAX
 )
 
