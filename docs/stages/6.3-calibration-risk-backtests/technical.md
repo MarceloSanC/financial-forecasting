@@ -3,7 +3,7 @@ title: Technical — Stage 6.3 — Backtests de calibração condicional e risco
 description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), TDD inside-out no domínio do BC evaluation — predicados FA7, kernels χ²/Kupiec/Wilson, HitSequence, ChristoffersenTest (trio puro, 3 estados, Monte Carlo), VaR descritivo, oráculo rugarch congelado e redação de roadmap/doc de domínio
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
 keywords: [technical, plano de execução, calibration-risk-backtests, evaluation, hit-sequence, christoffersen, kupiec, pof, wilson, chi-square, monte-carlo, dufour, var, rugarch, r-oracle, fixtures]
-status: done
+status: draft
 created_at: 2026-09-28
 updated_at: 2026-09-28
 stage_id: 6.3-calibration-risk-backtests
