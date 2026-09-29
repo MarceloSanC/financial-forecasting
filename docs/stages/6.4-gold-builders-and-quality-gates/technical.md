@@ -2008,4 +2008,34 @@ Task 11.
   `ParquetAnalyticsRepository`. `ValueError` de `value_guardrail` não-finito
   (`CoverageSeries`) propaga do `assemble` (decisão da Task 04).
 
+### 2026-09-29 — [decision] Task 12 — custo do MCS — Claude (Opus 5.5)
+**Contexto:** A12 pede o custo do MCS re-medido dentro do `RefreshGold` real e com T ≈
+10³ (a medição da Fase 3B está no §1).
+**Razão (medido no container de dev, Python 3.12.13, 12 CPUs, volume
+`ff-step62-venv`):**
+- **E2E (`RefreshGold` wirado, `ArchMcs` real, k = 3, T ≈ 60, `reps = 1000`, 2
+  horizontes × 2 esquemas):** etapa `mcs` do passo (1) = **0,133 s** (log
+  `step=mcs duration_s=0.132874`); rerun 0,223 s. O custo a frio é o `import arch`, que
+  o proxy lazy adia para a primeira estimativa b̂_sb: a etapa `preconditions` do
+  primeiro refresh do processo levou 2,907 s e 0,005 s nos seguintes.
+- **`timeit` (min de 3) de `ModelConfidenceSet.evaluate` sobre índices do `ArchMcs`,
+  T = 1000, k = 6 (15 pares), `reps = MIN_MCS_REPS = 1000`, α = 0,10, bloco da regra
+  l = 8:** estacionário 0,387 s (índices 0,307 s); moving-block 0,381 s (índices
+  0,292 s) — ≈ 0,7 s por (horizonte, esquema), coerente com a tabela do §1 (≈ 0,9 s no
+  pior caso). Stdlib + `arch` bastam: sem paralelismo nem cache.
+
+### 2026-09-29 — [decision] Task 12: wiring e cenário do e2e — Claude (Opus 5.5)
+**Contexto:** detalhes da montagem no `composition_root` e do e2e.
+**Razão:**
+- `refresh_gold` usa as MESMAS instâncias de `analytics_repository`, `store` e
+  `hasher` do contêiner, um `SystemClock` próprio e o `_LazyArchMcs` (dois métodos do
+  port, `ArchMcs` importado na 1ª chamada); `test_composition_root.py` prova o proxy
+  ainda vazio (`arch_mcs_proxy_lazy`) e o e2e prova a carga depois do passo (1).
+- O e2e usa a fábrica `make_cohort` (`_cohort_factory.py`) com os nomes do concept
+  (`tft_quantile`, `gbm_quantile`, `baseline_naive`), 70 sessões (≈ 60 pontos por série)
+  e grava o silver pelo `ParquetAnalyticsRepository` real; a lacuna interior do passo
+  (3) remove um `target_timestamp` de um run do GBM — o mesmo alvo existe nos dois
+  horizontes do run, então o `gold_quality_checks` traz um `interior_gap` por horizonte.
+  Tabelas lidas por DuckDB com `hive_partitioning = false` (o `[finding]` da Task 08).
+
 <!-- END: post-execution -->
