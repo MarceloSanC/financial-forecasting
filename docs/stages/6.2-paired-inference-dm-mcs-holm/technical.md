@@ -1741,4 +1741,15 @@ Findings abertos com Stage candidata: o `[finding]` da Task 03 (unificar `_times
 `_paired_inputs.check_horizon`/`_check_int` com o `_horizon.py` da 6.3 e a `CoverageSeries`
 — **6.4**).
 
+### 2026-09-29 — [decision] Auditoria da Stage: gate AST de pureza cobre 6 bibliotecas — Claude (Opus 5.5)
+**Contexto:** a auditoria (`stage-audit`, finding F1) achou que a entrada "Auditoria de
+testes: gate AST da pureza dos unit de `evaluation`" desta §7 lista 4 bibliotecas
+proibidas (`arch`/`statsmodels`/`scipy`/`numpy`), mas o código depois de `9729f8a` proíbe 6.
+**Razão:** o registro correto é: `_FORBIDDEN_ROOTS` de
+`tests/architecture/test_unit_evaluation_purity.py` reprova import de `arch`,
+`statsmodels`, `scipy`, `numpy`, `sklearn` e `scoringrules` — o commit `9729f8a` alinhou o
+conjunto ao grep de pureza do §3 (que já incluía `sklearn` e `scoringrules`). O resto da
+entrada anterior (adapters, chamadas de leitura, teste anti-vácuo) segue válido; esta
+entrada a corrige sem reescrever o histórico.
+
 <!-- END: post-execution -->
