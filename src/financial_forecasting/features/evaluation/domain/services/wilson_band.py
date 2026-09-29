@@ -34,6 +34,7 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
     is_finite_number,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
+    is_multi_step,
     validate_horizon,
 )
 
@@ -67,6 +68,11 @@ def wilson_interval(*, count: float, n: float, band_level: float) -> tuple[float
     # A Eq. (4) cai em [0, 1]; o recorte só remove o arredondamento das pontas (c = 0
     # dava -5.55e-17, c = n dava 1.0000000000000002) — a banda persistida é uma proporção.
     return max(0.0, center - half_width), min(1.0, center + half_width)
+
+
+def serial_dependence_warning_for(horizon: int) -> bool:
+    """Aviso de dependência serial da banda binomial: multi-passo (doc §4.4, §7.4)."""
+    return is_multi_step(horizon)
 
 
 @dataclass(frozen=True)
@@ -108,7 +114,7 @@ class WilsonBandReport:
         validate_horizon(self.horizon, field="horizon")
         validate_rate(self.nominal, field="nominal")
         validate_rate(self.band_level, field="band_level")
-        if self.serial_dependence_warning != (self.horizon > 1):
+        if self.serial_dependence_warning != serial_dependence_warning_for(self.horizon):
             raise ValueError(
                 "serial_dependence_warning must be (horizon > 1), got "
                 f"{self.serial_dependence_warning!r} for horizon={self.horizon}"
@@ -169,7 +175,7 @@ class WilsonBand:
         validate_horizon(horizon, field="horizon")
         validate_rate(nominal, field="nominal")
         validate_rate(band_level, field="band_level")
-        warning = horizon > 1
+        warning = serial_dependence_warning_for(horizon)
         if is_finite_number(n) and n == 0:
             if not (is_finite_number(count) and count == 0):
                 raise ValueError(f"count must be 0 when n == 0, got {count!r}")

@@ -25,3 +25,13 @@ def validate_positive_int(value: int, *, field: str) -> None:
 def validate_horizon(value: int, *, field: str) -> None:
     """Horizonte é inteiro positivo (`validate_positive_int`) - nome do conceito no slice."""
     validate_positive_int(value, field=field)
+
+
+def is_multi_step(horizon: int) -> bool:
+    """`horizon > 1` - o limiar único do slice para multi-passo (B-H7, doc §7.4).
+
+    A partir dele: hits podem ser (h-1)-dependentes sob a nula, a banda de Wilson ganha
+    o aviso de dependência serial, LR_ind/LR_cc viram descritivos (fora de sub-série DGT)
+    e o p-valor Monte Carlo não é definido.
+    """
+    return horizon > 1

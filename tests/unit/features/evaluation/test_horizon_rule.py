@@ -120,3 +120,37 @@ def test_horizon_rule_is_consumed_by_the_new_reports(
             patch.setattr(module, "validate_horizon", _reject)
             with pytest.raises(ValueError, match="single horizon rule called"):
                 rebuild()
+
+
+@pytest.mark.unit
+def test_horizon_rule_multi_step_threshold_at_two(
+    make_hit_sequence: HitSequenceFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Limiar único `is_multi_step` (h = 2 é o primeiro multi-passo): a banda de Wilson
+    ganha o aviso, LR_ind/LR_cc viram descritivos (salvo na sub-série DGT) e o MC é
+    recusado; em h = 1 nada disso. Os três leitores passam pela mesma função."""
+    one = make_hit_sequence((True, False, True, False))
+    two = make_hit_sequence((True, False, True, False), horizon=2)
+    wilson = {
+        h: wilson_band_module.WilsonBand.evaluate(
+            horizon=h, count=1, n=4, nominal=0.05, band_level=0.95
+        ).serial_dependence_warning
+        for h in (1, 2)
+    }
+
+    assert wilson == {1: False, 2: True}
+    assert ChristoffersenTest.evaluate(one, min_violations=0).independence_descriptive is False
+    assert ChristoffersenTest.evaluate(two, min_violations=0).independence_descriptive is True
+    sub = two.dgt_partition()[0]
+    assert ChristoffersenTest.evaluate(sub, min_violations=0).independence_descriptive is False
+    ChristoffersenTest.monte_carlo_p_values(one, min_violations=0, draws=2, seed=1)
+    with pytest.raises(ValueError, match="require horizon == 1"):
+        ChristoffersenTest.monte_carlo_p_values(two, min_violations=0, draws=2, seed=1)
+
+    for module in (christoffersen_test_module, wilson_band_module):
+        monkeypatch.setattr(module, "is_multi_step", lambda _: True)
+    assert wilson_band_module.WilsonBand.evaluate(
+        horizon=1, count=1, n=4, nominal=0.05, band_level=0.95
+    ).serial_dependence_warning
+    with pytest.raises(ValueError, match="require horizon == 1"):
+        ChristoffersenTest.monte_carlo_p_values(one, min_violations=0, draws=2, seed=1)

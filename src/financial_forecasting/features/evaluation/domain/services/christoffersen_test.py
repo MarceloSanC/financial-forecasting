@@ -54,6 +54,7 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
     is_finite_number,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
+    is_multi_step,
     validate_horizon,
     validate_positive_int,
 )
@@ -95,6 +96,16 @@ class IndependenceStatus(StrEnum):
     BELOW_MIN_VIOLATIONS = "below_min_violations"  # n_violations < min_violations
     # linha vazia (n00+n01 == 0 ou n10+n11 == 0) ou coluna vazia (n00+n10 == 0 ou n01+n11 == 0)
     DEGENERATE_TRANSITION_MATRIX = "degenerate_transition_matrix"
+
+
+def independence_is_descriptive(*, horizon: int, dgt_step: int | None) -> bool:
+    """LR_ind/LR_cc descritivos: multi-passo e fora de sub-série DGT (B-H7; regra única)."""
+    return is_multi_step(horizon) and not belongs_to_dgt_partition(dgt_step)
+
+
+def monte_carlo_defined_for(horizon: int) -> bool:
+    """O p-valor Monte Carlo só existe em h = 1 (ADR 6.3.0006 item 7; regra única)."""
+    return not is_multi_step(horizon)
 
 
 def validate_min_violations(min_violations: int) -> None:
@@ -343,7 +354,9 @@ class ChristoffersenReport:
             )
         for field, statistic, df in _P_VALUE_FIELDS:
             _check_p_value(field, getattr(self, field), getattr(stats, statistic), df)
-        expected_descriptive = self.horizon > 1 and not belongs_to_dgt_partition(self.dgt_step)
+        expected_descriptive = independence_is_descriptive(
+            horizon=self.horizon, dgt_step=self.dgt_step
+        )
         if self.independence_descriptive != expected_descriptive:
             raise ValueError(
                 "independence_descriptive must be (horizon > 1 and not a DGT sub-series) = "
@@ -403,7 +416,9 @@ class ChristoffersenTest:
             p_uc=p_values["p_uc"],
             p_ind=p_values["p_ind"],
             p_cc=p_values["p_cc"],
-            independence_descriptive=sequence.horizon > 1 and not sequence.is_dgt_subseries,
+            independence_descriptive=independence_is_descriptive(
+                horizon=sequence.horizon, dgt_step=sequence.dgt_step
+            ),
         )
 
     @staticmethod
@@ -427,7 +442,7 @@ class ChristoffersenTest:
                 "Monte Carlo p-values are not defined on a DGT sub-series "
                 f"(dgt_offset={sequence.dgt_offset}, dgt_step={sequence.dgt_step})"
             )
-        if sequence.horizon > 1:
+        if not monte_carlo_defined_for(sequence.horizon):
             raise ValueError(
                 "Monte Carlo p-values require horizon == 1 (the (h-1)-dependence under H0 is "
                 f"a nuisance parameter), got horizon={sequence.horizon}"
@@ -555,7 +570,7 @@ class MonteCarloPValues:
     def __post_init__(self) -> None:
         """C9: parâmetros, status, presença dos p-valores e contagem de tentativas."""
         validate_horizon(self.horizon, field="horizon")
-        if self.horizon != 1:
+        if not monte_carlo_defined_for(self.horizon):
             raise ValueError(
                 f"Monte Carlo p-values exist only for horizon == 1, got {self.horizon}"
             )

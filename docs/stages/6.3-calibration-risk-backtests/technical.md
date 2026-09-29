@@ -1831,4 +1831,16 @@ validador do meio erguia sobre entrada válida.
 `test_three_state_rounding_negative_middle_is_zero` e
 `test_three_state_counts_filling_n_are_accepted` ((3, 2, 5) = 32.39011338418889).
 
+### 2026-09-28 — [decision] Checkpoint C bloco 4: limiar multi-passo e leituras dependentes com dono único — Claude (Opus 5.5)
+**Contexto:** achado INFO (dono da regra) — "`independence_descriptive` = h > 1 fora de
+DGT" estava no `evaluate` e no `__post_init__` do relatório; "MC só em h = 1" no
+`monte_carlo_p_values` e no `MonteCarloPValues`; "aviso = h > 1" no `WilsonBand` e no
+seu relatório.
+**Razão:** disposição `corrigido` em `[6.3/task-08-fix]` — limiar único
+`is_multi_step(horizon)` em `value_objects/_horizon.py` e três leituras nomeadas, cada
+uma usada pelo serviço e pelo relatório: `independence_is_descriptive(horizon=,
+dgt_step=)` e `monte_carlo_defined_for(horizon)` em `christoffersen_test.py`,
+`serial_dependence_warning_for(horizon)` em `wilson_band.py`. Teste no limiar h = 2
+(`test_horizon_rule_multi_step_threshold_at_two`, com prova de consumo por monkeypatch).
+
 <!-- END: post-execution -->
