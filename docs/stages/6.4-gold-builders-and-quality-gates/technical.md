@@ -1719,11 +1719,14 @@ rejeitados incluem `"AAPL\n"`, `"\nAAPL"`, `a*b` e `bytes` além da lista do cri
 `sum((0.1,)*10) == 1.0`: desde o 3.12 o `sum` builtin de floats usa soma compensada
 (Neumaier — "What's New In Python 3.12", `sum()`), então a premissa "onde `sum` não é"
 é falsa nesta versão.
-**Razão:** o que o critério quer provar (o resumo usa soma exata, não a dobra ingênua)
-continua de pé; a referência do teste passou a ser `functools.reduce(operator.add, …)`
-(0.9999999999999999), e `returns_fsum == 1.0` segue asserido
-(`test_gold_value_objects.py::realized_summary`). O VO continua com `math.fsum` como o
-§1 manda (exato, sem depender da versão do `sum`). Sem mudança de contrato.
+**Razão:** o que o critério quer provar (o resumo usa soma exata) continua de pé com
+duas referências em `test_gold_value_objects.py::realized_summary`: (a) `[0.1]*10`
+contra a dobra ingênua `functools.reduce(operator.add, …)` (0.9999999999999999), com
+`returns_fsum == 1.0`; (b) — acrescentada após o Checkpoint C bloco 1 (achado M1: (a)
+não mata o mutante "`math.fsum` → `sum` builtin") — `xs = (1e16, 1e-16, -2.0, 1.0, 3.0,
+2.0**53)`, medida no container (Python 3.12.13): `math.fsum(xs) = 1.9007199254740996e+16`
+e `sum(xs) = 1.900719925474099e+16`; o teste exige `returns_fsum == math.fsum(xs)` e
+`!= sum(xs)`. O VO continua com `math.fsum` como o §1 manda. Sem mudança de contrato.
 
 ### 2026-09-29 — [decision] Task 03: helpers de forma nos VOs de entrada e coerência extra do `AssembledCohort` — Claude (Opus 5.5)
 **Contexto:** `ForecastRecord`, `CohortRun` e `AlignmentFinding`/`HorizonSamples`

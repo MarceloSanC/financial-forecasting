@@ -174,10 +174,11 @@ def test_realized_lookup_present_and_absent() -> None:
 
 @pytest.mark.unit
 def test_realized_summary_uses_fsum() -> None:
-    """`returns_fsum` é `math.fsum`: `[0.1]*10` soma 1.0 exato (a soma ingênua não soma).
+    """`returns_fsum` é `math.fsum`, não a dobra ingênua nem o `sum` builtin.
 
-    A referência é a dobra ingênua (`reduce(add)`), não o `sum` builtin: desde o Python
-    3.12 o `sum` de floats é compensado (Neumaier) e também dá 1.0 aqui (technical 6.4 §7).
+    `[0.1]*10`: fsum dá 1.0 exato e a dobra ingênua (`reduce(add)`) não. Desde o Python
+    3.12 o `sum` de floats é compensado (Neumaier) e também dá 1.0 ali; a série `xs`
+    separa `math.fsum` do `sum` builtin (technical 6.4 §7).
     """
     timestamps = tuple(f"2024-02-{day:02d}T00:00:00+00:00" for day in range(1, 11))
     realized = RealizedReturns(timestamps=timestamps, returns=(0.1,) * 10)
@@ -185,6 +186,11 @@ def test_realized_summary_uses_fsum() -> None:
     assert realized.returns_fsum == 1.0
     assert realized.n_sessions == len(timestamps)
     assert (realized.first_timestamp, realized.last_timestamp) == (timestamps[0], timestamps[-1])
+    xs = (1e16, 1e-16, -2.0, 1.0, 3.0, 2.0**53)
+    wide = RealizedReturns(timestamps=timestamps[: len(xs)], returns=xs)
+    assert sum(xs) != math.fsum(xs)
+    assert wide.returns_fsum == math.fsum(xs)
+    assert wide.returns_fsum != sum(xs)
 
 
 @pytest.mark.unit
