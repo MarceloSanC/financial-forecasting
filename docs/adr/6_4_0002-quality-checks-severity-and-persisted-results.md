@@ -20,6 +20,13 @@ bounded_context: evaluation
 
 `accepted`
 
+**Amendment (2026-09-29, Stage 6.4 execution, Checkpoint C block 4):** item
+6 (`realized_provenance`) is amended by
+[ADR 6.4.0009](./6_4_0009-realized-from-modeling-training-grid-via-consumer-port.md):
+the fingerprint it reports is the `DatasetContentFingerprint` of the
+modeling slice's trimmed training grid, and `detail` also carries
+`grid_trimmed_prefix`.
+
 ## Context
 
 Two project rules fix the severity of the two checks the roadmap names:
@@ -106,7 +113,6 @@ alerts that are either spammy or not actionable" — two levels, not one.
    consumed `target_return` (count of sessions read, `math.fsum` of the
    values, first and last session — ADR 6.4.0004 item 4) in `detail`, with
    the `math.fsum` as `value`.
-   > **Amended 2026-09-29:** the fingerprint here is the `DatasetContentFingerprint` of the training grid, with `grid_trimmed_prefix` in `detail` — see [ADR 6.4.0009](6_4_0009-realized-from-modeling-training-grid-via-consumer-port.md).
 7. A blocked refresh publishes only the builders declared
    `runs_when_blocked` — today `quality_checks` (ADR 6.4.0005).
 
