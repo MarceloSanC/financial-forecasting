@@ -1,9 +1,9 @@
 ---
 title: Technical — Stage 6.4 — Gold builders modulares e quality gates (montagem das séries, DuckDB, MCS em produção)
-description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), TDD inside-out no BC evaluation — validadores públicos da 6.2, regra única de identificador em shared, VOs de entrada, SeriesAssembly, registry de quality checks, HorizonReports e gold_build_order, DTOs e ports GoldStore/GoldBuilder/SilverTableReader, ParquetGoldStore e cinco builders, use case RefreshGold, wiring, e2e e roadmap
+description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), TDD inside-out no BC evaluation — validadores públicos da 6.2, regra única de identificador em shared, VOs de entrada, SeriesAssembly, registry de quality checks, HorizonReports e gold_build_order, DTOs e ports GoldStore/GoldBuilder/SilverTableReader, ParquetGoldStore e cinco builders, use case RefreshGold, wiring, e2e e roadmap; revisão de execução com o port TrainingGridReader (real ReadTrainingGrid da modeling) e o RefreshGold religado à grade de treino aparada da 5.5
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
-keywords: [technical, plano de execução, gold-builders-and-quality-gates, evaluation, gold, refresh-gold, series-assembly, quality-checks, registry, horizon-reports, graphlib, gold-store, gold-builder, silver-table-reader, parquet, duckdb, manifest, mcs, port-coverage, importlinter]
-status: draft
+keywords: [technical, plano de execução, gold-builders-and-quality-gates, evaluation, gold, refresh-gold, series-assembly, quality-checks, registry, horizon-reports, graphlib, gold-store, gold-builder, silver-table-reader, training-grid-reader, read-training-grid, dataset-content-fingerprint, parquet, duckdb, manifest, mcs, port-coverage, importlinter]
+status: done
 created_at: 2026-09-29
 updated_at: 2026-09-29
 stage_id: 6.4-gold-builders-and-quality-gates
@@ -14,7 +14,7 @@ depends_on: [6.2-paired-inference-dm-mcs-holm, 6.3-calibration-risk-backtests]
 concept_ref: ./concept.md
 issue_id: 117
 branch: feat/117-6-4-gold-builders-and-quality-gates
-tasks_count: 13
+tasks_count: 15
 ---
 
 # Technical — Stage 6.4 — Gold builders modulares e quality gates
@@ -24,7 +24,12 @@ tasks_count: 13
 > registrar §7. Commits seguem [`CONVENTIONS.md`](../../CONVENTIONS.md) §4:
 > `<type>(<escopo>): <descrição> [6.4/task-NN]`, `Refs #117`, subject
 > ≤ 100 caracteres (hook `commit-msg`). Escopo `evaluation`, salvo a Task 02
-> (`shared`) e a Task 13 (`roadmap`).
+> (`shared`) e a Task 13 (`roadmap`, inclusive a sua reexecução depois da
+> Task 15).
+>
+> **Revisão de execução (2026-09-29, ADR 6.4.0009):** as Tasks 01–13 já estão
+> executadas e commitadas; a ordem daqui em diante é **Task 14 → Task 15 →
+> reexecução da Task 13** (§4).
 >
 > Ao encontrar algo não previsto em §1–§6 ou no `concept.md`: **pausar**,
 > resolver pelo §2 de [`PROMPT-step-single-session.md`](../../PROMPT-step-single-session.md)
@@ -51,12 +56,30 @@ o `gold_build_order`, os DTOs do refresh, os ports-out `GoldStore`,
 `RefreshGold`, o wiring no `composition_root` com e2e sobre silver sintético e
 a redação do roadmap §6.4.
 
+**Revisão de execução (Checkpoint C bloco 4, ALTA-1;
+[ADR 6.4.0009](../../adr/6_4_0009-realized-from-modeling-training-grid-via-consumer-port.md)):**
+com a 5.5 em `develop`, o `decision_idx` gravado indexa a grade de treino
+**aparada** (prefixo de aquecimento cortado por `build_training_grid`); o
+`_read_realized` da Task 11 lia o dataset inteiro e toda série real saía com
+`decision_index_mismatch` (sonda: offset 251, 32 achados, refresh `BLOCKED`).
+Duas Tasks novas corrigem: a **Task 14** cria o port do consumidor
+`TrainingGridReader` com o real `ReadTrainingGrid` (use case aditivo da
+`modeling`, delega a `load_training_grid`), fake e contrato `[fake, real]`; a
+**Task 15** religa o `RefreshGold` à grade (realizado = grade;
+`DatasetContentFingerprint` conferido contra `command.dataset_fingerprint`,
+C10; `grid_trimmed_prefix` no manifesto e no `realized_provenance`), ajusta
+DTOs, contexto, wiring e e2e, absorve os 9 achados BAIXOS de teste do
+Checkpoint C bloco 4 e mede o refresh sobre uma cópia do cohort real. A
+Task 13 é **reexecutada** depois da 15 (roadmap com os nomes novos + L4).
+
 Todas as decisões vêm do concept **por referência** — nenhuma é re-derivada:
 D1 (montagem num serviço único, achados em vez de exceção), D2 (dedup não
 reaplicado —
 [ADR 6.4.0003](../../adr/6_4_0003-single-observation-verified-not-rededuplicated.md)),
 D3 (insumos —
-[ADR 6.4.0004](../../adr/6_4_0004-evaluation-inputs-silver-reader-port-and-medallion-dataset.md)),
+[ADR 6.4.0004](../../adr/6_4_0004-evaluation-inputs-silver-reader-port-and-medallion-dataset.md),
+itens 3–4 emendados pelo
+[ADR 6.4.0009](../../adr/6_4_0009-realized-from-modeling-training-grid-via-consumer-port.md)),
 D4 (registry e severidade —
 [ADR 6.4.0002](../../adr/6_4_0002-quality-checks-severity-and-persisted-results.md)),
 D5 (relatórios, duas amostras —
@@ -78,13 +101,18 @@ de identificador (shared, Task 02) → VOs folha (Task 03) → `SeriesAssembly`
 (Task 04) → checks (Task 05) → `HorizonReports` + `gold_build_order` (Task 06)
 → DTOs + port `GoldStore` (Task 07) → `ParquetGoldStore` (Task 08) → port
 `GoldBuilder` (Task 09) → builders (Task 10) → port `SilverTableReader` + use
-case `RefreshGold` (Task 11) → wiring + e2e (Task 12) → roadmap (Task 13).
+case `RefreshGold` (Task 11) → wiring + e2e (Task 12) → roadmap (Task 13);
+revisão de execução: port `TrainingGridReader` + real `ReadTrainingGrid`
+(Task 14) → `RefreshGold` sobre a grade (Task 15) → reexecução da Task 13.
 Cada commit deixa o build verde.
 
 **Exceções de ordem/contagem declaradas (PIPELINE §4.3; skill `task-ordering-hex`):**
 
-- **13 Tasks** — acima da estimativa do concept (12) e dentro do teto do
-  ROADMAP-1 (15; precedente: 6.2 com 13). Motivos: (a) as mudanças em
+- **15 Tasks** (13 no plano original + 2 da revisão de execução, ADR
+  6.4.0009) — no teto do ROADMAP-1 (15; precedente: 6.2 com 13). A atualização
+  do roadmap da revisão é **reexecução** da Task 13 (mesmo escopo `roadmap`,
+  commit `[6.4/task-13]`), não Task nova, para não passar do teto. No plano
+  original: 13 Tasks, acima da estimativa do concept (12). Motivos: (a) as mudanças em
   arquivos da 6.2 ficam numa Task própria, com os testes existentes intactos
   (pedido da sessão mestra); (b) a regra de identificador do C3 ganha dono
   único em `shared` numa Task de escopo `shared` (decisão de detalhe abaixo)
@@ -109,12 +137,28 @@ Cada commit deixa o build verde.
   e 11 (port + fake + contrato do `SilverTableReader`, que já tem real, junto
   do seu único consumidor — use case + teste unitário — e a docstring do
   repositório que o `check_port_coverage` lê; separar deixaria um port sem
-  consumidor por um commit).
+  consumidor por um commit), 14 (port + fake + contrato + o real
+  `ReadTrainingGrid`, que mora na `modeling`, + o piso do `port-coverage` +
+  LAYOUT §7 e comentário do `.importlinter` — a aresta type-only nasce
+  declarada no mesmo commit do import; sem o real no mesmo commit o port
+  abriria entrada no baseline, que o concept veda; o port fica sem consumidor
+  só até a Task 15, adjacente) e 15 (troca de tipo atômica: o
+  `RefreshGold` muda de colaborador e de tipo de fingerprint junto com o
+  `GoldManifest`, o `QualityCheckContext`, o `realized_provenance`, o
+  `composition_root` e os sete arquivos de teste que os constroem; separar
+  deixaria o build vermelho entre commits. Os achados BAIXOS de teste entram
+  aqui porque tocam os mesmos arquivos).
+- **Escopo do commit da Task 14:** `evaluation` — o port é do consumidor e o
+  `ReadTrainingGrid` é o real aditivo que existe só para ele (precedente da
+  Task 11, que tocou o `analytics_store` num commit `evaluation`); nenhum
+  arquivo existente da `modeling` muda.
 - **Gates de arquitetura tocados:** Task 03 (`test_unit_evaluation_purity.py`
   passa a varrer subpacotes), Task 04 (`.importlinter` +
   `test_import_contracts.py`), Tasks 07–10 (`scripts/arch_baseline.toml` +
-  `test_port_coverage_gate.py`, janela de um commit cada). Essas Tasks rodam
-  T3 (`make check`).
+  `test_port_coverage_gate.py`, janela de um commit cada), Task 14
+  (`test_port_coverage_gate.py`: piso 25 → 26 e resolução do real; LAYOUT §7;
+  comentário do `.importlinter`, sem entrada nova de runtime). Essas Tasks
+  rodam T3 (`make check`).
 
 **Decisões de detalhe planejadas (abaixo do limiar de concept — não mudam
 contrato, fronteira nem critério; viram `[decision]` em §7 ao executar):**
@@ -146,9 +190,14 @@ contrato, fronteira nem critério; viram `[decision]` em §7 ao executar):**
 - **Resumo do `target_return` como propriedade do `RealizedReturns`**
   (`n_sessions`, `returns_fsum` por `math.fsum`, `first_timestamp`,
   `last_timestamp`): uma computação, consumida pelo `realized_provenance` e
-  pelo manifesto. As somas de `close`/`volume` do fingerprint ficam na função
-  de leitura do use case (entradas do `DatasetFingerprint.compute`; o hash é
-  do VO de `shared`, LAYOUT §7).
+  pelo manifesto. No plano original as somas de `close`/`volume` do
+  `DatasetFingerprint` ficavam na leitura do use case; revisão de execução
+  (Task 15): a
+  identidade é o `DatasetContentFingerprint.compute(hasher, asset_id,
+  timestamps=grid.timestamps_iso(), columns=grid.columns)` (o hash é do VO de
+  `shared`, LAYOUT §7); saem `close`/`volume`, `PARQUET_FILE_HASH`,
+  `DATASET_LAYER`/`DATASET_TABLE` e os helpers `_timestamp`/`_number` do use
+  case.
 - **I10 consulta os donos:** `check_points(T, h)` (6.2, público) é chamado e o
   `ValueError` vira achado `common_sample_too_short`; o mínimo do b̂_sb é
   `T < MIN_BLOCK_LENGTH_OBS` contra a constante pública do dono.
@@ -194,8 +243,9 @@ contrato, fronteira nem critério; viram `[decision]` em §7 ao executar):**
 - **Hasher nos testes unitários do use case:** o gate AST proíbe importar
   `CanonicalJsonHasher` (adapter) e o `Hasher` não tem fake por desenho
   (#70); o teste declara um dublê local mínimo (`_StubHasher`, devolve o
-  `repr` ordenado do payload) só para o `DatasetFingerprint.compute`. O e2e
-  usa o `CanonicalJsonHasher` real.
+  `repr` ordenado do payload) só para o fingerprint (a partir da Task 15, o
+  `DatasetContentFingerprint.compute`). O e2e usa o `CanonicalJsonHasher`
+  real.
 - **`_LazyArchMcs` no `composition_root`** (precedente statsforecast/torch):
   `import arch` medido nesta Fase 3B em **8,15 s** a frio no container
   (`python -X importtime`); o proxy adia o import até a primeira chamada.
@@ -209,6 +259,33 @@ contrato, fronteira nem critério; viram `[decision]` em §7 ao executar):**
   guardada — grafo inválido falha no wiring, antes de qualquer `__call__` e,
   portanto, antes de qualquer leitura; I15 ("ordem validada → …") segue
   valendo porque a validação precede tudo o que o use case faz.
+- **Revisão de execução — detalhes da Task 14/15 (ADR 6.4.0009):**
+  - `TrainingGridReader.__call__(self, *, asset_id: str) -> TrainingGrid` e
+    `ReadTrainingGrid.__call__(self, *, asset_id: str) -> TrainingGrid` com a
+    **mesma anotação textual** (o `check_port_coverage` compara texto, #93);
+    no port, `TrainingGrid` só sob `if TYPE_CHECKING:`; no use case da
+    `modeling`, import normal do próprio slice.
+  - `FakeTrainingGridReader(rows_by_asset, *, columns)`: guarda linhas por
+    ativo e delega ao serviço de domínio `build_training_grid` (a regra tem
+    um dono; o fake não a reimplementa, e o `check_fake_parity` só compara
+    fakes com `adapters/`). Ativo sem linhas → `build_training_grid(())` →
+    `NoUsableRowsError`, como o real.
+  - `GridFingerprintMismatchError(ApplicationError)` mora no módulo do use
+    case (precedente: `DatasetMismatchError` no `run_confirmatory_cohort.py`);
+    a mensagem traz os 12 primeiros caracteres dos dois valores.
+  - A leitura da grade continua a **terceira** leitura (depois de `dim_run` e
+    fatos; etapa de log `read_realized`), e a conferência do fingerprint é
+    parte dela — antes do `assemble`, portanto antes de qualquer efeito.
+  - `grid_trimmed_prefix` validado como `int` não-`bool` ≥ 0 no
+    `GoldManifest` (mesma forma do `_check_counts` existente) e no
+    `QualityCheckContext`; mais um ponto de chamada "int ≥ 0" para a #118
+    (`[finding]` em §7).
+  - `RefreshGoldCommand.dataset_fingerprint` validado por `_check_text`
+    (texto não vazio, o validador do módulo); o formato hex é do VO.
+  - O dataset do e2e passa a ter **todas** as colunas de `modeling_columns()`
+    (lidas da função, não listadas no teste), um prefixo de aquecimento com
+    NaN numa coluna de feature e o silver gravado com `decision_idx` sobre a
+    grade aparada (a fábrica `make_cohort` roda sobre as sessões pós-prefixo).
 - **Log por etapa** via `logging.getLogger(__name__)` do use case, uma linha
   `INFO` por etapa com `step=<nome> duration_s=<perf_counter> in=<n>
   out=<n>` e uma linha final `status=<COMPLETED|BLOCKED>`; timestamps do
@@ -236,10 +313,11 @@ do MCS` em §7 (A12).
 **Gate por Task (RUNBOOK §Gates em camadas, ADR 0.0.0055):** T1 =
 `make check-task SLICE=evaluation` nas Tasks 01, 05, 06; `SLICE="evaluation
 analytics_store"` na 11 (docstring do repositório); `make check-block` nas
-Tasks 02 (`shared`) e 12 (`composition_root`); T3 = `make check` nas Tasks
-03, 04, 07, 08, 09, 10 (gates de arquitetura/baseline). Task 13 (docs):
-`make docs-check`. Checkpoint C (T2, `make check-block`) após as Tasks 03,
-06, 09 e 12; T3 no gate de saída (§3).
+Tasks 02 (`shared`), 12 e 15 (`composition_root`); T3 = `make check` nas
+Tasks 03, 04, 07, 08, 09, 10 e 14 (gates de arquitetura/baseline). Task 13
+(docs, e a sua reexecução): `make docs-check`. Checkpoint C (T2, `make
+check-block`) após as Tasks 03, 06, 09 e 12, e o bloco 5 após a 15 e a
+reexecução da 13; T3 no gate de saída (§3).
 
 **Onde rodar — convenção dos blocos de verificação (vale para §2 e §3; regra
 do Step):**
@@ -295,6 +373,13 @@ do Step):**
   `shared` ratificado no §4/D9/C3); ADRs 6.4.0001–0008 em `accepted`.
 - Working tree na branch `feat/117-6-4-gold-builders-and-quality-gates`;
   volume `ff-step62-venv` presente.
+- **Revisão de execução (Tasks 14–15):** branch rebaseada em `origin/develop`
+  com a Stage 5.5 (PR #121: `TrainingGrid`, `build_training_grid`,
+  `load_training_grid`, `modeling_columns`, `grid_fingerprint`,
+  `DatasetContentFingerprint`); concept re-aprovado com o ADR 6.4.0009
+  `accepted`; para a medição real, o cohort `aapl_confirmatory-r0-665f45d9169a`
+  no `data/` **não versionado** do checkout principal (`data/cohorts/aapl`) e o
+  `dataset_fingerprint` do `config/cohorts/aapl_confirmatory.toml`.
 - Nenhuma dependência nova (`pyproject.toml`/`uv.lock` intocados):
   `pyarrow`, `pandas` e `duckdb` já são dependências do projeto (4.2, 3.5).
 
@@ -319,11 +404,13 @@ do Step):**
 
 ```
 src/financial_forecasting/
-├── composition_root.py                                   # MODIFICADO (12): RefreshGold + _LazyArchMcs
+├── composition_root.py                                   # MODIFICADO (12): RefreshGold + _LazyArchMcs; (15): ReadTrainingGrid no lugar do store
 ├── shared/
 │   ├── domain/services/path_identifier.py                # NOVO (02)
 │   └── adapters/out/parquet/parquet_medallion_store.py   # MODIFICADO (02)
 └── features/
+    ├── modeling/application/use_cases/
+    │   └── read_training_grid.py                         # NOVO (14): ReadTrainingGrid, real do TrainingGridReader
     ├── analytics_store/adapters/out/parquet/
     │   └── parquet_analytics_repository.py               # MODIFICADO (11): docstring cita SilverTableReader
     └── evaluation/
@@ -345,18 +432,19 @@ src/financial_forecasting/
         │       ├── gold_build_order.py                   # NOVO (06)
         │       └── quality_checks/                       # NOVO (05)
         │           ├── __init__.py
-        │           ├── registry.py
+        │           ├── registry.py                       # MODIFICADO (15): contexto com DatasetContentFingerprint
         │           ├── alignment_check.py
         │           ├── statistical_preconditions_check.py
         │           ├── degeneracy_check.py
-        │           └── realized_provenance_check.py
+        │           └── realized_provenance_check.py      # MODIFICADO (15): grid_trimmed_prefix no detail
         ├── application/
         │   ├── dtos/__init__.py                          # NOVO (07)
-        │   ├── dtos/refresh_gold.py                      # NOVO (07)
+        │   ├── dtos/refresh_gold.py                      # NOVO (07); MODIFICADO (15): fingerprint do comando e do manifesto
         │   ├── ports/out/gold_store.py                   # NOVO (07)
         │   ├── ports/out/gold_builder.py                 # NOVO (09)
         │   ├── ports/out/silver_table_reader.py          # NOVO (11)
-        │   └── use_cases/{__init__.py, refresh_gold.py}  # NOVO (11)
+        │   ├── ports/out/training_grid_reader.py         # NOVO (14)
+        │   └── use_cases/{__init__.py, refresh_gold.py}  # NOVO (11); refresh_gold.py MODIFICADO (15)
         └── adapters/out/duckdb/
             ├── __init__.py                               # NOVO (08)
             ├── parquet_gold_store.py                     # NOVO (08)
@@ -370,9 +458,9 @@ src/financial_forecasting/
 tests/
 ├── architecture/test_unit_evaluation_purity.py           # MODIFICADO (03): rglob
 ├── architecture/test_import_contracts.py                 # MODIFICADO (04): caso da aresta nova
-├── architecture/test_port_coverage_gate.py               # MODIFICADO (07, 08, 09, 10)
+├── architecture/test_port_coverage_gate.py               # MODIFICADO (07, 08, 09, 10, 14)
 ├── unit/shared/domain/test_path_identifier.py            # NOVO (02)
-├── unit/shared/test_composition_root.py                  # MODIFICADO (12)
+├── unit/shared/test_composition_root.py                  # MODIFICADO (12, 15)
 ├── unit/features/evaluation/
 │   ├── test_paired_loss_series.py                        # MODIFICADO (01): só acréscimos
 │   ├── test_paired_pinball_losses.py                     # MODIFICADO (01): só acréscimos
@@ -386,28 +474,33 @@ tests/
 │       ├── test_quality_checks.py                        # NOVO (05)
 │       ├── test_horizon_reports.py                       # NOVO (06)
 │       ├── test_builder_explicit_deps.py                 # NOVO (06)
-│       ├── test_refresh_gold_dtos.py                     # NOVO (07)
-│       └── test_refresh_gold_use_case.py                 # NOVO (11)
+│       ├── test_quality_checks.py                        # MODIFICADO (15)
+│       ├── test_refresh_gold_dtos.py                     # NOVO (07); MODIFICADO (15)
+│       └── test_refresh_gold_use_case.py                 # NOVO (11); MODIFICADO (15)
 ├── fakes/shared/in_memory_medallion_store.py             # MODIFICADO (02)
 ├── fakes/features/evaluation/
 │   ├── in_memory_gold_store.py                           # NOVO (07)
 │   ├── fake_gold_builder.py                              # NOVO (09)
-│   └── fake_silver_table_reader.py                       # NOVO (11)
+│   ├── fake_silver_table_reader.py                       # NOVO (11)
+│   └── fake_training_grid_reader.py                      # NOVO (14)
 ├── contract/features/evaluation/
-│   ├── test_gold_store_contract.py                       # NOVO (07), MODIFICADO (08)
-│   ├── _gold_inputs.py                                   # NOVO (09)
+│   ├── test_gold_store_contract.py                       # NOVO (07), MODIFICADO (08, 15)
+│   ├── _gold_inputs.py                                   # NOVO (09), MODIFICADO (15)
 │   ├── test_gold_builder_contract.py                     # NOVO (09), MODIFICADO (10)
-│   └── test_silver_table_reader_contract.py              # NOVO (11)
-└── integration/features/evaluation/test_refresh_gold.py  # NOVO (12)
-.importlinter                                             # MODIFICADO (04)
+│   ├── test_silver_table_reader_contract.py              # NOVO (11)
+│   └── test_training_grid_reader_contract.py             # NOVO (14)
+└── integration/features/evaluation/test_refresh_gold.py  # NOVO (12); MODIFICADO (15)
+.importlinter                                             # MODIFICADO (04); (14): comentário do perímetro type-only
 scripts/arch_baseline.toml                                # MODIFICADO (07, 08, 09, 10)
-docs/LAYOUT.md                                            # MODIFICADO (04): §7, 22 arestas
-docs/roadmap.md                                           # MODIFICADO (13)
+docs/LAYOUT.md                                            # MODIFICADO (04): §7, 22 arestas; (14): aresta type-only
+docs/roadmap.md                                           # MODIFICADO (13; reexecução após a 15)
 ```
 
 Intocados por decisão: `pyproject.toml`, `uv.lock`, `concept.md`, ADRs
-6.4.0001–0008, `src/**/modeling/**`, `src/**/feature_engineering/**`,
-`src/**/market_data/**`, os schemas do `analytics_store`.
+6.4.0001–0009, `src/**/modeling/**` **exceto o arquivo novo**
+`read_training_grid.py` (Task 14; nenhum arquivo existente da `modeling`
+muda), `src/**/feature_engineering/**`, `src/**/market_data/**`, os schemas
+do `analytics_store`.
 
 ### Tabelas gold (colunas exatas — concept §9, ADR 6.4.0005/0007)
 
@@ -434,18 +527,19 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 |---|---|---|---|
 | A1 | `gold_build_order`: mesma ordem para qualquer registro; `ValueError` em duplicata, ciclo, dependência desconhecida, auto-dependência; `RefreshGold` com grafo inválido não chama leitura | 06, 11 | `U/test_builder_explicit_deps.py::order_invariant`, `::duplicate_name`, `::cycle_raises`, `::unknown_dependency`, `::self_dependency`; `U/test_refresh_gold_use_case.py::graph_checked_before_read` |
 | A2 | `SeriesAssembly`: um achado por violação de I3–I10 (um teste por regra) e prefixo dentro do déficit aceito com T e primeiro/último corretos | 04 | tokens de I3–I10 em `U/test_series_assembly.py` (matriz I*) + `::prefix_within_deficit`, `::common_intersection` |
-| A3 | Sem achado, séries reproduzem ponto a ponto `value_guardrail`/`value_raw`/`guardrail_applied` e o `target_return` | 04, 11 | `U/test_series_assembly.py::reproduces_persisted_values`, `::realized_joined`; `U/test_refresh_gold_use_case.py::guardrail_int_to_bool` |
-| A4 | Registry: ordem; `alignment_check` FAIL agregado / PASS por horizonte; `statistical_preconditions` FAIL (k < 2, diferencial constante, série inválida, b̂_sb indefinido) e SKIPPED; `degeneracy_check` REPORTED (1.0 no baseline pontual) e SKIPPED; `realized_provenance` REPORTED; fábrica e backend nunca recebem entrada inválida | 05, 11 | `U/test_quality_checks.py` (tokens da Task 05); `U/test_refresh_gold_use_case.py::factory_never_short`, `::backend_never_invalid` |
+| A3 | Sem achado, séries reproduzem ponto a ponto `value_guardrail`/`value_raw`/`guardrail_applied` e o `target_return` | 04, 11, 15 | `U/test_series_assembly.py::reproduces_persisted_values`, `::realized_joined`; `U/test_refresh_gold_use_case.py::guardrail_int_to_bool`, `::realized_from_training_grid` |
+| A4 | Registry: ordem; `alignment_check` FAIL agregado / PASS por horizonte; `statistical_preconditions` FAIL (k < 2, diferencial constante, série inválida, b̂_sb indefinido) e SKIPPED; `degeneracy_check` REPORTED (1.0 no baseline pontual) e SKIPPED; `realized_provenance` REPORTED (com `DatasetContentFingerprint` e `grid_trimmed_prefix`); fábrica e backend nunca recebem entrada inválida | 05, 11, 15 | `U/test_quality_checks.py` (tokens da Task 05) + `::provenance_grid_prefix_detail`; `U/test_refresh_gold_use_case.py::factory_never_short`, `::backend_never_invalid` |
 | A5 | `HorizonReports` = chamadas diretas (igualdade de VO), duas amostras, com/sem lacunas, uma banda por nível, um DM por estimador, DGT só em h > 1 | 06 | `U/test_horizon_reports.py` (tokens da Task 06) |
-| A6 | `RefreshGold` com fakes: ordem antes da leitura; identificador inválido antes de caminho; MCS com bloco da regra e `reps`/`seed`/esquemas; `ArithmeticError` → FAIL (outra exceção propaga); bloqueado publica só `runs_when_blocked` + manifesto `BLOCKED` e devolve `FailedCheck`s; exceção antes do `publish` não chama o store; log por etapa | 11 | `U/test_refresh_gold_use_case.py` (tokens da Task 11) |
+| A6 | `RefreshGold` com fakes: ordem antes da leitura; identificador inválido antes de caminho; MCS com bloco da regra e `reps`/`seed`/esquemas; `ArithmeticError` → FAIL (outra exceção propaga); bloqueado publica só `runs_when_blocked` + manifesto `BLOCKED` e devolve `FailedCheck`s; exceção antes do `publish` não chama o store; log por etapa; realizado = grade do `TrainingGridReader`; fingerprint divergente → erro sem `publish`; comando sem `dataset_fingerprint` falha | 11, 15 | `U/test_refresh_gold_use_case.py` (tokens das Tasks 11 e 15); `U/test_refresh_gold_dtos.py::command_fingerprint_required` |
 | A7 | `RefreshParameters` sem default; inválidos erguem na construção pela mensagem do dono (`validate_mcs_reps`, `validate_bootstrap_parameters`…); 6.2 com as mesmas mensagens; `MIN_MODELS` do VO único; `preregistration_ref` no manifesto e nas linhas confirmatórias | 01, 07, 10, 11 | Task 01: pytest dos arquivos da 6.2 + diff só de acréscimos + greps; `U/test_refresh_gold_dtos.py::parameters_no_default`, `::parameters_owner_messages`; `K/test_gold_builder_contract.py::confirmatory_rows_carry_prereg`; `U/test_refresh_gold_use_case.py::manifest_carries_parameters` |
-| A8 | `SilverTableReader`, `GoldBuilder`, `GoldStore` com fake e contrato `[fake, real]` (superconjunto nas duas pernas; cinco builders; `ParquetGoldStore`); `check_port_coverage` sem entrada nova no baseline | 07–11 | bloco Container do §3 (três suítes, zero `SKIPPED`, ids de cada perna) + Host (baseline sem `GoldStore`/`GoldBuilder`/`SilverTableReader`) |
+| A8 | `SilverTableReader`, `TrainingGridReader`, `GoldBuilder`, `GoldStore` com fake e contrato `[fake, real]` (superconjunto nas duas pernas; grade aparada, NaN interior e dataset inutilizável nas duas pernas; cinco builders; `ParquetGoldStore`); `check_port_coverage` sem entrada nova no baseline, `ReadTrainingGrid` reconhecido como real (#93) | 07–11, 14 | bloco Container do §3 (quatro suítes, zero `SKIPPED`, ids de cada perna) + Host (baseline sem `GoldStore`/`GoldBuilder`/`SilverTableReader`/`TrainingGridReader`); `tests/architecture/test_port_coverage_gate.py::training_grid_reader_resolves` |
 | A9 | `ParquetGoldStore`: falha antes da troca preserva `current/`; sobras removidas; manifesto por último; falha ao apagar `.previous/` → aviso e sucesso | 08 | `K/test_gold_store_contract.py::real_failure_keeps_current`, `::real_leftovers_removed`, `::real_manifest_written_last`, `::real_previous_delete_warns` |
-| A10 | E2E no mesmo `data_root`, pelo `RefreshGold` de `wire_dependencies`: COMPLETED com cinco tabelas por DuckDB; rerun sem apagar → linhas idênticas (NaN = NaN) e manifesto igual salvo timestamps; lacuna interior → BLOCKED substitui; outro `parent_sweep_id` intocado | 12 | `I/test_refresh_gold.py` (tokens da Task 12), zero `SKIPPED` |
-| A11 | `lint-imports` verde com uma aresta nova; nada de `modeling`/`feature_engineering`/application do `analytics_store` em `evaluation`; `duckdb`/`pyarrow`/`pandas` só em `adapters/out/duckdb/` | 04 (aresta + caso), todas (T1) | `uv run lint-imports` + `tests/architecture/test_import_contracts.py -k evaluation-new-module-imports-quantile-forecast` + greps Host do §3 |
+| A10 | E2E no mesmo `data_root`, pelo `RefreshGold` de `wire_dependencies`: COMPLETED com cinco tabelas por DuckDB sobre dataset com prefixo de aquecimento e silver na grade aparada (`grid_trimmed_prefix` e fingerprint = `grid_fingerprint` da 5.5 no manifesto); rerun sem apagar → linhas idênticas (NaN = NaN) e manifesto igual salvo timestamps; fingerprint divergente → ergue e `current/` intocado; lacuna interior → BLOCKED substitui; silver indexado no dataset inteiro → BLOCKED `decision_index_mismatch`; outro `parent_sweep_id` intocado | 12, 15 | `I/test_refresh_gold.py` (tokens das Tasks 12 e 15), zero `SKIPPED` |
+| A11 | `lint-imports` verde com uma aresta nova de runtime; nada de runtime de `modeling`/`feature_engineering`/application do `analytics_store` em `evaluation` (só a anotação `TrainingGrid` sob `TYPE_CHECKING` no port `TrainingGridReader`, declarada no LAYOUT §7 e no `.importlinter`); `duckdb`/`pyarrow`/`pandas` só em `adapters/out/duckdb/` | 04 (aresta + caso), 14 (type-only declarada), todas (T1) | `uv run lint-imports` + `tests/architecture/test_import_contracts.py -k evaluation-new-module-imports-quantile-forecast` + greps Host do §3 |
 | A12 | Custo do MCS medido (T ≈ 10³, `MIN_MCS_REPS`) e registrado em `[decision]` | §1 (medido), 12 (re-medido) | tabela do §1 + Host do §3: exatamente uma entrada `[decision] Task 12 — custo do MCS` em §7 |
 | A13 | Roadmap §Stage 6.4 conforme D9 (sem "disposições") | 13 | greps por seção da Task 13 (falham no `develop` de hoje) |
 | A14 | `make check` verde | todas; §3 | bloco Container do §3 (inclui cobertura por arquivo) |
+| A15 | Refresh medido sobre cópia somente-leitura do cohort real `aapl_confirmatory-r0-665f45d9169a`: sem `decision_index_mismatch`, fingerprint = spec congelado (critério do concept §11 logo após o de `lint-imports`; numerado aqui no fim para não renumerar A12–A14) | 15 | Host do §3: exatamente uma entrada `[decision] Task 15 — refresh sobre o cohort real` em §7 |
 
 ### Rastreabilidade — invariantes (I*) e casos de erro (C*) → Tasks
 
@@ -455,9 +549,9 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 | I2 | Um dono por regra; `alignment_check` só traduz | 04, 05 | `U/test_quality_checks.py::alignment_translates_report`; `U/test_series_assembly.py::all_findings_reported` |
 | I3 | Split `test`; `model` = `model_version`; um `feature_set_name`; uma `config_signature` por modelo; run órfão; `model_version` divergente | 04 | `U/test_series_assembly.py::split_non_test_ignored`, `::feature_sets_multiple`, `::config_signatures_multiple`, `::orphan_run`, `::model_version_mismatch` |
 | I4 | Uma observação por ponto (duplicata = achado) | 04 | `U/test_series_assembly.py::duplicate_point` |
-| I5 | `decision_idx` e rótulo de horizonte no índice do `RealizedReturns` | 04 | `U/test_series_assembly.py::decision_index_mismatch`, `::horizon_label_mismatch` |
+| I5 | `decision_idx` e rótulo de horizonte no índice do `RealizedReturns`, igualdade exata sobre a grade aparada (ADR 6.4.0009) | 04, 15 | `U/test_series_assembly.py::decision_index_mismatch`, `::horizon_label_mismatch`; `U/test_refresh_gold_use_case.py::realized_from_training_grid`; `I/test_refresh_gold.py::e2e_warmup_prefix_completed`, `::e2e_full_index_silver_blocked` |
 | I6 | Grade completa e igual; `guardrail_applied` igual nos níveis; `QuantileForecast` com valores persistidos | 04, 11 | `U/test_series_assembly.py::grid_incomplete`, `::grid_divergent`, `::guardrail_flag_mismatch`, `::reproduces_persisted_values`, `::quantile_forecast_not_from_raw`; `U/test_refresh_gold_use_case.py::guardrail_int_to_bool` |
-| I7 | Realizado lido, presente em todo `target` | 04, 11 | `U/test_series_assembly.py::realized_missing`, `::realized_joined`; `U/test_refresh_gold_use_case.py::realized_read_once` |
+| I7 | Realizado lido, presente em todo `target` | 04, 11, 15 | `U/test_series_assembly.py::realized_missing`, `::realized_joined`; `U/test_refresh_gold_use_case.py::realized_read_once` (a partir da 15: uma chamada ao `TrainingGridReader`) |
 | I8 | Contiguidade; sufixo comum; prefixo ≤ déficit; interseção | 04 | `U/test_series_assembly.py::interior_gap`, `::truncated_suffix`, `::prefix_over_deficit`, `::prefix_within_deficit`, `::common_intersection` |
 | I9 | Cobertura de fold, seed × horizonte, horizonte pedido, candidato | 04 | `U/test_series_assembly.py::fold_coverage`, `::seed_horizon_coverage`, `::horizon_missing`, `::required_model_missing` |
 | I10 | T mínimo pelos donos | 04 | `U/test_series_assembly.py::common_too_short` |
@@ -466,22 +560,25 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 | I13 | Degeneração por (modelo, seed, h) na `model_full`; SKIPPED se a montagem falhou | 05 | `U/test_quality_checks.py::degeneracy_reported`, `::degeneracy_uses_model_full`, `::degeneracy_point_baseline`, `::degeneracy_skipped` |
 | I14 | Ordem por `gold_build_order`; builders sem estado compartilhado; `BLOCKED` → só `runs_when_blocked` | 06, 09, 11 | `U/test_builder_explicit_deps.py::dependencies_first`; `K/test_gold_builder_contract.py::builder_pure_mapping`; `U/test_refresh_gold_use_case.py::blocked_publishes_checks_only` |
 | I15 | Efeitos colaterais depois dos guardas; nada gravado antes do `publish` | 11 | `U/test_refresh_gold_use_case.py::effects_order`, `::exception_before_publish` |
-| I16 | Reconstrução: mesmas entradas → mesmas linhas; só timestamps do manifesto mudam | 11, 12 | `U/test_refresh_gold_use_case.py::rerun_identical`; `I/test_refresh_gold.py::e2e_rerun_identical`, `::e2e_manifest_same_but_timestamps` |
+| I16 | Reconstrução: mesmas entradas (grade identificada pelo `DatasetContentFingerprint` + `grid_trimmed_prefix`) → mesmas linhas; só timestamps do manifesto mudam | 11, 12, 15 | `U/test_refresh_gold_use_case.py::rerun_identical`, `::manifest_grid_trimmed_prefix`, `::shuffled_dataset_rows_same_result`; `U/test_refresh_gold_dtos.py::manifest_content_fingerprint`; `I/test_refresh_gold.py::e2e_rerun_identical`, `::e2e_manifest_same_but_timestamps`, `::e2e_fingerprint_equals_modeling` |
 | I17 | Autodescrição (`asset`, `parent_sweep_id`, amostra, T/n, parâmetros; `preregistration_ref` só nas confirmatórias) | 07, 10, 11 | `U/test_refresh_gold_dtos.py::manifest_mapping`; `K/test_gold_builder_contract.py::rows_carry_partition`, `::confirmatory_rows_carry_prereg`, `::quality_rows_no_prereg`; `U/test_refresh_gold_use_case.py::manifest_carries_parameters` |
 | C1 | Grafo inválido → `ValueError` antes de qualquer leitura | 06, 11 | `U/test_builder_explicit_deps.py::duplicate_name`, `::cycle_raises`, `::unknown_dependency`, `::self_dependency`; `U/test_refresh_gold_use_case.py::graph_checked_before_read` |
 | C2 | Parâmetro inválido → `ValueError` na construção pelo validador dono | 01, 07 | `U/test_refresh_gold_dtos.py::parameters_owner_messages`, `::parameters_no_default`, `::tuple_empty_or_repeated`, `::preregistration_ref_required`; Task 01 (tokens `mcs_reps_validator`, `bootstrap_parameters_invalid`) |
 | C3 | Identificador inválido antes de caminho | 02, 07, 11 | `tests/unit/shared/domain/test_path_identifier.py::identifier_rejects`; `U/test_refresh_gold_dtos.py::identifier_rule`; `U/test_refresh_gold_use_case.py::identifier_before_path`; `K/test_gold_store_contract.py::real_rejects_bad_identifier` |
-| C4 | Cohort vazio ou dataset vazio → `ValueError`, nada publicado | 11 | `U/test_refresh_gold_use_case.py::cohort_empty_raises`, `::dataset_empty_raises` |
+| C4 | Cohort vazio → `ValueError`; dataset sem linha utilizável → `NoUsableRowsError` do dono (a partir da 15); nada publicado | 11, 14, 15 | `U/test_refresh_gold_use_case.py::cohort_empty_raises`, `::dataset_empty_raises`; `K/test_training_grid_reader_contract.py::grid_no_usable_rows_raises`, `::grid_interior_missing_raises` |
 | C5 | Alinhamento violado → BLOCKED, só `gold_quality_checks` | 11, 12 | `U/test_refresh_gold_use_case.py::blocked_publishes_checks_only`, `::blocked_result_failed_checks`; `I/test_refresh_gold.py::e2e_blocked_replaces` |
 | C6 | Pré-condição estatística → BLOCKED com causa | 05, 11 | `U/test_quality_checks.py::preconditions_k_below_min`, `::preconditions_constant_differential`, `::preconditions_invalid_series`, `::preconditions_undefined_estimate`; `U/test_refresh_gold_use_case.py::arithmetic_error_fails_precondition`, `::backend_never_invalid` |
 | C7 | Erro de programação propaga; nada publicado | 11 | `U/test_refresh_gold_use_case.py::other_backend_error_propagates`, `::exception_before_publish` |
 | C8 | Série 100 % degenerada → "não aplicável" + 1.0 | 05, 06 | `U/test_quality_checks.py::degeneracy_point_baseline`; `U/test_horizon_reports.py::degenerate_not_applicable` |
 | C9 | Falha de publicação → propaga; `current/` intacto; próximo refresh limpa | 08 | `K/test_gold_store_contract.py::real_failure_keeps_current`, `::real_leftovers_removed`, `::real_previous_delete_warns` |
+| C10 | Fingerprint da grade ≠ `command.dataset_fingerprint` → `GridFingerprintMismatchError` antes da montagem; nada publicado (ADR 6.4.0009; o pedido da sessão mestra dizia "C8", já ocupado no concept pela série 100 % degenerada) | 15 | `U/test_refresh_gold_use_case.py::fingerprint_mismatch_publishes_nothing`; `I/test_refresh_gold.py::e2e_fingerprint_mismatch_raises` |
 
 ## 2. Tasks
 
-> Faixa desta Stage: **13 Tasks** (estimativa do concept: 12 — exceções
-> declaradas no §1). Blocos de verificação conforme a convenção
+> Faixa desta Stage: **15 Tasks** (estimativa do concept: 12; 13 no plano
+> original + 14 e 15 da revisão de execução, ADR 6.4.0009 — exceções
+> declaradas no §1). As Tasks 01–13 já foram executadas; a ordem restante é
+> 14 → 15 → reexecução da 13 (§4). Blocos de verificação conforme a convenção
 > **Container/Host** do §1.
 
 ### Task 01 — Validadores públicos da 6.2: `MIN_MODELS` no VO, `validate_bootstrap_parameters`, `validate_mcs_reps`
@@ -1435,6 +1532,321 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   make check-task SLICE=evaluation
   ```
 - **Commit sugerido:** `docs(roadmap): Stage 6.4 com arquivos, contratos e DoD reais do gold [6.4/task-13]`
+- **Reexecução depois da Task 15 (revisão de execução, ADR 6.4.0009; cobre o
+  L4 do Checkpoint C bloco 4):** decisão — a atualização do roadmap é uma
+  **reexecução desta Task** (commit próprio de escopo `roadmap`, tag
+  `[6.4/task-13]`, precedente do segundo commit da Task 13), não um trecho da
+  Task 14/15: um commit = um escopo, e o roadmap deve descrever arquivos que
+  já existem. Na seção `#### Stage 6.4`: `arquivos_a_criar` +
+  `features/evaluation/application/ports/out/training_grid_reader.py`,
+  `features/modeling/application/use_cases/read_training_grid.py`,
+  `tests/fakes/features/evaluation/fake_training_grid_reader.py`,
+  `tests/contract/features/evaluation/test_training_grid_reader_contract.py`;
+  `arquivos_a_modificar` + `parquet_analytics_repository.py` (docstring da
+  Task 11), `docs/LAYOUT.md`, `tests/architecture/test_port_coverage_gate.py`,
+  `tests/architecture/test_import_contracts.py`,
+  `tests/architecture/test_unit_evaluation_purity.py` (o que faltava — L4);
+  `contratos_introduzidos` + `TrainingGridReader` (port-out),
+  `ReadTrainingGrid` (use case da modeling); `contratos_consumidos`: sai
+  `DatasetFingerprint`/`MedallionStore (par read-only dataset_tft)`, entram
+  `DatasetContentFingerprint`/`Hasher` e `TrainingGrid`/`load_training_grid`/
+  `modeling_columns` (5.5, via `ReadTrainingGrid`); DoD cita o realizado pela
+  grade de treino com o fingerprint do cohort. **Verificação (docs) —
+  Host** (substitui a lista acima na reexecução; reprova no `HEAD` de antes
+  da reexecução por `DatasetFingerprint` e pelos nomes novos):
+  ```bash
+  S64=$(awk '/^#### Stage 6.4/,/^#### Stage 6.5/' docs/roadmap.md); test -n "$S64"
+  if grep -n "disposi" <<<"$S64"; then echo "FAIL: roadmap 6.4 ainda cita disposições"; exit 1; fi
+  if grep -n "AnalyticsRepository (4.2)" <<<"$S64"; then echo "FAIL: roadmap 6.4 ainda consome AnalyticsRepository (4.2)"; exit 1; fi
+  if grep -nw "DatasetFingerprint" <<<"$S64"; then echo "FAIL: roadmap 6.4 ainda consome DatasetFingerprint"; exit 1; fi
+  for t in series_assembly.py horizon_reports.py gold_build_order.py silver_table_reader.py gold_store.py dtos/refresh_gold.py parquet_gold_store.py statistical_preconditions_check.py realized_provenance_check.py block_estimate.py shared/domain/services/path_identifier.py paired_loss_series.py paired_pinball_losses.py bootstrap_indices.py model_confidence_set.py .importlinter parquet_medallion_store.py in_memory_medallion_store.py composition_root.py training_grid_reader.py read_training_grid.py fake_training_grid_reader.py test_training_grid_reader_contract.py parquet_analytics_repository.py LAYOUT.md test_port_coverage_gate.py test_import_contracts.py test_unit_evaluation_purity.py SilverTableReader GoldStore SeriesAssembly HorizonReports ForecastRecord CohortRun RealizedReturns AssembledCohort QualityCheckResult ParquetAnalyticsRepository TrainingGridReader ReadTrainingGrid DatasetContentFingerprint Hasher Clock MIN_MODELS validate_mcs_reps validate_bootstrap_parameters validate_path_identifier; do grep -qwF -- "$t" <<<"$S64" || { echo "FAIL: roadmap 6.4 sem $t"; exit 1; }; done
+  python scripts/check_docs_pointers.py
+  ```
+  **Container:** `make docs-check`. **Commit sugerido:** `docs(roadmap): Stage
+  6.4 com TrainingGridReader, ReadTrainingGrid e ajustes da revisão [6.4/task-13]`.
+
+---
+
+### Task 14 — Port `TrainingGridReader` + real `ReadTrainingGrid` (modeling) + fake + contrato `[fake, real]`
+
+> Revisão de execução (ADR 6.4.0009). Executa **depois** das Tasks 01–13 e
+> antes da 15. Escopo do commit: `evaluation` (§1, exceções declaradas).
+
+- **Arquivos a criar:**
+  - `src/financial_forecasting/features/evaluation/application/ports/out/training_grid_reader.py`
+  - `src/financial_forecasting/features/modeling/application/use_cases/read_training_grid.py`
+  - `tests/fakes/features/evaluation/fake_training_grid_reader.py`
+  - `tests/contract/features/evaluation/test_training_grid_reader_contract.py`
+- **Arquivos a modificar:**
+  - `tests/architecture/test_port_coverage_gate.py` — piso do inventário 25 →
+    26 (comentário sem nomes de port, como no commit `4af7edb`) e um teste
+    novo que prova `TrainingGridReader` → `("ReadTrainingGrid",)` com o
+    contrato `test_training_grid_reader_contract.py` (mesma forma do teste
+    #93 dos ports da #68);
+  - `docs/LAYOUT.md` §7 — no parágrafo "Arestas sob `if TYPE_CHECKING:`",
+    acrescentar a anotação `TrainingGrid` (`modeling.domain`) do port
+    `TrainingGridReader` de `evaluation` (ADR 6.4.0009); as 22 arestas de
+    runtime não mudam;
+  - `.importlinter` — o mesmo acréscimo no comentário "PERÍMETRO" do contrato
+    `bc-independence` (só comentário; nenhum `ignore_imports` novo).
+- **O que fazer (concept §4 Application/modeling, D3, C4; ADR 6.4.0009 itens
+  1–2):**
+  - Port `TrainingGridReader(Protocol)`: `def __call__(self, *, asset_id:
+    str) -> TrainingGrid: ...`, com `from __future__ import annotations` e
+    `if TYPE_CHECKING: from financial_forecasting.features.modeling.domain.services.training_grid import TrainingGrid`.
+    Docstring: port do consumidor (ADR 0.0.0053), real
+    `ReadTrainingGrid` por duck typing; contrato — linhas do ativo (partição
+    `asset`), em ordem cronológica, prefixo sem valor aparado
+    (`trimmed_prefix`), erros do dono propagam (`NoUsableRowsError`,
+    `InteriorMissingValuesError`, `ValueError` de coluna ausente).
+  - `ReadTrainingGrid(*, store: MedallionStore, columns: Sequence[str])`
+    (guarda `tuple(columns)`), `def __call__(self, *, asset_id: str) ->
+    TrainingGrid: return load_training_grid(store=…, asset_id=asset_id,
+    columns=…)` — **nenhuma regra nova**; docstring: "real do port
+    `TrainingGridReader` do `evaluation` (ADR 6.4.0009); a leitura e o corte
+    são os da 5.5 (ADR 5.5.0004)". Nenhum outro arquivo da `modeling` muda.
+  - `FakeTrainingGridReader(rows_by_asset: Mapping[str, Sequence[Row]], *,
+    columns: Sequence[str])` → `build_training_grid(rows_by_asset.get(asset_id,
+    ()), columns=columns)` (decisão de detalhe do §1).
+  - Suíte `[fake, real]`: perna `real` = `ReadTrainingGrid(store=
+    ParquetMedallionStore(data_root=tmp_path), columns=_COLUMNS)` sobre o
+    dataset gravado por `pandas` em
+    `processed/dataset_tft/<asset>/dataset_tft_<asset>.parquet` (layout do par
+    read-only, como o e2e da Task 12); perna `fake` com as mesmas linhas.
+    `_COLUMNS` = duas features + `target_return` declaradas no teste (o
+    contrato é da leitura, não do registry). Casos: prefixo de 3 linhas com
+    NaN numa feature → `trimmed_prefix == 3` e a grade começa na 4ª sessão;
+    linhas gravadas fora de ordem → timestamps crescentes; NaN depois do
+    prefixo → `InteriorMissingValuesError`; ativo ausente e ativo com toda
+    linha inválida → `NoUsableRowsError`; dois ativos no mesmo `data_root` →
+    cada leitura só vê o seu.
+- **Critério de aceite (A8, A11, C4):** suíte verde nas pernas `[fake]` e
+  `[real]`, zero `SKIPPED`; `check_port_coverage.py --list` mostra
+  `TrainingGridReader` com `adapters=['ReadTrainingGrid']`, o fake e a suíte;
+  baseline sem `TrainingGridReader`; `test_port_coverage_gate.py` verde com o
+  piso 26; o port importa `modeling` **só** dentro de `if TYPE_CHECKING:`;
+  `lint-imports` verde com as mesmas 22 exceções de runtime no
+  `bc-independence`; LAYOUT §7 e `.importlinter` citam a aresta type-only;
+  `mypy --strict` verde.
+- **Tokens:** `tests/contract/features/evaluation/test_training_grid_reader_contract.py`:
+  `grid_trimmed_prefix_reported`, `grid_rows_chronological`,
+  `grid_interior_missing_raises`, `grid_no_usable_rows_raises`,
+  `grid_asset_partition_only`; `tests/architecture/test_port_coverage_gate.py`:
+  `training_grid_reader_resolves`.
+- **Verificação (T3) — Container:**
+  ```bash
+  f=$(mktemp)
+  uv run pytest tests/contract/features/evaluation/test_training_grid_reader_contract.py tests/architecture/test_port_coverage_gate.py -v -rs | tee "$f"
+  test -s "$f"
+  if grep -q "SKIPPED" "$f"; then echo "FAIL: SKIPPED"; exit 1; fi
+  grep -q "\[fake" "$f"
+  grep -q "\[real" "$f"
+  g=$(mktemp)
+  uv run python scripts/check_port_coverage.py --list > "$g"
+  test -s "$g"
+  h=$(mktemp)
+  grep "^TrainingGridReader:" "$g" > "$h"
+  test -s "$h"
+  grep -q "ReadTrainingGrid" "$h"
+  grep -q "fake_training_grid_reader.py" "$h"
+  grep -q "test_training_grid_reader_contract.py" "$h"
+  test -s scripts/arch_baseline.toml
+  if grep -n "TrainingGridReader" scripts/arch_baseline.toml; then echo "FAIL: baseline"; exit 1; fi
+  P=src/financial_forecasting/features/evaluation/application/ports/out/training_grid_reader.py
+  test -s "$P"
+  grep -q "^if TYPE_CHECKING:" "$P"
+  m=$(mktemp)
+  grep -nE "^\s*(from|import)\s+financial_forecasting\.features\.modeling" "$P" > "$m" || true
+  test -s "$m"
+  if grep -vE "^[0-9]+:    (from|import) " "$m"; then echo "FAIL: import de modeling fora do bloco TYPE_CHECKING"; exit 1; fi
+  uv run lint-imports
+  make check
+  ```
+  **Host:**
+  ```bash
+  L=.importlinter
+  test -s "$L"
+  test "$(awk '/^\[importlinter:contract:bc-independence\]/{f=1} /^unmatched_ignore_imports_alerting/{f=0} f' "$L" | grep -cE "^    financial_forecasting\.[A-Za-z_.]+ -> ")" -eq 22
+  grep -q "TrainingGridReader" "$L"
+  test -s docs/LAYOUT.md
+  S7=$(awk '/^## 7\. Regras de Ouro/,/^## 8\./' docs/LAYOUT.md); test -n "$S7"
+  grep -q "TrainingGridReader" <<<"$S7"
+  ```
+- **Commit sugerido:** `feat(evaluation): port TrainingGridReader com real ReadTrainingGrid da modeling [6.4/task-14]`
+
+---
+
+### Task 15 — `RefreshGold` sobre a grade de treino: fingerprint do cohort (C10), manifesto, proveniência, wiring, e2e e medição no cohort real
+
+> Revisão de execução (ADR 6.4.0009). Absorve os achados BAIXOS de teste do
+> Checkpoint C bloco 4 (tabela abaixo). Escopo do commit: `evaluation`.
+
+- **Arquivos a modificar:**
+  - `src/financial_forecasting/features/evaluation/application/use_cases/refresh_gold.py`
+  - `src/financial_forecasting/features/evaluation/application/dtos/refresh_gold.py`
+  - `src/financial_forecasting/features/evaluation/domain/services/quality_checks/registry.py`
+  - `src/financial_forecasting/features/evaluation/domain/services/quality_checks/realized_provenance_check.py`
+  - `src/financial_forecasting/composition_root.py`
+  - `tests/unit/features/evaluation/gold/test_refresh_gold_use_case.py`
+  - `tests/unit/features/evaluation/gold/test_refresh_gold_dtos.py`
+  - `tests/unit/features/evaluation/gold/test_quality_checks.py`
+  - `tests/contract/features/evaluation/_gold_inputs.py`
+  - `tests/contract/features/evaluation/test_gold_store_contract.py`
+  - `tests/integration/features/evaluation/test_refresh_gold.py`
+  - `tests/unit/shared/test_composition_root.py`
+  - este `technical.md`, só §7 (entradas da execução)
+- **Arquivos a criar:** nenhum (a fábrica `_cohort_factory.py` não deve mudar:
+  o e2e a chama sobre as sessões pós-prefixo; se mudar, `[deviation]`).
+- **O que fazer (concept §4, I5, I7, I16, C4, C10, D3, D8; ADR 6.4.0009 itens
+  3–6):**
+  - **DTOs:** `RefreshGoldCommand.dataset_fingerprint: str` obrigatório
+    (`_check_text`); `GoldManifest.dataset_fingerprint:
+    DatasetContentFingerprint` (checagem de tipo com a mensagem
+    `"dataset_fingerprint must be a DatasetContentFingerprint, got …"`) e
+    `grid_trimmed_prefix: int` (em `_check_counts`, int não-`bool` ≥ 0);
+    `as_mapping()` ganha `"grid_trimmed_prefix"`.
+  - **Contexto e check:** `QualityCheckContext.dataset_fingerprint:
+    DatasetContentFingerprint` e `grid_trimmed_prefix: int` (int não-`bool`
+    ≥ 0, `ValueError` na construção); o `detail` do `realized_provenance`
+    passa a `dataset_fingerprint=<v>; grid_trimmed_prefix=<n>;
+    n_sessions=<n>; first=<ts>; last=<ts>` (WARN/REPORTED, `value` inalterado).
+  - **Use case:** colaborador `grid_reader: TrainingGridReader` no lugar de
+    `store: MedallionStore`; `_read_realized(asset, expected)` →
+    `grid = self._grid_reader(asset_id=asset)` →
+    `DatasetContentFingerprint.compute(hasher=self._hasher, asset_id=asset,
+    timestamps=grid.timestamps_iso(), columns=grid.columns)` → se `value !=
+    command.dataset_fingerprint`: `GridFingerprintMismatchError` (C10) →
+    `RealizedReturns(timestamps=grid.timestamps_iso(),
+    returns=grid.column("target_return"))`; devolve realizado, fingerprint e
+    `grid.trimmed_prefix`, que seguem ao contexto e ao manifesto. Saem
+    `DATASET_LAYER`, `DATASET_TABLE`, `PARQUET_FILE_HASH`, `_timestamp`,
+    `_number`, o import de `DatasetFingerprint`/`MedallionStore` e o `math`
+    se ficar sem uso; a docstring do módulo (passo 3) e a do construtor
+    ("os sete colaboradores") são atualizadas.
+  - **Wiring:** `grid_reader=ReadTrainingGrid(store=store, columns=columns)`
+    depois de `columns = modeling_columns()` (hoje `composition_root.py:760`),
+    no lugar de `store=store`; comentário do bloco cita o ADR 6.4.0009.
+  - **Testes unitários (fakes):** `FakeTrainingGridReader` no lugar do
+    `FakeMedallionStore.seed_read_only`, com linhas cujo prefixo tem NaN numa
+    feature (grade de teste com `trimmed_prefix > 0`) e o silver indexado na
+    grade aparada; o comando leva o fingerprint calculado no teste pelo
+    `DatasetContentFingerprint.compute` com o `_StubHasher` sobre a grade do
+    `build_training_grid` (import do domínio da `modeling` em teste unit é
+    permitido — o gate AST só veda libs e adapters). Ajustes em testes
+    existentes: `dataset_empty_raises` (agora `NoUsableRowsError` do dono
+    propaga, `publish` não chamado), `realized_read_once` (uma chamada ao
+    `grid_reader`), expectativa `"must be a DatasetFingerprint"` do
+    `test_refresh_gold_dtos.py` → `DatasetContentFingerprint`; `_gold_inputs.py`
+    e `test_gold_store_contract.py` constroem o manifesto/contexto com
+    `DatasetContentFingerprint` e `grid_trimmed_prefix`.
+  - **Achados BAIXOS do Checkpoint C bloco 4 absorvidos:**
+
+    | Achado | Onde | O que muda | Token/prova |
+    |---|---|---|---|
+    | L1 (`mcs_block_from_rule` vácuo: fake com a mesma estimativa em todo par) | `test_refresh_gold_use_case.py` | estimativas distintas por par (2.2 e 4.7) e `block_size` igual a `ModelConfidenceSet.block_length` calculado no teste | `block_size_from_distinct_estimates` |
+    | L2 (`step_logs` só no COMPLETED) | idem | caso BLOCKED: sem linhas `step=reports`/`step=mcs` e linha final `status=BLOCKED` | `blocked_logs_skip_reports_and_mcs` |
+    | A1 (M04) | idem | `arithmetic_error_fails_precondition` parametrizado por `ZeroDivisionError`, `OverflowError`, `FloatingPointError` | 3 ids coletados (Container) |
+    | A2 (M10) | idem | `_PARAMETERS.mcs_reps = 1500` (≠ `MIN_MCS_REPS`), para o repasse de `reps` ser distinguível do piso | grep `mcs_reps=1500` (Container) |
+    | A3 (M16/M17) | idem | `FakeSilverTableReader` com `partition_keys={"dim_run": ("asset",), "fact_oos_predictions": ("feature_set_name",)}`, um `dim_run` de outro `parent_sweep_id` e um fato de outro `asset` — os pós-filtros do use case (hoje `refresh_gold.py:311-312` e `:331`) descartam os dois | `post_filter_drops_superset_rows` |
+    | A4 (M25/M20) | idem | cohort sem o candidato (`tft_quantile`) → `BLOCKED` com `FailedCheck(kind="required_model_missing")`; `manifest_carries_parameters` passa a afirmar `status == COMPLETED` | `candidate_absent_blocks` |
+    | A5 (M26) | idem | linhas do dataset embaralhadas no fake → mesmas tabelas e manifesto | `shuffled_dataset_rows_same_result` |
+    | I (testes de rejeição de `_timestamp`/`_number`) | — | **sem objeto:** os helpers saem do use case; a rejeição de timestamp sem fuso/valor não numérico é do dono (`build_training_grid`, testado na 5.5) e o contrato da Task 14 cobre as pernas | grep negativo (Container) |
+    | L3/A6 (issue de infraestrutura do logging do `import-linter` em processo) | — | não é teste: vai ao checklist de fechamento (issue aberta no fechamento) | §3 checklist |
+    | L4 (roadmap sem arquivos) | `docs/roadmap.md` | reexecução da Task 13 | greps da reexecução |
+  - **E2E** (`test_refresh_gold.py`, mesmo fixture de módulo e mesmo
+    `data_root`): dataset com todas as colunas de `modeling_columns()` (lidas
+    da função), prefixo de `P = 5` linhas com NaN numa coluna de feature e
+    valores finitos depois; silver dos cohorts A e B gravado pela fábrica
+    sobre as sessões pós-prefixo (`decision_idx` na grade aparada); o comando
+    leva `dataset_fingerprint = grid_fingerprint(build_training_grid(linhas,
+    columns=modeling_columns()), hasher=CanonicalJsonHasher(), asset_id=…)`
+    (a função da 5.5 como oráculo). Passos novos na sequência da Task 12:
+    depois do (2), (2b) comando do cohort A com fingerprint `"0" * 64` →
+    `GridFingerprintMismatchError` e bytes do `current/` iguais aos do (2);
+    depois do (3), (4) cohort **C** (outro `parent_sweep_id`) com o mesmo
+    silver mas `decision_idx` no **dataset inteiro** (índice da grade + P) →
+    `BLOCKED` com `alignment_check`/`decision_index_mismatch`. O passo (1)
+    afirma `COMPLETED`, manifesto com `grid_trimmed_prefix == P`,
+    `realized.first_timestamp` = sessão P do dataset e `dataset_fingerprint`
+    igual ao do oráculo.
+  - **`test_composition_root.py`:** `deps.refresh_gold._grid_reader` é um
+    `ReadTrainingGrid` com o mesmo `store` do contêiner e `columns ==
+    deps.modeling_columns`.
+  - **Medição no cohort real (A15), fora do repo:** script no scratchpad,
+    container de dev com o `data/cohorts/aapl` do checkout principal montado
+    **somente-leitura** (`-v <raiz-do-repo>/data/cohorts/aapl:/realdata:ro`) e
+    **copiado para `/tmp`** antes de qualquer leitura (o refresh grava gold na
+    cópia); `wire_dependencies(settings=Settings(_env_file=None,
+    data_root=<cópia>))`; comando com o `parent_sweep_id` do `dim_run` do
+    cohort `aapl_confirmatory-r0-665f45d9169a`, os horizontes dos fatos,
+    `window_deficits` declarados (ou `{}` com o achado resultante registrado),
+    `dataset_fingerprint` lido de `config/cohorts/aapl_confirmatory.toml`
+    (`tomllib`) e parâmetros literais de sonda (`preregistration_ref` de
+    sonda, `reps = 1000`). Registrar **uma** entrada `### <AAAA-MM-DD> —
+    [decision] Task 15 — refresh sobre o cohort real — <autor>` em §7 com:
+    status, `grid_trimmed_prefix` (esperado 251, o offset da sonda),
+    igualdade do fingerprint, contagem de achados por `kind` (esperado zero
+    `decision_index_mismatch`), duração por etapa. Achado de outra regra vira
+    `[finding]` para a 6.5/8.1, sem código para escondê-lo; qualquer
+    `decision_index_mismatch` restante ou fingerprint divergente → **HALT** à
+    sessão mestra. Nenhum dado real nem gold entra no repo.
+- **Critério de aceite (A3, A4, A6, A10, A15, I5, I7, I16, C4, C10):**
+  unit/contrato/e2e verdes, zero `SKIPPED`; fingerprint divergente ergue
+  `GridFingerprintMismatchError` sem `assemble` nem `publish` (espiões);
+  realizado = grade (timestamps e `target_return` da grade, índice 0 = sessão
+  pós-prefixo) e `COMPLETED` com silver indexado na grade aparada; manifesto e
+  `realized_provenance` com `DatasetContentFingerprint` e
+  `grid_trimmed_prefix`; e2e: prefixo de aquecimento → `COMPLETED`,
+  fingerprint = oráculo da 5.5, mismatch → ergue sem tocar `current/`, silver
+  no dataset inteiro → `BLOCKED` `decision_index_mismatch`; o use case não
+  contém mais `DatasetFingerprint`, `MedallionStore`, `PARQUET_FILE_HASH`,
+  `DATASET_LAYER`/`DATASET_TABLE`, `_timestamp`, `_number`; os nove achados
+  BAIXOS aplicados; §7 com a entrada da medição real; `make check-block`
+  verde.
+- **Tokens:** `gold/test_refresh_gold_use_case.py` (acréscimos):
+  `fingerprint_mismatch_publishes_nothing`, `realized_from_training_grid`,
+  `manifest_grid_trimmed_prefix`, `block_size_from_distinct_estimates`,
+  `blocked_logs_skip_reports_and_mcs`, `post_filter_drops_superset_rows`,
+  `candidate_absent_blocks`, `shuffled_dataset_rows_same_result`;
+  `gold/test_refresh_gold_dtos.py`: `command_fingerprint_required`,
+  `manifest_content_fingerprint`; `gold/test_quality_checks.py`:
+  `provenance_grid_prefix_detail`;
+  `tests/integration/features/evaluation/test_refresh_gold.py`:
+  `e2e_warmup_prefix_completed`, `e2e_fingerprint_equals_modeling`,
+  `e2e_fingerprint_mismatch_raises`, `e2e_full_index_silver_blocked`;
+  `tests/unit/shared/test_composition_root.py`:
+  `refresh_gold_grid_reader_wired`.
+- **Verificação (T1 = `check-block`, toca o composition root) — Container:**
+  ```bash
+  f=$(mktemp)
+  uv run pytest tests/unit/features/evaluation/gold/test_refresh_gold_use_case.py tests/unit/features/evaluation/gold/test_refresh_gold_dtos.py tests/unit/features/evaluation/gold/test_quality_checks.py tests/contract/features/evaluation/test_gold_store_contract.py tests/contract/features/evaluation/test_gold_builder_contract.py tests/integration/features/evaluation/test_refresh_gold.py tests/unit/shared/test_composition_root.py -v -rs --durations=5 | tee "$f"
+  test -s "$f"
+  if grep -q "SKIPPED" "$f"; then echo "FAIL: SKIPPED"; exit 1; fi
+  test "$(grep -cE "test_arithmetic_error_fails_precondition\[[A-Za-z]+Error\] PASSED" "$f")" -eq 3
+  U=src/financial_forecasting/features/evaluation/application/use_cases/refresh_gold.py
+  test -s "$U"
+  if grep -nE "DatasetFingerprint\b|MedallionStore|PARQUET_FILE_HASH|DATASET_LAYER|DATASET_TABLE|def _timestamp|def _number" "$U"; then echo "FAIL: resíduo da leitura do dataset inteiro"; exit 1; fi
+  grep -q "class GridFingerprintMismatchError" "$U"
+  grep -q "TrainingGridReader" "$U"
+  T=tests/unit/features/evaluation/gold/test_refresh_gold_use_case.py
+  test -s "$T"
+  grep -q "mcs_reps=1500" "$T"
+  make check-block
+  ```
+  **Host:**
+  ```bash
+  T=docs/stages/6.4-gold-builders-and-quality-gates/technical.md
+  test -s "$T"
+  test "$(grep -cE "^### [0-9-]+ — \[decision\] Task 15 — refresh sobre o cohort real" "$T")" -eq 1
+  HP="C:""/Users"   # montado em partes
+  if git grep -n "$HP" -- src/ tests/ docs/stages/ docs/adr/; then echo "FAIL: caminho do host versionado"; exit 1; fi
+  python scripts/check_technical_postexec.py "$T"
+  ```
+- **Commit sugerido:** `fix(evaluation): RefreshGold lê o realizado da grade de treino e confere o fingerprint [6.4/task-15]`
+
+> **Checkpoint C (T2) após esta Task e a reexecução da 13:** o
+> `make check-block` da Task cobre o gate; a sessão mestra roda o bloco 5
+> (auditoria das Tasks 14–15) antes do gate de saída.
 
 ## 3. Gate de saída da Stage
 
@@ -1457,13 +1869,14 @@ uv run python - "$cov" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))["files"]
 norm = {f.replace(chr(92), "/"): v["summary"]["percent_covered"] for f, v in d.items()}
-scope = {f: p for f, p in norm.items() if "features/evaluation/" in f or f.endswith("shared/domain/services/path_identifier.py")}
+scope = {f: p for f, p in norm.items() if "features/evaluation/" in f or f.endswith("shared/domain/services/path_identifier.py") or f.endswith("modeling/application/use_cases/read_training_grid.py")}
 need = ["forecast_record.py", "cohort_run.py", "realized_returns.py", "assembled_cohort.py",
         "quality_check_result.py", "block_estimate.py", "series_assembly.py", "horizon_reports.py", "gold_build_order.py",
         "quality_checks/registry.py", "quality_checks/alignment_check.py",
         "quality_checks/statistical_preconditions_check.py", "quality_checks/degeneracy_check.py",
         "quality_checks/realized_provenance_check.py", "dtos/refresh_gold.py",
         "ports/out/gold_store.py", "ports/out/gold_builder.py", "ports/out/silver_table_reader.py",
+        "ports/out/training_grid_reader.py", "use_cases/read_training_grid.py",
         "use_cases/refresh_gold.py", "duckdb/parquet_gold_store.py",
         "gold_builders/quality_checks.py", "gold_builders/metrics_by_run.py",
         "gold_builders/calibration_table.py", "gold_builders/dm_results.py",
@@ -1474,9 +1887,9 @@ print(len(scope), "arquivos no escopo; abaixo de 90%:", bad, "; ausentes:", miss
 sys.exit(1 if bad or miss else 0)
 PY
 
-# A8 — três suítes de contrato, todas as pernas, zero skips
+# A8 — quatro suítes de contrato, todas as pernas, zero skips
 f=$(mktemp)
-uv run pytest tests/contract/features/evaluation/test_gold_store_contract.py tests/contract/features/evaluation/test_gold_builder_contract.py tests/contract/features/evaluation/test_silver_table_reader_contract.py -v -rs | tee "$f"
+uv run pytest tests/contract/features/evaluation/test_gold_store_contract.py tests/contract/features/evaluation/test_gold_builder_contract.py tests/contract/features/evaluation/test_silver_table_reader_contract.py tests/contract/features/evaluation/test_training_grid_reader_contract.py -v -rs | tee "$f"
 test -s "$f"
 if grep -q "SKIPPED" "$f"; then echo "FAIL: SKIPPED no contrato"; exit 1; fi
 for id in fake parquet real quality_checks metrics_by_run calibration_table dm_results mcs_results; do grep -q "\[$id" "$f" || { echo "FAIL: perna $id ausente"; exit 1; }; done
@@ -1511,18 +1924,20 @@ $U/test_bootstrap_indices.py bootstrap_parameters_invalid bootstrap_parameters_a
 $U/test_mcs_vs_arch.py mcs_reps_validator mcs_reps_single_owner
 tests/unit/shared/domain/test_path_identifier.py identifier_accepts identifier_rejects identifier_message_names_field
 tests/architecture/test_unit_evaluation_purity.py purity_scans_subpackages
+tests/architecture/test_port_coverage_gate.py training_grid_reader_resolves
 $G/test_gold_value_objects.py record_invalid cohort_run_invalid realized_invalid realized_lookup realized_summary findings_xor_horizons samples_incoherent alignment_report_invalid finding_invalid
 $G/test_series_assembly.py split_non_test_ignored feature_sets_multiple config_signatures_multiple orphan_run model_version_mismatch duplicate_point decision_index_mismatch horizon_label_mismatch grid_incomplete grid_divergent guardrail_flag_mismatch realized_missing interior_gap truncated_suffix prefix_over_deficit fold_coverage seed_horizon_coverage horizon_missing required_model_missing common_too_short prefix_within_deficit reproduces_persisted_values quantile_forecast_not_from_raw realized_joined common_intersection horizons_from_command all_findings_reported shuffled_input_same_result invalid_call_raises
-$G/test_quality_checks.py registry_runs_in_order registry_duplicate_name is_blocking_rule result_invalid block_estimate_invalid alignment_translates_report alignment_pass_per_horizon preconditions_k_below_min preconditions_constant_differential preconditions_invalid_series preconditions_undefined_estimate preconditions_skipped preconditions_pass step_delegates_to_owners degeneracy_reported degeneracy_point_baseline degeneracy_skipped degeneracy_uses_model_full provenance_reported
+$G/test_quality_checks.py registry_runs_in_order registry_duplicate_name is_blocking_rule result_invalid block_estimate_invalid alignment_translates_report alignment_pass_per_horizon preconditions_k_below_min preconditions_constant_differential preconditions_invalid_series preconditions_undefined_estimate preconditions_skipped preconditions_pass step_delegates_to_owners degeneracy_reported degeneracy_point_baseline degeneracy_skipped degeneracy_uses_model_full provenance_reported provenance_grid_prefix_detail
 $G/test_horizon_reports.py reports_equal_direct_calls both_samples with_and_without_gaps band_per_level dm_per_estimator dgt_only_multistep var_level_tails degenerate_not_applicable seed_mean_by_factory guardrail_rate_copied horizon_mismatch_raises
 $G/test_builder_explicit_deps.py order_invariant dependencies_first duplicate_name cycle_raises unknown_dependency self_dependency
-$G/test_refresh_gold_dtos.py parameters_no_default parameters_owner_messages tuple_empty_or_repeated preregistration_ref_required identifier_rule command_horizons table_key_order table_columns_uniform manifest_mapping failed_checks_of_results
-$G/test_refresh_gold_use_case.py graph_checked_before_read identifier_before_path cohort_empty_raises dataset_empty_raises foreign_run_rows_dropped guardrail_int_to_bool realized_read_once mcs_block_from_rule mcs_reps_seed_schemes arithmetic_error_fails_precondition other_backend_error_propagates factory_never_short backend_never_invalid blocked_publishes_checks_only blocked_result_failed_checks exception_before_publish effects_order step_logs manifest_carries_parameters rerun_identical completed_publishes_all_tables seeds_averaged_by_factory
+$G/test_refresh_gold_dtos.py parameters_no_default parameters_owner_messages tuple_empty_or_repeated preregistration_ref_required identifier_rule command_horizons table_key_order table_columns_uniform manifest_mapping failed_checks_of_results command_fingerprint_required manifest_content_fingerprint
+$G/test_refresh_gold_use_case.py graph_checked_before_read identifier_before_path cohort_empty_raises dataset_empty_raises foreign_run_rows_dropped guardrail_int_to_bool realized_read_once mcs_block_from_rule mcs_reps_seed_schemes arithmetic_error_fails_precondition other_backend_error_propagates factory_never_short backend_never_invalid blocked_publishes_checks_only blocked_result_failed_checks exception_before_publish effects_order step_logs manifest_carries_parameters rerun_identical completed_publishes_all_tables seeds_averaged_by_factory fingerprint_mismatch_publishes_nothing realized_from_training_grid manifest_grid_trimmed_prefix block_size_from_distinct_estimates blocked_logs_skip_reports_and_mcs post_filter_drops_superset_rows candidate_absent_blocks shuffled_dataset_rows_same_result
 $K/test_gold_store_contract.py publish_then_current publish_replaces_generation other_partition_untouched rows_order_preserved real_failure_keeps_current real_leftovers_removed real_manifest_written_last real_previous_delete_warns real_duckdb_readable real_rejects_bad_identifier
 $K/test_gold_builder_contract.py builder_pure_mapping table_named_after_builder rows_carry_partition confirmatory_rows_carry_prereg blocked_inputs_tolerated no_self_dependency quality_checks_rows quality_rows_no_prereg metrics_rows_match_reports calibration_rows_match_reports dm_rows_match_families mcs_rows_match_reports row_keys_unique
 $K/test_silver_table_reader_contract.py partition_filter_applied non_partition_superset absent_partition_empty unknown_table_raises values_round_trip
-$I/test_refresh_gold.py e2e_wired_lazy_backend_loaded e2e_completed_five_tables e2e_duckdb_counts e2e_rerun_identical e2e_manifest_same_but_timestamps e2e_blocked_replaces e2e_other_cohort_untouched
-tests/unit/shared/test_composition_root.py wires_refresh_gold arch_mcs_proxy_lazy
+$K/test_training_grid_reader_contract.py grid_trimmed_prefix_reported grid_rows_chronological grid_interior_missing_raises grid_no_usable_rows_raises grid_asset_partition_only
+$I/test_refresh_gold.py e2e_wired_lazy_backend_loaded e2e_completed_five_tables e2e_duckdb_counts e2e_rerun_identical e2e_manifest_same_but_timestamps e2e_blocked_replaces e2e_other_cohort_untouched e2e_warmup_prefix_completed e2e_fingerprint_equals_modeling e2e_fingerprint_mismatch_raises e2e_full_index_silver_blocked
+tests/unit/shared/test_composition_root.py wires_refresh_gold arch_mcs_proxy_lazy refresh_gold_grid_reader_wired
 LIST
 ```
 
@@ -1533,14 +1948,21 @@ EV=src/financial_forecasting/features/evaluation
 # A8 — baseline sem resíduo
 test -s scripts/arch_baseline.toml
 test -s tests/architecture/test_port_coverage_gate.py
-if grep -nE "GoldStore|GoldBuilder|SilverTableReader" scripts/arch_baseline.toml tests/architecture/test_port_coverage_gate.py; then echo "FAIL: baseline residual"; exit 1; fi
-# A11 — engines só no adapter duckdb; nenhum import de modeling/feature_engineering/application do analytics_store
+if grep -nE "GoldStore|GoldBuilder|SilverTableReader|TrainingGridReader" scripts/arch_baseline.toml; then echo "FAIL: baseline residual"; exit 1; fi
+if grep -nE "GoldStore|GoldBuilder|SilverTableReader" tests/architecture/test_port_coverage_gate.py; then echo "FAIL: baseline residual no teste do gate"; exit 1; fi
+# A11 — engines só no adapter duckdb; nenhum import de runtime de modeling/feature_engineering/application do analytics_store
 test -d "$EV"
 e=$(mktemp)
 grep -rnE "^\s*(import|from)\s+(duckdb|pyarrow|pandas)\b" "$EV" > "$e" || true
 test -s "$e"   # o adapter duckdb importa pyarrow/duckdb: arquivo vazio = grep quebrado
 if grep -v "/adapters/out/duckdb/" "$e"; then echo "FAIL: engine fora de adapters/out/duckdb"; exit 1; fi
-if grep -rnE "features\.(modeling|feature_engineering)|features\.analytics_store\.application" "$EV"; then echo "FAIL: import proibido em evaluation"; exit 1; fi
+r=$(mktemp)
+grep -rnE "^\s*(from|import)\s+financial_forecasting\.features\.(modeling|feature_engineering|analytics_store\.application)" "$EV" > "$r" || true
+test -s "$r"   # a anotação type-only do port existe: arquivo vazio = grep quebrado
+if grep -v "application/ports/out/training_grid_reader.py:" "$r"; then echo "FAIL: import proibido em evaluation"; exit 1; fi
+# a única referência a modeling é a anotação TrainingGrid sob TYPE_CHECKING no port (ADR 6.4.0009)
+test "$(wc -l < "$r")" -eq 1
+grep -qE "training_grid_reader\.py:[0-9]+:    from financial_forecasting\.features\.modeling\.domain\.services\.training_grid import" "$r"
 # só dois módulos de evaluation importam de analytics_store: coverage_series (6.1) e series_assembly (6.4)
 q=$(mktemp)
 grep -rlE "^\s*(from|import)\s+financial_forecasting\.features\.analytics_store" "$EV" > "$q"
@@ -1551,6 +1973,8 @@ grep -q "coverage_series.py" "$q"
 # A12 — exatamente uma entrada de medição do MCS em §7
 test -s "$T"
 test "$(grep -cE "^### [0-9-]+ — \[decision\] Task 12(:| —) custo do MCS" "$T")" -eq 1
+# A15 — exatamente uma entrada da medição sobre o cohort real em §7
+test "$(grep -cE "^### [0-9-]+ — \[decision\] Task 15 — refresh sobre o cohort real" "$T")" -eq 1
 # A14 — ADRs; §7; issue; nada de caminho do host versionado
 test -z "$(grep -L '^status: accepted' docs/adr/6_4_000*.md)"
 HP="C:""/Users"   # montado em partes: o literal não aparece neste arquivo
@@ -1562,6 +1986,13 @@ python scripts/check_stage_issue.py
 ```
 
 (A saída dos blocos A14, A8, A10, A11 e do laço de tokens é colada no PR.)
+
+**Resíduo herdado (revisão de execução):** o `docs/runbooks/confirmatory-cohort-aapl.md`
+(Stage 5.5, já em `develop`) contém caminho absoluto do host nas linhas do
+exemplo de `docker run`; o grep A14 acima reprova por causa dele até que seja
+corrigido. Não é arquivo desta Stage: encaminhado à sessão mestra (correção
+de privacidade no `develop`, fora do escopo da 6.4); o gate **não** é
+afrouxado para excluí-lo.
 
 ### Verificações funcionais
 
@@ -1578,26 +2009,39 @@ python scripts/check_stage_issue.py
       geração `BLOCKED` só com `gold_quality_checks` cuja linha
       `alignment_check`/`interior_gap` diz por quê; o outro cohort segue
       byte-igual.
-- [ ] Sem cohort real: a execução sobre o silver AAPL é da 8.1 (concept §1).
+- [ ] Cohort real só medido: refresh sobre uma cópia somente-leitura do
+      cohort `aapl_confirmatory-r0-665f45d9169a` registrado em §7 (A15; zero
+      `decision_index_mismatch`, `grid_trimmed_prefix` e fingerprint do spec);
+      o gold AAPL publicado é da 8.1 (concept §1).
 
 ### Checklist de fechamento da Stage
 
 - [ ] Todas as Tasks commitadas, cada uma com o seu gate (T1/T2/T3) verde;
-      Checkpoints C após 03, 06, 09 e 12.
+      Checkpoints C após 03, 06, 09 e 12, e o bloco 5 após a Task 15 e a
+      reexecução da Task 13.
 - [ ] `make check` verde no branch (após rebase em `origin/develop`);
       cobertura por arquivo (A14) colada.
 - [ ] Laço de tokens da matriz verde, saída colada.
 - [ ] `scripts/arch_baseline.toml` e `test_port_coverage_gate.py` sem
-      `GoldStore`/`GoldBuilder`/`SilverTableReader` (ADR 6.1.0005).
+      `GoldStore`/`GoldBuilder`/`SilverTableReader` (ADR 6.1.0005);
+      `TrainingGridReader` fora do baseline (o teste do gate o cita só para
+      provar a resolução do real, Task 14).
 - [ ] §7 com as decisões de detalhe do §1 efetivamente aplicadas, a entrada
       única do custo do MCS (Task 12), o `[finding]` do ponto de chamada novo
       para a #118 (`window_deficits`) e os `[finding]`s dos encaminhamentos
       do concept §7 (perfis de §Fora do escopo para a 6.5/8.3; redação da
-      linha 6.5 do roadmap).
+      linha 6.5 do roadmap); da revisão de execução: a entrada única da
+      medição no cohort real (Task 15), o `[finding]` do `grid_trimmed_prefix`
+      como mais um ponto "int ≥ 0" para a #118 e os achados da medição real
+      para a 6.5/8.1.
+- [ ] Issue de infraestrutura de testes aberta no fechamento: isolar o CLI do
+      `import-linter` (subprocess) para não desligar loggers (Checkpoint C
+      bloco 4, L3/A6; `[finding]` do gate de saída em §7).
 - [ ] Commit final `stage 6.4: complete` aplicado (pós-auditoria).
 - [ ] `roadmap.md`: Stage 6.4 marcada `done`, `updated_at` e
       `last_reviewed_at` no fechamento.
-- [ ] ADRs 6.4.0001–0008 em `accepted`.
+- [ ] ADRs 6.4.0001–0009 em `accepted`; nota de emenda do ADR 6.4.0004
+      apontando o 6.4.0009.
 - [ ] `concept.md` desta Stage não precisa de retoque retrospectivo.
 
 ## 4. Ordem de dependência entre Tasks
@@ -1610,6 +2054,8 @@ Tasks 01, 02, 05, 06 ─► Task 07 (DTOs + port GoldStore; baseline +) ─► T
 Task 07 ─► Task 09 (port GoldBuilder; baseline +) ─► Task 10 (cinco builders; baseline −)
 Tasks 04–10 ─► Task 11 (SilverTableReader + RefreshGold) ─► Task 12 (wiring + e2e)
 Tasks 01–12 ─► (rebase em origin/develop) ─► Task 13 (roadmap)
+revisão de execução (ADR 6.4.0009; branch rebaseada com a 5.5):
+Tasks 11–13 ─► Task 14 (port TrainingGridReader + ReadTrainingGrid + contrato) ─► Task 15 (RefreshGold sobre a grade + e2e + medição real) ─► Task 13 (reexecução do roadmap)
 ```
 
 - A Task 01 vem primeiro porque o `RefreshParameters` (07) e o passo de
@@ -1623,7 +2069,12 @@ Tasks 01–12 ─► (rebase em origin/develop) ─► Task 13 (roadmap)
   commit (ADR 6.1.0005).
 - A 11 junta o port `SilverTableReader` ao seu primeiro consumidor: o real já
   existe, então não há baseline nem adapter novo.
-- A 13 fecha: o roadmap descreve arquivos e contratos que já existem.
+- A 13 fecha: o roadmap descreve arquivos e contratos que já existem — por
+  isso a sua reexecução vem depois da 15.
+- A 14 antes da 15: o `RefreshGold` passa a depender do port, e o port nasce
+  com fake, real e contrato no mesmo commit (sem janela de baseline). A 15
+  junta a troca de tipo do fingerprint em todos os pontos que o constroem
+  (atômica para o build ficar verde).
 
 ## 5. Riscos de execução e fallbacks
 
@@ -1638,6 +2089,11 @@ Tasks 01–12 ─► (rebase em origin/develop) ─► Task 13 (roadmap)
 | Cobertura < 90 % nos ramos dos `__post_init__` e nos 19 achados | Um teste por ramo e por regra (tokens); `# pragma: no cover` só comentado e em ramo comprovadamente inalcançável |
 | e2e lento (`ArchMcs` real, 2 horizontes × 2 esquemas × `reps = 1000`, `import arch` 8 s a frio) | Medido no §1 (< 1 s por par horizonte/esquema com T = 10³); T ≈ 60 no e2e; `--durations=5` no bloco da Task 12; `slow` só se passar de minutos, com `[decision]` |
 | Rebase conflitar em `docs/roadmap.md` (Stages vizinhas em voo) ou em `.importlinter`/`LAYOUT.md` | `git fetch && git rebase origin/develop` antes da Task 13 e de novo no PR; manter as duas edições; rerodar os greps da Task 13 e da Task 04 depois de cada rebase |
+| `check_port_coverage` não reconhecer o `ReadTrainingGrid` como real do `TrainingGridReader` (a comparação de anotações é textual) | Port e use case com a mesma anotação `-> TrainingGrid` e o mesmo `*, asset_id: str`; conferir com `--list` na Task 14 antes do commit; nunca abrir entrada no baseline (o script manda anotar igual) |
+| O e2e da 15 precisar de todas as colunas de `modeling_columns()` (registry) e o dataset sintético ficar grande | Colunas lidas da função (não listadas no teste), valores sintéticos finitos por coluna, ~75 sessões; o custo é de escrita de um Parquet pequeno |
+| Fingerprint da 6.4 divergir do `grid_fingerprint` da 5.5 por ordem de colunas ou tipo de valor | O VO ordena os nomes e o hasher canônico arredonda floats; o e2e compara os dois valores (`e2e_fingerprint_equals_modeling`); divergência = bug a corrigir no use case, não no VO |
+| A medição real achar outra regra (ex.: `prefix_over_deficit` com `window_deficits = {}`) ou erro de leitura da grade | `[finding]` para a 6.5/8.1 com a contagem por `kind`; sem código para esconder; `decision_index_mismatch` restante ou fingerprint divergente → HALT à sessão mestra |
+| Gate A14 de privacidade reprovar pelo runbook herdado da 5.5 | Resíduo declarado no §3; correção pela sessão mestra no `develop`; o gate não é afrouxado |
 | Verde falso por shell (`!` sob `set -e`, `grep -q` num pipe com `pipefail`, arquivo lido em outro `docker run`) | Convenção do §1: um `bash -euo pipefail -c` por bloco, negação por `if …; then exit 1; fi`, saída em arquivo antes do `grep`, `test -s` antes de ler |
 
 ## 6. Referências
@@ -1653,13 +2109,17 @@ Tasks 01–12 ─► (rebase em origin/develop) ─► Task 13 (roadmap)
   [`6.4.0005`](../../adr/6_4_0005-gold-full-refresh-per-cohort-partition.md),
   [`6.4.0006`](../../adr/6_4_0006-refresh-parameters-explicit-no-domain-defaults.md),
   [`6.4.0007`](../../adr/6_4_0007-gold-persists-both-samples-identified.md),
-  [`6.4.0008`](../../adr/6_4_0008-no-runtime-library-cross-check-in-gold.md);
+  [`6.4.0008`](../../adr/6_4_0008-no-runtime-library-cross-check-in-gold.md),
+  [`6.4.0009`](../../adr/6_4_0009-realized-from-modeling-training-grid-via-consumer-port.md)
+  (revisão de execução);
   relacionados: [`6.1.0002`](../../adr/6_1_0002-coverage-series-aligned-input-vo.md),
   [`6.1.0005`](../../adr/6_1_0005-transient-port-coverage-baseline-between-port-and-first-adapter.md),
   [`6.2.0004`](../../adr/6_2_0004-mcs-procedure-in-domain-over-backend-bootstrap-indices.md),
   [`6.2.0005`](../../adr/6_2_0005-mcs-block-length-ceiling-integer.md),
   [`0.0.0053`](../../adr/0_0_0053-slices-as-modules-of-one-context-consumer-owned-ports.md),
-  [`0.0.0055`](../../adr/0_0_0055-tiered-quality-gates.md).
+  [`0.0.0055`](../../adr/0_0_0055-tiered-quality-gates.md),
+  [`5.5.0004`](../../adr/5_5_0004-single-training-grid-warmup-trim.md); concept
+  [5.5](../5.5-confirmatory-retrain/concept.md) I9/D11.
 - Doc de domínio: [`probabilistic-forecast-evaluation.md`](../../domain/evaluation/probabilistic-forecast-evaluation.md)
   §2.1, §2.7, §5.3, §6.5, §6.7–§6.9, §8.2.
 - [`../../LAYOUT.md`](../../LAYOUT.md) §2, §3, §7; [`../../PIPELINE.md`](../../PIPELINE.md) §4.3;
