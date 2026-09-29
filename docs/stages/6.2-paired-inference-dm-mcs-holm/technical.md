@@ -1712,4 +1712,17 @@ helpers privados nascidos nos Checkpoints C (`value_objects/_paired_inputs.py`,
 referências novas (Bernardi & Catania 2018; NIST DLMF §8.17) entram no bloco "Inferência
 pareada:" do §11.2 e no item do doc de avaliação do overview §10 (ADR 0.0.0003).
 
+### 2026-09-29 — [decision] Auditoria de testes: gate AST da pureza dos unit de `evaluation` — Claude (Opus 5.5)
+**Contexto:** a auditoria independente de testes pediu que o I13 ("unit não importa
+biblioteca nem adapter, não lê arquivo") deixe de depender só do grep do §3 (Host), que roda
+uma vez no gate de saída e casa texto (docstring e comentário contam; `import x as y` e
+`from pacote import modulo` exigem padrões à parte).
+**Razão:** arquivo novo fora das listas das Tasks, **por pedido da sessão mestra**:
+`tests/architecture/test_unit_evaluation_purity.py` percorre a AST de todo
+`tests/unit/features/evaluation/*.py` e reprova import de `arch`/`statsmodels`/`scipy`/
+`numpy` ou de módulo `*.adapters.*` e chamada de `open`/`read_text`/`read_bytes`/`load`; um
+segundo teste prova que o detector não é vácuo (5 violações num arquivo sintético). Roda no
+`make check`/`check-block` (a pasta `tests/architecture/` fica fora do T1). O grep do §3
+continua valendo como conferência de saída.
+
 <!-- END: post-execution -->
