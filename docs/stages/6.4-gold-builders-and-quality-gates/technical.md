@@ -1820,4 +1820,21 @@ do §2 Task 04.
   pode ser vazio. O FAIL agrega por (motivo, horizonte) na ordem do `UndefinedReason`,
   com o primeiro par e o seu detalhe.
 
+### 2026-09-29 — [decision] Task 06: ordem das linhas do `HorizonReports` e validação do `gold_build_order` — Claude (Opus 5.5)
+**Contexto:** detalhes abaixo do limiar do concept (D5, D7).
+**Razão:**
+- **Ordem determinística:** `series` por modelo (ordenado) → seed (`None` antes de
+  int) → amostra (`model_full`, `common`); `calibration` por `include_degenerate`
+  (`False`, `True`) → intervalos (ordem de `symmetric_pairs`) → caudas (ordem de
+  `levels`, sem 0,5), cada sequência seguida das suas sub-séries DGT quando
+  `is_multi_step(h)` (a regra única do slice).
+- **Coerência do `paired`:** além de horizonte e modelos (critério do §2), o
+  `HorizonReports` exige que os `target_timestamps` do `paired` sejam os da amostra
+  comum — a série que foi ao backend é a da interseção (ADR 6.4.0007). `band_levels` e
+  `dm_variance_estimators` vazios erguem (o DTO da Task 07 também os valida).
+- **`gold_build_order`:** valida forma (nome `str` não-vazio, dependências
+  `frozenset`), duplicata, auto-dependência e dependência não registrada antes de
+  montar o grafo; insere no `TopologicalSorter` em ordem de nome com dependências
+  ordenadas (ordem idêntica em 20 permutações do registro dos cinco builders).
+
 <!-- END: post-execution -->
