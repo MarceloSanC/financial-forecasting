@@ -3,7 +3,7 @@ title: Concept — Stage 6.4 — Gold builders modulares e quality gates (montag
 description: Use case RefreshGold do BC evaluation que lê o silver por um port do consumidor e o realizado pelo par read-only do MedallionStore, monta as séries alinhadas num serviço de domínio dono único das regras de alinhamento, roda o registry de quality checks (alinhamento, pré-condições estatísticas, degeneração, proveniência), chama os serviços de 6.1/6.2/6.3 e o McsBackend em produção, mapeia os relatórios em cinco tabelas por builders ordenados por graphlib e publica a geração inteira do cohort com manifesto e troca de diretório
 when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; ao ler as tabelas gold na 6.5; ao questionar de onde vem o realizado, por que o dedup não é reaplicado, o que um refresh bloqueado publica, como um leitor sabe que o gold está completo ou como a ordem dos builders é decidida
 keywords: [concept, gold-builders-and-quality-gates, evaluation, gold, refresh-gold, series-assembly, alignment, quality-checks, registry, graphlib, duckdb, parquet, manifest, staging, mcs, silver, dataset-tft, realized, dataset-fingerprint, preregistration]
-status: draft
+status: done
 created_at: 2026-09-29
 updated_at: 2026-09-29
 stage_id: 6.4-gold-builders-and-quality-gates
@@ -315,6 +315,20 @@ Application (`evaluation/application/`):
   construtor recebe `SilverTableReader`, `MedallionStore`, `Hasher`, `Clock`,
   `McsBackend`, `GoldStore` e `Sequence[GoldBuilder]`.
 
+Shared (`shared/domain/services/`):
+
+- **`path_identifier`** (`domain-service`, dono único da regra de
+  identificador que entra em caminho de disco) —
+  `PATH_IDENTIFIER_PATTERN` (`^[A-Za-z0-9._-]+$`, sem separador de caminho) e
+  `validate_path_identifier(value, *, field) -> None`, que usa `fullmatch`
+  (então `"AAPL\n"` é recusado, o que `re.match` com `$` aceitaria) e ergue
+  `ValueError`. Hoje a regra mora como constante privada no
+  `ParquetMedallionStore` (par read-only); passa a ter este dono, consumido
+  pelo store, pelo seu fake, pelo `GoldPartition` e pelo `ParquetGoldStore`,
+  com as mensagens atuais do store preservadas byte a byte. Vai para
+  `shared/` porque nenhum slice é dono da regra (LAYOUT §4: conceito
+  transversal sem slice produtor).
+
 Adapters (`evaluation/adapters/out/duckdb/`):
 
 - **`ParquetGoldStore`** (`GoldStore`) e os builders
@@ -338,7 +352,8 @@ Adapters (`evaluation/adapters/out/duckdb/`):
   `WilsonBand`, `var_tail_for`, `validate_min_violations`, `validate_rate`
   (validador dos níveis do `WilsonBand`) — 6.3.
 - `QuantileForecast` (VO do 4.3; aresta de dados nova declarada, D3).
-- `MedallionStore`, `Hasher`, `Clock`, `DatasetFingerprint` (shared);
+- `MedallionStore`, `Hasher`, `Clock`, `DatasetFingerprint`,
+  `validate_path_identifier` (shared; o último introduzido nesta Stage);
   `ParquetAnalyticsRepository` (4.2) como real do `SilverTableReader`.
 
 ## 5. Invariantes e regras
@@ -431,8 +446,11 @@ Adapters (`evaluation/adapters/out/duckdb/`):
   `validate_bootstrap_parameters`, `validate_mcs_reps`, `validate_alpha`,
   `validate_rate`, `validate_min_violations`), antes de qualquer leitura; um manifesto
   `BLOCKED` nunca carrega parâmetro inválido.
-- **C3 — Identificador inválido** (`asset`/`parent_sweep_id` fora de
-  `^[A-Za-z0-9._-]+$`) → `ValueError` antes de montar qualquer caminho.
+- **C3 — Identificador inválido** (`asset`/`parent_sweep_id` que não casam
+  **inteiros** — `fullmatch` — `PATH_IDENTIFIER_PATTERN`; ex.: `"AAPL\n"`,
+  `"a/b"`, `""`) → `ValueError` de `validate_path_identifier`, na construção
+  do `GoldPartition` e de novo no `ParquetGoldStore`, antes de montar
+  qualquer caminho.
 - **C4 — Cohort vazio** (nenhuma linha de `dim_run` para `(asset,
   parent_sweep_id)`) ou dataset vazio → `ValueError` nomeando a partição;
   nada é publicado.
@@ -637,6 +655,13 @@ Adapters (`evaluation/adapters/out/duckdb/`):
     `validate_mcs_reps(reps)` público para a regra `reps ≥ MIN_MCS_REPS`,
     hoje escrita duas vezes — `McsReport.__post_init__` e
     `ModelConfidenceSet.evaluate` —, e os dois pontos passam a consumi-lo);
+    `shared/adapters/out/parquet/parquet_medallion_store.py` e
+    `tests/fakes/shared/in_memory_medallion_store.py` (trocam a regra local de
+    identificador por `validate_path_identifier`, mensagens byte a byte
+    iguais); `src/financial_forecasting/composition_root.py` (wiring do
+    `RefreshGold`);
+  - `arquivos_a_criar` (shared): `shared/domain/services/path_identifier.py`
+    (`PATH_IDENTIFIER_PATTERN`, `validate_path_identifier`) e o seu teste unit;
   - `contratos_consumidos`: `AnalyticsRepository (4.2)` passa a ser
     "`ParquetAnalyticsRepository` como real do `SilverTableReader` (ADR
     0.0.0053)"; entram `MedallionStore` (par read-only dataset_tft),

@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-09-29
 updated_at: 2026-09-29
 adr_id: 6.4.0005
-decision: A GoldStore port publishes a cohort's gold as one generation — RefreshGold computes every report first, the builders map them to tables, and ParquetGoldStore writes all tables into <data_root>/gold/asset=<a>/parent_sweep_id=<p>/.staging/, writes MANIFEST.json last (status COMPLETED or BLOCKED, rows per table, parameters with the preregistration reference, dataset fingerprint and target_return summary, timestamps), then renames current/ to .previous/, renames .staging/ to current/ and deletes .previous/; a failure to delete .previous/ after the swap is a logged warning, not an error; a single writer per cohort is a documented precondition (no lock file); a reader uses a partition only if current/MANIFEST.json exists and reads it before the tables; an exception before the swap leaves the live generation untouched; a blocked refresh publishes a generation that holds only the builders declared runs_when_blocked; asset and parent_sweep_id are validated with the MedallionStore identifier rule before any path is built; incremental refresh and DuckDB COPY … OVERWRITE are rejected.
+decision: A GoldStore port publishes a cohort's gold as one generation — RefreshGold computes every report first, the builders map them to tables, and ParquetGoldStore writes all tables into <data_root>/gold/asset=<a>/parent_sweep_id=<p>/.staging/, writes MANIFEST.json last (status COMPLETED or BLOCKED, rows per table, parameters with the preregistration reference, dataset fingerprint and target_return summary, timestamps), then renames current/ to .previous/, renames .staging/ to current/ and deletes .previous/; a failure to delete .previous/ after the swap is a logged warning, not an error; a single writer per cohort is a documented precondition (no lock file); a reader uses a partition only if current/MANIFEST.json exists and reads it before the tables; an exception before the swap leaves the live generation untouched; a blocked refresh publishes a generation that holds only the builders declared runs_when_blocked; asset and parent_sweep_id are validated by the shared validate_path_identifier (fullmatch of ^[A-Za-z0-9._-]+$, the rule the MedallionStore also consumes) in GoldPartition and again in the store before any path is built; incremental refresh and DuckDB COPY … OVERWRITE are rejected.
 context_stage: 6.4-gold-builders-and-quality-gates
 bounded_context: evaluation
 ---
@@ -77,9 +77,14 @@ Evidence (verified 2026-09-29):
 
 1. **Partition.** `(asset, parent_sweep_id)` — the cohort (`ScopeSpec.cohort_id`
    maps to `parent_sweep_id`); `parent_sweep_id` is required by
-   `RefreshGoldCommand`. Both are validated with the identifier rule of the
-   `MedallionStore` read-only pair (`^[A-Za-z0-9._-]+$`, no path separators)
-   **before** any path is built; the store refuses anything else.
+   `RefreshGoldCommand`. Both are validated by
+   `validate_path_identifier` (`shared/domain/services/path_identifier.py`,
+   the single owner of `PATH_IDENTIFIER_PATTERN` = `^[A-Za-z0-9._-]+$`, no
+   path separators, applied with `fullmatch` so `"AAPL\n"` is refused) when
+   the `GoldPartition` is built, and `ParquetGoldStore` calls it again
+   **before** any path is built. The same function replaces the local rule of
+   the `MedallionStore` read-only pair (store and fake, byte-identical
+   messages).
 2. **Layout.** `<data_root>/gold/asset=<a>/parent_sweep_id=<p>/current/`
    holds `<table>.parquet` per published table and `MANIFEST.json`. Every row
    also carries `asset` and `parent_sweep_id` as columns, so a DuckDB query
