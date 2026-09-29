@@ -1743,6 +1743,9 @@ nos dois lugares, sem segunda fonte. O gate de pureza passou a
 `_UNIT_DIR.rglob("*.py")` (via `_scan(root)`) e as violações citam o caminho, não só
 o nome (dois arquivos homônimos em subpacotes diferentes seriam indistinguíveis);
 `purity_scans_subpackages` grava `gold/deeper/test_impure.py` num `tmp_path` e prova
-que a varredura o acusa.
+que a varredura o acusa. Após o Checkpoint C bloco 1 (achados M2/L3): `seeds`/`full`/
+`common` do `HorizonSamples` precisam ser `Mapping` (senão `ValueError` nomeando o
+campo) e o VO guarda `MappingProxyType(dict(v))` — mutar o dict de origem depois da
+construção não altera o VO validado (`samples_mappings_frozen_copy`).
 
 <!-- END: post-execution -->

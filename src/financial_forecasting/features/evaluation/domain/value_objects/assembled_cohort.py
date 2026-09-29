@@ -23,6 +23,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from types import MappingProxyType
 
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     validate_horizon,
@@ -147,6 +148,8 @@ class HorizonSamples:
         models: modelos, ordenados e únicos (≥ 1).
         levels: grade comum de níveis — de toda série.
         seeds: modelo → seeds (ordenadas, `None` antes de int, únicas, ≥ 1).
+            `seeds`/`full`/`common` precisam ser `Mapping`; o VO guarda uma cópia
+            somente-leitura (`MappingProxyType`), imune a mutação do dict de origem.
         full: modelo → uma `CoverageSeries` por seed com todos os pontos da série.
         common: modelo → uma `CoverageSeries` por seed na interseção comum.
         n_common: T da amostra comum (≥ 1) — `n_points` de toda série `common`.
@@ -179,6 +182,11 @@ class HorizonSamples:
         )
         check_non_empty_str(self.common_last_target_timestamp, field="common_last_target_timestamp")
         for name in ("seeds", "full", "common"):
+            value = getattr(self, name)
+            if not isinstance(value, Mapping):
+                raise ValueError(f"{name} must be a Mapping, got {type(value).__name__}")
+            # cópia imutável: mutar o dict de origem depois não altera o VO validado
+            object.__setattr__(self, name, MappingProxyType(dict(value)))
             keys = tuple(sorted(getattr(self, name)))
             if keys != self.models:
                 raise ValueError(f"{name} keys must be the models {self.models}, got {keys}")

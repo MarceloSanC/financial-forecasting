@@ -334,6 +334,15 @@ def _incoherent_cases() -> list[object]:
             lambda ms: {"common_last_target_timestamp": None}, "common_last", id="last-none"
         ),
         pytest.param(
+            lambda ms: {"seeds": [("gbm", (None,)), ("tft", (1, 2))]},
+            "seeds must be a Mapping",
+            id="seeds-not-mapping",
+        ),
+        pytest.param(
+            lambda ms: {"full": (full(ms), full(ms))}, "full must be a Mapping", id="full-tuple"
+        ),
+        pytest.param(lambda ms: {"common": None}, "common must be a Mapping", id="common-none"),
+        pytest.param(
             lambda ms: {"seeds": {"gbm": (None,)}}, "seeds keys must be the models", id="seed-keys"
         ),
         pytest.param(
@@ -401,6 +410,20 @@ def test_samples_incoherent_raises(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         _samples(make_series, **changes(make_series))
+
+
+@pytest.mark.unit
+def test_samples_mappings_frozen_copy(make_series: SeriesFactory) -> None:
+    """Mutar o dict de origem depois da construção não altera o VO (cópia somente-leitura)."""
+    fields = _samples_fields(make_series)
+    seeds = dict(fields["seeds"])  # type: ignore[call-overload]
+    fields["seeds"] = seeds
+    samples = HorizonSamples(**fields)  # type: ignore[arg-type]
+    seeds["tft"] = (99,)
+    seeds["extra"] = (1,)
+    assert samples.seeds == {"gbm": (None,), "tft": (1, 2)}
+    with pytest.raises(TypeError):
+        samples.full["tft"] = ()  # type: ignore[index]
 
 
 @pytest.mark.unit
