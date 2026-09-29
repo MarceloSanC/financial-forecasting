@@ -3,7 +3,7 @@ title: Technical — Stage 6.4 — Gold builders modulares e quality gates (mont
 description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), TDD inside-out no BC evaluation — validadores públicos da 6.2, regra única de identificador em shared, VOs de entrada, SeriesAssembly, registry de quality checks, HorizonReports e gold_build_order, DTOs e ports GoldStore/GoldBuilder/SilverTableReader, ParquetGoldStore e cinco builders, use case RefreshGold, wiring, e2e e roadmap
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
 keywords: [technical, plano de execução, gold-builders-and-quality-gates, evaluation, gold, refresh-gold, series-assembly, quality-checks, registry, horizon-reports, graphlib, gold-store, gold-builder, silver-table-reader, parquet, duckdb, manifest, mcs, port-coverage, importlinter]
-status: done
+status: draft
 created_at: 2026-09-29
 updated_at: 2026-09-29
 stage_id: 6.4-gold-builders-and-quality-gates
