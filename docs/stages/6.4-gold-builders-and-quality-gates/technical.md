@@ -1861,4 +1861,23 @@ a reexporta (`statistical_preconditions_check.models_suffice` continua existindo
 o mesmo objeto — asserido em `step_delegates_to_owners`) e o registry a importa do VO.
 Uma escrita só, sem ciclo, sem mudança de contrato.
 
+### 2026-09-29 — [decision] Task 07: forma dos DTOs do refresh — Claude (Opus 5.5)
+**Contexto:** detalhes abaixo do limiar do concept ao implementar o ADR 6.4.0005/0006.
+**Razão:**
+- **`RefreshParameters`** `kw_only` e sem default; tipo de `mcs_reps`/`mcs_seed` por
+  `validate_bootstrap_parameters` **antes** do piso `validate_mcs_reps` (o [finding] I3
+  do Checkpoint C bloco 1, coberto por `parameters_owner_messages` com `reps=True` e
+  `reps=1000.0`). `validate_alpha` não nomeia o campo (mensagem do dono, igual para
+  `dm_alpha` e `mcs_alpha`) — sem segunda escrita no DTO.
+- **`RefreshStatus`** com valores `"COMPLETED"`/`"BLOCKED"` (o texto do manifesto e do
+  log). **`GoldInputs.preregistration_ref`** é propriedade dos `parameters` (uma fonte
+  só); `GoldInputs` exige `BLOCKED` sem relatórios e `COMPLETED` sem resultado
+  bloqueante.
+- **`GoldManifest`** carrega a `GoldPartition` (o id do cohort — ADR 6.4.0005 item 9),
+  o resumo do realizado em quatro campos planos e os timestamps como `datetime` com
+  fuso (serializados por `isoformat` no `as_mapping`); `preregistration_ref` aparece no
+  topo do mapeamento e dentro de `parameters`.
+- **`GoldTable`** recusa float não-finito (§1: "nunca NaN"), congela cada linha
+  (`MappingProxyType`) e converte chave com tipos misturados em `ValueError`.
+
 <!-- END: post-execution -->
