@@ -2612,15 +2612,17 @@ inteiros.
 
 ### 2026-09-29 — [deviation] Revisão de execução: revert do concept pela variante `revision-from-execution` — Claude (Opus 5.5)
 **Contexto:** a regressão da revisão de execução (ADR 6.4.0009) reverteu o concept com
-`chore(concept): revert to draft — revision-from-execution: …` (commit `b481aae`);
+`chore(concept): revert to draft — revision-from-execution: …` (commit `b0aafe4`);
 CONVENTIONS §3.2/§4 descrevem para o concept só a variante `revision-from-technical`
 (a `revision-from-execution` é a do technical).
 **Razão:** a causa veio da execução (Checkpoint C bloco 4, ALTA-1: a 5.5 mergeada em
 `develop` mudou a origem do `decision_idx`), não da Fase 3B; a variante nomeia a causa
 real. O hook `commit-msg` aceitou o subject; nenhuma aprovação foi pulada (o concept e o
-technical foram re-aprovados pelos commits reservados `b1b3db4` e `68cef87`). Em
-consequência, os ADRs 6.4.0002 (item 6) e 6.4.0005 (item 8) ganharam uma linha de
-emenda datada apontando o ADR 6.4.0009 (status `accepted` intacto).
+technical foram re-aprovados pelos commits reservados `a5f00b3` e `2cca98b`). Em
+consequência, os ADRs 6.4.0002 (item 6) e 6.4.0005 (item 8) ganharam uma emenda
+datada apontando o ADR 6.4.0009 (status `accepted` intacto) — após a auditoria (F4),
+um parágrafo na seção Status, como o do ADR 6.4.0004, fora do corpo da Decision.
+(Hashes corrigidos na auditoria, F1: os citados antes eram de antes do rebase.)
 
 ### 2026-09-29 — [decision] Tokens extra da auditoria de testes — Claude (Opus 5.5)
 **Contexto:** a auditoria de testes (rodada 1) achou 5 mutantes reais sobreviventes (e
