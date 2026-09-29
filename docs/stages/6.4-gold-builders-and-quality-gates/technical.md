@@ -1787,6 +1787,15 @@ do §2 Task 04.
   horizonte. Achados idênticos (mesmo tipo, escopo e detalhe — ex. um por nível do
   mesmo ponto) são deduplicados; o `alignment_check` (Task 05) agrega as ocorrências
   por (tipo, escopo).
+- **Unidade de `occurrences`** no `gold_quality_checks` (Checkpoint C bloco 2, B-2):
+  `interior_gap`, `truncated_suffix`, `prefix_over_deficit` e `seed_horizon_coverage`
+  contam 1 por série (modelo, seed, h); `model_version_mismatch` 1 por (h, run);
+  `fold_coverage` 1 por (modelo, seed); `orphan_run` 1 por run;
+  `multiple_feature_sets`, `grid_divergent`, `horizon_missing` e
+  `common_sample_too_short` 1 por cohort/horizonte; `required_model_missing` 1 por
+  modelo; `multiple_config_signatures` 1 por modelo; os demais
+  (`duplicate_point`, `decision_index_mismatch`, `horizon_label_mismatch`,
+  `grid_incomplete`, `guardrail_flag_mismatch`, `realized_missing`) 1 por ponto.
 - **Série (modelo, seed)** = união dos runs (folds) do par; o universo de pares vem
   dos `runs`. Folds do par vêm dos `runs` (o run sem predição é `orphan_run`, não
   `fold_coverage`).
