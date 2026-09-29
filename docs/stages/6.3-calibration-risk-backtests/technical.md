@@ -1812,4 +1812,14 @@ Task 10 verde; `_fixture_problems` da 6.2 (worktree irmã) = `[]`;
 203–204 do bloco de ambiente do §1 deste technical, congelado desde a aprovação — fora
 do alcance da §7).
 
+### 2026-09-28 — [deviation] Auditoria de testes: `lr_uc_three_state` com meio negativo por arredondamento — Claude (Opus 5.5)
+**Contexto:** bug real achado pela auditoria de testes (Checkpoint C bloco 4) — com
+contagens reais, `lower_count + upper_count == n` em float mas `n − lower − upper =
+−1.78e-15` (ex.: (70.918102624101, 13.963043814869055, 84.88114643897005)), e o
+validador do meio erguia sobre entrada válida.
+**Razão:** disposição `corrigido` em `[6.3/task-08-fix]` — depois do
+`lower_count + upper_count <= n`, o meio é `max(0.0, n − lower − upper)`; testes
+`test_three_state_rounding_negative_middle_is_zero` e
+`test_three_state_counts_filling_n_are_accepted` ((3, 2, 5) = 32.39011338418889).
+
 <!-- END: post-execution -->

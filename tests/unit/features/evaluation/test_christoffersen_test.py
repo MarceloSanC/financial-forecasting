@@ -567,6 +567,8 @@ def test_report_incoherent_p_value_without_statistic_raises(
 # --- Task 08 — LR_uc de 3 estados (A7, I10, I13, C3) ----------------------------------------
 
 _THREE_RATE = 0.02
+# (3, 2, 5), taxas 0.02/0.02 — contagens que somam n (valor de referência da auditoria).
+_THREE_STATE_FILLING_N = 32.39011338418889
 
 
 def _three_state_by_hand(
@@ -780,3 +782,33 @@ def test_report_incoherent_identity_through_the_vo_rule(
         patch.setattr(christoffersen_test_module, "belongs_to_dgt_partition", lambda _: True)
         with pytest.raises(ValueError, match="independence_descriptive must be"):
             dataclasses.replace(report, horizon=7, independence_descriptive=True)
+
+
+# --- 3 estados: meio nulo por arredondamento (auditoria de testes, Checkpoint C bloco 4) ----
+
+
+@pytest.mark.unit
+def test_three_state_rounding_negative_middle_is_zero() -> None:
+    """Contagens reais com `lower + upper == n` em float mas `n - lower - upper < 0`
+    (-1.78e-15): o meio é 0, nada ergue e o valor é o multinomial com meio nulo."""
+    lower, upper, n = 70.918102624101, 13.963043814869055, 84.88114643897005
+    assert lower + upper <= n
+    assert n - lower - upper < 0.0  # premissa: a subtração sai negativa
+
+    statistic = lr_uc_three_state(
+        lower_count=lower, upper_count=upper, n=n, lower_rate=_THREE_RATE, upper_rate=_THREE_RATE
+    )
+
+    null = lower * math.log(_THREE_RATE) + upper * math.log(_THREE_RATE)
+    fitted = lower * math.log(lower / n) + upper * math.log(upper / n)
+    assert _close(statistic, -2 * (null - fitted))
+
+
+@pytest.mark.unit
+def test_three_state_counts_filling_n_are_accepted() -> None:
+    """(3, 2, 5), taxas 0.02/0.02: contagens que somam n (meio 0) valem 32.39011338418889."""
+    statistic = lr_uc_three_state(
+        lower_count=3, upper_count=2, n=5, lower_rate=_THREE_RATE, upper_rate=_THREE_RATE
+    )
+
+    assert _close(statistic, _THREE_STATE_FILLING_N)
