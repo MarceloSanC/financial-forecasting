@@ -274,7 +274,9 @@ def test_real_repo_violations_are_exactly_the_declared_baseline(gate: ModuleType
     ports = gate.inventory()
     violating = sorted(port.name for port in ports if port.violation is not None)
 
-    assert violating == ["Hasher"]
+    # Janela transitória de um commit (ADR 6.1.0005): o port InferenceBackend nasce na
+    # Stage 6.2 Task 09 sem adapter real; a Task 10 (StatsmodelsHac) volta a ["Hasher"].
+    assert violating == ["Hasher", "InferenceBackend"]
     assert len(ports) >= 19  # noqa: PLR2004 — os 19 ports-out do repo hoje (#91 removeu IdGenerator)
 
 
