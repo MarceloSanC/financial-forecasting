@@ -21,3 +21,8 @@ allow = []
 key = "Hasher"
 motivo = "Implementação única por desenho (issue #70): o FakeHasher era cópia byte a byte do CanonicalJsonHasher e foi removido; o contrato roda só no adapter real + golden, e os testes de domínio/use case injetam o adapter real (stdlib, determinístico). Um fake aqui seria uma segunda definição de identidade — o oposto do que reprodutibilidade exige."
 issue = 70
+
+[[port_coverage.allow]]
+key = "McsBackend"
+motivo = "Janela transitória de UM commit (ADR 6.1.0005): a Stage 6.2 Task 11 cria o port McsBackend, o FakeMcsBackend e a perna fake da suíte de contrato; o primeiro adapter real (ArchMcs) e a perna arch chegam na Task 12, que remove esta entrada (removida na 6.2 Task 12; o gate reprova baseline morto)."
+issue = 114
