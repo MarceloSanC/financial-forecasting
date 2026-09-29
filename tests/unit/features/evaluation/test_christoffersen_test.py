@@ -280,9 +280,20 @@ def test_single_counting_in_the_hit_sequence(
         ((F, T, F, F, T, F), 3, IndependenceStatus.BELOW_MIN_VIOLATIONS),
         ((F, F, F, T), 1, IndependenceStatus.DEGENERATE_TRANSITION_MATRIX),
         ((T, F, F, F), 1, IndependenceStatus.DEGENERATE_TRANSITION_MATRIX),
+        ((T, T, F), 0, IndependenceStatus.DEGENERATE_TRANSITION_MATRIX),
+        ((F, T, T), 0, IndependenceStatus.DEGENERATE_TRANSITION_MATRIX),
         (_HAND, 0, IndependenceStatus.APPLICABLE),
     ],
-    ids=["single", "gaps-break-all-pairs", "below-min", "empty-row", "empty-column", "applicable"],
+    ids=[
+        "single",
+        "gaps-break-all-pairs",
+        "below-min",
+        "empty-row",
+        "empty-column",
+        "only-row-0-empty",
+        "only-column-0-empty",
+        "applicable",
+    ],
 )
 def test_status_each_with_statistics_presence(
     violations: tuple[bool | None, ...], min_violations: int, status: IndependenceStatus
