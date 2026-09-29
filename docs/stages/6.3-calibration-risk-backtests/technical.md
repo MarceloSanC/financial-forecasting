@@ -1791,7 +1791,7 @@ logo o rebase foi no-op ("is up to date") e o conflito previsto no §5 fica para
 rebase do PR, depois do merge da 6.2 (resolver à mão mantendo as duas edições e
 rerodar os greps da Task 12). Redação: roadmap 6.3 (descrição sem vocabulário órfão,
 `camada_alvo: domain` no bloco e na tabela, arquivos/contratos da D2 — mais a chave
-`arquivos_tocados` para os dois arquivos da 6.1 —, DoD do concept §11) e 6.5
+`arquivos_a_modificar` (renomeada de `arquivos_tocados` em `[6.3/task-12-fix]`, o formato que a stage-audit lê) para os dois arquivos da 6.1 —, DoD do concept §11) e 6.5
 (`contratos_consumidos` com os kernels da 6.3 e a composição do 3 estados); doc de
 domínio §7.6 (mecânica do MC), §7.7 (receita dos dois feeds, com a errata do ADR
 6.3.0003, e escopo da conv. 21), linhas 21/22 da tabela §10, registros 6.3-MC-TIES e

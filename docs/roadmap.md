@@ -804,7 +804,7 @@ arquivos_a_criar:
   - tests/integration/features/evaluation/test_christoffersen_vs_rugarch.py
   - tests/integration/features/evaluation/test_kupiec_vs_oracle.py
   - tests/fixtures/r_oracle/var_test_cases.{json,R,sessionInfo.txt} + tests/fixtures/r_oracle/Dockerfile (formato do Step, ADR 6.2.0006)
-arquivos_tocados:
+arquivos_a_modificar:
   - src/financial_forecasting/features/evaluation/domain/value_objects/coverage_series.py (predicados FA7 is_at_or_below / is_inside_closed)
   - src/financial_forecasting/features/evaluation/domain/services/coverage_metrics.py (consome os predicados; MPIW_LABEL)
 contratos_introduzidos: [HitSequence (value-object), HitSequences, WilsonBand, chi_square_sf, kupiec_pof (kernel; o POF é também o campo kupiec_pof de ChristoffersenStatistics), ChristoffersenTest, lr_uc_three_state, MonteCarloPValues / mc_p_value, VarDescriptive (domain-services), predicados FA7 is_at_or_below / is_inside_closed, MPIW_LABEL]

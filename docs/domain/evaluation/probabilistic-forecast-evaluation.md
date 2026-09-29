@@ -1457,7 +1457,9 @@ ADR 6.3.0003). **Escopo da conv. 21:** o condicionamento na primeira observaçã
 só para o trio 2-estados; o POF de Kupiec, a banda de Wilson e o LR_uc de 3 estados
 usam **todas** as posições observadas
 ([ADR 6.3.0005](../../adr/6_3_0005-count-kernels-accept-mean-counts.md)). Casos em que o
-oráculo não devolve valor (zero violações em toda a série; n_10 + n_11 = 0) não
+oráculo não devolve valor — sempre que algum símbolo {0, 1} falte em `head` ou em
+`tail` da série alimentada (zero violações, todas violações, uma única violação em
+t = 1 ou em t = T, n_10 + n_11 = 0; mesma regra do §11.3) — não
 são "valores do oráculo" — são casos de domínio com política própria (gate de
 degeneração §5; mínimo de violações §7.6).
 
