@@ -42,6 +42,14 @@ CLI ler os argumentos: por isso o contêiner expõe fábricas —
 device)` — em vez de instâncias. `wire_dependencies` aceita, opcionalmente, o
 modelo de sentimento e a fábrica do probe (fakes nos testes e no e2e); sem eles,
 monta os reais — não há condicional de produção.
+
+Stage 6.4 (Tasks 12/15): o use case `RefreshGold` é montado aqui com o
+`ParquetAnalyticsRepository` já wirado (como `SilverTableReader`, por duck typing), o
+`ReadTrainingGrid` da `modeling` sobre o `ParquetMedallionStore` e as colunas de
+modelagem (como `TrainingGridReader`, ADR 6.4.0009), o `CanonicalJsonHasher`, o
+`SystemClock`, o `ArchMcs` atrás do proxy lazy `_LazyArchMcs` (`import arch` ~8 s a
+frio, medido no technical 6.4 §1 — só carrega na primeira chamada), o
+`ParquetGoldStore(data_root)` e os cinco gold builders.
 """
 
 from collections.abc import Callable, Mapping, Sequence
@@ -63,6 +71,34 @@ from financial_forecasting.features.analytics_store.application.use_cases.persis
 )
 from financial_forecasting.features.analytics_store.application.use_cases.persist_run_record import (  # noqa: E501
     PersistRunRecord,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.calibration_table import (  # noqa: E501
+    CalibrationTableGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_results import (
+    DmResultsGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.mcs_results import (  # noqa: E501
+    McsResultsGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.metrics_by_run import (  # noqa: E501
+    MetricsByRunGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.quality_checks import (  # noqa: E501
+    QualityChecksGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
+    ParquetGoldStore,
+)
+from financial_forecasting.features.evaluation.application.ports.out.mcs_backend import (
+    McsBackend,
+)
+from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
+    RefreshGold,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
+    BootstrapIndices,
+    BootstrapScheme,
 )
 from financial_forecasting.features.feature_engineering.adapters.out.duckdb.asof_join_adapter import (  # noqa: E501
     AsofJoinDuckdbAdapter,
@@ -152,6 +188,9 @@ from financial_forecasting.features.modeling.application.ports.out.tft_trainer i
     TftTrainer,
     TftTrainingParams,
     TftTrainingResult,
+)
+from financial_forecasting.features.modeling.application.use_cases.read_training_grid import (
+    ReadTrainingGrid,
 )
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
@@ -470,6 +509,41 @@ class _LazyLightgbmQuantileTrainer:
         )
 
 
+class _LazyArchMcs:
+    """Proxy lazy do `ArchMcs` (satisfaz o port `McsBackend` do `evaluation`).
+
+    Adia o `import arch` (~8 s a frio no container; technical 6.4 §1) até a PRIMEIRA
+    chamada, mantendo `wire_dependencies` leve (precedente statsforecast/torch). O
+    contrato semântico do port (validação C9, `ArithmeticError` do b̂_sb) é do
+    delegate real.
+    """
+
+    def __init__(self) -> None:
+        self._delegate: McsBackend | None = None
+
+    def _ensure(self) -> McsBackend:
+        if self._delegate is None:
+            # Import LAZY proposital (PLC0415 ignorado no pyproject p/ este arquivo).
+            from financial_forecasting.features.evaluation.adapters.out.inference.arch_mcs import (
+                ArchMcs,
+            )
+
+            self._delegate = ArchMcs()
+        return self._delegate
+
+    def optimal_block_length(self, *, series: Sequence[float]) -> float:
+        """Constrói o `ArchMcs` na 1ª chamada e delega a estimativa b̂_sb."""
+        return self._ensure().optimal_block_length(series=series)
+
+    def bootstrap_indices(
+        self, *, n_obs: int, block_size: int, reps: int, seed: int, scheme: BootstrapScheme
+    ) -> BootstrapIndices:
+        """Constrói o `ArchMcs` na 1ª chamada e delega os índices de bootstrap."""
+        return self._ensure().bootstrap_indices(
+            n_obs=n_obs, block_size=block_size, reps=reps, seed=seed, scheme=scheme
+        )
+
+
 @dataclass
 class ApplicationDependencies:
     """Contêiner com as dependências montadas e prontas para uso.
@@ -518,6 +592,8 @@ class ApplicationDependencies:
     # As colunas de modelagem que o cohort usa em I4 — o `freeze` do CLI usa as
     # MESMAS, deste campo (uma fonte só para as duas impressões digitais).
     modeling_columns: tuple[str, ...]
+    # BC evaluation (Stage 6.4, Task 12): o refresh do gold de um cohort.
+    refresh_gold: RefreshGold
 
 
 def wire_dependencies(
@@ -705,6 +781,29 @@ def wire_dependencies(
             supported_device=_TRAINERS_DEVICE,
         )
 
+    # BC evaluation (Stage 6.4, Tasks 12/15): `RefreshGold` sobre o MESMO repositório
+    # silver (como `SilverTableReader`, ADR 0.0.0053/6.4.0004) e o MESMO hasher; o
+    # realizado vem da grade de treino da 5.5 — `ReadTrainingGrid` (real do port
+    # `TrainingGridReader`, ADR 6.4.0009) sobre o MESMO store e as MESMAS `columns`
+    # do cohort confirmatório, então o índice 0 é a origem do `decision_idx` gravado.
+    # O `ArchMcs` entra atrás do proxy lazy e o gold vai para `<data_root>/gold/` (ADR
+    # 6.4.0005). A ordem dos builders é validada no construtor (C1: falha no wiring).
+    refresh_gold = RefreshGold(
+        silver_reader=analytics_repository,
+        grid_reader=ReadTrainingGrid(store=store, columns=columns),
+        hasher=hasher,
+        clock=SystemClock(),
+        mcs_backend=_LazyArchMcs(),
+        gold_store=ParquetGoldStore(cfg.data_root),
+        builders=(
+            QualityChecksGoldBuilder(),
+            MetricsByRunGoldBuilder(),
+            CalibrationTableGoldBuilder(),
+            DmResultsGoldBuilder(),
+            McsResultsGoldBuilder(),
+        ),
+    )
+
     return ApplicationDependencies(
         hasher=hasher,
         tracker=tracker,
@@ -729,4 +828,5 @@ def wire_dependencies(
         runtime_probe_for=runtime_probe_for,
         confirmatory_cohort_for=confirmatory_cohort_for,
         modeling_columns=columns,
+        refresh_gold=refresh_gold,
     )

@@ -478,6 +478,20 @@ _REAL_VIOLATION_CASES = (
         },
         id="bc-independence:evaluation-imports-new-analytics-store-edge",
     ),
+    # Stage 6.4 (A11): a segunda aresta de `evaluation` (`series_assembly ->
+    # quantile_forecast`) é exceção do MÓDULO. Um módulo novo do mesmo slice que
+    # importe o MESMO VO reprova — prova que a exceção não virou permissão do slice.
+    pytest.param(
+        "bc-independence",
+        {
+            "features/evaluation/domain/services/_arch_audit_taint_qf.py": (
+                "from financial_forecasting.features.analytics_store.domain"
+                ".value_objects.quantile_forecast import QuantileForecast\n"
+                "\n_use = QuantileForecast\n"
+            )
+        },
+        id="bc-independence:evaluation-new-module-imports-quantile-forecast",
+    ),
     # ---------------------------------------------------------------------
     # Issue #60 (auditoria) — UM CASO POR MÓDULO PROIBIDO.
     # O `## Escopo` item 3 pedia "um por módulo proibido onde o contrato lista

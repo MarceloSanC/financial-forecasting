@@ -6,12 +6,14 @@ consome, com a proveniência do gerador de registro (`generator`, ex. `"arch 8.0
 StationaryBootstrap / numpy default_rng"`): reproduzir um MCS confirmatório depende das
 versões pinadas de `arch`/`numpy`, e o relatório diz quais.
 
-Dois validadores únicos, chamados pelo VO, pelo fake e pelo adapter — os mesmos erros em
+Validadores únicos, chamados pelo VO, pelo fake e pelo adapter — os mesmos erros em
 todas as pernas (padrão `scoring_input_validation` da 6.1):
 
 - `validate_bootstrap_request`: `n_obs`, `block_size`, `reps`, `seed` int **não-bool**;
   `n_obs ≥ 2`, `block_size ≥ 1`, `reps ≥ 1`, `seed ≥ 0`, esquema conhecido e, no
   moving-block, `block_size < n_obs`;
+- `validate_bootstrap_parameters`: só `reps` (int não-bool ≥ 1) e `seed` (int não-bool
+  ≥ 0) — a parte do pedido que o refresh do gold (6.4) valida antes de haver série;
 - `validate_block_length_request`: série de `optimal_block_length` com pelo menos
   `MIN_BLOCK_LENGTH_OBS` pontos, todos finitos, e **não constante**.
 
@@ -54,6 +56,19 @@ def _check_int(name: str, value: object, minimum: int) -> None:
         raise ValueError(f"{name} must be an int >= {minimum}, got {value!r}")
 
 
+def validate_bootstrap_parameters(*, reps: int, seed: int) -> None:
+    """Validador único de `reps` e `seed` de um bootstrap (C6; dono dos dois parâmetros).
+
+    Chamado por `validate_bootstrap_request` e, na 6.4, pelos `RefreshParameters` do
+    refresh do gold — as mesmas mensagens nos dois pontos (ADR 6.4.0006 item 2).
+
+    Raises:
+        ValueError: `reps` não-int, `bool` ou < 1; `seed` não-int, `bool` ou < 0.
+    """
+    _check_int("reps", reps, 1)
+    _check_int("seed", seed, 0)
+
+
 def validate_bootstrap_request(
     *, n_obs: int, block_size: int, reps: int, seed: int, scheme: BootstrapScheme
 ) -> None:
@@ -66,8 +81,7 @@ def validate_bootstrap_request(
     """
     _check_int("n_obs", n_obs, _MIN_OBS)
     _check_int("block_size", block_size, 1)
-    _check_int("reps", reps, 1)
-    _check_int("seed", seed, 0)
+    validate_bootstrap_parameters(reps=reps, seed=seed)
     if not isinstance(scheme, BootstrapScheme):
         raise ValueError(f"scheme must be a BootstrapScheme, got {scheme!r}")
     if scheme is BootstrapScheme.MOVING_BLOCK and block_size >= n_obs:

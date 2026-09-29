@@ -275,7 +275,8 @@ def test_real_repo_violations_are_exactly_the_declared_baseline(gate: ModuleType
     violating = sorted(port.name for port in ports if port.violation is not None)
 
     assert violating == ["Hasher"]
-    assert len(ports) >= 19  # noqa: PLR2004 — os 19 ports-out do repo hoje (#91 removeu IdGenerator)
+    # piso do inventário: 26 ports-out hoje (a Stage 6.4 somou quatro ports do gold)
+    assert len(ports) >= 26  # noqa: PLR2004
 
 
 def test_real_repo_consumer_ports_resolve_to_the_supplier_use_cases(gate: ModuleType) -> None:
@@ -287,6 +288,18 @@ def test_real_repo_consumer_ports_resolve_to_the_supplier_use_cases(gate: Module
     for name in ("PredictionPersister", "RunRecordPersister"):
         contract = by_name[name].contract
         assert contract is not None and contract.name == "test_persistence_ports_contract.py"
+
+
+def test_real_repo_training_grid_reader_resolves_to_the_modeling_use_case(
+    gate: ModuleType,
+) -> None:
+    """ADR 6.4.0009: o port do `evaluation` tem como real o use case `ReadTrainingGrid`."""
+    by_name = {port.name: port for port in gate.inventory()}
+    port = by_name["TrainingGridReader"]
+    assert port.adapters == ("ReadTrainingGrid",)
+    assert port.contract is not None
+    assert port.contract.name == "test_training_grid_reader_contract.py"
+    assert port.violation is None
 
 
 def test_main_exit_code_follows_the_baseline_verdict(

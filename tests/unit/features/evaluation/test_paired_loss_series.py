@@ -13,6 +13,9 @@ from collections.abc import Callable
 
 import pytest
 
+from financial_forecasting.features.evaluation.domain.value_objects import (
+    paired_loss_series as paired_loss_series_module,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
 )
@@ -169,3 +172,15 @@ def test_pls_mutable_container_rejected(overrides: dict[str, object], message: s
     """Lista validada poderia ser mutada depois (ex.: perda -5,0): só tuple é aceito."""
     with pytest.raises(ValueError, match=message):
         _series(**overrides)
+
+
+_PAIRED_MIN_MODELS = 2  # k >= 2 da amostra pareada (concept 6.2 C1)
+
+
+@pytest.mark.unit
+def test_pls_min_models_public() -> None:
+    """`MIN_MODELS` é público no VO (primeiro dono, 6.4 Task 01), vale 2 e governa o C1."""
+    assert paired_loss_series_module.MIN_MODELS == _PAIRED_MIN_MODELS
+    assert not hasattr(paired_loss_series_module, "_MIN_MODELS")
+    with pytest.raises(ValueError, match="k >= 2"):
+        _series(models=("a",), losses=(_LOSSES_A,))

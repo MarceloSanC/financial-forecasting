@@ -19,6 +19,7 @@ from financial_forecasting.composition_root import (
     _DATASET_MAX_NAN_RATIO_PER_FEATURE,
     _SILVER_SCHEMA_VERSION,
     ApplicationDependencies,
+    _LazyArchMcs,
     _LazyFinbertSentimentModel,
     _LazyLightgbmQuantileTrainer,
     _LazyOptunaSearch,
@@ -40,6 +41,13 @@ from financial_forecasting.features.analytics_store.application.use_cases.persis
 )
 from financial_forecasting.features.analytics_store.application.use_cases.persist_run_record import (  # noqa: E501
     PersistRunRecord,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
+    ParquetGoldStore,
+)
+from financial_forecasting.features.evaluation.application.dtos.refresh_gold import GoldPartition
+from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
+    RefreshGold,
 )
 from financial_forecasting.features.feature_engineering.adapters.out.duckdb.asof_join_adapter import (  # noqa: E501
     AsofJoinDuckdbAdapter,
@@ -89,6 +97,9 @@ from financial_forecasting.features.modeling.application.ports.out.hyperparamete
 )
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
     TftTrainer,
+)
+from financial_forecasting.features.modeling.application.use_cases.read_training_grid import (
+    ReadTrainingGrid,
 )
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
@@ -511,3 +522,45 @@ def test_git_probe_receives_the_cohort_path_resolved_against_the_cwd(
     assert isinstance(probe, GitRuntimeEnvironmentProbe)
     assert probe._repo_root == tmp_path.resolve()
     assert probe._cohort_path == "sub/config/cohorts/x.toml"
+
+
+@pytest.mark.unit
+def test_wire_dependencies_wires_refresh_gold(tmp_path: Path) -> None:
+    """Stage 6.4 Task 12: `refresh_gold` com os adapters reais e o grafo do concept."""
+    deps = wire_dependencies(settings=Settings(_env_file=None, data_root=tmp_path))
+
+    refresh = deps.refresh_gold
+    assert isinstance(refresh, RefreshGold)
+    assert refresh._silver_reader is deps.analytics_repository
+    assert refresh._hasher is deps.hasher
+    assert isinstance(refresh._clock, SystemClock)
+    assert isinstance(refresh._gold_store, ParquetGoldStore)
+    assert refresh._gold_store.partition_root(GoldPartition("AAPL", "sweep-01")).is_relative_to(
+        tmp_path / "gold"
+    )
+    assert refresh.build_order == (
+        "quality_checks",
+        "calibration_table",
+        "dm_results",
+        "mcs_results",
+        "metrics_by_run",
+    )
+
+
+@pytest.mark.unit
+def test_arch_mcs_proxy_lazy(tmp_path: Path) -> None:
+    """O `ArchMcs` só é construído na 1ª chamada (`import arch` adiado)."""
+    deps = wire_dependencies(settings=Settings(_env_file=None, data_root=tmp_path))
+    proxy = deps.refresh_gold._mcs_backend
+    assert isinstance(proxy, _LazyArchMcs)
+    assert proxy._delegate is None  # arch ainda não foi importado (o e2e prova a carga)
+
+
+@pytest.mark.unit
+def test_refresh_gold_grid_reader_wired(tmp_path: Path) -> None:
+    """ADR 6.4.0009: o realizado vem do `ReadTrainingGrid` com o store e as colunas do cohort."""
+    deps = wire_dependencies(settings=Settings(_env_file=None, data_root=tmp_path))
+    grid_reader = deps.refresh_gold._grid_reader
+    assert isinstance(grid_reader, ReadTrainingGrid)
+    assert grid_reader._store is deps.store
+    assert grid_reader._columns == deps.modeling_columns

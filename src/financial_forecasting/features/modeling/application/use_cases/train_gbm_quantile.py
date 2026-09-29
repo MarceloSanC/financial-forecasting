@@ -223,11 +223,15 @@ def modeling_columns() -> tuple[str, ...]:
 
 
 def grid_fingerprint(grid: TrainingGrid, *, hasher: Hasher, asset_id: str) -> str:
-    """Impressão digital do conteúdo do grid — caminho único de sweeps e cohort (I4).
+    """Impressão digital do conteúdo do grid — a mesma para sweeps e cohort (I4).
 
     Todas as colunas do grid (a ordem não importa: o VO ordena os nomes). Fica na
     aplicação, não no serviço de domínio do grid: o `Hasher` é port de aplicação e
     o hash só é chamado dentro dos VOs de shared (regra 6 do `check_layout`).
+
+    Não é o único ponto de chamada: o `RefreshGold` da `evaluation` recalcula o
+    mesmo `DatasetContentFingerprint` sobre a grade lida pelo `TrainingGridReader`
+    (ADR 6.4.0009), e o e2e dele usa esta função como oráculo da igualdade.
     """
     return DatasetContentFingerprint.compute(
         hasher=hasher,

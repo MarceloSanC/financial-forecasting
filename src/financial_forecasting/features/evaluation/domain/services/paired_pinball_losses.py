@@ -32,10 +32,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.coverage_ser
     CoverageSeries,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
+    MIN_MODELS,
     PairedLossSeries,
 )
-
-_MIN_MODELS = 2
 
 
 def paired_pinball_losses(
@@ -56,9 +55,9 @@ def paired_pinball_losses(
             grade ou realizados diferentes (entre seeds ou entre modelos); e as violações do
             VO (C1).
     """
-    if len(series_by_model) < _MIN_MODELS:
+    if len(series_by_model) < MIN_MODELS:
         raise ValueError(
-            f"paired losses need k >= {_MIN_MODELS} models, got {list(series_by_model)}"
+            f"paired losses need k >= {MIN_MODELS} models, got {list(series_by_model)}"
         )
     for model, seeds in series_by_model.items():
         if not seeds:

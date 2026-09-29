@@ -147,7 +147,11 @@ def _write_parquet(df: pd.DataFrame, path: Path) -> None:
 
 
 class ParquetAnalyticsRepository:
-    """Implementação do contrato `AnalyticsRepository` sobre pyarrow + duckdb + pandera."""
+    """Implementação do contrato `AnalyticsRepository` sobre pyarrow + duckdb + pandera.
+
+    Satisfaz também, por duck typing, o port `SilverTableReader` do `evaluation` (o
+    `read` filtrado por partição; ADR 0.0.0053, ADR 6.4.0004).
+    """
 
     def __init__(self, *, data_root: Path | str, clock: Clock) -> None:
         self._data_root = Path(data_root)

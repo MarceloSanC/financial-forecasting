@@ -283,20 +283,23 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   falso verde de segunda ordem, o defeito que a issue #60 existe para matar: o
   contrato `bc-independence` do `.importlinter` cobre os **cinco** slices
   (`modeling`, `analytics_store`, `feature_engineering`, `market_data`,
-  `evaluation` — este desde a Stage 6.1). As 21 arestas de runtime existentes
+  `evaluation` — este desde a Stage 6.1). As 22 arestas de runtime existentes
   estão declaradas UMA A UMA como exceção comentada (débito medido, não
   permissão) — as 8 `feature_engineering → market_data.domain.entities`
-  (`Candle`, `NewsArticle`, `FundamentalReport`, #95) e a
+  (`Candle`, `NewsArticle`, `FundamentalReport`, #95) e as duas
   `evaluation.domain → analytics_store.domain.value_objects.quantile_forecast`
-  (o VO `QuantileForecast` guardado pela `CoverageSeries`, Stage 6.1 / ADR
-  6.1.0002) são dados, pela regra da ADR 0.0.0053 — e **uma aresta nova reprova
+  (o VO `QuantileForecast` guardado pela `coverage_series`, Stage 6.1 / ADR
+  6.1.0002, e construído com os valores persistidos pelo `series_assembly`,
+  Stage 6.4 / ADR 6.4.0004) são dados, pela regra da ADR 0.0.0053 — e **uma aresta nova reprova
   o build**. O que o gate não vê:
 
   - **Arestas sob `if TYPE_CHECKING:` são invisíveis ao contrato**
     (`exclude_type_checking_imports = True`, ver §3). Hoje as únicas type-only
     cross-slice são as assinaturas dos ports `PredictionPersister`/
-    `RunRecordPersister` de `modeling` (anotam DTOs/VO do `analytics_store`) e a
-    anotação `NewsArticle` do `FinbertSentimentModel` (`feature_engineering`).
+    `RunRecordPersister` de `modeling` (anotam DTOs/VO do `analytics_store`), a
+    anotação `NewsArticle` do `FinbertSentimentModel` (`feature_engineering`) e a
+    anotação `TrainingGrid` (`modeling.domain`) do port `TrainingGridReader` de
+    `evaluation` (Stage 6.4, ADR 6.4.0009 — o real é o use case `ReadTrainingGrid`).
 
   **Nota de escopo (ADR 0.0.0053):** esta regra enforça direção de dependência e
   aciclicidade entre slices — NÃO afirma que cada slice é um Bounded Context

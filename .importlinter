@@ -475,12 +475,16 @@ allow_indirect_imports = False
 #     `PersistRunRecordResult` e o VO `RunRecord` do `analytics_store`) — o port
 #     é do consumidor, o formato dos dados é do fornecedor (#68) — e a anotação
 #     `NewsArticle` do `FinbertSentimentModel` (`feature_engineering` ->
-#     `market_data`).
+#     `market_data`) e a anotação `TrainingGrid` (`modeling.domain`) do port
+#     `TrainingGridReader` de `evaluation` (Stage 6.4, ADR 6.4.0009; o real é o
+#     use case `ReadTrainingGrid` da `modeling`).
 #
 # Os cinco slices estão no perímetro: `market_data` entrou na #95 com as suas 8
 # arestas de runtime declaradas e `evaluation` na Stage 6.1 com 1 (o VO
-# `QuantileForecast` lido pela `CoverageSeries` — ADR 6.1.0002 item 3). Cada
-# aresta de runtime existente entra como exceção NOMEADA abaixo (21 hoje). Elas
+# `QuantileForecast` lido pela `CoverageSeries` — ADR 6.1.0002 item 3), que a
+# Stage 6.4 levou a 2 (o mesmo VO construído pelo `SeriesAssembly` — ADR 6.4.0004
+# item 5). Cada aresta de runtime existente entra como exceção NOMEADA abaixo
+# (22 hoje). Elas
 # não são "ok": são o débito medido, e a lista encolhe conforme as issues de
 # fronteira fecham. Aresta nova entre estes cinco slices reprova o build — que é
 # o ponto.
@@ -564,6 +568,15 @@ ignore_imports =
     # aresta não declarada e este contrato reprovaria.
     # ADR 0.0.0053 item 3 / ADR 6.1.0002 item 3.
     financial_forecasting.features.evaluation.domain.value_objects.coverage_series -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
+    # -- evaluation -> analytics_store (aresta de DADOS: VO do fornecedor, Stage 6.4)
+    # O `SeriesAssembly` CONSTRÓI o `QuantileForecast` direto dos valores
+    # persistidos no silver (`value_raw`, `value_guardrail`, `guardrail_applied`),
+    # nunca por `from_raw` (concept 6.4 I6) — o mesmo VO que a `CoverageSeries`
+    # guarda, sem tipo de grade próprio nem tradutor. Exceção do MÓDULO, não do
+    # slice: outro módulo de `evaluation` que importe o VO reprova (caso
+    # `evaluation-new-module-imports-quantile-forecast`).
+    # ADR 6.4.0003 item 3 / ADR 6.4.0004 item 5 / ADR 0.0.0053 item 3.
+    financial_forecasting.features.evaluation.domain.services.series_assembly -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
 # `error` é o detector de EXCEÇÃO MORTA: quando uma issue de fronteira remover
 # uma aresta, o ignore correspondente deixa de casar e o build cobra a remoção
 # da linha. É o que faz esta lista encolher sozinha em vez de virar sedimento.

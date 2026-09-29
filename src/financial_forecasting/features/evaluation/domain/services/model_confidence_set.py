@@ -59,6 +59,22 @@ _STATISTIC = "R"
 _MIN_ELIMINATIONS = 2
 
 
+def validate_mcs_reps(reps: int) -> None:
+    """Validador único do mínimo de réplicas do MCS (`reps >= MIN_MCS_REPS`).
+
+    Consumido pelo `McsReport`, pelo `ModelConfidenceSet.evaluate` e pelos
+    `RefreshParameters` da 6.4 (ADR 6.4.0006 item 2). O tipo (int não-bool) é do
+    `validate_bootstrap_parameters`; aqui só o piso confirmatório.
+
+    Raises:
+        ValueError: `reps` abaixo de `MIN_MCS_REPS`.
+    """
+    if reps < MIN_MCS_REPS:
+        raise ValueError(
+            f"reps must be >= {MIN_MCS_REPS} (the MCS needs reps >= {MIN_MCS_REPS}), got {reps!r}"
+        )
+
+
 @dataclass(frozen=True)
 class McsElimination:
     """Um passo do MCS: o modelo eliminado (ou o sobrevivente), p do passo e p MCS."""
@@ -111,8 +127,7 @@ class McsReport:
             seed=self.seed,
             scheme=self.scheme,
         )
-        if self.reps < MIN_MCS_REPS:
-            raise ValueError(f"reps must be >= {MIN_MCS_REPS}, got {self.reps}")
+        validate_mcs_reps(self.reps)
         check_generator(self.generator)
         self._check_eliminations()
         self._check_included()
@@ -189,8 +204,7 @@ class ModelConfidenceSet:
             ValueError: pré-condições de C6 (ver docstring do módulo).
         """
         validate_alpha(alpha)
-        if bootstrap.reps < MIN_MCS_REPS:
-            raise ValueError(f"the MCS needs reps >= {MIN_MCS_REPS}, got {bootstrap.reps}")
+        validate_mcs_reps(bootstrap.reps)
         if bootstrap.n_obs != series.n_points:
             raise ValueError(
                 f"bootstrap n_obs ({bootstrap.n_obs}) must equal T ({series.n_points})"

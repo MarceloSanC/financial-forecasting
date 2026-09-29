@@ -27,7 +27,9 @@ perfis descritivos).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Final
 
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
     check_horizon,
@@ -39,7 +41,19 @@ from financial_forecasting.features.evaluation.domain.value_objects._timestamps 
     check_strictly_increasing,
 )
 
-_MIN_MODELS = 2
+# Dono único do mínimo de modelos da amostra pareada (a fábrica `paired_pinball_losses` e
+# o passo de pré-condições da 6.4 importam daqui — ADR 6.4.0002 item 4).
+MIN_MODELS: Final = 2
+
+
+def models_suffice(models: Sequence[str]) -> bool:
+    """k ≥ `MIN_MODELS`: há amostra pareada (e a fábrica de L_t pode ser chamada).
+
+    Regra única, ao lado da constante: consumida pelo passo de pré-condições
+    (`statistical_preconditions_check`, que a reexporta) e pelo `QualityCheckContext`
+    (6.4), que não pode importar o check sem ciclo registry ↔ check.
+    """
+    return len(models) >= MIN_MODELS
 
 
 @dataclass(frozen=True)
@@ -120,9 +134,9 @@ class PairedLossSeries:
         check_horizon(self.horizon)
 
     def _check_models(self) -> None:
-        if len(self.models) < _MIN_MODELS:
+        if len(self.models) < MIN_MODELS:
             raise ValueError(
-                f"a PairedLossSeries needs k >= {_MIN_MODELS} models, got {self.models}"
+                f"a PairedLossSeries needs k >= {MIN_MODELS} models, got {self.models}"
             )
         for index, name in enumerate(self.models):
             if not isinstance(name, str) or not name:
