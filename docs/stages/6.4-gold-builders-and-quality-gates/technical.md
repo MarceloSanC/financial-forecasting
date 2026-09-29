@@ -1713,4 +1713,33 @@ byte-idêntica à anterior; `test_medallion_store_contract.py` verde sem altera�
 grep do bloco acha um único `re.compile` do padrão em `src/` + `tests/fakes/`. Os casos
 rejeitados incluem `"AAPL\n"`, `"\nAAPL"`, `a*b` e `bytes` além da lista do critério.
 
+### 2026-09-29 — [deviation] Task 03: `sum([0.1]*10)` dá 1.0 no Python 3.12 — Claude (Opus 5.5)
+**Contexto:** o critério de aceite da Task 03 diz "resumo com `math.fsum` exato de
+`[0.1]*10` (igual a `1.0`, onde `sum` não é)". Na execução (Python 3.12.13 do container)
+`sum((0.1,)*10) == 1.0`: desde o 3.12 o `sum` builtin de floats usa soma compensada
+(Neumaier — "What's New In Python 3.12", `sum()`), então a premissa "onde `sum` não é"
+é falsa nesta versão.
+**Razão:** o que o critério quer provar (o resumo usa soma exata, não a dobra ingênua)
+continua de pé; a referência do teste passou a ser `functools.reduce(operator.add, …)`
+(0.9999999999999999), e `returns_fsum == 1.0` segue asserido
+(`test_gold_value_objects.py::realized_summary`). O VO continua com `math.fsum` como o
+§1 manda (exato, sem depender da versão do `sum`). Sem mudança de contrato.
+
+### 2026-09-29 — [decision] Task 03: helpers de forma nos VOs de entrada e coerência extra do `AssembledCohort` — Claude (Opus 5.5)
+**Contexto:** `ForecastRecord`, `CohortRun` e `AlignmentFinding`/`HorizonSamples`
+repetem "str não-vazia", "seed int não-`bool` ou `None`" e "fold str ou `None`".
+**Razão:** uma escrita só, em `forecast_record.py` (o primeiro VO de entrada):
+`check_non_empty_str`, `check_optional_seed`, `check_optional_fold`, importados por
+`cohort_run.py` e `assembled_cohort.py` (direção VO → VO, sem arquivo novo fora da
+lista da Task). `quantile_level` exige `float` (não `int`) finito;
+`value_raw`/`value_guardrail` só o tipo `float`. `RealizedReturns` guarda o índice
+por timestamp num campo `init=False, compare=False` (construído uma vez; igualdade e
+`replace` intactos). Além do que o §2 lista, o `AssembledCohort` sem achado exige
+`(horizon, n_common)` de cada `HorizonSamples` = `alignment.common_points` — a mesma T
+nos dois lugares, sem segunda fonte. O gate de pureza passou a
+`_UNIT_DIR.rglob("*.py")` (via `_scan(root)`) e as violações citam o caminho, não só
+o nome (dois arquivos homônimos em subpacotes diferentes seriam indistinguíveis);
+`purity_scans_subpackages` grava `gold/deeper/test_impure.py` num `tmp_path` e prova
+que a varredura o acusa.
+
 <!-- END: post-execution -->
