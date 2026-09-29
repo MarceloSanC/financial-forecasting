@@ -36,7 +36,8 @@ dataset/asset inexistente → vazio (C4). `write` no par ergue `ApplicationError
 
 Disciplina de filtro do par read-only (paridade fake↔real no contract test):
 `filters={"asset": None}` equivale a filtro ausente (união dos assets); o valor
-de `asset` é validado contra `^[A-Za-z0-9._-]+$` ANTES de interpolar no
+de `asset` é validado contra `^[A-Za-z0-9._-]+$` (regra única
+`shared.domain.services.path_identifier`, 6.4 C3) ANTES de interpolar no
 glob/SQL (sem separadores de path — `ValueError` se violar); qualquer chave de
 filtro diferente de `asset` ergue `ValueError` em vez de ser ignorada
 silenciosamente.
@@ -44,7 +45,6 @@ silenciosamente.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -61,6 +61,9 @@ from financial_forecasting.shared.domain.exceptions.base import (
     ApplicationError,
     DuplicateKeyError,
 )
+from financial_forecasting.shared.domain.services.path_identifier import (
+    validate_path_identifier,
+)
 
 Row = Mapping[str, object]
 
@@ -69,9 +72,6 @@ _COLLISION_SAMPLE_SIZE = 5
 # Registry read-only (Stage 5.2 D3): pares legíveis pelo port cujo layout físico
 # é diretório-por-asset (3.5), NÃO Hive; `write` neles ergue ApplicationError.
 _READ_ONLY_PAIRS: frozenset[tuple[str, str]] = frozenset({("processed", "dataset_tft")})
-# Valor de filtro `asset` interpolado em glob/SQL: conservador, sem separadores
-# de path (disciplina de interpolação do par read-only).
-_READ_ONLY_ASSET_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 def _validate_read_only_filters(
@@ -94,11 +94,8 @@ def _validate_read_only_filters(
     if asset_val is None:
         return None
     asset = str(asset_val)
-    if not _READ_ONLY_ASSET_PATTERN.fullmatch(asset):
-        raise ValueError(
-            f"read-only pair ({layer!r}, {table!r}) asset filter must match "
-            f"{_READ_ONLY_ASSET_PATTERN.pattern!r}; got {asset!r}"
-        )
+    # Valor interpolado em glob/SQL: regra única de identificador de caminho (6.4 C3).
+    validate_path_identifier(asset, field=f"read-only pair ({layer!r}, {table!r}) asset filter")
     return asset
 
 

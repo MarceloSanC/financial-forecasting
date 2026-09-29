@@ -1700,4 +1700,17 @@ edição. Provado por `test_mcs_vs_arch.py::mcs_reps_validator`,
 `test_bootstrap_indices.py::bootstrap_request_delegates` e
 `test_paired_pinball_losses.py::factory_imports_min_models`.
 
+### 2026-09-29 — [decision] Task 02: regra de identificador de caminho em `shared/domain` — Claude (Opus 5.5)
+**Contexto:** decisão de detalhe planejada no §1 (C3; ADR 6.4.0005 item 1): o padrão
+`^[A-Za-z0-9._-]+$` estava compilado no `ParquetMedallionStore` e no
+`FakeMedallionStore`.
+**Razão:** executada como planejado. `PATH_IDENTIFIER_PATTERN` e
+`validate_path_identifier(value, *, field)` (com `fullmatch`; não-`str` erguem) moram em
+`shared/domain/services/path_identifier.py`; adapter e fake apagaram os seus
+`_READ_ONLY_ASSET_PATTERN` (e o `import re`) e chamam o validador com
+`field=f"read-only pair ({layer!r}, {table!r}) asset filter"` — mensagem
+byte-idêntica à anterior; `test_medallion_store_contract.py` verde sem alteração. O
+grep do bloco acha um único `re.compile` do padrão em `src/` + `tests/fakes/`. Os casos
+rejeitados incluem `"AAPL\n"`, `"\nAAPL"`, `a*b` e `bytes` além da lista do critério.
+
 <!-- END: post-execution -->
