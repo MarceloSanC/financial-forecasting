@@ -1880,4 +1880,24 @@ Uma escrita só, sem ciclo, sem mudança de contrato.
 - **`GoldTable`** recusa float não-finito (§1: "nunca NaN"), congela cada linha
   (`MappingProxyType`) e converte chave com tipos misturados em `ValueError`.
 
+### 2026-09-29 — [finding] Task 08 → 6.5: leitura do gold sem inferência de partição hive — Claude (Opus 5.5)
+**Contexto:** o layout `gold/asset=<a>/parent_sweep_id=<p>/current/` (ADR 6.4.0005 item
+2) tem segmentos `chave=valor`, e toda linha também carrega `asset`/`parent_sweep_id`
+como coluna. Medido na Task 08: `pyarrow.parquet.read_table(<arquivo>)` infere as
+partições hive do caminho (dicionário) e falha ao unir com a coluna `string` da
+linha (`ArrowTypeError: Unable to merge: Field asset has incompatible types`).
+**Encaminhamento:** leitores (6.5) leem cada tabela com `partitioning=None` (pyarrow)
+ou `hive_partitioning = false` (DuckDB) — as colunas da linha já identificam a
+partição; a suíte de contrato lê assim. A leitura por DuckDB com `read_parquet(?)` de um
+arquivo único passou sem ajuste nesta versão, mas o leitor não deve depender disso.
+
+### 2026-09-29 — [decision] Task 08: `ParquetGoldStore` expõe `partition_root`/`current_dir` — Claude (Opus 5.5)
+**Contexto:** a suíte de contrato e o e2e (Task 12) precisam do caminho da geração viva
+sem remontar o layout.
+**Razão:** `partition_root(partition)` e `current_dir(partition)` são públicos e passam
+pela mesma validação de identificador do `publish` (`validate_path_identifier` antes
+de montar caminho); uma escrita só do layout. `_write_table`/`_write_manifest` são as
+duas funções de escrita do módulo (espiadas pela suíte); `pq.write_table` leva o
+`type: ignore[no-untyped-call]` do precedente `ParquetAnalyticsRepository`.
+
 <!-- END: post-execution -->
