@@ -442,7 +442,9 @@ def test_realized_missing_whole_series() -> None:
         of_series("tft", 2, 1),
         lambda r: dataclasses.replace(r, target_timestamp="2099-" + r.target_timestamp[5:]),
     )
-    findings = _only(_assemble(cohort), AlignmentKind.REALIZED_MISSING)
+    result = _assemble(cohort)
+    assert {f.kind for f in result.alignment.findings} == {AlignmentKind.REALIZED_MISSING}
+    findings = _only(result, AlignmentKind.REALIZED_MISSING)
     assert {_scope(f) for f in findings} == {(1, "tft", 2)}
 
 
