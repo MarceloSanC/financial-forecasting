@@ -617,7 +617,10 @@ def test_effects_order() -> None:
 
 
 @pytest.mark.unit
-def test_step_logs(caplog: pytest.LogCaptureFixture) -> None:
+def test_step_logs(caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+    # outro teste do mesmo processo pode desligar loggers existentes (logging.config com
+    # disable_existing_loggers): o teste religa o logger do use case só durante ele
+    monkeypatch.setattr(logging.getLogger(refresh_gold_module.__name__), "disabled", False)
     with caplog.at_level(logging.INFO, logger=refresh_gold_module.__name__):
         _harness()()
     lines = [r.getMessage() for r in caplog.records if r.name == refresh_gold_module.__name__]

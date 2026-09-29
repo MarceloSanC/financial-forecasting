@@ -2065,4 +2065,16 @@ público "int ≥ 0" e o ADR 6.4.0006 veda nova escrita no DTO.
 de chamada ao lado de `validate_min_violations`, `decision_idx` (`ForecastRecord`) e
 das contagens do `GoldManifest`/`QualityCheckResult`.
 
+### 2026-09-29 — [finding] Gate de saída: testes de log dependem de logger não desligado — Claude (Opus 5.5)
+**Contexto:** o `make check` (xdist) passou, mas o `pytest --cov` serial do bloco A14
+falhou em `step_logs`, `real_previous_delete_warns` e `e2e_wired_lazy_backend_loaded`:
+`tests/architecture/test_import_contracts.py` roda o CLI do `import-linter` no mesmo
+processo, e o `logging.config.dictConfig` dele desliga os loggers existentes
+(`disable_existing_loggers`) — os `logger.info`/`warning` do use case e do store não
+chegavam ao `caplog`. Reproduzido com `-n0` (os dois arquivos em sequência).
+**Encaminhamento/decisão:** os três testes religam só o logger do módulo sob teste
+(`monkeypatch.setattr(logger, "disabled", False)`; no e2e, salvo e restaurado no
+fixture) — sem mexer em configuração global. Candidato a issue de infraestrutura de
+testes: isolar o CLI do `import-linter` (subprocess) para não vazar estado de logging.
+
 <!-- END: post-execution -->
