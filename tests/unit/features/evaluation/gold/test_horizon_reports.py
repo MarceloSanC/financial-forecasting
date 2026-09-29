@@ -28,6 +28,7 @@ from financial_forecasting.features.evaluation.domain.services.holm_correction i
     HolmCorrection,
 )
 from financial_forecasting.features.evaluation.domain.services.horizon_reports import (
+    CalibrationRow,
     HorizonReport,
     HorizonReports,
     SampleKind,
@@ -49,6 +50,12 @@ from financial_forecasting.features.evaluation.domain.services.wilson_band impor
 from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
     HorizonSamples,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
+    CoverageSeries,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.hit_sequence import (
+    HitSequence,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
 )
@@ -66,6 +73,7 @@ _ESTIMATORS = (DmVarianceEstimator.RECTANGULAR, DmVarianceEstimator.BARTLETT)
 _CANDIDATE = "tft"
 _TAIL_LEVELS = (0.05, 0.1, 0.25, 0.75, 0.9, 0.95)
 _H2 = 2
+_MEDIAN = 0.5
 
 
 def _samples(
@@ -116,6 +124,63 @@ def reports() -> tuple[tuple[HorizonSamples, HorizonReport], ...]:
     )
 
 
+def _expected_calibration(series: CoverageSeries) -> tuple[CalibrationRow, ...]:
+    """Calibração montada à mão, sem `var_tail_for`: τ < 0,5 cauda inferior, τ > 0,5
+    superior (mata a troca inferior ↔ superior), sem/com degeneradas, + DGT em h > 1."""
+    rows: list[CalibrationRow] = []
+    for include in (False, True):
+        sequences: list[tuple[HitSequence, float | None]] = [
+            (
+                HitSequences.interval(
+                    series, pair=pair, tolerance=_TOLERANCE, include_degenerate=include
+                ),
+                None,
+            )
+            for pair in series.symmetric_pairs
+        ]
+        for level in series.levels:
+            if level < _MEDIAN:
+                sequences.append(
+                    (
+                        HitSequences.lower_tail(
+                            series, level=level, tolerance=_TOLERANCE, include_degenerate=include
+                        ),
+                        1.0 - level,
+                    )
+                )
+            elif level > _MEDIAN:
+                sequences.append(
+                    (
+                        HitSequences.upper_tail(
+                            series, level=level, tolerance=_TOLERANCE, include_degenerate=include
+                        ),
+                        level,
+                    )
+                )
+        for sequence, var_level in sequences:
+            parts = [sequence, *sequence.dgt_partition()] if series.horizon > 1 else [sequence]
+            rows.extend(
+                CalibrationRow(
+                    christoffersen=ChristoffersenTest.evaluate(
+                        part, min_violations=_MIN_VIOLATIONS
+                    ),
+                    wilson=tuple(
+                        WilsonBand.evaluate(
+                            horizon=part.horizon,
+                            count=part.n_violations,
+                            n=part.n_observed,
+                            nominal=part.violation_rate,
+                            band_level=band,
+                        )
+                        for band in _BANDS
+                    ),
+                    var_level=var_level,
+                )
+                for part in parts
+            )
+    return tuple(rows)
+
+
 @pytest.mark.unit
 def test_reports_equal_direct_calls(
     reports: tuple[tuple[HorizonSamples, HorizonReport], ...],
@@ -137,13 +202,7 @@ def test_reports_equal_direct_calls(
                         series.target_timestamps[0],
                         series.target_timestamps[-1],
                     )
-                    first = got.calibration[0]
-                    direct = HitSequences.interval(
-                        series, pair=series.symmetric_pairs[0], tolerance=_TOLERANCE
-                    )
-                    assert first.christoffersen == ChristoffersenTest.evaluate(
-                        direct, min_violations=_MIN_VIOLATIONS
-                    )
+                    assert got.calibration == _expected_calibration(series)
         for estimator, family in zip(_ESTIMATORS, report.dm_families, strict=True):
             assert family == HolmCorrection.family(
                 report.paired, candidate=_CANDIDATE, alpha=_ALPHA, variance_estimator=estimator
