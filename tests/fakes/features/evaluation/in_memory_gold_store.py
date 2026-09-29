@@ -3,7 +3,8 @@
 Guarda, por `(asset, parent_sweep_id)`, o `manifest.as_mapping()` e as linhas de cada
 tabela publicada (dicts, na ordem recebida). Um `publish` troca a geração inteira da
 partição — o mesmo comportamento observável do `ParquetGoldStore`, sem disco. `current`
-devolve a geração viva para a suíte de contrato; `publishes` conta as chamadas.
+devolve a geração viva para a suíte de contrato; `publishes` conta as chamadas. A
+coerência da geração é a do dono único `check_generation` (a mesma do real).
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     GoldManifest,
     GoldPartition,
     GoldTable,
+    check_generation,
 )
 
 Generation = tuple[dict[str, object], dict[str, list[dict[str, object]]]]
@@ -29,6 +31,7 @@ class InMemoryGoldStore:
     def publish(
         self, *, partition: GoldPartition, tables: Sequence[GoldTable], manifest: GoldManifest
     ) -> None:
+        check_generation(partition, tables, manifest)
         self.publishes += 1
         self._generations[partition.asset, partition.parent_sweep_id] = (
             manifest.as_mapping(),

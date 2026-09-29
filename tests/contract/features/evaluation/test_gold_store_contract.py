@@ -119,11 +119,13 @@ def harness(request: pytest.FixtureRequest, tmp_path: Path) -> Harness:
     return HARNESSES[request.param](tmp_path)
 
 
-def _table(name: str, n_rows: int, *, offset: float = 0.0) -> GoldTable:
+def _table(
+    name: str, n_rows: int, *, offset: float = 0.0, partition: GoldPartition = _PARTITION
+) -> GoldTable:
     rows = tuple(
         {
-            "asset": "AAPL",
-            "parent_sweep_id": "sweep-01",
+            "asset": partition.asset,
+            "parent_sweep_id": partition.parent_sweep_id,
             "horizon": 1 + index // 3,
             "model": ("gbm", "naive", "tft")[index % 3],
             "seed": None if index % 3 != 2 else index,  # noqa: PLR2004 — tft com seed
@@ -137,11 +139,14 @@ def _table(name: str, n_rows: int, *, offset: float = 0.0) -> GoldTable:
 
 
 def _manifest(
-    tables: list[GoldTable], *, status: RefreshStatus = RefreshStatus.COMPLETED
+    tables: list[GoldTable],
+    *,
+    status: RefreshStatus = RefreshStatus.COMPLETED,
+    partition: GoldPartition = _PARTITION,
 ) -> GoldManifest:
     return GoldManifest(
         status=status,
-        partition=_PARTITION,
+        partition=partition,
         rows_by_table={table.name: len(table.rows) for table in tables},
         parameters=_PARAMETERS,
         horizons=(1, 2),
@@ -165,7 +170,7 @@ def _publish(
     partition: GoldPartition = _PARTITION,
     status: RefreshStatus = RefreshStatus.COMPLETED,
 ) -> GoldManifest:
-    manifest = _manifest(tables, status=status)
+    manifest = _manifest(tables, status=status, partition=partition)
     harness.store.publish(partition=partition, tables=tables, manifest=manifest)
     return manifest
 
@@ -200,7 +205,7 @@ def test_publish_replaces_generation(harness: Harness) -> None:
 
 @pytest.mark.contract
 def test_other_partition_untouched(harness: Harness) -> None:
-    kept = [_table("gold_mcs_results", 3)]
+    kept = [_table("gold_mcs_results", 3, partition=_OTHER)]
     _publish(harness, kept, partition=_OTHER)
     before = harness.current(_OTHER)
     _publish(harness, [_table("gold_quality_checks", 4)])
@@ -222,6 +227,28 @@ def test_rows_order_preserved(harness: Harness) -> None:
         (row["horizon"], row["model"]) for row in table.rows
     ]
     assert got == _rows(table)
+
+
+@pytest.mark.contract
+def test_publish_rejects_incoherent_generation(harness: Harness) -> None:
+    """Geração incoerente ergue antes de gravar (dono único `check_generation`)."""
+    good = [_table("gold_quality_checks", 4)]
+    _publish(harness, good)
+    before = harness.current(_PARTITION)
+    cases = [
+        (good, _manifest(good, partition=_OTHER), "manifest is for partition"),
+        (good + good, _manifest(good), "repeated"),
+        (good, _manifest([_table("gold_quality_checks", 3)]), "rows_by_table"),
+        (
+            [_table("gold_quality_checks", 2, partition=_OTHER)],
+            _manifest([_table("gold_quality_checks", 2)]),
+            "not the partition",
+        ),
+    ]
+    for tables, manifest, message in cases:
+        with pytest.raises(ValueError, match=message):
+            harness.store.publish(partition=_PARTITION, tables=tables, manifest=manifest)
+    assert harness.current(_PARTITION) == before
 
 
 # --- só do real (ParquetGoldStore) -----------------------------------------------------
@@ -344,9 +371,8 @@ def test_real_rejects_bad_identifier(tmp_path: Path) -> None:
     """`GoldPartition` adulterada: `ValueError` antes de criar qualquer caminho (C3)."""
     partition = GoldPartition("AAPL", "sweep-01")
     object.__setattr__(partition, "asset", "../x")
-    tables = [_table("gold_quality_checks", 1)]
+    tables = [_table("gold_quality_checks", 1, partition=partition)]
+    manifest = _manifest(tables, partition=partition)
     with pytest.raises(ValueError, match="asset must match"):
-        ParquetGoldStore(tmp_path).publish(
-            partition=partition, tables=tables, manifest=_manifest(tables)
-        )
+        ParquetGoldStore(tmp_path).publish(partition=partition, tables=tables, manifest=manifest)
     assert not (tmp_path / "gold").exists()

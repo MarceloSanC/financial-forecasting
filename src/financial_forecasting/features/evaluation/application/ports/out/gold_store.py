@@ -17,6 +17,10 @@ Contrato de `publish(partition=..., tables=..., manifest=...)`:
   execução interrompida são removidas no `publish` seguinte;
 - **pré-condição de escritor único:** no máximo um `publish` por
   `(asset, parent_sweep_id)` ao mesmo tempo (ADR `6_4_0005` item 6) — sem lock;
+- a geração é coerente (`check_generation`, dono único no módulo dos DTOs): manifesto
+  da mesma partição, nomes de tabela únicos, `rows_by_table` = tabelas publicadas e
+  `asset`/`parent_sweep_id` da partição em toda linha — senão `ValueError` antes de
+  gravar;
 - a `partition` já foi validada (`validate_path_identifier`, C3); o real valida de novo
   antes de montar qualquer caminho.
 """
@@ -42,7 +46,8 @@ class GoldStore(Protocol):
         """Substitui a geração corrente da `partition` por `tables` + `manifest`.
 
         Raises:
-            ValueError: identificador inválido (defesa do real na fronteira de I/O).
+            ValueError: geração incoerente (`check_generation`) ou identificador
+                inválido (defesa do real na fronteira de I/O).
             OSError: falha de escrita antes da troca (a geração anterior segue viva).
         """
         ...

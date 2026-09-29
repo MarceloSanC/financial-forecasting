@@ -7,7 +7,8 @@ Concept 6.4 D8, C3, C9; ADR `6_4_0005` itens 2, 5 e 6. Layout por partição:
 
 `publish`, nesta ordem:
 
-1. `validate_path_identifier` em `asset` e `parent_sweep_id` (dono único em
+1. `check_generation` (dono único da coerência partição x tabelas x manifesto, no
+   módulo dos DTOs) e `validate_path_identifier` em `asset` e `parent_sweep_id` (dono único em
    `shared/domain`, C3 "de novo no `ParquetGoldStore`") — antes de montar caminho;
 2. remove `.staging/` e `.previous/` sobrantes de uma execução interrompida;
 3. grava cada tabela em `.staging/<name>.parquet` (`pyarrow.Table.from_pylist` →
@@ -39,6 +40,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     GoldManifest,
     GoldPartition,
     GoldTable,
+    check_generation,
 )
 from financial_forecasting.shared.domain.services.path_identifier import (
     validate_path_identifier,
@@ -87,6 +89,7 @@ class ParquetGoldStore:
         self, *, partition: GoldPartition, tables: Sequence[GoldTable], manifest: GoldManifest
     ) -> None:
         """Staging → manifesto por último → troca de pasta (ADR `6_4_0005` item 5)."""
+        check_generation(partition, tables, manifest)
         root = self.partition_root(partition)
         staging, current, previous = root / _STAGING, root / _CURRENT, root / _PREVIOUS
         for leftover in (staging, previous):

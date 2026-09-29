@@ -354,6 +354,37 @@ class GoldManifest:
         }
 
 
+def check_generation(
+    partition: GoldPartition, tables: Sequence[GoldTable], manifest: GoldManifest
+) -> None:
+    """Coerência de uma geração antes de publicar — dono único, chamado pelos dois stores.
+
+    Raises:
+        ValueError: manifesto de outra partição; nomes de tabela repetidos;
+            `manifest.rows_by_table` diferente das tabelas publicadas; linha cujo
+            `asset`/`parent_sweep_id` não é o da partição (Checkpoint C bloco 3).
+    """
+    if manifest.partition != partition:
+        raise ValueError(f"manifest is for partition {manifest.partition}, publishing {partition}")
+    names = [table.name for table in tables]
+    repeated = sorted({name for name in names if names.count(name) > 1})
+    if repeated:
+        raise ValueError(f"table names must be unique in a generation, repeated: {repeated}")
+    counts = {table.name: len(table.rows) for table in tables}
+    if dict(manifest.rows_by_table) != counts:
+        raise ValueError(
+            f"manifest rows_by_table {dict(manifest.rows_by_table)} != tables {counts}"
+        )
+    expected = (partition.asset, partition.parent_sweep_id)
+    for table in tables:
+        for index, row in enumerate(table.rows):
+            got = (row.get("asset"), row.get("parent_sweep_id"))
+            if got != expected:
+                raise ValueError(
+                    f"{table.name} row {index} is for {got}, not the partition {expected}"
+                )
+
+
 @dataclass(frozen=True, kw_only=True)
 class GoldInputs:
     """O que os builders mapeiam — resultados prontos, nenhum a recomputar.

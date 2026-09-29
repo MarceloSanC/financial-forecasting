@@ -1940,4 +1940,16 @@ e a regra "None antes de qualquer valor" já tem dono no `GoldTable` (Task 07).
   `runs_when_blocked`) — satisfazem o Protocol de propriedades do port; nenhum importa
   `pyarrow`/`duckdb`/`pandas` (grep do bloco Container).
 
+### 2026-09-29 — [decision] Checkpoint C bloco 3 (MÉDIA-1): `check_generation` dono único da coerência da geração — Claude (Opus 5.5)
+**Contexto:** o `publish` dos dois stores aceitava geração incoerente (manifesto de
+outra partição, `rows_by_table` diferente das tabelas, linha de outra partição).
+**Razão:** `check_generation(partition, tables, manifest)` no módulo dos DTOs
+(`refresh_gold.py`) — manifesto da mesma partição, nomes de tabela únicos,
+`rows_by_table` = `{nome: len(linhas)}` e `asset`/`parent_sweep_id` da partição em
+toda linha — é chamado **primeiro** no `ParquetGoldStore.publish` e no
+`InMemoryGoldStore.publish` (uma escrita, sem bloco duplicado para o
+`check_fake_parity`). Token acrescentado: `test_gold_store_contract.py::
+publish_rejects_incoherent_generation` (duas pernas). O `_publish` da suíte passou a
+montar tabelas e manifesto da partição alvo.
+
 <!-- END: post-execution -->
