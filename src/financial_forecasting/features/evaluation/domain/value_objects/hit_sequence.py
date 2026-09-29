@@ -32,6 +32,7 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
     is_finite_number,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
+    is_multi_step,
     validate_horizon,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._tolerance import (
@@ -41,8 +42,6 @@ from financial_forecasting.features.evaluation.domain.value_objects.coverage_ser
     is_symmetric_pair,
     pair_miscoverage,
 )
-
-_DGT_MIN_STEP = 2
 
 
 class HitKind(StrEnum):
@@ -134,10 +133,9 @@ def validate_dgt_fields(*, dgt_offset: int | None, dgt_step: int | None, horizon
             raise ValueError(f"{name} must be an int (not bool), got {value!r}")
     if dgt_step != horizon:
         raise ValueError(f"dgt_step must equal horizon={horizon}, got {dgt_step}")
-    if dgt_step < _DGT_MIN_STEP:
+    if not is_multi_step(dgt_step):
         raise ValueError(
-            f"dgt_step must be >= {_DGT_MIN_STEP} (horizon = 1 has no DGT sub-series), "
-            f"got {dgt_step}"
+            f"dgt_step must be >= 2 (horizon = 1 has no DGT sub-series), got {dgt_step}"
         )
     if not 0 <= dgt_offset < dgt_step:
         raise ValueError(f"dgt_offset must be in [0, dgt_step={dgt_step}), got {dgt_offset}")
@@ -309,7 +307,7 @@ class HitSequence:
                 f"dgt_partition cannot be applied to a DGT sub-series "
                 f"(dgt_offset={self.dgt_offset}, dgt_step={self.dgt_step})"
             )
-        if self.horizon == 1:
+        if not is_multi_step(self.horizon):
             return (self,)
         step = self.horizon
         return tuple(

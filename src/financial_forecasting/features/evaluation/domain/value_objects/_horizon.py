@@ -31,7 +31,7 @@ def is_multi_step(horizon: int) -> bool:
     """`horizon > 1` - o limiar único do slice para multi-passo (B-H7, doc §7.4).
 
     A partir dele: hits podem ser (h-1)-dependentes sob a nula, a banda de Wilson ganha
-    o aviso de dependência serial, LR_ind/LR_cc viram descritivos (fora de sub-série DGT)
-    e o p-valor Monte Carlo não é definido.
+    o aviso de dependência serial, LR_ind/LR_cc viram descritivos (fora de sub-série DGT),
+    o p-valor Monte Carlo não é definido e a `HitSequence` tem partição DGT (passo ≥ 2).
     """
     return horizon > 1
