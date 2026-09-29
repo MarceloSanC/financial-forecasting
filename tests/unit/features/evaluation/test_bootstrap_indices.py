@@ -130,6 +130,7 @@ def _indices(**overrides: object) -> BootstrapIndices:
     ("overrides", "message"),
     [
         pytest.param({"indices": ((0, 1, 2, 3),)}, "4 indices for n_obs=5", id="row-short"),
+        pytest.param({"indices": ((),)}, "row 0: 0 indices for n_obs=5", id="row-empty"),
         pytest.param({"indices": ((0, 1, 2, 3, 4, 0),)}, "6 indices", id="row-long"),
         pytest.param({"indices": ((0, 1, -1, 3, 4),)}, "outside", id="index-negative"),
         pytest.param({"indices": ((0, 1, 5, 3, 4),)}, "outside", id="index-n-obs"),
