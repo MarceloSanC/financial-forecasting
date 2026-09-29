@@ -152,6 +152,15 @@ add(run_case("t6_h7_acf_horizon_above_t_error", "h > T (T = 6, h = 7)",
 add(run_case("t6_h1_acf_zero_variance_error", "d constante com h = 1: variância nula",
              c(3, 4, 5, 6, 7, 8), c(1, 2, 3, 4, 5, 6), 1L, "acf"))
 
+# 9. d constante com média inexata em float (0,1 x 12): o R ergue variância nula (h = 1)
+#    e, com h = 2, cai no fallback e ergue — o domínio não pode devolver S1* ~1e16.
+add(run_case("t12_h1_acf_constant_inexact_mean_error",
+             "d = 0.1 constante (média inexata em float), h = 1: variância nula",
+             rep(0.1, 12), rep(0, 12), 1L, "acf"))
+add(run_case("t12_h2_acf_constant_inexact_mean_error",
+             "d = 0.1 constante (média inexata em float), h = 2: fallback e variância nula",
+             rep(0.1, 12), rep(0, 12), 2L, "acf"))
+
 provenance <- list(
   generator = "tests/fixtures/r_oracle/dm_test_cases.R",
   image = "rocker/r-ver:4.4.1",

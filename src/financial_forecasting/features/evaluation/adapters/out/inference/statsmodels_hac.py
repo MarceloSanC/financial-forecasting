@@ -44,6 +44,9 @@ from financial_forecasting.features.evaluation.domain.services.inference_input_v
     validate_alpha,
     validate_p_values,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
+    is_constant,
+)
 
 _KERNELS = {
     DmVarianceEstimator.RECTANGULAR: "uniform",
@@ -112,12 +115,13 @@ def _hac_mean_and_variance(
 ) -> tuple[float, float]:
     """(d̄, var̂(d̄)) pela OLS de d sobre a constante com covariância HAC (maxlags = h - 1).
 
-    d constante tem variância **zero** por definição (o `acf` do R dá 0 exato), mas a OLS
-    do `statsmodels` resolve por pseudo-inversa e deixa resíduos de ~1e-16 — var̂ ~1e-32 >
-    0, e o adapter "aceitaria" um DM que o domínio e o R recusam. O adapter se recusa a
-    mentir: com d constante devolve var̂ = 0 e o chamador aplica o fallback/erro de C3.
+    d constante tem variância **zero** por definição (o `acf` do R dá 0 exato). A OLS do
+    `statsmodels` resolve por pseudo-inversa e deixa resíduos de ~1e-16 (var̂ ~1e-32 > 0);
+    o adapter usa o predicado do dono (`_paired_inputs.is_constant`, o mesmo do primitivo
+    do domínio) e devolve var̂ = 0, para o chamador aplicar o fallback/erro de C3 como o
+    domínio e o R `dm.test`.
     """
-    if bool(np.all(d == d[0])):
+    if is_constant(d.tolist()):
         return float(d[0]), 0.0
     fitted = OLS(d, np.ones_like(d)).fit()
     robust = fitted.get_robustcov_results(

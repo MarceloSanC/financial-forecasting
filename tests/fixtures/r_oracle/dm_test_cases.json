@@ -8,7 +8,7 @@
       "jsonlite": "1.8.9"
     },
     "cran_snapshot": "https://p3m.dev/cran/__linux__/jammy/2024-10-30",
-    "generated_at": "2026-09-28",
+    "generated_at": "2026-09-29",
     "session_info": "dm_test_cases.sessionInfo.txt",
     "command": "docker build -t ff-r-oracle:4.4.1 tests/fixtures/r_oracle && docker run --rm -v \"$PWD/tests/fixtures/r_oracle:/work\" -w /work ff-r-oracle:4.4.1 Rscript dm_test_cases.R"
   },
@@ -408,6 +408,46 @@
       },
       "expected_error": "Variance of DM statistic is zero",
       "warning": null
+    },
+    {
+      "id": "t12_h1_acf_constant_inexact_mean_error",
+      "description": "d = 0.1 constante (média inexata em float), h = 1: variância nula",
+      "inputs": {
+        "candidate_losses": {
+          "dec": [0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001],
+          "hex": ["0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4"]
+        },
+        "comparator_losses": {
+          "dec": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "hex": ["0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0"]
+        },
+        "horizon": 1,
+        "varestimator": "acf",
+        "alternative": "less",
+        "power": 1
+      },
+      "expected_error": "Variance of DM statistic is zero",
+      "warning": null
+    },
+    {
+      "id": "t12_h2_acf_constant_inexact_mean_error",
+      "description": "d = 0.1 constante (média inexata em float), h = 2: fallback e variância nula",
+      "inputs": {
+        "candidate_losses": {
+          "dec": [0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001, 0.10000000000000001],
+          "hex": ["0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4", "0x1.999999999999ap-4"]
+        },
+        "comparator_losses": {
+          "dec": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "hex": ["0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0", "0x0p+0"]
+        },
+        "horizon": 2,
+        "varestimator": "acf",
+        "alternative": "less",
+        "power": 1
+      },
+      "expected_error": "Variance of DM statistic is zero",
+      "warning": "Variance is negative. Try varestimator = bartlett. Proceeding with horizon h=1."
     }
   ]
 }

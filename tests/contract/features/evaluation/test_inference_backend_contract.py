@@ -192,11 +192,21 @@ def test_dm_fallback_both_legs(backend: InferenceBackend, estimator: DmVarianceE
 
 @pytest.mark.contract
 @pytest.mark.parametrize("horizon", [1, 2])
-def test_dm_constant_raises(backend: InferenceBackend, horizon: int) -> None:
+@pytest.mark.parametrize(
+    ("cand", "comp"),
+    [
+        pytest.param((3.0, 4.0, 5.0, 6.0, 7.0), (1.0, 2.0, 3.0, 4.0, 5.0), id="exact-mean"),
+        # média de 0,1 x 12 inexata em float: desvios ~1e-17, não var̂ > 0
+        pytest.param((0.1,) * 12, (0.0,) * 12, id="inexact-mean"),
+    ],
+)
+def test_dm_constant_raises(
+    backend: InferenceBackend, cand: tuple[float, ...], comp: tuple[float, ...], horizon: int
+) -> None:
     with pytest.raises(ValueError, match=r"^Variance of DM statistic is zero$"):
         backend.diebold_mariano(
-            candidate_losses=(3.0, 4.0, 5.0, 6.0, 7.0),
-            comparator_losses=(1.0, 2.0, 3.0, 4.0, 5.0),
+            candidate_losses=cand,
+            comparator_losses=comp,
             horizon=horizon,
             variance_estimator=DmVarianceEstimator.RECTANGULAR,
         )

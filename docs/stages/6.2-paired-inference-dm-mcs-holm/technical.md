@@ -1660,7 +1660,17 @@ covariância HAC sai ~1e−32 > 0 e o adapter aceitaria um DM que o domínio e o
 ("Variance of DM statistic is zero"). (2) A suíte levou **320 s**: `multipletests(method=
 "holm")` do `statsmodels` 0.15 chama `gc.collect()` explicitamente a cada chamada (~0,25 s
 num processo pytest com torch/pandas carregados) e as pernas de Holm fazem 1200 chamadas.
-**Razão:** (1) no `_hac_mean_and_variance` do adapter, d constante devolve var̂ = 0 antes
+**Correção no Checkpoint C do bloco 4:** a frase "o domínio e o R recusam" era falsa em
+geral — o domínio também errava: com d constante de média inexata em float (ex.:
+cand = 0,1 x 12, comp = 0 x 12) `fsum(d)/T` difere de d_t, os desvios saem ~1e−17 e
+var̂ ~1,6e−35 > 0, e o primitivo devolvia S1* ~2,4e16 e p = 1 onde o R `dm.test` ergue
+(~7 % das combinações (c, T) medidas pela revisão). O dono passou a tratar
+`_paired_inputs.is_constant(d)` como var̂ = 0 pelo mesmo caminho de fallback/erro, e o
+adapter usa o **mesmo** predicado (commit `[6.2/task-04-fix]` deste checkpoint; casos
+novos no unit, no contrato das duas pernas e na fixture R `t12_h{1,2}_acf_constant_inexact_
+mean_error`). A `gc.freeze()` da suíte é só de teste: um consumidor de produção do
+`StatsmodelsHac` pagaria ~0,25 s por chamada de Holm (`gc.collect()` do `statsmodels` 0.15).
+**Razão (original):** (1) no `_hac_mean_and_variance` do adapter, d constante devolve var̂ = 0 antes
 da OLS — a variância de uma série constante é zero por definição (o `acf` do R dá 0 exato);
 mesma postura "o adapter se recusa a mentir" da guarda de divisão por zero planejada para o
 `ArchMcs` (§1). A mensagem de C3 sai igual nas duas pernas. (2) fixture de módulo `autouse`

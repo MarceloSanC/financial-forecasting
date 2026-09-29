@@ -169,6 +169,25 @@ def test_dm_constant_differential_raises(horizon: int, estimator: DmVarianceEsti
         _run((3.0, 4.0, 5.0, 6.0, 7.0), (1.0, 2.0, 3.0, 4.0, 5.0), horizon, estimator)
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("cand", "comp", "horizon"),
+    [
+        pytest.param((0.1,) * 12, (0.0,) * 12, 1, id="0.1x12-h1"),
+        pytest.param((0.1,) * 12, (0.0,) * 12, 2, id="0.1x12-h2"),
+        pytest.param((0.7,) * 24, (0.0,) * 24, 7, id="0.7x24-h7"),
+    ],
+)
+def test_dm_constant_differential_inexact_mean_raises(
+    cand: tuple[float, ...], comp: tuple[float, ...], horizon: int
+) -> None:
+    """d constante com média inexata em float (fsum(d)/T ≠ d_t): desvios ~1e-17 não viram
+    var̂ > 0 — ergue como o R `dm.test` (o domínio devolvia S1* ~2e16, p = 1)."""
+    for estimator in (_RECT, _BART):
+        with pytest.raises(ValueError, match=r"^Variance of DM statistic is zero$"):
+            _run(cand, comp, horizon, estimator)
+
+
 _C3_CASES = [
     pytest.param((1.0, 2.0, 3.0), (1.0, 2.0), 1, _RECT, "same length", id="length-mismatch"),
     pytest.param((1.0,), (2.0,), 1, _RECT, "T >= 2", id="single-point"),

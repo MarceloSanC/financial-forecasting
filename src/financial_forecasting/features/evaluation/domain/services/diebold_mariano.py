@@ -39,6 +39,7 @@ from financial_forecasting.features.evaluation.domain.value_objects._paired_inpu
     check_loss,
     check_points,
     differential,
+    is_constant,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
@@ -177,12 +178,18 @@ def diebold_mariano(
     mean = math.fsum(differences) / n_points
     deviations = [value - mean for value in differences]
     horizon_used = horizon
-    variance = _long_run_variance(deviations, horizon, variance_estimator)
+    # d constante tem var̂ = 0 por definição (o `acf` do R dá 0 exato); com média inexata
+    # em float (ex.: 0,1 x 12) os desvios sairiam ~1e-17 e var̂ ~1e-35 > 0 — o DM daria
+    # S1* ~1e16 onde o R ergue. Mesmo caminho de fallback/erro, mesma mensagem.
+    constant = is_constant(differences)
+    variance = 0.0 if constant else _long_run_variance(deviations, horizon, variance_estimator)
     # Com Bartlett o fallback é observacionalmente equivalente: a variância é PSD e só zera
     # com d constante, que ergue do mesmo jeito em h = 1 (segue o dm.test, ramo único).
     if variance <= 0.0 and horizon > 1:
         horizon_used = 1
-        variance = _long_run_variance(deviations, horizon_used, variance_estimator)
+        variance = (
+            0.0 if constant else _long_run_variance(deviations, horizon_used, variance_estimator)
+        )
     if variance <= 0.0:
         raise ValueError("Variance of DM statistic is zero")
     statistic = _hln_factor(n_points, horizon_used) * mean / math.sqrt(variance)
