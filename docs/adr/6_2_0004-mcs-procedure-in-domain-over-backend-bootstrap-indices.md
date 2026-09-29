@@ -14,6 +14,8 @@ bounded_context: evaluation
 
 # ADR 6.2.0004 — MCS in the domain over backend-supplied bootstrap indices; `McsBackend`
 
+> ⚠️ **Errata (2026-09-28):** Decision item 3 lists the single bootstrap-request validator as "`seed` an `int` (not `bool`)" with no range. The implementation also requires **`seed ≥ 0`**: `arch` 8.0.0 builds its generator with `numpy.random.default_rng(seed)`, which raises `ValueError: expected non-negative integer` for a negative seed, while the fake's `random.Random(seed)` would accept it — without the range the error parity of item 6 (C9) would break. The rule is additive (it only rejects what the generator of record already rejects); the decision itself is unchanged. See technical 6.2 §7, Task 06 `seed ≥ 0` entry. The concept's §4/C6 wording ("seed int não-bool") is frozen and is cited in the PR body.
+
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
 ## Status
