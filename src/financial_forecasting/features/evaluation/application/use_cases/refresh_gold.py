@@ -9,7 +9,11 @@ de efeitos):
 2. o `RefreshGoldCommand` já validou os identificadores (`GoldPartition`, C3);
 3. leituras: `dim_run` do cohort (vazio → `ValueError`, C4) → `fact_oos_predictions`
    de cada `feature_set_name` do cohort, pós-filtrado ao cohort → o realizado **uma
-   vez** pelo `MedallionStore` (vazio → `ValueError`, C4) com o `DatasetFingerprint`;
+   vez** pela grade de treino da 5.5 (`TrainingGridReader`, ADR 6.4.0009: índice 0 =
+   primeira sessão da grade aparada, a mesma origem do `decision_idx` dos escritores;
+   erros do dono propagam, C4) com o `DatasetContentFingerprint` conferido contra o
+   `command.dataset_fingerprint` — divergente → `GridFingerprintMismatchError` (C10),
+   antes da montagem e de qualquer efeito;
 4. `SeriesAssembly.assemble` (achados, nunca exceção — D1);
 5. passo de pré-condições (I11): por horizonte, `models_suffice` antes da fábrica
    `paired_pinball_losses`; por par, `block_request_defect` antes do backend; do
@@ -31,7 +35,6 @@ com o `status`.
 from __future__ import annotations
 
 import logging
-import math
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from time import perf_counter
@@ -58,6 +61,9 @@ from financial_forecasting.features.evaluation.application.ports.out.mcs_backend
 )
 from financial_forecasting.features.evaluation.application.ports.out.silver_table_reader import (
     SilverTableReader,
+)
+from financial_forecasting.features.evaluation.application.ports.out.training_grid_reader import (
+    TrainingGridReader,
 )
 from financial_forecasting.features.evaluation.domain.services.gold_build_order import (
     gold_build_order,
@@ -113,18 +119,16 @@ from financial_forecasting.features.evaluation.domain.value_objects.realized_ret
 )
 from financial_forecasting.shared.application.ports.out.clock import Clock
 from financial_forecasting.shared.application.ports.out.hasher import Hasher
-from financial_forecasting.shared.application.ports.out.medallion_store import MedallionStore
-from financial_forecasting.shared.domain.value_objects.dataset_fingerprint import (
-    DatasetFingerprint,
+from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+    DatasetContentFingerprint,
 )
 
 logger = logging.getLogger(__name__)
 
 SILVER_LAYER = "silver"
-DATASET_LAYER = "processed"
-DATASET_TABLE = "dataset_tft"
-# O `MedallionStore` não expõe o hash do arquivo (issue #120): literal declarado.
-PARQUET_FILE_HASH = "not-exposed-by-medallion-store"
+_TARGET = "target_return"
+_FINGERPRINT_SHOWN = 12
 _GUARDRAIL_FLAGS = {0: False, 1: True}
 _DEFECT_DETAIL = {
     UndefinedReason.CONSTANT_DIFFERENTIAL: "the loss differential is constant",
@@ -145,6 +149,14 @@ def _timed[T](step: str, n_in: int, action: Callable[[], T], count: Callable[[T]
     return result
 
 
+class GridFingerprintMismatchError(ApplicationError):
+    """A grade lida não é a do cohort: o fingerprint diverge do congelado (C10).
+
+    Espelha o `DatasetMismatchError` da corrida confirmatória (ADR 6.4.0009 item 5): o
+    dado não é aquele sobre o qual o cohort treinou, então não há série a julgar.
+    """
+
+
 class RefreshGold:
     """Regenera por inteiro a geração gold de um cohort (ADR `6_4_0005`)."""
 
@@ -152,7 +164,7 @@ class RefreshGold:
         self,
         *,
         silver_reader: SilverTableReader,
-        store: MedallionStore,
+        grid_reader: TrainingGridReader,
         hasher: Hasher,
         clock: Clock,
         mcs_backend: McsBackend,
@@ -169,7 +181,7 @@ class RefreshGold:
         self._build_order = order
         self._builders = tuple(by_name[name] for name in order)
         self._silver_reader = silver_reader
-        self._store = store
+        self._grid_reader = grid_reader
         self._hasher = hasher
         self._clock = clock
         self._mcs_backend = mcs_backend
@@ -192,8 +204,10 @@ class RefreshGold:
         """Lê, monta, checa, relata, mapeia e publica uma geração (I15).
 
         Raises:
-            ValueError: cohort ou dataset vazio (C4), linha de silver mal-formada, e
-                qualquer erro de programação (C7) — nada é publicado.
+            GridFingerprintMismatchError: a grade não é a do cohort (C10).
+            ValueError: cohort vazio (C4), linha de silver mal-formada, e qualquer erro
+                de programação (C7); os erros do dono da grade (`NoUsableRowsError`,
+                `InteriorMissingValuesError`) propagam — nada é publicado.
         """
         started_at = self._clock.now()
         partition, parameters = command.partition, command.parameters
@@ -204,10 +218,10 @@ class RefreshGold:
             lambda: self._read_records(partition, runs),
             len,
         )
-        realized, fingerprint = _timed(
+        realized, fingerprint, trimmed_prefix = _timed(
             "read_realized",
             0,
-            lambda: self._read_realized(partition.asset),
+            lambda: self._read_realized(partition.asset, command.dataset_fingerprint),
             lambda r: len(r[0].timestamps),
         )
         assembled = _timed(
@@ -239,6 +253,7 @@ class RefreshGold:
                     block_estimates=estimates,
                     tolerance=parameters.degeneracy_tolerance,
                     dataset_fingerprint=fingerprint,
+                    grid_trimmed_prefix=trimmed_prefix,
                     realized=realized,
                 )
             ),
@@ -275,6 +290,7 @@ class RefreshGold:
             runs=runs,
             realized=realized,
             fingerprint=fingerprint,
+            grid_trimmed_prefix=trimmed_prefix,
             started_at=started_at,
         )
         _timed(
@@ -333,37 +349,27 @@ class RefreshGold:
                 records.append(_record(row, run))
         return tuple(records)
 
-    def _read_realized(self, asset: str) -> tuple[RealizedReturns, DatasetFingerprint]:
-        rows = self._store.read(layer=DATASET_LAYER, table=DATASET_TABLE, filters={"asset": asset})
-        if not rows:
-            raise ValueError(
-                f"dataset ({DATASET_LAYER!r}, {DATASET_TABLE!r}) is empty for asset {asset!r} (C4)"
+    def _read_realized(
+        self, asset: str, expected: str
+    ) -> tuple[RealizedReturns, DatasetContentFingerprint, int]:
+        """Realizado = a grade de treino do ativo, conferida contra o cohort (ADR 6.4.0009).
+
+        Raises:
+            GridFingerprintMismatchError: fingerprint da grade != `expected` (C10).
+        """
+        grid = self._grid_reader(asset_id=asset)
+        timestamps = grid.timestamps_iso()
+        fingerprint = DatasetContentFingerprint.compute(
+            hasher=self._hasher, asset_id=asset, timestamps=timestamps, columns=grid.columns
+        )
+        if fingerprint.value != expected:
+            raise GridFingerprintMismatchError(
+                f"training grid of {asset!r} has fingerprint "
+                f"{fingerprint.value[:_FINGERPRINT_SHOWN]}…, the cohort was trained on "
+                f"{expected[:_FINGERPRINT_SHOWN]}… (C10)"
             )
-        parsed = sorted(
-            (
-                (
-                    _timestamp(row),
-                    _number(row, "target_return"),
-                    _number(row, "close"),
-                    _number(row, "volume"),
-                )
-                for row in rows
-            ),
-            key=lambda item: item[0],
-        )
-        timestamps = tuple(item[0].isoformat() for item in parsed)
-        realized = RealizedReturns(timestamps=timestamps, returns=tuple(item[1] for item in parsed))
-        fingerprint = DatasetFingerprint.compute(
-            hasher=self._hasher,
-            asset=asset,
-            timestamp_min=timestamps[0],
-            timestamp_max=timestamps[-1],
-            row_count=len(parsed),
-            close_sum=math.fsum(item[2] for item in parsed),
-            volume_sum=math.fsum(item[3] for item in parsed),
-            parquet_file_hash=PARQUET_FILE_HASH,
-        )
-        return realized, fingerprint
+        realized = RealizedReturns(timestamps=timestamps, returns=grid.column(_TARGET))
+        return realized, fingerprint, grid.trimmed_prefix
 
     # -- pré-condições, relatórios e MCS ------------------------------------------------
 
@@ -464,7 +470,8 @@ class RefreshGold:
         tables: Sequence[GoldTable],
         runs: Sequence[CohortRun],
         realized: RealizedReturns,
-        fingerprint: DatasetFingerprint,
+        fingerprint: DatasetContentFingerprint,
+        grid_trimmed_prefix: int,
         started_at: datetime,
     ) -> GoldManifest:
         return GoldManifest(
@@ -475,6 +482,7 @@ class RefreshGold:
             horizons=command.horizons,
             window_deficits=command.window_deficits,
             dataset_fingerprint=fingerprint,
+            grid_trimmed_prefix=grid_trimmed_prefix,
             realized_sessions=realized.n_sessions,
             realized_returns_fsum=realized.returns_fsum,
             realized_first_timestamp=realized.first_timestamp,
@@ -505,17 +513,3 @@ def _record(row: Mapping[str, object], run: CohortRun) -> ForecastRecord:
         value_guardrail=row["value_guardrail"],  # type: ignore[arg-type]
         guardrail_applied=_GUARDRAIL_FLAGS[flag],
     )
-
-
-def _timestamp(row: Mapping[str, object]) -> datetime:
-    value = row.get("timestamp")
-    if not isinstance(value, datetime) or value.tzinfo is None:
-        raise ValueError(f"dataset row 'timestamp' must be a tz-aware datetime, got {value!r}")
-    return value
-
-
-def _number(row: Mapping[str, object], column: str) -> float:
-    value = row.get(column)
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValueError(f"dataset row {column!r} must be numeric, got {value!r}")
-    return float(value)

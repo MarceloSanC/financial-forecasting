@@ -50,8 +50,8 @@ from financial_forecasting.features.evaluation.domain.services.diebold_mariano i
 from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
     BootstrapScheme,
 )
-from financial_forecasting.shared.domain.value_objects.dataset_fingerprint import (
-    DatasetFingerprint,
+from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+    DatasetContentFingerprint,
 )
 from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
 
@@ -152,7 +152,8 @@ def _manifest(
         parameters=_PARAMETERS,
         horizons=(1, 2),
         window_deficits={"tft": 2},
-        dataset_fingerprint=DatasetFingerprint(value="cd" * 32),
+        dataset_fingerprint=DatasetContentFingerprint(value="cd" * 32),
+        grid_trimmed_prefix=5,
         realized_sessions=40,
         realized_returns_fsum=0.25,
         realized_first_timestamp="2024-01-02T00:00:00+00:00",

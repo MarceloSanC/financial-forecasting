@@ -2551,4 +2551,62 @@ linha inválida) e um ativo ausente. `test_port_coverage_gate.py`: piso 26 e
 `training_grid_reader_resolves` (`adapters == ("ReadTrainingGrid",)`, contrato
 `test_training_grid_reader_contract.py`, sem violação).
 
+### 2026-09-29 — [decision] Task 15 — refresh sobre o cohort real — Claude (Opus 5.5)
+**Contexto:** A15 — o `RefreshGold` wirado (`wire_dependencies`, `ArchMcs` real) sobre
+uma cópia do `data/cohorts/aapl` do checkout principal, montado somente-leitura no
+container de dev e copiado para `/tmp` antes de qualquer leitura (script fora do repo;
+nenhum dado real nem gold entrou no repo). Comando: `parent_sweep_id =
+aapl_confirmatory-r0-665f45d9169a` (96 runs: 5 baselines × 6 folds, `gbm_quantile` × 6,
+`tft_quantile` × 60 — 10 seeds × 6 folds; `feature_set_name = fs_all`; 337 792 fatos
+`test`), horizontes dos fatos (1, 7), `window_deficits = {}`, `dataset_fingerprint`
+lido do topo de `config/cohorts/aapl_confirmatory.toml` (`tomllib`), candidato
+`tft_quantile`, parâmetros de sonda (`preregistration_ref = "probe-6.4-task15"`,
+`reps = 1000`, seed 20260929, os dois esquemas e estimadores, bandas 0,95/0,975).
+**Resultado (medido):** status **COMPLETED** em 18,9 s; `grid_trimmed_prefix` =
+**251** (o offset da sonda do Checkpoint C bloco 4); fingerprint da grade **igual** ao
+congelado (`00e4406dcd96…`); **zero** achados de alinhamento (nenhum
+`decision_index_mismatch`, nenhum outro `kind`); `gold_quality_checks` só com
+`common_sample_size` PASS (2), `preconditions_met` PASS (2), `degeneracy_rate` REPORTED
+(32 séries) e `target_return_fsum` REPORTED (1). Realizado: 3 699 sessões,
+2011-04-18 → 2025-12-31. Linhas publicadas: `gold_quality_checks` 37,
+`gold_calibration_table` 10 368, `gold_dm_results` 24, `gold_mcs_results` 28,
+`gold_metrics_by_run` 1 880. Duração por etapa: `read_runs` 0,016 s, `read_facts`
+4,863 s, `read_realized` 0,485 s, `assemble` 1,953 s, `preconditions` 2,709 s (inclui o
+`import arch` a frio), `checks` 0,049 s, `reports` 5,451 s, `mcs` 2,874 s, `build`
+0,279 s, `publish` 0,098 s. Nenhum HALT.
+
+### 2026-09-29 — [decision] Task 15: `RefreshGold` sobre a grade de treino — Claude (Opus 5.5)
+**Contexto:** revisão de execução (ADR 6.4.0009) — detalhes da troca atômica.
+**Razão:**
+- **Use case:** colaborador `grid_reader: TrainingGridReader` no lugar do `store`; a
+  leitura da grade é a 3ª (etapa `read_realized`), com `DatasetContentFingerprint`
+  sobre `grid.timestamps_iso()`/`grid.columns` e `GridFingerprintMismatchError`
+  (`ApplicationError`, no módulo do use case; mensagem com 12 caracteres de cada valor
+  e "C10") antes do `assemble`. Saíram `DATASET_LAYER`, `DATASET_TABLE`,
+  `PARQUET_FILE_HASH`, `_timestamp`, `_number`, `math` e os imports de
+  `DatasetFingerprint`/`MedallionStore`; a variável da grade fica sem anotação (o use
+  case não importa a `modeling`).
+- **DTOs/contexto:** `RefreshGoldCommand.dataset_fingerprint` obrigatório
+  (`_check_text`); `GoldManifest` com `DatasetContentFingerprint` e
+  `grid_trimmed_prefix` (int ≥ 0 em `_check_counts`; `as_mapping` ganha a chave);
+  `QualityCheckContext.grid_trimmed_prefix` (int não-`bool` ≥ 0); detalhe do
+  `realized_provenance` = `dataset_fingerprint=…; grid_trimmed_prefix=…; n_sessions=…;
+  first=…; last=…`.
+- **Testes:** grade de teste com aquecimento de 3 linhas (NaN em `feat_a`) antes das
+  sessões do cohort, colunas `("feat_a", "target_return")`, fingerprint pelo
+  `_StubHasher`; os nove achados BAIXOS do bloco 4 aplicados (L1 com a fábrica espiada
+  e estimativas 2,2/4,7 servidas em ciclo pelo backend; A1 parametrizado pelas
+  classes, ids por `__name__`; A2 `mcs_reps=1500`; A3 com `partition_keys` só
+  `asset`/`feature_set_name`; A4 cohort sem `tft`; A5 linhas embaralhadas; L2 log do
+  BLOCKED). O e2e ganhou P = 5 linhas de aquecimento, todas as colunas de
+  `modeling_columns()`, o oráculo `grid_fingerprint` da 5.5, o passo (2b) de mismatch e
+  o cohort C indexado no dataset inteiro. `_cohort_factory.py` não mudou.
+
+### 2026-09-29 — [finding] Novos pontos de chamada "int ≥ 0" para a #118 (`grid_trimmed_prefix`) — Claude (Opus 5.5)
+**Contexto:** `grid_trimmed_prefix` é validado como int não-`bool` ≥ 0 no
+`GoldManifest._check_counts` e no `QualityCheckContext.__post_init__` (sem validador
+público "int ≥ 0").
+**Encaminhamento:** issue #118 — incluir os dois pontos na unificação da regra de
+inteiros.
+
 <!-- END: post-execution -->

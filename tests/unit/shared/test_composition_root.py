@@ -98,6 +98,9 @@ from financial_forecasting.features.modeling.application.ports.out.hyperparamete
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
     TftTrainer,
 )
+from financial_forecasting.features.modeling.application.use_cases.read_training_grid import (
+    ReadTrainingGrid,
+)
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
 )
@@ -529,7 +532,6 @@ def test_wire_dependencies_wires_refresh_gold(tmp_path: Path) -> None:
     refresh = deps.refresh_gold
     assert isinstance(refresh, RefreshGold)
     assert refresh._silver_reader is deps.analytics_repository
-    assert refresh._store is deps.store
     assert refresh._hasher is deps.hasher
     assert isinstance(refresh._clock, SystemClock)
     assert isinstance(refresh._gold_store, ParquetGoldStore)
@@ -552,3 +554,13 @@ def test_arch_mcs_proxy_lazy(tmp_path: Path) -> None:
     proxy = deps.refresh_gold._mcs_backend
     assert isinstance(proxy, _LazyArchMcs)
     assert proxy._delegate is None  # arch ainda não foi importado (o e2e prova a carga)
+
+
+@pytest.mark.unit
+def test_refresh_gold_grid_reader_wired(tmp_path: Path) -> None:
+    """ADR 6.4.0009: o realizado vem do `ReadTrainingGrid` com o store e as colunas do cohort."""
+    deps = wire_dependencies(settings=Settings(_env_file=None, data_root=tmp_path))
+    grid_reader = deps.refresh_gold._grid_reader
+    assert isinstance(grid_reader, ReadTrainingGrid)
+    assert grid_reader._store is deps.store
+    assert grid_reader._columns == deps.modeling_columns

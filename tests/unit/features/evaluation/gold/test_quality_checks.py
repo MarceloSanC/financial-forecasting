@@ -66,8 +66,8 @@ from financial_forecasting.features.evaluation.domain.value_objects.quality_chec
     CheckSeverity,
     QualityCheckResult,
 )
-from financial_forecasting.shared.domain.value_objects.dataset_fingerprint import (
-    DatasetFingerprint,
+from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+    DatasetContentFingerprint,
 )
 from tests.unit.features.evaluation.gold._cohort_factory import (
     Cohort,
@@ -78,7 +78,8 @@ from tests.unit.features.evaluation.gold._cohort_factory import (
 )
 
 _TOLERANCE = 1e-9
-_FINGERPRINT = DatasetFingerprint(value="f" * 64)
+_FINGERPRINT = DatasetContentFingerprint(value="f" * 64)
+_PREFIX = 251
 _DEFICITS: Mapping[str, int] = {}
 
 
@@ -126,6 +127,7 @@ def _context(
         ),
         tolerance=_TOLERANCE,
         dataset_fingerprint=_FINGERPRINT,
+        grid_trimmed_prefix=_PREFIX,
         realized=cohort.realized,
     )
 
@@ -392,6 +394,7 @@ def test_preconditions_k_below_min() -> None:
         block_estimates={},
         tolerance=_TOLERANCE,
         dataset_fingerprint=_FINGERPRINT,
+        grid_trimmed_prefix=_PREFIX,
         realized=cohort.realized,
     )
     results = StatisticalPreconditionsCheck().run(context)
@@ -527,6 +530,7 @@ def test_context_missing_horizon_estimates_raises() -> None:
             block_estimates={1: ()},
             tolerance=_TOLERANCE,
             dataset_fingerprint=_FINGERPRINT,
+            grid_trimmed_prefix=_PREFIX,
             realized=single.realized,
         )
 
@@ -624,3 +628,21 @@ def test_provenance_reported() -> None:
         realized.last_timestamp,
     ):
         assert piece in result.detail
+
+
+@pytest.mark.unit
+def test_provenance_grid_prefix_detail() -> None:
+    """O detalhe da proveniência imprime fingerprint e `grid_trimmed_prefix` (ADR 6.4.0009)."""
+    cohort = make_cohort()
+    [result] = RealizedProvenanceCheck().run(_context(cohort))
+    realized = cohort.realized
+    assert result.detail == (
+        f"dataset_fingerprint={_FINGERPRINT.value}; grid_trimmed_prefix={_PREFIX}; "
+        f"n_sessions={realized.n_sessions}; first={realized.first_timestamp}; "
+        f"last={realized.last_timestamp}"
+    )
+    assert (result.outcome, result.severity) == (CheckOutcome.REPORTED, CheckSeverity.WARN)
+    base = _context(cohort)
+    for bad in (-1, True, 1.0):
+        with pytest.raises(ValueError, match="grid_trimmed_prefix must be an int >= 0"):
+            dataclasses.replace(base, grid_trimmed_prefix=bad)

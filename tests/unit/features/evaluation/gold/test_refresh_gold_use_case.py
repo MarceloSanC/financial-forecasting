@@ -4,16 +4,20 @@ Critérios A1, A3, A4, A6, A7; invariantes I11-I16; casos C1-C7.
 
 Silver e dataset sintéticos saem da fábrica `make_cohort` (`gold/_cohort_factory.py`)
 convertida para as linhas do schema silver (`dim_run`, `fact_oos_predictions`) e do
-`dataset_tft`. Colaboradores: `FakeSilverTableReader`, `FakeMedallionStore`
-(`seed_read_only`), `FakeClock`, `FakeMcsBackend` (espiado), `InMemoryGoldStore` e
-`FakeGoldBuilder`s no grafo do concept. O `Hasher` não tem fake por desenho (#70): o
-teste declara um dublê local mínimo (`_StubHasher`) só para o `DatasetFingerprint`.
+dataset de treino: um prefixo de aquecimento de `_WARMUP` linhas com NaN numa feature
+antes das sessões do cohort, então a grade aparada (`build_training_grid`, 5.5) começa
+na sessão 0 do cohort — a origem do `decision_idx` do silver (ADR 6.4.0009).
+Colaboradores: `FakeSilverTableReader`, `FakeTrainingGridReader` (espiado), `FakeClock`,
+`FakeMcsBackend` (espiado), `InMemoryGoldStore` e `FakeGoldBuilder`s no grafo do
+concept. O `Hasher` não tem fake por desenho (#70): o teste declara um dublê local
+mínimo (`_StubHasher`) só para o `DatasetContentFingerprint`.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import logging
+import math
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 
@@ -32,11 +36,14 @@ from financial_forecasting.features.evaluation.application.use_cases import (
     refresh_gold as refresh_gold_module,
 )
 from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
-    PARQUET_FILE_HASH,
+    GridFingerprintMismatchError,
     RefreshGold,
 )
 from financial_forecasting.features.evaluation.domain.services.diebold_mariano import (
     DmVarianceEstimator,
+)
+from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
+    ModelConfidenceSet,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
     is_constant,
@@ -58,15 +65,23 @@ from financial_forecasting.features.evaluation.domain.value_objects.forecast_rec
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
 )
-from financial_forecasting.shared.domain.value_objects.dataset_fingerprint import (
-    DatasetFingerprint,
+from financial_forecasting.features.evaluation.domain.value_objects.realized_returns import (
+    RealizedReturns,
+)
+from financial_forecasting.features.modeling.domain.exceptions.cohort import NoUsableRowsError
+from financial_forecasting.features.modeling.domain.services.training_grid import (
+    TrainingGrid,
+    build_training_grid,
+)
+from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+    DatasetContentFingerprint,
 )
 from tests.fakes.features.evaluation.fake_gold_builder import FakeGoldBuilder
 from tests.fakes.features.evaluation.fake_mcs_backend import FakeMcsBackend
 from tests.fakes.features.evaluation.fake_silver_table_reader import FakeSilverTableReader
+from tests.fakes.features.evaluation.fake_training_grid_reader import FakeTrainingGridReader
 from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
 from tests.fakes.shared.in_memory_clock import FakeClock
-from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 from tests.unit.features.evaluation.gold._cohort_factory import (
     Cohort,
     at_point,
@@ -92,10 +107,12 @@ _PARAMETERS = RefreshParameters(
     dm_alpha=0.05,
     dm_variance_estimators=(DmVarianceEstimator.RECTANGULAR, DmVarianceEstimator.BARTLETT),
     mcs_alpha=0.10,
-    mcs_reps=1000,
+    mcs_reps=1500,  # ≠ MIN_MCS_REPS: o repasse de `reps` é distinguível do piso (A2)
     mcs_seed=20260929,
     mcs_schemes=(BootstrapScheme.STATIONARY, BootstrapScheme.MOVING_BLOCK),
 )
+_WARMUP = 3  # linhas de aquecimento com NaN numa feature, aparadas pela grade
+_GRID_COLUMNS = ("feat_a", "target_return")
 _EXPECTED_STEPS = (
     "read_runs",
     "read_facts",
@@ -172,16 +189,40 @@ def _silver(cohort: Cohort) -> dict[str, list[dict[str, object]]]:
 
 
 def _dataset(cohort: Cohort) -> list[dict[str, object]]:
+    """Linhas do dataset: aquecimento (NaN em `feat_a`) + as sessões do cohort."""
     realized = cohort.realized
-    return [
+    first = datetime.fromisoformat(realized.timestamps[0])
+    warmup: list[dict[str, object]] = [
+        {
+            "timestamp": first - timedelta(days=_WARMUP - i),
+            "feat_a": math.nan,
+            "target_return": 0.5,
+        }
+        for i in range(_WARMUP)
+    ]
+    return warmup + [
         {
             "timestamp": datetime.fromisoformat(ts),
+            "feat_a": 1.0 + index / 100,
             "target_return": value,
-            "close": 100.0 + index,
-            "volume": 1000.0 + 10 * index,
         }
         for index, (ts, value) in enumerate(zip(realized.timestamps, realized.returns, strict=True))
     ]
+
+
+def _grid(cohort: Cohort) -> TrainingGrid:
+    return build_training_grid(_dataset(cohort), columns=_GRID_COLUMNS)
+
+
+def _fingerprint(cohort: Cohort) -> str:
+    """O fingerprint congelado do cohort: o `DatasetContentFingerprint` da sua grade."""
+    grid = _grid(cohort)
+    return DatasetContentFingerprint.compute(
+        hasher=_StubHasher(),
+        asset_id=_ASSET,
+        timestamps=grid.timestamps_iso(),
+        columns=grid.columns,
+    ).value
 
 
 class _Log:
@@ -190,8 +231,16 @@ class _Log:
 
 
 class _SpyReader(FakeSilverTableReader):
-    def __init__(self, rows: Mapping[str, Sequence[Mapping[str, object]]], log: _Log) -> None:
-        super().__init__(rows)
+    def __init__(
+        self,
+        rows: Mapping[str, Sequence[Mapping[str, object]]],
+        log: _Log,
+        partition_keys: Mapping[str, tuple[str, ...]] | None = None,
+    ) -> None:
+        if partition_keys is None:
+            super().__init__(rows)
+        else:
+            super().__init__(rows, partition_keys)
         self._log = log
 
     def read(self, **kwargs: object) -> Sequence[Mapping[str, object]]:  # type: ignore[override]
@@ -199,23 +248,28 @@ class _SpyReader(FakeSilverTableReader):
         return super().read(**kwargs)  # type: ignore[arg-type]
 
 
-class _SpyStore(FakeMedallionStore):
-    def __init__(self, log: _Log) -> None:
-        super().__init__()
+class _SpyGrid(FakeTrainingGridReader):
+    def __init__(self, rows: Sequence[Mapping[str, object]] | None, log: _Log) -> None:
+        super().__init__({} if rows is None else {_ASSET: rows}, columns=_GRID_COLUMNS)
         self._log = log
-        self.dataset_reads = 0
 
-    def read(self, **kwargs: object) -> Sequence[Mapping[str, object]]:  # type: ignore[override]
-        self._log.events.append(f"read:{kwargs['table']}")
-        self.dataset_reads += 1
-        return super().read(**kwargs)  # type: ignore[arg-type]
+    def __call__(self, *, asset_id: str) -> TrainingGrid:
+        self._log.events.append("read:grid")
+        return super().__call__(asset_id=asset_id)
 
 
 class _SpyBackend(FakeMcsBackend):
-    def __init__(self, log: _Log, *, fail: BaseException | None = None) -> None:
+    def __init__(
+        self,
+        log: _Log,
+        *,
+        fail: BaseException | None = None,
+        estimates: Sequence[float] | None = None,
+    ) -> None:
         super().__init__(block_length=_BLOCK)
         self._log = log
         self._fail = fail
+        self._estimates = estimates
         self.block_series: list[tuple[float, ...]] = []
         self.index_calls: list[dict[str, object]] = []
 
@@ -226,6 +280,8 @@ class _SpyBackend(FakeMcsBackend):
         self.block_series.append(tuple(series))
         if self._fail is not None:
             raise self._fail
+        if self._estimates is not None:  # uma estimativa por par, em ciclo
+            return self._estimates[(len(self.block_series) - 1) % len(self._estimates)]
         return super().optimal_block_length(series=series)
 
     def bootstrap_indices(self, **kwargs: object) -> BootstrapIndices:  # type: ignore[override]
@@ -264,13 +320,14 @@ def _builders(log: _Log) -> list[FakeGoldBuilder]:
 class _Harness:
     use_case: RefreshGold
     reader: _SpyReader
-    store: _SpyStore
+    grid: _SpyGrid
     backend: _SpyBackend
     gold: _SpyStoreGold
     log: _Log
+    fingerprint: str
 
     def __call__(self, **changes: object) -> RefreshGoldResult:
-        return self.use_case(_command(**changes))
+        return self.use_case(_command(**{"dataset_fingerprint": self.fingerprint, **changes}))
 
 
 def _command(**changes: object) -> RefreshGoldCommand:
@@ -280,6 +337,7 @@ def _command(**changes: object) -> RefreshGoldCommand:
         "horizons": _HORIZONS,
         "window_deficits": {},
         "parameters": _PARAMETERS,
+        "dataset_fingerprint": "0" * 64,
     }
     kwargs.update(changes)
     return RefreshGoldCommand(**kwargs)  # type: ignore[arg-type]
@@ -293,27 +351,27 @@ def _harness(  # noqa: PLR0913 — um parâmetro por colaborador trocável (keyw
     fail: BaseException | None = None,
     clock: object | None = None,
     builders: Callable[[_Log], Sequence[FakeGoldBuilder]] = _builders,
+    dataset: Sequence[Mapping[str, object]] | None = None,
+    partition_keys: Mapping[str, tuple[str, ...]] | None = None,
+    estimates: Sequence[float] | None = None,
 ) -> _Harness:
     cohort = make_cohort() if cohort is None else cohort
     log = _Log()
-    reader = _SpyReader(_silver(cohort) if silver is None else silver, log)
-    store = _SpyStore(log)
-    if seed_dataset:
-        store.seed_read_only(
-            layer="processed", table="dataset_tft", asset=_ASSET, rows=_dataset(cohort)
-        )
-    backend = _SpyBackend(log, fail=fail)
+    reader = _SpyReader(_silver(cohort) if silver is None else silver, log, partition_keys)
+    rows = (_dataset(cohort) if dataset is None else dataset) if seed_dataset else None
+    grid = _SpyGrid(rows, log)
+    backend = _SpyBackend(log, fail=fail, estimates=estimates)
     gold = _SpyStoreGold(log)
     use_case = RefreshGold(
         silver_reader=reader,
-        store=store,
+        grid_reader=grid,
         hasher=_StubHasher(),
         clock=FakeClock() if clock is None else clock,  # type: ignore[arg-type]
         mcs_backend=backend,
         gold_store=gold,
         builders=builders(log),
     )
-    return _Harness(use_case, reader, store, backend, gold, log)
+    return _Harness(use_case, reader, grid, backend, gold, log, _fingerprint(cohort))
 
 
 def _gap_cohort() -> Cohort:
@@ -346,7 +404,7 @@ def test_graph_checked_before_read() -> None:
     with pytest.raises(ValueError, match="builder dependency cycle"):
         RefreshGold(
             silver_reader=reader,
-            store=_SpyStore(log),
+            grid_reader=_SpyGrid(None, log),
             hasher=_StubHasher(),
             clock=FakeClock(),
             mcs_backend=_SpyBackend(log),
@@ -376,8 +434,9 @@ def test_cohort_empty_raises() -> None:
 
 @pytest.mark.unit
 def test_dataset_empty_raises() -> None:
+    """Dataset sem linha do ativo: `NoUsableRowsError` do dono da grade propaga (C4)."""
     harness = _harness(seed_dataset=False)
-    with pytest.raises(ValueError, match=r"is empty for asset 'AAPL'"):
+    with pytest.raises(NoUsableRowsError):
         harness()
     assert harness.gold.publishes == 0
 
@@ -436,8 +495,8 @@ def test_guardrail_int_to_bool(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_realized_read_once() -> None:
     harness = _harness()
     harness()
-    assert harness.store.dataset_reads == 1
-    assert harness.log.events.count("read:dataset_tft") == 1
+    assert harness.grid.calls == [_ASSET]
+    assert harness.log.events.count("read:grid") == 1
 
 
 # --- pré-condições e MCS (I11, I12, C6, C7) ---------------------------------------------
@@ -465,8 +524,14 @@ def test_mcs_reps_seed_schemes() -> None:
 
 
 @pytest.mark.unit
-def test_arithmetic_error_fails_precondition() -> None:
-    harness = _harness(fail=ZeroDivisionError("float division by zero"))
+@pytest.mark.parametrize(
+    "error",
+    [ZeroDivisionError, OverflowError, FloatingPointError],
+    ids=lambda error: error.__name__,
+)
+def test_arithmetic_error_fails_precondition(error: type[ArithmeticError]) -> None:
+    """Toda subclasse de `ArithmeticError` do backend vira FAIL `backend_arithmetic` (A1)."""
+    harness = _harness(fail=error("numerically undefined"))
     result = harness()
     assert result.status is RefreshStatus.BLOCKED
     kinds = {(f.check, f.kind) for f in result.failed_checks}
@@ -613,7 +678,7 @@ def test_effects_order() -> None:
     assert last_read < first["backend"] < last_backend < first["build"]
     assert last_build < first["publish"] == len(events) - 1
     assert events[first["build"]] == f"build:{_QUALITY}"
-    assert events[:3] == ["read:dim_run", "read:fact_oos_predictions", "read:dataset_tft"]
+    assert events[:3] == ["read:dim_run", "read:fact_oos_predictions", "read:grid"]
 
 
 @pytest.mark.unit
@@ -634,24 +699,17 @@ def test_step_logs(caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyP
 def test_manifest_carries_parameters() -> None:
     cohort = make_cohort(prefixes={"tft": 1})
     harness = _harness(cohort)
-    harness(window_deficits={"tft": 1})
+    result = harness(window_deficits={"tft": 1})
     manifest, _ = _published(harness)
     realized = cohort.realized
+    assert result.status is RefreshStatus.COMPLETED
+    assert manifest["status"] == "COMPLETED"
     assert manifest["parameters"]["preregistration_ref"] == _PREREG  # type: ignore[index]
+    assert manifest["parameters"]["mcs_reps"] == _PARAMETERS.mcs_reps  # type: ignore[index]
     assert manifest["preregistration_ref"] == _PREREG
     assert manifest["horizons"] == list(_HORIZONS)
     assert manifest["window_deficits"] == {"tft": 1}
-    expected = DatasetFingerprint.compute(
-        hasher=_StubHasher(),
-        asset=_ASSET,
-        timestamp_min=realized.first_timestamp,
-        timestamp_max=realized.last_timestamp,
-        row_count=realized.n_sessions,
-        close_sum=sum(100.0 + i for i in range(realized.n_sessions)),
-        volume_sum=sum(1000.0 + 10 * i for i in range(realized.n_sessions)),
-        parquet_file_hash=PARQUET_FILE_HASH,
-    )
-    assert manifest["dataset_fingerprint"] == expected.value
+    assert manifest["dataset_fingerprint"] == _fingerprint(cohort)
     assert manifest["realized"] == {
         "n_sessions": realized.n_sessions,
         "returns_fsum": realized.returns_fsum,
@@ -691,3 +749,150 @@ def test_completed_publishes_all_tables() -> None:
         == {name: len(rows) for name, rows in tables.items()}
     )
     assert all(row["preregistration_ref"] == _PREREG for name in names[1:] for row in tables[name])
+
+
+# --- grade de treino (ADR 6.4.0009; C10, I5, I7, I16) --------------------------------
+
+
+@pytest.mark.unit
+def test_fingerprint_mismatch_publishes_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Grade de outro dado → `GridFingerprintMismatchError` sem montar nem publicar (C10)."""
+    assembled: list[object] = []
+    real = refresh_gold_module.SeriesAssembly.assemble
+
+    def _spy(*args: object, **kwargs: object) -> AssembledCohort:
+        assembled.append(args)
+        return real(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(refresh_gold_module.SeriesAssembly, "assemble", staticmethod(_spy))
+    harness = _harness()
+    with pytest.raises(GridFingerprintMismatchError, match="C10"):
+        harness(dataset_fingerprint="f" * 64)
+    assert assembled == []
+    assert harness.gold.publishes == 0
+    assert "publish" not in harness.log.events
+
+
+@pytest.mark.unit
+def test_realized_from_training_grid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Realizado = a grade aparada (índice 0 = primeira sessão pós-aquecimento)."""
+    cohort = make_cohort()
+    seen: list[RealizedReturns] = []
+    real = refresh_gold_module.SeriesAssembly.assemble
+
+    def _spy(
+        records: Sequence[ForecastRecord], runs: object, realized: RealizedReturns, **kwargs: object
+    ) -> AssembledCohort:
+        seen.append(realized)
+        return real(records, runs, realized, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(refresh_gold_module.SeriesAssembly, "assemble", staticmethod(_spy))
+    result = _harness(cohort)()
+    grid = _grid(cohort)
+    [realized] = seen
+    assert result.status is RefreshStatus.COMPLETED
+    assert realized.timestamps == grid.timestamps_iso() == cohort.realized.timestamps
+    assert realized.returns == grid.column("target_return")
+    assert realized.index_of(cohort.realized.timestamps[0]) == 0
+    assert grid.trimmed_prefix == _WARMUP
+
+
+@pytest.mark.unit
+def test_manifest_grid_trimmed_prefix() -> None:
+    cohort = make_cohort()
+    harness = _harness(cohort)
+    harness()
+    manifest, tables = _published(harness)
+    assert manifest["grid_trimmed_prefix"] == _WARMUP
+    assert manifest["dataset_fingerprint"] == _fingerprint(cohort)
+    assert tables  # geração publicada
+
+
+@pytest.mark.unit
+def test_block_size_from_distinct_estimates(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Estimativas distintas por par (2,2 e 4,7): bloco = `block_length` da regra (L1)."""
+    captured: list[PairedLossSeries] = []
+    real = refresh_gold_module.paired_pinball_losses
+
+    def _spy(series_by_model: Mapping[str, Sequence[CoverageSeries]]) -> PairedLossSeries:
+        series = real(series_by_model)
+        captured.append(series)
+        return series
+
+    monkeypatch.setattr(refresh_gold_module, "paired_pinball_losses", _spy)
+    estimates = (2.2, 4.7)
+    cohort = make_cohort(seeds={"gbm": (None,), "naive": (None,), "tft": (1, 2)})
+    harness = _harness(cohort, estimates=estimates)
+    assert harness().status is RefreshStatus.COMPLETED
+    expected: list[int] = []
+    served = 0  # o backend serve as estimativas em ciclo, na ordem das chamadas
+    for series in captured:
+        by_pair: dict[tuple[str, str], float] = {}
+        for pair in series.model_pairs():
+            by_pair[pair] = estimates[served % len(estimates)]
+            served += 1
+        block = ModelConfidenceSet.block_length(series, block_estimates=by_pair)
+        expected += [block] * len(_PARAMETERS.mcs_schemes)
+    assert [call["block_size"] for call in harness.backend.index_calls] == expected
+    assert set(expected) == {math.ceil(max(estimates))}
+
+
+@pytest.mark.unit
+def test_blocked_logs_skip_reports_and_mcs(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Refresh BLOCKED: sem `step=reports`/`step=mcs`, linha final `status=BLOCKED` (L2)."""
+    monkeypatch.setattr(logging.getLogger(refresh_gold_module.__name__), "disabled", False)
+    with caplog.at_level(logging.INFO, logger=refresh_gold_module.__name__):
+        _harness(_gap_cohort())()
+    lines = [r.getMessage() for r in caplog.records if r.name == refresh_gold_module.__name__]
+    steps = [line.split("step=")[1].split()[0] for line in lines if " step=" in line]
+    assert "reports" not in steps
+    assert "mcs" not in steps
+    assert steps == [s for s in _EXPECTED_STEPS if s not in ("reports", "mcs")]
+    assert lines[-1].startswith("refresh_gold status=BLOCKED")
+
+
+@pytest.mark.unit
+def test_post_filter_drops_superset_rows() -> None:
+    """Leitor que devolve superconjunto: os pós-filtros do use case descartam (A3)."""
+    cohort = make_cohort()
+    silver = _silver(cohort)
+    alien_run = {**silver["dim_run"][0], "run_id": "alien", "parent_sweep_id": "sweep-99"}
+    other_asset = [
+        {**row, "asset": "MSFT", "value_raw": 7.0, "value_guardrail": 7.0}
+        for row in silver["fact_oos_predictions"][:14]
+    ]
+    wide = {
+        "dim_run": [*silver["dim_run"], alien_run],
+        "fact_oos_predictions": [*silver["fact_oos_predictions"], *other_asset],
+    }
+    keys = {"dim_run": ("asset",), "fact_oos_predictions": ("feature_set_name",)}
+    baseline, harness = _harness(cohort), _harness(cohort, silver=wide, partition_keys=keys)
+    assert harness() == baseline()
+    assert _published(harness) == _published(baseline)
+    assert len(harness.reader.read(layer="silver", table="dim_run", filters={"asset": _ASSET})) == (
+        len(cohort.runs) + 1
+    )
+
+
+@pytest.mark.unit
+def test_candidate_absent_blocks() -> None:
+    """Cohort sem o candidato: BLOCKED com `required_model_missing` (A4)."""
+    result = _harness(make_cohort(seeds={"gbm": (None,), "naive": (None,)}))()
+    assert result.status is RefreshStatus.BLOCKED
+    assert ("alignment_check", "required_model_missing", "tft") in {
+        (f.check, f.kind, f.model) for f in result.failed_checks
+    }
+
+
+@pytest.mark.unit
+def test_shuffled_dataset_rows_same_result() -> None:
+    """Linhas do dataset embaralhadas no leitor: mesmas tabelas e manifesto (A5, I16)."""
+    cohort = make_cohort()
+    rows = _dataset(cohort)
+    shuffled = rows[1::2] + rows[::2]
+    assert shuffled != rows
+    baseline, harness = _harness(cohort), _harness(cohort, dataset=shuffled)
+    assert harness() == baseline()
+    assert _published(harness) == _published(baseline)

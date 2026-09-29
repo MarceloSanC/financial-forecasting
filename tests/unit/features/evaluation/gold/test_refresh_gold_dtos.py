@@ -31,8 +31,8 @@ from financial_forecasting.features.evaluation.domain.value_objects.quality_chec
     CheckSeverity,
     QualityCheckResult,
 )
-from financial_forecasting.shared.domain.value_objects.dataset_fingerprint import (
-    DatasetFingerprint,
+from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+    DatasetContentFingerprint,
 )
 
 _PREREG = "prereg-test-0001"  # literal declarado até a 6.5 fornecer o hash congelado
@@ -125,6 +125,7 @@ def _command(**changes: object) -> RefreshGoldCommand:
         "horizons": (1, 7),
         "window_deficits": {"tft": 3},
         "parameters": _PARAMETERS,
+        "dataset_fingerprint": "ab" * 32,
     }
     kwargs.update(changes)
     return RefreshGoldCommand(**kwargs)  # type: ignore[arg-type]
@@ -221,7 +222,8 @@ def _manifest(**changes: object) -> GoldManifest:
         "parameters": _PARAMETERS,
         "horizons": (1, 7),
         "window_deficits": {"tft": 3},
-        "dataset_fingerprint": DatasetFingerprint(value="ab" * 32),
+        "dataset_fingerprint": DatasetContentFingerprint(value="ab" * 32),
+        "grid_trimmed_prefix": 251,
         "realized_sessions": 250,
         "realized_returns_fsum": 0.125,
         "realized_first_timestamp": "2024-01-02T00:00:00+00:00",
@@ -253,7 +255,9 @@ def test_manifest_mapping() -> None:
         ({"started_at": datetime(2026, 9, 29)}, "timezone-aware"),
         ({"window_deficits": [("tft", 3)]}, "window_deficits must be a Mapping"),
         ({"started_at": datetime(2026, 9, 29, 13, 0, tzinfo=UTC)}, "is after finished_at"),
-        ({"dataset_fingerprint": "ab" * 32}, "must be a DatasetFingerprint"),
+        ({"dataset_fingerprint": "ab" * 32}, "must be a DatasetContentFingerprint"),
+        ({"grid_trimmed_prefix": -1}, "grid_trimmed_prefix must be an int >= 0"),
+        ({"grid_trimmed_prefix": True}, "grid_trimmed_prefix must be an int >= 0"),
         ({"realized_returns_fsum": math.inf}, "realized_returns_fsum must be a finite"),
         ({"realized_returns_fsum": None}, "realized_returns_fsum must be a finite"),
         ({"horizons": [1, 7]}, "horizons must be a tuple"),
@@ -346,3 +350,30 @@ def test_table_key_order_sorted_by_key() -> None:
         GoldTable.sorted_by_key("gold_x", ("horizon",), rows)
     with pytest.raises(ValueError, match="mix types"):
         GoldTable.sorted_by_key("gold_x", ("seed",), [_row("a", 1), {**_row("a", 1), "seed": "x"}])
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", ["", None, 7])
+def test_command_fingerprint_required(value: object) -> None:
+    """`dataset_fingerprint` do cohort é obrigatório e não vazio (ADR 6.4.0009)."""
+    with pytest.raises(ValueError, match="dataset_fingerprint must be a non-empty str"):
+        _command(dataset_fingerprint=value)
+    kwargs = {
+        "asset": "AAPL",
+        "parent_sweep_id": "sweep-01",
+        "horizons": (1,),
+        "window_deficits": {},
+        "parameters": _PARAMETERS,
+    }
+    with pytest.raises(TypeError, match="dataset_fingerprint"):
+        RefreshGoldCommand(**kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_manifest_content_fingerprint() -> None:
+    """O manifesto guarda o `DatasetContentFingerprint` e o `grid_trimmed_prefix`."""
+    mapping = _manifest().as_mapping()
+    assert mapping["dataset_fingerprint"] == "ab" * 32
+    assert mapping["grid_trimmed_prefix"] == 251  # noqa: PLR2004 — o prefixo declarado
+    with pytest.raises(ValueError, match="must be a DatasetContentFingerprint"):
+        _manifest(dataset_fingerprint=object())

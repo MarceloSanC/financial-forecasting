@@ -3,7 +3,10 @@
 Um único `data_root` (fixture de módulo, padrão do `test_run_baselines.py`): silver
 sintético gravado pelo `ParquetAnalyticsRepository` real (`dim_run` um run por
 chamada — #119) e o dataset `processed/dataset_tft/<asset>/dataset_tft_<asset>.parquet`
-com `timestamp`, `target_return`, `close`, `volume`. O `RefreshGold` vem de
+com `timestamp` e todas as colunas de `modeling_columns()` (5.5), com um prefixo de
+aquecimento de `_WARMUP` linhas com NaN numa feature; o silver indexa o `decision_idx`
+na grade APARADA (ADR 6.4.0009) e o comando leva o fingerprint da grade calculado pela
+função da 5.5 (`grid_fingerprint`, o oráculo). O `RefreshGold` vem de
 `wire_dependencies` (caminho de produção: `ArchMcs` real atrás do proxy lazy,
 `ParquetGoldStore`, cinco builders). Cenário: horizontes 1 e 2; `tft_quantile`
 (candidato) com seeds 0 e 1 e prefixo 2 sessões atrás (déficit declarado 3);
@@ -14,6 +17,10 @@ Sequência: (0) refresh de um cohort **B** (outro `parent_sweep_id`, mesmo ativo
 cópia dos bytes do seu `current/`; (1) refresh do cohort **A** → `COMPLETED`; (2)
 rerun **sem apagar**; (3) o arquivo da partição de fatos é reescrito sem as linhas de
 um alvo interior de um run do GBM (lacuna interior) e o refresh dá `BLOCKED`.
+Revisão de execução (Task 15): (2b) depois do (2), o cohort A com fingerprint
+divergente ergue `GridFingerprintMismatchError` e o `current/` fica byte-igual; (4)
+depois do (3), um cohort **C** com o mesmo silver mas `decision_idx` no dataset
+INTEIRO (índice da grade + `_WARMUP`) dá `BLOCKED` com `decision_index_mismatch`.
 """
 
 from __future__ import annotations
@@ -24,7 +31,7 @@ import logging
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import duckdb
@@ -44,11 +51,24 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
 from financial_forecasting.features.evaluation.application.use_cases import (
     refresh_gold as refresh_gold_module,
 )
+from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
+    GridFingerprintMismatchError,
+)
 from financial_forecasting.features.evaluation.domain.services.diebold_mariano import (
     DmVarianceEstimator,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
     BootstrapScheme,
+)
+from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
+    grid_fingerprint,
+    modeling_columns,
+)
+from financial_forecasting.features.modeling.domain.services.training_grid import (
+    build_training_grid,
+)
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
 )
 from financial_forecasting.shared.infrastructure.config.settings import Settings
 from tests.unit.features.evaluation.gold._cohort_factory import (
@@ -63,6 +83,8 @@ pytestmark = pytest.mark.integration
 _ASSET = "AAPL"
 _SWEEP_A = "sweep-a"
 _SWEEP_B = "sweep-b"
+_SWEEP_C = "sweep-c"
+_WARMUP = 5  # P: linhas de aquecimento (NaN numa feature) que a grade da 5.5 apara
 _SILVER = "silver"
 _CANDIDATE = "tft_quantile"
 _GBM = "gbm_quantile"
@@ -112,7 +134,12 @@ def _cohort() -> Cohort:
 
 
 def _write_silver(
-    deps: ApplicationDependencies, cohort: Cohort, *, sweep: str, prefix: str
+    deps: ApplicationDependencies,
+    cohort: Cohort,
+    *,
+    sweep: str,
+    prefix: str,
+    index_offset: int = 0,
 ) -> None:
     repo = deps.analytics_repository
     for run in cohort.runs:  # um write por run (#119)
@@ -146,7 +173,7 @@ def _write_silver(
                 "feature_set_name": "fs-core",
                 "split": record.split,
                 "horizon": record.horizon,
-                "decision_idx": record.decision_idx,
+                "decision_idx": record.decision_idx + index_offset,
                 "timestamp_utc": record.decision_timestamp,
                 "target_timestamp_utc": record.target_timestamp,
                 "quantile_level": record.quantile_level,
@@ -160,20 +187,34 @@ def _write_silver(
     )
 
 
-def _write_dataset(data_root: Path, cohort: Cohort) -> None:
+def _dataset_rows(cohort: Cohort) -> list[dict[str, object]]:
+    """Linhas do dataset: `_WARMUP` de aquecimento (NaN na 1ª feature) + as sessões."""
     realized = cohort.realized
-    frame = pd.DataFrame(
-        {
-            "timestamp": [datetime.fromisoformat(ts) for ts in realized.timestamps],
-            "asset_id": [_ASSET] * realized.n_sessions,
-            "target_return": list(realized.returns),
-            "close": [100.0 + i for i in range(realized.n_sessions)],
-            "volume": [1e6 + 10.0 * i for i in range(realized.n_sessions)],
-        }
-    )
+    columns = modeling_columns()
+    features = [name for name in columns if name != "target_return"]
+    first = datetime.fromisoformat(realized.timestamps[0])
+    stamps = [first - timedelta(days=_WARMUP - i) for i in range(_WARMUP)]
+    stamps += [datetime.fromisoformat(ts) for ts in realized.timestamps]
+    returns = [0.0] * _WARMUP + list(realized.returns)
+    rows: list[dict[str, object]] = []
+    for i, (stamp, target) in enumerate(zip(stamps, returns, strict=True)):
+        row: dict[str, object] = {"timestamp": stamp, "asset_id": _ASSET, "target_return": target}
+        for j, name in enumerate(features):
+            row[name] = math.nan if (i < _WARMUP and j == 0) else math.sin(i + 1.5 * j)
+        rows.append(row)
+    return rows
+
+
+def _write_dataset(data_root: Path, rows: list[dict[str, object]]) -> None:
     target = data_root / "processed" / "dataset_tft" / _ASSET
     target.mkdir(parents=True)
-    frame.to_parquet(target / f"dataset_tft_{_ASSET}.parquet", index=False)
+    pd.DataFrame(rows).to_parquet(target / f"dataset_tft_{_ASSET}.parquet", index=False)
+
+
+def _oracle_fingerprint(rows: list[dict[str, object]]) -> str:
+    """O fingerprint da grade pela função da 5.5 (o oráculo do e2e)."""
+    grid = build_training_grid(rows, columns=modeling_columns())
+    return grid_fingerprint(grid, hasher=CanonicalJsonHasher(), asset_id=_ASSET)
 
 
 def _drop_interior_gbm_target(data_root: Path, cohort: Cohort) -> str:
@@ -197,13 +238,14 @@ def _drop_interior_gbm_target(data_root: Path, cohort: Cohort) -> str:
     return target
 
 
-def _command(sweep: str) -> RefreshGoldCommand:
+def _command(sweep: str, fingerprint: str) -> RefreshGoldCommand:
     return RefreshGoldCommand(
         asset=_ASSET,
         parent_sweep_id=sweep,
         horizons=_HORIZONS,
         window_deficits={_CANDIDATE: 3},
         parameters=_PARAMETERS,
+        dataset_fingerprint=fingerprint,
     )
 
 
@@ -276,6 +318,12 @@ class _Scenario:
     delegate_loaded_after_step_1: bool
     step_1_logs: tuple[str, ...]
     gap_target: str
+    oracle_fingerprint: str
+    first_grid_timestamp: str
+    mismatch_error: str
+    current_before_mismatch: dict[str, bytes]
+    current_after_mismatch: dict[str, bytes]
+    full_index: _Generation
 
 
 @pytest.fixture(scope="module")
@@ -291,10 +339,13 @@ def scenario(tmp_path_factory: pytest.TempPathFactory) -> _Scenario:
     )
     _write_silver(deps, cohort, sweep=_SWEEP_A, prefix="")
     _write_silver(deps, cohort, sweep=_SWEEP_B, prefix="b-")
-    _write_dataset(data_root, cohort)
+    _write_silver(deps, cohort, sweep=_SWEEP_C, prefix="c-", index_offset=_WARMUP)
+    rows = _dataset_rows(cohort)
+    _write_dataset(data_root, rows)
+    oracle = _oracle_fingerprint(rows)
     refresh = deps.refresh_gold
 
-    result_b = refresh(_command(_SWEEP_B))  # (0)
+    result_b = refresh(_command(_SWEEP_B, oracle))  # (0)
     assert result_b.status is RefreshStatus.COMPLETED
     cohort_b_before = _bytes(_current(deps, _SWEEP_B))
 
@@ -305,15 +356,20 @@ def scenario(tmp_path_factory: pytest.TempPathFactory) -> _Scenario:
     logger.setLevel(logging.INFO)
     logger.disabled = False  # outro teste do processo pode ter desligado loggers existentes
     try:
-        completed = _snapshot(deps, _SWEEP_A, refresh(_command(_SWEEP_A)))  # (1)
+        completed = _snapshot(deps, _SWEEP_A, refresh(_command(_SWEEP_A, oracle)))  # (1)
     finally:
         logger.removeHandler(capture)
         logger.setLevel(previous_level)
         logger.disabled = previous_disabled
     loaded = refresh._mcs_backend._delegate is not None  # type: ignore[attr-defined]
-    rerun = _snapshot(deps, _SWEEP_A, refresh(_command(_SWEEP_A)))  # (2)
+    rerun = _snapshot(deps, _SWEEP_A, refresh(_command(_SWEEP_A, oracle)))  # (2)
+    before_mismatch = _bytes(_current(deps, _SWEEP_A))
+    with pytest.raises(GridFingerprintMismatchError) as raised:  # (2b)
+        refresh(_command(_SWEEP_A, "0" * 64))
+    after_mismatch = _bytes(_current(deps, _SWEEP_A))
     gap = _drop_interior_gbm_target(data_root, cohort)  # (3)
-    blocked = _snapshot(deps, _SWEEP_A, refresh(_command(_SWEEP_A)))
+    blocked = _snapshot(deps, _SWEEP_A, refresh(_command(_SWEEP_A, oracle)))
+    full_index = _snapshot(deps, _SWEEP_C, refresh(_command(_SWEEP_C, oracle)))  # (4)
     return _Scenario(
         deps=deps,
         cohort_b_before=cohort_b_before,
@@ -324,6 +380,12 @@ def scenario(tmp_path_factory: pytest.TempPathFactory) -> _Scenario:
         delegate_loaded_after_step_1=loaded,
         step_1_logs=tuple(capture.messages),
         gap_target=gap,
+        oracle_fingerprint=oracle,
+        first_grid_timestamp=rows[_WARMUP]["timestamp"].isoformat(),  # type: ignore[attr-defined]
+        mismatch_error=str(raised.value),
+        current_before_mismatch=before_mismatch,
+        current_after_mismatch=after_mismatch,
+        full_index=full_index,
     )
 
 
@@ -409,3 +471,34 @@ def test_e2e_blocked_replaces(scenario: _Scenario) -> None:
 def test_e2e_other_cohort_untouched(scenario: _Scenario) -> None:
     assert scenario.cohort_b_after == scenario.cohort_b_before
     assert "MANIFEST.json" in scenario.cohort_b_before
+
+
+def test_e2e_warmup_prefix_completed(scenario: _Scenario) -> None:
+    """Dataset com aquecimento e silver na grade aparada → COMPLETED (ADR 6.4.0009)."""
+    generation = scenario.completed
+    assert generation.result.status is RefreshStatus.COMPLETED
+    assert generation.manifest["grid_trimmed_prefix"] == _WARMUP
+    realized = generation.manifest["realized"]
+    assert realized["first_timestamp"] == scenario.first_grid_timestamp  # type: ignore[index]
+    assert realized["n_sessions"] == _N_SESSIONS  # type: ignore[index]
+
+
+def test_e2e_fingerprint_equals_modeling(scenario: _Scenario) -> None:
+    """O fingerprint do manifesto é o `grid_fingerprint` da 5.5 sobre o mesmo dataset."""
+    assert scenario.completed.manifest["dataset_fingerprint"] == scenario.oracle_fingerprint
+    assert scenario.rerun.manifest["dataset_fingerprint"] == scenario.oracle_fingerprint
+
+
+def test_e2e_fingerprint_mismatch_raises(scenario: _Scenario) -> None:
+    """Fingerprint divergente ergue (C10) e o `current/` fica byte-igual ao do (2)."""
+    assert "C10" in scenario.mismatch_error
+    assert scenario.current_after_mismatch == scenario.current_before_mismatch
+
+
+def test_e2e_full_index_silver_blocked(scenario: _Scenario) -> None:
+    """Silver indexado no dataset INTEIRO (grade + P) → BLOCKED `decision_index_mismatch`."""
+    generation = scenario.full_index
+    assert generation.result.status is RefreshStatus.BLOCKED
+    assert generation.files == ("MANIFEST.json", "gold_quality_checks.parquet")
+    kinds = {(f.check, f.kind) for f in generation.result.failed_checks}
+    assert ("alignment_check", "decision_index_mismatch") in kinds

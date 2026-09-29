@@ -39,6 +39,7 @@ class RealizedProvenanceCheck:
                 value=realized.returns_fsum,
                 detail=(
                     f"dataset_fingerprint={context.dataset_fingerprint.value}; "
+                    f"grid_trimmed_prefix={context.grid_trimmed_prefix}; "
                     f"n_sessions={realized.n_sessions}; first={realized.first_timestamp}; "
                     f"last={realized.last_timestamp}"
                 ),

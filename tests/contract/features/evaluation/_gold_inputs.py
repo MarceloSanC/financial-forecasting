@@ -70,8 +70,8 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
 )
-from financial_forecasting.shared.domain.value_objects.dataset_fingerprint import (
-    DatasetFingerprint,
+from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+    DatasetContentFingerprint,
 )
 from tests.fakes.features.evaluation.fake_mcs_backend import FakeMcsBackend
 from tests.unit.features.evaluation.gold._cohort_factory import (
@@ -100,7 +100,8 @@ PARAMETERS = RefreshParameters(
     mcs_seed=20260929,
     mcs_schemes=(BootstrapScheme.STATIONARY, BootstrapScheme.MOVING_BLOCK),
 )
-FINGERPRINT = DatasetFingerprint(value="e3" * 32)
+FINGERPRINT = DatasetContentFingerprint(value="e3" * 32)
+GRID_TRIMMED_PREFIX = 3
 _BLOCK_LENGTH = 2.5
 _POINT_FORECAST = 0.001
 
@@ -175,6 +176,7 @@ def completed_inputs() -> GoldInputs:
         block_estimates=estimates,
         tolerance=PARAMETERS.degeneracy_tolerance,
         dataset_fingerprint=FINGERPRINT,
+        grid_trimmed_prefix=GRID_TRIMMED_PREFIX,
         realized=cohort.realized,
     )
     results = _registry().run(context)
@@ -233,6 +235,7 @@ def blocked_inputs() -> GoldInputs:
         block_estimates={},
         tolerance=PARAMETERS.degeneracy_tolerance,
         dataset_fingerprint=FINGERPRINT,
+        grid_trimmed_prefix=GRID_TRIMMED_PREFIX,
         realized=cohort.realized,
     )
     results = _registry().run(context)

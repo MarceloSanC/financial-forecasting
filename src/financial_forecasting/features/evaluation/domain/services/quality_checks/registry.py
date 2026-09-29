@@ -38,8 +38,8 @@ from financial_forecasting.features.evaluation.domain.value_objects.quality_chec
 from financial_forecasting.features.evaluation.domain.value_objects.realized_returns import (
     RealizedReturns,
 )
-from financial_forecasting.shared.domain.value_objects.dataset_fingerprint import (
-    DatasetFingerprint,
+from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+    DatasetContentFingerprint,
 )
 
 
@@ -67,7 +67,8 @@ class QualityCheckContext:
     paired: Mapping[int, PairedLossSeries]
     block_estimates: Mapping[int, tuple[BlockEstimate, ...]]
     tolerance: float
-    dataset_fingerprint: DatasetFingerprint
+    dataset_fingerprint: DatasetContentFingerprint
+    grid_trimmed_prefix: int
     realized: RealizedReturns
 
     def __post_init__(self) -> None:
@@ -78,6 +79,9 @@ class QualityCheckContext:
                 raise ValueError(f"{name} must be a Mapping, got {type(value).__name__}")
             object.__setattr__(self, name, MappingProxyType(dict(value)))
         validate_tolerance(self.tolerance, field="tolerance")
+        prefix = self.grid_trimmed_prefix
+        if isinstance(prefix, bool) or not isinstance(prefix, int) or prefix < 0:
+            raise ValueError(f"grid_trimmed_prefix must be an int >= 0, got {prefix!r}")
         self._check_horizon_keys()
         for horizon, estimates in self.block_estimates.items():
             series = self.paired.get(horizon)

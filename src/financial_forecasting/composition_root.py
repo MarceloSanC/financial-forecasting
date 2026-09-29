@@ -43,12 +43,13 @@ device)` — em vez de instâncias. `wire_dependencies` aceita, opcionalmente, o
 modelo de sentimento e a fábrica do probe (fakes nos testes e no e2e); sem eles,
 monta os reais — não há condicional de produção.
 
-Stage 6.4 (Task 12): o use case `RefreshGold` é montado aqui com o
+Stage 6.4 (Tasks 12/15): o use case `RefreshGold` é montado aqui com o
 `ParquetAnalyticsRepository` já wirado (como `SilverTableReader`, por duck typing), o
-`ParquetMedallionStore`, o `CanonicalJsonHasher`, o `SystemClock`, o `ArchMcs` atrás
-do proxy lazy `_LazyArchMcs` (`import arch` ~8 s a frio, medido no technical 6.4 §1 —
-só carrega na primeira chamada), o `ParquetGoldStore(data_root)` e os cinco gold
-builders.
+`ReadTrainingGrid` da `modeling` sobre o `ParquetMedallionStore` e as colunas de
+modelagem (como `TrainingGridReader`, ADR 6.4.0009), o `CanonicalJsonHasher`, o
+`SystemClock`, o `ArchMcs` atrás do proxy lazy `_LazyArchMcs` (`import arch` ~8 s a
+frio, medido no technical 6.4 §1 — só carrega na primeira chamada), o
+`ParquetGoldStore(data_root)` e os cinco gold builders.
 """
 
 from collections.abc import Callable, Mapping, Sequence
@@ -187,6 +188,9 @@ from financial_forecasting.features.modeling.application.ports.out.tft_trainer i
     TftTrainer,
     TftTrainingParams,
     TftTrainingResult,
+)
+from financial_forecasting.features.modeling.application.use_cases.read_training_grid import (
+    ReadTrainingGrid,
 )
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
@@ -777,14 +781,16 @@ def wire_dependencies(
             supported_device=_TRAINERS_DEVICE,
         )
 
-    # BC evaluation (Stage 6.4, Task 12): `RefreshGold` sobre o MESMO repositório
-    # silver (como `SilverTableReader`, ADR 0.0.0053/6.4.0004), o MESMO store do
-    # dataset e o MESMO hasher; o `ArchMcs` entra atrás do proxy lazy e o gold vai
-    # para `<data_root>/gold/` (ADR 6.4.0005). A ordem dos builders é validada no
-    # construtor do use case (C1: grafo inválido falha aqui, no wiring).
+    # BC evaluation (Stage 6.4, Tasks 12/15): `RefreshGold` sobre o MESMO repositório
+    # silver (como `SilverTableReader`, ADR 0.0.0053/6.4.0004) e o MESMO hasher; o
+    # realizado vem da grade de treino da 5.5 — `ReadTrainingGrid` (real do port
+    # `TrainingGridReader`, ADR 6.4.0009) sobre o MESMO store e as MESMAS `columns`
+    # do cohort confirmatório, então o índice 0 é a origem do `decision_idx` gravado.
+    # O `ArchMcs` entra atrás do proxy lazy e o gold vai para `<data_root>/gold/` (ADR
+    # 6.4.0005). A ordem dos builders é validada no construtor (C1: falha no wiring).
     refresh_gold = RefreshGold(
         silver_reader=analytics_repository,
-        store=store,
+        grid_reader=ReadTrainingGrid(store=store, columns=columns),
         hasher=hasher,
         clock=SystemClock(),
         mcs_backend=_LazyArchMcs(),

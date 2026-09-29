@@ -69,8 +69,8 @@ from financial_forecasting.features.evaluation.domain.value_objects.quality_chec
 from financial_forecasting.shared.domain.services.path_identifier import (
     validate_path_identifier,
 )
-from financial_forecasting.shared.domain.value_objects.dataset_fingerprint import (
-    DatasetFingerprint,
+from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+    DatasetContentFingerprint,
 )
 
 Row = Mapping[str, object]
@@ -187,6 +187,7 @@ class RefreshGoldCommand:
     horizons: tuple[int, ...]
     window_deficits: Mapping[str, int]
     parameters: RefreshParameters
+    dataset_fingerprint: str
     partition: GoldPartition = field(init=False)
 
     def __post_init__(self) -> None:
@@ -200,6 +201,8 @@ class RefreshGoldCommand:
         object.__setattr__(self, "window_deficits", MappingProxyType(dict(self.window_deficits)))
         if not isinstance(self.parameters, RefreshParameters):
             raise ValueError(f"parameters must be RefreshParameters, got {self.parameters!r}")
+        # o fingerprint congelado do cohort (ADR 6.4.0009 item 5); o formato hex é do VO
+        _check_text(self.dataset_fingerprint, field="dataset_fingerprint")
 
 
 def _cell_ok(value: object) -> bool:
@@ -299,7 +302,8 @@ class GoldManifest:
     parameters: RefreshParameters
     horizons: tuple[int, ...]
     window_deficits: Mapping[str, int]
-    dataset_fingerprint: DatasetFingerprint
+    dataset_fingerprint: DatasetContentFingerprint
+    grid_trimmed_prefix: int
     realized_sessions: int
     realized_returns_fsum: float
     realized_first_timestamp: str
@@ -326,7 +330,7 @@ class GoldManifest:
         for table, count in self.rows_by_table.items():
             if isinstance(count, bool) or not isinstance(count, int) or count < 0:
                 raise ValueError(f"rows_by_table[{table!r}] must be an int >= 0, got {count!r}")
-        for name in ("realized_sessions", "n_runs"):
+        for name in ("realized_sessions", "n_runs", "grid_trimmed_prefix"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise ValueError(f"{name} must be an int >= 0, got {value!r}")
@@ -336,9 +340,9 @@ class GoldManifest:
 
     def _check_identity(self) -> None:
         fingerprint = self.dataset_fingerprint
-        if not isinstance(fingerprint, DatasetFingerprint):
+        if not isinstance(fingerprint, DatasetContentFingerprint):
             raise ValueError(
-                f"dataset_fingerprint must be a DatasetFingerprint, got {fingerprint!r}"
+                f"dataset_fingerprint must be a DatasetContentFingerprint, got {fingerprint!r}"
             )
         for name in ("horizons", "build_order"):
             if not isinstance(getattr(self, name), tuple):
@@ -367,6 +371,7 @@ class GoldManifest:
             "horizons": list(self.horizons),
             "window_deficits": dict(self.window_deficits),
             "dataset_fingerprint": self.dataset_fingerprint.value,
+            "grid_trimmed_prefix": self.grid_trimmed_prefix,
             "realized": {
                 "n_sessions": self.realized_sessions,
                 "returns_fsum": self.realized_returns_fsum,
