@@ -26,13 +26,17 @@ quebrada.
 
 from __future__ import annotations
 
+import gc
 import math
 import random
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
 import pytest
 
+from financial_forecasting.features.evaluation.adapters.out.inference.statsmodels_hac import (
+    StatsmodelsHac,
+)
 from financial_forecasting.features.evaluation.application.ports.out.inference_backend import (
     InferenceBackend,
 )
@@ -60,7 +64,22 @@ _ALPHAS = (0.01, 0.025, 0.05, 0.10, 0.20)
 
 _FACTORIES: dict[str, Callable[[], InferenceBackend]] = {
     "fake": FakeInferenceBackend,
+    "statsmodels": StatsmodelsHac,
 }
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _frozen_heap() -> Iterator[None]:
+    """Congela o heap do processo de teste durante a suíte (só custo, sem efeito no resultado).
+
+    `statsmodels.stats.multitest.multipletests(method="holm")` (0.15) chama `gc.collect()`
+    explicitamente a cada chamada; num processo pytest com torch/pandas carregados isso
+    custa ~0,25 s por chamada — 1200 chamadas nas pernas de Holm levavam ~5 min. Com o heap
+    já existente em `gc.freeze()`, a coleta só varre objetos novos.
+    """
+    gc.freeze()
+    yield
+    gc.unfreeze()
 
 
 @pytest.fixture(params=list(_FACTORIES), ids=list(_FACTORIES))

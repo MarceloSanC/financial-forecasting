@@ -1652,4 +1652,23 @@ tolerâncias do §1 (1e−11 / 1e−12). (5) `_fixture_problems` também reporta
 found" quando falta o `Dockerfile` ao lado do JSON (a regra 7 não teria com o que comparar);
 o `LAYOUT.md` §2 ganhou `tests/fixtures/r_oracle/` e `tests/architecture/` na árvore.
 
+### 2026-09-28 — [decision] Task 10: `StatsmodelsHac` zera var̂ de d constante; `gc.freeze` na suíte de contrato — Claude (Opus 5.5)
+**Contexto:** a primeira rodada da perna `statsmodels` teve duas surpresas medidas. (1)
+`test_dm_constant_raises[statsmodels-1|2]` falhou (`DID NOT RAISE`): com d constante a
+OLS do `statsmodels` resolve por pseudo-inversa e deixa resíduos de ~1e−16, então a
+covariância HAC sai ~1e−32 > 0 e o adapter aceitaria um DM que o domínio e o R recusam
+("Variance of DM statistic is zero"). (2) A suíte levou **320 s**: `multipletests(method=
+"holm")` do `statsmodels` 0.15 chama `gc.collect()` explicitamente a cada chamada (~0,25 s
+num processo pytest com torch/pandas carregados) e as pernas de Holm fazem 1200 chamadas.
+**Razão:** (1) no `_hac_mean_and_variance` do adapter, d constante devolve var̂ = 0 antes
+da OLS — a variância de uma série constante é zero por definição (o `acf` do R dá 0 exato);
+mesma postura "o adapter se recusa a mentir" da guarda de divisão por zero planejada para o
+`ArchMcs` (§1). A mensagem de C3 sai igual nas duas pernas. (2) fixture de módulo `autouse`
+com `gc.freeze()`/`gc.unfreeze()` na suíte de contrato: o heap preexistente sai da varredura
+e a suíte cai para **5,7 s**, sem mudar resultado nem o número de listas/alphas da Task.
+Medição da perna `statsmodels` × domínio nos 36 casos DM aleatórios (1 com fallback):
+estatística rel. máx. 1,2e−15, var̂ rel. máx. 2,1e−15, p abs. máx. 3,3e−16 e rel. na cauda
+1,5e−14 (scipy × `student_t_cdf`); Holm ajustado `==` e `reject` igual nos 5 alphas × 200
+listas.
+
 <!-- END: post-execution -->
