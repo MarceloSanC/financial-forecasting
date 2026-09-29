@@ -20,6 +20,16 @@ bounded_context: evaluation
 
 `accepted`
 
+**Amendment (2026-09-29, Stage 6.4 execution, Checkpoint C block 4):** items
+3 (realized read) and 4 (fingerprint) and the decision record `6.4-C4c` are
+amended/superseded by
+[ADR 6.4.0009](./6_4_0009-realized-from-modeling-training-grid-via-consumer-port.md):
+since Stage 5.5 the writers index `decision_idx` on the modeling slice's
+trimmed training grid, so the realized input is that grid, read through the
+consumer-owned `TrainingGridReader` port and identified by
+`DatasetContentFingerprint` checked against the cohort's frozen value.
+Items 1, 2 and 5 stand. The text below is kept as decided.
+
 ## Context
 
 The refresh needs two inputs:
