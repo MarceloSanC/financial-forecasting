@@ -45,6 +45,9 @@ from financial_forecasting.features.evaluation.domain.services.quality_checks.st
 from financial_forecasting.features.evaluation.domain.services.series_assembly import (
     SeriesAssembly,
 )
+from financial_forecasting.features.evaluation.domain.value_objects import (
+    paired_loss_series as paired_loss_series_module,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
     AlignmentFinding,
     AlignmentKind,
@@ -496,15 +499,43 @@ def test_step_delegates_to_owners(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(preconditions_module, "validate_block_length_request", _reject)
     assert block_request_defect(good) is UndefinedReason.INVALID_SERIES
     monkeypatch.undo()
-    monkeypatch.setattr(preconditions_module, "MIN_MODELS", 3)
+    monkeypatch.setattr(paired_loss_series_module, "MIN_MODELS", 3)
     assert not models_suffice(("a", "b"))
+    assert preconditions_module.models_suffice is paired_loss_series_module.models_suffice
+
+
+@pytest.mark.unit
+def test_context_missing_horizon_estimates_raises() -> None:
+    """Horizonte montado com k >= 2 sem série pareada/estimativas: erro, não PASS falso."""
+    base = _context(make_cohort())
+    only_h1_paired = {1: base.paired[1]}
+    only_h1_estimates = {1: base.block_estimates[1]}
+    with pytest.raises(ValueError, match="paired must hold horizon 2"):
+        dataclasses.replace(base, paired=only_h1_paired, block_estimates=only_h1_estimates)
+    with pytest.raises(ValueError, match="block_estimates must hold horizon 2"):
+        dataclasses.replace(base, block_estimates=only_h1_estimates)
+    with pytest.raises(ValueError, match=r"paired has horizons \[3\] outside"):
+        dataclasses.replace(base, paired={**base.paired, 3: base.paired[1]})
+    with pytest.raises(ValueError, match=r"paired\[2\] is a series of horizon 1"):
+        dataclasses.replace(base, paired={1: base.paired[1], 2: base.paired[1]})
+    single = _single_model_cohort()
+    assembled = _assembled(single)
+    with pytest.raises(ValueError, match="block_estimates must not hold horizon 1"):
+        QualityCheckContext(
+            assembled=assembled,
+            paired={},
+            block_estimates={1: ()},
+            tolerance=_TOLERANCE,
+            dataset_fingerprint=_FINGERPRINT,
+            realized=single.realized,
+        )
 
 
 @pytest.mark.unit
 def test_context_estimates_must_match_pairs() -> None:
     base = _context(make_cohort())
     with pytest.raises(ValueError, match="must cover the pairs"):
-        dataclasses.replace(base, block_estimates={1: ()})
+        dataclasses.replace(base, block_estimates={**base.block_estimates, 1: ()})
     with pytest.raises(ValueError, match="tolerance must be"):
         dataclasses.replace(base, tolerance=-1.0)
     with pytest.raises(ValueError, match="paired must be a Mapping"):

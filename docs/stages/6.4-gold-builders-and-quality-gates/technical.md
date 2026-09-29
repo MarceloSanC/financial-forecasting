@@ -1814,8 +1814,12 @@ do §2 Task 04.
 - **`QualityCheckContext`** guarda `paired`/`block_estimates` como
   `MappingProxyType` (mesma disciplina do `HorizonSamples`, Checkpoint C bloco 1) e
   exige que as estimativas de um horizonte cubram, em ordem, os `model_pairs()` da
-  série pareada desse horizonte — um horizonte sem estimativa para algum par daria
-  PASS falso.
+  série pareada desse horizonte. **Correção (Checkpoint C bloco 2, M-A):** a versão
+  original só conferia os horizontes presentes em `block_estimates` — um horizonte
+  montado com k ≥ 2 **ausente** de `paired`/`block_estimates` dava PASS falso. Agora,
+  sem achado, todo horizonte montado com `models_suffice` está em `paired` **e** em
+  `block_estimates` (e nenhum com k < 2 está), `paired[h].horizon == h` e nenhuma
+  chave fica fora dos horizontes montados (`context_missing_horizon_estimates_raises`).
 - **`BlockEstimate.detail`** é obrigatório (não-vazio) só com `reason`; com `value`
   pode ser vazio. O FAIL agrega por (motivo, horizonte) na ordem do `UndefinedReason`,
   com o primeiro par e o seu detalhe.
@@ -1836,5 +1840,16 @@ do §2 Task 04.
   `frozenset`), duplicata, auto-dependência e dependência não registrada antes de
   montar o grafo; insere no `TopologicalSorter` em ordem de nome com dependências
   ordenadas (ordem idêntica em 20 permutações do registro dos cinco builders).
+
+### 2026-09-29 — [deviation] Task 05 (fix M-A): `models_suffice` mora no módulo do VO `PairedLossSeries` — Claude (Opus 5.5)
+**Contexto:** o §1 põe `models_suffice` em `statistical_preconditions_check.py`. O fix
+M-A exige que o `QualityCheckContext` (em `registry.py`) consulte a mesma regra, mas o
+check importa o registry (`QualityCheckContext`, `result_of`): importar o check no
+registry criaria ciclo.
+**Razão:** a regra "k ≥ `MIN_MODELS`" passou para o lado da constante, no módulo do
+VO `PairedLossSeries` (o primeiro dono de `MIN_MODELS`, ADR 6.4.0002 item 4); o check
+a reexporta (`statistical_preconditions_check.models_suffice` continua existindo e é
+o mesmo objeto — asserido em `step_delegates_to_owners`) e o registry a importa do VO.
+Uma escrita só, sem ciclo, sem mudança de contrato.
 
 <!-- END: post-execution -->

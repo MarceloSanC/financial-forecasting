@@ -28,6 +28,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.block_estima
 )
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
+    models_suffice,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.quality_check_result import (
     CheckOutcome,
@@ -56,8 +57,10 @@ class QualityCheckContext:
         realized: o realizado consumido.
 
     Raises:
-        ValueError: contêiner não-`Mapping`, tolerância inválida ou estimativas que não
-            batem com os pares da série do horizonte, na construção.
+        ValueError: contêiner não-`Mapping`, tolerância inválida, horizonte fora da
+            montagem, horizonte com k ≥ `MIN_MODELS` sem série pareada ou sem
+            estimativas (ou com elas quando k < `MIN_MODELS`), série de outro horizonte
+            ou estimativas que não batem com os pares da série, na construção.
     """
 
     assembled: AssembledCohort
@@ -75,6 +78,7 @@ class QualityCheckContext:
                 raise ValueError(f"{name} must be a Mapping, got {type(value).__name__}")
             object.__setattr__(self, name, MappingProxyType(dict(value)))
         validate_tolerance(self.tolerance, field="tolerance")
+        self._check_horizon_keys()
         for horizon, estimates in self.block_estimates.items():
             series = self.paired.get(horizon)
             pairs = () if series is None else series.model_pairs()
@@ -84,6 +88,33 @@ class QualityCheckContext:
                     f"block_estimates[{horizon}] must cover the pairs {pairs} of the paired "
                     f"series in order, got {got}"
                 )
+
+    def _check_horizon_keys(self) -> None:
+        """Sem achado: horizonte com k ≥ `MIN_MODELS` ⇔ tem série pareada e estimativas.
+
+        Sem esta regra, um horizonte montado ausente de `paired`/`block_estimates` daria
+        PASS falso no `statistical_preconditions` (Checkpoint C bloco 2, M-A).
+        """
+        assembled_horizons = {samples.horizon for samples in self.assembled.horizons}
+        for name in ("paired", "block_estimates"):
+            outside = sorted(set(getattr(self, name)) - assembled_horizons)
+            if outside:
+                raise ValueError(
+                    f"{name} has horizons {outside} outside the assembled horizons "
+                    f"{sorted(assembled_horizons)}"
+                )
+        for samples in self.assembled.horizons:
+            horizon = samples.horizon
+            expected = models_suffice(samples.models)
+            for name in ("paired", "block_estimates"):
+                if (horizon in getattr(self, name)) != expected:
+                    raise ValueError(
+                        f"{name} must {'' if expected else 'not '}hold horizon {horizon} "
+                        f"(k={len(samples.models)} model(s))"
+                    )
+            series = self.paired.get(horizon)
+            if series is not None and series.horizon != horizon:
+                raise ValueError(f"paired[{horizon}] is a series of horizon {series.horizon}")
 
 
 class QualityCheck(Protocol):

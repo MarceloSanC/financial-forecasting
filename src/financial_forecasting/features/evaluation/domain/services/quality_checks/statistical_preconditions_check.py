@@ -4,8 +4,9 @@ Concept 6.4 I11, C6; ADR `6_4_0002` item 4. O **passo de domínio** roda antes d
 fábrica `paired_pinball_losses` e do `McsBackend`, que validariam as mesmas condições
 erguendo:
 
-- `models_suffice(models)`: k ≥ `MIN_MODELS` (constante pública do VO
-  `PairedLossSeries`, o primeiro dono) — antes da fábrica;
+- `models_suffice(models)`: k ≥ `MIN_MODELS` — antes da fábrica. Regra e constante
+  moram no módulo do VO `PairedLossSeries` (o primeiro dono), de onde este passo a
+  reexporta; o `QualityCheckContext` a consulta sem ciclo com o check;
 - `block_request_defect(differential)`: por par, `is_constant` (diferencial constante)
   e `validate_block_length_request` (série que o backend recusaria) — os donos da 6.2;
   o par com defeito ganha estimativa indefinida **sem** chamar o backend.
@@ -36,6 +37,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
 )
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     MIN_MODELS,
+    models_suffice,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.quality_check_result import (
     CheckOutcome,
@@ -47,11 +49,6 @@ STATISTICAL_PRECONDITIONS = "statistical_preconditions"
 INSUFFICIENT_MODELS = "insufficient_models"
 PRECONDITIONS_MET = "preconditions_met"
 ASSEMBLY_FAILED = "assembly_failed"
-
-
-def models_suffice(models: Sequence[str]) -> bool:
-    """k ≥ `MIN_MODELS`: a fábrica de L_t pareadas pode ser chamada."""
-    return len(models) >= MIN_MODELS
 
 
 def block_request_defect(differential: Sequence[float]) -> UndefinedReason | None:
