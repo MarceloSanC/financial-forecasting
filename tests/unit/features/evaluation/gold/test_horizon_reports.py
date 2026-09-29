@@ -354,3 +354,18 @@ def test_horizon_mismatch_raises(reports: tuple[tuple[HorizonSamples, HorizonRep
         _evaluate(h1, band_levels=())
     with pytest.raises(ValueError, match="dm_variance_estimators"):
         _evaluate(h1, dm_variance_estimators=())
+
+
+@pytest.mark.unit
+def test_dm_alpha_forwarded(reports: tuple[tuple[HorizonSamples, HorizonReport], ...]) -> None:
+    """O alfa do DM + Holm vem do parâmetro (0,10), não de uma constante."""
+    alpha = 0.10
+    for samples, _ in reports:
+        report = _evaluate(samples, dm_alpha=alpha)
+        assert all(family.alpha == alpha for family in report.dm_families)
+        assert report.dm_families == tuple(
+            HolmCorrection.family(
+                report.paired, candidate=_CANDIDATE, alpha=alpha, variance_estimator=estimator
+            )
+            for estimator in _ESTIMATORS
+        )
