@@ -2621,4 +2621,24 @@ technical foram re-aprovados pelos commits reservados `b1b3db4` e `68cef87`). Em
 consequência, os ADRs 6.4.0002 (item 6) e 6.4.0005 (item 8) ganharam uma linha de
 emenda datada apontando o ADR 6.4.0009 (status `accepted` intacto).
 
+### 2026-09-29 — [decision] Tokens extra da auditoria de testes — Claude (Opus 5.5)
+**Contexto:** a auditoria de testes (rodada 1) achou 5 mutantes reais sobreviventes (e
+um sexto de prioridade baixa); o technical está aprovado, então os testes novos não
+entram na lista de tokens do §3 — ficam registrados aqui, um commit
+`test(evaluation): cobrir … [6.4/task-NN-extra]` por mutante.
+**Razão (cada teste matou o seu mutante numa cópia em `/tmp` dentro do container; o
+worktree não foi mutado):**
+- `test_series_assembly.py::horizon_label_short_mismatch` (Task 04) — mata
+  `target − decision != h` → `> h`;
+- `test_series_assembly.py::only_val_rows_orphaned` (Task 04) — mata o órfão calculado
+  sobre todo split (o nome não contém o token `orphan_run` da lista do §3);
+- `test_horizon_reports.py::dm_alpha_forwarded` (Task 06) — mata o α do DM fixo em 0,05;
+- `test_gold_builder_contract.py::dm_rows_adjusted_all_comparisons` (Task 10) — mata
+  `adjusted_p_value` ← p bruto (pré-condição: algum p ajustado ≠ bruto);
+- `test_gold_builder_contract.py::mcs_rows_max_block_distinct` (Task 10) — mata
+  `max` → `min` do `max_block_estimate` (estimativas 2,2/4,7/3,1);
+- `test_quality_checks.py::preconditions_mixed_reasons_order` (Task 05) — mata a ordem
+  de inserção no lugar da ordem do `UndefinedReason`.
+Nenhum token novo é substring de outro token do mesmo arquivo nem o contém.
+
 <!-- END: post-execution -->

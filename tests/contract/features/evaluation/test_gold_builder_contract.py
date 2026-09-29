@@ -610,3 +610,26 @@ def test_dm_rows_adjusted_all_comparisons() -> None:
         assert got["adjusted_p_value"] == comparison.adjusted_p_value
         assert got["rejected"] == comparison.rejected
         assert got["p_value"] == comparison.dm.p_value
+
+
+@pytest.mark.contract
+def test_mcs_rows_max_block_distinct() -> None:
+    """Estimativas b̂_sb distintas por par (2,2; 4,7; 3,1): o máximo e a lista em ordem."""
+    inputs = completed_inputs()
+    values = (2.2, 4.7, 3.1)
+    distinct = {
+        horizon: tuple(
+            dataclasses.replace(estimate, value=values[i % len(values)])
+            for i, estimate in enumerate(estimates)
+        )
+        for horizon, estimates in inputs.block_estimates.items()
+    }
+    assert all(len(estimates) == len(values) for estimates in distinct.values())
+    table = McsResultsGoldBuilder().build(dataclasses.replace(inputs, block_estimates=distinct))
+    assert table.rows
+    for row in table.rows:
+        estimates = distinct[row["horizon"]]  # type: ignore[index]
+        assert row["max_block_estimate"] == max(values)
+        assert row["block_estimates"] == ";".join(
+            f"{e.pair[0]}|{e.pair[1]}={e.value!r}" for e in estimates
+        )
