@@ -8,8 +8,10 @@ e o `DieboldMarianoResult` checam (concept 6.2 I2/I5, C1/C3; ADR `6_2_0001` item
   que aceita h = T — ADR `6_2_0001`);
 - `check_loss`: perda finita (sem `bool`/`None`) e ≥ 0 (o R pontuaria |L|);
 - `differential`: d_t = L_first,t - L_second,t, a única escrita do diferencial;
-- `is_constant`: série com todos os valores iguais (a pré-condição var > 0 do MCS e do
-  `validate_block_length_request`).
+- `is_constant`: série com todos os valores iguais — a pré-condição var > 0 do MCS e do
+  `validate_block_length_request`, a regra "d constante ⇒ var̂ = 0" do DM do domínio
+  (`diebold_mariano`, média inexata em float não vira var̂ > 0) e a guarda equivalente do
+  adapter `StatsmodelsHac`.
 
 Fica em `value_objects/` porque o primeiro dono das regras é o VO e a direção interna
 do domínio é serviço → VO. Não se chama `_horizon.py`: a Stage 6.3, em paralelo, cria um
