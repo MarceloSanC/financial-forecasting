@@ -100,7 +100,7 @@ graph LR
 | `5.5-confirmatory-retrain` | modeling | application (orquestração) | vertical | draft | 5.2, 5.3, 5.4 |
 | `6.1-scoring-and-calibration-metrics` | evaluation | multi (domain + adapters/out) | vertical | done | 4.3 |
 | `6.2-paired-inference-dm-mcs-holm` | evaluation | multi (domain + adapters/out) | vertical | done | 6.1 |
-| `6.3-calibration-risk-backtests` | evaluation | multi (domain + adapters/out) | vertical | draft | 6.1 |
+| `6.3-calibration-risk-backtests` | evaluation | domain | vertical | draft | 6.1 |
 | `6.4-gold-builders-and-quality-gates` | evaluation | multi (domain + application + adapters/out) | vertical | draft | 6.2, 6.3 |
 | `6.5-preregistration-and-scorecard` | evaluation | multi (domain + application) | vertical | draft | 6.4, 5.5 |
 | `7.1-inference-engine` | inference | multi (application + adapters/out) | vertical | draft | 5.4, 4.3 |
@@ -790,23 +790,27 @@ skills_hint: [ddd-tactical-patterns, hex-arch-python, dmls-ch05-model-developmen
 
 #### Stage 6.3 — `6.3-calibration-risk-backtests`
 
-**Descrição humana:** Testes de calibração condicional e risco como domínio + oráculo R: Christoffersen (cobertura condicional), Kupiec POF; VaR descritivo backtestado (Gate D); disposições do C.0 aplicadas (DELETAR prob_up/confidence/ES/expected_move/downside; DESCRIPTIVE MPIW/win-rate).
+**Descrição humana:** Backtests de calibração condicional e de risco no domínio do BC `evaluation`, conferidos contra o R: a sequência de violações por série e horizonte (com as linhas degeneradas como lacunas), a banda de Wilson da cobertura (critério decisivo de H1), o Kupiec POF, o trio de Christoffersen (LR_uc/LR_ind/LR_cc na convenção pura) com as sensibilidades pré-registradas (LR_uc de 3 estados; p-valor Monte Carlo com desempate de Dufour) e o VaR descritivo por cauda. O oráculo `rugarch::VaRTest` fica congelado como fixture versionada, lida por testes de integração.
 
 **Descrição para IA:**
 ```yaml
 stage_id: 6.3-calibration-risk-backtests
 bounded_context: evaluation
-camada_alvo: multi (domain + adapters/out)
+camada_alvo: domain
 arquivos_a_criar:
   - src/financial_forecasting/features/evaluation/domain/services/{christoffersen_test.py, kupiec_pof.py, var_descriptive.py}
-  - src/financial_forecasting/features/evaluation/adapters/out/inference/r_backtest_oracle_fixtures.py
-  - tests/unit/features/evaluation/test_christoffersen_vs_rugarch.py
-  - tests/unit/features/evaluation/test_kupiec_vs_oracle.py
-  - tests/fixtures/r_oracle/{var_test_cases.json}
-contratos_introduzidos: [ChristoffersenTest, KupiecPof, VarDescriptive (domain-services)]
-contratos_consumidos: [CoverageSeries (6.1)]
-definition_of_done: "Christoffersen (LR_uc/ind/cc) e Kupiec batem com R `rugarch::VaRTest`/fixtures; VaR descritivo backtestado por exceedances; métricas DELETAR não existem no domínio; MPIW/win-rate marcadas como descritivas não-inferenciais."
-non_goals: [ES como confirmatório (futuro), métricas heurísticas removidas (não reintroduzir)]
+  - src/financial_forecasting/features/evaluation/domain/value_objects/hit_sequence.py
+  - src/financial_forecasting/features/evaluation/domain/services/{hit_sequences.py, wilson_band.py, chi_square.py}
+  - tests/integration/features/evaluation/test_christoffersen_vs_rugarch.py
+  - tests/integration/features/evaluation/test_kupiec_vs_oracle.py
+  - tests/fixtures/r_oracle/var_test_cases.{json,R,sessionInfo.txt} + tests/fixtures/r_oracle/Dockerfile (formato do Step, ADR 6.2.0006)
+arquivos_tocados:
+  - src/financial_forecasting/features/evaluation/domain/value_objects/coverage_series.py (predicados FA7 is_at_or_below / is_inside_closed)
+  - src/financial_forecasting/features/evaluation/domain/services/coverage_metrics.py (consome os predicados; MPIW_LABEL)
+contratos_introduzidos: [HitSequence (value-object), HitSequences, WilsonBand, chi_square_sf, kupiec_pof (kernel; o POF é também o campo kupiec_pof de ChristoffersenStatistics), ChristoffersenTest, lr_uc_three_state, MonteCarloPValues / mc_p_value, VarDescriptive (domain-services), predicados FA7 is_at_or_below / is_inside_closed, MPIW_LABEL]
+contratos_consumidos: [CoverageSeries, pair_miscoverage, DegeneracyGate, CoverageReport / PairCoverage, is_finite_number (6.1)]
+definition_of_done: "Christoffersen (LR_uc/LR_ind/LR_cc, convenção pura) e Kupiec POF batem **exatamente** (a menos de arredondamento) com `rugarch::VaRTest` congelado — LR_uc no *feed* a partir de t = 2, LR_ind = cc − uc no *feed* inteiro — e com fixtures analíticas; LR_cc = LR_uc + LR_ind exata; banda de Wilson bate com BCD 2001 Eq. (4) e aceita contagens médias; VaR descritivo backtestado por exceedances unilaterais por cauda; casos-limite são resultados de domínio 'não aplicável'; MPIW e VaR rotulados como descritivos não-inferenciais; as métricas heurísticas do projeto antigo (`prob_up`, a métrica `confidence`, ES, `expected_move`, `downside`, win-rate) não existem no slice `evaluation`."
+non_goals: [ES como confirmatório (futuro), métricas heurísticas removidas (não reintroduzir), valores do pré-registro e aplicação do gate H1 (6.5), leitura do silver e persistência gold (6.4)]
 complexidade_estimada: M
 gate_mode: strict
 skills_hint: [ddd-tactical-patterns, hex-arch-python]
@@ -854,7 +858,7 @@ arquivos_a_criar:
   - tests/unit/features/evaluation/test_preregistration_immutable_hash.py
   - tests/unit/features/evaluation/test_scorecard_mechanical_rule.py
 contratos_introduzidos: [Preregistration, ConfirmatoryScorecard (domain-services), BuildConfirmatoryScorecard (use case)]
-contratos_consumidos: [DieboldMariano/Holm/MCS (6.2), CoverageMetrics (6.1), Hasher (1.4)]
+contratos_consumidos: [DieboldMariano/Holm/MCS (6.2), CoverageMetrics (6.1), Hasher (1.4), WilsonBand, kupiec_pof, lr_uc_three_state, chi_square_sf, ChristoffersenTest, HitSequences (6.3) — LR_uc de 3 estados composto com lower_count = HitSequences.lower_tail(τ_l).n_violations e upper_count = HitSequences.upper_tail(τ_u).n_violations sobre o mesmo n_observed (mesma série e tolerância; I10, ADR 6.3.0005 item 2)]
 definition_of_done: "Pré-registro hasheado e imutável (alteração quebra o hash); scorecard aplica a regra pré-registrada mecanicamente (primária=pinball + gate calibração + DM/Holm + MCS); separa vencedor de perfil; `academic_decision_ready` exige todos os gates."
 non_goals: [execução do cohort (8.1), reabrir hipóteses]
 complexidade_estimada: M

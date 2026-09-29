@@ -1764,7 +1764,7 @@ Notas: `docker build` da Task reconstruiu a imagem `ff-r-oracle:4.4.1` a partir 
 `r_error_policy` também sobre o feed t ≥ 2 (`violations[1:]`); a errata do ADR 6.3.0003
 (Checkpoint C, bloco 3) grava `lr_uc_internal` quando o feed t ≥ 2 falha e restringe a
 equivalência "erro do R ⇔ status ≠ APPLICABLE" ao feed inteiro.
-**Razão:** `trio_two_feeds` roda em **todo** caso com o feed inteiro válido (24 dos 32),
+**Razão:** `trio_two_feeds` roda em **todo** caso com o feed inteiro válido (28 dos 32),
 com o LR_uc esperado = `uc.LRstat` do t ≥ 2 ou, se ele falhou, `lr_uc_internal`
 (`_pure_uc_expected`; nunca valor de feed com erro — C8); `r_error_policy` roda nos 32
 casos, com a equivalência só no feed inteiro e, nos casos com erro, `lr_ind`/`lr_cc`
@@ -1772,5 +1772,22 @@ casos, com a equivalência só no feed inteiro e, nos casos com erro, `lr_ind`/`
 Medido: 121 testes de oráculo verdes, zero `SKIPPED`, sob `_ORACLE_ABS_TOL = 1e-10`. O
 carregador é o módulo privado `_var_test_cases.py` (decisão de detalhe do §1), com
 `@functools.cache` (uma leitura por processo).
+
+### 2026-09-28 — [decision] Task 12: rebase sem novidades e redação de roadmap/doc de domínio/overview — Claude (Opus 5.5)
+**Contexto:** a Task 12 manda `git fetch && git rebase origin/develop` antes de editar
+(a 6.2 edita os mesmos três arquivos — mapa de conflitos do §5).
+**Razão:** `origin/develop` ainda está em `ee1c428` (merge da 6.1; a 6.2 não mergeou),
+logo o rebase foi no-op ("is up to date") e o conflito previsto no §5 fica para o
+rebase do PR, depois do merge da 6.2 (resolver à mão mantendo as duas edições e
+rerodar os greps da Task 12). Redação: roadmap 6.3 (descrição sem vocabulário órfão,
+`camada_alvo: domain` no bloco e na tabela, arquivos/contratos da D2 — mais a chave
+`arquivos_tocados` para os dois arquivos da 6.1 —, DoD do concept §11) e 6.5
+(`contratos_consumidos` com os kernels da 6.3 e a composição do 3 estados); doc de
+domínio §7.6 (mecânica do MC), §7.7 (receita dos dois feeds, com a errata do ADR
+6.3.0003, e escopo da conv. 21), linhas 21/22 da tabela §10, registros 6.3-MC-TIES e
+6.3-MC-COND no §10.1 (texto do ADR 6.3.0006), Dufour 2006 e BCP 2011 no §11.2, bullet
+`rugarch::VaRTest` do §11.3; overview §10 com as duas fontes (DOI) e `updated_at`.
+Nenhuma convenção mudada. Correção nesta mesma entrada de §7: a entrada da Task 11
+dizia "24 dos 32" casos com feed inteiro válido; são **28 dos 32** (corrigido acima).
 
 <!-- END: post-execution -->
