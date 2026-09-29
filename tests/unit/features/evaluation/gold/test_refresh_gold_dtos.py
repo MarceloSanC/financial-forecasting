@@ -295,7 +295,7 @@ def test_failed_checks_of_results() -> None:
 
 
 @pytest.mark.unit
-def test_parameters_owner_messages_valid_mapping() -> None:
+def test_parameters_as_mapping() -> None:
     assert _PARAMETERS.as_mapping()["mcs_reps"] == _VALID["mcs_reps"]
     assert dataclasses.replace(_PARAMETERS) == _PARAMETERS
 
