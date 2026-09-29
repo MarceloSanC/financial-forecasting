@@ -12,6 +12,9 @@ import math
 
 import pytest
 
+from financial_forecasting.features.evaluation.domain.value_objects import (
+    bootstrap_indices as bootstrap_indices_module,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
     MIN_BLOCK_LENGTH_OBS,
     BootstrapIndices,
@@ -182,3 +185,44 @@ def test_indices_mutable_container_rejected(indices: object, message: str) -> No
     """Lista validada poderia ser mutada depois (ex.: índice 99 com n_obs = 5)."""
     with pytest.raises(ValueError, match=message):
         _indices(indices=indices)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("reps", "seed", "message"),
+    [
+        pytest.param(0, 0, "reps must be an int >= 1", id="reps-zero"),
+        pytest.param(True, 0, "reps must be an int >= 1", id="reps-bool"),
+        pytest.param(1.5, 0, "reps must be an int >= 1", id="reps-float"),
+        pytest.param(1, -1, "seed must be an int >= 0", id="seed-negative"),
+        pytest.param(1, True, "seed must be an int >= 0", id="seed-bool"),
+    ],
+)
+def test_bootstrap_parameters_invalid_raises(reps: object, seed: object, message: str) -> None:
+    """`validate_bootstrap_parameters`: as mesmas mensagens do pedido completo (6.4 Task 01)."""
+    with pytest.raises(ValueError, match=message):
+        bootstrap_indices_module.validate_bootstrap_parameters(
+            reps=reps,  # type: ignore[arg-type]
+            seed=seed,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.unit
+def test_bootstrap_parameters_accepts_minimums() -> None:
+    """Os mínimos (`reps=1`, `seed=0`) passam sem erro."""
+    assert bootstrap_indices_module.validate_bootstrap_parameters(reps=1, seed=0) is None
+
+
+@pytest.mark.unit
+def test_bootstrap_request_delegates_to_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`validate_bootstrap_request` consome o validador dono de `reps`/`seed` (dono único)."""
+
+    class _Sentinel(Exception):
+        pass
+
+    def _reject(*, reps: int, seed: int) -> None:
+        raise _Sentinel(f"reps={reps}, seed={seed}")
+
+    monkeypatch.setattr(bootstrap_indices_module, "validate_bootstrap_parameters", _reject)
+    with pytest.raises(_Sentinel, match="reps=3, seed=7"):
+        validate_bootstrap_request(**_VALID_REQUEST)  # type: ignore[arg-type]

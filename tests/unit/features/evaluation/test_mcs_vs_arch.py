@@ -21,6 +21,9 @@ from collections.abc import Callable
 
 import pytest
 
+from financial_forecasting.features.evaluation.domain.services import (
+    model_confidence_set as model_confidence_set_module,
+)
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     MIN_MCS_REPS,
     McsElimination,
@@ -442,3 +445,40 @@ def test_mcs_report_from_evaluate_is_coherent(build: Callable[[], McsReport]) ->
     """O relatório do `evaluate` passa pelo próprio I9 (reconstrução sem erro)."""
     report = build()
     assert dataclasses.replace(report) == report
+
+
+@pytest.mark.unit
+def test_mcs_reps_validator() -> None:
+    """`validate_mcs_reps`: 999 ergue com as duas substrings antigas; 1000 passa (6.4 Task 01)."""
+    validate = model_confidence_set_module.validate_mcs_reps
+    with pytest.raises(ValueError, match="reps must be >= 1000") as raised:
+        validate(MIN_MCS_REPS - 1)
+    assert "reps >= 1000" in str(raised.value)
+    assert "999" in str(raised.value)
+    assert validate(MIN_MCS_REPS) is None
+
+
+class _RepsSentinel(Exception):
+    pass
+
+
+def _reject_reps(reps: int) -> None:
+    raise _RepsSentinel(f"reps={reps}")
+
+
+@pytest.mark.unit
+def test_mcs_reps_single_owner_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    """O `McsReport` consome `validate_mcs_reps` (dono único do piso de réplicas)."""
+    monkeypatch.setattr(model_confidence_set_module, "validate_mcs_reps", _reject_reps)
+    with pytest.raises(_RepsSentinel, match=f"reps={_REPS}"):
+        dataclasses.replace(_VALID_REPORT)
+
+
+@pytest.mark.unit
+def test_mcs_reps_single_owner_evaluate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """O `ModelConfidenceSet.evaluate` consome `validate_mcs_reps` antes do procedimento."""
+    series = _series(("A", "B", "C"), (_A, _B, _C))
+    bootstrap = _indices(_iid_rows(len(_A), _REPS, seed=3))
+    monkeypatch.setattr(model_confidence_set_module, "validate_mcs_reps", _reject_reps)
+    with pytest.raises(_RepsSentinel, match=f"reps={_REPS}"):
+        ModelConfidenceSet.evaluate(series, bootstrap=bootstrap, alpha=_ALPHA)

@@ -1683,4 +1683,21 @@ Tasks 01–12 ─► (rebase em origin/develop) ─► Task 13 (roadmap)
 > Preenchida durante/após a Fase 4. Apenas esta seção é editável após
 > `status: done`. Cada entrada carrega data + autor.
 
+### 2026-09-29 — [decision] Task 01: validadores públicos da 6.2 sem mudança de mensagem — Claude (Opus 5.5)
+**Contexto:** decisões de detalhe planejadas no §1 (`MIN_MODELS` no VO,
+`validate_bootstrap_parameters`, `validate_mcs_reps` com a mensagem dupla).
+**Razão:** executadas como planejado. `MIN_MODELS: Final = 2` mora em
+`paired_loss_series.py` e a fábrica o importa (mesmo objeto, sem `_MIN_MODELS`);
+`validate_bootstrap_parameters(*, reps, seed)` é chamado por
+`validate_bootstrap_request` depois de `n_obs`/`block_size` (mesma ordem e
+mensagens); `validate_mcs_reps` ergue `"reps must be >= 1000 (the MCS needs reps >=
+1000), got 999"` e substitui as duas comparações inline (`McsReport.__post_init__`
+e `ModelConfidenceSet.evaluate`), no mesmo ponto da sequência de cada uma. Os
+quatro arquivos de teste da 6.2 só ganharam linhas (`+`): as expectativas
+existentes (`"reps must be >= 1000"`, `"reps >= 1000"`, `"k >= 2"`) passam sem
+edição. Provado por `test_mcs_vs_arch.py::mcs_reps_validator`,
+`::mcs_reps_single_owner` (monkeypatch nas duas pontas),
+`test_bootstrap_indices.py::bootstrap_request_delegates` e
+`test_paired_pinball_losses.py::factory_imports_min_models`.
+
 <!-- END: post-execution -->

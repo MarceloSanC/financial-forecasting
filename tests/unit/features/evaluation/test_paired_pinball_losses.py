@@ -15,11 +15,17 @@ from typing import Any
 
 import pytest
 
+from financial_forecasting.features.evaluation.domain.services import (
+    paired_pinball_losses as paired_pinball_losses_module,
+)
 from financial_forecasting.features.evaluation.domain.services.paired_pinball_losses import (
     paired_pinball_losses,
 )
 from financial_forecasting.features.evaluation.domain.services.pinball_score import (
     PinballScore,
+)
+from financial_forecasting.features.evaluation.domain.value_objects import (
+    paired_loss_series as paired_loss_series_module,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
@@ -145,3 +151,10 @@ def test_factory_horizon_propagated(make_series: SeriesFactory) -> None:
     assert paired.horizon == _LONG_HORIZON
     assert paired.target_timestamps == first.target_timestamps
     assert paired.n_points == _N_POINTS
+
+
+@pytest.mark.unit
+def test_factory_imports_min_models() -> None:
+    """A fábrica usa o `MIN_MODELS` do VO (mesmo objeto), sem cópia privada (6.4 Task 01)."""
+    assert paired_pinball_losses_module.MIN_MODELS is paired_loss_series_module.MIN_MODELS
+    assert not hasattr(paired_pinball_losses_module, "_MIN_MODELS")

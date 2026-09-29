@@ -28,6 +28,7 @@ perfis descritivos).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Final
 
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
     check_horizon,
@@ -39,7 +40,9 @@ from financial_forecasting.features.evaluation.domain.value_objects._timestamps 
     check_strictly_increasing,
 )
 
-_MIN_MODELS = 2
+# Dono único do mínimo de modelos da amostra pareada (a fábrica `paired_pinball_losses` e
+# o passo de pré-condições da 6.4 importam daqui — ADR 6.4.0002 item 4).
+MIN_MODELS: Final = 2
 
 
 @dataclass(frozen=True)
@@ -120,9 +123,9 @@ class PairedLossSeries:
         check_horizon(self.horizon)
 
     def _check_models(self) -> None:
-        if len(self.models) < _MIN_MODELS:
+        if len(self.models) < MIN_MODELS:
             raise ValueError(
-                f"a PairedLossSeries needs k >= {_MIN_MODELS} models, got {self.models}"
+                f"a PairedLossSeries needs k >= {MIN_MODELS} models, got {self.models}"
             )
         for index, name in enumerate(self.models):
             if not isinstance(name, str) or not name:
