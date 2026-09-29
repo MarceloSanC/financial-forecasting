@@ -407,6 +407,36 @@ def test_common_too_short(n_sessions: int, horizon: int, reason: str) -> None:
     assert result.alignment.common_points == ((horizon, n_sessions - 5 - horizon),)
 
 
+@pytest.mark.unit
+def test_common_too_short_empty_intersection() -> None:
+    """Interseção vazia (gbm termina antes do tft começar): achado, sem (h, T), sem exceção."""
+    cohort = make_cohort(prefixes={"tft": 20}, folds=("f0",))
+    late = {session(i) for i in range(20, 40)}
+    cohort = drop_records(
+        cohort, lambda r: of_series("gbm", None, 1)(r) and r.target_timestamp in late
+    )
+    result = _assemble(cohort, window_deficits={"tft": 20})
+    kinds = {(f.kind, f.horizon, f.model) for f in result.alignment.findings}
+    assert kinds == {
+        (AlignmentKind.TRUNCATED_SUFFIX, 1, "gbm"),
+        (AlignmentKind.COMMON_SAMPLE_TOO_SHORT, 1, None),
+    }
+    assert result.horizons == ()
+    assert [h for h, _ in result.alignment.common_points] == [2]
+
+
+@pytest.mark.unit
+def test_realized_missing_whole_series() -> None:
+    """Série com TODO alvo fora do dataset: só `realized_missing`, sem intervalo."""
+    cohort = replace_records(
+        make_cohort(),
+        of_series("tft", 2, 1),
+        lambda r: dataclasses.replace(r, target_timestamp="2099-" + r.target_timestamp[5:]),
+    )
+    findings = _only(_assemble(cohort), AlignmentKind.REALIZED_MISSING)
+    assert {_scope(f) for f in findings} == {(1, "tft", 2)}
+
+
 # --- montagem sem achado (A3, I6, I7) --------------------------------------------------
 
 
