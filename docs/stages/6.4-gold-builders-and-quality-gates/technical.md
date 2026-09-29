@@ -1919,4 +1919,25 @@ e a regra "None antes de qualquer valor" já tem dono no `GoldTable` (Task 07).
   `preregistration_ref` só quando não roda bloqueado; registra os `GoldInputs` em
   `calls`.
 
+### 2026-09-29 — [decision] Task 10: mapeamento dos cinco builders — Claude (Opus 5.5)
+**Contexto:** colunas exatas no §1 "Tabelas gold"; detalhes abaixo do limiar do concept.
+**Razão:**
+- **Autodescrição com dono único:** `gold_builders/__init__.py::partition_columns`
+  escreve `asset`/`parent_sweep_id` em toda linha e `preregistration_ref` só nas
+  quatro confirmatórias; a ordenação é do `GoldTable.sorted_by_key` (Task 09).
+- **`gold_metrics_by_run`:** `coverage_n_evaluated` sai como `float(n_evaluated)` —
+  a coluna `value` é numérica única (conversão de tipo, não fórmula). Série não
+  aplicável (baseline pontual, 100 % degenerada) não tem linhas de `coverage_rate`/
+  `picp`/`mpiw` (o `CoverageReport` as traz vazias) — contagem declarada no teste.
+- **`gold_calibration_table`:** `level_high` = `None` nas caudas; `var_label` =
+  `VAR_DESCRIPTIVE_LABEL` só onde há `var_level`; `n_points`/timestamps são os da série
+  (amostra) de origem.
+- **`gold_mcs_results`:** `elimination_rank` começa em 1 (primeiro eliminado; o
+  sobrevivente é o último); `max_block_estimate` é o maior valor das `BlockEstimate`
+  do horizonte (seleção, não fórmula) e `block_estimates` =
+  `"a|b=<repr do valor>;…"` na ordem de `model_pairs()`.
+- Os builders são classes com atributos de classe (`name`, `depends_on`,
+  `runs_when_blocked`) — satisfazem o Protocol de propriedades do port; nenhum importa
+  `pyarrow`/`duckdb`/`pandas` (grep do bloco Container).
+
 <!-- END: post-execution -->
