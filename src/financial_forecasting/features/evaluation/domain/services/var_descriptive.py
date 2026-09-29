@@ -39,6 +39,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.coverage_ser
 )
 from financial_forecasting.features.evaluation.domain.value_objects.hit_sequence import (
     HitKind,
+    belongs_to_dgt_partition,
 )
 
 VAR_DESCRIPTIVE_LABEL: Final = "VaR descritivo — sem claim de gestão de risco"
@@ -90,6 +91,12 @@ class VarTailBacktest:
                 f"var_level must be {expected_var_level!r} for level={self.level}, "
                 f"got {self.var_level!r}"
             )
+        if self.backtest.includes_degenerate or belongs_to_dgt_partition(self.backtest.dgt_step):
+            raise ValueError(
+                "a VaR tail backtests the masked variant of the whole series: "
+                f"includes_degenerate={self.backtest.includes_degenerate!r}, "
+                f"dgt_step={self.backtest.dgt_step!r}"
+            )
         if self.backtest.kind is not self.kind or self.backtest.levels != (self.level,):
             raise ValueError(
                 f"backtest must be of the same tail ({self.kind.value}, ({self.level},)), got "
@@ -127,6 +134,12 @@ class VarDescriptiveReport:
         if any(b <= a for a, b in pairwise(levels)):
             raise ValueError(
                 f"tails must follow the grid order (strictly increasing), got {levels}"
+            )
+        settings = {(tail.backtest.tolerance, tail.backtest.min_violations) for tail in self.tails}
+        if len(settings) != 1:
+            raise ValueError(
+                "every tail must share the same tolerance and min_violations, got "
+                f"{sorted(settings)}"
             )
         for tail in self.tails:
             if tail.backtest.horizon != self.horizon:

@@ -216,3 +216,49 @@ def test_var_signature_keyword_only_without_default(name: str) -> None:
 
     assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
     assert parameter.default is inspect.Parameter.empty
+
+
+# --- C9 — variante mascarada, série inteira e parâmetros comuns (Checkpoint C bloco 3) ------
+
+
+@pytest.mark.unit
+def test_tail_incoherent_without_gaps_variant_raises(make_series: SeriesFactory) -> None:
+    """C9: a cauda de VaR é a variante mascarada — backtest "sem lacunas" ergue."""
+    series = _series(make_series)
+    backtest = ChristoffersenTest.evaluate(
+        HitSequences.lower_tail(series, level=0.02, tolerance=_TOLERANCE, include_degenerate=True),
+        min_violations=_MIN_VIOLATIONS,
+    )
+
+    with pytest.raises(ValueError, match="masked variant of the whole series"):
+        VarTailBacktest(kind=HitKind.LOWER_TAIL, level=0.02, var_level=_VAR_98, backtest=backtest)
+
+
+@pytest.mark.unit
+def test_tail_incoherent_dgt_subseries_raises(make_series: SeriesFactory) -> None:
+    """C9: a cauda de VaR é a série inteira — backtest de sub-série DGT ergue."""
+    series = _series(make_series, horizon=_H7)
+    sub = HitSequences.lower_tail(series, level=0.02, tolerance=_TOLERANCE).dgt_partition()[0]
+    backtest = ChristoffersenTest.evaluate(sub, min_violations=_MIN_VIOLATIONS)
+
+    with pytest.raises(ValueError, match="masked variant of the whole series"):
+        VarTailBacktest(kind=HitKind.LOWER_TAIL, level=0.02, var_level=_VAR_98, backtest=backtest)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("tolerance", "min_violations"),
+    [(0.5, _MIN_VIOLATIONS), (_TOLERANCE, 0)],
+    ids=["other-tolerance", "other-min-violations"],
+)
+def test_tail_incoherent_report_mixed_settings_raise(
+    make_series: SeriesFactory, tolerance: float, min_violations: int
+) -> None:
+    """C9: todas as caudas compartilham a mesma tolerância e o mesmo `min_violations`."""
+    series = _series(make_series)
+    report = _report(make_series)
+    other = VarDescriptive.backtest(series, tolerance=tolerance, min_violations=min_violations)
+    tails = (report.tails[0], *other.tails[1:])
+
+    with pytest.raises(ValueError, match="same tolerance and min_violations"):
+        VarDescriptiveReport(horizon=1, tails=tails)

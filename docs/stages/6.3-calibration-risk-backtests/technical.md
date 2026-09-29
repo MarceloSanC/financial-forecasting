@@ -1710,4 +1710,14 @@ consumidor); o `MonteCarloPValues` chama as partes que tem (`kind`/`levels`,
 tolerância, variante). Um caso por ramo em `report_incoherent_identity` e
 `mc_incoherent_identity`; consumo provado por monkeypatch.
 
+### 2026-09-28 — [decision] Checkpoint C bloco 3: VaR descritivo exige variante mascarada da série inteira e parâmetros comuns — Claude (Opus 5.5)
+**Contexto:** achado LOW — `VarTailBacktest`/`VarDescriptiveReport` aceitavam backtest
+da variante "sem lacunas", de sub-série DGT e caudas com tolerância ou
+`min_violations` diferentes, embora o concept §4 diga "só a variante mascarada" e o
+relatório seja de **uma** série.
+**Razão:** disposição `corrigido` em `[6.3/task-09-fix]` — o `VarTailBacktest` exige
+`includes_degenerate is False` e `not belongs_to_dgt_partition(dgt_step)` (predicado
+único do VO); o `VarDescriptiveReport` exige um único par (`tolerance`,
+`min_violations`) entre as caudas. Um teste por ramo no `tail_incoherent`.
+
 <!-- END: post-execution -->
