@@ -345,6 +345,16 @@ _INCOHERENT: list[tuple[str, dict[str, object], str]] = [
         "unique",
     ),
     (
+        "step-negative-stepneg",
+        {"eliminations": _elims(("A", -0.25, -0.25), ("B", 1.0, 1.0))},
+        r"\[0, 1\]",
+    ),
+    (
+        "step-bool-stepbool",
+        {"eliminations": _elims(("A", True, True), ("B", 1.0, 1.0))},
+        r"\[0, 1\]",
+    ),
+    (
         "step-out-of-range",
         {"eliminations": _elims(("A", 1.5, 1.5), ("B", 1.0, 1.5))},
         r"\[0, 1\]",
