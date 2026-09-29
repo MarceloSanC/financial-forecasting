@@ -1798,4 +1798,26 @@ do §2 Task 04.
   `Cohort.special` (valores persistidos fora do `from_raw`), e os mutadores são
   funções puras sobre o `Cohort` imutável.
 
+### 2026-09-29 — [decision] Task 05: forma dos resultados e coerência do registry — Claude (Opus 5.5)
+**Contexto:** detalhes abaixo do limiar do concept ao implementar o ADR 6.4.0002.
+**Razão:**
+- **`kind` das linhas que não são achado:** `alignment_check` PASS → `common_sample_size`
+  (`value` = T); `statistical_preconditions` PASS → `preconditions_met`, FAIL de k →
+  `insufficient_models` (`value` = k), SKIPPED → `assembly_failed`;
+  `degeneracy_check` → `degeneracy_rate` / `assembly_failed`; `realized_provenance` →
+  `target_return_fsum`.
+- **Uma escrita do resultado:** `registry.result_of(check, outcome, kind, …)` preenche
+  `check`/`severity` a partir do próprio check; o `QualityCheckRegistry.run` ergue
+  `ValueError` se um check devolver resultado com outro nome ou severidade (erro de
+  programação), e `QualityCheckResult.is_blocking` é a regra única ERROR + FAIL que o
+  `is_blocking(results)` consulta.
+- **`QualityCheckContext`** guarda `paired`/`block_estimates` como
+  `MappingProxyType` (mesma disciplina do `HorizonSamples`, Checkpoint C bloco 1) e
+  exige que as estimativas de um horizonte cubram, em ordem, os `model_pairs()` da
+  série pareada desse horizonte — um horizonte sem estimativa para algum par daria
+  PASS falso.
+- **`BlockEstimate.detail`** é obrigatório (não-vazio) só com `reason`; com `value`
+  pode ser vazio. O FAIL agrega por (motivo, horizonte) na ordem do `UndefinedReason`,
+  com o primeiro par e o seu detalhe.
+
 <!-- END: post-execution -->
