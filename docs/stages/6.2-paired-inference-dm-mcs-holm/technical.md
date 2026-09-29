@@ -3,7 +3,7 @@ title: Technical — Stage 6.2 — Inferência pareada (Diebold–Mariano/HLN, H
 description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit), TDD inside-out no BC evaluation (2ª fatia — domain stdlib + dois ports-out de oráculo + adapters statsmodels/arch + fixtures do oráculo R)
 when-use: Consultar durante Fase 4 (execução) desta Stage; cada Task tem critério de aceite e comando de verificação
 keywords: [technical, plano de execução, paired-inference-dm-mcs-holm, evaluation, paired-loss-series, student-t, diebold-mariano, hln, holm, mcs, bootstrap-indices, inference-backend, mcs-backend, statsmodels, arch, r-oracle, dm-test, importlinter, port-coverage]
-status: draft
+status: done
 created_at: 2026-09-28
 updated_at: 2026-09-28
 stage_id: 6.2-paired-inference-dm-mcs-holm
@@ -171,8 +171,8 @@ Step):**
   ```bash
   WT=feat-114-6-2-paired-inference-dm-mcs-holm
   MSYS_NO_PATHCONV=1 docker run --rm \
-    -v "C:/Users/Marcelo/Documents/Code/financial-forecasting-worktrees/$WT:/app" \
-    -v "C:/Users/Marcelo/Documents/Code/financial-forecasting/.git:/main.git" \
+    -v "<raiz-das-worktrees>/$WT:/app" \
+    -v "<raiz-do-repo>/.git:/main.git" \
     -v ff-step62-venv:/app/.venv \
     -e GIT_DIR=/main.git/worktrees/$WT -e GIT_WORK_TREE=/app \
     -w /app financial_forecasting-app:dev bash -euo pipefail -c "$(cat <<'EOF'
