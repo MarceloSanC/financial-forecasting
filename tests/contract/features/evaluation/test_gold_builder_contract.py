@@ -16,6 +16,7 @@ mapeamento de cada builder real ficam fora da parametrização, no mesmo arquivo
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable, Mapping
 
 import pytest
@@ -583,3 +584,29 @@ def test_real_tables_match_schema(name: str) -> None:
     key, others = _SCHEMAS[name]
     assert table.key == key
     assert set(table.columns) == set(key) | others
+
+
+@pytest.mark.contract
+def test_dm_rows_adjusted_all_comparisons() -> None:
+    """Toda comparação de toda família: p ajustado e decisão de Holm copiados do relatório."""
+    inputs = completed_inputs()
+    table = DmResultsGoldBuilder().build(inputs)
+    comparisons = [
+        (report, family, comparison)
+        for report in inputs.horizon_reports
+        for family in report.dm_families
+        for comparison in family.comparisons
+    ]
+    # pré-condição: o ajuste de Holm muda algum p (senão o teste não discrimina)
+    assert any(c.adjusted_p_value != c.dm.p_value for _, _, c in comparisons)
+    for report, family, comparison in comparisons:
+        got = _one(
+            table.rows,
+            horizon=report.horizon,
+            variance_estimator=family.variance_estimator.value,
+            candidate=family.candidate,
+            comparator=comparison.comparator,
+        )
+        assert got["adjusted_p_value"] == comparison.adjusted_p_value
+        assert got["rejected"] == comparison.rejected
+        assert got["p_value"] == comparison.dm.p_value
