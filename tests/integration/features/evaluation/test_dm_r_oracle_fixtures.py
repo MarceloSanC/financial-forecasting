@@ -41,6 +41,12 @@ _P_TAIL_REL_TOL = 1e-10
 _HALF = 0.5
 _SMALL_T = 10
 _REQUIRED_HORIZONS = {1, 7}
+# Mensagem do R -> padrão da mensagem do domínio, por categoria (os textos diferem; a
+# categoria não). Mensagem do R nova → KeyError: o caso precisa de categoria declarada.
+_DOMAIN_ERROR = {
+    "h cannot be longer than the number of forecast errors": r"\(T > h\)",
+    "Variance of DM statistic is zero": "^Variance of DM statistic is zero$",
+}
 
 
 def _assert_p_close(actual: float, expected: float) -> None:
@@ -77,7 +83,7 @@ _OK_CASES = [case for case in _CASES if "expected" in case]
 @pytest.mark.parametrize("case", _CASES, ids=_IDS)
 def test_r_fixture_case_matches(case: dict[str, Any]) -> None:
     if "expected_error" in case:
-        with pytest.raises(ValueError):  # o texto do R difere do do domínio
+        with pytest.raises(ValueError, match=_DOMAIN_ERROR[case["expected_error"]]):
             _run(case)
         return
     expected = case["expected"]
