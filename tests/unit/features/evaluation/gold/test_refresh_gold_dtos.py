@@ -312,6 +312,13 @@ def test_gold_inputs_status_coherence() -> None:
         dataclasses.replace(blocked, mcs_reports=(object(),))  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="COMPLETED generation cannot"):
         dataclasses.replace(blocked, status=RefreshStatus.COMPLETED)
+    with pytest.raises(ValueError, match="BLOCKED generation needs a blocking"):
+        dataclasses.replace(
+            blocked,
+            check_results=(_result(CheckSeverity.WARN, CheckOutcome.REPORTED, "degeneracy"),),
+        )
+    completed = dataclasses.replace(blocked, status=RefreshStatus.COMPLETED, check_results=())
+    assert completed.status is RefreshStatus.COMPLETED
     with pytest.raises(ValueError, match="status must be a RefreshStatus"):
         dataclasses.replace(blocked, status="BLOCKED")
     with pytest.raises(ValueError, match="block_estimates must be a Mapping"):

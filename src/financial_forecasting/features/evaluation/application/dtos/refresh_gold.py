@@ -397,7 +397,8 @@ class GoldInputs:
         block_estimates: horizonte → as b̂_sb por par (as que foram ao MCS).
 
     Raises:
-        ValueError: `BLOCKED` com relatórios, ou `COMPLETED` com resultado bloqueante.
+        ValueError: `BLOCKED` com relatórios ou sem resultado bloqueante; `COMPLETED`
+            com resultado bloqueante (bloqueado ⇔ algum ERROR + FAIL, nos dois sentidos).
     """
 
     partition: GoldPartition
@@ -420,6 +421,8 @@ class GoldInputs:
             raise ValueError("a BLOCKED generation has no horizon or MCS reports")
         if self.status is RefreshStatus.COMPLETED and blocking:
             raise ValueError("a COMPLETED generation cannot hold a blocking check result")
+        if self.status is RefreshStatus.BLOCKED and not blocking:
+            raise ValueError("a BLOCKED generation needs a blocking (ERROR + FAIL) check result")
 
     @property
     def preregistration_ref(self) -> str:
