@@ -157,6 +157,33 @@ def test_mcs_boundary_included_counts_only_strict_exceedance() -> None:
 
 
 @pytest.mark.unit
+def test_mcs_variance_recentred_by_hand() -> None:
+    """var̂_ij usa d*_ij,b - d̄_ij (recentrado), não o 2º momento bruto de d* (I8).
+
+    A = (1, 1, 1, 5), B = (1, 1, 1, 1), C = (0, 0, 1, 2); 900 linhas identidade, 50 da
+    reamostra (3, 3, 3, 3) e 50 de (0, 0, 0, 0). d̄: AB = 1, AC = 1,25, BC = 0,25.
+    d* - d̄ (identidade / (3,...) / (0,...)): AB 0 / 3 / -1; AC 0 / 1,75 / -0,25;
+    BC 0 / -1,25 / 0,75 → var̂ = 50·Σ²/1000: AB 0,5; AC 0,15625; BC 0,10625.
+    t: AB √2 ≈ 1,414; AC 1,25/√0,15625 ≈ 3,162 (máx. → sai A); BC ≈ 0,767.
+    Passo 1: T*_R da (3,...) = 1,75/√0,15625 ≈ 4,427 > 3,162 (conta); da (0,...) =
+    0,75/√0,10625 ≈ 2,301 < 3,162 (não conta) → p = 50/1000. Passo 2 (B, C): T_R = t_BC
+    ≈ 0,767, as duas reamostras passam (3,83 e 2,30) → p = 100/1000.
+    Com o 2º momento bruto (var̂ AB 1,7; AC 1,90625; BC 0,15625) as duas reamostras
+    passariam já no passo 1 (p = 0,1).
+    """
+    series = _series(
+        ("A", "B", "C"), ((1.0, 1.0, 1.0, 5.0), (1.0, 1.0, 1.0, 1.0), (0.0, 0.0, 1.0, 2.0))
+    )
+    rows = ((0, 1, 2, 3),) * 900 + ((3, 3, 3, 3),) * 50 + ((0, 0, 0, 0),) * 50
+    report = ModelConfidenceSet.evaluate(series, bootstrap=_indices(rows), alpha=_ALPHA)
+    assert report.eliminations == (
+        McsElimination(model="A", step_p_value=0.05, mcs_p_value=0.05),
+        McsElimination(model="B", step_p_value=0.1, mcs_p_value=0.1),
+        McsElimination(model="C", step_p_value=1.0, mcs_p_value=1.0),
+    )
+
+
+@pytest.mark.unit
 def test_mcs_exact_tie_one_model() -> None:
     """t_AC = t_BC exatos: B é A com as posições 0 e 1 trocadas, C[0] = C[1] e o conjunto
     de linhas é fechado pela troca 0 ↔ 1. A 1ª eliminação é só A (1º modelo-linha)."""
