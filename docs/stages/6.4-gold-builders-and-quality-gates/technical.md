@@ -2534,8 +2534,9 @@ processo, e o `logging.config.dictConfig` dele desliga os loggers existentes
 chegavam ao `caplog`. Reproduzido com `-n0` (os dois arquivos em sequência).
 **Encaminhamento/decisão:** os três testes religam só o logger do módulo sob teste
 (`monkeypatch.setattr(logger, "disabled", False)`; no e2e, salvo e restaurado no
-fixture) — sem mexer em configuração global. Candidato a issue de infraestrutura de
-testes: isolar o CLI do `import-linter` (subprocess) para não vazar estado de logging.
+fixture) — sem mexer em configuração global. Issue de infraestrutura de testes aberta
+no fechamento: **#125** (isolar o CLI do `import-linter` em subprocess para não vazar
+estado de logging; lista os contornos a remover, inclusive o da 5.5).
 
 ### 2026-09-29 — [decision] Task 14: port `TrainingGridReader`, real `ReadTrainingGrid` e contrato — Claude (Opus 5.5)
 **Contexto:** revisão de execução (ADR 6.4.0009) — decisões de detalhe do §1.
@@ -2640,5 +2641,30 @@ worktree não foi mutado):**
 - `test_quality_checks.py::preconditions_mixed_reasons_order` (Task 05) — mata a ordem
   de inserção no lugar da ordem do `UndefinedReason`.
 Nenhum token novo é substring de outro token do mesmo arquivo nem o contém.
+Rodada 2: todos os itens "sim", sem teste novo; somadas as duas rodadas, 52 mutantes
+reais, todos mortos.
+
+### 2026-09-29 — [finding] Medição no cohort real: nada a encaminhar à 6.5/8.1 além do registrado — Claude (Opus 5.5)
+**Contexto:** o checklist de fechamento (§3) pede os achados da medição real (Task 15)
+para a 6.5/8.1.
+**Encaminhamento:** a medição **não** produziu achado de alinhamento (zero `kind` de
+I3–I10, nenhum `decision_index_mismatch`, fingerprint igual, nenhum valor não-finito no
+realizado), então os dois riscos do §6 que previam `[finding]` (regra inesperada; NaN no
+`value_guardrail`) não se materializaram. Para a 6.5/8.1 fica só o que o gold já mostra:
+`degeneracy_rate` REPORTED em 32 séries — o scorecard decide como exibi-lo (não bloqueia
+por ADR 6.4.0002) — e o custo por refresh (≈ 19 s, dominado por `reports` e
+`read_facts`), que não pede otimização antes da 8.1.
+
+### 2026-09-29 — [decision] Fechamento: checklist do §3 e gate de saída — Claude (Opus 5.5)
+**Contexto:** fechamento após a auditoria de testes (rodadas 1 e 2, todos os itens
+"sim").
+**Razão:** issue de infraestrutura #125 aberta (L3/A6); ADRs 6.4.0001–0009 em
+`accepted`, e o 6.4.0004 já traz a nota de emenda apontando o 6.4.0009; `concept.md` sem
+retoque retrospectivo; roadmap com a Stage 6.4 em `done`. `origin/develop` = `52fa0ba`
+(o branch já estava na ponta, rebase no-op, nada a re-rodar). Gate de saída (§3) verde
+na ponta do branch: `make check` 4672 passed / 23 skipped, cobertura 99,23 %; A14 com
+79 arquivos, nenhum abaixo de 90 % e nenhum ausente; A8 97 passed; A10 11 passed; A11
+`lint-imports` 15 contratos mantidos, 0 quebrados; laço de tokens 91 passed; bloco Host
+verde; grep de privacidade vazio.
 
 <!-- END: post-execution -->
