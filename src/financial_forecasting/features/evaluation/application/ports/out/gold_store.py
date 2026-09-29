@@ -15,6 +15,11 @@ Contrato de `publish(partition=..., tables=..., manifest=...)`:
   `.staging/` → `current/` por dois `rename` de diretório. Falha antes da troca
   propaga e deixa `current/` intacto (C9); sobras de `.staging/`/`.previous/` de uma
   execução interrompida são removidas no `publish` seguinte;
+- **leitores (6.5):** leem `MANIFEST.json` primeiro e cada tabela como arquivo único
+  **sem** inferência de partição (`partitioning=None` no pyarrow,
+  `hive_partitioning = false` no DuckDB): os segmentos `asset=`/`parent_sweep_id=` do
+  caminho colidem com as colunas de mesmo nome das linhas. Tabela com zero linhas é
+  gravada com schema vazio (sem colunas) — o leitor usa o `rows_by_table` do manifesto;
 - **pré-condição de escritor único:** no máximo um `publish` por
   `(asset, parent_sweep_id)` ao mesmo tempo (ADR `6_4_0005` item 6) — sem lock;
 - a geração é coerente (`check_generation`, dono único no módulo dos DTOs): manifesto
