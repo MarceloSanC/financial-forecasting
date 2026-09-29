@@ -70,12 +70,15 @@ All container commands below use this invocation. Mount the main `.git`
 **read-only**, and set `GIT_DIR`/`GIT_WORK_TREE`: the worktree's `.git` file
 points to a Windows path the container cannot resolve. `GIT_OPTIONAL_LOCKS=0`
 keeps `git status` from taking `index.lock` on the read-only mount.
+Replace `<raiz-das-worktrees>` with the folder that holds the worktrees and
+`<raiz-do-repo>` with the main checkout, both as absolute host paths with
+forward slashes.
 
 ```bash
 WT=feat-102-5-5-confirmatory-retrain
-WTP="C:/Users/Marcelo/Documents/Code/financial-forecasting-worktrees/$WT"
+WTP="<raiz-das-worktrees>/$WT"
 RUN="docker run --rm -v $WTP:/app \
-  -v C:/Users/Marcelo/Documents/Code/financial-forecasting/.git:/main.git:ro \
+  -v <raiz-do-repo>/.git:/main.git:ro \
   -v ff55-venv-sentiment:/app/.venv -v ff55-hf-cache:/root/.cache/huggingface \
   -w /app -e GIT_DIR=/main.git/worktrees/$WT -e GIT_WORK_TREE=/app \
   -e GIT_OPTIONAL_LOCKS=0 financial_forecasting-app:dev"
