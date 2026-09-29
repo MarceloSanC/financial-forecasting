@@ -1983,4 +1983,29 @@ lacunas: `violation_rate` (≠ `degeneracy_rate`), `tolerance`, `degeneracy_rate
 `n_points`, primeiro/último `target_timestamp`, `wilson_applicable`,
 `wilson_estimate`, `serial_dependence_warning`, n00–n11 e LR/p.
 
+### 2026-09-29 — [decision] Task 11: forma do `RefreshGold` e da leitura — Claude (Opus 5.5)
+**Contexto:** detalhes abaixo do limiar do concept ao implementar a sequência do §2
+Task 11.
+**Razão:**
+- **Construtor keyword-only** com os sete colaboradores; `gold_build_order` roda nele e
+  a ordem fica em `build_order` (C1 antes de qualquer leitura). Os quatro checks são
+  instanciados no construtor, na ordem do ADR 6.4.0002.
+- **Leitura:** `dim_run` pós-filtrado por `(asset, parent_sweep_id)` exatos e ordenado
+  por `run_id`; fatos pós-filtrados por `asset` e `run_id` do cohort; `seed`/`fold`
+  do `ForecastRecord` vêm do `CohortRun`; `guardrail_applied` só `int` 0/1 (medido no
+  real: `int`, `seed` `None`/`int` preservados — suíte do reader); o realizado usa
+  `timestamp` tz-aware e `target_return`/`close`/`volume` numéricos, ordenado pela
+  sessão; `parquet_file_hash` = `PARQUET_FILE_HASH` (literal do ADR 6.4.0004 item 4).
+- **Pré-condições:** o `BlockEstimate` indefinido por defeito do domínio leva um
+  detalhe fixo por motivo; o de `ArithmeticError` leva `"<tipo>: <mensagem>"`. O
+  `QualityCheckContext` recebe `paired`/`block_estimates` só dos horizontes com
+  k ≥ `MIN_MODELS` (coerência exigida pelo fix M-A do Checkpoint C bloco 2).
+- **Log:** dez etapas fixas (`read_runs`, `read_facts`, `read_realized`, `assemble`,
+  `preconditions`, `checks`, `reports`, `mcs`, `build`, `publish`); num refresh
+  bloqueado `reports`/`mcs` não rodam e não logam; linha final
+  `refresh_gold status=<COMPLETED|BLOCKED>`.
+- **Suíte do reader:** o fake ergue `ApplicationError` em tabela desconhecida, como o
+  `ParquetAnalyticsRepository`. `ValueError` de `value_guardrail` não-finito
+  (`CoverageSeries`) propaga do `assemble` (decisão da Task 04).
+
 <!-- END: post-execution -->
