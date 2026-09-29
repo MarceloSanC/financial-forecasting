@@ -481,6 +481,13 @@ def test_e2e_warmup_prefix_completed(scenario: _Scenario) -> None:
     realized = generation.manifest["realized"]
     assert realized["first_timestamp"] == scenario.first_grid_timestamp  # type: ignore[index]
     assert realized["n_sessions"] == _N_SESSIONS  # type: ignore[index]
+    # a proveniência publicada carrega o prefixo e o fingerprint que o use case passou
+    # ao contexto dos checks (não só ao manifesto)
+    checks = generation.column("gold_quality_checks", "check")
+    details = generation.column("gold_quality_checks", "detail")
+    [provenance] = [d for c, d in zip(checks, details, strict=True) if c == "realized_provenance"]
+    assert f"grid_trimmed_prefix={_WARMUP};" in str(provenance)
+    assert f"dataset_fingerprint={scenario.oracle_fingerprint};" in str(provenance)
 
 
 def test_e2e_fingerprint_equals_modeling(scenario: _Scenario) -> None:
