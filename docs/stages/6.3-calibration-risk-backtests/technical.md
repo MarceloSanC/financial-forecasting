@@ -1759,4 +1759,18 @@ Notas: `docker build` da Task reconstruiu a imagem `ff-r-oracle:4.4.1` a partir 
 `Sys.Date()` do container (UTC); `provenance.command` é o literal executado no host
 (caminho absoluto `pwd -W`), como a Task manda.
 
+### 2026-09-28 — [decision] Task 11: trio comparado em todo caso com o feed inteiro válido; política de erro só no feed inteiro — Claude (Opus 5.5)
+**Contexto:** a Task 11 previa o `trio_two_feeds` só com os dois feeds válidos e o
+`r_error_policy` também sobre o feed t ≥ 2 (`violations[1:]`); a errata do ADR 6.3.0003
+(Checkpoint C, bloco 3) grava `lr_uc_internal` quando o feed t ≥ 2 falha e restringe a
+equivalência "erro do R ⇔ status ≠ APPLICABLE" ao feed inteiro.
+**Razão:** `trio_two_feeds` roda em **todo** caso com o feed inteiro válido (24 dos 32),
+com o LR_uc esperado = `uc.LRstat` do t ≥ 2 ou, se ele falhou, `lr_uc_internal`
+(`_pure_uc_expected`; nunca valor de feed com erro — C8); `r_error_policy` roda nos 32
+casos, com a equivalência só no feed inteiro e, nos casos com erro, `lr_ind`/`lr_cc`
+`None`, POF definido (`-2·T·log(1 − p)` com x = 0) e LR_uc puro == `lr_uc_internal`.
+Medido: 121 testes de oráculo verdes, zero `SKIPPED`, sob `_ORACLE_ABS_TOL = 1e-10`. O
+carregador é o módulo privado `_var_test_cases.py` (decisão de detalhe do §1), com
+`@functools.cache` (uma leitura por processo).
+
 <!-- END: post-execution -->
