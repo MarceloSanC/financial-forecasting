@@ -5,6 +5,8 @@ não-degeneradas** (ADR `0_0_0011`; concept 6.1 I8):
 
 - ĉ(τ_k) = média de 1{y ≤ q̂_{τ_k}} — empate conta como coberto (I6);
 - PICP do par (τ_l, τ_u) = média de 1{l ≤ y ≤ u} — bordas inclusas (I6);
+- os dois indicadores vêm dos predicados FA7 de dono único `is_at_or_below` e
+  `is_inside_closed` (`coverage_series.py`; concept 6.3 I3) — nenhuma cópia aqui;
 - MPIW = média de u - l, na unidade de y;
 - nominal = 1 - 2·τ_l, derivado da grade da série (I7), nunca constante do código.
 
@@ -19,6 +21,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Final
 
 from financial_forecasting.features.evaluation.domain.services.degeneracy_gate import (
     DegeneracyGate,
@@ -26,8 +29,14 @@ from financial_forecasting.features.evaluation.domain.services.degeneracy_gate i
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
+    is_at_or_below,
+    is_inside_closed,
     pair_nominal,
 )
+
+# Rótulo do MPIW (concept 6.3 D10, I9): a largura média é sharpness descritiva, sem
+# teste nem banda — o nome não pode circular sem essa qualificação.
+MPIW_LABEL: Final = "MPIW — sharpness descritiva, não-inferencial"
 
 
 @dataclass(frozen=True)
@@ -39,6 +48,8 @@ class PairCoverage:
         nominal: 1 - 2·τ_l (dinâmico, da grade).
         picp: fração de linhas com l ≤ y ≤ u.
         mpiw: média de u - l, na unidade de y.
+        mpiw_label: `MPIW_LABEL` — o MPIW é sharpness descritiva, não-inferencial
+            (concept 6.3 D10); campo aditivo com default, validado na construção.
     """
 
     lower_level: float
@@ -46,9 +57,13 @@ class PairCoverage:
     nominal: float
     picp: float
     mpiw: float
+    mpiw_label: str = MPIW_LABEL
 
     def __post_init__(self) -> None:
-        """I7: o nominal sai da fórmula única 1 - 2·τ_l; PICP é fração e MPIW é largura."""
+        """I7: o nominal sai da fórmula única 1 - 2·τ_l; PICP é fração e MPIW é largura.
+
+        I9 (6.3): o rótulo do MPIW é exatamente `MPIW_LABEL`.
+        """
         expected = pair_nominal(self.lower_level)
         if self.nominal != expected:
             raise ValueError(
@@ -58,6 +73,8 @@ class PairCoverage:
             raise ValueError(f"picp must be a fraction in [0, 1], got {self.picp}")
         if not self.mpiw >= 0.0:
             raise ValueError(f"mpiw must be a width >= 0, got {self.mpiw}")
+        if self.mpiw_label != MPIW_LABEL:
+            raise ValueError(f"a PairCoverage must carry MPIW_LABEL, got {self.mpiw_label!r}")
 
 
 @dataclass(frozen=True)
@@ -161,7 +178,11 @@ class CoverageMetrics:
         per_level = tuple(
             (
                 level,
-                sum(1 for i in kept if series.realized[i] <= series.scored_values(i)[k])
+                sum(
+                    1
+                    for i in kept
+                    if is_at_or_below(series.realized[i], series.scored_values(i)[k])
+                )
                 / n_evaluated,
             )
             for k, level in enumerate(series.levels)
@@ -221,7 +242,7 @@ def _pair_coverage(
     for i in kept:
         values = series.scored_values(i)
         low, high = values[k_low], values[k_high]
-        if low <= series.realized[i] <= high:
+        if is_inside_closed(series.realized[i], low, high):
             covered += 1
         widths.append(high - low)
     return PairCoverage(

@@ -1418,6 +1418,21 @@ one VaR violations … a risk management team would not start backtesting unless
 at least a couple of violations had occurred") — é regra de exclusão, logo
 **pré-registrada** (Simmons et al. 2011; Wagenmakers et al. 2012).
 
+**Mecânica do MC (Stage 6.3; [ADR 6.3.0006](../../adr/6_3_0006-monte-carlo-p-value-dufour-tie-breaking.md)).**
+Com sequências binárias a estatística assume poucos valores e o p-valor precisa
+de uma regra de **desempate** (C&P 2004 §4.3, p. 9: "we need a rule to break
+ties"). O projeto usa o desempate **aleatorizado** de Dufour (2006, Eqs.
+(2.30)–(2.31)): G̃_N = 1 − (1/N)Σ1(S_i **≤** S_0) + (1/N)Σ1(S_i = S_0)·1(U_i ≥ U_0)
+e p̃ = (N·G̃_N + 1)/(N + 1), com comparações exatas (todas as estatísticas saem do
+mesmo primitivo); o "<" da versão working paper de C&P é erro tipográfico
+(Berkowitz, Christoffersen & Pelletier 2011 imprimem "≤"). A referência do LR_uc são
+os N primeiros sorteios; a de **LR_ind/LR_cc** é **condicionada ao mesmo evento de
+aplicabilidade do observado** (os N primeiros sorteios que também passam pelo mínimo
+de violações e têm matriz de transição não degenerada, com teto de 100·N tentativas),
+porque só sob o mesmo evento o observado e os sorteios são permutáveis (Dufour Eq.
+(2.37)). `draws` e `seed` são obrigatórios e pré-registrados na 6.5 (N com α(N+1)
+inteiro); o MC só existe em h+1 e fora de sub-série DGT.
+
 ### 7.7 Convenção de condicionamento e o oráculo R
 
 O oráculo `rugarch::VaRTest` (§11.3) calcula LR_uc sobre as **T** observações e
@@ -1429,11 +1444,22 @@ não-rejeição), mas com **I_1 = 1** é O(1) (0,1–1,6 no mesmo cenário — r
 uma violação entre ~10 muda π̂ em ~10 %; cálculo próprio). **Convenção
 (FC5):** o projeto adota a convenção **"pura"** — tudo condicionado na primeira
 observação, com a identidade LR_cc = LR_uc + LR_ind **exata** (Christoffersen
-p. 847; §7.2) — e o golden-test contra o oráculo **compara convenções iguais**:
-alimenta o oráculo com a série a partir de t = 2 (ou descarta I_1 da própria
-implementação só para o teste), exigindo igualdade **exata** a menos de
-arredondamento; **não** se usa tolerância O(1/T). Casos em que o
-oráculo não devolve valor (zero violações em toda a série; n_10 + n_11 = 0) não
+p. 847; §7.2) — e o golden-test contra o oráculo **compara convenções iguais**,
+exigindo igualdade **exata** a menos de arredondamento; **não** se usa tolerância
+O(1/T). **Receita por dois *feeds*** (Stage 6.3;
+[ADR 6.3.0003](../../adr/6_3_0003-pure-convention-oracle-comparison-by-two-feeds.md)):
+alimentar só a série a partir de t = 2 corrige o LR_uc mas desloca o LR_ind para as
+T − 2 transições a partir de t = 3; por isso cada caso roda o `VaRTest` na série
+inteira **e** a partir de t = 2, e compara LR_uc puro ↔ `uc` do *feed* a partir de
+t = 2, LR_ind ↔ `cc − uc` do *feed* inteiro e LR_cc ↔ a soma (quando só o *feed*
+t ≥ 2 falha, o LR_uc puro vem de `rugarch:::.LR.uc(p, T − 1, Σ_{t≥2} I_t)` — errata do
+ADR 6.3.0003). **Escopo da conv. 21:** o condicionamento na primeira observação vale
+só para o trio 2-estados; o POF de Kupiec, a banda de Wilson e o LR_uc de 3 estados
+usam **todas** as posições observadas
+([ADR 6.3.0005](../../adr/6_3_0005-count-kernels-accept-mean-counts.md)). Casos em que o
+oráculo não devolve valor — sempre que algum símbolo {0, 1} falte em `head` ou em
+`tail` da série alimentada (zero violações, todas violações, uma única violação em
+t = 1 ou em t = T, n_10 + n_11 = 0; mesma regra do §11.3) — não
 são "valores do oráculo" — são casos de domínio com política própria (gate de
 degeneração §5; mínimo de violações §7.6).
 
@@ -1785,8 +1811,8 @@ pelo gate, depois fechada pela triagem E/C com registro em §10.1; ADR onde indi
 | 18 | Folds concatenados em série contígua por horizonte; diagnóstico de estacionariedade; DM por fold no perfil; janela rolante = limitação declarada (FB6) | Diebold 2015 §2.2/§3; HLN 2011 p. 484 e nota 11 do WP; GW 2006 §3.2 | **decidida — B-FOLDS** (§10.1) | 6.2, 6.5 |
 | 19 | Seeds → média ponto a ponto das perdas (conservadora pelo Jensen); cobertura/degeneração = média entre seeds, n ≈ T (nunca S·T); gate e sensibilidades por contagens médias; LR_ind/cc por seed e fração de seeds que rejeita no perfil; GBM determinístico → uma execução, com teste de contrato na 5.5; nº e lista de seeds = decisão P do humano na 5.5 (custo medido do TFT), consumida daqui (T12/FB7) | Bouthillier 2021; Jensen (derivação); código do adapter LightGBM | **decidida — B-SEEDS** (§10.1) (ADR) | 6.2, 6.5 |
 | 20 | Backtests: 2-estados por intervalo aninhado + unilateral por τ; 3-estados não adotado como backtest — exceto o LR_uc de 3 estados do par primário, sensibilidade do gate H1 (FC4) | Christoffersen 1998 §3/§4.2 | decidida | 6.3 |
-| 21 | Convenção "pura" de condicionamento — todas as contagens sobre t = 2..T, n_1 = n_01 + n_11 (identidade LR_cc = LR_uc + LR_ind exata); golden-test compara convenções iguais (oráculo alimentado a partir de t = 2), sem tolerância O(1/T) (FC5) | Christoffersen 1998 pp. 845/847; C&P 2004 §4.1; `rugarch` | decidida | 6.3 |
-| 22 | P-valor χ² assintótico; MC exato sob iid Bern(p) como sensibilidade em h+1; mínimo de violações para LR_ind pré-registrado (FC6) | Christoffersen 1998; Christoffersen & Pelletier 2004 §4.1, §4.3, §5 | decidida | 6.3, 6.5 |
+| 21 | Convenção "pura" de condicionamento — todas as contagens sobre t = 2..T, n_1 = n_01 + n_11 (identidade LR_cc = LR_uc + LR_ind exata); golden-test compara convenções iguais por dois *feeds* do oráculo (LR_uc ↔ `uc` a partir de t = 2; LR_ind ↔ `cc − uc` da série inteira — ADR 6.3.0003), sem tolerância O(1/T); escopo só do trio 2-estados — POF, Wilson e LR_uc de 3 estados sobre todas as posições observadas (ADR 6.3.0005) (FC5) | Christoffersen 1998 pp. 845/847; C&P 2004 §4.1; `rugarch` | decidida | 6.3 |
+| 22 | P-valor χ² assintótico; MC exato sob iid Bern(p) como sensibilidade em h+1, com desempate aleatorizado de Dufour e referência de LR_ind/LR_cc condicionada ao evento de aplicabilidade (ADR 6.3.0006; §10.1 6.3-MC-TIES, 6.3-MC-COND); mínimo de violações para LR_ind pré-registrado (FC6) | Christoffersen 1998; Christoffersen & Pelletier 2004 §4.1, §4.3, §5; Dufour 2006 Eqs. (2.30)–(2.37); BCP 2011 | decidida | 6.3, 6.5 |
 | 23 | h+7: LR's computados; LR_ind/LR_cc descritivos para h > 1; gate H1 em h+7 = banda; LR_uc-HAC não adotado; partição + Bonferroni registrada (FC1) | DGT 1998 §6 + derivação `[SEM-FONTE-PRIMÁRIA]`; Christoffersen & Diebold 2000 fn. 14 (só reconhecimento) | **decidida — B-H7** (§10.1) | 6.3, 6.5 |
 | 24 | VaR_α(r) = −q_{1−α}(r); hits unilaterais por cauda; Kupiec + Christoffersen por cauda; "descritivo" = sem claim de risco | QRM 2005 Def. 2.10; Christoffersen 1998 pp. 843–844 | decidida | 6.3 |
 | 25 | Pré-registro congela COMO se julga e é hasheado antes de qualquer métrica confirmatória; cohort congela O QUE e tem hash próprio referenciado (T10) | Nosek 2018; ICH E9 §5.1; modeling §6.3 | **decidida — B-ORDEM** (§10.1) | 6.5, 8.1 |
@@ -1865,7 +1891,21 @@ Sensibilidade pré-registrada: partição DGT + Bonferroni no par primário · R
 Escolha: cohort (5.5) congelado e treinado → pré-registro (6.5) hasheado → métricas confirmatórias (8.1); ver predições brutas não viola, computar métricas confirmatórias viola · Alternativas: pré-registrar antes do treino · Degrau: 1 (roadmap 5.5 → 6.5; overview §7)
 Base: Nosek et al. 2018 "Challenge 3" "once the data have been observed, there are inevitable risks for blinding … This transparency provides insight about potential biasing influences" [verificado; a reticência une dois parágrafos]
 Sensibilidade pré-registrada: nenhuma · Reversível: não depois do hash (é o objetivo)
+
+[decision:E] 6.3-MC-TIES — tie handling in the Monte Carlo p-value of the discrete LR statistics
+Escolha: Dufour randomized tie-breaking (Eq. 2.30, with ≤) · Alternativas: non-randomized Ĝ_N with ≥ (valid, size ≤ α); strict ">" (continuous-case rule); the WP's literal "<"
+Base: C&P 2004 §4.3 p. 9 "we need a rule to break ties" [doi ok; verificado]; Dufour 2006 Eqs. (2.30)–(2.31), (2.33) p. 8, (2.37) p. 9 [doi ok; verificado]; BCP 2011 prelim. p. 16 [doi ok; verificado]
+Sensibilidade pré-registrada: nenhuma (o MC já é sensibilidade de perfil) · Reversível: sim
+
+[decision:E] 6.3-MC-COND — reference distribution when LR_ind is not defined on some null draws
+Escolha: condition the LR_ind/LR_cc reference on the same applicability event A as the observed statistic (first N draws in A, redrawing up to a declared cap); LR_uc reference = first N draws (its applicability is structural) · Alternativas: unconditioned reference with inapplicable draws counted as LR_ind = 0; drop inapplicable draws and report fewer than N
+Base: Dufour 2006 Eq. (2.37) "exchangeable" premise [doi ok; verificado]; C&P 2004 §5 p. 11 "we do not use Monte Carlo samples with zero or one VaR violations" [doi ok]; Checkpoint A probe (0.0080 vs 0.0112)
+Sensibilidade pré-registrada: nenhuma · Reversível: sim
 ```
+
+Os dois registros acima vêm da Stage 6.3
+([ADR 6.3.0006](../../adr/6_3_0006-monte-carlo-p-value-dufour-tie-breaking.md)): só
+mecânica do MC da convenção 22, nenhuma convenção nova.
 
 ## 11. Referências
 
@@ -1945,6 +1985,8 @@ Backtests e pré-registro:
 
 - Diebold, F. X.; Gunther, T. A.; Tay, A. S. (1998). "Evaluating Density Forecasts with Applications to Financial Risk Management". *International Economic Review*, 39(4), 863–883. DOI: 10.2307/2527342. (§3 pp. 867–869; §6 pp. 880–881.)
 - Christoffersen, P. F.; Diebold, F. X. (2000). "How Relevant is Volatility Forecasting for Financial Risk Management?". *Review of Economics and Statistics*, 82(1), 12–22. DOI: 10.1162/003465300558597. (Lido no NBER WP 6844, 1998: §2; §3 fn. 14.)
+- Dufour, J.-M. (2006). "Monte Carlo tests with nuisance parameters: A general approach to finite-sample inference and nonstandard asymptotics". *Journal of Econometrics*, 133(2), 443–477. DOI: 10.1016/j.jeconom.2005.06.007. (Lido no CIRANO WP 2005s-02: Eq. (2.8) p. 4; Eq. (2.10) p. 5; Eqs. (2.30)–(2.31), (2.33) p. 8; Eq. (2.37) p. 9 — desempate aleatorizado e tamanho exato sob permutabilidade; §7.6, ADR 6.3.0006.)
+- Berkowitz, J.; Christoffersen, P.; Pelletier, D. (2011). "Evaluating Value-at-Risk Models with Desk-Level Data". *Management Science*, 57(12), 2213–2227. DOI: 10.1287/mnsc.1080.0964. (Lido na versão preliminar: p. 16, regra de desempate do p-valor Monte Carlo com "≤"; §7.6, ADR 6.3.0006.)
 - Christoffersen, P.; Pelletier, D. (2004). "Backtesting Value-at-Risk: A Duration-Based Approach". *Journal of Financial Econometrics*, 2(1), 84–108. DOI: 10.1093/jjfinec/nbh004. (Lido no CIRANO WP 2003s-05: abstract; §2; §4.1 p. 7; §4.3 pp. 8–9; §5 p. 11.)
 - Brown, L. D.; Cai, T. T.; DasGupta, A. (2001). "Interval Estimation for a Binomial Proportion". *Statistical Science*, 16(2), 101–133. DOI: 10.1214/ss/1009213286. (Abstract p. 101; Eq. (1) p. 103; §3.1.1 Eq. (4) p. 107.)
 - Wilson, E. B. (1927). "Probable Inference, the Law of Succession, and Statistical Inference". *JASA*, 22(158), 209–212. DOI: 10.1080/01621459.1927.10502953. `[CITAÇÃO-NÃO-ACESSADA]` (origem do intervalo; via BCD 2001.)
@@ -1962,4 +2004,4 @@ Backtests e pré-registro:
 - **statsmodels** — `stats.multitest.multipletests(pvals, alpha=0.05, method='holm', …)`: rejeita se p_(i) ≤ α/(m − i + 1) (≤, como Holm), step-down, `pvals_corrected = maximum.accumulate(pvals * arange(m, 0, −1))` truncado em 1; a correção "is independent of the alpha specified". `OLSResults.get_robustcov_results(cov_type='HAC', maxlags=m, kernel='bartlett'|'uniform', use_correction=True)` (código `stats/sandwich_covariance.py`): `weights_bartlett` = 1 − k/(m+1) (com m = h−1: 1 − k/h, idêntico ao "bartlett" do R); `weights_uniform` = 1 (janela retangular DM 1995 / "acf" do R); `nlags=None` → floor(4(T/100)^{2/9}); `use_correction=True` multiplica por T/(T−1) — coincide com o fator HLN em h = 1 e **difere** para h > 1 ("just guessing on correction factor, need reference"), por isso fica desligado em todo h e o HLN é aplicado por fora; `use_t=False` → p-valores pela normal. Neutralizar: `kernel='uniform'`, `maxlags=h−1`, `use_correction=False`, aplicar o fator HLN e a t_{T−1} por fora; o estimador pressupõe "a single time series with zero axis consecutive, equal spaced".
 - **arch** — `arch.bootstrap.MCS(losses, size, reps=1000, block_size=None, method='R', bootstrap='stationary', *, seed=None)` (código `arch/bootstrap/multiple_comparison.py`): `losses` T × k completa; `block_size=None` → int(√T) ("should be provided and chosen to be appropriate for the data"); `method='R'`: d̄_ij = L̄_i − L̄_j, var̂ por bootstrap calculada **uma vez** com os mesmos índices reutilizados, estatística max t_ij, elimina o i do par que atinge o máximo (= e_R,M); `method='max'`: var recalculada a cada passo, elimina arg max t_i· (= e_max,M); p-valores = máximo cumulativo (= Definition 4 de HLN 2011); `included` = modelos com p-valor **>** `size` (HLN Theorem 3 usa ≥ α — diferença só em empate exato); o aviso "estimated standard deviation of at least one loss difference was 0" existe **só** em `method='max'` — em `method='R'` só a diagonal da matriz de variâncias é protegida (`variances += np.eye(k)`), e duas colunas de perda idênticas dão `0/0 = NaN`, p-valor 0 e `IndexError` sem diagnóstico (validar var(L_i − L_j) > 0 antes de chamar — §6.5). `StationaryBootstrap(block_size)`: `block_size` = comprimento **médio** (Politis & Romano 1994); `optimal_block_length(x)` devolve um DataFrame com as colunas `"stationary"` e `"circular"` (o docstring fala em `b_sb`/`b_cb`; Politis & White 2004 + Patton et al. 2009) — o adapter lê `["stationary"]`. Empate exato na eliminação 'R': `loc = argwhere(included_loss_diffs == test_stat)` com mais de um par empatado faz `loc.squeeze()[0]` devolver o **primeiro par inteiro**, e o `arch` remove o modelo-linha **e** o modelo-coluna desse par (possivelmente o melhor dos dois) num só passo; o domínio elimina só o modelo-linha (o primeiro na ordem da série — ADR 6.2.0004). Neutralizar: `size` = α_MCS, `seed` fixo e `reps` pré-registrados; bloco explícito; > vs ≥ na fronteira.
 - **R `forecast::dm.test(e1, e2, alternative, h, power, varestimator)`** (código `R/DM2.R`; página de referência oficial): recebe **erros** e usa d = |e1|^power − |e2|^power — para testar um diferencial de **pinball**, passar as próprias séries de perda (≥ 0) como `e1`, `e2` com `power = 1`; autocovariâncias até h−1; `varestimator = "acf"` (default) = janela retangular (γ̂_0 + 2Σγ̂_k)/n; `"bartlett"` = pesos 1 − k/h; se a variância for ≤ 0 com h > 1: aviso "Variance is negative. Try varestimator = bartlett. Proceeding with horizon h=1" e **recalcula com h = 1** — inclusive com dv = 0 (a condição do código é `if (dv > 0)`), apesar de a mensagem falar em variância negativa; estatística × fator HLN ((n + 1 − 2h + h(h−1)/n)/n)^{1/2}; p-valor com **t de Student, df = n − 1**; variância ≤ 0 com h = 1 ⇒ `stop("Variance of DM statistic is zero")` (erro, não fallback); `alternative = "less"` = "method 2 is less accurate than method 1" ⇔ com e1 = candidato, H1 "candidato melhor". Neutralizar: nada além de `power = 1` e da convenção de sinal; é o oráculo que fixa retangular + HLN + t_{n−1}.
-- **R `rugarch::VaRTest(alpha = 0.05, actual, VaR, conf.level = 0.95)`** (man page; código `R/rugarch-tests.R`): `alpha` = **probabilidade de violação**; `VaR` = quantil de **retorno** (negativo na cauda inferior); hit = `actual < VaR` (estrito); `.LR.uc` sobre as T observações, com **produtos** de verossimilhanças (sub-fluxo a 0 e `NaN` para T de milhares — fixtures em T de centenas); `.LR.cc`: tabela de transições sobre T−1 pares, `stat.cc = stat.uc + stat.ind` (identidade só aproximada — LR_uc sobre T obs; O(1/T) se I_1 = 0, O(1) se I_1 = 1, §7.7); `0^0 = 1` ⇒ N11 = 0 funciona (= Christoffersen & Pelletier §4.1); `N10 + N11 = 0` ⇒ `p11 = NaN`; erro ("subscript out of bounds") sempre que algum símbolo {0, 1} falte em `head` ou em `tail` da série — zero violações, ou **uma única** violação em t = 1 ou t = T; saída: `expected.exceed = floor(alpha·TN)`, `actual.exceed`, `uc.LRstat`, `uc.LRp`, `cc.LRstat`, `cc.LRp` (não devolve LR_ind separado — derivar como cc − uc na convenção do R). Neutralizar: alimentar o oráculo com a série a partir de t = 2 para igualar a convenção pura (§7.7) — sem tolerância O(1/T); desigualdade estrita vs ≤ (§4.5); casos-limite como casos de domínio, não valores do oráculo.
+- **R `rugarch::VaRTest(alpha = 0.05, actual, VaR, conf.level = 0.95)`** (man page; código `R/rugarch-tests.R`): `alpha` = **probabilidade de violação**; `VaR` = quantil de **retorno** (negativo na cauda inferior); hit = `actual < VaR` (estrito); `.LR.uc` sobre as T observações, com **produtos** de verossimilhanças (sub-fluxo a 0 e `NaN` para T de milhares — fixtures em T de centenas); `.LR.cc`: tabela de transições sobre T−1 pares, `stat.cc = stat.uc + stat.ind` (identidade só aproximada — LR_uc sobre T obs; O(1/T) se I_1 = 0, O(1) se I_1 = 1, §7.7); `0^0 = 1` ⇒ N11 = 0 funciona (= Christoffersen & Pelletier §4.1); `N10 + N11 = 0` ⇒ `p11 = NaN`; erro ("subscript out of bounds") sempre que algum símbolo {0, 1} falte em `head` ou em `tail` da série — zero violações, ou **uma única** violação em t = 1 ou t = T; saída: `expected.exceed = floor(alpha·TN)`, `actual.exceed`, `uc.LRstat`, `uc.LRp`, `cc.LRstat`, `cc.LRp` (não devolve LR_ind separado — derivar como cc − uc na convenção do R). Neutralizar: comparar a convenção pura por **dois *feeds*** (§7.7; ADR 6.3.0003) — LR_uc ↔ `uc.LRstat` da série a partir de t = 2 (ou `rugarch:::.LR.uc(p, T − 1, Σ_{t≥2} I_t)` quando só esse *feed* falha — errata do ADR), LR_ind ↔ `cc.LRstat − uc.LRstat` da série inteira, LR_cc ↔ a soma; POF ↔ `uc.LRstat` da série inteira — sem tolerância O(1/T); desigualdade estrita vs ≤ (§4.5); casos-limite como casos de domínio, não valores do oráculo (fixture `tests/fixtures/r_oracle/var_test_cases.json`, ADR 6.3.0002).

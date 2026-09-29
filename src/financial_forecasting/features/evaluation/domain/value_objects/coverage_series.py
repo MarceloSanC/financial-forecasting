@@ -46,7 +46,8 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
 # Tolerância da simetria da grade: representação float64 (ADR 6.1.0002 item 2). Aceita
 # (0.02, …, 0.98) apesar de `1 - 0.98 != 0.02` em float.
 _SYMMETRY_TOLERANCE = 1e-12
-_MEDIAN_LEVEL = 0.5
+# Nível central da grade: não forma par simétrico nem é cauda de VaR.
+MEDIAN_LEVEL = 0.5
 
 
 @dataclass(frozen=True)
@@ -106,7 +107,7 @@ class CoverageSeries:
         cobertura) indexam `scored_values(i)` por aqui, sem remontar a regra.
         """
         size = len(self.levels)
-        return tuple((k, size - 1 - k) for k in range(size) if self.levels[k] < _MEDIAN_LEVEL)
+        return tuple((k, size - 1 - k) for k in range(size) if self.levels[k] < MEDIAN_LEVEL)
 
     @property
     def guardrail_applied_rate(self) -> float:
@@ -140,13 +141,13 @@ class CoverageSeries:
             raise ValueError(f"levels must be strictly increasing and unique, got {levels}")
         size = len(levels)
         for k in range(size):
-            if abs(levels[k] + levels[size - 1 - k] - 1.0) > _SYMMETRY_TOLERANCE:
+            if not is_symmetric_pair(levels[k], levels[size - 1 - k]):
                 raise ValueError(
                     f"levels must be symmetric (tau_k + tau_(K+1-k) == 1 within "
                     f"{_SYMMETRY_TOLERANCE}), got {levels}"
                 )
         # Vazia ou só {0.5}: nenhum par simétrico — IS, PICP e nominal indefinidos.
-        if not levels or levels[0] >= _MEDIAN_LEVEL:
+        if not levels or levels[0] >= MEDIAN_LEVEL:
             raise ValueError(
                 f"levels must hold at least one symmetric pair (tau_1 < 0.5), got {levels}"
             )
@@ -186,6 +187,15 @@ class CoverageSeries:
                 raise ValueError(f"point {index}: realized value must be finite, got {realized}")
 
 
+def is_symmetric_pair(lower_level: float, upper_level: float) -> bool:
+    """`τ_l + τ_u == 1` dentro da tolerância de representação float64 da grade (1e-12).
+
+    Regra única da simetria (ADR 6.1.0002 item 2): a `CoverageSeries` a aplica a cada
+    par da grade e a `HitSequence` (6.3) ao par de um `HitKind.INTERVAL`.
+    """
+    return abs(lower_level + upper_level - 1.0) <= _SYMMETRY_TOLERANCE
+
+
 def pair_miscoverage(lower_level: float) -> float:
     """Miscobertura do par simétrico (τ_l, 1 - τ_l): alpha = 2·τ_l — fórmula única (I5).
 
@@ -198,3 +208,26 @@ def pair_miscoverage(lower_level: float) -> float:
 def pair_nominal(lower_level: float) -> float:
     """Cobertura nominal do par simétrico: 1 - 2·τ_l = 1 - `pair_miscoverage` (I7)."""
     return 1.0 - pair_miscoverage(lower_level)
+
+
+def is_at_or_below(realized: float, quantile: float) -> bool:
+    """Indicador 1{y ≤ q̂} — regra única de empate FA7 da cauda (doc §4.5; concept 6.3 I3).
+
+    Empate `y == q̂` **conta** como "abaixo ou no quantil". Consumidores: o
+    `CoverageMetrics` (ĉ(τ)) e o `HitSequences` (violação da cauda inferior); a
+    violação da cauda superior é `not is_at_or_below(y, q̂_τ)` — no empate, não é
+    violação. Sem validação própria: recebe valores já validados pela
+    `CoverageSeries` (C2 da 6.1).
+    """
+    return realized <= quantile
+
+
+def is_inside_closed(realized: float, lower: float, upper: float) -> bool:
+    """Indicador [l ≤ y ≤ u] do intervalo **fechado** — regra única FA7 (doc §4.5; I3).
+
+    As duas bordas contam como dentro (`y == l` ou `y == u` não é violação).
+    Consumidores: o `CoverageMetrics` (PICP) e o `HitSequences` (violação do intervalo
+    = `not is_inside_closed(...)`). Sem validação própria (valores já validados pela
+    `CoverageSeries`).
+    """
+    return lower <= realized <= upper

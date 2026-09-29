@@ -65,6 +65,14 @@ def test_rejects_non_finite_bool_and_non_float_numbers(value: object) -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("value", [10**400, -(10**400)], ids=["huge-int", "huge-negative-int"])
+def test_rejects_int_beyond_float_range_without_overflow_error(value: int) -> None:
+    """`math.isfinite(10**400)` ergue `OverflowError`; o predicado devolve `False`, para
+    os consumidores erguerem o `ValueError` nomeado do contrato em vez do erro cru."""
+    assert is_finite_number(value) is False
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("value", _FORMERLY_DIVERGENT, ids=_FORMERLY_DIVERGENT_IDS)
 def test_all_three_consumers_reject_formerly_divergent_input(
     make_series: SeriesFactory, value: object

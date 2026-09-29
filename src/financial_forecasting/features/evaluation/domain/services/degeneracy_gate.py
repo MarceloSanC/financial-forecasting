@@ -21,8 +21,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
-    is_finite_number,
+from financial_forecasting.features.evaluation.domain.value_objects._tolerance import (
+    validate_tolerance,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
@@ -114,7 +114,7 @@ class DegeneracyGate:
         Raises:
             ValueError: `tolerance` negativa ou não-finita (C3).
         """
-        _validate_tolerance(tolerance)
+        validate_tolerance(tolerance, field="tolerance")
         degenerate = tuple(
             max(values) - min(values) <= tolerance
             for values in (series.scored_values(i) for i in range(series.n_points))
@@ -131,13 +131,6 @@ class DegeneracyGate:
             rate=n_degenerate / series.n_points,
             pair_collapse_rates=_pair_collapse_rates(series, degenerate, tolerance),
         )
-
-
-def _validate_tolerance(tolerance: float) -> None:
-    # Predicado único de número finito do slice (`_finite_number`), o mesmo da
-    # `CoverageSeries` e do validador dos kernels.
-    if not is_finite_number(tolerance) or tolerance < 0.0:
-        raise ValueError(f"tolerance must be a finite number >= 0, got {tolerance!r}")
 
 
 def _pair_collapse_rates(

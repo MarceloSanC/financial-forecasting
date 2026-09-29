@@ -3,7 +3,8 @@
 Uma só escrita da regra, consumida pelos três lugares que a checam: a
 `CoverageSeries` (C2: quantis pós-guardrail e realizados), o validador único dos
 kernels (`scoring_input_validation.validate_finite`, C7) e o `DegeneracyGate`
-(tolerância, C3). Antes eram três cópias com semânticas diferentes — a do validador
+(tolerância, C3 — hoje via a regra única `_tolerance.validate_tolerance`, que a 6.3
+compartilha com a `HitSequence`). Antes eram três cópias com semânticas diferentes — a do validador
 (`math.isfinite` sob `try`) aceitava `Decimal`, `Fraction` e escalares numpy fora da
 hierarquia de `float` que a `CoverageSeries` recusava.
 
@@ -24,7 +25,14 @@ import math
 
 
 def is_finite_number(value: object) -> bool:
-    """`True` só para `int`/`float` não-bool finitos (exclui `None`, `nan`, `inf`, `bool`)."""
+    """`True` só para `int`/`float` não-bool finitos (exclui `None`, `nan`, `inf`, `bool`).
+
+    `int` além do alcance do float64 (ex.: `10**400`) também é `False`: `math.isfinite`
+    ergueria `OverflowError` cru nos consumidores, em vez do `ValueError` nomeado.
+    """
     if isinstance(value, bool) or not isinstance(value, int | float):
         return False
-    return math.isfinite(value)
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False

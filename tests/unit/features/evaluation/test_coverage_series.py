@@ -7,7 +7,9 @@ Prova (concept 6.1 A1, I1/I2/I3, C1/C2; ADR `6_1_0002`):
 - `symmetric_pairs` e `guardrail_applied_rate` numa grade de 7 níveis;
 - a grade (0.02, …, 0.98) é aceita apesar de `1 - 0.98 != 0.02` em float;
 - `scored_values` devolve `guardrail_values`, não `raw_values` (I3);
-- o VO é frozen.
+- o VO é frozen;
+- os predicados FA7 de dono único `is_at_or_below` / `is_inside_closed` e as suas
+  regras de empate (concept 6.3 I3; doc §4.5).
 """
 
 from __future__ import annotations
@@ -23,6 +25,8 @@ from financial_forecasting.features.analytics_store.domain.value_objects.quantil
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
+    is_at_or_below,
+    is_inside_closed,
     pair_miscoverage,
     pair_nominal,
 )
@@ -339,3 +343,30 @@ def test_bool_guardrail_value_is_not_a_finite_number(make_series: SeriesFactory)
     grid = (*_GRID[:3], True, *_GRID[4:])
     with pytest.raises(ValueError, match="point 0: guardrail values must all be finite"):
         make_series([grid], [0.0])
+
+
+# --- Predicados FA7 com dono único (concept 6.3 I3; doc §4.5) ----------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("realized", "quantile", "expected"),
+    [(-0.01, 0.0, True), (0.0, 0.0, True), (0.01, 0.0, False)],
+    ids=["below", "tie", "above"],
+)
+def test_fa7_at_or_below_counts_tie_as_at_or_below(
+    realized: float, quantile: float, *, expected: bool
+) -> None:
+    """I3: 1{y ≤ q̂} — y < q̂ e o empate y = q̂ são `True`; y > q̂ é `False`."""
+    assert is_at_or_below(realized, quantile) is expected
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("realized", "expected"),
+    [(-0.03, True), (0.03, True), (0.0, True), (-0.031, False), (0.031, False)],
+    ids=["at-lower", "at-upper", "strictly-inside", "below-lower", "above-upper"],
+)
+def test_fa7_inside_closed_counts_both_bounds_as_inside(realized: float, *, expected: bool) -> None:
+    """I3: [l ≤ y ≤ u] fechado — y = l, y = u e l < y < u são `True`; fora é `False`."""
+    assert is_inside_closed(realized, -0.03, 0.03) is expected
