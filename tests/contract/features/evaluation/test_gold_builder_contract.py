@@ -60,7 +60,7 @@ from tests.fakes.features.evaluation.fake_gold_builder import FakeGoldBuilder
 
 BUILDERS: dict[str, Callable[[], GoldBuilder]] = {
     "fake": lambda: FakeGoldBuilder(
-        "probe", depends_on=frozenset({"quality_checks"}), runs_when_blocked=False
+        "probe", depends_on=frozenset({"quality_checks"}), runs_when_blocked=True
     ),
     "quality_checks": QualityChecksGoldBuilder,
     "metrics_by_run": MetricsByRunGoldBuilder,
@@ -118,7 +118,8 @@ def test_blocked_inputs_tolerated(builder: GoldBuilder) -> None:
         assert table.name == f"gold_{builder.name}"
         assert table.rows
     else:
-        assert blocked_inputs().horizon_reports == ()
+        # confirmatória: sem relatórios não há linha (e nada é inventado)
+        assert builder.build(blocked_inputs()).rows == ()
 
 
 @pytest.mark.contract
