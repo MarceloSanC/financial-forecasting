@@ -1803,7 +1803,7 @@ dizia "24 dos 32" casos com feed inteiro válido; são **28 dos 32** (corrigido 
 ### 2026-09-28 — [deviation] Checkpoint C bloco 4: `provenance.command` portável (sem caminho do host) e `clustered` com n11 ≥ 2 — Claude (Opus 5.5)
 **Contexto:** achado LOW (repo público) — a Task 10 mandava gravar o literal executado
 (`$(pwd -W)` via `FF_R_ORACLE_COMMAND`), o que versionou um caminho absoluto do host
-(`C:/Users/…`) em `var_test_cases.json`, e o comando gravado não reproduzia (faltavam o
+(a pasta do usuário no Windows) em `var_test_cases.json`, e o comando gravado não reproduzia (faltavam o
 `docker build`, o `MSYS_NO_PATHCONV=1` e a variável que o gerador exigia). Achado INFO:
 `clustered_p0.02_T250` tinha n11 = 0 (não era agrupado de fato).
 **Razão:** disposição `corrigido` em `[6.3/task-10-fix]`, desviando da receita do
@@ -1817,7 +1817,7 @@ regeneração, a categoria `clustered` passou a exigir n11 ≥ 2: só
 outros cinco `clustered` mudaram só a descrição, e os demais 26 casos e o
 `provenance` (fora `command`) ficaram byte-idênticos. Verificado: pré-checagem da
 Task 10 verde; `_fixture_problems` da 6.2 (worktree irmã) = `[]`;
-`git grep -n "C:/Users" -- tests/` sem ocorrências (em `docs/` só restam as linhas
+a busca pelo prefixo da pasta do usuário do Windows em `tests/` sem ocorrências (em `docs/` só restam as linhas
 203–204 do bloco de ambiente do §1 deste technical, congelado desde a aprovação — fora
 do alcance da §7).
 
