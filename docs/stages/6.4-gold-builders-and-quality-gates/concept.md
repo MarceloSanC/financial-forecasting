@@ -3,7 +3,7 @@ title: Concept — Stage 6.4 — Gold builders modulares e quality gates (montag
 description: Use case RefreshGold do BC evaluation que lê o silver por um port do consumidor e o realizado pelo par read-only do MedallionStore, monta as séries alinhadas num serviço de domínio dono único das regras de alinhamento, roda o registry de quality checks (alinhamento, pré-condições estatísticas, degeneração, proveniência), chama os serviços de 6.1/6.2/6.3 e o McsBackend em produção, mapeia os relatórios em cinco tabelas por builders ordenados por graphlib e publica a geração inteira do cohort com manifesto e troca de diretório
 when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; ao ler as tabelas gold na 6.5; ao questionar de onde vem o realizado, por que o dedup não é reaplicado, o que um refresh bloqueado publica, como um leitor sabe que o gold está completo ou como a ordem dos builders é decidida
 keywords: [concept, gold-builders-and-quality-gates, evaluation, gold, refresh-gold, series-assembly, alignment, quality-checks, registry, graphlib, duckdb, parquet, manifest, staging, mcs, silver, dataset-tft, realized, dataset-fingerprint, preregistration]
-status: done
+status: draft
 created_at: 2026-09-29
 updated_at: 2026-09-29
 stage_id: 6.4-gold-builders-and-quality-gates
