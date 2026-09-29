@@ -2537,4 +2537,18 @@ chegavam ao `caplog`. Reproduzido com `-n0` (os dois arquivos em sequência).
 fixture) — sem mexer em configuração global. Candidato a issue de infraestrutura de
 testes: isolar o CLI do `import-linter` (subprocess) para não vazar estado de logging.
 
+### 2026-09-29 — [decision] Task 14: port `TrainingGridReader`, real `ReadTrainingGrid` e contrato — Claude (Opus 5.5)
+**Contexto:** revisão de execução (ADR 6.4.0009) — decisões de detalhe do §1.
+**Razão:** executadas como planejado. O port anota `TrainingGrid` só sob
+`if TYPE_CHECKING:` (aresta type-only declarada no LAYOUT §7 e no comentário do
+`bc-independence`; as 22 exceções de runtime não mudam). `ReadTrainingGrid(*, store,
+columns)` guarda `tuple(columns)` e só delega a `load_training_grid` (nenhum arquivo
+existente da `modeling` muda). `FakeTrainingGridReader` delega ao
+`build_training_grid` e registra `calls`. A suíte `[fake, real]` grava o dataset por
+`pandas` no layout do par read-only, com as linhas do ativo `AAPL` fora de ordem e
+quatro ativos no mesmo `data_root` (prefixo de 3, sem prefixo, NaN interior, toda
+linha inválida) e um ativo ausente. `test_port_coverage_gate.py`: piso 26 e
+`training_grid_reader_resolves` (`adapters == ("ReadTrainingGrid",)`, contrato
+`test_training_grid_reader_contract.py`, sem violação).
+
 <!-- END: post-execution -->

@@ -475,7 +475,9 @@ allow_indirect_imports = False
 #     `PersistRunRecordResult` e o VO `RunRecord` do `analytics_store`) — o port
 #     é do consumidor, o formato dos dados é do fornecedor (#68) — e a anotação
 #     `NewsArticle` do `FinbertSentimentModel` (`feature_engineering` ->
-#     `market_data`).
+#     `market_data`) e a anotação `TrainingGrid` (`modeling.domain`) do port
+#     `TrainingGridReader` de `evaluation` (Stage 6.4, ADR 6.4.0009; o real é o
+#     use case `ReadTrainingGrid` da `modeling`).
 #
 # Os cinco slices estão no perímetro: `market_data` entrou na #95 com as suas 8
 # arestas de runtime declaradas e `evaluation` na Stage 6.1 com 1 (o VO

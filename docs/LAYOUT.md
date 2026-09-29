@@ -296,8 +296,10 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   - **Arestas sob `if TYPE_CHECKING:` são invisíveis ao contrato**
     (`exclude_type_checking_imports = True`, ver §3). Hoje as únicas type-only
     cross-slice são as assinaturas dos ports `PredictionPersister`/
-    `RunRecordPersister` de `modeling` (anotam DTOs/VO do `analytics_store`) e a
-    anotação `NewsArticle` do `FinbertSentimentModel` (`feature_engineering`).
+    `RunRecordPersister` de `modeling` (anotam DTOs/VO do `analytics_store`), a
+    anotação `NewsArticle` do `FinbertSentimentModel` (`feature_engineering`) e a
+    anotação `TrainingGrid` (`modeling.domain`) do port `TrainingGridReader` de
+    `evaluation` (Stage 6.4, ADR 6.4.0009 — o real é o use case `ReadTrainingGrid`).
 
   **Nota de escopo (ADR 0.0.0053):** esta regra enforça direção de dependência e
   aciclicidade entre slices — NÃO afirma que cada slice é um Bounded Context
