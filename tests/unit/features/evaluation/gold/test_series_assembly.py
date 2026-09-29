@@ -426,6 +426,15 @@ def test_common_too_short_empty_intersection() -> None:
 
 
 @pytest.mark.unit
+def test_common_too_short_not_at_block_floor() -> None:
+    """T == MIN_BLOCK_LENGTH_OBS (11): o piso é inclusivo, sem achado."""
+    cohort = make_cohort(n_sessions=17, horizons=(1,), folds=("f0",))
+    result = _assemble(cohort, horizons=(1,))
+    assert result.alignment.findings == ()
+    assert result.alignment.common_points == ((1, 11),)
+
+
+@pytest.mark.unit
 def test_realized_missing_whole_series() -> None:
     """Série com TODO alvo fora do dataset: só `realized_missing`, sem intervalo."""
     cohort = replace_records(
