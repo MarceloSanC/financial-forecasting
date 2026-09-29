@@ -1725,4 +1725,20 @@ segundo teste prova que o detector não é vácuo (5 violações num arquivo sin
 `make check`/`check-block` (a pasta `tests/architecture/` fica fora do T1). O grep do §3
 continua valendo como conferência de saída.
 
+### 2026-09-29 — [decision] Fechamento: gate de saída do §3 — Claude (Opus 5.5)
+**Contexto:** gate de saída rodado sobre `9729f8a`, bloco Container do §3 num único
+`bash -euo pipefail` e bloco Host em Git Bash.
+**Razão:** tudo verde — `make check` (3338 passed, 23 skipped de outros slices, cobertura
+98,66 %); A15 com 36 arquivos do slice, nenhum abaixo de 90 % e nenhum dos 12 exigidos
+ausente; A11 com as duas suítes de contrato (187 passed, pernas `fake`/`statsmodels`/`arch`,
+zero `SKIPPED`); integrações (84 passed, zero `SKIPPED`, **8** ids `test_mcs_matches_arch`);
+`lint-imports` 15 kept; laço de tokens OK nos 13 arquivos; Host: baseline sem
+`InferenceBackend`/`McsBackend`, unit e contrato puros, A14 = 1/1/1 (Tasks 02/06/07), 7
+ADRs `accepted`, `check_technical_postexec` e `check_stage_issue` OK. Único ajuste de
+execução no bloco: o `pytest --cov` do A15 rodou com `-n auto --dist loadgroup` (o mesmo
+paralelismo do `make check`; o resultado de cobertura é o mesmo, só o tempo muda).
+Findings abertos com Stage candidata: o `[finding]` da Task 03 (unificar `_timestamps`,
+`_paired_inputs.check_horizon`/`_check_int` com o `_horizon.py` da 6.3 e a `CoverageSeries`
+— **6.4**).
+
 <!-- END: post-execution -->
