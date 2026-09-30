@@ -2244,4 +2244,34 @@ usual). O `.importlinter` não tem contrato de camadas internas ao domínio; um
 ciclo falharia já na coleta dos testes (nenhum teste dedicado).
 **Stage candidata:** esta.
 
+### 2026-09-30 — [decision] Tasks 03–04: leituras de detalhe do gate, da evidência e do veredito — Claude (Opus 5.5)
+**Contexto:** pontos que o concept/technical deixam implícitos, resolvidos na
+execução abaixo do limiar de concept (nenhum muda contrato, fronteira ou
+critério). **Decisões:**
+1. **Degeneração média do gate** = a maior entre as médias das duas caudas
+   (`CalibrationEvidence.mean_degeneracy`): por construção da 6.4 as duas caudas
+   da mesma série têm a mesma taxa; o `max` só escolhe o lado conservador se o
+   gold um dia divergir.
+2. **Sensibilidade "amostra comum"** recomputa o gate **inteiro** (as duas bandas
+   ao nível do gate ∧ degeneração média ≤ limiar) sobre `HorizonEvidence.common`.
+3. **Bandas DGT** chamam o `WilsonBand` com o horizonte h da série de origem (o
+   aviso de dependência sai ligado, como na banda da série inteira); o nível é
+   1 − `sensitivity_alpha`/(2h) e a sensibilidade passa só se as 2h bandas são
+   aplicáveis e contêm a nominal.
+4. **Divergência do LR_uc** = "rejeita" quando o gate passa, ou "não rejeita"
+   quando o gate reprova (nos dois sentidos, ADR 6.5.0006 item 4).
+5. **`HorizonEvidence`** exige `n_points` de toda linha DM = `common_points`
+   (invariante do VO; o mapeador da Task 08 ergue `GoldGenerationCorruptError`
+   antes, ao ler), `gate.dgt` com h sub-séries (offsets 0..h−1, passo h) para
+   h > 1 e vazio para h = 1; `common.dgt` pode vir vazio.
+6. **`candidate_has_lowest_mean_pinball`**: empate com o menor P̄_G conta como
+   "tem a menor" (é informação, nunca condição — ADR 6.5.0007 item 4).
+7. **`TierReading.ties_in_mcs`** (perfil, ADR 6.5.0007 item 5) = o candidato e
+   **todos** os membros do nível estão no MCS primário ("o candidato está no MCS
+   com eles"); `holm_rejects_all` = Holm rejeita contra todo membro.
+8. **Poder**: `accepted_counts` varre c = 0..n com `WilsonBand.evaluate(horizon=1, …)`
+   (só a aceitação importa); medido em n = 1 000 (seis cenários × dois
+   horizontes) ≈ 0,3 s por `decide` — abaixo do limite de 1 s por cenário do §5.
+**Stage candidata:** esta.
+
 <!-- END: post-execution -->
