@@ -1,34 +1,28 @@
-\chapter{Resultados e Discussão}
+\chapter{Resultados e Discussão} \label{chap:resultados}
 
-% Guardrails do capitulo (fonte: docs/living-paper/chapter_structure_freeze.md)
-% Objetivo: apresentar resultados, comparacoes e interpretacoes com base em evidencias rastreaveis.
-% Escopo obrigatorio: resultados por horizonte/split, incerteza quantilica, comparacoes e robustez.
-% Fora de escopo: afirmacoes sem suporte empirico ou sem alinhamento temporal OOS.
-% Status: este capitulo aguarda execucao da Fase B (resultados confirmatorios) e da Fase C
-% (interpretabilidade) sob pre-registro versionado. A Round 0 e tratada apenas como diagnostico
-% exploratorio do pipeline; nao alimenta claims confirmatorios.
+% Objetivo: apresentar resultados, comparações e interpretações com base em
+% evidências rastreáveis. Status: aguarda a rodada confirmatória; as seções
+% abaixo são espaços reservados com o conteúdo que cada uma reportará.
 
-\section{Cenários experimentais avaliados}
-Os experimentos deste trabalho dividem-se em duas naturezas distintas. A primeira é a Round 0, conduzida sobre o ativo piloto AAPL com a coorte controlada de prefixo \texttt{0\_2\_3\_} no horizonte \(h+1\), e teve como propósito exclusivo o diagnóstico exploratório do pipeline: depuração da extração e persistência de quantis, sensibilidade a hiperparâmetros e identificação de patologias quantílicas que motivaram a definição dos gates de qualidade da Fase B. A Round 0 não constitui evidência confirmatória sobre o desempenho do modelo; achados quantitativos dessa rodada permanecem registrados em \texttt{docs/07\_reports/ROUND0\_023\_FROZEN\_SHORTLIST.md} e no \texttt{evidence\_log} do living-paper para rastreabilidade histórica.
+\section{Cenários experimentais}
+Os experimentos deste trabalho têm duas naturezas distintas. A \textbf{rodada exploratória} consiste na busca de hiperparâmetros do TFT, avaliada exclusivamente pela perda no bloco \texttt{early\_stop} de cada \textit{fold}, sem persistência de previsões fora da amostra; ela não constitui evidência e serve apenas para fixar a configuração do candidato. A \textbf{rodada confirmatória} é executada uma única vez, com hiperparâmetros congelados, sobre o cohort pré-registrado (sementes \(\times\) \textit{folds}), contra a hierarquia completa de \textit{baselines}, sob alinhamento estrito por \textit{target timestamp}. As seções seguintes são organizadas como espaços reservados que serão preenchidos com os artefatos da rodada confirmatória.
 
-A segunda natureza, ainda a ser executada, é a Fase B, prevista para fornecer os resultados confirmatórios contra baselines pré-declarados sob pré-registro versionado, com alinhamento temporal estrito por \textit{target timestamp}, múltiplas sementes, governança de coorte por \texttt{parent\_sweep\_id} e variante quantilica primária pós-guardrail. As seções seguintes deste capítulo são organizadas como espaços reservados que serão preenchidos quando os artefatos confirmatórios estiverem disponíveis.
+\section{Calibração por horizonte (H1)}
+\textit{A ser preenchido após a rodada confirmatória.} Esta seção reportará, por horizonte (\(h+1\), \(h+7\); \(h+30\) suplementar), a cobertura marginal em cada nível da grade e o \textit{reliability diagram}, o PICP e o MPIW dos intervalos definidos no pré-registro, o \textit{interval score} e os testes de cobertura condicional de Christoffersen e Kupiec, confrontados com as bandas pré-registradas e com os intervalos conformais (CQR) calibrados no bloco \texttt{calib}. A taxa de degeneração da grade e a proporção de previsões alteradas pelo rearranjo serão reportadas por execução.
 
-\section{Resultados agregados por horizonte e split}
-\textit{A ser preenchido após a Fase B.} Esta seção consolidará as métricas pontuais (RMSE, MAE, acurácia direcional e viés) por horizonte (\(h+1\), \(h+7\); \(h+30\) suplementar se a amostra efetiva permitir) e por partição temporal, restrita a \textit{runs} pós-\textit{reset} do \textit{silver}/\textit{gold} de 10 de maio de 2026 e ao escopo de coorte pré-registrado.
-
-\section{Análise da incerteza (quantis, cobertura, largura de intervalo)}
-\textit{A ser preenchido após a Fase B.} A análise probabilística reportará calibração marginal por quantil (\(p10\), \(p50\), \(p90\)), PICP intervalar para o intervalo \(p10\)-\(p90\), MPIW médio, pinball loss e \textit{reliability diagram} por horizonte, todos sob a variante pós-guardrail como objeto primário de avaliação, conforme política consolidada em \texttt{docs/04\_evaluation/METRICS\_DEFINITIONS.md} e \texttt{docs/04\_evaluation/CALIBRATION\_AND\_RISK.md}.
-
-\section{Comparações entre configurações e feature sets}
-\textit{A ser preenchido após a Fase B.} As comparações restringir-se-ão a configurações com a mesma chave de coorte (\texttt{parent\_sweep\_id}) e seguirão o contrato de baselines admissíveis declarado em \texttt{docs/04\_evaluation/BASELINES.md} (random walk, AR(1), média histórica, EWMA-vol, quantis empíricos históricos), com escopo de ativos e horizontes definidos no pré-registro.
+\section{\textit{Skill} relativo contra a hierarquia de \textit{baselines} (H2)}
+\textit{A ser preenchido após a rodada confirmatória.} Para os horizontes aprovados em H1, esta seção reportará a \textit{pinball loss} média e o CRPS do candidato e de cada \textit{baseline} (retorno nulo, média histórica, AR(1), EWMA-vol, quantis empíricos históricos e GBM quantílico), com a dispersão entre sementes e \textit{folds}.
 
 \section{Análise estatística pareada}
-\textit{A ser preenchido após a Fase B.} A análise pareada utilizará o teste de Diebold-Mariano \cite{DIEBOLDMARIANO1995} com correção HAC e ajuste para amostras pequenas no estilo Harvey-Leybourne-Newbold \cite{HARVEY1997}, e ajuste de múltiplas comparações por Holm-Bonferroni, sobre coortes alinhadas por \textit{target timestamp}, conforme especificação em \texttt{docs/04\_evaluation/STATISTICAL\_TESTS.md}. \textit{Model Confidence Set} \cite{HANSEN2011MCS} poderá ser reportado quando o número de candidatos justificar.
+\textit{A ser preenchido após a rodada confirmatória.} A análise pareada utilizará o teste de Diebold-Mariano \cite{DIEBOLDMARIANO1995} unilateral sobre a \textit{pinball loss}, com variância HAC de defasagem \(h-1\) e correção HLN \cite{HARVEY1997}, ajuste de Holm \cite{HOLM1979} sobre a família de comparações e o \textit{Model Confidence Set} \cite{HANSEN2011MCS}, que integra o \textit{scorecard} como leitura complementar. O veredito de H1 e H2 por horizonte será o produzido mecanicamente pelo \textit{scorecard} (Seção~\ref{sec:scorecard}).
 
-\section{Interpretabilidade e implicações}
-\textit{A ser preenchido após a Fase C.} A análise de contribuição relativa de famílias de indicadores (preço, técnico, sentimento, fundamentalista) seguirá a hierarquia metodológica de \texttt{docs/04\_evaluation/EXPLAINABILITY.md}: \textit{Variable Selection Network} (VSN) como evidência primária, importância por permutação como evidência complementar, ablação explicativa como verificação adicional. Conclusões de contribuição exigirão consistência em pelo menos dois dos três métodos.
+\section{Perfil descritivo pontual}
+\textit{A ser preenchido após a rodada confirmatória.} RMSE, MAE e acurácia direcional por horizonte, reportados como perfil descritivo, sem papel no veredito.
 
-\section{Ameaças à validade dos resultados}
-As principais ameaças à validade incluem: (i) sensibilidade dos resultados ao recorte de ativo, horizonte e janela temporal, (ii) possibilidade de subpotência estatística para detectar diferenças pequenas entre candidatos, e (iii) risco de interpretação indevida quando comparações são feitas fora da mesma interseção temporal. Para mitigar esses riscos, a análise adotou coorte congelada, alinhamento temporal estrito e leitura conjunta de métricas pontuais, probabilísticas e pareadas.
+\section{Contribuição de famílias (H3)}
+\textit{A ser preenchido após a rodada confirmatória.} A contribuição relativa das famílias (preço, técnico, sentimento, fundamento) será reportada por horizonte segundo os três métodos --- pesos da VSN, importância por permutação com intervalo \textit{bootstrap} e ablação ---, destacando as famílias com consistência em pelo menos dois métodos.
 
-Adicionalmente, embora a infraestrutura de persistência favoreça rastreabilidade e reconstrução analítica, a generalização externa dos achados depende de replicação em outros ativos e períodos. Assim, as conclusões desta rodada devem ser entendidas como evidência robusta para o escopo experimental definido, e não como afirmação universal sobre desempenho relativo de arquiteturas ou famílias de features.
+\section{Ameaças à validade}
+As principais ameaças à validade são: (i) sensibilidade dos resultados ao recorte de ativo, horizonte e janela temporal; (ii) possível subpotência estatística para detectar diferenças pequenas entre o candidato e os comparadores fortes; (iii) interpretação indevida quando comparações são feitas fora da mesma interseção temporal; e (iv) não permutabilidade das séries temporais, que limita a garantia teórica da predição conformal --- razão pela qual sua cobertura é reportada como empírica \cite{BARBER2023}. Para mitigar esses riscos, a análise adota coorte congelada, alinhamento temporal estrito, correção de múltiplas comparações e leitura conjunta de métricas de calibração, \textit{skill} e testes pareados.
+
+A generalização externa dos achados depende de replicação em outros ativos e períodos. As conclusões devem ser entendidas como evidência para o escopo experimental definido, e não como afirmação universal sobre o desempenho relativo de arquiteturas ou famílias de \textit{features}.
