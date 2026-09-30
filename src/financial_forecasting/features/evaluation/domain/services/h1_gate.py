@@ -166,7 +166,13 @@ class H1Gate:
 
     @staticmethod
     def evaluate(spec: H1GateSpec, evidence: HorizonEvidence) -> H1Result:
-        """O gate de um horizonte (ver docstring do módulo)."""
+        """O gate de um horizonte (ver docstring do módulo).
+
+        Raises:
+            ValueError: níveis de alguma cauda (gate, amostra comum ou sub-série DGT)
+                diferentes do par pré-registrado (`spec.lower_level`, `spec.upper_level`).
+        """
+        H1Gate._check_levels(spec, evidence)
         horizon = evidence.horizon
         gate = evidence.gate
         lower_band, upper_band = H1Gate.tail_bands(
@@ -222,6 +228,25 @@ class H1Gate:
             common_sample_passed=common_passed,
             divergences=tuple(divergences),
         )
+
+    @staticmethod
+    def _check_levels(spec: H1GateSpec, evidence: HorizonEvidence) -> None:
+        expected = (spec.lower_level, spec.upper_level)
+        pairs = [
+            (name, calibration.lower, calibration.upper)
+            for name, calibration in (("gate", evidence.gate), ("common", evidence.common))
+        ]
+        pairs += [
+            (f"{name}.dgt[{sub.offset}]", sub.lower, sub.upper)
+            for name, calibration in (("gate", evidence.gate), ("common", evidence.common))
+            for sub in calibration.dgt
+        ]
+        for where, lower, upper in pairs:
+            if (lower.level, upper.level) != expected:
+                raise ValueError(
+                    f"{where} levels must be the preregistered pair {expected}, got "
+                    f"({lower.level!r}, {upper.level!r})"
+                )
 
     @staticmethod
     def _lr_uc(spec: H1GateSpec, gate: CalibrationEvidence) -> LrUcSensitivity:

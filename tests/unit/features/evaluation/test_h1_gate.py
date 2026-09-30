@@ -10,6 +10,7 @@ em n = round(n̄).
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Sequence
 
 import pytest
@@ -316,3 +317,26 @@ def test_gate_power_rounded_n() -> None:
     assert result.power[0].failure_probability == H1GatePower.failure_probability(
         n=101, spec=_SPEC, deviation=first
     )
+
+
+def _with_level(calibration: CalibrationEvidence, where: str) -> CalibrationEvidence:
+    if where.endswith("dgt"):
+        sub = calibration.dgt[1]
+        moved = dataclasses.replace(sub, upper=dataclasses.replace(sub.upper, level=0.75))
+        return dataclasses.replace(calibration, dgt=(calibration.dgt[0], moved))
+    return dataclasses.replace(
+        calibration, lower=dataclasses.replace(calibration.lower, level=0.25)
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("where", ["gate", "common", "gate.dgt"])
+def test_gate_levels_must_match_plan(where: str) -> None:
+    """M2: as caudas lidas têm de ser as do par pré-registrado (gate, comum e DGT)."""
+    evidence = _evidence(horizon=2)
+    name = where.split(".", maxsplit=1)[0]
+    changed = dataclasses.replace(evidence, **{name: _with_level(getattr(evidence, name), where)})
+
+    with pytest.raises(ValueError, match=rf"{where}(\[1\])? levels must be the preregistered pair"):
+        H1Gate.evaluate(_SPEC, changed)
+    assert H1Gate.evaluate(_SPEC, evidence).passed is True
