@@ -232,3 +232,27 @@ def test_evidence_seed_spread() -> None:
         SeedSpread.of([])
     with pytest.raises(ValueError, match="finite numbers"):
         SeedSpread.of([0.1, float("inf")])
+
+
+# --- extras da auditoria de testes (rodada 1) -----------------------------------------
+
+
+@pytest.mark.unit
+def test_evidence_dgt_step_coherence() -> None:
+    """Auditoria (cobertura): DGT com passos misturados e DGT da comum fora do horizonte."""
+    lower, upper = _tail(0.1, (1, 10, 100)), _tail(0.9, (1, 10, 100))
+    with pytest.raises(ValueError, match="must share one step"):
+        CalibrationEvidence(
+            sample="common",
+            lower=lower,
+            upper=upper,
+            dgt=(DgtTailEvidence(0, 2, lower, upper), DgtTailEvidence(1, 3, lower, upper)),
+        )
+    common = CalibrationEvidence(
+        sample="common",
+        lower=lower,
+        upper=upper,
+        dgt=(DgtTailEvidence(0, 2, lower, upper), DgtTailEvidence(1, 2, lower, upper)),
+    )
+    with pytest.raises(ValueError, match=r"common.dgt step must be the horizon 3"):
+        _horizon(3, common=common)

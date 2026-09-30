@@ -131,3 +131,19 @@ def test_power_acceptance_from_wilson_owner(monkeypatch: pytest.MonkeyPatch) -> 
 def test_power_invalid_n_rejected(n: int) -> None:
     with pytest.raises(ValueError, match="n must be an int >= 1"):
         H1GatePower.failure_probability(n=n, spec=_SPEC, deviation=_deviation(0.1, 0.1))
+
+
+# --- extras da auditoria de testes (rodada 1) -----------------------------------------
+
+_TINY_N_TOLERANCE = 1e-15
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("n", [2, 3])
+def test_power_brute_small_n_all_upper(n: int) -> None:
+    """Auditoria P2: taxa superior alta (U pode esgotar o restante, u == n - l)."""
+    deviation = _deviation(0.1, 0.6)
+
+    failure = H1GatePower.failure_probability(n=n, spec=_SPEC, deviation=deviation)
+
+    assert failure == pytest.approx(_brute_failure(n, deviation), abs=_TINY_N_TOLERANCE)
