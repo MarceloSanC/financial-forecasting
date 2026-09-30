@@ -410,3 +410,23 @@ def test_real_unreadable_files_corrupt(tmp_path: Path) -> None:
     (current / MANIFEST_NAME).write_bytes(bytes([0xFF, 0xFE]) + b"{")
     with pytest.raises(GoldGenerationCorruptError, match="not valid JSON"):
         store.read_generation(partition=_PARTITION)
+
+
+# --- extras da auditoria de testes (rodada 1) -----------------------------------------
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        pytest.param("[1, 2]", "is not a JSON object", id="not-object"),
+        pytest.param('{"status": "COMPLETED"}', "has no rows_by_table", id="no-rows-by-table"),
+    ],
+)
+def test_real_manifest_shape_corrupt(tmp_path: Path, content: str, message: str) -> None:
+    """Auditoria (cobertura): manifesto que não é objeto ou sem `rows_by_table` é corrupção."""
+    store, current = _published(tmp_path)
+    (current / MANIFEST_NAME).write_text(content, encoding="utf-8")
+
+    with pytest.raises(GoldGenerationCorruptError, match=message):
+        store.read_generation(partition=_PARTITION)
