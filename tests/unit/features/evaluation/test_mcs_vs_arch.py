@@ -25,10 +25,12 @@ from financial_forecasting.features.evaluation.domain.services import (
     model_confidence_set as model_confidence_set_module,
 )
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
+    MCS_STATISTIC,
     MIN_MCS_REPS,
     McsElimination,
     McsReport,
     ModelConfidenceSet,
+    block_length_rule,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
     BootstrapIndices,
@@ -482,3 +484,64 @@ def test_mcs_reps_single_owner_evaluate(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(model_confidence_set_module, "validate_mcs_reps", _reject_reps)
     with pytest.raises(_RepsSentinel, match=f"reps={_REPS}"):
         ModelConfidenceSet.evaluate(series, bootstrap=bootstrap, alpha=_ALPHA)
+
+
+# --- Stage 6.5: donos públicos (MCS_STATISTIC, block_length_rule) --------------------
+
+
+@pytest.mark.unit
+def test_mcs_statistic_public_constant() -> None:
+    """A estatística implementada é pública (catálogo de regras do pré-registro, 6.5)."""
+    assert MCS_STATISTIC == "R"
+    assert _VALID_REPORT.statistic == MCS_STATISTIC
+    with pytest.raises(ValueError, match="statistic must be 'R'"):
+        dataclasses.replace(_VALID_REPORT, statistic="SQ")
+
+
+class _BlockRuleSentinel(Exception):
+    pass
+
+
+def _reject_block_rule(*, horizon: int, max_estimate: float) -> int:
+    raise _BlockRuleSentinel(f"h={horizon} max={max_estimate}")
+
+
+@pytest.mark.unit
+def test_block_rule_single_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    """O `ModelConfidenceSet.block_length` delega a regra ao dono `block_length_rule`."""
+    series = _pair_series(7)
+    estimates = dict(zip(series.model_pairs(), (9.2, 3.0, 1.5), strict=True))
+    monkeypatch.setattr(model_confidence_set_module, "block_length_rule", _reject_block_rule)
+    with pytest.raises(_BlockRuleSentinel, match=r"h=7 max=9\.2"):
+        ModelConfidenceSet.block_length(series, block_estimates=estimates)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("horizon", "max_estimate", "expected"),
+    [
+        pytest.param(7, 3.2, 7, id="h7-wins"),
+        pytest.param(1, 3.2, 4, id="ceiling-wins"),
+        pytest.param(2, 3.0, 3, id="integer-estimate"),
+        pytest.param(1, 0.0, 1, id="zero"),
+    ],
+)
+def test_block_rule_ceiling_values(horizon: int, max_estimate: float, expected: int) -> None:
+    block = block_length_rule(horizon=horizon, max_estimate=max_estimate)
+    assert block == expected
+    assert type(block) is int
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("horizon", "max_estimate", "message"),
+    [
+        pytest.param(0, 1.0, "horizon must be an int >= 1", id="horizon-zero"),
+        pytest.param(True, 1.0, "horizon must be an int >= 1", id="horizon-bool"),
+        pytest.param(1, -0.1, "max_estimate must be a finite number >= 0", id="negative"),
+        pytest.param(1, math.inf, "max_estimate must be a finite number >= 0", id="inf"),
+    ],
+)
+def test_block_rule_ceiling_values_invalid(horizon: int, max_estimate: float, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        block_length_rule(horizon=horizon, max_estimate=max_estimate)

@@ -30,7 +30,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
-from financial_forecasting.features.evaluation.domain.services.student_t import student_t_cdf
+from financial_forecasting.features.evaluation.domain.services.student_t import (
+    student_t_cdf,
+    student_t_quantile,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
 )
@@ -205,6 +208,36 @@ def diebold_mariano(
         degrees_of_freedom=n_points - 1,
         p_value=student_t_cdf(statistic, float(n_points - 1)),
     )
+
+
+def dm_effect_interval(
+    *, mean_differential: float, statistic: float, n_points: int, level: float
+) -> tuple[float, float] | None:
+    """IC do efeito do DM: d̄ ± t_{T-1,(1+level)/2}·|d̄/S1*| (doc §6.8; ADR 6.5.0008 item 2).
+
+    Usa exatamente a variância e o fator HLN da estatística reportada (d̄/S1* é o erro
+    padrão implícito); `None` quando a estatística é 0 (IC indefinido, reportado assim).
+
+    Raises:
+        ValueError: `mean_differential`/`statistic` não-finitos; `n_points` não-`int`,
+            `bool` ou < 2; `level` fora de (0, 1).
+    """
+    for name, value in (("mean_differential", mean_differential), ("statistic", statistic)):
+        if not is_finite_number(value):
+            raise ValueError(f"{name} must be a finite number, got {value!r}")
+    if isinstance(n_points, bool) or not isinstance(n_points, int) or n_points < _MIN_EFFECT_POINTS:
+        raise ValueError(f"n_points must be an int >= {_MIN_EFFECT_POINTS}, got {n_points!r}")
+    if not is_finite_number(level) or not 0.0 < level < 1.0:
+        raise ValueError(f"level must be a finite number in (0, 1), got {level!r}")
+    if statistic == 0.0:
+        return None
+    half_width = student_t_quantile((1.0 + level) / 2.0, float(n_points - 1)) * abs(
+        mean_differential / statistic
+    )
+    return mean_differential - half_width, mean_differential + half_width
+
+
+_MIN_EFFECT_POINTS = 2
 
 
 class DieboldMariano:

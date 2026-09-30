@@ -16,6 +16,7 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
     QUALITY_CHECKS,
     partition_columns,
 )
+from financial_forecasting.features.evaluation.application.dtos.gold_schema import GOLD_MCS_RESULTS
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldInputs,
     GoldTable,
@@ -23,8 +24,6 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
 from financial_forecasting.features.evaluation.domain.value_objects.block_estimate import (
     BlockEstimate,
 )
-
-_KEY = ("horizon", "scheme", "model")
 
 
 def _estimates_text(estimates: Sequence[BlockEstimate]) -> str:
@@ -71,4 +70,4 @@ class McsResultsGoldBuilder:
                         "block_estimates": _estimates_text(estimates),
                     }
                 )
-        return GoldTable.sorted_by_key(f"gold_{self.name}", _KEY, rows)
+        return GoldTable.sorted_by_key(GOLD_MCS_RESULTS.name, GOLD_MCS_RESULTS.key, rows)

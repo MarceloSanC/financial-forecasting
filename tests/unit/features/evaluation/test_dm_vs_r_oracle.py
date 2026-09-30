@@ -24,7 +24,11 @@ from financial_forecasting.features.evaluation.domain.services.diebold_mariano i
     DieboldMarianoResult,
     DmVarianceEstimator,
     diebold_mariano,
+    dm_effect_interval,
     validate_dm_request,
+)
+from financial_forecasting.features.evaluation.domain.services.student_t import (
+    student_t_quantile,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
@@ -363,3 +367,39 @@ def test_dm_result_incoherent_raises(
 def test_dm_result_fallback_coherent_accepted() -> None:
     result = dataclasses.replace(_valid_result(), horizon=2, horizon_used=1, fallback_applied=True)
     assert result.fallback_applied
+
+
+# --- Stage 6.5: IC do efeito do DM (perfil do scorecard, ADR 6.5.0008 item 2) ---------
+
+_EFFECT_TOL = 1e-12
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("mean", "statistic", "n_points"),
+    [(-0.01, -3.0, 250), (0.004, 1.2, 30), (-0.02, -0.5, 2)],
+)
+def test_dm_effect_interval_formula(mean: float, statistic: float, n_points: int) -> None:
+    interval = dm_effect_interval(
+        mean_differential=mean, statistic=statistic, n_points=n_points, level=0.95
+    )
+
+    half = student_t_quantile(0.975, float(n_points - 1)) * abs(mean / statistic)
+    assert interval is not None
+    assert interval[0] == pytest.approx(mean - half, abs=_EFFECT_TOL)
+    assert interval[1] == pytest.approx(mean + half, abs=_EFFECT_TOL)
+    for bad, message in (
+        ({"n_points": 1}, "n_points must be an int >= 2"),
+        ({"level": 1.0}, "level must be"),
+        ({"statistic": math.inf}, "statistic must be a finite"),
+    ):
+        kwargs = {"mean_differential": mean, "statistic": statistic, "n_points": n_points}
+        with pytest.raises(ValueError, match=message):
+            dm_effect_interval(**{**kwargs, "level": 0.95, **bad})  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_dm_effect_undefined_zero_statistic() -> None:
+    assert (
+        dm_effect_interval(mean_differential=0.0, statistic=0.0, n_points=100, level=0.95) is None
+    )

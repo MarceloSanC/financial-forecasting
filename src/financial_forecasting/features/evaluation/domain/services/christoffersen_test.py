@@ -448,7 +448,7 @@ class ChristoffersenTest:
                 f"a nuisance parameter), got horizon={sequence.horizon}"
             )
         validate_min_violations(min_violations)
-        _validate_draws_and_seed(draws, seed)
+        validate_draws_and_seed(draws, seed)
         return _monte_carlo(sequence, min_violations=min_violations, draws=draws, seed=seed)
 
 
@@ -578,7 +578,7 @@ class MonteCarloPValues:
         validate_tolerance(self.tolerance, field="MonteCarloPValues.tolerance")
         validate_includes_degenerate(self.includes_degenerate)
         validate_min_violations(self.min_violations)
-        _validate_draws_and_seed(self.draws, self.seed)
+        validate_draws_and_seed(self.draws, self.seed)
         for name, p_value in (("p_uc", self.p_uc), ("p_ind", self.p_ind), ("p_cc", self.p_cc)):
             if p_value is not None and not (is_finite_number(p_value) and 0.0 <= p_value <= 1.0):
                 raise ValueError(f"{name} must be in [0, 1], got {p_value!r}")
@@ -628,7 +628,12 @@ class MonteCarloPValues:
             )
 
 
-def _validate_draws_and_seed(draws: int, seed: int) -> None:
+def validate_draws_and_seed(draws: int, seed: int) -> None:
+    """Validador único de `draws` (int ≥ 1) e `seed` (int, não `bool`) do Monte Carlo.
+
+    Consumido pelo `monte_carlo_p_values`, pelo `MonteCarloPValues` e, na 6.5, pelo
+    `MonteCarloSpec` do pré-registro (mesmas mensagens).
+    """
     validate_positive_int(draws, field="draws")
     if type(seed) is not int:
         raise ValueError(f"seed must be an int (not bool), got {seed!r}")

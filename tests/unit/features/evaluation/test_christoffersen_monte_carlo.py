@@ -24,12 +24,16 @@ from collections.abc import Callable, Sequence
 
 import pytest
 
+from financial_forecasting.features.evaluation.domain.services import (
+    christoffersen_test as christoffersen_test_module,
+)
 from financial_forecasting.features.evaluation.domain.services.christoffersen_test import (
     ChristoffersenTest,
     MonteCarloPValues,
     MonteCarloStatus,
     christoffersen_statistics,
     mc_p_value,
+    validate_draws_and_seed,
 )
 from financial_forecasting.features.evaluation.domain.services.kupiec_pof import kupiec_pof
 from financial_forecasting.features.evaluation.domain.value_objects.hit_sequence import (
@@ -526,3 +530,42 @@ def test_mc_incoherent_attempts_bool_raises(make_hit_sequence: HitSequenceFactor
 
     with pytest.raises(ValueError, match="attempts must be an int"):
         dataclasses.replace(result, attempts=True)
+
+
+# --- Stage 6.5: dono público de draws/seed (MonteCarloSpec do pré-registro) ----------
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("draws", "seed", "message"),
+    [
+        pytest.param(0, 1, "draws must be an int >= 1", id="draws-zero"),
+        pytest.param(True, 1, "draws must be an int >= 1", id="draws-bool"),
+        pytest.param(5, True, "seed must be an int", id="seed-bool"),
+        pytest.param(5, 1.5, "seed must be an int", id="seed-float"),
+    ],
+)
+def test_draws_seed_validator_public(draws: int, seed: int, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        validate_draws_and_seed(draws, seed)
+    assert validate_draws_and_seed(999, 128) is None
+
+
+class _DrawsSentinel(Exception):
+    pass
+
+
+def _reject_draws(draws: int, seed: int) -> None:
+    raise _DrawsSentinel(f"draws={draws} seed={seed}")
+
+
+@pytest.mark.unit
+def test_draws_seed_single_owner(
+    make_hit_sequence: HitSequenceFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """O Monte Carlo consome `validate_draws_and_seed` (dono único de draws/seed)."""
+    monkeypatch.setattr(christoffersen_test_module, "validate_draws_and_seed", _reject_draws)
+    with pytest.raises(_DrawsSentinel, match="draws=5 seed=1"):
+        ChristoffersenTest.monte_carlo_p_values(
+            _cond_sequence(make_hit_sequence), min_violations=0, draws=5, seed=1
+        )

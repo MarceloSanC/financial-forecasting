@@ -270,8 +270,9 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 - **Shared não importa de features.** O fluxo é sempre: features → shared, nunca o contrário.
 - **Identidade só pelos VOs de `shared/domain/value_objects/`.** `RunId`, `ConfigSignature`,
   `SplitFingerprint`, `DatasetFingerprint`, `CohortHash` (hash do spec do cohort
-  confirmatório, ADR 5.5.0001) e `DatasetContentFingerprint` (conteúdo do grid de
-  treino, ADR 5.5.0004) são o único caminho de hash; fora deles ninguém
+  confirmatório, ADR 5.5.0001), `DatasetContentFingerprint` (conteúdo do grid de
+  treino, ADR 5.5.0004) e `PreregistrationHash` (hash do pré-registro
+  confirmatório, floats codificados exatamente, ADR 6.5.0001) são o único caminho de hash; fora deles ninguém
   chama `hasher.hash_mapping`/`hash_text` (payload hand-rolled num use case é uma segunda
   definição de "o mesmo run" — ADR 5.2.0004). Gate: regra 6 do `scripts/check_layout.py`.
 - **Features não importam comportamento de outras features.** Cada slice é uma unidade

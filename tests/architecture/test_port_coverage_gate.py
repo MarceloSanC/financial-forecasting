@@ -275,8 +275,9 @@ def test_real_repo_violations_are_exactly_the_declared_baseline(gate: ModuleType
     violating = sorted(port.name for port in ports if port.violation is not None)
 
     assert violating == ["Hasher"]
-    # piso do inventário: 26 ports-out hoje (a Stage 6.4 somou quatro ports do gold)
-    assert len(ports) >= 26  # noqa: PLR2004
+    # piso do inventário: 28 ports-out hoje (a Stage 6.4 somou quatro ports do gold e a
+    # 6.5 somou PreregistrationSource e GoldGenerationReader)
+    assert len(ports) >= 28  # noqa: PLR2004
 
 
 def test_real_repo_consumer_ports_resolve_to_the_supplier_use_cases(gate: ModuleType) -> None:
@@ -300,6 +301,24 @@ def test_real_repo_training_grid_reader_resolves_to_the_modeling_use_case(
     assert port.contract is not None
     assert port.contract.name == "test_training_grid_reader_contract.py"
     assert port.violation is None
+
+
+def test_real_repo_scorecard_ports_resolve(gate: ModuleType) -> None:
+    """Stage 6.5: os dois ports do scorecard têm fake, real e contrato `[fake, real]`."""
+    by_name = {port.name: port for port in gate.inventory()}
+    expected = {
+        "PreregistrationSource": (
+            "TomlPreregistrationSource",
+            "test_preregistration_source_contract.py",
+        ),
+        "GoldGenerationReader": ("ParquetGoldStore", "test_gold_generation_reader_contract.py"),
+    }
+    for name, (adapter, contract) in expected.items():
+        port = by_name[name]
+        assert adapter in port.adapters
+        assert port.contract is not None
+        assert port.contract.name == contract
+        assert port.violation is None
 
 
 def test_main_exit_code_follows_the_baseline_verdict(

@@ -31,6 +31,10 @@ from enum import StrEnum
 from itertools import pairwise
 from types import MappingProxyType
 
+from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
+    GOLD_SCHEMAS,
+    GoldTableSchema,
+)
 from financial_forecasting.features.evaluation.domain.services.christoffersen_test import (
     validate_min_violations,
 )
@@ -66,6 +70,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
 from financial_forecasting.features.evaluation.domain.value_objects.quality_check_result import (
     QualityCheckResult,
 )
+from financial_forecasting.shared.domain.exceptions.base import ApplicationError
 from financial_forecasting.shared.domain.services.path_identifier import (
     validate_path_identifier,
 )
@@ -86,6 +91,32 @@ def _check_distinct_tuple(value: object, *, field: str) -> None:
         raise ValueError(f"{field} must be a non-empty tuple, got {value!r}")
     if len(set(value)) != len(value):
         raise ValueError(f"{field} must not repeat values, got {value!r}")
+
+
+def _require_keys(mapping: object, expected: Iterable[str], *, where: str) -> Mapping[str, object]:
+    """`mapping` é um `Mapping` com exatamente as chaves `expected` (inversas de `as_mapping`)."""
+    if not isinstance(mapping, Mapping):
+        raise ValueError(f"{where} must be a Mapping, got {type(mapping).__name__}")
+    expected_set = set(expected)
+    unknown = sorted(str(key) for key in mapping if key not in expected_set)
+    if unknown:
+        raise ValueError(f"{where} has unknown keys {unknown}")
+    missing = sorted(key for key in expected_set if key not in mapping)
+    if missing:
+        raise ValueError(f"{where} misses the keys {missing}")
+    return mapping
+
+
+def _as_list(value: object, *, field: str) -> list[object]:
+    if not isinstance(value, list | tuple):
+        raise ValueError(f"{field} must be a list, got {value!r}")
+    return list(value)
+
+
+def _as_int_map(value: object, *, field: str) -> dict[str, int]:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{field} must be a Mapping, got {value!r}")
+    return {str(key): item for key, item in value.items()}  # tipos: o __post_init__
 
 
 class RefreshStatus(StrEnum):
@@ -154,6 +185,46 @@ class RefreshParameters:
             "mcs_seed": self.mcs_seed,
             "mcs_schemes": [s.value for s in self.mcs_schemes],
         }
+
+    @classmethod
+    def from_mapping(cls, mapping: Mapping[str, object]) -> RefreshParameters:
+        """Inversa de `as_mapping` (listas → tuplas, enums pelo valor; ADR 6.5.0005 item 3).
+
+        Raises:
+            ValueError: chave desconhecida/ausente, enum desconhecido ou valor inválido
+                pelo validador dono (o `__post_init__`).
+        """
+        fields = _require_keys(mapping, _PARAMETER_KEYS, where="parameters")
+        estimators = _as_list(fields["dm_variance_estimators"], field="dm_variance_estimators")
+        schemes = _as_list(fields["mcs_schemes"], field="mcs_schemes")
+        return cls(
+            preregistration_ref=fields["preregistration_ref"],  # type: ignore[arg-type]
+            degeneracy_tolerance=fields["degeneracy_tolerance"],  # type: ignore[arg-type]
+            band_levels=tuple(_as_list(fields["band_levels"], field="band_levels")),  # type: ignore[arg-type]
+            min_violations=fields["min_violations"],  # type: ignore[arg-type]
+            candidate=fields["candidate"],  # type: ignore[arg-type]
+            dm_alpha=fields["dm_alpha"],  # type: ignore[arg-type]
+            dm_variance_estimators=tuple(DmVarianceEstimator(str(v)) for v in estimators),
+            mcs_alpha=fields["mcs_alpha"],  # type: ignore[arg-type]
+            mcs_reps=fields["mcs_reps"],  # type: ignore[arg-type]
+            mcs_seed=fields["mcs_seed"],  # type: ignore[arg-type]
+            mcs_schemes=tuple(BootstrapScheme(str(v)) for v in schemes),
+        )
+
+
+_PARAMETER_KEYS = (
+    "preregistration_ref",
+    "degeneracy_tolerance",
+    "band_levels",
+    "min_violations",
+    "candidate",
+    "dm_alpha",
+    "dm_variance_estimators",
+    "mcs_alpha",
+    "mcs_reps",
+    "mcs_seed",
+    "mcs_schemes",
+)
 
 
 @dataclass(frozen=True)
@@ -384,6 +455,76 @@ class GoldManifest:
             "finished_at": self.finished_at.isoformat(),
         }
 
+    @classmethod
+    def from_mapping(cls, mapping: Mapping[str, object]) -> GoldManifest:
+        """Inversa de `as_mapping` (ADR 6.5.0005 item 3) — `from_mapping(m.as_mapping()) == m`.
+
+        Raises:
+            ValueError: chave desconhecida/ausente (no topo ou em `realized`),
+                `preregistration_ref` de topo ≠ o dos parâmetros, status/enum
+                desconhecido, timestamp não-ISO ou campo inválido pelo `__post_init__`.
+        """
+        fields = _require_keys(mapping, _MANIFEST_KEYS, where="manifest")
+        realized = _require_keys(fields["realized"], _REALIZED_KEYS, where="manifest.realized")
+        # `_require_keys` do `from_mapping` dos parâmetros recusa o não-`Mapping`
+        parameters = RefreshParameters.from_mapping(fields["parameters"])  # type: ignore[arg-type]
+        top_ref = fields["preregistration_ref"]
+        if top_ref != parameters.preregistration_ref:
+            raise ValueError(
+                f"manifest preregistration_ref {top_ref!r} differs from "
+                f"parameters.preregistration_ref {parameters.preregistration_ref!r}"
+            )
+        fingerprint = fields["dataset_fingerprint"]
+        if not isinstance(fingerprint, str):
+            raise ValueError(f"dataset_fingerprint must be a str, got {fingerprint!r}")
+        return cls(
+            status=RefreshStatus(str(fields["status"])),
+            partition=GoldPartition(
+                fields["asset"],  # type: ignore[arg-type]
+                fields["parent_sweep_id"],  # type: ignore[arg-type]
+            ),
+            rows_by_table=_as_int_map(fields["rows_by_table"], field="rows_by_table"),
+            parameters=parameters,
+            horizons=tuple(_as_list(fields["horizons"], field="horizons")),  # type: ignore[arg-type]
+            window_deficits=_as_int_map(fields["window_deficits"], field="window_deficits"),
+            dataset_fingerprint=DatasetContentFingerprint(fingerprint),
+            grid_trimmed_prefix=fields["grid_trimmed_prefix"],  # type: ignore[arg-type]
+            realized_sessions=realized["n_sessions"],  # type: ignore[arg-type]
+            realized_returns_fsum=realized["returns_fsum"],  # type: ignore[arg-type]
+            realized_first_timestamp=realized["first_timestamp"],  # type: ignore[arg-type]
+            realized_last_timestamp=realized["last_timestamp"],  # type: ignore[arg-type]
+            n_runs=fields["n_runs"],  # type: ignore[arg-type]
+            build_order=tuple(_as_list(fields["build_order"], field="build_order")),  # type: ignore[arg-type]
+            started_at=_as_datetime(fields["started_at"], field="started_at"),
+            finished_at=_as_datetime(fields["finished_at"], field="finished_at"),
+        )
+
+
+_MANIFEST_KEYS = (
+    "status",
+    "asset",
+    "parent_sweep_id",
+    "preregistration_ref",
+    "rows_by_table",
+    "parameters",
+    "horizons",
+    "window_deficits",
+    "dataset_fingerprint",
+    "grid_trimmed_prefix",
+    "realized",
+    "n_runs",
+    "build_order",
+    "started_at",
+    "finished_at",
+)
+_REALIZED_KEYS = ("n_sessions", "returns_fsum", "first_timestamp", "last_timestamp")
+
+
+def _as_datetime(value: object, *, field: str) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError(f"{field} must be an ISO-8601 str, got {value!r}")
+    return datetime.fromisoformat(value)
+
 
 def check_generation(
     partition: GoldPartition, tables: Sequence[GoldTable], manifest: GoldManifest
@@ -414,6 +555,96 @@ def check_generation(
                 raise ValueError(
                     f"{table.name} row {index} is for {got}, not the partition {expected}"
                 )
+
+
+class GoldManifestNotFoundError(ApplicationError):
+    """A partição não tem geração publicada (sem `MANIFEST.json`; C6, ADR 6.5.0005)."""
+
+
+class GoldGenerationCorruptError(ApplicationError):
+    """A geração lida não se sustenta (C6, ADR 6.5.0005 item 5).
+
+    Manifesto inválido, tabela ausente, contagem divergente, linha inválida, fora de
+    ordem ou de outra partição.
+    """
+
+
+@dataclass(frozen=True)
+class GoldGeneration:
+    """Uma geração lida: o manifesto e as tabelas pelo nome (ADR 6.5.0005 item 5)."""
+
+    manifest: GoldManifest
+    tables: Mapping[str, GoldTable]
+
+    def __post_init__(self) -> None:
+        """Mapa das tabelas como cópia somente-leitura."""
+        object.__setattr__(self, "tables", MappingProxyType(dict(self.tables)))
+
+    def table(self, schema: GoldTableSchema) -> GoldTable:
+        """A tabela do `schema`.
+
+        Raises:
+            GoldGenerationCorruptError: a geração não tem a tabela.
+        """
+        if schema.name not in self.tables:
+            raise GoldGenerationCorruptError(f"the generation has no table {schema.name!r}")
+        return self.tables[schema.name]
+
+    @classmethod
+    def from_stored(
+        cls,
+        manifest: Mapping[str, object],
+        rows_by_table: Mapping[str, Sequence[Row]],
+        *,
+        partition: GoldPartition,
+    ) -> GoldGeneration:
+        """Montagem única de uma geração lida — usada pelo fake e pelo real (I7).
+
+        Uma `GoldTable` por tabela do manifesto, com a chave do `GOLD_SCHEMAS`;
+        `check_generation` no fim. Uma geração `BLOCKED` volta normal (a recusa é do
+        use case). `partition` é a partição pedida ao leitor: manifesto de outra
+        partição (ex. pasta copiada) é corrupção, conferida aqui — dono único, fake e
+        real (Checkpoint C bloco 2, F2).
+
+        Raises:
+            GoldGenerationCorruptError: manifesto inválido; tabela desconhecida,
+                ausente de `rows_by_table` ou a mais nele; contagem divergente; linha
+                inválida ou fora de ordem; geração incoerente (`check_generation`);
+                manifesto de outra partição que a pedida.
+        """
+        try:
+            parsed = GoldManifest.from_mapping(manifest)
+        except ValueError as error:
+            raise GoldGenerationCorruptError(f"invalid manifest: {error}") from error
+        if parsed.partition != partition:
+            raise GoldGenerationCorruptError(
+                f"the manifest is for partition {parsed.partition}, read as {partition}"
+            )
+        listed = dict(parsed.rows_by_table)
+        extra = sorted(set(rows_by_table) - set(listed))
+        if extra:
+            raise GoldGenerationCorruptError(f"tables {extra} are not in the manifest")
+        tables: list[GoldTable] = []
+        for name, count in listed.items():
+            schema = GOLD_SCHEMAS.get(name)
+            if schema is None:
+                raise GoldGenerationCorruptError(f"unknown gold table {name!r} in the manifest")
+            if name not in rows_by_table:
+                raise GoldGenerationCorruptError(f"table {name!r} of the manifest is missing")
+            rows = rows_by_table[name]
+            if len(rows) != count:
+                raise GoldGenerationCorruptError(
+                    f"table {name!r} has {len(rows)} rows, the manifest says {count}"
+                )
+            try:
+                tables.append(GoldTable(name, schema.key, tuple(rows)))
+            except ValueError as error:
+                raise GoldGenerationCorruptError(f"table {name!r}: {error}") from error
+        try:
+            check_generation(parsed.partition, tables, parsed)
+        except ValueError as error:
+            raise GoldGenerationCorruptError(f"incoherent generation: {error}") from error
+        return cls(manifest=parsed, tables={table.name: table for table in tables})
 
 
 @dataclass(frozen=True, kw_only=True)
