@@ -2377,4 +2377,32 @@ intocado aqui):** acrescentar `"*/_arch_audit_taint*.py"` ao `omit` do
 `[tool.coverage.run]` (`pyproject.toml`, lista `omit`), em vez de `-i` permanente.
 **Stage candidata:** issue de tooling da sessão mestra.
 
+### 2026-09-30 — [decision] Tokens extra da auditoria de testes (rodada 1) — Claude (Opus 5.5)
+**Contexto:** a auditoria de testes independente (checklist do §3, mutação real: 72
+mutantes, 13 sobreviventes) pediu testes extras, cada um conferido contra o seu
+mutante numa cópia em diretório vazio do container. **Decisão:** os tokens abaixo
+entram na matriz de nomes de teste (únicos no arquivo e nenhum contido em outro token
+do mesmo arquivo), em commits `[6.5/task-NN-extra]` pela Task de origem; nenhum
+exigiu correção de código (o F1 — chave opcional aninhada — já era recusado).
+- `tests/unit/features/evaluation/test_h1_gate.py`: `gate_seed_rates_per_tail_order`,
+  `gate_power_at_one_point` (task-04);
+- `tests/unit/features/evaluation/test_scorecard_mechanical_rule.py`:
+  `decide_missing_primary_rows_raises`, `tier_ties_partial_membership` (task-04);
+- `tests/unit/features/evaluation/test_scorecard_evidence_mapper.py`:
+  `mismatch_block_above_rule`, `mcs_mismatch_before_missing_estimate`,
+  `evidence_pinball_seed_mean` (task-08);
+- `tests/unit/features/evaluation/test_h1_gate_power.py`: `power_brute_small_n_all_upper`
+  (task-03);
+- `tests/unit/features/evaluation/test_scorecard_evidence.py`: `evidence_dgt_step_coherence`
+  (task-03);
+- `tests/unit/shared/domain/value_objects/test_preregistration_hash.py`:
+  `prereg_hash_mapping_proxy_encoded` (task-01);
+- `tests/unit/features/evaluation/test_preregistration_value_object.py`:
+  `prereg_nested_optional_key_rejected`, `prereg_repeated_list_values_rejected` (task-02);
+- `tests/contract/features/evaluation/test_gold_generation_reader_contract.py`:
+  `real_manifest_shape_corrupt` (task-07);
+- `tests/contract/features/evaluation/test_preregistration_source_contract.py`:
+  `real_anchor_date_not_datetime` (task-06).
+**Stage candidata:** esta.
+
 <!-- END: post-execution -->
