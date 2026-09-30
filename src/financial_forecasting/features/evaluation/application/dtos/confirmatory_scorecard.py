@@ -21,11 +21,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import StrEnum
+from typing import Protocol
 
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     FailedCheck,
+    GoldManifest,
     RefreshGoldCommand,
     RefreshParameters,
+)
+from financial_forecasting.features.evaluation.domain.services.confirmatory_scorecard import (
+    ScorecardVerdict,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
     Preregistration,
@@ -292,3 +297,53 @@ class ScorecardProfile:
     def as_mapping(self) -> dict[str, object]:
         """Serialização JSON-safe única."""
         return {f.name: to_jsonable(getattr(self, f.name)) for f in fields(self)}
+
+
+# --- resultado do scorecard (Task 10; ADR 6.5.0007 item 8) ----------------------------
+
+
+class PreregistrationAnchorLike(Protocol):
+    """A forma da âncora que o resultado ecoa (o `PreregistrationAnchor` do port)."""
+
+    @property
+    def tag(self) -> str: ...
+    @property
+    def commit(self) -> str: ...
+    @property
+    def comment_url(self) -> str: ...
+    @property
+    def anchored_at(self) -> datetime: ...
+
+
+class ReadinessReason(StrEnum):
+    """Por que o scorecard não está pronto para decisão acadêmica (C10)."""
+
+    REQUIRED_CHECK_SKIPPED = "required_check_skipped"
+    GOLD_BEFORE_ANCHOR = "gold_before_anchor"
+    AMENDED_AFTER_UNBLINDING = "amended_after_unblinding"
+
+
+@dataclass(frozen=True, kw_only=True)
+class ScorecardResult:
+    """O scorecard confirmatório de uma revisão julgada (concept 6.5 §4).
+
+    `academic_decision_ready` conjuga só os gates de validade (nunca o desfecho de H1/H2
+    nem a declaração de cegamento); cada conjunto falso é uma razão nomeada (I13).
+    """
+
+    preregistration_ref: str
+    revision_chain: tuple[str, ...]
+    anchor: PreregistrationAnchorLike
+    blinding_statement: str | None
+    manifest_read: GoldManifest
+    verdict: ScorecardVerdict
+    profile: ScorecardProfile
+    academic_decision_ready: bool
+    readiness_reasons: tuple[ReadinessReason, ...]
+
+    def as_mapping(self) -> dict[str, object]:
+        """Serialização única, JSON-safe (datetimes ISO, enums pelo valor)."""
+        mapping = {f.name: to_jsonable(getattr(self, f.name)) for f in fields(self)}
+        mapping["manifest_read"] = self.manifest_read.as_mapping()
+        mapping["profile"] = self.profile.as_mapping()
+        return mapping
