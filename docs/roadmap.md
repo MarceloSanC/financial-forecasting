@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-09-29
-last_reviewed_at: 2026-09-29
+updated_at: 2026-09-30
+last_reviewed_at: 2026-09-30
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -102,7 +102,7 @@ graph LR
 | `6.2-paired-inference-dm-mcs-holm` | evaluation | multi (domain + adapters/out) | vertical | done | 6.1 |
 | `6.3-calibration-risk-backtests` | evaluation | domain | vertical | done | 6.1 |
 | `6.4-gold-builders-and-quality-gates` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.2, 6.3 |
-| `6.5-preregistration-and-scorecard` | evaluation | multi (domain + application + adapters/out) | vertical | draft | 6.4, 5.5 |
+| `6.5-preregistration-and-scorecard` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.4, 5.5 |
 | `7.1-inference-engine` | inference | multi (application + adapters/out) | vertical | draft | 5.4, 4.3 |
 | `7.2-conformal-cqr` | inference | multi (domain + adapters/out) | vertical | draft | 7.1, 5.1 |
 | `7.3-explainability` | inference | multi (domain + adapters/out) | vertical | draft | 7.1, 6.1 |

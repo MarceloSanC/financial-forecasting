@@ -2432,4 +2432,28 @@ não calculou nenhuma métrica sobre o cohort: todo teste e o e2e usaram dados
 sintéticos e nenhum refresh foi rodado sobre o cohort nesta Task.
 **Stage candidata:** esta.
 
+### 2026-09-30 — [decision] Fechamento da Stage 6.5 com o gate de saída — Claude (Opus 5.5)
+**Gate de saída §3 (depois da Task 13, sem rebase: o `origin/develop` não se moveu):**
+- **Container:** `make check` verde (5 303 passed, 23 skipped; cobertura total
+  99,04 %); A14 com `coverage json -i` (desvio registrado acima): 27 arquivos de
+  `src/` no escopo, nenhum abaixo de 90 %; contratos `[fake, toml, parquet]` 135
+  passed sem skip; e2e + consistência + refresh da 6.4 24 passed sem skip;
+  `check_layout`, `lint-imports` (15 kept) e os gates de arquitetura 92 passed; laço
+  de tokens da matriz verde (inclui `test_preregistration_consistency.py`).
+- **Host:** baseline intocado; `hash_mapping` só no `PreregistrationHash`; `tomllib`
+  e `pyarrow` confinados aos adapters; uma única referência a `modeling`; nenhuma
+  recomputação na application do scorecard; cegamento (I15) sem linha nova tocando o
+  dado do cohort; âncora única em §7 com os dois carimbos na ordem; tag no remoto e
+  arquivo da tag byte-igual ao de HEAD; ADRs `accepted`; nenhum caminho de host
+  versionado; `check_technical_postexec`, `check_stage_issue` e `check_docs_pointers`
+  verdes.
+**Auditoria de testes independente:** três rodadas com mutação real (72 → 86
+mutantes, 4 equivalentes); todos os sobreviventes mortos pelos testes extras
+registrados acima. **Encaminhamentos (Stage candidata concreta):** o desvio do
+`coverage json -i` → **#130** (omit de `*/_arch_audit_taint*.py`); os "≤ 5 %" do ADR
+0.0.0011 e do doc de domínio §8.5 (seguimento do `[finding]` T-F11) → **#131**; os
+perfis de séries novas → **#129** (antes da 8.1); a fronteira `lower == nominal` do
+`WilsonBand` → seguimento de testes da 6.3 (sessão mestra).
+**Stage candidata:** esta.
+
 <!-- END: post-execution -->
