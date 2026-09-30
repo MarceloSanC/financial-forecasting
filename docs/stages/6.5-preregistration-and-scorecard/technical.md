@@ -2394,7 +2394,7 @@ exigiu correção de código (o F1 — chave opcional aninhada — já era recus
 - `tests/unit/features/evaluation/test_h1_gate_power.py`: `power_brute_small_n_all_upper`
   (task-03);
 - `tests/unit/features/evaluation/test_scorecard_evidence.py`: `evidence_dgt_step_coherence`
-  (task-03);
+  (task-03); `evidence_seed_spread_equal_values` (task-03, rodada 2);
 - `tests/unit/shared/domain/value_objects/test_preregistration_hash.py`:
   `prereg_hash_mapping_proxy_encoded` (task-01);
 - `tests/unit/features/evaluation/test_preregistration_value_object.py`:
@@ -2402,7 +2402,12 @@ exigiu correção de código (o F1 — chave opcional aninhada — já era recus
 - `tests/contract/features/evaluation/test_gold_generation_reader_contract.py`:
   `real_manifest_shape_corrupt` (task-07);
 - `tests/contract/features/evaluation/test_preregistration_source_contract.py`:
-  `real_anchor_date_not_datetime` (task-06).
+  `real_anchor_date_not_datetime` (task-06); `source_anchor_per_revision` (task-06,
+  rodada 2).
+
+Rodada 2 da auditoria (os 13 sobreviventes da rodada 1 mortos; uma lacuna nova): os
+dois tokens marcados "rodada 2" acima. A lista de tokens do §3 não é editada depois
+da aprovação (o `check_technical_postexec` a guarda): esta entrada é o registro.
 **Stage candidata:** esta.
 
 <!-- END: post-execution -->
