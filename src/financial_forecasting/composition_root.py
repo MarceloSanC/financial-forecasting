@@ -90,8 +90,14 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
 from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
     ParquetGoldStore,
 )
+from financial_forecasting.features.evaluation.adapters.out.toml.toml_preregistration_source import (  # noqa: E501
+    TomlPreregistrationSource,
+)
 from financial_forecasting.features.evaluation.application.ports.out.mcs_backend import (
     McsBackend,
+)
+from financial_forecasting.features.evaluation.application.use_cases.build_confirmatory_scorecard import (  # noqa: E501
+    BuildConfirmatoryScorecard,
 )
 from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
     RefreshGold,
@@ -594,6 +600,8 @@ class ApplicationDependencies:
     modeling_columns: tuple[str, ...]
     # BC evaluation (Stage 6.4, Task 12): o refresh do gold de um cohort.
     refresh_gold: RefreshGold
+    # BC evaluation (Stage 6.5, Task 11): o scorecard confirmatório de uma revisão.
+    build_confirmatory_scorecard: BuildConfirmatoryScorecard
 
 
 def wire_dependencies(
@@ -788,13 +796,14 @@ def wire_dependencies(
     # do cohort confirmatório, então o índice 0 é a origem do `decision_idx` gravado.
     # O `ArchMcs` entra atrás do proxy lazy e o gold vai para `<data_root>/gold/` (ADR
     # 6.4.0005). A ordem dos builders é validada no construtor (C1: falha no wiring).
+    gold_store = ParquetGoldStore(cfg.data_root)
     refresh_gold = RefreshGold(
         silver_reader=analytics_repository,
         grid_reader=ReadTrainingGrid(store=store, columns=columns),
         hasher=hasher,
         clock=SystemClock(),
         mcs_backend=_LazyArchMcs(),
-        gold_store=ParquetGoldStore(cfg.data_root),
+        gold_store=gold_store,
         builders=(
             QualityChecksGoldBuilder(),
             MetricsByRunGoldBuilder(),
@@ -802,6 +811,16 @@ def wire_dependencies(
             DmResultsGoldBuilder(),
             McsResultsGoldBuilder(),
         ),
+    )
+
+    # BC evaluation (Stage 6.5, Task 11): o scorecard confirmatório lê a geração viva
+    # pelo MESMO `ParquetGoldStore` do refresh (real do port `GoldGenerationReader`,
+    # ADR 6.5.0005) e o pré-registro de `<repo_root>/config/preregistration/` (ADR
+    # 6.5.0001), com o MESMO hasher que calcula o `preregistration_ref`.
+    build_confirmatory_scorecard = BuildConfirmatoryScorecard(
+        source=TomlPreregistrationSource(root=cfg.repo_root / "config" / "preregistration"),
+        reader=gold_store,
+        hasher=hasher,
     )
 
     return ApplicationDependencies(
@@ -829,4 +848,5 @@ def wire_dependencies(
         confirmatory_cohort_for=confirmatory_cohort_for,
         modeling_columns=columns,
         refresh_gold=refresh_gold,
+        build_confirmatory_scorecard=build_confirmatory_scorecard,
     )

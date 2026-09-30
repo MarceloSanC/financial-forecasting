@@ -45,7 +45,13 @@ from financial_forecasting.features.analytics_store.application.use_cases.persis
 from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
     ParquetGoldStore,
 )
+from financial_forecasting.features.evaluation.adapters.out.toml.toml_preregistration_source import (  # noqa: E501
+    TomlPreregistrationSource,
+)
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import GoldPartition
+from financial_forecasting.features.evaluation.application.use_cases.build_confirmatory_scorecard import (  # noqa: E501
+    BuildConfirmatoryScorecard,
+)
 from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
     RefreshGold,
 )
@@ -564,3 +570,27 @@ def test_refresh_gold_grid_reader_wired(tmp_path: Path) -> None:
     assert isinstance(grid_reader, ReadTrainingGrid)
     assert grid_reader._store is deps.store
     assert grid_reader._columns == deps.modeling_columns
+
+
+@pytest.mark.unit
+def test_wires_build_confirmatory_scorecard(tmp_path: Path) -> None:
+    """Stage 6.5 Task 11: o scorecard com o source TOML na raiz do repo e o hasher wirado."""
+    deps = wire_dependencies(
+        settings=Settings(_env_file=None, data_root=tmp_path / "data", repo_root=tmp_path)
+    )
+
+    use_case = deps.build_confirmatory_scorecard
+    assert isinstance(use_case, BuildConfirmatoryScorecard)
+    assert isinstance(use_case._source, TomlPreregistrationSource)
+    assert use_case._source._root == tmp_path / "config" / "preregistration"
+    assert use_case._hasher is deps.hasher
+
+
+@pytest.mark.unit
+def test_scorecard_shares_gold_store(tmp_path: Path) -> None:
+    """O leitor do scorecard é o MESMO `ParquetGoldStore` em que o refresh publica."""
+    deps = wire_dependencies(settings=Settings(_env_file=None, data_root=tmp_path))
+
+    reader = deps.build_confirmatory_scorecard._reader
+    assert isinstance(reader, ParquetGoldStore)
+    assert reader is deps.refresh_gold._gold_store
