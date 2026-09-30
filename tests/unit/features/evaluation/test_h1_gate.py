@@ -397,3 +397,28 @@ def test_gate_common_sample_sensitivity_degeneracy(
     assert result.passed is True
     assert result.common_sample_passed is expected
     assert (COMMON_SAMPLE_SENSITIVITY in result.divergences) is (not expected)
+
+
+# --- extras da auditoria de testes (rodada 1) -----------------------------------------
+
+
+@pytest.mark.unit
+def test_gate_seed_rates_per_tail_order() -> None:
+    """Auditoria H1i: a média das taxas por seed vem na ordem (inferior, superior)."""
+    lower = ((1, 10, 100), (2, 10, 100))
+    upper = ((1, 12, 100), (2, 12, 100))
+
+    result = H1Gate.evaluate(_SPEC, _evidence(lower=lower, upper=upper))
+
+    assert result.mean_of_seed_rates == (pytest.approx(0.10), pytest.approx(0.12))
+
+
+@pytest.mark.unit
+def test_gate_power_at_one_point() -> None:
+    """Auditoria H1m: n̄ = 1 ainda declara o poder de cada cenário, em n = 1."""
+    one = ((1, 0, 1),)
+
+    result = H1Gate.evaluate(_SPEC, _evidence(lower=one, upper=one))
+
+    assert len(result.power) == len(_SPEC.power_scenarios)
+    assert {power.n for power in result.power} == {1}
