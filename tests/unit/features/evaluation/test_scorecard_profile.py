@@ -156,6 +156,13 @@ def test_profile_band_95_fractions() -> None:
         "independence_status",
         "below_min_violations",
     )
+    for seed in (5, 6):  # p_cc distinto do p_ind (Checkpoint C bloco 3, L3)
+        stored.set_cell(
+            GOLD_CALIBRATION_TABLE.name,
+            _is(model=_CAND, seed=seed, horizon=1, band_level=0.95),
+            "p_cc",
+            0.02,
+        )
 
     series = [
         s
@@ -171,6 +178,7 @@ def test_profile_band_95_fractions() -> None:
     assert series[0].n_seeds == 10  # noqa: PLR2004
     assert series[0].fraction_contains_nominal == pytest.approx(0.8)
     assert series[0].fraction_ind_rejected == pytest.approx(1 / 9)
+    assert series[0].fraction_cc_rejected == pytest.approx(2 / 9)
     assert series[0].n_independence_not_applicable == 1
 
 
@@ -299,3 +307,68 @@ def test_profile_declared_not_built() -> None:
         "partial_degeneracy_per_pair",
         "sharpness_diagram",
     )
+
+
+def _profile_for(plan: Preregistration, stored: StoredGold) -> ScorecardProfile:
+    generation = stored.generation()
+    command = refresh_command_from(plan, REFERENCE)
+    evidence = evidence_from_generation(prereg=plan, command=command, generation=generation)
+    verdict = ConfirmatoryScorecard.decide(plan, evidence)
+    return build_profile(prereg=plan, evidence=evidence, verdict=verdict, generation=generation)
+
+
+@pytest.mark.unit
+def test_profile_comparators_threshold_gate_band_rows() -> None:
+    """Checkpoint C bloco 3, L3: a banda do comparador vem das linhas do nível do gate.
+
+    A degeneração do comparador é a da série: igual nas duas caudas por invariante do
+    `ComparatorCalibration` (Checkpoint C bloco 1, B3), por isso lida de uma cauda só.
+    """
+    stored = make_stored(_PLAN)
+    stored.set_cell(
+        GOLD_CALIBRATION_TABLE.name,
+        _is(model="baseline_ar1", horizon=1, band_level=0.95),
+        "n_violations",
+        100,
+    )
+
+    first = _first(stored)
+
+    ar1 = next(c for c in first.comparators_calibration if c.model == "baseline_ar1")
+    assert (ar1.lower_contains_nominal, ar1.upper_contains_nominal) == (True, True)
+    evidence = next(
+        c
+        for c in evidence_from_generation(
+            prereg=_PLAN, command=_COMMAND, generation=stored.generation()
+        )[0].comparators_calibration
+        if c.model == "baseline_ar1"
+    )
+    assert evidence.lower.mean_degeneracy == evidence.upper.mean_degeneracy
+
+
+@pytest.mark.unit
+def test_profile_without_gaps_rows_gate_band() -> None:
+    """Checkpoint C bloco 3, L3/R3: sem lacunas lê o nível do gate; sem as linhas → ()."""
+    stored = make_stored(_PLAN)
+    base = {"model": _CAND, "horizon": 1, "sample": "model_full", "includes_degenerate": True}
+    stored.set_cell(GOLD_CALIBRATION_TABLE.name, _is(**base, band_level=0.95), "n_violations", 77)
+    stored.set_cell(GOLD_CALIBRATION_TABLE.name, _is(**base, band_level=0.975), "n_violations", 31)
+
+    without = {s.kind: s for s in _first(stored).without_gaps}
+
+    assert without["lower_tail"].mean_violations == 31.0  # noqa: PLR2004
+    empty = make_stored(_PLAN)
+    empty.drop_rows(GOLD_CALIBRATION_TABLE.name, _is(includes_degenerate=True))
+    assert _first(empty).without_gaps == ()
+
+
+@pytest.mark.unit
+def test_profile_moving_block_divergence_without_scheme() -> None:
+    """Checkpoint C bloco 3, R3: plano sem moving-block → sem divergência."""
+    payload = valid_payload()
+    payload["mcs"]["sensitivity_schemes"] = []  # type: ignore[index]
+    plan = Preregistration.from_mapping(payload)
+
+    profile = _profile_for(plan, make_stored(plan))
+
+    assert profile.horizons[0].mcs_moving_block_divergence is False
