@@ -21,13 +21,15 @@ from collections.abc import Mapping
 from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
 
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     FailedCheck,
     GoldManifest,
     RefreshGoldCommand,
     RefreshParameters,
+)
+from financial_forecasting.features.evaluation.application.ports.out.preregistration_source import (
+    PreregistrationAnchor,
 )
 from financial_forecasting.features.evaluation.domain.services.confirmatory_scorecard import (
     ScorecardVerdict,
@@ -302,19 +304,6 @@ class ScorecardProfile:
 # --- resultado do scorecard (Task 10; ADR 6.5.0007 item 8) ----------------------------
 
 
-class PreregistrationAnchorLike(Protocol):
-    """A forma da âncora que o resultado ecoa (o `PreregistrationAnchor` do port)."""
-
-    @property
-    def tag(self) -> str: ...
-    @property
-    def commit(self) -> str: ...
-    @property
-    def comment_url(self) -> str: ...
-    @property
-    def anchored_at(self) -> datetime: ...
-
-
 class ReadinessReason(StrEnum):
     """Por que o scorecard não está pronto para decisão acadêmica (C10)."""
 
@@ -333,7 +322,7 @@ class ScorecardResult:
 
     preregistration_ref: str
     revision_chain: tuple[str, ...]
-    anchor: PreregistrationAnchorLike
+    anchor: PreregistrationAnchor
     blinding_statement: str | None
     manifest_read: GoldManifest
     verdict: ScorecardVerdict
