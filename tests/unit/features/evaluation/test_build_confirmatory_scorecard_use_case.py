@@ -431,3 +431,26 @@ def test_result_mapping_json_safe() -> None:
     }
     assert decoded["manifest_read"]["status"] == "COMPLETED"
     assert decoded["readiness_reasons"] == []
+
+
+# --- aplicação da auditoria da Stage (F4) ---------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("revision", [0, 1])
+def test_unanchored_before_reader_tag_mismatch(revision: int) -> None:
+    """Auditoria F4: a âncora tem de ser a tag da referência calculada da própria revisão."""
+    world = _World()
+    reference0 = world.add(0, valid_payload())
+    payload = _r1(reference0)
+    reference1 = _reference(payload)
+    stale = _anchor("test_plan-r9-000000000000")
+    if revision == 0:
+        world.source.add(_NAME, 0, valid_payload(), stale)
+        world.source.add(_NAME, 1, payload, _anchor(reference1))
+    else:
+        world.source.add(_NAME, 1, payload, stale)
+
+    with pytest.raises(PreregistrationNotAnchoredError, match=rf"revisions \[{revision}\]"):
+        world.run(1, reference1)
+    assert world.reader.reads == []

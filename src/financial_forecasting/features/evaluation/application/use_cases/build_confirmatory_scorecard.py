@@ -9,7 +9,9 @@ Concept 6.5 §4, I5, I6, I12, I13, C2-C5, C7, C10, C11; ADRs `6_5_0002` item 4,
    (`PreregistrationChainError`);
 2. **hash** — a referência da revisão julgada = `command.preregistration_ref`
    (`PreregistrationHashMismatchError`);
-3. **âncora** — toda revisão da cadeia ancorada (`PreregistrationNotAnchoredError`);
+3. **âncora** — toda revisão da cadeia ancorada, com a tag
+   `preregistration/<referência calculada da própria revisão>` — âncora velha de um plano
+   re-hasheado não serve (`PreregistrationNotAnchoredError`; ADR 6.5.0003 item 1);
 4. só então lê o gold da partição **derivada do plano** (`refresh_command_from`);
 5. `BLOCKED` → `GoldNotReadyError` com os checks `ERROR` + `FAIL`;
 6. mapeia e confere o gold (`evidence_from_generation`, C6/C8);
@@ -51,6 +53,7 @@ from financial_forecasting.features.evaluation.application.ports.out.gold_genera
     GoldGenerationReader,
 )
 from financial_forecasting.features.evaluation.application.ports.out.preregistration_source import (
+    ANCHOR_TAG_PREFIX,
     PreregistrationAnchor,
     PreregistrationSource,
 )
@@ -157,6 +160,16 @@ class BuildConfirmatoryScorecard:
         if unanchored or anchor is None:
             raise PreregistrationNotAnchoredError(
                 f"revisions {unanchored} of {command.name!r} have no anchor"
+            )
+        mismatched = [
+            revision
+            for revision, (record, reference) in enumerate(zip(records, chain, strict=True))
+            if record.anchor is not None and record.anchor.tag != f"{ANCHOR_TAG_PREFIX}{reference}"
+        ]
+        if mismatched:
+            raise PreregistrationNotAnchoredError(
+                f"the anchors of revisions {mismatched} of {command.name!r} are not the tags "
+                f"of their computed references (an anchor must match its revision)"
             )
         judged = plans[-1]
         derived = refresh_command_from(judged, chain[-1])
