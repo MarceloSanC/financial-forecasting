@@ -94,7 +94,7 @@ def test_profile_dm_effect_ci() -> None:
     assert row.effect_interval[0] == pytest.approx(row.mean_differential - half, abs=_EFFECT_TOL)
     assert row.effect_interval[1] == pytest.approx(row.mean_differential + half, abs=_EFFECT_TOL)
     stored = make_stored(_PLAN)
-    stored.set_cell(
+    assert stored.set_cell(
         GOLD_DM_RESULTS.name, _is(horizon=1, comparator="baseline_ar1"), "statistic", 0.0
     )
     zero = next(r for r in _first(stored).dm if r.comparator == "baseline_ar1")
@@ -104,7 +104,7 @@ def test_profile_dm_effect_ci() -> None:
 @pytest.mark.unit
 def test_profile_fallback_applied() -> None:
     stored = make_stored(_PLAN)
-    stored.set_cell(
+    assert stored.set_cell(
         GOLD_DM_RESULTS.name,
         _is(horizon=1, comparator="gbm_quantile", variance_estimator="bartlett"),
         "fallback_applied",
@@ -138,26 +138,26 @@ def test_profile_comparators_threshold() -> None:
 def test_profile_band_95_fractions() -> None:
     stored = make_stored(_PLAN)
     for seed in (1, 2):
-        stored.set_cell(
+        assert stored.set_cell(
             GOLD_CALIBRATION_TABLE.name,
             _is(model=_CAND, seed=seed, horizon=1, band_level=0.95),
             "wilson_contains_nominal",
             False,
         )
-    stored.set_cell(
+    assert stored.set_cell(
         GOLD_CALIBRATION_TABLE.name,
         _is(model=_CAND, seed=3, horizon=1, band_level=0.95),
         "p_ind",
         0.01,
     )
-    stored.set_cell(
+    assert stored.set_cell(
         GOLD_CALIBRATION_TABLE.name,
         _is(model=_CAND, seed=4, horizon=1, band_level=0.95),
         "independence_status",
         "below_min_violations",
     )
     for seed in (5, 6):  # p_cc distinto do p_ind (Checkpoint C bloco 3, L3)
-        stored.set_cell(
+        assert stored.set_cell(
             GOLD_CALIBRATION_TABLE.name,
             _is(model=_CAND, seed=seed, horizon=1, band_level=0.95),
             "p_cc",
@@ -196,7 +196,7 @@ def test_profile_common_sample_gate() -> None:
 @pytest.mark.unit
 def test_profile_without_gaps_rows() -> None:
     stored = make_stored(_PLAN)
-    stored.set_cell(
+    assert stored.set_cell(
         GOLD_CALIBRATION_TABLE.name,
         _is(model=_CAND, horizon=1, sample="model_full", includes_degenerate=True, dgt_offset=None),
         "n_violations",
@@ -212,7 +212,7 @@ def test_profile_without_gaps_rows() -> None:
 @pytest.mark.unit
 def test_profile_bartlett_divergence() -> None:
     stored = make_stored(_PLAN)
-    stored.set_cell(
+    assert stored.set_cell(
         GOLD_DM_RESULTS.name,
         _is(horizon=1, comparator="baseline_zero_return", variance_estimator="bartlett"),
         "rejected",
@@ -226,7 +226,7 @@ def test_profile_bartlett_divergence() -> None:
 @pytest.mark.unit
 def test_profile_moving_block_divergence() -> None:
     stored = make_stored(_PLAN)
-    stored.set_cell(
+    assert stored.set_cell(
         GOLD_MCS_RESULTS.name, _is(horizon=1, scheme="moving_block", model=_CAND), "included", False
     )
 
@@ -272,13 +272,13 @@ def test_profile_lowest_pinball() -> None:
 @pytest.mark.unit
 def test_profile_copies_gold_values() -> None:
     stored = make_stored(_PLAN)
-    stored.set_cell(
+    assert stored.set_cell(
         GOLD_DM_RESULTS.name,
         _is(horizon=1, comparator="baseline_ar1"),
         "mean_differential",
         -0.0123456789,
     )
-    stored.set_cell(
+    assert stored.set_cell(
         GOLD_DM_RESULTS.name,
         _is(horizon=1, comparator="baseline_ar1"),
         "adjusted_p_value",
@@ -325,7 +325,7 @@ def test_profile_comparators_threshold_gate_band_rows() -> None:
     `ComparatorCalibration` (Checkpoint C bloco 1, B3), por isso lida de uma cauda só.
     """
     stored = make_stored(_PLAN)
-    stored.set_cell(
+    assert stored.set_cell(
         GOLD_CALIBRATION_TABLE.name,
         _is(model="baseline_ar1", horizon=1, band_level=0.95),
         "n_violations",
@@ -351,14 +351,18 @@ def test_profile_without_gaps_rows_gate_band() -> None:
     """Checkpoint C bloco 3, L3/R3: sem lacunas lê o nível do gate; sem as linhas → ()."""
     stored = make_stored(_PLAN)
     base = {"model": _CAND, "horizon": 1, "sample": "model_full", "includes_degenerate": True}
-    stored.set_cell(GOLD_CALIBRATION_TABLE.name, _is(**base, band_level=0.95), "n_violations", 77)
-    stored.set_cell(GOLD_CALIBRATION_TABLE.name, _is(**base, band_level=0.975), "n_violations", 31)
+    assert stored.set_cell(
+        GOLD_CALIBRATION_TABLE.name, _is(**base, band_level=0.95), "n_violations", 77
+    )
+    assert stored.set_cell(
+        GOLD_CALIBRATION_TABLE.name, _is(**base, band_level=0.975), "n_violations", 31
+    )
 
     without = {s.kind: s for s in _first(stored).without_gaps}
 
     assert without["lower_tail"].mean_violations == 31.0  # noqa: PLR2004
     empty = make_stored(_PLAN)
-    empty.drop_rows(GOLD_CALIBRATION_TABLE.name, _is(includes_degenerate=True))
+    assert empty.drop_rows(GOLD_CALIBRATION_TABLE.name, _is(includes_degenerate=True))
     assert _first(empty).without_gaps == ()
 
 
