@@ -123,8 +123,10 @@ def test_source_anchor_absent_none(harness: Harness) -> None:
 def test_source_anchor_present_parsed(harness: Harness) -> None:
     harness.put(0, valid_payload(), _ANCHOR)
 
-    anchor = harness.source.read(name=_NAME, revision=0).anchor
+    record = harness.source.read(name=_NAME, revision=0)
+    anchor = record.anchor
 
+    assert record.payload == valid_payload()
     assert anchor == PreregistrationAnchor(**_ANCHOR)  # type: ignore[arg-type]
     assert anchor is not None
     assert anchor.anchored_at.utcoffset() is not None
@@ -137,6 +139,25 @@ def test_source_anchor_naive_rejected(harness: Harness) -> None:
 
     with pytest.raises(ValueError, match="timezone-aware"):
         harness.put(0, valid_payload(), naive)
+        harness.source.read(name=_NAME, revision=0)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        pytest.param({"tag": "v1"}, "anchor tag must start with 'preregistration/'", id="tag"),
+        pytest.param({"commit": ""}, "anchor commit must be a non-empty str", id="commit"),
+        pytest.param({"commit": 7}, "anchor commit must be a non-empty str", id="commit-int"),
+        pytest.param({"comment_url": ""}, "anchor comment_url must be a non-empty", id="url"),
+    ],
+)
+def test_source_anchor_invariants_rejected(
+    harness: Harness, changes: dict[str, object], message: str
+) -> None:
+    """Checkpoint C bloco 2, F5/R1: as invariantes da âncora valem nas duas pernas."""
+    with pytest.raises(ValueError, match=message):
+        harness.put(0, valid_payload(), {**_ANCHOR, **changes})
         harness.source.read(name=_NAME, revision=0)
 
 
@@ -169,4 +190,6 @@ def test_real_name_identifier_checked(tmp_path: Path, name: str) -> None:
         TomlPreregistrationSource(root).read(name=name, revision=0)
     with pytest.raises(ValueError, match="revision must be an int >= 0"):
         TomlPreregistrationSource(root).read(name=_NAME, revision=True)
+    with pytest.raises(ValueError, match="revision must be an int >= 0"):
+        TomlPreregistrationSource(root).read(name=_NAME, revision=-1)
     assert not root.exists()
