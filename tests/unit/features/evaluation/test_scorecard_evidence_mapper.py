@@ -36,6 +36,9 @@ from financial_forecasting.features.evaluation.application.use_cases import (
 from financial_forecasting.features.evaluation.application.use_cases.scorecard_evidence import (
     evidence_from_generation,
 )
+from financial_forecasting.features.evaluation.domain.services.confirmatory_scorecard import (
+    ConfirmatoryScorecard,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
     Preregistration,
 )
@@ -398,3 +401,52 @@ def test_corrupt_block_estimate_missing_non_finite(estimate: float) -> None:
     with pytest.raises(GoldGenerationCorruptError, match="has an invalid max_block_estimate"):
         mapper_module.check_completed(tables)  # type: ignore[arg-type]
     mapper_module.check_mcs_rules(_PLAN, tables)  # type: ignore[arg-type]  # pulada, sem erro
+
+
+# --- extras da auditoria de testes (rodada 1) -----------------------------------------
+
+
+@pytest.mark.unit
+def test_mismatch_block_above_rule() -> None:
+    """Auditoria E4: block_size acima da regra também é mismatch (não só abaixo)."""
+    stored = make_stored(_PLAN)
+    assert stored.set_cell(GOLD_MCS_RESULTS.name, _is(horizon=7, model=_CAND), "block_size", 8)
+
+    _mismatch(stored, MismatchField.MCS_BLOCK_RULE)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("case", ["stat", "block"])
+def test_mcs_mismatch_before_missing_estimate(case: str) -> None:
+    """Auditoria E5/E16: estimativa ausente numa linha anterior não mascara o mismatch."""
+    stored = make_stored(_PLAN)
+    first = _is(horizon=1, scheme="moving_block", model="baseline_ar1")
+    later = _is(horizon=7, scheme="stationary", model=_CAND)
+    assert stored.set_cell(GOLD_MCS_RESULTS.name, first, "max_block_estimate", None)
+    if case == "stat":
+        assert stored.set_cell(GOLD_MCS_RESULTS.name, later, "statistic", "SQ")
+        expected = MismatchField.MCS_STATISTIC
+    else:
+        assert stored.set_cell(GOLD_MCS_RESULTS.name, later, "block_size", 99)
+        expected = MismatchField.MCS_BLOCK_RULE
+    rows = list(stored.generation().table(GOLD_MCS_RESULTS).rows)
+    order = [i for i, row in enumerate(rows) if first(dict(row)) or later(dict(row))]
+    assert first(dict(rows[order[0]])) and later(dict(rows[order[1]]))  # a ausente vem antes
+
+    _mismatch(stored, expected)
+
+
+@pytest.mark.unit
+def test_evidence_pinball_seed_mean() -> None:
+    """Auditoria E10: o P̄_G do candidato é a média entre seeds, não uma seed."""
+
+    def pinball(model: str, seed: int | None, _h: int) -> float:
+        if model == _CAND:
+            return 0.10 if (seed or 0) % 2 else 0.40
+        return 0.20
+
+    evidence = _map(make_stored(_PLAN, pinball=pinball))
+
+    assert evidence[0].mean_pinball[_CAND] == pytest.approx(0.25)  # type: ignore[index]
+    verdict = ConfirmatoryScorecard.decide(_PLAN, evidence)  # type: ignore[arg-type]
+    assert verdict.horizons[0].candidate_has_lowest_mean_pinball is False
