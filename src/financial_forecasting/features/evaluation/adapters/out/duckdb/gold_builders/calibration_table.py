@@ -13,6 +13,9 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
     QUALITY_CHECKS,
     partition_columns,
 )
+from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
+    GOLD_CALIBRATION_TABLE,
+)
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldInputs,
     GoldTable,
@@ -28,19 +31,6 @@ from financial_forecasting.features.evaluation.domain.services.wilson_band impor
     WilsonBandReport,
 )
 
-_KEY = (
-    "model",
-    "seed",
-    "horizon",
-    "sample",
-    "kind",
-    "level_low",
-    "level_high",
-    "includes_degenerate",
-    "dgt_offset",
-    "dgt_step",
-    "band_level",
-)
 _INTERVAL_LEVELS = 2
 
 
@@ -111,4 +101,6 @@ class CalibrationTableGoldBuilder:
             for row in series.calibration
             for band in row.wilson
         ]
-        return GoldTable.sorted_by_key(f"gold_{self.name}", _KEY, rows)
+        return GoldTable.sorted_by_key(
+            GOLD_CALIBRATION_TABLE.name, GOLD_CALIBRATION_TABLE.key, rows
+        )

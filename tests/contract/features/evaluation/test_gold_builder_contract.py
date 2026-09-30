@@ -36,6 +36,7 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.quality_checks import (  # noqa: E501
     QualityChecksGoldBuilder,
 )
+from financial_forecasting.features.evaluation.application.dtos.gold_schema import GOLD_SCHEMAS
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import GoldInputs
 from financial_forecasting.features.evaluation.application.ports.out.gold_builder import (
     GoldBuilder,
@@ -633,3 +634,32 @@ def test_mcs_rows_max_block_distinct() -> None:
         assert row["block_estimates"] == ";".join(
             f"{e.pair[0]}|{e.pair[1]}={e.value!r}" for e in estimates
         )
+
+
+# --- Stage 6.5: builders com as chaves do schema dono (gold_schema) --------------------
+
+_REAL_BUILDERS = [name for name in BUILDERS if name != "fake"]
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("name", _REAL_BUILDERS)
+def test_builders_use_schema_keys(name: str) -> None:
+    """Nome e chave de cada tabela real são os do `gold_schema` (ADR 6.5.0005 item 2)."""
+    table = BUILDERS[name]().build(completed_inputs())
+
+    schema = GOLD_SCHEMAS[f"gold_{name}"]
+    assert table.name == schema.name
+    assert table.key == schema.key
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("name", _REAL_BUILDERS)
+def test_schema_columns_written(name: str) -> None:
+    """Chave e colunas lidas do schema são colunas escritas pelo builder."""
+    table = BUILDERS[name]().build(completed_inputs())
+    schema = GOLD_SCHEMAS[table.name]
+
+    assert table.rows, f"{name} built no rows from the completed inputs"
+    written = set(table.columns)
+    assert set(schema.key) <= written
+    assert set(schema.read_columns) <= written

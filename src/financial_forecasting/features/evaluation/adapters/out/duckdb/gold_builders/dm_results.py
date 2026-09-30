@@ -11,12 +11,11 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
     QUALITY_CHECKS,
     partition_columns,
 )
+from financial_forecasting.features.evaluation.application.dtos.gold_schema import GOLD_DM_RESULTS
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldInputs,
     GoldTable,
 )
-
-_KEY = ("horizon", "variance_estimator", "candidate", "comparator")
 
 
 class DmResultsGoldBuilder:
@@ -54,4 +53,4 @@ class DmResultsGoldBuilder:
             for family in report.dm_families
             for comparison in family.comparisons
         ]
-        return GoldTable.sorted_by_key(f"gold_{self.name}", _KEY, rows)
+        return GoldTable.sorted_by_key(GOLD_DM_RESULTS.name, GOLD_DM_RESULTS.key, rows)

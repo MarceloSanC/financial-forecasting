@@ -12,12 +12,13 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
     QUALITY_CHECKS,
     partition_columns,
 )
+from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
+    GOLD_QUALITY_CHECKS,
+)
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldInputs,
     GoldTable,
 )
-
-_KEY = ("check", "kind", "horizon", "model", "seed")
 
 
 class QualityChecksGoldBuilder:
@@ -46,4 +47,4 @@ class QualityChecksGoldBuilder:
             }
             for result in inputs.check_results
         ]
-        return GoldTable.sorted_by_key(f"gold_{self.name}", _KEY, rows)
+        return GoldTable.sorted_by_key(GOLD_QUALITY_CHECKS.name, GOLD_QUALITY_CHECKS.key, rows)

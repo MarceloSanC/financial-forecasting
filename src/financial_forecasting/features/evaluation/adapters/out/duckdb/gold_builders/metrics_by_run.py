@@ -16,6 +16,9 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
     QUALITY_CHECKS,
     partition_columns,
 )
+from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
+    GOLD_METRICS_BY_RUN,
+)
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldInputs,
     GoldTable,
@@ -27,8 +30,6 @@ from financial_forecasting.features.evaluation.domain.services.crps_score import
 from financial_forecasting.features.evaluation.domain.services.horizon_reports import (
     SeriesReports,
 )
-
-_KEY = ("model", "seed", "horizon", "sample", "metric", "level_low", "level_high")
 
 Metric = tuple[str, float | None, float | None, float, str | None]
 
@@ -85,4 +86,4 @@ class MetricsByRunGoldBuilder:
             for series in report.series
             for metric, level_low, level_high, value, label in _metrics(series)
         ]
-        return GoldTable.sorted_by_key(f"gold_{self.name}", _KEY, rows)
+        return GoldTable.sorted_by_key(GOLD_METRICS_BY_RUN.name, GOLD_METRICS_BY_RUN.key, rows)
