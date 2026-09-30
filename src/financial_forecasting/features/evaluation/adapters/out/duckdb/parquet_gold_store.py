@@ -79,14 +79,21 @@ def _write_manifest(path: Path, manifest: GoldManifest) -> None:
 
 
 def _read_manifest(path: Path) -> object:
+    """O `MANIFEST.json` decodificado; ilegível (bytes, UTF-8 ou JSON) → corrupção."""
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise GoldGenerationCorruptError(f"{path.name} is not valid JSON: {error}") from error
 
 
 def _read_rows(path: Path) -> list[dict[str, object]]:
-    table = pq.read_table(path, partitioning=None)  # type: ignore[no-untyped-call]
+    """As linhas de uma tabela; arquivo Parquet ilegível (truncado, lixo) → corrupção."""
+    try:
+        table = pq.read_table(path, partitioning=None)  # type: ignore[no-untyped-call]
+    except (OSError, pa.ArrowInvalid) as error:
+        raise GoldGenerationCorruptError(
+            f"{path.name} is not a readable Parquet file: {error}"
+        ) from error
     rows: list[dict[str, object]] = table.to_pylist()
     return rows
 

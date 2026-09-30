@@ -396,3 +396,17 @@ def test_real_manifest_of_other_partition_corrupt(tmp_path: Path) -> None:
 
     with pytest.raises(GoldGenerationCorruptError, match="read as"):
         store.read_generation(partition=other)
+
+
+@pytest.mark.contract
+def test_real_unreadable_files_corrupt(tmp_path: Path) -> None:
+    """Checkpoint C bloco 2, F3: Parquet truncado e manifesto não-UTF-8 viram corrupção."""
+    store, current = _published(tmp_path)
+    table = current / f"{GOLD_DM_RESULTS.name}.parquet"
+    table.write_bytes(table.read_bytes()[:20])
+
+    with pytest.raises(GoldGenerationCorruptError, match="not a readable Parquet file"):
+        store.read_generation(partition=_PARTITION)
+    (current / MANIFEST_NAME).write_bytes(bytes([0xFF, 0xFE]) + b"{")
+    with pytest.raises(GoldGenerationCorruptError, match="not valid JSON"):
+        store.read_generation(partition=_PARTITION)
