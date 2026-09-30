@@ -118,6 +118,12 @@ As tabelas confirmatórias do cohort r0 foram calculadas uma vez num teste de
 software da Stage 6.4 (Task 15), num container descartado. Nenhum valor resultante
 foi lido. Nenhuma escolha deste plano usou informação de desempenho.
 
+O que aquele teste da 6.4 exibiu foi só o status da execução, as durações e as
+contagens por etapa, as contagens de linhas por tabela, o resumo do realizado (número
+de sessões, datas e soma dos retornos) e os quality checks agrupados com as suas
+contagens — nenhum valor de desempenho (registro completo no technical da Stage 6.4,
+§7, "Exposição de cegamento").
+
 ### O que a Stage 6.5 prova sobre a ordem (ADR 6.5.0003 item 4)
 
 - A âncora do cohort referenciado (comentário na #102, 2026-09-28T20:27:09Z) é
