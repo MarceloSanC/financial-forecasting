@@ -353,3 +353,43 @@ def test_services_check_rule_identifiers(field: str, key: str) -> None:
 
     with pytest.raises(ValueError, match=f"rules.{key} must be"):
         ConfirmatoryScorecard.decide(plan, [_evidence(1), _evidence(7)])
+
+
+def _flip_sensitivities(evidence: HorizonEvidence) -> HorizonEvidence:
+    """Bartlett e moving-block discordando das linhas primárias em toda linha."""
+    dm = tuple(
+        dataclasses.replace(row, rejected=not row.rejected)
+        if row.estimator is DmVarianceEstimator.BARTLETT
+        else row
+        for row in evidence.dm
+    )
+    mcs = tuple(
+        dataclasses.replace(row, included=not row.included)
+        if row.scheme is BootstrapScheme.MOVING_BLOCK
+        else row
+        for row in evidence.mcs
+    )
+    return dataclasses.replace(evidence, dm=dm, mcs=mcs)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("rejected", "included", "outcome"),
+    [
+        pytest.param(_NAIVE, {_CANDIDATE}, H2Outcome.BEATS_NAIVE_TIES_STRONG, id="ties"),
+        pytest.param(_ALL, set(), H2Outcome.BEATS_NAIVE_AND_STRONG, id="beats-all"),
+        pytest.param((), {_CANDIDATE}, H2Outcome.NO_SKILL_OVER_NAIVE, id="no-skill"),
+    ],
+)
+def test_outcome_follows_primary_variants(
+    rejected: tuple[str, ...], included: set[str], outcome: H2Outcome
+) -> None:
+    """M1 (ADR 6.5.0006 item 6): o veredito lê só o DM retangular e o MCS estacionário."""
+    primary = _evidence(1, rejected=rejected, included=included)
+    flipped = _flip_sensitivities(primary)
+
+    verdict = _decide(flipped).horizons[0]
+
+    assert verdict.h2 is outcome
+    assert verdict == _decide(primary).horizons[0]
+    assert verdict.in_mcs is (_CANDIDATE in included)
