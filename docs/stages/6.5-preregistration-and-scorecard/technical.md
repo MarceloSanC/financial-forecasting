@@ -3,7 +3,7 @@ title: Technical — Stage 6.5 — Pré-registro imutável e scorecard confirmat
 description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit, salvo a do roadmap e a de congelamento), TDD inside-out no BC evaluation — PreregistrationHash em shared, VO Preregistration com catálogo de regras, poder exato e VOs de evidência, H1Gate e ConfirmatoryScorecard, dono do schema do gold e montagem única da geração lida, ports PreregistrationSource e GoldGenerationReader com fake, real e contrato, derivação do comando e conferência do gold, perfil, use case BuildConfirmatoryScorecard, wiring, e2e sintético, roadmap e o congelamento e a âncora do r0 (bloqueada pela declaração de cegamento)
 when-use: Consultar durante a Fase 4 (execução) desta Stage; cada Task tem critério de aceite, tokens de teste e blocos de verificação Container/Host
 keywords: [technical, plano de execução, preregistration-and-scorecard, evaluation, preregistration, preregistration-hash, rule-catalog, h1-gate, h1-gate-power, confirmatory-scorecard, scorecard-evidence, gold-schema, gold-generation, gold-generation-reader, preregistration-source, toml, refresh-command-from, profile, academic-decision-ready, anchor, blinding, port-coverage]
-status: draft
+status: done
 created_at: 2026-09-30
 updated_at: 2026-09-30
 stage_id: 6.5-preregistration-and-scorecard
@@ -222,15 +222,19 @@ contrato, fronteira nem critério; viram `[decision]` em §7 ao executar):**
   Checkpoint B r1, A3), que cobre exatamente o que o esquema usa (`str` com
   escape de `"`/`\`, `int`, `float` por `repr`, `bool`, `datetime` — com fuso
   vira *offset date-time*, sem fuso vira *local date-time* (para o caso
-  negativo da âncora) —, listas de escalares, tabelas e *arrays of tables*),
+  negativo da âncora) —, listas de escalares, tabelas e *arrays of tables*;
+  lista de tabelas **vazia** vira `key = []`; `str` com quebra de linha ou
+  caractere de controle sai escapado (`\n`, `\t`, `\r`, `\uXXXX`), nunca
+  literal),
   com a regra "chaves escalares antes das
   tabelas"; `PAYLOAD_TOML = to_toml(valid_payload())`; `leaf_paths(payload)`
   enumera **toda** folha com caminho indexado (`"dm.alpha"`, `"horizons[1]"`,
   `"h1_gate.power_scenarios[0].lower_rate"`); `with_leaf(payload, path,
   value)` devolve cópia profunda com a folha trocada; `FloatRefusingHasher`
   (acima). O teste `payload_toml_writer_round_trip` prova `tomllib.loads(
-  to_toml(p)) == p` para o plano base, para um r1 com emenda e para um plano
-  com `blinding_statement` contendo aspas e barra invertida (o gate de pureza
+  to_toml(p)) == p` para o plano base, para um r1 com emenda, para um plano
+  com `blinding_statement` contendo aspas, barra invertida, `\n` e um
+  caractere de controle, e para um payload com lista de tabelas vazia (o gate de pureza
   proíbe `load`, não `loads`). O contrato (Task 06) e o e2e (Task 11) gravam em
   disco o texto de `to_toml` dos planos que montam — nenhum TOML escrito à
   mão.
@@ -724,11 +728,14 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
     naive → estatístico forte → ML), `models` (candidato + comparadores),
     `strong` (estatístico forte ∪ ML).
   - `_preregistration_payload.py` — decisão de detalhe do §1
-    (`valid_payload()`, `to_toml(...)`, `PAYLOAD_TOML`, `leaf_paths(...)` com
-    caminhos indexados, `with_leaf(...)`, `FloatRefusingHasher`).
+    (`valid_payload()`, `to_toml(...)`, `PAYLOAD_TOML`, `key_paths(...)`
+    pontuado sem índices, `leaf_paths(...)` com caminhos indexados,
+    `with_leaf(...)`, `FloatRefusingHasher`).
 - **Critério de aceite (A1, I1–I4, I14, C1):** chave desconhecida e cada chave
   ausente (parametrizado sobre **toda** chave obrigatória do payload, via
-  `leaf_paths`) erguem nomeando o caminho; `blinding_statement` ausente aceito,
+  `key_paths(payload)` — caminhos pontuados de **chave**, sem índices, ex.
+  `"h1_gate.power_scenarios"`, `"dm.alpha"`; remover um elemento de lista não
+  é "chave ausente"; Checkpoint B r2, item 4) erguem nomeando o caminho; `blinding_statement` ausente aceito,
   `""` recusado; cada identificador de regra diferente do catálogo recusado; o
   catálogo cobre exatamente os campos de `RuleIdentifiers` e
   `RULE_CATALOG["mcs.statistic"] is MCS_STATISTIC`; um caso por bloco com valor
@@ -741,8 +748,8 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   `0` num campo float vira `0.0` e `1.0` num campo int ergue, `True` em campo
   numérico ergue; emenda em r0 ergue e r1 sem `amends` ergue, r1 completo é
   aceito; `from_mapping(p.as_payload()) == p`; `tomllib.loads(to_toml(q)) ==
-  q` para o plano base, um r1 com emenda e um `blinding_statement` com aspas e
-  barra invertida. Hash (com o dublê que recusa float): para **todo** caminho
+  q` para o plano base, um r1 com emenda, um `blinding_statement` com aspas,
+  barra invertida, `\n` e caractere de controle, e uma lista de tabelas vazia. Hash (com o dublê que recusa float): para **todo** caminho
   de `leaf_paths(p.as_payload())`, `PreregistrationHash.compute` direto sobre
   `with_leaf(p.as_payload(), path, alt)` difere do hash de `p` — **sem**
   passar por `from_mapping`, porque várias folhas só têm um valor válido
@@ -1206,6 +1213,13 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
     `PreregistrationNotAnchoredError`, `PreregistrationMismatchError` (campo no
     atributo `field` e na mensagem) e `GoldNotReadyError` (`failed_checks:
     tuple[FailedCheck, ...]`).
+  - **Nomes de `field` fixados** (o e2e depende de `"preregistration_ref"` e
+    `"seeds"`; Checkpoint B r2, item 2): manifesto → `"partition"`,
+    `"preregistration_ref"`, `"parameters"`, `"horizons"`, `"window_deficits"`,
+    `"dataset_fingerprint"`; conjuntos → `"models"`, `"seeds"`,
+    `"quantile_levels"`; MCS → `"mcs.statistic"`, `"mcs.block_rule"`.
+    Constantes públicas no módulo de DTOs (`MismatchField(StrEnum)`), usadas
+    pelo mapeador e pelos testes.
   - `use_cases/scorecard_evidence.py`: `evidence_from_generation(*, prereg, command: RefreshGoldCommand,
     generation: GoldGeneration) -> tuple[HorizonEvidence, ...]`, na ordem de
     C6/C8 do concept: (1) manifesto × comando — `partition`,
@@ -1241,7 +1255,9 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   Mapeador: `PreregistrationMismatchError` para cada campo do manifesto
   alterado (partição inclusive; parametrizado), modelo a mais e a menos em DM,
   MCS e calibração, seed ausente e a mais em cada tabela, nível de grade
-  diferente, `statistic` diferente e `block_size` fora da regra;
+  diferente, `statistic` diferente e `block_size` fora da regra — cada caso
+  **afirma o `field`** exato da lista acima (`error.field ==
+  MismatchField.SEEDS`, etc.);
   `GoldGenerationCorruptError` para seed presente sem uma cauda, modelo sem a
   linha de um horizonte, comparador sem a linha de um estimador, esquema sem
   MCS num horizonte, `n_points` divergente no DM de um horizonte,
@@ -1448,9 +1464,11 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
     "preregistration")` e o `hasher` já wirado.
   - `test_build_confirmatory_scorecard.py` (`pytestmark =
     pytest.mark.integration`), fixture de módulo com o cenário inteiro num
-    único `tmp_path` (`Settings(data_root=<tmp>/data, repo_root=<tmp>)`, sempre
-    com os dois argumentos; o teste afirma `cfg.data_root.is_relative_to(
-    tmp_path)` e `cfg.repo_root == tmp_path` antes de qualquer escrita): plano
+    único `tmp_path` (`Settings(_env_file=None, data_root=<tmp>/data,
+    repo_root=<tmp>, artifacts_root=<tmp>/art)` — sem `.env` do checkout; o
+    teste afirma que `cfg.data_root`, `cfg.repo_root` e `cfg.artifacts_root`
+    estão **todos** sob `tmp_path` antes de qualquer escrita; Checkpoint B r2,
+    item 3): plano
     de teste (`valid_payload()` com horizontes (1, 2), candidato com seeds
     `[1, 2]`, os seis comparadores, `cohort_id = "e2e-cohort"`, fingerprint do
     dataset sintético, montado por `with_leaf`) gravado por `to_toml` em
@@ -1671,11 +1689,23 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
      locação recalculadas (tolerância 1e-12); todo arquivo de
      `config/preregistration/` cujo nome casa `^(?P<name>.+)-r(?P<rev>\d+)\.toml$`
      (o `.anchor.toml` **não** casa) tem o hash completo citado no espelho;
-     nenhum texto do TOML e do espelho casa a regex de afirmação proibida
-     `CLAIM_PATTERN` = `(nenhuma|nunca|jamais|no|never)[^.]{0,80}(métrica|metric)[^.]{0,80}(comput|calcul)[^.]{0,80}(r0|cohort|coorte)`
-     (sem distinção de caixa; linha que cita `6.5` é permitida — é a afirmação
-     da própria Stage). A regex é estreita de propósito: prosa como "o perfil
-     jamais troca o veredito" não casa (Checkpoint B r1, A16).
+     nenhuma **frase** do TOML e do espelho é afirmação proibida. Regra
+     (`CLAIM_TERMS`, no módulo do teste; Checkpoint B r2, item 1): o texto tem as
+     quebras de linha simples trocadas por espaço e é cortado em frases
+     (`(?<=[.!?;])\s+` ou linha em branco); uma frase é afirmação proibida se
+     casa **os quatro** termos, em **qualquer ordem**, sem distinção de caixa e
+     com fronteira de palavra: negação `\b(nenhuma|nenhum|nunca|jamais|never)\b`
+     ou `\bno\s+metrics?\b` (o `no` sozinho é "em o" em PT e não conta);
+     métrica `\b(métricas?|metrics?)\b`; cálculo `\b(comput\w*|calcul\w*)\b`;
+     alvo `\b(r0|cohort|coorte)\b`. **Sem isenção** de linha que cite `6.5`:
+     o espelho descreve o que a Stage fez sem esses termos juntos (ex.: "todo
+     teste e o e2e da 6.5 usam dados sintéticos"). O teste
+     `no_claim_about_r0_past` também roda a regra sobre frases-amostra —
+     **casam**: "Nunca foi calculada nenhuma métrica sobre o r0", "The r0
+     cohort has never had a metric computed on it", "No metric was ever
+     computed on the cohort"; **não casam**: "A 8.1 roda o refresh no cohort e
+     cada métrica é calculada sobre o cohort r0", "o perfil jamais troca o
+     veredito", "Todos os testes da 6.5 usam dados sintéticos".
   4. **Calcular a referência** (bloco Container "ref" abaixo) → escrever no
      espelho o `preregistration_ref` e o hash completo → rodar o bloco de teste
      (Container "1º commit"). **Commit 1** (congelamento). Sem rebase entre este
@@ -1687,8 +1717,8 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
      em nada. Bloco Host "âncora" abaixo: confere que a tag não existe (local e
      remota), cria e empurra **só** a tag, grava o corpo do comentário num
      arquivo (ref, hash completo, tag, commit, `cohort_id` e hash do cohort —
-     sem afirmação sobre o passado do r0; a mesma `CLAIM_PATTERN` roda sobre o
-     corpo antes de postar), posta com `gh issue comment 127 --body-file`, e lê
+     sem afirmação sobre o passado do r0; a mesma regra `CLAIM_TERMS` roda
+     sobre o corpo antes de postar), posta com `gh issue comment 127 --body-file`, e lê
      de volta pela API **exatamente um** comentário com `preregistration/<ref>`,
      com `created_at` e `html_url`, `created_at` > `2026-09-28T20:27:09Z`
      (âncora do cohort na #102).
@@ -1713,7 +1743,8 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   rodado (nenhum comando desta Task cita `data/`).
 - **Tokens:** `test_preregistration_consistency.py`: `r0_matches_cohort`,
   `r0_values_match_adrs`, `r0_location_rates_normal`,
-  `every_revision_hash_quoted`, `no_claim_about_r0_past` (1º commit);
+  `every_revision_hash_quoted`, `no_claim_about_r0_past` (1º commit; inclui
+  as frases-amostra positivas e negativas do item 3);
   `anchor_record_matches_ref` (2º commit).
 - **Container "ref" (antes de escrever o espelho):**
   ```bash
@@ -1740,12 +1771,23 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   ```bash
   P=config/preregistration/aapl_confirmatory-r0.toml
   M=docs/preregistration/aapl_confirmatory.md
-  CLAIM='(nenhuma|nunca|jamais|no|never)[^.]{0,80}(métrica|metric)[^.]{0,80}(comput|calcul)[^.]{0,80}(r0|cohort|coorte)'
   test -s "$P"
   test -s "$M"
-  c=$(mktemp)
-  grep -niE "$CLAIM" "$P" "$M" > "$c" || true
-  if test -s "$c" && grep -v "6\.5" "$c"; then echo "FAIL: afirmação sobre o passado do r0"; exit 1; fi
+  # mesma regra do CLAIM_TERMS do teste (frases, quatro termos, qualquer ordem)
+  set -- "$P" "$M"
+  python - "$@" <<'PY'
+  import re, sys
+  TERMS = (r"\b(nenhuma|nenhum|nunca|jamais|never)\b|\bno\s+metrics?\b",
+           r"\b(métricas?|metrics?)\b", r"\b(comput\w*|calcul\w*)\b", r"\b(r0|cohort|coorte)\b")
+  bad = []
+  for path in sys.argv[1:]:
+      flat = re.sub(r"(?<!\n)\n(?!\n)", " ", open(path, encoding="utf-8").read())
+      for s in re.split(r"(?<=[.!?;])\s+|\n\s*\n", flat):
+          if all(re.search(term, s, re.IGNORECASE) for term in TERMS):
+              bad.append((path, s.strip()))
+  print(bad)
+  sys.exit(1 if bad else 0)
+  PY
   if grep -nF "≤ 5 %" "$M"; then echo "FAIL: espelho afirma <= 5 % de falsa reprovação"; exit 1; fi
   n=$(mktemp)
   git show --name-only --format= HEAD > "$n"
@@ -1760,7 +1802,6 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   COHORT_HASH="665f45d9169aba576d194e73d45c0508f51f231f573c4de283c96fc5847365b1"
   test -n "$REF"; test -n "$HASH"
   TAG="preregistration/$REF"
-  CLAIM='(nenhuma|nunca|jamais|no|never)[^.]{0,80}(métrica|metric)[^.]{0,80}(comput|calcul)[^.]{0,80}(r0|cohort|coorte)'
   if git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then echo "FAIL: tag já existe localmente"; exit 1; fi
   r=$(mktemp)
   git ls-remote --tags origin "$TAG" > "$r"
@@ -1774,7 +1815,21 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   body=$(mktemp)
   printf '%s\n' "Âncora do pré-registro (ADR 6.5.0003)" "" "- preregistration_ref: $REF" "- hash: $HASH" "- tag: $TAG" "- commit: $COMMIT" "- cohort_id: $COHORT_ID" "- cohort_hash: $COHORT_HASH" > "$body"
   test -s "$body"
-  if grep -iE "$CLAIM" "$body"; then echo "FAIL: corpo do comentário com afirmação proibida"; exit 1; fi
+  # mesma regra do CLAIM_TERMS do teste sobre o corpo do comentário
+  set -- "$body"
+  python - "$@" <<'PY'
+  import re, sys
+  TERMS = (r"\b(nenhuma|nenhum|nunca|jamais|never)\b|\bno\s+metrics?\b",
+           r"\b(métricas?|metrics?)\b", r"\b(comput\w*|calcul\w*)\b", r"\b(r0|cohort|coorte)\b")
+  bad = []
+  for path in sys.argv[1:]:
+      flat = re.sub(r"(?<!\n)\n(?!\n)", " ", open(path, encoding="utf-8").read())
+      for s in re.split(r"(?<=[.!?;])\s+|\n\s*\n", flat):
+          if all(re.search(term, s, re.IGNORECASE) for term in TERMS):
+              bad.append((path, s.strip()))
+  print(bad)
+  sys.exit(1 if bad else 0)
+  PY
   gh issue comment 127 --body-file "$body"
   a=$(mktemp)
   gh api --paginate repos/{owner}/{repo}/issues/127/comments --jq '.[] | select(.body | contains("'"$TAG"'")) | "\(.created_at) \(.html_url)"' > "$a"
@@ -2163,6 +2218,12 @@ exato. Nenhuma métrica do cohort foi usada (cálculo sobre taxas nominais).
 `accepted` intacto), no 2º commit da Task 12; o espelho do pré-registro (Task
 13) declara a taxa como ≈ 5 % com o valor exato no n que o scorecard medir,
 nunca "≤ 5 %"; o `dm_alpha` = 0,05 não muda (é escolha de coerência, ADR
-6.5.0009). **Stage candidata:** esta (Tasks 12 e 13).
+6.5.0009). **Stage candidata:** esta (Tasks 12 e 13). **Seguimento (sem
+edição agora; Checkpoint B r2, item 6):** o mesmo "≤ 5 %" aparece no ADR
+0.0.0011 (`docs/adr/0_0_0011-preregistration-invariants-and-h1-gate.md:59`,
+item 4 "Bonferroni over two tails, ≤ 5 % false failure") e no doc de domínio
+(`docs/domain/evaluation/probabilistic-forecast-evaluation.md:1614`, §8.5 "a
+probabilidade de reprovar um modelo calibrado é ≤ 5 %") — a corrigir por nota
+datada pela sessão mestra (issue de docs), fora desta Stage.
 
 <!-- END: post-execution -->
