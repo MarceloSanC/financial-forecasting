@@ -14,6 +14,8 @@ bounded_context: evaluation
 
 # ADR 6.5.0009 — Conventional and evidence-fixed values of the preregistration
 
+> **Nota (2026-09-30, Stage 6.5 Task 12):** "≤ 5 % false failure" é o alvo nominal do Bonferroni; a taxa exata é ≈ 5 % (0,0506 em n = 1 512) — ver technical 6.5 §7 `[finding]` T-F11. O valor `dm_alpha` = 0,05 não muda.
+
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
 ## Status
