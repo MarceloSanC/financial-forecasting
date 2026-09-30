@@ -2346,4 +2346,23 @@ technical §2 Task 08). **Stage candidata:** esta.
    prefixo `_` quebraria os nomes que o technical e os testes citam. Mantido como está.
 **Stage candidata:** esta.
 
+### 2026-09-30 — [finding] Gate de saída §3 (A14): `coverage json` falha por módulos temporários do teste de import-contracts — Claude (Opus 5.5)
+**Contexto:** no bloco Container do §3, o `make check` passou nas duas rodadas
+(5 268 passed, 23 skipped; cobertura total 98,95 %), mas o passo seguinte
+`uv run coverage json -o "$cov"` ergueu `No source for code:
+.../features/evaluation/application/_arch_audit_taint_sklearn.py`. O
+`tests/architecture/test_import_contracts.py` grava módulos "contaminados"
+temporários **dentro de `src/`** e os apaga; com `pytest-xdist` + `pytest-cov`, um
+worker que salva os dados de cobertura enquanto o arquivo existe o registra como
+fonte não executada (o relatório de terminal do `make check` só avisa —
+`couldnt-parse` —, o `coverage json` sem `-i` erra). Não vem do código da 6.5 (o
+arquivo é da 6.1/6.2); é corrida de tempo do tooling, que o bloco A14 desta Stage
+expõe. **Execução:** o resto do bloco foi rodado sobre o mesmo `.coverage` com
+`coverage json -i` (ignora só arquivos sem fonte): 27 arquivos de `src/` no escopo,
+nenhum abaixo de 90 %, nenhum ausente; contratos, e2e, gates de arquitetura e o laço
+de tokens verdes. **Direção sugerida:** o teste de import-contracts gerar os
+módulos numa cópia fora de `src/` (ou o `[tool.coverage.run]` omitir
+`*/_arch_audit_taint*.py`), e o §3 das próximas Stages usar `coverage json -i`.
+**Stage candidata:** issue de tooling da sessão mestra (fora desta Stage).
+
 <!-- END: post-execution -->
