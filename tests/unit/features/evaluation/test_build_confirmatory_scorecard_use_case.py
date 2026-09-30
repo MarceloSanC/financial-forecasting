@@ -282,18 +282,59 @@ def test_ready_false_unblinded_amendment() -> None:
     assert result.academic_decision_ready is False
 
 
+_REQUIRED = ("degeneracy_check", "alignment_check", "statistical_preconditions")
+
+
 @pytest.mark.unit
-def test_ready_false_required_check_skipped() -> None:
-    checks = [
-        ("degeneracy_check", "error", "pass"),
-        ("alignment_check", "error", "skipped"),
-        ("statistical_preconditions", "error", "pass"),
-    ]
+@pytest.mark.parametrize("skipped", _REQUIRED)
+def test_ready_false_required_check_skipped(skipped: str) -> None:
+    checks = [(name, "error", "skipped" if name == skipped else "pass") for name in _REQUIRED]
     world, reference = _ready_world(checks=checks)
 
     result = world.run(0, reference)
 
     assert result.readiness_reasons == (ReadinessReason.REQUIRED_CHECK_SKIPPED,)
+
+
+@pytest.mark.unit
+def test_ready_false_required_check_skipped_only_required() -> None:
+    """Checkpoint C bloco 3, R2/L1: check fora dos exigidos `SKIPPED` não tira a prontidão."""
+    checks = [(name, "error", "pass") for name in _REQUIRED]
+    world, reference = _ready_world(checks=[*checks, ("realized_provenance", "warn", "skipped")])
+
+    result = world.run(0, reference)
+
+    assert result.academic_decision_ready is True
+
+
+@pytest.mark.unit
+def test_ready_false_gold_before_anchor_of_judged_revision() -> None:
+    """Checkpoint C bloco 3, M1: vale a âncora da revisão julgada, não a da r0."""
+    world = _World()
+    reference0 = world.add(0, valid_payload())  # ancorada antes do gold
+    payload = _r1(reference0)
+    reference1 = world.add(1, payload, anchored=STARTED_AT + timedelta(seconds=1))
+    world.publish(payload, reference1)
+
+    result = world.run(1, reference1)
+
+    assert result.readiness_reasons == (ReadinessReason.GOLD_BEFORE_ANCHOR,)
+
+
+@pytest.mark.unit
+def test_ready_false_unblinded_amendment_anywhere_in_chain() -> None:
+    """Checkpoint C bloco 3, R1: uma emenda `unblinded` em qualquer revisão da cadeia."""
+    world = _World()
+    reference0 = world.add(0, valid_payload())
+    reference1 = world.add(1, _r1(reference0, blind_status="unblinded"))
+    payload2 = _r1(reference1, revision=2, justification="a later blinded fix")
+    reference2 = world.add(2, payload2)
+    world.publish(payload2, reference2)
+
+    result = world.run(2, reference2)
+
+    assert result.readiness_reasons == (ReadinessReason.AMENDED_AFTER_UNBLINDING,)
+    assert result.revision_chain == (reference0, reference1, reference2)
 
 
 @pytest.mark.unit
