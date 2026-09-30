@@ -466,10 +466,8 @@ class GoldManifest:
         """
         fields = _require_keys(mapping, _MANIFEST_KEYS, where="manifest")
         realized = _require_keys(fields["realized"], _REALIZED_KEYS, where="manifest.realized")
-        parameters_mapping = fields["parameters"]
-        if not isinstance(parameters_mapping, Mapping):
-            raise ValueError(f"parameters must be a Mapping, got {parameters_mapping!r}")
-        parameters = RefreshParameters.from_mapping(parameters_mapping)
+        # `_require_keys` do `from_mapping` dos parâmetros recusa o não-`Mapping`
+        parameters = RefreshParameters.from_mapping(fields["parameters"])  # type: ignore[arg-type]
         top_ref = fields["preregistration_ref"]
         if top_ref != parameters.preregistration_ref:
             raise ValueError(

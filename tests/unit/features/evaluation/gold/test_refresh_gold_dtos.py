@@ -565,3 +565,25 @@ def test_from_stored_uses_schema_keys() -> None:
     assert generation.manifest == _manifest()
     with pytest.raises(GoldGenerationCorruptError, match="has no table 'gold_mcs_results'"):
         generation.table(GOLD_MCS_RESULTS)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        pytest.param({"status": "RUNNING"}, "is not a valid RefreshStatus", id="status"),
+        pytest.param({"parameters": "x"}, "parameters must be a Mapping", id="parameters"),
+        pytest.param({"dataset_fingerprint": 7}, "dataset_fingerprint must be a str", id="fp"),
+        pytest.param({"started_at": 7}, "started_at must be an ISO-8601 str", id="timestamp"),
+        pytest.param({"finished_at": "yesterday"}, "Invalid isoformat", id="not-iso"),
+        pytest.param({"horizons": 1}, "horizons must be a list", id="horizons"),
+        pytest.param({"rows_by_table": [1]}, "rows_by_table must be a Mapping", id="rows"),
+    ],
+)
+def test_manifest_fields_rejected(changes: dict[str, object], message: str) -> None:
+    """Checkpoint C bloco 2, R4: cada campo do manifesto lido recusado pela sua regra."""
+    with pytest.raises(ValueError, match=message):
+        GoldManifest.from_mapping({**_manifest().as_mapping(), **changes})
+    parameters = {**_PARAMETERS.as_mapping(), "dm_variance_estimators": ["parzen"]}
+    with pytest.raises(ValueError, match="is not a valid DmVarianceEstimator"):
+        RefreshParameters.from_mapping(parameters)
