@@ -193,3 +193,15 @@ def test_real_name_identifier_checked(tmp_path: Path, name: str) -> None:
     with pytest.raises(ValueError, match="revision must be an int >= 0"):
         TomlPreregistrationSource(root).read(name=_NAME, revision=-1)
     assert not root.exists()
+
+
+# --- extras da auditoria de testes (rodada 1) -----------------------------------------
+
+
+@pytest.mark.contract
+def test_real_anchor_date_not_datetime(tmp_path: Path) -> None:
+    """Auditoria (cobertura): `anchored_at` como texto (não date-time TOML) é recusado."""
+    _TomlHarness(tmp_path).put(0, valid_payload(), {**_ANCHOR, "anchored_at": "2026-10-01"})
+
+    with pytest.raises(ValueError, match="anchored_at must be a TOML date-time"):
+        TomlPreregistrationSource(tmp_path).read(name=_NAME, revision=0)
