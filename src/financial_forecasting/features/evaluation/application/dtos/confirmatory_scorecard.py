@@ -17,7 +17,9 @@ DTOs de aplicação **frozen** (concept 6.5 §4 "Application", D4, I6, C3-C8; AD
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, fields, is_dataclass
+from datetime import datetime
 from enum import StrEnum
 
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
@@ -132,3 +134,161 @@ class GoldNotReadyError(ApplicationError):
         names = sorted({check.check for check in failed_checks})
         super().__init__(f"the gold generation is BLOCKED by the checks {names}")
         self.failed_checks = failed_checks
+
+
+# --- perfil do scorecard (Task 09; ADR 6.5.0008 item 2) --------------------------------
+
+
+def to_jsonable(value: object) -> object:
+    """Forma JSON-safe única dos DTOs do scorecard (dataclass → dict, enum → valor,
+    tupla → lista, datetime → ISO)."""
+    if isinstance(value, StrEnum):
+        return value.value
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if is_dataclass(value) and not isinstance(value, type):
+        return {f.name: to_jsonable(getattr(value, f.name)) for f in fields(value)}
+    if isinstance(value, Mapping):
+        return {str(k): to_jsonable(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [to_jsonable(item) for item in value]
+    return value
+
+
+@dataclass(frozen=True)
+class GateSensitivitiesProfile:
+    """Sensibilidades do gate H1 copiadas do `H1Result` (nunca veredito)."""
+
+    lr_uc_statistic: float | None
+    lr_uc_p_value: float | None
+    lr_uc_rejected: bool | None
+    dgt_band_level: float | None
+    dgt_passed: bool | None
+    common_sample_passed: bool | None
+    mean_of_seed_rates: tuple[float | None, float | None]
+    divergences: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PowerProfile:
+    """Probabilidade de reprovar o gate sob um cenário pré-registrado."""
+
+    label: str
+    role: str
+    n: int
+    failure_probability: float
+    assumes_independence: bool
+
+
+@dataclass(frozen=True)
+class TierProfile:
+    """Desfecho de um nível de comparadores (ADR 6.5.0007 item 5)."""
+
+    tier: str
+    members: tuple[str, ...]
+    holm_rejects_all: bool
+    candidate_in_mcs: bool
+    beats_or_ties: bool
+    ties_in_mcs: bool
+
+
+@dataclass(frozen=True)
+class DmProfileRow:
+    """Uma linha do DM copiada do gold, com o IC do efeito a 95 % (`None` se S = 0)."""
+
+    comparator: str
+    estimator: str
+    n_points: int
+    mean_differential: float
+    statistic: float
+    adjusted_p_value: float
+    rejected: bool
+    fallback_applied: bool
+    effect_interval: tuple[float, float] | None
+
+
+@dataclass(frozen=True)
+class ComparatorCalibrationProfile:
+    """Calibração de um comparador no par do gate (S = 1) — informação, nunca filtro."""
+
+    model: str
+    lower_contains_nominal: bool | None
+    upper_contains_nominal: bool | None
+    mean_degeneracy_rate: float
+    degeneracy_above_threshold: bool
+
+
+@dataclass(frozen=True)
+class CalibrationSeriesProfile:
+    """Uma série da calibração no nível de banda do perfil (médias e frações entre seeds)."""
+
+    model: str
+    sample: str
+    kind: str
+    level_low: float
+    level_high: float | None
+    includes_degenerate: bool
+    dgt_offset: int | None
+    dgt_step: int | None
+    n_seeds: int
+    mean_violations: float
+    mean_observed: float
+    fraction_contains_nominal: float | None
+    fraction_ind_rejected: float | None
+    fraction_cc_rejected: float | None
+    n_independence_not_applicable: int
+
+
+@dataclass(frozen=True)
+class TailSummaryProfile:
+    """Uma cauda do gate na variante com as degeneradas ("sem lacunas" não aplicado)."""
+
+    kind: str
+    level: float
+    mean_violations: float
+    mean_observed: float
+
+
+@dataclass(frozen=True)
+class DescriptorProfile:
+    """Um descritor de `gold_metrics_by_run`: média, mínimo e máximo entre seeds."""
+
+    model: str
+    sample: str
+    metric: str
+    level_low: float | None
+    level_high: float | None
+    mean: float
+    minimum: float
+    maximum: float
+    n_seeds: int
+
+
+@dataclass(frozen=True, kw_only=True)
+class HorizonProfile:
+    """O perfil de um horizonte (ADR 6.5.0008 item 2) — nunca lido pelo veredito (I12)."""
+
+    horizon: int
+    gate_sensitivities: GateSensitivitiesProfile
+    power: tuple[PowerProfile, ...]
+    tiers: tuple[TierProfile, ...]
+    dm: tuple[DmProfileRow, ...]
+    bartlett_divergences: tuple[str, ...]
+    mcs_moving_block_divergence: bool
+    comparators_calibration: tuple[ComparatorCalibrationProfile, ...]
+    calibration_95: tuple[CalibrationSeriesProfile, ...]
+    without_gaps: tuple[TailSummaryProfile, ...]
+    descriptors: tuple[DescriptorProfile, ...]
+    lowest_mean_pinball: bool
+
+
+@dataclass(frozen=True)
+class ScorecardProfile:
+    """O perfil do scorecard: por horizonte, e os perfis declarados e não construídos."""
+
+    horizons: tuple[HorizonProfile, ...]
+    declared_not_built: tuple[str, ...]
+
+    def as_mapping(self) -> dict[str, object]:
+        """Serialização JSON-safe única."""
+        return {f.name: to_jsonable(getattr(self, f.name)) for f in fields(self)}

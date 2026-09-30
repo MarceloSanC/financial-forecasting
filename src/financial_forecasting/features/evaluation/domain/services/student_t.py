@@ -101,6 +101,45 @@ def student_t_cdf(x: float, df: float) -> float:
     return lower if x < 0.0 else 1.0 - lower
 
 
+# Quantil por bisseção sobre a CDF (Stage 6.5, technical §1 "Quantil da t"): intervalo,
+# tolerância relativa no x e teto de iterações (2e6 / 2^61 < 1e-12 — 61 bastam).
+_QUANTILE_BOUND = 1e6
+_QUANTILE_RTOL = 1e-12
+_QUANTILE_MAX_ITERATIONS = 200
+
+
+def student_t_quantile(p: float, df: float) -> float:
+    """O x com P(T_df ≤ x) = p — bisseção sobre `student_t_cdf` (dono da CDF).
+
+    Sem aproximação nova: a bisseção em [-1e6, 1e6] para quando o intervalo fica
+    ≤ 1e-12·max(1, |x|) (consumidor único: o IC do efeito do DM, p = 0,975).
+
+    Raises:
+        ValueError: `p` fora de (0, 1), não-finito ou `bool`; `df` como na CDF.
+        ArithmeticError: o quantil cai fora de [-1e6, 1e6] ou não converge.
+    """
+    if not is_finite_number(p) or not 0.0 < p < 1.0:
+        raise ValueError(f"p must be a finite number in (0, 1), got {p!r}")
+    if not is_finite_number(df) or df < _MIN_DF:
+        raise ValueError(f"df must be a finite number >= {_MIN_DF}, got {df!r}")
+    if p == _HALF:
+        return 0.0
+    low, high = -_QUANTILE_BOUND, _QUANTILE_BOUND
+    if not student_t_cdf(low, df) <= p <= student_t_cdf(high, df):
+        raise ArithmeticError(f"the t quantile of p={p!r}, df={df!r} is outside [-1e6, 1e6]")
+    for _ in range(_QUANTILE_MAX_ITERATIONS):
+        middle = (low + high) / 2.0
+        if student_t_cdf(middle, df) < p:
+            low = middle
+        else:
+            high = middle
+        if high - low <= _QUANTILE_RTOL * max(1.0, abs(middle)):
+            return (low + high) / 2.0
+    raise ArithmeticError(  # pragma: no cover - 61 iterações bastam; salvaguarda
+        f"the t quantile bisection did not converge in {_QUANTILE_MAX_ITERATIONS} steps"
+    )
+
+
 def _two_sided_tail(x: float, df: float) -> float:
     """P(|T_df| > |x|) pelos ramos do `pt.c` (x ≠ 0)."""
     if (x / df) * x > _ASYMPTOTIC_NX:

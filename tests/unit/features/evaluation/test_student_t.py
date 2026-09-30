@@ -218,3 +218,45 @@ def test_t_not_converge_raises_arithmetic_error(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(student_t, "_MAX_ITERATIONS", 1)
     with pytest.raises(ArithmeticError, match="did not converge"):
         student_t_cdf(-1.5, 5.0)
+
+
+# --- Stage 6.5: quantil por bisseção (IC do efeito do DM) -----------------------------
+
+student_t_quantile = student_t.student_t_quantile
+_QUANTILE_TOL = 1e-9  # valores publicados (ADR 0.0.0021: tolerância declarada)
+_ROUND_TRIP_TOL = 1e-12
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("p", [0.025, 0.5, 0.975])
+@pytest.mark.parametrize("df", [1.0, 10.0, 1511.0])
+def test_t_quantile_round_trip(p: float, df: float) -> None:
+    assert abs(student_t_cdf(student_t_quantile(p, df), df) - p) <= _ROUND_TRIP_TOL
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("df", "expected"),
+    [(1.0, 12.706204736174705), (10.0, 2.2281388519649385), (30.0, 2.0422724563012373)],
+)
+def test_t_quantile_published_values(df: float, expected: float) -> None:
+    assert student_t_quantile(0.975, df) == pytest.approx(expected, abs=_QUANTILE_TOL)
+    assert student_t_quantile(0.025, df) == pytest.approx(-expected, abs=_QUANTILE_TOL)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("p", "df", "message"),
+    [
+        (0.0, 10.0, "p must be"),
+        (1.0, 10.0, "p must be"),
+        (True, 10.0, "p must be"),
+        (math.nan, 10.0, "p must be"),
+        (0.5, 0.5, "df must be"),
+    ],
+)
+def test_t_quantile_invalid_rejected(p: float, df: float, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        student_t_quantile(p, df)
+    with pytest.raises(ArithmeticError, match="outside"):
+        student_t_quantile(1e-300, 1.0)
