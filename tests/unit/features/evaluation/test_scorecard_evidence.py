@@ -259,6 +259,6 @@ def test_evidence_dgt_step_coherence() -> None:
 
 
 @pytest.mark.unit
-def test_evidence_seed_spread_equal_values() -> None:
+def test_seed_spread_counts_equal_values() -> None:
     """Auditoria N1: seeds com o mesmo valor contam como seeds distintas."""
     assert SeedSpread.of([0.2, 0.2]).n_seeds == 2  # noqa: PLR2004

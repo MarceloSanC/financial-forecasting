@@ -2394,7 +2394,8 @@ exigiu correção de código (o F1 — chave opcional aninhada — já era recus
 - `tests/unit/features/evaluation/test_h1_gate_power.py`: `power_brute_small_n_all_upper`
   (task-03);
 - `tests/unit/features/evaluation/test_scorecard_evidence.py`: `evidence_dgt_step_coherence`
-  (task-03); `evidence_seed_spread_equal_values` (task-03, rodada 2);
+  (task-03); `seed_spread_counts_equal_values` (task-03, rodada 2; renomeado na auditoria da
+  Stage, F5: o nome antigo continha o token `evidence_seed_spread` do §3);
 - `tests/unit/shared/domain/value_objects/test_preregistration_hash.py`:
   `prereg_hash_mapping_proxy_encoded` (task-01);
 - `tests/unit/features/evaluation/test_preregistration_value_object.py`:
