@@ -53,9 +53,6 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     block_length_rule,
 )
-from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
-    is_finite_number,
-)
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     is_multi_step,
 )
@@ -203,11 +200,9 @@ def check_mcs_rules(prereg: Preregistration, tables: _Tables) -> None:
                 f"row {_describe(row, GOLD_MCS_RESULTS)} has {statistic!r}",
             )
     for row in tables.mcs:
-        estimate = col(row, GOLD_MCS_RESULTS, "max_block_estimate")
-        if not _valid_estimate(estimate):
-            continue  # ausente ou inválida: corrupção, conferida depois de todo mismatch
-        horizon = col(row, GOLD_MCS_RESULTS, "horizon")
-        expected = block_length_rule(horizon=horizon, max_estimate=estimate)  # type: ignore[arg-type]
+        expected = _block_rule(row)
+        if expected is None:
+            continue  # estimativa ausente ou inválida: corrupção, conferida depois de todo mismatch
         if col(row, GOLD_MCS_RESULTS, "block_size") != expected:
             raise _mismatch(
                 MismatchField.MCS_BLOCK_RULE,
@@ -223,9 +218,22 @@ def _describe(row: Row, schema: GoldTableSchema) -> str:
     return "(" + ", ".join(f"{k}={row[k]!r}" for k in schema.key) + ")"
 
 
-def _valid_estimate(estimate: object) -> bool:
-    """A estimativa que a regra de bloco aceita: número finito ≥ 0 (dono: `block_length_rule`)."""
-    return is_finite_number(estimate) and estimate >= 0.0  # type: ignore[operator]
+def _block_rule(row: Row) -> int | None:
+    """O bloco que a regra dá para a linha; `None` se o dono (`block_length_rule`) recusa.
+
+    A validade da estimativa é do dono da regra (uma escrita do predicado): ausente ou
+    recusada por ele é corrupção, erguida por `check_completed`.
+    """
+    estimate = col(row, GOLD_MCS_RESULTS, "max_block_estimate")
+    if estimate is None:
+        return None
+    try:
+        return block_length_rule(
+            horizon=col(row, GOLD_MCS_RESULTS, "horizon"),  # type: ignore[arg-type]
+            max_estimate=estimate,  # type: ignore[arg-type]
+        )
+    except ValueError:
+        return None
 
 
 def check_completed(tables: _Tables) -> None:
@@ -237,7 +245,7 @@ def check_completed(tables: _Tables) -> None:
                 f"{GOLD_MCS_RESULTS.name} row {_describe(row, GOLD_MCS_RESULTS)} has no "
                 "max_block_estimate in a COMPLETED generation"
             )
-        if not _valid_estimate(estimate):
+        if _block_rule(row) is None:
             raise GoldGenerationCorruptError(
                 f"{GOLD_MCS_RESULTS.name} row {_describe(row, GOLD_MCS_RESULTS)} has an invalid "
                 f"max_block_estimate {estimate!r} (the block rule needs a finite number >= 0)"

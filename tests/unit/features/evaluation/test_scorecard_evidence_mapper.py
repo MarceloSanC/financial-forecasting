@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable
+from types import SimpleNamespace
 
 import pytest
 
@@ -369,3 +370,31 @@ def test_corrupt_seed_missing_tail_invalid_cell() -> None:
     )
 
     _corrupt(stored, "do not form evidence")
+
+
+@pytest.mark.unit
+def test_corrupt_block_estimate_missing_zero_is_valid() -> None:
+    """Checkpoint C bloco 4, F2/N5: estimativa 0.0 é válida (bloco = h), sem corrupção."""
+    stored = make_stored(_PLAN)
+    assert stored.set_cell(
+        GOLD_MCS_RESULTS.name, _is(horizon=7, model=_CAND), "max_block_estimate", 0.0
+    )
+
+    evidence = _map(stored)
+
+    assert len(evidence) == 2  # type: ignore[arg-type]  # noqa: PLR2004
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("estimate", [float("nan"), float("inf")], ids=["nan", "inf"])
+def test_corrupt_block_estimate_missing_non_finite(estimate: float) -> None:
+    """Não-finita: recusada pelo dono da regra → corrupção (o `GoldTable` já a barra antes)."""
+    row = {
+        **make_stored(_PLAN).rows[GOLD_MCS_RESULTS.name][0],
+        "max_block_estimate": estimate,
+    }
+    tables = SimpleNamespace(mcs=(row,), checks=())
+
+    with pytest.raises(GoldGenerationCorruptError, match="has an invalid max_block_estimate"):
+        mapper_module.check_completed(tables)  # type: ignore[arg-type]
+    mapper_module.check_mcs_rules(_PLAN, tables)  # type: ignore[arg-type]  # pulada, sem erro
