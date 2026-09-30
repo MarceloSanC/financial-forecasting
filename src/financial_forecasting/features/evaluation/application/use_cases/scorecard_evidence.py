@@ -25,6 +25,10 @@ As colunas são lidas **só** pelo schema (`gold_schema`): uma coluna fora de `k
 `read_columns` ergue `KeyError`. As caudas do gate e da amostra comum vêm **só** das
 linhas com `band_level == gate_band_level` (a calibração tem uma linha por nível de
 banda, com as mesmas contagens por construção da 6.4).
+
+Os `# type: ignore[arg-type]` deste módulo vêm das células do gold, tipadas `object`
+(`col`): o tipo é o do schema dono (`gold_schema`) e os valores são revalidados na
+construção dos VOs/DTOs de destino (evidência, perfil, `FailedCheck`).
 """
 
 from __future__ import annotations

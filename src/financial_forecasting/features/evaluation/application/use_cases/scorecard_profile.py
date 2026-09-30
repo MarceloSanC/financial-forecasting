@@ -13,6 +13,10 @@ leituras (I10, doc §6.4); o veredito é construído antes e sem o perfil (I12).
 séries novas (issue #129: DM por fold/seed/τ, estacionariedade de d_t, degeneração
 parcial por par, sensibilidades de bloco do MCS, p-valor Monte Carlo) e o diagrama de
 nitidez (8.3).
+
+Os `# type: ignore[arg-type]` deste módulo vêm das células do gold, tipadas `object`
+(`col`): o tipo é o do schema dono (`gold_schema`) e os valores são revalidados na
+construção dos VOs/DTOs de destino (evidência, perfil, `FailedCheck`).
 """
 
 from __future__ import annotations

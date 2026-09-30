@@ -25,6 +25,10 @@ Concept 6.5 §4, I5, I6, I12, I13, C2-C5, C7, C10, C11; ADRs `6_5_0002` item 4,
 
 Os erros moram em `dtos/confirmatory_scorecard.py` (importados daqui, sem
 reexportação — technical 6.5 §7 `[deviation]` Task 08).
+
+Os `# type: ignore[arg-type]` deste módulo vêm das células do gold, tipadas `object`
+(`col`): o tipo é o do schema dono (`gold_schema`) e os valores são revalidados na
+construção dos VOs/DTOs de destino (evidência, perfil, `FailedCheck`).
 """
 
 from __future__ import annotations
