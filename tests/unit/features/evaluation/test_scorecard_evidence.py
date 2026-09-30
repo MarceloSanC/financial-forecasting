@@ -19,6 +19,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
 )
 from financial_forecasting.features.evaluation.domain.value_objects.scorecard_evidence import (
     CalibrationEvidence,
+    ComparatorCalibration,
     DgtTailEvidence,
     DmEvidence,
     HorizonEvidence,
@@ -177,6 +178,29 @@ def test_evidence_horizon_incoherent_tail_seeds() -> None:
 
     with pytest.raises(ValueError, match="the two tails must have the same seeds"):
         dataclasses.replace(gate, upper=_tail(0.9, (1, 1, 10)))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("upper", "id_"),
+    [
+        pytest.param(((1, 10, 99), (2, 10, 100)), "n", id="n-observed-differs"),
+        pytest.param(((1, 10, 100), (2, 10, 100)), "degeneracy", id="degeneracy-differs"),
+    ],
+)
+def test_evidence_horizon_incoherent_tail_series(
+    upper: tuple[tuple[int, int, int], ...], id_: str
+) -> None:
+    """n_observed e degeneracy_rate são da série: iguais nas duas caudas, por seed."""
+    lower = _tail(0.1, (1, 10, 100), (2, 10, 100))
+    upper_tail = _tail(0.9, *upper, degeneracy=0.02 if id_ == "degeneracy" else 0.0)
+    message = "same n_observed and degeneracy_rate"
+    with pytest.raises(ValueError, match=message):
+        CalibrationEvidence(sample="model_full", lower=lower, upper=upper_tail, dgt=())
+    with pytest.raises(ValueError, match=message):
+        DgtTailEvidence(0, 2, lower, upper_tail)
+    with pytest.raises(ValueError, match=message):
+        ComparatorCalibration(model="m", lower=lower, upper=upper_tail)
 
 
 @pytest.mark.unit

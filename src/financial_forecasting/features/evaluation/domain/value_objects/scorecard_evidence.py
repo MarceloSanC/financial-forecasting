@@ -161,6 +161,23 @@ def _check_same_seeds(first: TailEvidence, second: TailEvidence, *, field: str) 
         )
 
 
+def _check_same_series(lower: TailEvidence, upper: TailEvidence, *, field: str) -> None:
+    """As duas caudas de uma série: mesmas seeds e, por seed, o mesmo n e a mesma degeneração.
+
+    `n_observed` e `degeneracy_rate` são da **série** (pontos não-degenerados e fração
+    degenerada do conjunto alinhado), não da cauda — iguais nas duas caudas por
+    construção da 6.4 (`HitSequence`); divergir é evidência incoerente.
+    """
+    _check_same_seeds(lower, upper, field=field)
+    for low, up in zip(lower.seeds, upper.seeds, strict=True):
+        if (low.n_observed, low.degeneracy_rate) != (up.n_observed, up.degeneracy_rate):
+            raise ValueError(
+                f"{field}: seed {low.seed} must have the same n_observed and degeneracy_rate "
+                f"in the two tails, got ({low.n_observed}, {low.degeneracy_rate!r}) and "
+                f"({up.n_observed}, {up.degeneracy_rate!r})"
+            )
+
+
 @dataclass(frozen=True)
 class DgtTailEvidence:
     """As duas caudas de uma sub-série DGT (offset k, passo h)."""
@@ -178,7 +195,7 @@ class DgtTailEvidence:
         _check_count(self.offset, field="offset")
         if self.offset >= self.step:
             raise ValueError(f"offset must be < step={self.step}, got {self.offset}")
-        _check_same_seeds(self.lower, self.upper, field=f"dgt offset {self.offset}")
+        _check_same_series(self.lower, self.upper, field=f"dgt offset {self.offset}")
 
 
 @dataclass(frozen=True)
@@ -199,7 +216,7 @@ class CalibrationEvidence:
     def __post_init__(self) -> None:
         """Seeds iguais nas caudas e em cada sub-série; DGT completo quando presente."""
         _check_text(self.sample, field="sample")
-        _check_same_seeds(self.lower, self.upper, field=f"sample {self.sample}")
+        _check_same_series(self.lower, self.upper, field=f"sample {self.sample}")
         _check_tuple_of(self.dgt, DgtTailEvidence, field="dgt", allow_empty=True)
         if not self.dgt:
             return
@@ -215,8 +232,8 @@ class CalibrationEvidence:
 
     @property
     def mean_degeneracy(self) -> float:
-        """Degeneração média da amostra (a maior das duas caudas — lado conservador)."""
-        return max(self.lower.mean_degeneracy, self.upper.mean_degeneracy)
+        """Degeneração média da amostra (a taxa é da série: igual nas duas caudas)."""
+        return self.lower.mean_degeneracy
 
 
 @dataclass(frozen=True)
@@ -230,7 +247,7 @@ class ComparatorCalibration:
     def __post_init__(self) -> None:
         """Nome não vazio e as mesmas seeds nas duas caudas."""
         _check_text(self.model, field="model")
-        _check_same_seeds(self.lower, self.upper, field=f"comparator {self.model}")
+        _check_same_series(self.lower, self.upper, field=f"comparator {self.model}")
 
 
 @dataclass(frozen=True)

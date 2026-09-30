@@ -2248,10 +2248,12 @@ ciclo falharia já na coleta dos testes (nenhum teste dedicado).
 **Contexto:** pontos que o concept/technical deixam implícitos, resolvidos na
 execução abaixo do limiar de concept (nenhum muda contrato, fronteira ou
 critério). **Decisões:**
-1. **Degeneração média do gate** = a maior entre as médias das duas caudas
-   (`CalibrationEvidence.mean_degeneracy`): por construção da 6.4 as duas caudas
-   da mesma série têm a mesma taxa; o `max` só escolhe o lado conservador se o
-   gold um dia divergir.
+1. **Degeneração média do gate e n̄** = as da cauda inferior
+   (`CalibrationEvidence.mean_degeneracy`, `lower.mean_observed`): a taxa e o n
+   são da série; as duas caudas são iguais por invariante — o
+   `CalibrationEvidence` (e o `DgtTailEvidence` e o `ComparatorCalibration`)
+   exige, por seed, o mesmo `n_observed` e a mesma `degeneracy_rate` nas duas
+   caudas (Checkpoint C bloco 1, B3/A3/I6; o `max` da primeira versão saiu).
 2. **Sensibilidade "amostra comum"** recomputa o gate **inteiro** (as duas bandas
    ao nível do gate ∧ degeneração média ≤ limiar) sobre `HorizonEvidence.common`.
 3. **Bandas DGT** chamam o `WilsonBand` com o horizonte h da série de origem (o
