@@ -19,6 +19,9 @@ import pytest
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     MCS_STATISTIC,
 )
+from financial_forecasting.features.evaluation.domain.value_objects import (
+    preregistration as preregistration_module,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
     PROFILE_CATALOG,
     RULE_CATALOG,
@@ -448,3 +451,11 @@ def test_payload_toml_writer_round_trip() -> None:
     assert "\x07" not in to_toml(tricky)
     assert "horizons_not_evaluated = []" in to_toml(empty_tables)
     assert _plan(empty_tables).horizons_not_evaluated == ()
+
+
+@pytest.mark.unit
+def test_prereg_gate_pair_symmetry_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    """O par do gate usa o dono da simetria (`is_symmetric_pair`, ADR 6.1.0002)."""
+    _plan()
+    monkeypatch.setattr(preregistration_module, "is_symmetric_pair", lambda _l, _u: False)
+    _raises(valid_payload(), r"lower_level \+ upper_level == 1")

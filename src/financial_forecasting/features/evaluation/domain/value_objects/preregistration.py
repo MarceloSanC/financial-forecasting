@@ -71,6 +71,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
     BootstrapScheme,
     validate_bootstrap_parameters,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
+    is_symmetric_pair,
+)
 from financial_forecasting.shared.domain.services.path_identifier import (
     validate_path_identifier,
 )
@@ -454,7 +457,7 @@ class H1GateSpec:
                 "h1_gate needs lower_level < 0.5 < upper_level, got "
                 f"({self.lower_level!r}, {self.upper_level!r})"
             )
-        if self.lower_level + self.upper_level != 1.0:
+        if not is_symmetric_pair(self.lower_level, self.upper_level):
             raise ValueError(
                 "h1_gate needs lower_level + upper_level == 1 (a central pair), got "
                 f"({self.lower_level!r}, {self.upper_level!r})"
