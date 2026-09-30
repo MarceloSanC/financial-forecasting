@@ -408,3 +408,61 @@ def test_outcome_follows_primary_variants(
     assert verdict.h2 is outcome
     assert verdict == _decide(primary).horizons[0]
     assert verdict.in_mcs is (_CANDIDATE in included)
+
+
+# --- extras da auditoria de testes (rodada 1) -----------------------------------------
+
+
+def _without_primary(evidence: HorizonEvidence, part: str) -> HorizonEvidence:
+    if part == "dm":
+        dm = tuple(
+            r
+            for r in evidence.dm
+            if not (
+                r.comparator == "baseline_ar1" and r.estimator is DmVarianceEstimator.RECTANGULAR
+            )
+        )
+        return dataclasses.replace(evidence, dm=dm)
+    if part == "mcs":
+        mcs = tuple(
+            r
+            for r in evidence.mcs
+            if not (r.model == "gbm_quantile" and r.scheme is BootstrapScheme.STATIONARY)
+        )
+        return dataclasses.replace(evidence, mcs=mcs)
+    pinball = {m: v for m, v in evidence.mean_pinball.items() if m != "baseline_ewma_vol"}
+    return dataclasses.replace(evidence, mean_pinball=pinball)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("part", "message"),
+    [
+        ("dm", "no primary DM row for the comparators"),
+        ("mcs", "no primary MCS row for the models"),
+        ("pinball", "no mean pinball for the models"),
+    ],
+)
+def test_decide_missing_primary_rows_raises(part: str, message: str) -> None:
+    """Auditoria D8: linha primária do DM/MCS ou P̄_G faltando é erro de programação (C11)."""
+    evidence = _without_primary(_evidence(1, rejected=_ALL, included={_CANDIDATE}), part)
+
+    with pytest.raises(ValueError, match=message):
+        ConfirmatoryScorecard.decide(_PLAN, [evidence, _evidence(7)])
+
+
+@pytest.mark.unit
+def test_tier_ties_partial_membership() -> None:
+    """Auditoria D10: candidato no MCS e um naive fora → sem empate com o nível naive."""
+    included = {_CANDIDATE, _NAIVE[0], *_STRONG_STAT, *_ML}
+    evidence = [_evidence(1, rejected=_NAIVE, included=included), _evidence(7)]
+
+    naive = next(
+        r
+        for r in ConfirmatoryScorecard.tier_readings(_PLAN, evidence)
+        if r.horizon == 1 and r.tier == "naive"
+    )
+
+    assert naive.candidate_in_mcs is True
+    assert naive.ties_in_mcs is False
+    assert naive.beats_or_ties is True
