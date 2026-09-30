@@ -8,6 +8,8 @@ chamador (o VO do plano), não daqui.
 
 import copy
 import dataclasses
+from collections.abc import Mapping
+from types import MappingProxyType
 
 import pytest
 
@@ -111,3 +113,42 @@ def test_is_frozen() -> None:
 
     with pytest.raises(dataclasses.FrozenInstanceError):
         digest.value = "x"  # type: ignore[misc]
+
+
+# --- extras da auditoria de testes (rodada 1) -----------------------------------------
+
+
+class _RecordingHasher:
+    """Guarda o payload recebido para conferir que nenhum float chega ao hasher."""
+
+    def __init__(self) -> None:
+        self.payloads: list[object] = []
+
+    def hash_mapping(self, payload: Mapping[str, object]) -> str:
+        self.payloads.append(payload)
+        return CanonicalJsonHasher().hash_mapping(payload)
+
+    def hash_text(self, text: str) -> str:
+        return CanonicalJsonHasher().hash_text(text)
+
+
+def _floats(value: object) -> list[float]:
+    if isinstance(value, float):
+        return [value]
+    if isinstance(value, Mapping):
+        return [f for item in value.values() for f in _floats(item)]
+    if isinstance(value, list | tuple):
+        return [f for item in value for f in _floats(item)]
+    return []
+
+
+@pytest.mark.unit
+def test_prereg_hash_mapping_proxy_encoded() -> None:
+    """Auditoria S3: `MappingProxyType` (os VOs do plano) é codificado como um dict."""
+    recorder = _RecordingHasher()
+    proxied = {"block": MappingProxyType({"x": 0.1}), "top": 1}
+
+    digest = PreregistrationHash.compute(hasher=recorder, payload=MappingProxyType(proxied))
+
+    assert digest == _compute({"block": {"x": 0.1}, "top": 1})
+    assert _floats(recorder.payloads[0]) == []
