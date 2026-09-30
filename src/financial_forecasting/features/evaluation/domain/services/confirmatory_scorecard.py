@@ -25,8 +25,9 @@ do estudo é "H1 em ≥ 1 horizonte" (doc §8.8). O veredito não tem campo do p
 (I12): é construído antes e sem ele.
 
 `tier_readings` (perfil, ADR 6.5.0007 item 5) é função separada: por horizonte e
-nível, se Holm rejeita contra todos os membros e se o candidato está no MCS
-primário **junto com** todos eles (empate com o nível). `decide` não a chama.
+nível, se Holm rejeita contra todos os membros, se o candidato está no MCS
+primário, a condição (ii) lida contra o nível (`beats_or_ties`) e se o candidato
+está no MCS **junto com** todos eles (empate com o nível). `decide` não a chama.
 
 Na entrada, `decide` confere `rules.h1_gate.form`, `rules.verdict.form` e
 `rules.success_criterion` contra o catálogo (defesa: o VO do plano já garante).
@@ -85,12 +86,24 @@ class ScorecardVerdict:
 
 @dataclass(frozen=True)
 class TierReading:
-    """Leitura de um nível de comparadores num horizonte (perfil, ADR 6.5.0007 item 5)."""
+    """Leitura de um nível de comparadores num horizonte (perfil, ADR 6.5.0007 item 5).
+
+    Campos:
+        holm_rejects_all: Holm rejeita contra todo membro do nível.
+        candidate_in_mcs: o candidato está no MCS primário (o mesmo fato de
+            `HorizonVerdict.in_mcs`).
+        beats_or_ties: `candidate_in_mcs or holm_rejects_all` — a condição (ii) do
+            veredito lida só contra este nível.
+        ties_in_mcs: o candidato **e todos** os membros do nível estão no MCS
+            primário (empate com o nível inteiro) — descritivo, mais estrito que (ii).
+    """
 
     horizon: int
     tier: str
     members: tuple[str, ...]
     holm_rejects_all: bool
+    candidate_in_mcs: bool
+    beats_or_ties: bool
     ties_in_mcs: bool
 
 
@@ -204,6 +217,7 @@ class ConfirmatoryScorecard:
         for item in _evidence_by_horizon(prereg, evidence):
             rows = _primary_rows(prereg, item)
             included = _included(prereg, item)
+            candidate_in_mcs = prereg.candidate in included
             for name, members in (
                 ("naive", tiers.naive),
                 ("strong_statistical", tiers.strong_statistical),
@@ -214,9 +228,10 @@ class ConfirmatoryScorecard:
                         horizon=item.horizon,
                         tier=name,
                         members=members,
-                        holm_rejects_all=all(rows[model].rejected for model in members),
-                        ties_in_mcs=prereg.candidate in included
-                        and all(model in included for model in members),
+                        holm_rejects_all=(rejects_all := all(rows[m].rejected for m in members)),
+                        candidate_in_mcs=candidate_in_mcs,
+                        beats_or_ties=candidate_in_mcs or rejects_all,
+                        ties_in_mcs=candidate_in_mcs and all(m in included for m in members),
                     )
                 )
         return tuple(readings)

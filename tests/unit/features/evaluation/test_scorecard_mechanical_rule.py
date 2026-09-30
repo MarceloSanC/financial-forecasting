@@ -326,6 +326,21 @@ def test_tier_reading_per_tier() -> None:
         True,
     )
     assert (first["ml"].holm_rejects_all, first["ml"].ties_in_mcs) == (True, False)
+    assert all(r.candidate_in_mcs for r in first.values())
+    assert [first[t].beats_or_ties for t in ("naive", "strong_statistical", "ml")] == [True] * 3
+    out = _evidence(1, rejected=_NAIVE, included=set(_STRONG_STAT))
+    outside = {
+        r.tier: r
+        for r in ConfirmatoryScorecard.tier_readings(_PLAN, [out, _evidence(7)])
+        if r.horizon == 1
+    }
+    assert [outside[t].candidate_in_mcs for t in outside] == [False] * 3
+    assert [outside[t].beats_or_ties for t in ("naive", "strong_statistical", "ml")] == [
+        True,
+        False,
+        False,
+    ]
+    assert outside["strong_statistical"].ties_in_mcs is False
     assert first["ml"].members == _ML
 
 

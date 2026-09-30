@@ -2268,9 +2268,12 @@ critério). **Decisões:**
    h > 1 e vazio para h = 1; `common.dgt` pode vir vazio.
 6. **`candidate_has_lowest_mean_pinball`**: empate com o menor P̄_G conta como
    "tem a menor" (é informação, nunca condição — ADR 6.5.0007 item 4).
-7. **`TierReading.ties_in_mcs`** (perfil, ADR 6.5.0007 item 5) = o candidato e
-   **todos** os membros do nível estão no MCS primário ("o candidato está no MCS
-   com eles"); `holm_rejects_all` = Holm rejeita contra todo membro.
+7. **`TierReading`** (perfil, ADR 6.5.0007 item 5): `holm_rejects_all` = Holm
+   rejeita contra todo membro; `candidate_in_mcs` = o mesmo fato de `in_mcs` do
+   veredito; `beats_or_ties` = `candidate_in_mcs or holm_rejects_all` (a (ii) do
+   veredito lida contra o nível — acrescentado no Checkpoint C bloco 1, B6, para
+   o relatório não parecer contradizer o veredito); `ties_in_mcs` = o candidato e
+   **todos** os membros no MCS primário (empate com o nível inteiro, descritivo).
 8. **Poder**: `accepted_counts` varre c = 0..n com `WilsonBand.evaluate(horizon=1, …)`
    (só a aceitação importa); medido em n = 1 000 (seis cenários × dois
    horizontes) ≈ 0,3 s por `decide` — abaixo do limite de 1 s por cenário do §5.
