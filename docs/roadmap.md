@@ -102,12 +102,12 @@ graph LR
 | `6.2-paired-inference-dm-mcs-holm` | evaluation | multi (domain + adapters/out) | vertical | done | 6.1 |
 | `6.3-calibration-risk-backtests` | evaluation | domain | vertical | done | 6.1 |
 | `6.4-gold-builders-and-quality-gates` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.2, 6.3 |
-| `6.5-preregistration-and-scorecard` | evaluation | multi (domain + application) | vertical | draft | 6.4, 5.5 |
+| `6.5-preregistration-and-scorecard` | evaluation | multi (domain + application + adapters/out) | vertical | draft | 6.4, 5.5 |
 | `7.1-inference-engine` | inference | multi (application + adapters/out) | vertical | draft | 5.4, 4.3 |
 | `7.2-conformal-cqr` | inference | multi (domain + adapters/out) | vertical | draft | 7.1, 5.1 |
 | `7.3-explainability` | inference | multi (domain + adapters/out) | vertical | draft | 7.1, 6.1 |
 | `7.4-inference-api` | inference | adapters/in/http | vertical | draft | 7.2, 7.3 |
-| `8.1-confirmatory-run` | evaluation | application (orquestração) | vertical | draft | 6.5, 7.1, 7.2 |
+| `8.1-confirmatory-run` | evaluation | application (orquestração) | vertical | draft | 6.5, 7.1, 7.2, #129 |
 | `8.2-equivalence-audit` | evaluation | application + tests | vertical | draft | 8.1 |
 | `8.3-plots-and-final-report` | evaluation | adapters/out + docs | vertical | draft | 8.2 |
 
@@ -884,26 +884,56 @@ skills_hint: [hex-arch-python, repository-pattern, composition-root]
 
 #### Stage 6.5 — `6.5-preregistration-and-scorecard`
 
-**Descrição humana:** Pré-registro imutável hasheado (hipóteses, métrica primária, regra de decisão, bandas, baselines, gates) + `gold_model_comparison_confirmatory_scorecard` que aplica a regra **mecanicamente**, separando vencedor primário de perfil. `academic_decision_ready` só verdadeiro com todos os gates satisfeitos.
+**Descrição humana:** Pré-registro imutável hasheado (hipóteses, métrica primária, regra de decisão, bandas, baselines, gates) — um TOML canônico por revisão, lido para um VO tipado com regras nomeadas e hasheado sem arredondar floats — e o scorecard confirmatório que aplica a regra **mecanicamente** por horizonte, separando vencedor primário de perfil. `academic_decision_ready` só verdadeiro com todos os gates de validade satisfeitos. O scorecard é emitido como resultado (`ScorecardResult`) e gravado pela 8.1.
 
-**Leitura do gold (nota da 6.4):** ler `current/MANIFEST.json` primeiro e cada tabela como arquivo único **sem** inferência de partição hive (`partitioning=None` no pyarrow, `hive_partitioning = false` no DuckDB — os segmentos `asset=`/`parent_sweep_id=` do caminho colidem com as colunas de mesmo nome); tabela com zero linhas tem schema vazio (usar o `rows_by_table` do manifesto).
+**Leitura do gold (nota da 6.4):** pelo port `GoldGenerationReader` (real no `ParquetGoldStore.read_generation`, 6.5): `current/MANIFEST.json` primeiro e cada tabela como arquivo único **sem** inferência de partição hive (`partitioning=None` no pyarrow, `hive_partitioning = false` no DuckDB — os segmentos `asset=`/`parent_sweep_id=` do caminho colidem com as colunas de mesmo nome); tabela com zero linhas tem schema vazio (usar o `rows_by_table` do manifesto); montagem única por `GoldGeneration.from_stored`.
 
 **Descrição para IA:**
 ```yaml
 stage_id: 6.5-preregistration-and-scorecard
 bounded_context: evaluation
-camada_alvo: multi (domain + application)
+camada_alvo: multi (domain + application + adapters/out)
 arquivos_a_criar:
-  - src/financial_forecasting/features/evaluation/domain/services/preregistration.py
+  - src/financial_forecasting/shared/domain/value_objects/preregistration_hash.py
+  - src/financial_forecasting/features/evaluation/domain/value_objects/preregistration.py
+  - src/financial_forecasting/features/evaluation/domain/value_objects/scorecard_evidence.py
+  - src/financial_forecasting/features/evaluation/domain/services/h1_gate.py
+  - src/financial_forecasting/features/evaluation/domain/services/h1_gate_power.py
   - src/financial_forecasting/features/evaluation/domain/services/confirmatory_scorecard.py
+  - src/financial_forecasting/features/evaluation/application/ports/out/preregistration_source.py
+  - src/financial_forecasting/features/evaluation/application/ports/out/gold_generation_reader.py
+  - src/financial_forecasting/features/evaluation/application/dtos/gold_schema.py
+  - src/financial_forecasting/features/evaluation/application/dtos/confirmatory_scorecard.py
+  - src/financial_forecasting/features/evaluation/application/use_cases/scorecard_evidence.py
+  - src/financial_forecasting/features/evaluation/application/use_cases/scorecard_profile.py
   - src/financial_forecasting/features/evaluation/application/use_cases/build_confirmatory_scorecard.py
+  - src/financial_forecasting/features/evaluation/adapters/out/toml/toml_preregistration_source.py
+  - config/preregistration/aapl_confirmatory-r0.toml
+  - config/preregistration/aapl_confirmatory-r0.anchor.toml
   - docs/preregistration/aapl_confirmatory.md
+  - tests/fakes/features/evaluation/in_memory_preregistration_source.py
+  - tests/fakes/features/evaluation/in_memory_gold_generation_reader.py
+  - tests/contract/features/evaluation/test_preregistration_source_contract.py
+  - tests/contract/features/evaluation/test_gold_generation_reader_contract.py
+  - tests/integration/features/evaluation/test_build_confirmatory_scorecard.py
+  - tests/integration/features/evaluation/test_preregistration_consistency.py
   - tests/unit/features/evaluation/test_preregistration_immutable_hash.py
   - tests/unit/features/evaluation/test_scorecard_mechanical_rule.py
-contratos_introduzidos: [Preregistration, ConfirmatoryScorecard (domain-services), BuildConfirmatoryScorecard (use case)]
-contratos_consumidos: [DieboldMariano/Holm/MCS (6.2), CoverageMetrics (6.1), Hasher (1.4), WilsonBand, kupiec_pof, lr_uc_three_state, chi_square_sf, ChristoffersenTest, HitSequences (6.3) — LR_uc de 3 estados composto com lower_count = HitSequences.lower_tail(τ_l).n_violations e upper_count = HitSequences.upper_tail(τ_u).n_violations sobre o mesmo n_observed (mesma série e tolerância; I10, ADR 6.3.0005 item 2)]
-definition_of_done: "Pré-registro hasheado e imutável (alteração quebra o hash); scorecard aplica a regra pré-registrada mecanicamente (primária=pinball + gate calibração + DM/Holm + MCS); separa vencedor de perfil; `academic_decision_ready` exige todos os gates; cegamento: nenhuma métrica sobre o `parent_sweep_id` do cohort confirmatório (5.5) é calculada antes de o hash do pré-registro estar publicado, e a Stage prova essa ordem (âncora com carimbo do servidor — ADR 5.5.0001)."
-non_goals: [execução do cohort (8.1), reabrir hipóteses]
+arquivos_a_modificar:
+  - src/financial_forecasting/features/evaluation/application/dtos/refresh_gold.py
+  - src/financial_forecasting/features/evaluation/adapters/out/duckdb/parquet_gold_store.py
+  - src/financial_forecasting/features/evaluation/adapters/out/duckdb/gold_builders/ (os cinco builders)
+  - src/financial_forecasting/features/evaluation/domain/services/model_confidence_set.py
+  - src/financial_forecasting/features/evaluation/domain/services/christoffersen_test.py
+  - src/financial_forecasting/features/evaluation/domain/services/student_t.py
+  - src/financial_forecasting/features/evaluation/domain/services/diebold_mariano.py
+  - src/financial_forecasting/composition_root.py
+  - docs/LAYOUT.md
+  - tests/architecture/test_port_coverage_gate.py
+contratos_introduzidos: [Preregistration, PreregistrationHash, TailDeviation, VOs de evidência (value-objects), H1Gate, H1GatePower, ConfirmatoryScorecard (domain-services), PreregistrationSource, GoldGenerationReader (ports-out), BuildConfirmatoryScorecard (use case)]
+contratos_consumidos: [tabelas gold + manifesto (6.4) via GoldGenerationReader, RefreshParameters/GoldManifest/check_generation (6.4), WilsonBand, lr_uc_three_state, chi_square_sf (6.3, sobre contagens médias entre seeds), Hasher (1.4), cohort r0 por referência (5.5)]
+definition_of_done: "Pré-registro hasheado e imutável (qualquer campo alterado, inclusive regra nomeada, muda o hash); ancorado com carimbo do servidor depois da âncora do cohort referenciado; nenhuma métrica calculada pela 6.5 sobre o cohort; o scorecard recusa plano sem âncora, gold de outro plano/cohort e gold bloqueado, e marca como não pronto o gold gerado antes da âncora; aplica a regra pré-registrada mecanicamente por horizonte (primária = pinball + gate de calibração + DM/Holm + MCS); separa vencedor de perfil; `academic_decision_ready` exige todos os gates de validade (gold completo sem check bloqueante ou pulado, gold posterior à âncora, nenhuma emenda não-cega) e não depende do desfecho."
+non_goals: [execução do cohort (8.1), reabrir hipóteses, perfis de séries novas (#129), plots (8.3)]
 complexidade_estimada: M
 gate_mode: strict
 skills_hint: [ddd-tactical-patterns, hex-arch-python, dmls-ch05-model-development-and-evaluation]
@@ -1030,6 +1060,8 @@ Roda o protocolo confirmatório completo em AAPL, audita equivalência vs evidê
 
 **Descrição humana:** Orquestração ponta-a-ponta do confirmatório: do cohort treinado (5.5) → métricas/inferência (Step 6) → scorecard pré-registrado, gerando os artefatos gold confirmatórios e o veredito mecânico por H1/H2/H3.
 
+**Notas da 6.5:** depende também da issue **#129** (perfis de séries novas — DM por fold/seed/τ, sensibilidades de bloco do MCS, estacionariedade de d_t, degeneração parcial por par, p-valor Monte Carlo — antes da 8.1) e dos pré-registros de H3 (7.3) e do CQR (7.2), todos ancorados antes da corrida. O refresh do gold é chamado com `refresh_command_from(plano, ref)` (derivação única do comando); o `ScorecardResult.as_mapping()` é gravado **fora** de `current/`, em `gold/asset=<a>/parent_sweep_id=<p>/scorecard/<preregistration_ref>/` (como `gold_model_comparison_confirmatory_scorecard`, registrando o manifesto lido); o primeiro refresh confirmatório posta um comentário na issue da Stage (fecho da ordem, ADR 6.5.0003 item 4).
+
 **Descrição para IA:**
 ```yaml
 stage_id: 8.1-confirmatory-run
@@ -1039,7 +1071,7 @@ arquivos_a_criar:
   - src/financial_forecasting/features/evaluation/application/use_cases/run_confirmatory_evaluation.py
   - tests/integration/features/evaluation/test_run_confirmatory_evaluation.py
 contratos_introduzidos: [RunConfirmatoryEvaluation (use case)]
-contratos_consumidos: [BuildConfirmatoryScorecard (6.5), RunInference (7.1), ConformalCalibrator (7.2)]
+contratos_consumidos: [BuildConfirmatoryScorecard e refresh_command_from (6.5), RefreshGold (6.4), RunInference (7.1), ConformalCalibrator (7.2), perfis da #129]
 definition_of_done: "Pipeline confirmatória roda do cohort persistido até o scorecard sem re-treino; veredito mecânico H1/H2/H3 produzido; conformal incluído como eixo comparativo; tudo rastreável por run_id + hash de pré-registro."
 non_goals: [equivalência (8.2), plots (8.3)]
 complexidade_estimada: M
@@ -1059,7 +1091,8 @@ camada_alvo: application + tests
 arquivos_a_criar:
   - tests/equivalence/test_official_vs_prior_evidence.py
   - docs/reports/equivalence_audit.md
-arquivos_a_modificar: [docs/preregistration/aapl_confirmatory.md]
+# o espelho docs/preregistration/aapl_confirmatory.md só recebe seções acrescentadas por revisão (ADR 6.5.0001 item 6)
+arquivos_a_modificar: []
 contratos_introduzidos: []
 contratos_consumidos: [RunConfirmatoryEvaluation (8.1)]
 definition_of_done: "Deltas vs evidência anterior dentro da tolerância declarada (ASSUM-4) documentados; divergências explicadas pela teoria (não 'bate com o antigo'); relatório de equivalência commitado."
