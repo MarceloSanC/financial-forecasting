@@ -2329,4 +2329,21 @@ forma dos erros do gold (definidos em `dtos/refresh_gold.py`, ADR 6.5.0005 item 
 O `PreregistrationMismatchError` carrega `field: MismatchField` (nomes fixos do
 technical §2 Task 08). **Stage candidata:** esta.
 
+### 2026-09-30 — [decision] Checkpoint C bloco 3 (L4, L2, R4): conjunto de modelos também em `gold_metrics_by_run`; estimativa de bloco inválida é corrupção; módulos auxiliares em `use_cases/` — Claude (Opus 5.5)
+**Contexto e decisões:**
+1. **(L4)** O technical §2 Task 08 lista o conjunto de modelos conferido em DM, MCS e
+   calibração; o mapeador confere também em `gold_metrics_by_run`, de onde lê o P̄_G e
+   as seeds por modelo — um modelo a mais ou a menos ali é o mesmo C8 ("modelo ausente
+   ou a mais"), com `field == "models"`. Caso no `test_mismatch_model_extra_missing`.
+2. **(L2)** `max_block_estimate` negativo (fora do domínio de `block_length_rule`)
+   não pode escapar como `ValueError` cru: a conferência da regra de bloco pula a
+   linha (estimativa ausente **ou** inválida) e a fase de corrupção a recusa com
+   `GoldGenerationCorruptError` (C6), depois de todo mismatch.
+3. **(R4)** `use_cases/scorecard_evidence.py` e `use_cases/scorecard_profile.py` são
+   módulos auxiliares do use case `BuildConfirmatoryScorecard` (o technical §1 os
+   nomeia assim); o LAYOUT não recebe nota nova — "um use case por arquivo" continua
+   valendo (os auxiliares não são use cases, não têm `__call__` nem port-in) e o
+   prefixo `_` quebraria os nomes que o technical e os testes citam. Mantido como está.
+**Stage candidata:** esta.
+
 <!-- END: post-execution -->

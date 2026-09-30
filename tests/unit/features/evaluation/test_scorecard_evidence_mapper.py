@@ -133,6 +133,7 @@ def _copy_model(stored: StoredGold, table: str, column: str, source: str, target
         (GOLD_DM_RESULTS.name, "comparator"),
         (GOLD_MCS_RESULTS.name, "model"),
         (GOLD_CALIBRATION_TABLE.name, "model"),
+        (GOLD_METRICS_BY_RUN.name, "model"),
     ],
 )
 @pytest.mark.parametrize("direction", ["missing", "extra"])
@@ -345,3 +346,26 @@ def test_mapper_gate_rows_band_level() -> None:
     first = _map(stored)[0]  # type: ignore[index]
 
     assert first.gate.lower.mean_violations == 25.0  # noqa: PLR2004
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("estimate", [-0.5, -1e-9], ids=["negative", "tiny-negative"])
+def test_corrupt_block_estimate_missing_or_invalid(estimate: float) -> None:
+    """Checkpoint C bloco 3, L2: estimativa inválida é corrupção (C6), nunca ValueError cru."""
+    stored = make_stored(_PLAN)
+    assert stored.set_cell(
+        GOLD_MCS_RESULTS.name, _is(horizon=7, model=_CAND), "max_block_estimate", estimate
+    )
+
+    _corrupt(stored, "has an invalid max_block_estimate")
+
+
+@pytest.mark.unit
+def test_corrupt_seed_missing_tail_invalid_cell() -> None:
+    """Checkpoint C bloco 3, R3: célula que o VO de evidência recusa vira corrupção."""
+    stored = make_stored(_PLAN)
+    assert stored.set_cell(
+        GOLD_CALIBRATION_TABLE.name, _is(**_GATE_ROW, seed=2), "n_violations", 999
+    )
+
+    _corrupt(stored, "do not form evidence")

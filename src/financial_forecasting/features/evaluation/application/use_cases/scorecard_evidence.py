@@ -53,6 +53,9 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     block_length_rule,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
+    is_finite_number,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     is_multi_step,
 )
@@ -201,8 +204,8 @@ def check_mcs_rules(prereg: Preregistration, tables: _Tables) -> None:
             )
     for row in tables.mcs:
         estimate = col(row, GOLD_MCS_RESULTS, "max_block_estimate")
-        if estimate is None:
-            continue  # corrupção, conferida depois de todo mismatch
+        if not _valid_estimate(estimate):
+            continue  # ausente ou inválida: corrupção, conferida depois de todo mismatch
         horizon = col(row, GOLD_MCS_RESULTS, "horizon")
         expected = block_length_rule(horizon=horizon, max_estimate=estimate)  # type: ignore[arg-type]
         if col(row, GOLD_MCS_RESULTS, "block_size") != expected:
@@ -220,13 +223,24 @@ def _describe(row: Row, schema: GoldTableSchema) -> str:
     return "(" + ", ".join(f"{k}={row[k]!r}" for k in schema.key) + ")"
 
 
+def _valid_estimate(estimate: object) -> bool:
+    """A estimativa que a regra de bloco aceita: número finito ≥ 0 (dono: `block_length_rule`)."""
+    return is_finite_number(estimate) and estimate >= 0.0  # type: ignore[operator]
+
+
 def check_completed(tables: _Tables) -> None:
-    """Estimativa de bloco ausente e `ERROR` + `FAIL` num gold `COMPLETED` são corrupção."""
+    """Estimativa de bloco ausente ou inválida e `ERROR` + `FAIL` num `COMPLETED` são corrupção."""
     for row in tables.mcs:
-        if col(row, GOLD_MCS_RESULTS, "max_block_estimate") is None:
+        estimate = col(row, GOLD_MCS_RESULTS, "max_block_estimate")
+        if estimate is None:
             raise GoldGenerationCorruptError(
                 f"{GOLD_MCS_RESULTS.name} row {_describe(row, GOLD_MCS_RESULTS)} has no "
                 "max_block_estimate in a COMPLETED generation"
+            )
+        if not _valid_estimate(estimate):
+            raise GoldGenerationCorruptError(
+                f"{GOLD_MCS_RESULTS.name} row {_describe(row, GOLD_MCS_RESULTS)} has an invalid "
+                f"max_block_estimate {estimate!r} (the block rule needs a finite number >= 0)"
             )
     for row in tables.checks:
         failed = (
