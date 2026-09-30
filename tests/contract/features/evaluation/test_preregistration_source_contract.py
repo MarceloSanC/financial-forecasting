@@ -205,3 +205,23 @@ def test_real_anchor_date_not_datetime(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="anchored_at must be a TOML date-time"):
         TomlPreregistrationSource(tmp_path).read(name=_NAME, revision=0)
+
+
+# --- extras da auditoria de testes (rodada 2) -----------------------------------------
+
+
+@pytest.mark.contract
+def test_source_anchor_per_revision(harness: Harness) -> None:
+    """Auditoria N5: a âncora é a da revisão pedida (não a da r0)."""
+    commit_a, commit_b = "a" * 40, "b" * 40
+    harness.put(0, valid_payload(), {**_ANCHOR, "commit": commit_a})
+    harness.put(1, valid_payload(), None)
+
+    assert harness.source.read(name=_NAME, revision=1).anchor is None
+    anchor0 = harness.source.read(name=_NAME, revision=0).anchor
+    assert anchor0 is not None
+    assert anchor0.commit == commit_a
+    harness.put(1, valid_payload(), {**_ANCHOR, "commit": commit_b})
+    anchor1 = harness.source.read(name=_NAME, revision=1).anchor
+    assert anchor1 is not None
+    assert anchor1.commit == commit_b
