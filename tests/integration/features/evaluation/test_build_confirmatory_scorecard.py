@@ -67,6 +67,8 @@ from financial_forecasting.shared.domain.value_objects.preregistration_hash impo
 )
 from financial_forecasting.shared.infrastructure.config.settings import Settings
 from tests.unit.features.evaluation._preregistration_payload import (
+    leaf_paths,
+    leaf_value,
     to_toml,
     valid_payload,
     with_leaf,
@@ -262,6 +264,7 @@ class _Scenario:
     refresh_status: RefreshStatus
     result: ScorecardResult
     changed_error: PreregistrationMismatchError
+    changed_leaves: frozenset[str]
     extra_refresh_status: RefreshStatus
     extra_error: PreregistrationMismatchError
 
@@ -286,9 +289,16 @@ def scenario(tmp_path_factory: pytest.TempPathFactory) -> _Scenario:
     refresh_status = deps.refresh_gold(refresh_command_from(plan, reference)).status
     result = deps.build_confirmatory_scorecard(_command(plan, reference))
 
+    base_payload = _plan_payload("test_plan", _COHORT, fingerprint)
     changed_payload = with_leaf(
         _plan_payload("test_plan_changed", _COHORT, fingerprint), "mcs.seed", 128
     )
+    changed_leaves = frozenset(
+        path
+        for path in leaf_paths(base_payload)
+        if leaf_value(base_payload, path) != leaf_value(changed_payload, path)
+    )
+    assert leaf_paths(base_payload) == leaf_paths(changed_payload)
     changed, changed_reference = _freeze(tmp, changed_payload)
     with pytest.raises(PreregistrationMismatchError) as changed_error:
         deps.build_confirmatory_scorecard(_command(changed, changed_reference))
@@ -307,6 +317,7 @@ def scenario(tmp_path_factory: pytest.TempPathFactory) -> _Scenario:
         refresh_status=refresh_status,
         result=result,
         changed_error=changed_error.value,
+        changed_leaves=changed_leaves,
         extra_refresh_status=extra_status,
         extra_error=extra_error.value,
     )
@@ -320,9 +331,9 @@ def test_e2e_paths_under_tmp(scenario: _Scenario) -> None:
         scenario.settings.artifacts_root,
     ):
         assert Path(root).resolve().is_relative_to(tmp)
-    written = [p for p in tmp.rglob("*") if p.is_file()]
-    assert written
-    assert all(p.resolve().is_relative_to(tmp) for p in written)
+    uri = scenario.settings.mlflow_tracking_uri
+    assert uri.startswith("sqlite:///")
+    assert Path(uri.removeprefix("sqlite:///")).resolve().is_relative_to(tmp)
 
 
 def test_e2e_scorecard_expected_verdict(scenario: _Scenario) -> None:
@@ -345,6 +356,8 @@ def test_e2e_ready_after_anchor(scenario: _Scenario) -> None:
 
 
 def test_e2e_parameter_changed_mismatch(scenario: _Scenario) -> None:
+    # o plano alterado difere do julgado só no nome do arquivo e no parâmetro
+    assert scenario.changed_leaves == {"name", "mcs.seed"}
     assert scenario.changed_error.field == "preregistration_ref"
 
 
