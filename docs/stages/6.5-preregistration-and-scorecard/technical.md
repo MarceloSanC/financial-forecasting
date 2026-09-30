@@ -2226,4 +2226,22 @@ item 4 "Bonferroni over two tails, ≤ 5 % false failure") e no doc de domínio
 probabilidade de reprovar um modelo calibrado é ≤ 5 %") — a corrigir por nota
 datada pela sessão mestra (issue de docs), fora desta Stage.
 
+### 2026-09-30 — [decision] Task 02: direção VO → serviço de domínio no slice `evaluation` (reverte a postura do technical 6.4 Task 03) — Claude (Opus 5.5)
+**Contexto:** o `Preregistration` (`domain/value_objects/preregistration.py`)
+valida cada valor pelos donos públicos, e vários moram em `domain/services/`
+(`validate_rate`, `validate_alpha`, `validate_min_violations`,
+`validate_mcs_reps`, `validate_draws_and_seed`, além de `DmVarianceEstimator` e
+`MCS_STATISTIC`). O technical 6.4 (Task 03, `forecast_record.py`) evitou essa
+direção ("o VO não importa `validate_rate` de `services/`, direção VO → serviço
+que o slice não tem"). **Decisão:** adotar a aresta VO → serviço aqui, sob o ADR
+6.5.0001 item 2 ("the public owner validators" — validar pelos donos, sem
+segunda escrita); a reversão da postura 6.4 é deliberada. O mesmo vale para
+`value_objects/scorecard_evidence.py` (Task 03: `validate_rate`,
+`DmVarianceEstimator`). **Por que não cicla:** nenhum dos módulos de serviço
+importados importa o VO do plano nem o de evidência; os serviços novos
+(`h1_gate_power`, `h1_gate`, `confirmatory_scorecard`) importam os VOs (direção
+usual). O `.importlinter` não tem contrato de camadas internas ao domínio; um
+ciclo falharia já na coleta dos testes (nenhum teste dedicado).
+**Stage candidata:** esta.
+
 <!-- END: post-execution -->

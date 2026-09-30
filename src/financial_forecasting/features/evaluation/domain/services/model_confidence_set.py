@@ -38,6 +38,9 @@ from financial_forecasting.features.evaluation.domain.services.inference_input_v
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
+    validate_horizon,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
     check_horizon,
     check_points,
@@ -55,7 +58,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_
 
 MIN_MCS_REPS: Final = 1000
 
-_STATISTIC = "R"
+MCS_STATISTIC: Final = "R"
+"""A estatística do MCS implementada (HLN 2011, `T_R`) — dona do identificador `mcs.statistic`."""
+
 _MIN_ELIMINATIONS = 2
 
 
@@ -73,6 +78,23 @@ def validate_mcs_reps(reps: int) -> None:
         raise ValueError(
             f"reps must be >= {MIN_MCS_REPS} (the MCS needs reps >= {MIN_MCS_REPS}), got {reps!r}"
         )
+
+
+def block_length_rule(*, horizon: int, max_estimate: float) -> int:
+    """Dona da regra de bloco l = max(h, ⌈max b̂_sb⌉) (ADR `6_2_0005`; conv. #16b).
+
+    Consumida pelo `ModelConfidenceSet.block_length` (que antes valida o conjunto de
+    estimativas por par) e, na 6.5, pela conferência do gold contra o plano (a regra
+    reaplicada à estimativa persistida).
+
+    Raises:
+        ValueError: `horizon` não-`int`, `bool` ou < 1; `max_estimate` não-finita,
+            não-número, `bool` ou negativa.
+    """
+    validate_horizon(horizon, field="horizon")
+    if not is_finite_number(max_estimate) or max_estimate < 0.0:
+        raise ValueError(f"max_estimate must be a finite number >= 0, got {max_estimate!r}")
+    return max(horizon, math.ceil(max_estimate))
 
 
 @dataclass(frozen=True)
@@ -115,8 +137,8 @@ class McsReport:
 
     def __post_init__(self) -> None:
         """I9: estatística, amostra, bootstrap, máximo acumulado e pertença."""
-        if self.statistic != _STATISTIC:
-            raise ValueError(f"statistic must be {_STATISTIC!r}, got {self.statistic!r}")
+        if self.statistic != MCS_STATISTIC:
+            raise ValueError(f"statistic must be {MCS_STATISTIC!r}, got {self.statistic!r}")
         validate_alpha(self.alpha)
         check_horizon(self.horizon)
         check_points(self.n_points, self.horizon)
@@ -192,7 +214,7 @@ class ModelConfidenceSet:
                 raise ValueError(
                     f"block estimate of {pair} must be a finite number >= 0, got {estimate!r}"
                 )
-        return max(series.horizon, math.ceil(max(block_estimates.values())))
+        return block_length_rule(horizon=series.horizon, max_estimate=max(block_estimates.values()))
 
     @staticmethod
     def evaluate(
@@ -221,7 +243,7 @@ class ModelConfidenceSet:
             horizon=series.horizon,
             n_points=series.n_points,
             alpha=alpha,
-            statistic=_STATISTIC,
+            statistic=MCS_STATISTIC,
             scheme=bootstrap.scheme,
             block_size=bootstrap.block_size,
             reps=bootstrap.reps,
