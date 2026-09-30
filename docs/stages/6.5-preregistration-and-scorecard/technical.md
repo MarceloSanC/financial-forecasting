@@ -2276,4 +2276,33 @@ critério). **Decisões:**
    horizontes) ≈ 0,3 s por `decide` — abaixo do limite de 1 s por cenário do §5.
 **Stage candidata:** esta.
 
+### 2026-09-30 — [decision] Checkpoint C bloco 1 (I7): fronteiras numéricas do gate registradas — Claude (Opus 5.5)
+**Contexto:** três fronteiras de ponto flutuante que o gate herda dos donos, sem
+mudar regra. **Registro:**
+1. **Limiar de degeneração.** A média entre seeds é `math.fsum(...)/S`; com
+   taxas por seed diferentes, a média pode cair 1 ULP acima de 0,01 quando o
+   valor exato é 0,01 (conjunto de medida zero; o teste
+   `gate_degeneracy_at_threshold_passes` usa taxas iguais, cuja média é exata).
+   Não se introduz tolerância: o limiar é `≤` sobre o float calculado.
+2. **Nominal da cauda superior** = `violation_rate_for(UPPER_TAIL, (0.9,))` =
+   `1.0 - 0.9` = `0.09999999999999998` (≠ 0,1 da inferior). É o valor do dono,
+   usado igual no gate, no LR_uc e no poder; os testes o leem do dono.
+3. **Poder com n̄ pequeno.** `n = round(n̄)` usa o arredondamento bancário do
+   Python (`round(0.5) == 0`, `round(2.5) == 2`); com n̄ ≤ 0,5 o poder sai vazio
+   (só acontece com banda quase inaplicável).
+**Stage candidata:** esta.
+
+### 2026-09-30 — [finding] Checkpoint C bloco 1 (A5): fronteira `lower == nominal` do `WilsonBand` sem teste na 6.3 — Claude (Opus 5.5)
+**Contexto:** a revisão de arquitetura trocou `<=` por `<` em
+`wilson_band.py` (`WilsonBandReport._check_applicable_band`, veredito
+`lower <= nominal <= upper`, e `WilsonBand.evaluate`, `contains_nominal=`) e o
+mutante sobreviveu a `tests/unit/features/evaluation/test_wilson_band.py`: nenhum
+caso tem um limite de Wilson exatamente igual ao nominal. O gate H1 da 6.5 herda
+essa fronteira (banda que toca o nominal "contém", convenção B-BANDAS). Não é
+defeito do código (a regra está certa), é teste faltando no dono. **Direção
+sugerida:** caso no teste da 6.3 com o relatório montado com `lower == nominal`
+(`WilsonBandReport` direto) e com `wilson_interval` trocado por monkeypatch no
+`evaluate`. **Stage candidata:** seguimento da 6.3 (issue de testes da sessão
+mestra), fora desta Stage.
+
 <!-- END: post-execution -->

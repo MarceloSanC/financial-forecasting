@@ -22,6 +22,7 @@ from financial_forecasting.features.evaluation.domain.services.christoffersen_te
 )
 from financial_forecasting.features.evaluation.domain.services.h1_gate import (
     COMMON_SAMPLE_SENSITIVITY,
+    DGT_SENSITIVITY,
     LR_UC_SENSITIVITY,
     H1Gate,
 )
@@ -99,12 +100,20 @@ def _evidence(  # noqa: PLR0913 — um parâmetro por eixo da evidência (keywor
     common_lower: Counts = _CALIBRATED,
     common_upper: Counts = _CALIBRATED,
     common_points: int = 250,
+    common_degeneracy: float = 0.0,
 ) -> HorizonEvidence:
     return HorizonEvidence(
         horizon=horizon,
         common_points=common_points,
         gate=_calibration("model_full", horizon, lower, upper, degeneracy=degeneracy),
-        common=_calibration("common", horizon, common_lower, common_upper, with_dgt=False),
+        common=_calibration(
+            "common",
+            horizon,
+            common_lower,
+            common_upper,
+            degeneracy=common_degeneracy,
+            with_dgt=False,
+        ),
         comparators_calibration=(),
         mean_pinball={},
         dm=(),
@@ -157,7 +166,7 @@ def test_gate_degeneracy_at_threshold_passes() -> None:
 def test_gate_not_applicable_fails() -> None:
     empty = ((1, 0, 0), (2, 0, 0))
 
-    result = H1Gate.evaluate(_SPEC, _evidence(lower=empty, upper=empty, degeneracy=1.0))
+    result = H1Gate.evaluate(_SPEC, _evidence(lower=empty, upper=empty, degeneracy=0.0))
 
     assert result.lower_band.applicable is False
     assert result.upper_band.applicable is False
@@ -340,3 +349,48 @@ def test_gate_levels_must_match_plan(where: str) -> None:
     with pytest.raises(ValueError, match=rf"{where}(\[1\])? levels must be the preregistered pair"):
         H1Gate.evaluate(_SPEC, changed)
     assert H1Gate.evaluate(_SPEC, evidence).passed is True
+
+
+@pytest.mark.unit
+def test_gate_dgt_sensitivity_diverges() -> None:
+    """B4: uma sub-série DGT descalibrada reprova a sensibilidade (todas as 2h bandas)."""
+    lower = ((1, 99, 990), (2, 99, 990))
+    evidence = _evidence(horizon=3, lower=lower, upper=lower)
+    sub = evidence.gate.dgt[1]
+    bad = dataclasses.replace(sub, lower=_tail(0.1, ((1, 70, 330), (2, 70, 330)), 0.0))
+    gate = dataclasses.replace(evidence.gate, dgt=(evidence.gate.dgt[0], bad, evidence.gate.dgt[2]))
+
+    result = H1Gate.evaluate(_SPEC, dataclasses.replace(evidence, gate=gate))
+
+    assert result.passed is True
+    assert result.dgt is not None
+    assert result.dgt.passed is False
+    assert sum(not band.contains_nominal for band in result.dgt.bands) == 1
+    assert result.divergences == (DGT_SENSITIVITY,)
+
+
+@pytest.mark.unit
+def test_gate_divergence_both_directions_degeneracy_only() -> None:
+    """B4: gate reprova só pela degeneração; o LR_uc não rejeita e a divergência é listada."""
+    result = H1Gate.evaluate(_SPEC, _evidence(degeneracy=0.011))
+
+    assert result.passed is False
+    assert result.lr_uc is not None
+    assert result.lr_uc.rejected is False
+    assert LR_UC_SENSITIVITY in result.divergences
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("common_degeneracy", "expected"),
+    [pytest.param(0.011, False, id="above"), pytest.param(0.01, True, id="at-threshold")],
+)
+def test_gate_common_sample_sensitivity_degeneracy(
+    common_degeneracy: float, expected: bool
+) -> None:
+    """B4/A2: o gate recomputado na amostra comum aplica o limiar inclusivo de degeneração."""
+    result = H1Gate.evaluate(_SPEC, _evidence(common_degeneracy=common_degeneracy))
+
+    assert result.passed is True
+    assert result.common_sample_passed is expected
+    assert (COMMON_SAMPLE_SENSITIVITY in result.divergences) is (not expected)
