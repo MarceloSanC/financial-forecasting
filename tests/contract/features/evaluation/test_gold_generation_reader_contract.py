@@ -340,3 +340,43 @@ def test_real_single_assembly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert calls == [
         (GOLD_DM_RESULTS.name, GOLD_MCS_RESULTS.name, GOLD_QUALITY_CHECKS.name),
     ]
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("name", ["../../evil", "../gold_x", "gold_other"])
+def test_real_unknown_table_name_rejected_before_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    """Checkpoint C bloco 2, F1/R3: nome de tabela fora do schema não vira caminho."""
+    store, current = _published(tmp_path)
+    path = current / MANIFEST_NAME
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest["rows_by_table"] = {name: 1, **manifest["rows_by_table"]}
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    opened: list[Path] = []
+    monkeypatch.setattr(parquet_gold_store_module, "_read_rows", opened.append)
+
+    with pytest.raises(GoldGenerationCorruptError, match="unknown gold table"):
+        store.read_generation(partition=_PARTITION)
+    assert opened == []
+
+
+@pytest.mark.contract
+def test_reader_single_assembly_every_leg(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Checkpoint C bloco 2, F4: as duas pernas montam só por `GoldGeneration.from_stored`."""
+    harness.publish(*_generation())
+    calls: list[int] = []
+    original = GoldGeneration.from_stored.__func__  # type: ignore[attr-defined]
+
+    def spy(cls: type[GoldGeneration], *args: object, **kwargs: object) -> GoldGeneration:
+        calls.append(1)
+        generation: GoldGeneration = original(cls, *args, **kwargs)
+        return generation
+
+    monkeypatch.setattr(GoldGeneration, "from_stored", classmethod(spy))
+
+    harness.reader.read_generation(partition=_PARTITION)
+
+    assert calls == [1]
