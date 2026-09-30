@@ -1,6 +1,6 @@
 ---
 title: Technical — Stage 6.5 — Pré-registro imutável e scorecard confirmatório (hash exato, âncora, leitura do gold, regra H1 → H2 mecânica)
-description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit, salvo a de congelamento), TDD inside-out no BC evaluation — PreregistrationHash em shared, VO Preregistration com catálogo de regras, poder exato e VOs de evidência, H1Gate e ConfirmatoryScorecard, dono do schema do gold e montagem única da geração lida, ports PreregistrationSource e GoldGenerationReader com fake, real e contrato, derivação do comando e conferência do gold, perfil, use case BuildConfirmatoryScorecard, wiring, e2e sintético, roadmap e o congelamento e a âncora do r0 (bloqueada pela declaração de cegamento)
+description: Plano de execução desta Stage, lista ordenada de Tasks (1 Task = 1 commit, salvo a do roadmap e a de congelamento), TDD inside-out no BC evaluation — PreregistrationHash em shared, VO Preregistration com catálogo de regras, poder exato e VOs de evidência, H1Gate e ConfirmatoryScorecard, dono do schema do gold e montagem única da geração lida, ports PreregistrationSource e GoldGenerationReader com fake, real e contrato, derivação do comando e conferência do gold, perfil, use case BuildConfirmatoryScorecard, wiring, e2e sintético, roadmap e o congelamento e a âncora do r0 (bloqueada pela declaração de cegamento)
 when-use: Consultar durante a Fase 4 (execução) desta Stage; cada Task tem critério de aceite, tokens de teste e blocos de verificação Container/Host
 keywords: [technical, plano de execução, preregistration-and-scorecard, evaluation, preregistration, preregistration-hash, rule-catalog, h1-gate, h1-gate-power, confirmatory-scorecard, scorecard-evidence, gold-schema, gold-generation, gold-generation-reader, preregistration-source, toml, refresh-command-from, profile, academic-decision-ready, anchor, blinding, port-coverage]
 status: draft
@@ -20,13 +20,13 @@ tasks_count: 13
 # Technical — Stage 6.5 — Pré-registro imutável e scorecard confirmatório
 
 > **Como usar (para code assistant):** ler §1, executar as Tasks em ordem (§2 e
-> §4), 1 Task = 1 commit (a Task 13 tem dois commits, declarados), não avançar
+> §4), 1 Task = 1 commit (as Tasks 12 e 13 têm dois commits cada, declarados), não avançar
 > sem verificação verde; ao fim validar §3 e registrar §7. Commits seguem
 > [`CONVENTIONS.md`](../../CONVENTIONS.md) §4:
 > `<type>(<escopo>): <descrição> [6.5/task-NN]`, `Refs #127`, subject
 > ≤ 100 caracteres (hook `commit-msg`), mensagem UTF-8 sem BOM por
-> `git commit -F`. Escopo `evaluation`, salvo a Task 01 (`shared`) e a Task 12
-> (`roadmap`).
+> `git commit -F`. Escopo `evaluation`, salvo a Task 01 (`shared`) e o 1º
+> commit da Task 12 (`roadmap`).
 >
 > **Cegamento (I15, inegociável).** Nenhuma Task, bloco de verificação, e2e ou
 > medição desta Stage lê `data/cohorts/**`, roda o refresh sobre o cohort
@@ -37,7 +37,9 @@ tasks_count: 13
 >
 > **Task 13 bloqueada por decisão humana (P).** O conteúdo — ou a ausência — do
 > `blinding_statement` do r0 (concept §13, ADR 6.5.0010 P1) é **entrada** da
-> Task 13; ela não roda antes da resposta. Todo o resto (Tasks 01–12) é
+> Task 13; ela não roda antes da resposta. As **ações externas** da Task 13
+> (push da tag e comentário na #127) exigem, além da decisão humana, um
+> **go-ahead explícito da sessão mestra**. Todo o resto (Tasks 01–12) é
 > executável agora.
 >
 > Ao encontrar algo não previsto em §1–§6 ou no `concept.md`: **pausar**,
@@ -89,12 +91,12 @@ e viram `[decision]` em §7 ao executar.
 
 | Premissa | Onde (arquivo:linha) | Consequência no plano |
 |---|---|---|
-| O hasher arredonda floats a 10 casas | `shared/adapters/out/hashing/canonical_json_hasher.py:30` (`_FLOAT_PRECISION = 10`), `:54` (`round`) | `PreregistrationHash` troca todo `float` por `f"float:{x!r}"` antes do hasher (Task 01); `str` atravessa o `_canonicalize` intacto (`:57-60`) |
+| O hasher arredonda floats a 10 casas | `shared/adapters/out/hashing/canonical_json_hasher.py:33` (`_FLOAT_PRECISION = 10`), `:54` (`round`) | `PreregistrationHash` troca todo `float` por `f"float:{x!r}"` antes do hasher (Task 01); `str` atravessa o `_canonicalize` intacto (`:57-60`) |
 | Só VOs de `shared/domain/value_objects/` chamam `hash_mapping` | `scripts/check_layout.py:96-99`, `:286` (regra 6) | o hash do plano mora em `shared` (Task 01); o use case chama o VO, nunca o hasher |
 | O precedente de identidade por VO de shared | `shared/domain/value_objects/cohort_hash.py:26-38` | `PreregistrationHash` com a mesma forma (`compute(*, hasher, payload)`) |
 | Chaves do gold privadas em cada builder | `gold_builders/calibration_table.py:31`, `dm_results.py:19`, `mcs_results.py:27`, `metrics_by_run.py:31`, `quality_checks.py:20` (`_KEY`); nome `f"gold_{self.name}"` em cada `build` | `gold_schema.py` vira o dono; os `_KEY` somem (Task 05) |
-| O manifesto só serializa (não tem inversa) | `application/dtos/refresh_gold.py:115-130` (`RefreshParameters.as_mapping`), `:367-392` (`GoldManifest.as_mapping`) | `from_mapping` das duas, ao lado (Task 05) |
-| Coerência de geração com dono único | `refresh_gold.py:395-424` (`check_generation`) | `GoldGeneration.from_stored` reusa-o (Task 05) |
+| O manifesto só serializa (não tem inversa) | `application/dtos/refresh_gold.py:142` (`RefreshParameters.as_mapping`), `:362` (`GoldManifest.as_mapping`) | `from_mapping` das duas, ao lado (Task 05) |
+| Coerência de geração com dono único | `refresh_gold.py:388` (`check_generation`) | `GoldGeneration.from_stored` reusa-o (Task 05) |
 | Layout e nome do manifesto com dono no adapter | `adapters/out/duckdb/parquet_gold_store.py:51` (`MANIFEST_NAME`), `:72-85` (`partition_root`, `current_dir`) | `read_generation` no mesmo módulo (Task 07) |
 | Port-coverage reconhece fake por nome e real por citação | `scripts/check_port_coverage.py:160-176` (`fake_names`, `real_adapter_classes`), `:277-327` (`inventory`) | fakes `InMemoryPreregistrationSource`/`InMemoryGoldGenerationReader`; docstrings dos reais citam o port; contratos `[fake, real]` (Tasks 06, 07) |
 | Piso do inventário de ports | `tests/architecture/test_port_coverage_gate.py:279` (`len(ports) >= 26`) | sobe para 28 na Task 07 |
@@ -104,7 +106,7 @@ e viram `[decision]` em §7 ao executar.
 | Estatística e regra de bloco do MCS sem nome público | `model_confidence_set.py:58` (`_STATISTIC = "R"`), `:195` (`max(series.horizon, math.ceil(...))` dentro de `block_length`) | `MCS_STATISTIC` público e `block_length_rule(*, horizon, max_estimate)` como dono da regra; `block_length` delega (Task 02) |
 | Kernels de contagem aceitam médias reais | `wilson_band.py:42` (`wilson_interval(count: float, n: float, …)`), `:165` (`WilsonBand.evaluate`); `christoffersen_test.py:459` (`lr_uc_three_state`); `chi_square.py:68` (`chi_square_sf`) | `H1Gate` só os chama (Task 04) |
 | Taxa nominal da cauda tem dono | `value_objects/hit_sequence.py:66` (`violation_rate_for`) | a nominal da cauda superior é `violation_rate_for(UPPER_TAIL, (τ_u,))`, nunca `1 − τ` escrito de novo (Tasks 03, 04) |
-| Só existe a CDF da t de Student | `student_t.py:79` (`student_t_cdf`) | `student_t_quantile` por bisseção sobre a CDF (Task 03), para o IC do efeito do DM |
+| Só existe a CDF da t de Student | `student_t.py:79` (`student_t_cdf`) | `student_t_quantile` por bisseção sobre a CDF (Task 09, junto do seu único consumidor, o IC do efeito do DM) |
 | Estatística do DM com HLN | `diebold_mariano.py:195` (`statistic = _hln_factor(...) * mean / sqrt(variance)`), p unilateral `student_t_cdf(statistic, T − 1)` | IC do efeito = d̄ ± t_{T−1,0,975}·(d̄/estatística) usa exatamente essa escala (Task 09) |
 | Nomes dos checks exigidos | `quality_checks/degeneracy_check.py:24`, `alignment_check.py:24`, `statistical_preconditions_check.py:48`; severidade/outcome em `value_objects/quality_check_result.py:31-50` | a prontidão lê esses nomes do domínio (Task 10) |
 | Nomes de modelo dos escritores | `modeling/application/use_cases/train_tft.py:121` (`tft_quantile`), `train_gbm_quantile.py:124` (`gbm_quantile`), `modeling/domain/value_objects/baseline_spec.py:88-90` (`baseline_<family>`) | só o teste de consistência (Task 13) os importa |
@@ -115,8 +117,8 @@ e viram `[decision]` em §7 ao executar.
 ### Estratégia
 
 **TDD inside-out** (skill `task-ordering-hex`): identidade em `shared` (Task 01)
-→ VO do plano + donos públicos da 6.2/6.3 que ele consome (Task 02) → kernels
-numéricos novos e VOs de evidência (Task 03) → serviços `H1Gate` e
+→ VO do plano + donos públicos da 6.2/6.3 que ele consome (Task 02) → poder
+exato e VOs de evidência (Task 03) → serviços `H1Gate` e
 `ConfirmatoryScorecard` (Task 04) → dono do schema e montagem da geração lida
 (Task 05) → port `PreregistrationSource` com fake, real e contrato (Task 06) →
 port `GoldGenerationReader` com fake, real e contrato (Task 07) → derivação do
@@ -133,17 +135,25 @@ o build verde.
   resto do item (1) do concept vira a Task 02.
 - **Tasks com mais de 5 arquivos** (PIPELINE §4.3 "tipicamente"):
   - **02 (8)** — o VO + dois testes + a fábrica de payload de teste; e os
-    donos públicos que ele consome (`MCS_STATISTIC`, `block_length_rule`,
-    `validate_draws_and_seed`) em dois arquivos da 6.2/6.3 com os seus testes
-    só ganhando casos. Separar os donos numa Task própria levaria a 14 Tasks;
-    juntos, nenhum dono fica sem consumidor.
-  - **03 (6)** — três módulos pequenos de domínio (poder, quantil da t, VOs de
-    evidência) com os seus testes; os três são folhas que as Tasks 04/09
-    consomem.
-  - **05 (9)** — `gold_schema.py` + inversas/`from_stored` no módulo dos DTOs +
-    os cinco builders (troca mecânica de import, ADR 6.5.0005 Negative) + os
-    dois testes existentes que ganham casos: o schema nasce junto dos seus
-    importadores, senão o `_KEY` viraria segunda escrita por um commit.
+    donos públicos que ele consome (`MCS_STATISTIC`, `validate_draws_and_seed`;
+    `block_length_rule`, no mesmo arquivo da 6.2, só é consumido na Task 08)
+    em dois arquivos da 6.2/6.3, com os seus
+    testes só ganhando casos. **Motivo real:** uma Task própria para os donos
+    públicos levaria a 14 Tasks, o alarme do CONVENTIONS §6; o custo aceito é um
+    commit com dois módulos da 6.2/6.3 a mais, cobertos pelo diff "só `+`" dos
+    seus testes. `block_length_rule` fica sem consumidor da Task 02 à 08 (o VO
+    não o usa) — aceito pelo mesmo motivo.
+  - **05 (9)** — `gold_schema.py` + os cinco builders (troca mecânica de
+    import, ADR 6.5.0005 Negative) + os dois testes existentes que ganham
+    casos: o schema nasce junto dos seus importadores, senão o `_KEY` viraria
+    segunda escrita por um commit. As inversas, o `from_stored` e os dois erros
+    do gold entram no **mesmo** commit **por escolha** (poderiam ser Task
+    própria; ficam juntos porque o `from_stored` monta cada tabela com a chave
+    do schema recém-nascido e uma Task a mais levaria a 14).
+  - **09 (7)** — o perfil (helper + teste + DTO) com os seus dois kernels
+    (`dm_effect_interval` e `student_t_quantile`) e os testes existentes que
+    ganham casos: cada kernel nasce junto do seu **único** consumidor
+    (Checkpoint B r1, A11), em vez de ficar seis commits sem uso.
 - **Port + real no mesmo commit (06, 07):** port, fake, adapter e contrato
   numa Task só (5 arquivos cada), **sem** janela de baseline do
   `port-coverage` (precedente 6.4 Task 14; o concept veda entrada nova no
@@ -153,7 +163,9 @@ o build verde.
 - **Task 13 com dois commits** (mesma tag `[6.5/task-13]`, precedente 5.5
   Task 34): o arquivo do plano precisa estar commitado **antes** da tag e do
   comentário, e o registro da âncora só existe **depois** do comentário (ADR
-  6.5.0003 item 2: fora do hash por construção).
+  6.5.0003 item 2: fora do hash por construção). **Task 12 com dois commits**
+  (um escopo por commit): o roadmap (`docs(roadmap)`) e a nota de emenda datada
+  no topo do ADR 6.5.0009 (`docs(evaluation)`, T-F11 — ver §7 `[finding]`).
 - **Gates de arquitetura tocados:** Task 01 (`check_layout` regra 6 exercida
   pelo VO novo; LAYOUT §7), Task 07 (`test_port_coverage_gate.py`: piso
   26 → 28 e caso de resolução dos dois ports novos). Essas rodam T3 ou
@@ -170,7 +182,13 @@ contrato, fronteira nem critério; viram `[decision]` em §7 ao executar):**
   do slice; não há ciclo (nenhum desses módulos importa o do plano) e o
   `.importlinter` não tem contrato de camadas internas ao domínio. Os serviços
   novos (`h1_gate`, `h1_gate_power`, `confirmatory_scorecard`) importam o VO
-  (direção usual).
+  (direção usual). **Reversão deliberada de uma postura registrada:** o
+  technical 6.4 (Task 03, `forecast_record.py`: "o VO não importa
+  `validate_rate` de `services/`, direção VO → serviço que o slice não tem")
+  evitou essa direção; aqui ela é adotada sob o ADR 6.5.0001 item 2 (validar
+  pelos donos públicos, sem segunda escrita) e registrada como `[decision]` em
+  §7 ao executar a Task 02 (um ciclo de import falharia já na coleta dos
+  testes; nenhum teste dedicado).
 - **Catálogo de regras no módulo do VO.** `RULE_CATALOG: Final[Mapping[str,
   str]]` em `preregistration.py`: chave pontuada do TOML (`"dm.kernel_lag"`,
   `"h1_gate.form"`, …) → o **único** identificador implementado (ADR 6.5.0004
@@ -185,22 +203,37 @@ contrato, fronteira nem critério; viram `[decision]` em §7 ao executar):**
   (`"training_grid_target_return"`).
 - **Dublê de hasher nos testes unitários do `evaluation`.** O gate de pureza
   proíbe importar `CanonicalJsonHasher` em `tests/unit/features/evaluation/**`
-  e o `Hasher` não tem fake por desenho (#70). Os testes declaram um dublê
-  local **que recusa float** (`_FloatRefusingHasher`: percorre o payload, ergue
-  `AssertionError` se achar `float`, devolve o sha256 de `json.dumps(...,
-  sort_keys=True)`): prova que o `PreregistrationHash` codifica todo float antes
-  de delegar. O comportamento contra o hasher real (arredondamento) é provado em
+  e o `Hasher` não tem fake por desenho (#70). Um dublê **que recusa float**
+  (`FloatRefusingHasher`: percorre o payload, ergue `AssertionError` se achar
+  `float`, devolve o sha256 de `json.dumps(..., sort_keys=True)`) é definido
+  **uma vez**, em `_preregistration_payload.py` — **fora** de `tests/fakes/` e
+  **sem** prefixo `Fake`/`InMemory` (senão o `check_port_coverage` o tomaria
+  por fake do `Hasher`, que está no baseline por desenho, e acusaria "baseline
+  morto"). Prova que o `PreregistrationHash` codifica todo float antes de
+  delegar. O comportamento contra o hasher real (arredondamento) é provado em
   `tests/unit/shared/domain/value_objects/test_preregistration_hash.py`
   (precedente `test_cohort_hash.py`, fora do gate de pureza do `evaluation`).
 - **Fábrica de payload de teste única.**
   `tests/unit/features/evaluation/_preregistration_payload.py` (módulo privado,
-  sem `test_`) expõe `PAYLOAD_TOML: str` — o texto TOML de um plano sintético
-  completo (valores do r0 salvo `name = "test_plan"` e cohort/fingerprint
-  sintéticos) — e `valid_payload() -> dict[str, object]` =
-  `tomllib.loads(PAYLOAD_TOML)` (o gate de pureza proíbe `load`, não `loads`);
-  `with_leaf(payload, "dm.alpha", 0.1)` devolve cópia profunda com uma folha
-  trocada. Texto e dict nunca divergem; o contrato (Task 06) e o e2e (Task 11)
-  gravam o mesmo texto em disco.
+  sem `test_`) expõe `valid_payload() -> dict[str, object]` (cópia profunda de
+  um dict literal: plano sintético completo, valores do r0 salvo `name =
+  "test_plan"` e cohort/fingerprint sintéticos); `to_toml(payload) -> str` —
+  **escritor TOML só de teste** (stdlib não tem escritor: `tomllib` só lê;
+  Checkpoint B r1, A3), que cobre exatamente o que o esquema usa (`str` com
+  escape de `"`/`\`, `int`, `float` por `repr`, `bool`, `datetime` — com fuso
+  vira *offset date-time*, sem fuso vira *local date-time* (para o caso
+  negativo da âncora) —, listas de escalares, tabelas e *arrays of tables*),
+  com a regra "chaves escalares antes das
+  tabelas"; `PAYLOAD_TOML = to_toml(valid_payload())`; `leaf_paths(payload)`
+  enumera **toda** folha com caminho indexado (`"dm.alpha"`, `"horizons[1]"`,
+  `"h1_gate.power_scenarios[0].lower_rate"`); `with_leaf(payload, path,
+  value)` devolve cópia profunda com a folha trocada; `FloatRefusingHasher`
+  (acima). O teste `payload_toml_writer_round_trip` prova `tomllib.loads(
+  to_toml(p)) == p` para o plano base, para um r1 com emenda e para um plano
+  com `blinding_statement` contendo aspas e barra invertida (o gate de pureza
+  proíbe `load`, não `loads`). O contrato (Task 06) e o e2e (Task 11) gravam em
+  disco o texto de `to_toml` dos planos que montam — nenhum TOML escrito à
+  mão.
 - **Registro do source no módulo do port.** `PreregistrationRecord(payload:
   Mapping[str, object], anchor: PreregistrationAnchor | None)` e
   `PreregistrationAnchor(tag, commit, comment_url, anchored_at)` (frozen;
@@ -210,14 +243,18 @@ contrato, fronteira nem critério; viram `[decision]` em §7 ao executar):**
   port (concept §4 os descreve junto do port). `anchored_at` no arquivo
   `.anchor.toml` é um *offset date-time* TOML nativo (`anchored_at =
   2026-10-01T12:00:00Z`); data local sem fuso → `ValueError`.
-- **`PreregistrationMismatchError` no módulo do mapeador.** O concept põe os
-  erros no módulo do use case; o mapeador (`use_cases/scorecard_evidence.py`)
-  é quem ergue o de C8 e é importado pelo use case — defini-lo no use case
-  criaria ciclo. Ele é definido no mapeador e **reexportado** pelo módulo do use
-  case (mesma forma dos erros do gold reexportados pelo port, ADR 6.5.0005 item
-  5); o caminho de import do concept continua válido. Os outros quatro erros
-  (`PreregistrationHashMismatchError`, `PreregistrationChainError`,
-  `PreregistrationNotAnchoredError`, `GoldNotReadyError`) moram no use case.
+- **Os cinco erros do scorecard no módulo de DTOs** (`dtos/confirmatory_scorecard.py`,
+  criado na Task 08): `PreregistrationHashMismatchError`,
+  `PreregistrationChainError`, `PreregistrationNotAnchoredError`,
+  `PreregistrationMismatchError` (com atributo `field`) e `GoldNotReadyError`
+  (com `failed_checks`), todos `ApplicationError`. O concept §4 os põe "no
+  módulo do use case"; o mapeador (`use_cases/scorecard_evidence.py`) ergue o
+  de C8 e é importado pelo use case — defini-los no use case criaria ciclo.
+  Mesma forma dos erros do gold, definidos no módulo de DTOs (ADR 6.5.0005 item
+  5). **Sem reexportação** pelo use case (decisão da sessão mestra no
+  Checkpoint B r1): o import é do módulo de DTOs. Registrado como
+  `[deviation]` (lugar do erro ≠ texto do concept) em §7 ao executar a
+  Task 08.
 - **Ordem das tuplas derivadas.** `refresh_command_from` monta
   `band_levels = tuple(sorted({gate_band_level, profile_band_level}))`
   (`(0.95, 0.975)`), `dm_variance_estimators = (primary,) + sensitivity`,
@@ -228,6 +265,27 @@ contrato, fronteira nem critério; viram `[decision]` em §7 ao executar):**
 - **Evidência de T comum.** T do horizonte = `n_points` das linhas
   `gold_dm_results` do horizonte (a amostra comum em que o DM rodou); linhas do
   mesmo horizonte com `n_points` diferentes → `GoldGenerationCorruptError`.
+- **Linhas do gate pelo nível da banda.** A calibração tem uma linha por nível
+  de banda (0,95 e 0,975, com as mesmas contagens por construção da 6.4); o
+  mapeador lê as caudas do gate **só** nas linhas com `band_level ==
+  gate_band_level` (e as do perfil a 95 % nas de `profile_band_level`), nunca
+  "qualquer uma" — um teste com contagens diferentes por nível prova a
+  seleção (Checkpoint B r1, T-F7).
+- **O que o gold `COMPLETED` não pode ter** (C6, corrupção, não prontidão):
+  linha `ERROR` + `FAIL` em `gold_quality_checks` (o `GoldInputs` da 6.4 nunca
+  grava isso num `COMPLETED`; `refresh_gold.py` `GoldInputs.__post_init__`) e
+  `max_block_estimate` `None` numa linha do MCS → `GoldGenerationCorruptError`
+  no mapeador. Por isso a prontidão **não** tem razão "check exigido falhou":
+  um `ERROR`+`FAIL` só existe em gold `BLOCKED` (→ `GoldNotReadyError`) ou
+  corrompido (Checkpoint B r1, T-F4).
+- **O `preregistration_ref` mascara os demais campos do manifesto.** Qualquer
+  folha do plano muda o hash e portanto o `preregistration_ref`, que a
+  conferência do manifesto compara **antes** de `parameters`, horizontes,
+  déficits e fingerprint. Um gold refrescado com outro plano erra sempre com
+  `field == "preregistration_ref"`; os campos seguintes só são alcançáveis por
+  manifesto adulterado (testes do mapeador, Task 08). O e2e (Task 11) prova as
+  duas situações reais: plano alterado → `preregistration_ref`; e o **mesmo**
+  plano sobre um silver com uma seed a mais → `seeds` (Checkpoint B r1, T-F1).
 - **Veredito sempre com os fatos.** `HorizonVerdict.beats_naive`,
   `beats_or_ties_strong` e `in_mcs` são preenchidos mesmo com H1 reprovado (são
   fatos do gold); `h2 = NOT_APPLICABLE` e `primary_winner = None` quando H1
@@ -276,8 +334,8 @@ contrato, fronteira nem critério; viram `[decision]` em §7 ao executar):**
 **Gate por Task (RUNBOOK §Gates em camadas, ADR 0.0.0055):** T1 =
 `make check-task SLICE=evaluation` nas Tasks 02, 03, 04, 05, 06, 08, 09, 10 e
 13; `make check-block` na Task 01 (`shared` + LAYOUT) e na 11 (composition
-root); T3 = `make check` na Task 07 (`tests/architecture/`). Task 12 (docs):
-`make docs-check`. **Checkpoint C (T2, `make check-block`)** após as Tasks 04,
+root); T3 = `make check` na Task 07 (`tests/architecture/`). Task 12 (docs,
+dois commits): `make docs-check`. **Checkpoint C (T2, `make check-block`)** após as Tasks 04,
 07 e 10; o bloco 4 após a 12 (antes da espera humana). T3 no gate de saída
 (§3), depois da Task 13.
 
@@ -310,6 +368,10 @@ do Step):**
 - **Host:** Git Bash na raiz da worktree, o bloco como um só script
   `bash -euo pipefail` (scripts stdlib `python scripts/check_*.py`, greps de
   docs, `git`, `gh`).
+- **Indentação:** os blocos dentro de itens de lista aparecem indentados no
+  markdown; copiar **sem** a indentação comum (um heredoc `<<'PY'` exige o
+  `PY` de fechamento na coluna 0). A validação da Fase 3B (`bash -n`) roda
+  sobre os blocos com a indentação removida.
 - **Negação:** `set -e` ignora o status de `! cmd`; toda asserção negativa é
   `if <cmd>; then echo "FAIL: <motivo>"; exit 1; fi`. Pipeline dentro de `if`
   nunca termina em `grep -q` (com `pipefail`, o SIGPIPE do produtor vira falso
@@ -430,6 +492,7 @@ config/preregistration/
 └── aapl_confirmatory-r0.anchor.toml                             # NOVO (13, 2º commit)
 docs/
 ├── preregistration/aapl_confirmatory.md                         # NOVO (13); âncora no 2º commit
+├── adr/6_5_0009-preregistered-conventional-values.md             # MODIFICADO (12, 2º commit): nota de emenda datada no topo
 ├── LAYOUT.md                                                     # MODIFICADO (01): §7 lista PreregistrationHash
 └── roadmap.md                                                    # MODIFICADO (12): §Stage 6.5, 8.1 (#129), 8.2 e tabela
 src/financial_forecasting/
@@ -444,14 +507,14 @@ src/financial_forecasting/
     │       ├── model_confidence_set.py                           # MODIFICADO (02): MCS_STATISTIC, block_length_rule
     │       ├── christoffersen_test.py                            # MODIFICADO (02): validate_draws_and_seed público
     │       ├── h1_gate_power.py                                  # NOVO (03)
-    │       ├── student_t.py                                      # MODIFICADO (03): student_t_quantile
+    │       ├── student_t.py                                      # MODIFICADO (09): student_t_quantile
     │       ├── h1_gate.py                                        # NOVO (04)
     │       ├── confirmatory_scorecard.py                         # NOVO (04)
     │       └── diebold_mariano.py                                # MODIFICADO (09): dm_effect_interval
     ├── application/
     │   ├── dtos/gold_schema.py                                   # NOVO (05)
     │   ├── dtos/refresh_gold.py                                  # MODIFICADO (05): inversas, GoldGeneration, erros
-    │   ├── dtos/confirmatory_scorecard.py                        # NOVO (08); MODIFICADO (09, 10)
+    │   ├── dtos/confirmatory_scorecard.py                        # NOVO (08: comando + cinco erros); MODIFICADO (09, 10)
     │   ├── ports/out/preregistration_source.py                   # NOVO (06)
     │   ├── ports/out/gold_generation_reader.py                   # NOVO (07)
     │   └── use_cases/
@@ -475,7 +538,7 @@ tests/
 │   ├── test_mcs_vs_arch.py                                       # MODIFICADO (02): só acréscimos
 │   ├── test_christoffersen_monte_carlo.py                        # MODIFICADO (02): só acréscimos
 │   ├── test_h1_gate_power.py                                     # NOVO (03)
-│   ├── test_student_t.py                                         # MODIFICADO (03): só acréscimos
+│   ├── test_student_t.py                                         # MODIFICADO (09): só acréscimos
 │   ├── test_scorecard_evidence.py                                # NOVO (03)
 │   ├── test_h1_gate.py                                           # NOVO (04)
 │   ├── test_scorecard_mechanical_rule.py                         # NOVO (04)
@@ -498,7 +561,8 @@ tests/
 ```
 
 Intocados por decisão: `pyproject.toml`, `uv.lock`, `.importlinter`,
-`scripts/arch_baseline.toml`, `concept.md`, ADRs 6.5.0001–0010,
+`scripts/arch_baseline.toml`, `concept.md`, ADRs 6.5.0001–0010 (salvo a nota
+de emenda datada no topo do 6.5.0009 — o corpo `accepted` não muda; Task 12),
 `src/**/modeling/**`, `config/cohorts/**`, `data/**` (nunca lido), o
 `RefreshGold` e os serviços da 6.1–6.4 salvo os quatro arquivos de domínio
 listados acima (acréscimos de API pública, mesmas mensagens).
@@ -513,16 +577,16 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 
 | # | Critério de aceitação (concept §11) | Tasks | Check objetivo |
 |---|---|---|---|
-| A1 | `from_mapping` recusa chave desconhecida/ausente, identificador não implementado e cada valor inválido pela mensagem do dono (um teste por bloco); `blinding_statement` ausente aceito, vazio recusado; ida e volta; qualquer folha muda o hash; 1e-12 × 1e-11 diferem; 0 × 0.0 iguais; referência `<name>-r<rev>-<hash12>`; emenda em r0 e r ≥ 1 sem emenda erguem | 01, 02 | `U/test_preregistration_value_object.py` (tokens da Task 02); `U/test_preregistration_immutable_hash.py::every_leaf_changes_hash`, `::tolerance_exponents_differ`, `::zero_int_float_same_hash`, `::reference_uses_hash12`; `S/test_preregistration_hash.py::prereg_hash_float_encoded_exactly` |
+| A1 | `from_mapping` recusa chave desconhecida/ausente, identificador não implementado e cada valor inválido pela mensagem do dono (um teste por bloco); `blinding_statement` ausente aceito, vazio recusado; ida e volta; qualquer folha muda o hash; 1e-12 × 1e-11 diferem; 0 × 0.0 iguais; referência `<name>-r<rev>-<hash12>`; emenda em r0 e r ≥ 1 sem emenda erguem | 01, 02 | `U/test_preregistration_value_object.py` (tokens da Task 02); `U/test_preregistration_immutable_hash.py::every_leaf_changes_hash`, `::leaf_paths_cover_payload`, `::tolerance_exponents_differ`, `::zero_int_float_same_hash`, `::reference_uses_hash12`; `S/test_preregistration_hash.py::prereg_hash_float_encoded_exactly`; `U/test_preregistration_value_object.py::payload_toml_writer_round_trip` |
 | A2 | `check_layout` verde: `hash_mapping` só no `PreregistrationHash` (e nos VOs existentes) | 01 | Container da Task 01 (`uv run python scripts/check_layout.py`) + grep Host do §3 (única chamada nova em `shared/domain/value_objects/preregistration_hash.py`) |
 | A3 | `refresh_command_from` devolve o comando com cada campo do plano (teste por campo) | 08 | `U/test_refresh_command_from.py::command_field_from_plan`, `::command_partition_from_cohort`, `::command_parameters_from_plan` |
 | A4 | `H1GatePower` reproduz a tabela do doc §8.5 em n = 500 (0,041; 0,840; 0,996; 0,580; 0,536); taxas de locação do r0 recalculadas com `NormalDist` batem com o arquivo | 03, 13 | `U/test_h1_gate_power.py::power_doc_table_n500`; `I/test_preregistration_consistency.py::r0_location_rates_normal` |
-| A5 | `H1Gate`: S = 2 com médias (nunca S·T) = `WilsonBand` à mão; degeneração > 1 % reprova com bandas contendo o nominal; não aplicável reprova; LR_uc 3 estados e DGT das mesmas médias; divergência nos dois sentidos; h = 1 sem DGT; n̄, T e aviso | 04 | `U/test_h1_gate.py` (tokens da Task 04) |
-| A6 | `decide`: um teste por desfecho e pelo vencedor; H1 reprovado com DM todo rejeitado → `NOT_APPLICABLE`; fora do MCS e supera os fortes vence; menor P̄_G só informação; comparador mal calibrado segue na leitura; horizontes independentes; sucesso = ≥ 1 horizonte; veredito idêntico com e sem perfil | 04, 10 | `U/test_scorecard_mechanical_rule.py` (tokens da Task 04); `U/test_build_confirmatory_scorecard_use_case.py::verdict_unchanged_by_profile` |
-| A7 | Perfil: desfecho por nível, efeito do DM com IC, `fallback_applied`, calibração e limiar dos comparadores, 95 %, amostra comum, "sem lacunas", Bartlett e moving-block com divergências | 03, 09 | `U/test_scorecard_profile.py` (tokens da Task 09); `U/test_dm_vs_r_oracle.py::dm_effect_interval_formula`; `U/test_student_t.py::t_quantile_published_values` |
-| A8 | Use case com fakes: ordem I5 sem chamar o leitor; `GoldNotReadyError`; `PreregistrationMismatchError` por campo, modelo, seed, grade, estatística, bloco; `GoldGenerationCorruptError` por linha faltando; as duas falhas juntas → mismatch; prontidão falsa com razão (gold antes da âncora, emenda `unblinded`, check `SKIPPED`), verdadeira com refutação; declaração ecoada | 08, 10 | `U/test_scorecard_evidence_mapper.py` (tokens da Task 08); `U/test_build_confirmatory_scorecard_use_case.py` (tokens da Task 10) |
+| A5 | `H1Gate`: S = 2 com médias (nunca S·T) = `WilsonBand` à mão; degeneração > 1 % reprova com bandas contendo o nominal; não aplicável reprova; LR_uc 3 estados e DGT das mesmas médias; divergência nos dois sentidos; h = 1 sem DGT; n̄, T e aviso | 04 | `U/test_h1_gate.py` (tokens da Task 04; fronteira `::gate_degeneracy_at_threshold_passes`) |
+| A6 | `decide`: um teste por desfecho e pelo vencedor; H1 reprovado com DM todo rejeitado → `NOT_APPLICABLE`; fora do MCS e supera os fortes vence; menor P̄_G só informação; comparador mal calibrado segue na leitura; horizontes independentes; sucesso = ≥ 1 horizonte; veredito idêntico com e sem perfil | 04, 10 | `U/test_scorecard_mechanical_rule.py` (tokens da Task 04, inclusive `::ml_tier_counts_as_strong` — P4: o GBM é forte); `U/test_build_confirmatory_scorecard_use_case.py::verdict_unchanged_by_profile` |
+| A7 | Perfil: desfecho por nível, efeito do DM com IC, `fallback_applied`, calibração e limiar dos comparadores, 95 %, amostra comum, "sem lacunas", Bartlett e moving-block com divergências | 09 | `U/test_scorecard_profile.py` (tokens da Task 09); `U/test_dm_vs_r_oracle.py::dm_effect_interval_formula`; `U/test_student_t.py::t_quantile_published_values` |
+| A8 | Use case com fakes: ordem I5 sem chamar o leitor; `GoldNotReadyError`; `PreregistrationMismatchError` por campo, modelo, seed, grade, estatística, bloco; `GoldGenerationCorruptError` por linha faltando; as duas falhas juntas → mismatch; prontidão falsa com razão (gold antes da âncora, emenda `unblinded`, check `SKIPPED`), verdadeira com refutação; declaração ecoada | 08, 10 | `U/test_scorecard_evidence_mapper.py` (tokens da Task 08); `U/test_build_confirmatory_scorecard_use_case.py` (tokens da Task 10; fronteira `::ready_true_started_at_anchor`) |
 | A9 | Fakes e contratos `[fake, real]` dos dois ports (revisão inexistente, âncora ausente/presente; zero linhas, coluna toda `None`, `BLOCKED`, manifesto ausente, ida e volta); `GoldManifest.from_mapping(as_mapping(m)) == m` e `preregistration_ref` divergente recusado; builders com as chaves do `gold_schema`; `check_port_coverage` sem entrada nova | 05, 06, 07 | `K/test_preregistration_source_contract.py`, `K/test_gold_generation_reader_contract.py` (tokens das Tasks 06/07); `U/gold/test_refresh_gold_dtos.py::manifest_from_mapping_round_trip`, `::manifest_prereg_ref_divergent_rejected`; `K/test_gold_builder_contract.py::builders_use_schema_keys`; `tests/architecture/test_port_coverage_gate.py::scorecard_ports_resolve`; Host do §3 (baseline intocado) |
-| A10 | E2E sintético (≥ 2 horizontes, candidato com 2 seeds, seis comparadores): plano → `refresh_command_from` → `RefreshGold` real → scorecard real no Parquet → veredito esperado; parâmetro alterado ou seed a mais → mismatch | 11 | `I/test_build_confirmatory_scorecard.py` (tokens da Task 11), zero `SKIPPED` |
+| A10 | E2E sintético (≥ 2 horizontes, candidato com 2 seeds, seis comparadores): plano → `refresh_command_from` → `RefreshGold` real → scorecard real no Parquet → veredito esperado; parâmetro alterado → mismatch em `preregistration_ref` (o hash muda primeiro, §1); mesmo plano sobre silver com seed a mais → mismatch em `seeds` | 11 | `I/test_build_confirmatory_scorecard.py` (tokens da Task 11), zero `SKIPPED`; `::e2e_paths_under_tmp` |
 | A11 | r0 congelado com os valores dos ADRs 0009/0010; consistência com o cohort e com o espelho; nenhum texto afirma que nenhuma métrica foi computada sobre o r0; tag e comentário; `anchor.toml`; §7 com os dois carimbos na ordem e "a 6.5 não calculou nada sobre o cohort" | 13 | `I/test_preregistration_consistency.py` (tokens da Task 13); Host da Task 13 (tag remota, `created_at` do comentário, grep de afirmação proibida); Host do §3 (entrada única `[decision] Task 13 — âncora do pré-registro r0`) |
 | A12 | `lint-imports` verde; nada de runtime de `modeling` em `src/**/evaluation`; `tomllib` só em `adapters/out/toml/`; `pyarrow` só em `adapters/out/duckdb/` | todas (T1); §3 | `uv run lint-imports` + greps Host do §3 |
 | A13 | Roadmap §Stage 6.5 (DoD e descrição), 8.1 e 8.2 conforme D10 (8.1 depende da #129); LAYOUT §7 com o `PreregistrationHash` | 01, 12 | greps Host das Tasks 01 e 12 (reprovam no HEAD `29c9184`) |
@@ -538,7 +602,7 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 | I4 | Regras nomeadas aceitas só se implementadas | 02, 04 | `U/test_preregistration_value_object.py::prereg_rule_identifier_unimplemented`, `::prereg_rule_catalog_complete`; `U/test_scorecard_mechanical_rule.py::services_check_rule_identifiers` |
 | I5 | Ordem: cadeia → hash → âncora antes de ler o gold | 10 | `U/test_build_confirmatory_scorecard_use_case.py::hash_mismatch_before_reader`, `::chain_broken_before_reader`, `::unanchored_before_reader`, `::validation_order_chain_hash_anchor` |
 | I6 | Uma derivação; partição do plano; gold conferido nos dois sentidos | 08, 10, 11 | `U/test_refresh_command_from.py::command_field_from_plan`; `U/test_build_confirmatory_scorecard_use_case.py::reader_reads_derived_partition`, `::command_has_no_partition`; `U/test_scorecard_evidence_mapper.py::mismatch_manifest_field`; `I/test_build_confirmatory_scorecard.py::e2e_parameter_changed_mismatch` |
-| I7 | Manifesto primeiro; um dono do schema e da montagem; `partitioning=None`; zero linhas pelo `rows_by_table` | 05, 07 | `U/gold/test_refresh_gold_dtos.py::from_stored_empty_table`, `::schema_tables_complete`; `K/test_gold_generation_reader_contract.py::real_reads_manifest_first`, `::real_no_hive_inference`, `::real_single_assembly`, `::reader_zero_row_table` |
+| I7 | Manifesto primeiro; um dono do schema e da montagem; `partitioning=None`; zero linhas pelo `rows_by_table` | 05, 07 | `U/gold/test_refresh_gold_dtos.py::from_stored_empty_table`, `::schema_tables_complete`; `K/test_gold_generation_reader_contract.py::real_reads_manifest_first`, `::real_no_hive_inference`, `::real_single_assembly`, `::reader_zero_row_table`; `U/test_scorecard_evidence_mapper.py::mapper_gate_rows_band_level` |
 | I8 | Nada recomputado: só médias, kernels de contagem, poder, IC e lógica | 04, 08, 09 | `U/test_h1_gate.py::gate_calls_count_kernels`; `U/test_scorecard_profile.py::profile_copies_gold_values`; grep Host do §3 (sem `DieboldMariano`/`HolmCorrection`/`ModelConfidenceSet.evaluate`/`CoverageMetrics`/`HitSequences` nos módulos novos da application) |
 | I9 | Por horizonte; nenhum campo agrega horizontes | 04 | `U/test_scorecard_mechanical_rule.py::horizons_independent`, `::study_success_one_horizon` |
 | I10 | Só o candidato é filtrado; Holm = seis, MCS = sete | 04, 08, 09 | `U/test_scorecard_mechanical_rule.py::comparator_miscalibrated_stays_in_family`; `U/test_scorecard_evidence_mapper.py::mismatch_model_extra_missing`; `U/test_scorecard_profile.py::profile_comparators_threshold` |
@@ -552,11 +616,11 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 | C3 | Hash divergente → `PreregistrationHashMismatchError` antes do gold | 10 | `U/test_build_confirmatory_scorecard_use_case.py::hash_mismatch_before_reader` |
 | C4 | Cadeia quebrada → `PreregistrationChainError` | 10 | `U/test_build_confirmatory_scorecard_use_case.py::chain_broken_before_reader` |
 | C5 | Revisão sem âncora → `PreregistrationNotAnchoredError` | 10 | `U/test_build_confirmatory_scorecard_use_case.py::unanchored_before_reader` |
-| C6 | Sem manifesto → `GoldManifestNotFoundError`; tabela ausente/contagem/incoerente → `GoldGenerationCorruptError`; linha faltando para modelo/seed presente → corrupt (depois de C8) | 05, 07, 08 | `U/gold/test_refresh_gold_dtos.py::from_stored_missing_table_corrupt`, `::from_stored_count_mismatch_corrupt`, `::from_stored_incoherent_corrupt`; `K/test_gold_generation_reader_contract.py::reader_missing_manifest_raises`, `::real_missing_table_file_corrupt`; `U/test_scorecard_evidence_mapper.py::corrupt_seed_missing_tail`, `::corrupt_horizon_row_missing`, `::corrupt_estimator_row_missing`, `::corrupt_scheme_row_missing`, `::mismatch_before_corrupt` |
+| C6 | Sem manifesto → `GoldManifestNotFoundError`; tabela ausente/contagem/incoerente → `GoldGenerationCorruptError`; linha faltando para modelo/seed presente → corrupt (depois de C8) | 05, 07, 08 | `U/gold/test_refresh_gold_dtos.py::from_stored_missing_table_corrupt`, `::from_stored_count_mismatch_corrupt`, `::from_stored_incoherent_corrupt`; `K/test_gold_generation_reader_contract.py::reader_missing_manifest_raises`, `::real_missing_table_file_corrupt`; `U/test_scorecard_evidence_mapper.py::corrupt_seed_missing_tail`, `::corrupt_horizon_row_missing`, `::corrupt_estimator_row_missing`, `::corrupt_scheme_row_missing`, `::mismatch_before_corrupt`; `U/test_scorecard_evidence_mapper.py::corrupt_block_estimate_missing`, `::corrupt_completed_with_failed_check` |
 | C7 | `BLOCKED` → `GoldNotReadyError` com os checks | 10 | `U/test_build_confirmatory_scorecard_use_case.py::blocked_gold_not_ready` |
 | C8 | Outro plano/cohort (manifesto, modelos, seeds, grade, estatística, bloco) → `PreregistrationMismatchError` nomeando o campo | 08, 11 | `U/test_scorecard_evidence_mapper.py::mismatch_manifest_field`, `::mismatch_model_extra_missing`, `::mismatch_seed_extra_missing`, `::mismatch_grid_levels`, `::mismatch_mcs_statistic`, `::mismatch_block_rule`; `I/test_build_confirmatory_scorecard.py::e2e_parameter_changed_mismatch`, `::e2e_extra_seed_mismatch` |
 | C9 | Candidato 100 % degenerado → banda não aplicável, gate reprova, `NOT_APPLICABLE` | 04 | `U/test_h1_gate.py::gate_not_applicable_fails`; `U/test_scorecard_mechanical_rule.py::outcome_not_applicable` |
-| C10 | Gold antes da âncora, emenda `unblinded`, check exigido `SKIPPED` → prontidão falsa com razão | 10 | `U/test_build_confirmatory_scorecard_use_case.py::ready_false_gold_before_anchor`, `::ready_false_unblinded_amendment`, `::ready_false_required_check_skipped` |
+| C10 | Gold antes da âncora, emenda `unblinded`, check exigido `SKIPPED` → prontidão falsa com razão | 10 | `U/test_build_confirmatory_scorecard_use_case.py::ready_false_gold_before_anchor`, `::ready_false_unblinded_amendment`, `::ready_false_required_check_skipped`; fronteira `::ready_true_started_at_anchor` |
 | C11 | Erro de programação propaga | 04, 10 | `U/test_scorecard_mechanical_rule.py::decide_horizon_set_mismatch_raises`; `U/test_build_confirmatory_scorecard_use_case.py::programming_error_propagates` |
 
 ## 2. Tasks
@@ -659,9 +723,9 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
     Propriedades de leitura usadas adiante: `comparators` (os seis, na ordem
     naive → estatístico forte → ML), `models` (candidato + comparadores),
     `strong` (estatístico forte ∪ ML).
-  - `_preregistration_payload.py` — decisão de detalhe do §1 (`PAYLOAD_TOML`,
-    `valid_payload()`, `with_leaf(...)`, `leaf_paths(payload)` que enumera
-    todas as folhas).
+  - `_preregistration_payload.py` — decisão de detalhe do §1
+    (`valid_payload()`, `to_toml(...)`, `PAYLOAD_TOML`, `leaf_paths(...)` com
+    caminhos indexados, `with_leaf(...)`, `FloatRefusingHasher`).
 - **Critério de aceite (A1, I1–I4, I14, C1):** chave desconhecida e cada chave
   ausente (parametrizado sobre **toda** chave obrigatória do payload, via
   `leaf_paths`) erguem nomeando o caminho; `blinding_statement` ausente aceito,
@@ -676,8 +740,17 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   repetida, déficit negativo, cenário inválido, perfil fora do catálogo erguem;
   `0` num campo float vira `0.0` e `1.0` num campo int ergue, `True` em campo
   numérico ergue; emenda em r0 ergue e r1 sem `amends` ergue, r1 completo é
-  aceito; `from_mapping(p.as_payload()) == p`. Hash (com o dublê que recusa
-  float): toda folha trocada muda o hash (parametrizado sobre `leaf_paths`);
+  aceito; `from_mapping(p.as_payload()) == p`; `tomllib.loads(to_toml(q)) ==
+  q` para o plano base, um r1 com emenda e um `blinding_statement` com aspas e
+  barra invertida. Hash (com o dublê que recusa float): para **todo** caminho
+  de `leaf_paths(p.as_payload())`, `PreregistrationHash.compute` direto sobre
+  `with_leaf(p.as_payload(), path, alt)` difere do hash de `p` — **sem**
+  passar por `from_mapping`, porque várias folhas só têm um valor válido
+  (identificadores de regra, `realized.source`, `revision` de r0, nomes de
+  modelo, par do gate; Checkpoint B r1, T-F2); `alt` por tipo (`str` + `"_x"`,
+  `int` + 1, `float` × 1,5 ou 1,0 se zero, `bool` negado); e
+  `leaf_paths(p.as_payload()) == leaf_paths(valid_payload())` (o payload
+  canônico não perde nem ganha folha);
   `degeneracy_tolerance` 1e-12 × 1e-11 diferem; `0` × `0.0` num campo float
   dão o mesmo hash; referência = `"test_plan-r0-" + hash[:12]`.
   Donos públicos: `MCS_STATISTIC == "R"` e o `McsReport` ainda recusa outra;
@@ -699,9 +772,10 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   `prereg_amendment_required_after_zero`, `prereg_amendment_complete_accepted`,
   `prereg_blinding_absent_accepted`, `prereg_blinding_empty_rejected`,
   `prereg_int_coerced_to_float`, `prereg_float_rejected_where_int`,
-  `prereg_bool_rejected_as_number`, `prereg_payload_round_trip`;
+  `prereg_bool_rejected_as_number`, `prereg_payload_round_trip`,
+  `payload_toml_writer_round_trip`;
   `test_preregistration_immutable_hash.py`: `every_leaf_changes_hash`,
-  `tolerance_exponents_differ`, `zero_int_float_same_hash`,
+  `leaf_paths_cover_payload`, `tolerance_exponents_differ`, `zero_int_float_same_hash`,
   `hasher_never_sees_float`, `reference_uses_hash12`; `test_mcs_vs_arch.py`:
   `mcs_statistic_public_constant`, `block_rule_single_owner`,
   `block_rule_ceiling_values`; `test_christoffersen_monte_carlo.py`:
@@ -714,7 +788,7 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   test -s $D/services/model_confidence_set.py
   test -s $D/services/christoffersen_test.py
   if grep -nE "(^|[^A-Z])_STATISTIC\b|_validate_draws_and_seed" $D/services/model_confidence_set.py $D/services/christoffersen_test.py; then echo "FAIL: dono privado remanescente"; exit 1; fi
-  test "$(grep -c "math.ceil" $D/services/model_confidence_set.py)" -eq 1
+  test "$(grep -cE "^\s+return max\(horizon, math\.ceil\(" $D/services/model_confidence_set.py)" -eq 1
   d=$(mktemp)
   base=$(git merge-base origin/develop HEAD)
   git diff "$base" -- $U/test_mcs_vs_arch.py $U/test_christoffersen_monte_carlo.py > "$d"
@@ -726,17 +800,15 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 
 ---
 
-### Task 03 — `H1GatePower`, quantil da t e VOs de evidência
+### Task 03 — `H1GatePower` e VOs de evidência
 
 - **Arquivos a criar:**
   - `src/financial_forecasting/features/evaluation/domain/services/h1_gate_power.py`
   - `src/financial_forecasting/features/evaluation/domain/value_objects/scorecard_evidence.py`
   - `tests/unit/features/evaluation/test_h1_gate_power.py`
   - `tests/unit/features/evaluation/test_scorecard_evidence.py`
-- **Arquivos a modificar:**
-  - `src/financial_forecasting/features/evaluation/domain/services/student_t.py`
-    — `student_t_quantile(p: float, df: float) -> float` (decisão do §1).
-  - `tests/unit/features/evaluation/test_student_t.py` — **só acréscimos**.
+- **Arquivos a modificar:** nenhum (o quantil da t foi para a Task 09, junto
+  do seu consumidor — Checkpoint B r1, A11).
 - **O que fazer (concept §4 "Domínio", D6, D8; ADR 6.5.0006 itens 2, 5,
   6.5-POWER; ADR 6.5.0008 item 2):**
   - `H1GatePower.failure_probability(*, n: int, spec: H1GateSpec, deviation:
@@ -760,23 +832,18 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
     par (comparador, estimador) repetido, MCS sem par (esquema, modelo)
     repetido); `SeedSpread.of(values) -> SeedSpread(mean, minimum, maximum,
     n_seeds)` (dono da agregação entre seeds dos descritores).
-- **Critério de aceite (A4, A7):** em n = 500 com os cenários do doc §8.5 —
+- **Critério de aceite (A4):** em n = 500 com os cenários do doc §8.5 —
   calibrado (0,10/0,10), locação 0,2σ e 0,3σ (taxas pelo `NormalDist` no
   teste), cobertura 75 % (0,125/0,125) e 85 % (0,075/0,075) — a probabilidade
   de reprovar arredondada a 3 casas é 0,041; 0,840; 0,996; 0,580; 0,536; em
   n ∈ {5, 20} o algoritmo iguala a soma dupla bruta da multinomial (tolerância
   1e-12); a aceitação vem do `WilsonBand` (monkeypatch do dono muda o
-  resultado); `n` 0/`True`/`2.0` erguem. `student_t_quantile`: ida e volta com
-  `student_t_cdf` (|cdf(q) − p| ≤ 1e-12) em p ∈ {0,025; 0,5; 0,975} e df ∈
-  {1; 10; 1 511}; valores publicados t_{0,975}: df = 1 → 12,706204736174705,
-  df = 10 → 2,2281388519649385, df = 30 → 2,0422724563012373 (tolerância
-  1e-9); p fora de (0, 1), df < 1 erguem. VOs: cada invariante com um caso;
+  resultado); `n` 0/`True`/`2.0` erguem. VOs: cada invariante com um caso;
   médias com S = 2 de n_observed diferentes dão razão de médias ≠ média das
   taxas; `SeedSpread` de um valor tem média = mínimo = máximo.
 - **Tokens:** `test_h1_gate_power.py`: `power_doc_table_n500`,
   `power_equals_brute_double_sum`, `power_acceptance_from_wilson_owner`,
-  `power_invalid_n_rejected`; `test_student_t.py`: `t_quantile_round_trip`,
-  `t_quantile_published_values`, `t_quantile_invalid_rejected`;
+  `power_invalid_n_rejected`;
   `test_scorecard_evidence.py`: `evidence_seed_counts_invalid`,
   `evidence_tail_ratio_of_means`, `evidence_dgt_offsets_complete`,
   `evidence_single_step_without_dgt`, `evidence_horizon_incoherent`,
@@ -784,15 +851,10 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 - **Verificação (T1) — Container:**
   ```bash
   U=tests/unit/features/evaluation
-  uv run pytest $U/test_h1_gate_power.py $U/test_student_t.py $U/test_scorecard_evidence.py -v --durations=3
-  d=$(mktemp)
-  base=$(git merge-base origin/develop HEAD)
-  git diff "$base" -- $U/test_student_t.py > "$d"
-  test -s "$d"
-  if grep -nE '^-([^-]|$)' "$d"; then echo "FAIL: teste existente da t alterado"; exit 1; fi
+  uv run pytest $U/test_h1_gate_power.py $U/test_scorecard_evidence.py -v --durations=3
   make check-task SLICE=evaluation
   ```
-- **Commit sugerido:** `feat(evaluation): poder exato do gate H1, quantil da t e VOs de evidência [6.5/task-03]`
+- **Commit sugerido:** `feat(evaluation): poder exato do gate H1 e VOs de evidência [6.5/task-03]`
 
 ---
 
@@ -853,7 +915,9 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 - **Critério de aceite (A5, A6, I8–I12, C9, C11):** gate com S = 2 e n_observed
   diferentes entre seeds: as bandas são **iguais** (`==`) a `WilsonBand.evaluate`
   chamado à mão com as médias e **diferentes** das com S·T; degeneração média
-  0,011 reprova com as duas bandas contendo a nominal; n̄ = 0 → não aplicável e
+  0,011 reprova com as duas bandas contendo a nominal e degeneração média
+  **exatamente** 0,01 passa (limiar inclusivo, "≤", ADR 6.5.0006 item 3);
+  n̄ = 0 → não aplicável e
   reprova; espião nos kernels (`WilsonBand.evaluate`, `lr_uc_three_state`,
   `chi_square_sf`) mostra as mesmas médias; DGT com h = 3 usa o nível
   `1 − 0,05/6` e as 6 bandas; h = 1 → `dgt is None`; um caso gate passa /
@@ -861,7 +925,11 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   resultado carrega n̄, T, aviso e poder com `n = round(n̄)`. Scorecard: um
   teste por desfecho; vencedor só com H1 ∧ (i) ∧ (ii); H1 reprovado com DM
   todo rejeitado → `NOT_APPLICABLE` e `primary_winner is None`; candidato fora
-  do MCS que supera todos os fortes vence; candidato sem a menor P̄_G vence (a
+  do MCS que supera todos os fortes vence; (i) verdadeiro, candidato fora do
+  MCS primário, Holm rejeita contra os três estatísticos fortes mas **não**
+  contra o `gbm_quantile` → `BEATS_NAIVE_ONLY` e `primary_winner is None` (o
+  nível ML conta como forte — P4, ADR 6.5.0010; Checkpoint B r1, T-F3);
+  candidato sem a menor P̄_G vence (a
   flag é falsa); comparador com a própria banda reprovada e degeneração acima
   do limiar continua nas contagens de Holm e no MCS; mudar a evidência de um
   horizonte não muda o outro; `study_success_h1` verdadeiro com um horizonte
@@ -870,7 +938,8 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   ergue; identificador de regra fora do catálogo (plano montado com
   `object.__setattr__`) ergue.
 - **Tokens:** `test_h1_gate.py`: `gate_seed_mean_not_st`,
-  `gate_degeneracy_over_threshold_fails`, `gate_not_applicable_fails`,
+  `gate_degeneracy_over_threshold_fails`, `gate_degeneracy_at_threshold_passes`,
+  `gate_not_applicable_fails`,
   `gate_calls_count_kernels`, `gate_lr_uc_sensitivity`,
   `gate_dgt_bonferroni_level`, `gate_single_step_no_dgt`,
   `gate_common_sample_sensitivity`, `gate_divergence_both_directions`,
@@ -879,7 +948,8 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   `outcome_no_skill_over_naive`, `outcome_beats_naive_only`,
   `outcome_beats_naive_ties_strong`, `outcome_beats_naive_and_strong`,
   `winner_requires_gate_and_both`, `h1_fail_all_rejected_no_winner`,
-  `outside_mcs_beats_strong_wins`, `lowest_pinball_only_information`,
+  `outside_mcs_beats_strong_wins`, `ml_tier_counts_as_strong`,
+  `lowest_pinball_only_information`,
   `comparator_miscalibrated_stays_in_family`, `horizons_independent`,
   `study_success_one_horizon`, `verdict_without_profile_fields`,
   `tier_reading_per_tier`, `decide_horizon_set_mismatch_raises`,
@@ -974,7 +1044,8 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   - `src/financial_forecasting/features/evaluation/adapters/out/toml/toml_preregistration_source.py`
   - `tests/fakes/features/evaluation/in_memory_preregistration_source.py`
   - `tests/contract/features/evaluation/test_preregistration_source_contract.py`
-- **Arquivos a modificar:** nenhum (o contrato lê `PAYLOAD_TOML` da Task 02).
+- **Arquivos a modificar:** nenhum (o contrato usa `valid_payload`/`to_toml`
+  da Task 02).
 - **O que fazer (concept §4 "Application"/"Adapters", §8 "Externas", C2; ADR
   6.5.0003 itens 2–3):**
   - Port: `PreregistrationSource(Protocol)` com `read(self, *, name: str,
@@ -993,7 +1064,8 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
     anchor=None)`; `read` devolve cópia profunda do payload; ausente → o mesmo
     erro; `reads` conta as chamadas (usado pela Task 10).
   - Contrato: *harness* por perna (`fake`; `toml` num `tmp_path` com o
-    `PAYLOAD_TOML` gravado e o `.anchor.toml` escrito à mão), ids `["fake",
+    `PAYLOAD_TOML` e o `.anchor.toml` gravados por `to_toml` — nenhum TOML
+    escrito à mão; o caso sem fuso usa um `datetime` ingênuo), ids `["fake",
     "toml"]`, sem `skipif`.
 - **Critério de aceite (A9, C2):** nas duas pernas: o payload lido é igual ao
   `valid_payload()`; revisão inexistente → `PreregistrationNotFoundError`;
@@ -1027,7 +1099,7 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   ```bash
   EV=src/financial_forecasting/features/evaluation
   t=$(mktemp)
-  grep -rln "tomllib" "$EV" > "$t"
+  grep -rlE "^\s*(import|from)\s+tomllib\b" "$EV" > "$t"
   test -s "$t"
   if grep -v "/adapters/out/toml/" "$t"; then echo "FAIL: tomllib fora de adapters/out/toml"; exit 1; fi
   test -s scripts/arch_baseline.toml
@@ -1129,10 +1201,12 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
     cohort.cohort_id`, `horizons`, `window_deficits`, `dataset_fingerprint =
     realized.dataset_fingerprint`, `RefreshParameters` inteiro);
     `BuildConfirmatoryScorecardCommand(name, revision, preregistration_ref)` —
-    **sem** partição.
-  - `use_cases/scorecard_evidence.py`: `PreregistrationMismatchError
-    (ApplicationError)` com o campo no atributo `field` e na mensagem;
-    `evidence_from_generation(*, prereg, command: RefreshGoldCommand,
+    **sem** partição; os **cinco erros** do scorecard (decisão do §1):
+    `PreregistrationHashMismatchError`, `PreregistrationChainError`,
+    `PreregistrationNotAnchoredError`, `PreregistrationMismatchError` (campo no
+    atributo `field` e na mensagem) e `GoldNotReadyError` (`failed_checks:
+    tuple[FailedCheck, ...]`).
+  - `use_cases/scorecard_evidence.py`: `evidence_from_generation(*, prereg, command: RefreshGoldCommand,
     generation: GoldGeneration) -> tuple[HorizonEvidence, ...]`, na ordem de
     C6/C8 do concept: (1) manifesto × comando — `partition`,
     `preregistration_ref`, `parameters` (`as_mapping`), `horizons`,
@@ -1143,9 +1217,12 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
     `{None}`); níveis da grade (os `level_low` das linhas `pinball` de
     `gold_metrics_by_run`) = `quantile_levels`; (3) MCS — `statistic` =
     `MCS_STATISTIC` do plano e `block_size = block_length_rule(horizon=h,
-    max_estimate=max_block_estimate)` por linha; (4) só então linhas esperadas
+    max_estimate=max_block_estimate)` por linha (`max_block_estimate` `None`
+    num gold `COMPLETED` → `GoldGenerationCorruptError`, decisão do §1); (4)
+    só então: linha `ERROR` + `FAIL` em `gold_quality_checks` de um gold
+    `COMPLETED` → `GoldGenerationCorruptError`; linhas esperadas
     por modelo/seed presentes (duas caudas do gate em `model_full` mascarado e
-    em `common`, DGT 0..h−1 quando h > 1, um DM por comparador e estimador, um
+    em `common`, lidas **só** nas linhas `band_level == gate_band_level`, DGT 0..h−1 quando h > 1, um DM por comparador e estimador, um
     MCS por esquema e modelo, a linha `pinball_grid_mean` da amostra comum por
     modelo/seed) → `GoldGenerationCorruptError` nomeando a linha; (5) monta
     `HorizonEvidence` (T da decisão do §1; P̄_G do candidato = média entre seeds
@@ -1167,7 +1244,10 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   diferente, `statistic` diferente e `block_size` fora da regra;
   `GoldGenerationCorruptError` para seed presente sem uma cauda, modelo sem a
   linha de um horizonte, comparador sem a linha de um estimador, esquema sem
-  MCS num horizonte, `n_points` divergente no DM de um horizonte; com seed a
+  MCS num horizonte, `n_points` divergente no DM de um horizonte,
+  `max_block_estimate` `None` e linha `ERROR` + `FAIL` num gold `COMPLETED`;
+  com contagens diferentes nas linhas 0,95 e 0,975 da mesma série, a evidência
+  do gate traz as de 0,975; com seed a
   mais **e** cauda faltando ao mesmo tempo, ergue o mismatch; gold coerente →
   um `HorizonEvidence` por horizonte do plano, com as contagens por seed e o
   T do DM; o mapeador lê só colunas do schema (monkeypatch de um
@@ -1181,7 +1261,9 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   `corrupt_seed_missing_tail`, `corrupt_horizon_row_missing`,
   `corrupt_estimator_row_missing`, `corrupt_scheme_row_missing`,
   `corrupt_common_points_divergent`, `mismatch_before_corrupt`,
-  `evidence_built_per_horizon`, `mapper_reads_schema_columns`.
+  `evidence_built_per_horizon`, `mapper_reads_schema_columns`,
+  `mapper_gate_rows_band_level`, `corrupt_block_estimate_missing`,
+  `corrupt_completed_with_failed_check`.
 - **Verificação (T1) — Container:**
   ```bash
   U=tests/unit/features/evaluation
@@ -1198,12 +1280,15 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 
 ---
 
-### Task 09 — IC do efeito do DM + perfil do scorecard
+### Task 09 — Quantil da t, IC do efeito do DM e perfil do scorecard
 
 - **Arquivos a criar:**
   - `src/financial_forecasting/features/evaluation/application/use_cases/scorecard_profile.py`
   - `tests/unit/features/evaluation/test_scorecard_profile.py`
 - **Arquivos a modificar:**
+  - `src/financial_forecasting/features/evaluation/domain/services/student_t.py`
+    — `student_t_quantile(p: float, df: float) -> float` (decisão do §1).
+  - `tests/unit/features/evaluation/test_student_t.py` — **só acréscimos**.
   - `src/financial_forecasting/features/evaluation/domain/services/diebold_mariano.py`
     — `dm_effect_interval` (decisão do §1).
   - `src/financial_forecasting/features/evaluation/application/dtos/confirmatory_scorecard.py`
@@ -1211,7 +1296,8 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   - `tests/unit/features/evaluation/test_dm_vs_r_oracle.py` — **só acréscimos**.
 - **O que fazer (concept §4, D8, I8, I10, I12; ADRs 6.5.0006 itens 4, 6, 7,
   6.5.0007 itens 4–5, 6.5.0008 item 2):**
-  - `dm_effect_interval(*, mean_differential, statistic, n_points, level)`.
+  - `student_t_quantile(p, df)` e `dm_effect_interval(*, mean_differential,
+    statistic, n_points, level)` (o IC usa o quantil).
   - `ScorecardProfile` (frozen DTO, `as_mapping()` JSON-safe): por horizonte —
     `gate_sensitivities` (copiadas do `H1Result`: LR_uc, DGT, amostra comum,
     média das taxas, divergências), `power` (idem), `tiers` (de
@@ -1232,7 +1318,12 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
     verdict, generation) -> ScorecardProfile` — só copia colunas do gold (pelo
     schema), chama `H1Gate`/`tier_readings`/`dm_effect_interval`/`SeedSpread`
     e nunca é lido por `decide`.
-- **Critério de aceite (A7, I8, I10):** desfecho por nível (naive, estatístico
+- **Critério de aceite (A7, I8, I10):** `student_t_quantile`: ida e volta
+  com `student_t_cdf` (|cdf(q) − p| ≤ 1e-12) em p ∈ {0,025; 0,5; 0,975} e
+  df ∈ {1; 10; 1 511}; valores publicados t_{0,975}: df = 1 →
+  12,706204736174705, df = 10 → 2,2281388519649385, df = 30 →
+  2,0422724563012373 (tolerância 1e-9); p fora de (0, 1), df < 1 erguem.
+  Perfil: desfecho por nível (naive, estatístico
   forte, ML) com um caso em que o candidato supera os naive e o ML mas não um
   estatístico forte; IC do efeito igual a d̄ ± t_{T−1,0,975}·|d̄/estatística|
   com o `student_t_quantile` (tolerância 1e-12) e `None` para estatística 0;
@@ -1242,7 +1333,9 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   retangular e moving-block × estacionário listadas; spread por seed; menor
   P̄_G; os valores copiados são idênticos às células do gold (sem cálculo);
   `declared_not_built` lista exatamente os perfis fora da 6.5.
-- **Tokens:** `test_dm_vs_r_oracle.py`: `dm_effect_interval_formula`,
+- **Tokens:** `test_student_t.py`: `t_quantile_round_trip`,
+  `t_quantile_published_values`, `t_quantile_invalid_rejected`;
+  `test_dm_vs_r_oracle.py`: `dm_effect_interval_formula`,
   `dm_effect_undefined_zero_statistic`; `test_scorecard_profile.py`:
   `profile_tier_outcomes`, `profile_dm_effect_ci`, `profile_fallback_applied`,
   `profile_comparators_threshold`, `profile_band_95_fractions`,
@@ -1253,19 +1346,19 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 - **Verificação (T1) — Container:**
   ```bash
   U=tests/unit/features/evaluation
-  uv run pytest $U/test_scorecard_profile.py $U/test_dm_vs_r_oracle.py -v
+  uv run pytest $U/test_scorecard_profile.py $U/test_dm_vs_r_oracle.py $U/test_student_t.py -v
   d=$(mktemp)
   base=$(git merge-base origin/develop HEAD)
-  git diff "$base" -- $U/test_dm_vs_r_oracle.py > "$d"
+  git diff "$base" -- $U/test_dm_vs_r_oracle.py $U/test_student_t.py > "$d"
   test -s "$d"
-  if grep -nE '^-([^-]|$)' "$d"; then echo "FAIL: teste existente do DM alterado"; exit 1; fi
+  if grep -nE '^-([^-]|$)' "$d"; then echo "FAIL: teste existente do DM ou da t alterado"; exit 1; fi
   make check-task SLICE=evaluation
   ```
-- **Commit sugerido:** `feat(evaluation): perfil do scorecard com IC do efeito do DM e leitura por nível [6.5/task-09]`
+- **Commit sugerido:** `feat(evaluation): perfil do scorecard com IC do efeito do DM e quantil da t [6.5/task-09]`
 
 ---
 
-### Task 10 — Use case `BuildConfirmatoryScorecard` + erros + `ScorecardResult`
+### Task 10 — Use case `BuildConfirmatoryScorecard` + `ScorecardResult`
 
 - **Arquivos a criar:**
   - `src/financial_forecasting/features/evaluation/application/use_cases/build_confirmatory_scorecard.py`
@@ -1275,11 +1368,9 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
     — `ReadinessReason(StrEnum)` e `ScorecardResult`.
 - **O que fazer (concept §4, I5, I6, I12, I13, C2–C5, C7, C10, C11; ADRs
   6.5.0002 item 4, 6.5.0003 item 3, 6.5.0007 item 8):**
-  - Erros (`ApplicationError`): `PreregistrationHashMismatchError`,
-    `PreregistrationChainError`, `PreregistrationNotAnchoredError`,
-    `GoldNotReadyError` (com `failed_checks: tuple[FailedCheck, ...]` lidos de
-    `gold_quality_checks`); reexporta `PreregistrationMismatchError` (decisão
-    do §1).
+  - Os cinco erros já existem em `dtos/confirmatory_scorecard.py` (Task 08);
+    o use case os importa de lá (sem reexportação). `GoldNotReadyError` recebe
+    os `FailedCheck` das linhas `ERROR` + `FAIL` de `gold_quality_checks`.
   - `BuildConfirmatoryScorecard(*, source: PreregistrationSource, reader:
     GoldGenerationReader, hasher: Hasher)`; `__call__(command) ->
     ScorecardResult`, na ordem I5: (1) lê as revisões 0..r do `name` e monta
@@ -1292,11 +1383,14 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
     `reader.read_generation(partition=derived.partition)`; (5) `BLOCKED` →
     `GoldNotReadyError`; (6) `evidence_from_generation`; (7)
     `ConfirmatoryScorecard.decide`; (8) `build_profile`; (9) prontidão — razões
-    `REQUIRED_CHECK_FAILED`, `REQUIRED_CHECK_SKIPPED` (linhas de
-    `DEGENERACY_CHECK`, `ALIGNMENT_CHECK`, `STATISTICAL_PRECONDITIONS`),
-    `GOLD_BEFORE_ANCHOR` (`manifest.started_at < anchor.anchored_at` da revisão
-    julgada), `AMENDED_AFTER_UNBLINDING` (alguma revisão `unblinded`);
-    `academic_decision_ready = not reasons`.
+    `REQUIRED_CHECK_SKIPPED` (linha `SKIPPED` de `DEGENERACY_CHECK`,
+    `ALIGNMENT_CHECK` ou `STATISTICAL_PRECONDITIONS`), `GOLD_BEFORE_ANCHOR`
+    (`manifest.started_at < anchor.anchored_at` da revisão julgada; igualdade é
+    pronta — ADR 6.5.0007 item 8 "≥"), `AMENDED_AFTER_UNBLINDING` (alguma
+    revisão `unblinded`); `academic_decision_ready = not reasons`. Não há razão
+    "check exigido falhou": `ERROR` + `FAIL` só existe em gold `BLOCKED` (passo
+    5) ou corrompido (mapeador, Task 08) — decisão do §1 (Checkpoint B r1,
+    T-F4).
   - `ScorecardResult` (frozen): `preregistration_ref`, `revision_chain`
     (referências r0..r), `anchor`, `blinding_statement`, `manifest_read`
     (`GoldManifest`), `verdict`, `profile`, `academic_decision_ready`,
@@ -1311,7 +1405,7 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   checks; revisão inexistente propaga `PreregistrationNotFoundError`; exceção
   genérica do leitor propaga; prontidão falsa com a razão exata para gold
   anterior à âncora, emenda `unblinded` e check exigido `SKIPPED`; verdadeira
-  com H1 reprovado em todos os horizontes (refutação pronta);
+  com `started_at == anchored_at`; verdadeira com H1 reprovado em todos os horizontes (refutação pronta);
   `blinding_statement` ecoado e sem efeito na prontidão; `revision_chain` de
   r1 lista r0 e r1; o veredito é idêntico com `build_profile` trocado por um
   que devolve outro perfil; `json.dumps(result.as_mapping())` funciona.
@@ -1322,7 +1416,8 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   `blocked_gold_not_ready`, `not_found_propagates`,
   `programming_error_propagates`, `ready_false_gold_before_anchor`,
   `ready_false_unblinded_amendment`, `ready_false_required_check_skipped`,
-  `ready_true_refutation`, `blinding_echoed_not_conjoined`,
+  `ready_true_refutation`, `ready_true_started_at_anchor`,
+  `blinding_echoed_not_conjoined`,
   `chain_listed_in_result`, `verdict_unchanged_by_profile`,
   `result_mapping_json_safe`.
 - **Verificação (T1) — Container:**
@@ -1353,26 +1448,40 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
     "preregistration")` e o `hasher` já wirado.
   - `test_build_confirmatory_scorecard.py` (`pytestmark =
     pytest.mark.integration`), fixture de módulo com o cenário inteiro num
-    único `tmp_path` (`Settings(data_root=<tmp>/data, repo_root=<tmp>)`): plano
-    de teste (o `PAYLOAD_TOML` com horizontes (1, 2), candidato com seeds
+    único `tmp_path` (`Settings(data_root=<tmp>/data, repo_root=<tmp>)`, sempre
+    com os dois argumentos; o teste afirma `cfg.data_root.is_relative_to(
+    tmp_path)` e `cfg.repo_root == tmp_path` antes de qualquer escrita): plano
+    de teste (`valid_payload()` com horizontes (1, 2), candidato com seeds
     `[1, 2]`, os seis comparadores, `cohort_id = "e2e-cohort"`, fingerprint do
-    dataset sintético) gravado em `<tmp>/config/preregistration/` com âncora
+    dataset sintético, montado por `with_leaf`) gravado por `to_toml` em
+    `<tmp>/config/preregistration/`, com âncora (`to_toml` também) de
     `anchored_at = 2020-01-01T00:00:00Z` e o `preregistration_ref` calculado com
     o `CanonicalJsonHasher`; silver sintético (≈ 120 sessões de teste, 2 folds)
     gravado pelo `ParquetAnalyticsRepository` real e dataset com as colunas de
     `modeling_columns()` (padrão da 6.4 Task 15); **hits determinísticos por
     construção**: o candidato emite os quantis de um gerador conhecido e o
-    realizado é posto abaixo do q0,10 em exatamente 1 de cada 10 pontos e acima
-    do q0,90 em outro 1 de cada 10 (as duas caudas contêm a nominal em toda
-    amostra e sub-série DGT); comparadores com viés grande (perda muito maior)
+    realizado do ponto i fica abaixo do q0,10 quando `i % 20 ∈ {0, 11}` e acima
+    do q0,90 quando `i % 20 ∈ {5, 16}` — 10 % por cauda, e cada paridade (as
+    duas sub-séries DGT de h = 2) recebe uma violação de cada cauda a cada 20
+    pontos, então a nominal fica dentro das bandas em toda amostra e sub-série
+    (Checkpoint B r1, T-F10); comparadores com viés grande (perda muito maior)
     → DM rejeita contra todos. Sequência: `deps.refresh_gold(
     refresh_command_from(prereg, ref))` → `COMPLETED`;
     `deps.build_confirmatory_scorecard(command)` → veredito esperado
     `BEATS_NAIVE_AND_STRONG` com `primary_winner = "tft_quantile"` nos dois
-    horizontes, `academic_decision_ready is True`, razões vazias. Planos
-    alternativos (arquivos próprios, ancorados) com o **mesmo** cohort: `mcs.seed`
-    diferente → `PreregistrationMismatchError` (`parameters`); seed `3` a mais
-    no candidato → `PreregistrationMismatchError` (seeds).
+    horizontes, `academic_decision_ready is True`, razões vazias. Casos de
+    recusa (Checkpoint B r1, T-F1/A1 — o `preregistration_ref` mascara os
+    demais campos, decisão do §1): (a) **plano alterado** — arquivo próprio,
+    ancorado, com `mcs.seed` diferente e o **mesmo** cohort, julgando o gold do
+    passo acima → `PreregistrationMismatchError` com `field ==
+    "preregistration_ref"`; (b) **seed a mais no silver** (opção (b) da sessão
+    mestra) — plano B (arquivo próprio, ancorado, `cohort_id =
+    "e2e-cohort-extra-seed"`, candidato com seeds `[1, 2]`) e silver desse
+    cohort escrito com o candidato nas seeds `{1, 2, 3}`; roda-se antes o
+    `deps.refresh_gold(refresh_command_from(plano_B, ref_B))` → `COMPLETED`
+    (o refresh não filtra seeds), e o scorecard do plano B →
+    `PreregistrationMismatchError` com `field == "seeds"` (manifesto igual ao
+    comando derivado; conjunto de seeds do gold ≠ do plano).
 - **Critério de aceite (A10):** os testes acima verdes, zero `SKIPPED`;
   `test_composition_root.py`: o use case wirado com `TomlPreregistrationSource`
   na raiz `repo_root/config/preregistration` e o **mesmo** objeto
@@ -1380,7 +1489,8 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 - **Tokens:** `test_build_confirmatory_scorecard.py`:
   `e2e_scorecard_expected_verdict`, `e2e_ready_after_anchor`,
   `e2e_parameter_changed_mismatch`, `e2e_extra_seed_mismatch`,
-  `e2e_result_mapping_serializable`; `tests/unit/shared/test_composition_root.py`:
+  `e2e_result_mapping_serializable`, `e2e_paths_under_tmp`;
+  `tests/unit/shared/test_composition_root.py`:
   `wires_build_confirmatory_scorecard`, `scorecard_shares_gold_store`.
 - **Verificação (T1 = `check-block`, toca o composition root) — Container:**
   ```bash
@@ -1394,7 +1504,7 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   ```bash
   E=tests/integration/features/evaluation/test_build_confirmatory_scorecard.py
   test -s "$E"
-  if grep -nE "data/cohorts|aapl_confirmatory-r0" "$E"; then echo "FAIL: e2e toca o cohort real"; exit 1; fi
+  if grep -nE "cohorts|aapl_confirmatory-r0|Settings\(\)" "$E"; then echo "FAIL: e2e toca o cohort real ou usa Settings() sem raiz"; exit 1; fi
   ```
 - **Commit sugerido:** `feat(evaluation): BuildConfirmatoryScorecard no composition root e e2e sintético [6.5/task-11]`
 
@@ -1477,7 +1587,34 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   ```bash
   make docs-check
   ```
-- **Commit sugerido:** `docs(roadmap): Stage 6.5 com pré-registro e scorecard; 8.1 depende da #129 [6.5/task-12]`
+- **2º commit — nota de emenda no ADR 6.5.0009 (Checkpoint B r1, T-F11):**
+  o ADR (`accepted`) diz, na linha do `dm_alpha`, "the H1 gate's ≤ 5 % false
+  failure"; a taxa exata de reprovação falsa do gate (Wilson 97,5 % por cauda,
+  calibrado, taxas 0,10/0,10) é **0,0506 em n = 1 512** e oscila entre ≈ 0,044
+  e 0,053 para n em 1 400–1 600 (cálculo exato pelo algoritmo do §1; Bonferroni
+  sobre bandas de Wilson não é exato). O **corpo** do ADR não muda: uma linha
+  datada logo abaixo do título (`> **Nota (2026-MM-DD, Stage 6.5 Task 12):**
+  "≤ 5 % false failure" é o alvo nominal do Bonferroni; a taxa exata é
+  ≈ 5 % (0,0506 em n = 1 512) — ver technical 6.5 §7 `[finding]` T-F11. O valor
+  `dm_alpha` = 0,05 não muda.`) e o `updated_at` do frontmatter. Nenhum texto
+  da Stage (espelho, technical, comentário) afirma "≤ 5 %".
+  **Host:**
+  ```bash
+  A=docs/adr/6_5_0009-preregistered-conventional-values.md
+  test -s "$A"
+  grep -q "^status: accepted" "$A"
+  grep -qF "0,0506" "$A"
+  d=$(mktemp)
+  base=$(git merge-base origin/develop HEAD)
+  git diff "$base" -- "$A" > "$d"
+  test -s "$d"
+  m=$(mktemp)
+  grep -E '^-([^-]|$)' "$d" > "$m" || true
+  if grep -v "^-updated_at:" "$m"; then echo "FAIL: corpo do ADR aceito alterado"; exit 1; fi
+  python scripts/check_adr_bounded_context.py
+  ```
+- **Commits sugeridos:** `docs(roadmap): Stage 6.5 com pré-registro e scorecard; 8.1 depende da #129 [6.5/task-12]`;
+  `docs(evaluation): nota de emenda datada no ADR 6.5.0009 sobre a falsa reprovação [6.5/task-12]`.
 
 > **Checkpoint C (T2) bloco 4 após esta Task** (antes da espera humana):
 > `make check-block`.
@@ -1492,7 +1629,9 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 > foi computada sobre o r0. Enquanto a resposta não chega, a Task não começa;
 > nada mais na Stage depende dela salvo o gate de saída. **Nenhum refresh é
 > rodado nesta Task** (nem sobre cópia): ela só escreve arquivos, calcula o
-> hash do plano e publica tag + comentário.
+> hash do plano e publica tag + comentário. **A publicação (tag no remoto e
+> comentário na #127) só acontece com a decisão humana aplicada e um go-ahead
+> explícito da sessão mestra** (item 5).
 
 - **Arquivos a criar (1º commit — congelamento):**
   - `config/preregistration/aapl_confirmatory-r0.toml`
@@ -1529,37 +1668,55 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
      conjunto de modelos = {`train_tft.MODEL_VERSION`,
      `train_gbm_quantile.MODEL_VERSION`} ∪ {`b.model_version` das baselines};
      os valores dos ADRs 6.5.0009/0010 (literais no teste); as taxas de
-     locação recalculadas (tolerância 1e-12); todo `config/preregistration/*-r*.toml`
-     tem o hash completo citado no espelho; nenhum texto do TOML e do espelho
-     casa a regex de afirmação proibida (`(nenhuma|no)\s+(métrica|metric)|
-     jamais|never` fora de uma linha que cite `6.5`).
-  4. **Commit 1** (congelamento). Sem rebase entre este commit e o push da tag.
-  5. **Âncora (Host):** calcular a referência no container (bloco abaixo);
-     `git tag preregistration/<ref> <commit-1>`; `git push origin
-     preregistration/<ref>` (só a tag); comentário na #127 com o
-     `preregistration_ref`, o hash completo, a tag, o commit, o `cohort_id` e o
-     hash do cohort — sem afirmação sobre o passado do r0; ler o `created_at` do
-     comentário pela API.
-  6. **Commit 2** (registro): `anchor.toml` (`tag`, `commit`, `comment_url`,
-     `anchored_at` = `created_at`, offset date-time TOML); seção "Âncora r0" no
-     espelho; caso `anchor_record_matches_ref` no teste (tag =
-     `preregistration/<ref>`, `anchored_at` > `2026-09-28T20:27:09Z`, a âncora
-     do cohort na #102); entrada única em §7 com o título literal `###
-     <AAAA-MM-DD> — [decision] Task 13 — âncora do pré-registro r0 — <autor>`
-     com os carimbos do servidor da #102 (`2026-09-28T20:27:09Z`) e da #127, na
-     ordem, e a frase "a Stage 6.5 não calculou nenhuma métrica sobre o cohort".
+     locação recalculadas (tolerância 1e-12); todo arquivo de
+     `config/preregistration/` cujo nome casa `^(?P<name>.+)-r(?P<rev>\d+)\.toml$`
+     (o `.anchor.toml` **não** casa) tem o hash completo citado no espelho;
+     nenhum texto do TOML e do espelho casa a regex de afirmação proibida
+     `CLAIM_PATTERN` = `(nenhuma|nunca|jamais|no|never)[^.]{0,80}(métrica|metric)[^.]{0,80}(comput|calcul)[^.]{0,80}(r0|cohort|coorte)`
+     (sem distinção de caixa; linha que cita `6.5` é permitida — é a afirmação
+     da própria Stage). A regex é estreita de propósito: prosa como "o perfil
+     jamais troca o veredito" não casa (Checkpoint B r1, A16).
+  4. **Calcular a referência** (bloco Container "ref" abaixo) → escrever no
+     espelho o `preregistration_ref` e o hash completo → rodar o bloco de teste
+     (Container "1º commit"). **Commit 1** (congelamento). Sem rebase entre este
+     commit e o push da tag.
+  5. **Ações externas — só depois de (a) a decisão humana do
+     `blinding_statement` estar aplicada no arquivo commitado e (b) um go-ahead
+     explícito da sessão mestra para publicar** (tag no remoto e comentário na
+     #127 são públicos e não se desfazem; Checkpoint B r1, A4). Sem `--force`
+     em nada. Bloco Host "âncora" abaixo: confere que a tag não existe (local e
+     remota), cria e empurra **só** a tag, grava o corpo do comentário num
+     arquivo (ref, hash completo, tag, commit, `cohort_id` e hash do cohort —
+     sem afirmação sobre o passado do r0; a mesma `CLAIM_PATTERN` roda sobre o
+     corpo antes de postar), posta com `gh issue comment 127 --body-file`, e lê
+     de volta pela API **exatamente um** comentário com `preregistration/<ref>`,
+     com `created_at` e `html_url`, `created_at` > `2026-09-28T20:27:09Z`
+     (âncora do cohort na #102).
+  6. **Commit 2** (registro): `anchor.toml` gravado com os valores lidos da API
+     (`tag`, `commit`, `comment_url` = `html_url`, `anchored_at` =
+     `created_at`, offset date-time TOML); seção "Âncora r0" no espelho; caso
+     `anchor_record_matches_ref` no teste (tag = `preregistration/<ref>`,
+     `anchored_at` > `2026-09-28T20:27:09Z`); entrada única em §7 com o título
+     literal `### <AAAA-MM-DD> — [decision] Task 13 — âncora do pré-registro r0
+     — <autor>`, com os carimbos do servidor da #102 (`2026-09-28T20:27:09Z`) e
+     da #127 (o `anchored_at`), nessa ordem, a entrada humana do
+     `blinding_statement`, o registro do go-ahead e a frase "a Stage 6.5 não
+     calculou nenhuma métrica sobre o cohort".
+
+  **Espelho sem "≤ 5 %":** o poder declarado usa os números exatos; a taxa de
+  reprovação falsa do gate é ≈ 5 % (0,0506 em n = 1 512 pela geometria), nunca
+  "≤ 5 %" (Checkpoint B r1, T-F11; nota de emenda no ADR 6.5.0009, Task 12).
 - **Critério de aceite (A4 parcial, A11, I1, I15):** os tokens abaixo verdes;
-  tag visível no remoto; `created_at` do comentário posterior ao da #102;
-  `git show preregistration/<ref>:config/preregistration/aapl_confirmatory-r0.toml`
+  tag visível no remoto; exatamente um comentário da #127 com a tag, posterior
+  ao da #102; `git show preregistration/<ref>:config/preregistration/aapl_confirmatory-r0.toml`
   byte-igual ao arquivo em HEAD (também depois de rebases); nenhum `refresh`
   rodado (nenhum comando desta Task cita `data/`).
 - **Tokens:** `test_preregistration_consistency.py`: `r0_matches_cohort`,
   `r0_values_match_adrs`, `r0_location_rates_normal`,
   `every_revision_hash_quoted`, `no_claim_about_r0_past` (1º commit);
   `anchor_record_matches_ref` (2º commit).
-- **Verificação do 1º commit (T1) — Container:**
+- **Container "ref" (antes de escrever o espelho):**
   ```bash
-  uv run pytest tests/integration/features/evaluation/test_preregistration_consistency.py -v -rs
   uv run python - <<'PY'
   from pathlib import Path
   from financial_forecasting.features.evaluation.adapters.out.toml.toml_preregistration_source import TomlPreregistrationSource
@@ -1572,6 +1729,10 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   print("preregistration_ref", prereg.reference(digest))
   print("hash", digest.value)
   PY
+  ```
+- **Container "1º commit" (T1, depois do espelho):**
+  ```bash
+  uv run pytest tests/integration/features/evaluation/test_preregistration_consistency.py -v -rs
   make check-task SLICE=evaluation
   make docs-check
   ```
@@ -1579,39 +1740,62 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
   ```bash
   P=config/preregistration/aapl_confirmatory-r0.toml
   M=docs/preregistration/aapl_confirmatory.md
+  CLAIM='(nenhuma|nunca|jamais|no|never)[^.]{0,80}(métrica|metric)[^.]{0,80}(comput|calcul)[^.]{0,80}(r0|cohort|coorte)'
   test -s "$P"
   test -s "$M"
   c=$(mktemp)
-  grep -niE "(nenhuma|no)[[:space:]]+(métrica|metric)|jamais|never" "$P" "$M" > "$c" || true
+  grep -niE "$CLAIM" "$P" "$M" > "$c" || true
   if test -s "$c" && grep -v "6\.5" "$c"; then echo "FAIL: afirmação sobre o passado do r0"; exit 1; fi
+  if grep -nF "≤ 5 %" "$M"; then echo "FAIL: espelho afirma <= 5 % de falsa reprovação"; exit 1; fi
   n=$(mktemp)
   git show --name-only --format= HEAD > "$n"
   test -s "$n"
   if grep -n "^data/" "$n"; then echo "FAIL: dado no commit de congelamento"; exit 1; fi
   ```
-  **Host (âncora, depois do 1º commit; `<ref>`, `<hash>` e `<n>` do bloco
-  acima e do comentário):**
+  **Host "âncora" (só com a decisão humana aplicada E o go-ahead da sessão
+  mestra; `REF`/`HASH` do bloco "ref"):**
   ```bash
-  REF="<ref>"; test -n "$REF"
-  git tag "preregistration/$REF" HEAD
-  git push origin "preregistration/$REF"
+  REF="<ref>"; HASH="<hash>"
+  COHORT_ID="aapl_confirmatory-r0-665f45d9169a"
+  COHORT_HASH="665f45d9169aba576d194e73d45c0508f51f231f573c4de283c96fc5847365b1"
+  test -n "$REF"; test -n "$HASH"
+  TAG="preregistration/$REF"
+  CLAIM='(nenhuma|nunca|jamais|no|never)[^.]{0,80}(métrica|metric)[^.]{0,80}(comput|calcul)[^.]{0,80}(r0|cohort|coorte)'
+  if git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then echo "FAIL: tag já existe localmente"; exit 1; fi
   r=$(mktemp)
-  git ls-remote --tags origin "preregistration/*" > "$r"
+  git ls-remote --tags origin "$TAG" > "$r"
+  if test -s "$r"; then echo "FAIL: tag já existe no remoto"; exit 1; fi
+  COMMIT=$(git rev-parse HEAD); test -n "$COMMIT"
+  git tag "$TAG" "$COMMIT"
+  git push origin "refs/tags/$TAG"
+  git ls-remote --tags origin "$TAG" > "$r"
   test -s "$r"
-  grep -qF "preregistration/$REF" "$r"
+  grep -qF "$COMMIT" "$r"
+  body=$(mktemp)
+  printf '%s\n' "Âncora do pré-registro (ADR 6.5.0003)" "" "- preregistration_ref: $REF" "- hash: $HASH" "- tag: $TAG" "- commit: $COMMIT" "- cohort_id: $COHORT_ID" "- cohort_hash: $COHORT_HASH" > "$body"
+  test -s "$body"
+  if grep -iE "$CLAIM" "$body"; then echo "FAIL: corpo do comentário com afirmação proibida"; exit 1; fi
+  gh issue comment 127 --body-file "$body"
   a=$(mktemp)
-  gh api --paginate repos/{owner}/{repo}/issues/127/comments --jq '.[] | select(.body | contains("preregistration/")) | .created_at' > "$a"
+  gh api --paginate repos/{owner}/{repo}/issues/127/comments --jq '.[] | select(.body | contains("'"$TAG"'")) | "\(.created_at) \(.html_url)"' > "$a"
   test -s "$a"
-  cat "$a"
+  test "$(wc -l < "$a")" -eq 1
+  TS=$(cut -d' ' -f1 "$a"); URL=$(cut -d' ' -f2 "$a")
+  test -n "$URL"
+  [[ "$TS" > "2026-09-28T20:27:09Z" ]] || { echo "FAIL: âncora do pré-registro não é posterior à do cohort"; exit 1; }
+  echo "anchored_at=$TS comment_url=$URL commit=$COMMIT"
   ```
   **Host (2º commit):**
   ```bash
-  REF="<ref>"; test -n "$REF"
+  A=config/preregistration/aapl_confirmatory-r0.anchor.toml
   T=docs/stages/6.5-preregistration-and-scorecard/technical.md
-  test -s config/preregistration/aapl_confirmatory-r0.anchor.toml
-  grep -qF "preregistration/$REF" config/preregistration/aapl_confirmatory-r0.anchor.toml
+  test -s "$A"
+  TAG=$(sed -nE 's/^tag = "(.*)"$/\1/p' "$A"); test -n "$TAG"
+  r=$(mktemp)
+  git ls-remote --tags origin "$TAG" > "$r"
+  test -s "$r"
   d=$(mktemp)
-  git show "preregistration/$REF:config/preregistration/aapl_confirmatory-r0.toml" > "$d"
+  git show "$TAG:config/preregistration/aapl_confirmatory-r0.toml" > "$d"
   test -s "$d"
   cmp "$d" config/preregistration/aapl_confirmatory-r0.toml
   test -s "$T"
@@ -1640,28 +1824,23 @@ Notação dos checks: `arquivo::token` — ver "Tokens de nome de teste" acima;
 ```bash
 make check                 # ruff + mypy strict + check_layout + lint-imports + fake-parity + port-coverage + docs-check + testes (cov >= 90%)
 
-# A14 — cobertura por arquivo novo/modificado (JSON gerado e lido no mesmo shell):
-# falha se arquivo < 90% ou arquivo ausente
+# A14 — cobertura por arquivo de src/ novo/modificado nesta Stage (lista DERIVADA do git, não
+# escrita à mão — inclui composition_root.py; Checkpoint B r1, A6). Lê o .coverage deixado pelo
+# `make check` acima no MESMO docker run (sem segunda rodada da suíte); falha se < 90% ou ausente.
+base=$(git merge-base origin/develop HEAD)
+src=$(mktemp)
+git diff --name-only --diff-filter=AM "$base" -- 'src/*.py' > "$src"
+test -s "$src"
+test -s .coverage
 cov=$(mktemp --suffix=.json)
-uv run pytest --cov=financial_forecasting --cov-report=json:"$cov" -q
+uv run coverage json -o "$cov"
 test -s "$cov"
-uv run python - "$cov" <<'PY'
+uv run python - "$cov" "$src" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))["files"]
 norm = {f.replace(chr(92), "/"): v["summary"]["percent_covered"] for f, v in d.items()}
-need = ["shared/domain/value_objects/preregistration_hash.py",
-        "value_objects/preregistration.py", "value_objects/scorecard_evidence.py",
-        "services/h1_gate.py", "services/h1_gate_power.py", "services/confirmatory_scorecard.py",
-        "services/student_t.py", "services/diebold_mariano.py", "services/model_confidence_set.py",
-        "services/christoffersen_test.py", "dtos/gold_schema.py", "dtos/refresh_gold.py",
-        "dtos/confirmatory_scorecard.py", "ports/out/preregistration_source.py",
-        "ports/out/gold_generation_reader.py", "use_cases/scorecard_evidence.py",
-        "use_cases/scorecard_profile.py", "use_cases/build_confirmatory_scorecard.py",
-        "toml/toml_preregistration_source.py", "duckdb/parquet_gold_store.py",
-        "gold_builders/quality_checks.py", "gold_builders/metrics_by_run.py",
-        "gold_builders/calibration_table.py", "gold_builders/dm_results.py",
-        "gold_builders/mcs_results.py"]
-scope = {n: [p for f, p in norm.items() if f.endswith("/" + n)] for n in need}
+need = [line.strip() for line in open(sys.argv[2]) if line.strip()]
+scope = {n: [p for f, p in norm.items() if n.endswith(f) or f.endswith(n)] for n in need}
 miss = [n for n, ps in scope.items() if not ps]
 bad = {n: ps for n, ps in scope.items() if ps and min(ps) < 90}
 print(len(need), "arquivos no escopo; abaixo de 90%:", bad, "; ausentes:", miss)
@@ -1701,26 +1880,26 @@ while read -r file toks; do
   for t in $toks; do grep -qi -- "$t" <<<"$ids" || { echo "FAIL: sem teste '$t' em $file"; exit 1; }; done
 done <<LIST
 tests/unit/shared/domain/value_objects/test_preregistration_hash.py prereg_hash_float_encoded_exactly prereg_hash_nested_floats_encoded prereg_hash_int_not_coerced prereg_hash_bool_untouched prereg_hash_key_order_irrelevant prereg_hash_payload_not_mutated
-$U/test_preregistration_value_object.py prereg_unknown_key_rejected prereg_missing_key_rejected prereg_rule_identifier_unimplemented prereg_rule_catalog_complete prereg_owner_validator_messages prereg_tiers_overlap_rejected prereg_candidate_in_tier_rejected prereg_model_without_seed_rejected prereg_model_without_deficit_rejected prereg_repeated_seeds_rejected prereg_negative_deficit_rejected prereg_power_scenario_invalid prereg_profile_unknown_rejected prereg_amendment_in_revision_zero prereg_amendment_required_after_zero prereg_amendment_complete_accepted prereg_blinding_absent_accepted prereg_blinding_empty_rejected prereg_int_coerced_to_float prereg_float_rejected_where_int prereg_bool_rejected_as_number prereg_payload_round_trip
-$U/test_preregistration_immutable_hash.py every_leaf_changes_hash tolerance_exponents_differ zero_int_float_same_hash hasher_never_sees_float reference_uses_hash12
+$U/test_preregistration_value_object.py prereg_unknown_key_rejected prereg_missing_key_rejected prereg_rule_identifier_unimplemented prereg_rule_catalog_complete prereg_owner_validator_messages prereg_tiers_overlap_rejected prereg_candidate_in_tier_rejected prereg_model_without_seed_rejected prereg_model_without_deficit_rejected prereg_repeated_seeds_rejected prereg_negative_deficit_rejected prereg_power_scenario_invalid prereg_profile_unknown_rejected prereg_amendment_in_revision_zero prereg_amendment_required_after_zero prereg_amendment_complete_accepted prereg_blinding_absent_accepted prereg_blinding_empty_rejected prereg_int_coerced_to_float prereg_float_rejected_where_int prereg_bool_rejected_as_number prereg_payload_round_trip payload_toml_writer_round_trip
+$U/test_preregistration_immutable_hash.py every_leaf_changes_hash tolerance_exponents_differ zero_int_float_same_hash hasher_never_sees_float reference_uses_hash12 leaf_paths_cover_payload
 $U/test_mcs_vs_arch.py mcs_statistic_public_constant block_rule_single_owner block_rule_ceiling_values
 $U/test_christoffersen_monte_carlo.py draws_seed_validator_public draws_seed_single_owner
 $U/test_h1_gate_power.py power_doc_table_n500 power_equals_brute_double_sum power_acceptance_from_wilson_owner power_invalid_n_rejected
 $U/test_student_t.py t_quantile_round_trip t_quantile_published_values t_quantile_invalid_rejected
 $U/test_scorecard_evidence.py evidence_seed_counts_invalid evidence_tail_ratio_of_means evidence_dgt_offsets_complete evidence_single_step_without_dgt evidence_horizon_incoherent evidence_dm_pair_repeated evidence_seed_spread
-$U/test_h1_gate.py gate_seed_mean_not_st gate_degeneracy_over_threshold_fails gate_not_applicable_fails gate_calls_count_kernels gate_lr_uc_sensitivity gate_dgt_bonferroni_level gate_single_step_no_dgt gate_common_sample_sensitivity gate_divergence_both_directions gate_result_carries_n_t_warning gate_power_rounded_n
-$U/test_scorecard_mechanical_rule.py outcome_not_applicable outcome_no_skill_over_naive outcome_beats_naive_only outcome_beats_naive_ties_strong outcome_beats_naive_and_strong winner_requires_gate_and_both h1_fail_all_rejected_no_winner outside_mcs_beats_strong_wins lowest_pinball_only_information comparator_miscalibrated_stays_in_family horizons_independent study_success_one_horizon verdict_without_profile_fields tier_reading_per_tier decide_horizon_set_mismatch_raises services_check_rule_identifiers
+$U/test_h1_gate.py gate_seed_mean_not_st gate_degeneracy_over_threshold_fails gate_not_applicable_fails gate_calls_count_kernels gate_lr_uc_sensitivity gate_dgt_bonferroni_level gate_single_step_no_dgt gate_common_sample_sensitivity gate_divergence_both_directions gate_result_carries_n_t_warning gate_power_rounded_n gate_degeneracy_at_threshold_passes
+$U/test_scorecard_mechanical_rule.py outcome_not_applicable outcome_no_skill_over_naive outcome_beats_naive_only outcome_beats_naive_ties_strong outcome_beats_naive_and_strong winner_requires_gate_and_both h1_fail_all_rejected_no_winner outside_mcs_beats_strong_wins lowest_pinball_only_information comparator_miscalibrated_stays_in_family horizons_independent study_success_one_horizon verdict_without_profile_fields tier_reading_per_tier decide_horizon_set_mismatch_raises services_check_rule_identifiers ml_tier_counts_as_strong
 $U/gold/test_refresh_gold_dtos.py schema_tables_complete parameters_from_mapping_round_trip manifest_from_mapping_round_trip manifest_prereg_ref_divergent_rejected manifest_unknown_key_rejected from_stored_empty_table from_stored_missing_table_corrupt from_stored_count_mismatch_corrupt from_stored_incoherent_corrupt from_stored_blocked_returned from_stored_uses_schema_keys
 $K/test_gold_builder_contract.py builders_use_schema_keys schema_columns_written
 $K/test_preregistration_source_contract.py source_reads_payload source_missing_revision_raises source_anchor_absent_none source_anchor_present_parsed source_anchor_naive_rejected real_anchor_extra_key_rejected real_malformed_toml_raises real_name_identifier_checked
 $K/test_gold_generation_reader_contract.py reader_round_trip_equal reader_zero_row_table reader_all_none_column reader_blocked_returned reader_missing_manifest_raises real_no_hive_inference real_missing_table_file_corrupt real_count_mismatch_corrupt real_reads_manifest_first real_single_assembly
 tests/architecture/test_port_coverage_gate.py scorecard_ports_resolve
 $U/test_refresh_command_from.py command_field_from_plan command_partition_from_cohort command_parameters_from_plan command_tuple_order scorecard_command_without_partition
-$U/test_scorecard_evidence_mapper.py mismatch_manifest_field mismatch_model_extra_missing mismatch_seed_extra_missing mismatch_grid_levels mismatch_mcs_statistic mismatch_block_rule corrupt_seed_missing_tail corrupt_horizon_row_missing corrupt_estimator_row_missing corrupt_scheme_row_missing corrupt_common_points_divergent mismatch_before_corrupt evidence_built_per_horizon mapper_reads_schema_columns
+$U/test_scorecard_evidence_mapper.py mismatch_manifest_field mismatch_model_extra_missing mismatch_seed_extra_missing mismatch_grid_levels mismatch_mcs_statistic mismatch_block_rule corrupt_seed_missing_tail corrupt_horizon_row_missing corrupt_estimator_row_missing corrupt_scheme_row_missing corrupt_common_points_divergent mismatch_before_corrupt evidence_built_per_horizon mapper_reads_schema_columns mapper_gate_rows_band_level corrupt_block_estimate_missing corrupt_completed_with_failed_check
 $U/test_dm_vs_r_oracle.py dm_effect_interval_formula dm_effect_undefined_zero_statistic
 $U/test_scorecard_profile.py profile_tier_outcomes profile_dm_effect_ci profile_fallback_applied profile_comparators_threshold profile_band_95_fractions profile_common_sample_gate profile_without_gaps_rows profile_bartlett_divergence profile_moving_block_divergence profile_seed_spread profile_lowest_pinball profile_copies_gold_values profile_declared_not_built
-$U/test_build_confirmatory_scorecard_use_case.py hash_mismatch_before_reader chain_broken_before_reader unanchored_before_reader validation_order_chain_hash_anchor reader_reads_derived_partition command_has_no_partition blocked_gold_not_ready not_found_propagates programming_error_propagates ready_false_gold_before_anchor ready_false_unblinded_amendment ready_false_required_check_skipped ready_true_refutation blinding_echoed_not_conjoined chain_listed_in_result verdict_unchanged_by_profile result_mapping_json_safe
-$I/test_build_confirmatory_scorecard.py e2e_scorecard_expected_verdict e2e_ready_after_anchor e2e_parameter_changed_mismatch e2e_extra_seed_mismatch e2e_result_mapping_serializable
+$U/test_build_confirmatory_scorecard_use_case.py hash_mismatch_before_reader chain_broken_before_reader unanchored_before_reader validation_order_chain_hash_anchor reader_reads_derived_partition command_has_no_partition blocked_gold_not_ready not_found_propagates programming_error_propagates ready_false_gold_before_anchor ready_false_unblinded_amendment ready_false_required_check_skipped ready_true_refutation blinding_echoed_not_conjoined chain_listed_in_result verdict_unchanged_by_profile result_mapping_json_safe ready_true_started_at_anchor
+$I/test_build_confirmatory_scorecard.py e2e_scorecard_expected_verdict e2e_ready_after_anchor e2e_parameter_changed_mismatch e2e_extra_seed_mismatch e2e_result_mapping_serializable e2e_paths_under_tmp
 tests/unit/shared/test_composition_root.py wires_build_confirmatory_scorecard scorecard_shares_gold_store
 $I/test_preregistration_consistency.py r0_matches_cohort r0_values_match_adrs r0_location_rates_normal every_revision_hash_quoted no_claim_about_r0_past anchor_record_matches_ref
 LIST
@@ -1762,25 +1941,61 @@ grep -q "training_grid_reader.py" "$r"
 n=$(mktemp)
 grep -nE "DieboldMariano\b|HolmCorrection|ModelConfidenceSet\b|CoverageMetrics|HitSequences" "$EV"/application/use_cases/scorecard_evidence.py "$EV"/application/use_cases/scorecard_profile.py "$EV"/application/use_cases/build_confirmatory_scorecard.py > "$n" || true
 if test -s "$n"; then cat "$n"; echo "FAIL: recomputação na application do scorecard"; exit 1; fi
-# I15 — cegamento: nenhum arquivo novo/modificado de src/ ou tests/ cita o dado do cohort
+# I15 — cegamento: nenhuma linha ACRESCENTADA por esta Stage em src/ ou tests/ cita o dado do
+# cohort, usa Settings() sem raiz (cairia no data_root padrão) ou cita "cohorts" — exceto
+# config/cohorts no teste de consistência (versionado) — Checkpoint B r1, A7. Só linhas novas:
+# arquivos existentes tocados (ex. test_composition_root.py) já citam config/cohorts da 5.5.
 base=$(git merge-base origin/develop HEAD)
 c=$(mktemp)
 git diff --name-only "$base" -- src/ tests/ > "$c"
 test -s "$c"
 b=$(mktemp)
-while read -r path; do if test -f "$path" && grep -qE "data/cohorts" "$path"; then echo "$path" >> "$b"; fi; done < "$c"
-if test -s "$b"; then cat "$b"; echo "FAIL: arquivo da 6.5 cita data/cohorts"; exit 1; fi
-# A11 — âncora registrada uma vez em §7, com os dois carimbos
+while read -r path; do
+  test -f "$path" || continue
+  added=$(mktemp)
+  git diff -U0 "$base" -- "$path" > "$added"
+  test -s "$added"
+  plus=$(mktemp)
+  grep -E '^\+[^+]' "$added" > "$plus" || true
+  if grep -qE "data/cohorts|Settings\(\)" "$plus"; then echo "$path" >> "$b"; fi
+  if [[ "$path" == *test_preregistration_consistency.py ]]; then
+    k=$(mktemp)
+    grep "cohorts" "$plus" > "$k" || true
+    if grep -qv "config/cohorts" "$k"; then echo "$path" >> "$b"; fi
+  elif grep -q "cohorts" "$plus"; then echo "$path" >> "$b"; fi
+done < "$c"
+if test -s "$b"; then cat "$b"; echo "FAIL: linha nova da 6.5 toca o dado do cohort"; exit 1; fi
+# A11 — âncora registrada uma vez em §7 (recortada: o grep não casa o próprio plano acima),
+# com os carimbos da #102 e da #127, na ordem — Checkpoint B r1, A2
 test -s "$T"
-test "$(grep -cE "^### [0-9-]+ — \[decision\] Task 13 — âncora do pré-registro r0" "$T")" -eq 1
-grep -q "2026-09-28T20:27:09Z" "$T"
-test -s config/preregistration/aapl_confirmatory-r0.anchor.toml
-# ADRs; §7; issue; nada de caminho do host versionado
+S7=$(awk '/<!-- BEGIN: post-execution -->/,/<!-- END: post-execution -->/' "$T"); test -n "$S7"
+ENTRY=$(awk '/^### [0-9-]+ — \[decision\] Task 13 — âncora do pré-registro r0/{f=1; print; next} f && /^### /{f=0} f' <<<"$S7")
+test -n "$ENTRY"
+test "$(grep -cE "^### [0-9-]+ — \[decision\] Task 13 — âncora do pré-registro r0" <<<"$S7")" -eq 1
+A=config/preregistration/aapl_confirmatory-r0.anchor.toml
+test -s "$A"
+TS=$(sed -nE 's/^anchored_at = ([0-9TZ:-]+)$/\1/p' "$A"); test -n "$TS"
+grep -qF "2026-09-28T20:27:09Z" <<<"$ENTRY"
+grep -qF "$TS" <<<"$ENTRY"
+[[ "$TS" > "2026-09-28T20:27:09Z" ]] || { echo "FAIL: âncora do pré-registro não é posterior à do cohort"; exit 1; }
+# A11 — tag no remoto e conteúdo da tag = arquivo em HEAD (conferência por conteúdo, ADR 6.5.0003 item 1)
+TAG=$(sed -nE 's/^tag = "(.*)"$/\1/p' "$A"); test -n "$TAG"
+r=$(mktemp)
+git ls-remote --tags origin "$TAG" > "$r"
+test -s "$r"
+d=$(mktemp)
+git show "$TAG:config/preregistration/aapl_confirmatory-r0.toml" > "$d"
+test -s "$d"
+cmp "$d" config/preregistration/aapl_confirmatory-r0.toml
+# ADRs; §7; issue; nada de caminho do host versionado (dois padrões, montados em partes)
 test -z "$(grep -L '^status: accepted' docs/adr/6_5_00*.md)"
 HP="C:""/Users"   # montado em partes: o literal não aparece neste arquivo
-if git grep -n "$HP" -- docs/ tests/ src/ config/; then echo "FAIL: caminho do host versionado"; exit 1; fi
-# o gate não é vácuo: um arquivo de rascunho com caminho de host é pego pelo mesmo padrão
-s=$(mktemp); printf '%s\n' "x ${HP}/alguem/y" > "$s"; test -s "$s"; grep -q "$HP" "$s"; rm -f "$s"
+HQ="/c""/Users"
+for pat in "$HP" "$HQ"; do
+  if git grep -n "$pat" -- docs/ tests/ src/ config/; then echo "FAIL: caminho do host versionado"; exit 1; fi
+done
+# o gate não é vácuo: um arquivo de rascunho com caminho de host é pego pelos mesmos padrões
+s=$(mktemp); printf '%s\n' "x ${HP}/alguem/y" "x ${HQ}/alguem/y" > "$s"; test -s "$s"; grep -q "$HP" "$s"; grep -q "$HQ" "$s"; rm -f "$s"
 python scripts/check_technical_postexec.py "$T"
 python scripts/check_stage_issue.py
 python scripts/check_docs_pointers.py
@@ -1795,8 +2010,12 @@ python scripts/check_docs_pointers.py
       JSON com `preregistration_ref`, a cadeia, a âncora, o manifesto lido, o
       veredito por horizonte, o perfil e `academic_decision_ready`; a 8.1 grava
       esse mapeamento fora de `current/` (roadmap, Task 12).
-- [ ] O mesmo gold com um parâmetro alterado no plano ou uma seed a mais é
-      recusado com `PreregistrationMismatchError` nomeando o campo.
+- [ ] Um plano alterado julgando o mesmo gold é recusado com
+      `PreregistrationMismatchError` em `preregistration_ref` (o hash muda
+      primeiro); o mesmo plano sobre um silver com uma seed a mais é recusado
+      em `seeds` (e2e, A10).
+- [ ] **Sem entrypoint de runtime na 6.5:** o scorecard é exercido pelo e2e
+      via `wire_dependencies`; o runner (CLI/orquestrador) é da 8.1.
 - [ ] O pré-registro r0 está no remoto (tag) e na #127 (comentário), com o
       carimbo do servidor posterior ao da âncora do cohort na #102; o arquivo em
       HEAD é byte-igual ao da tag.
@@ -1807,8 +2026,16 @@ python scripts/check_docs_pointers.py
 
 - [ ] Todas as Tasks commitadas, cada uma com o seu gate (T1/T3/`check-block`)
       verde; Checkpoints C após 04, 07, 10 e 12.
-- [ ] Task 13 executada depois da decisão humana do `blinding_statement`
-      (entrada registrada na §7 junto da âncora).
+- [ ] Task 13 executada depois da decisão humana do `blinding_statement` e,
+      para a tag e o comentário, do go-ahead explícito da sessão mestra
+      (ambos registrados na §7 junto da âncora).
+- [ ] **Auditoria de testes independente** (PROMPT-stage §Auditoria de
+      testes) com **mutação real** em `H1Gate.evaluate`,
+      `ConfirmatoryScorecard.decide` e `evidence_from_generation` (ex.: `≤` →
+      `<` no limiar, estimador Bartlett no lugar do retangular, `n·S` no lugar
+      de `n̄`, pular a checagem de seeds): cada mutante morto por ≥ 1 teste;
+      disposição de cada achado (A/B/C) registrada.
+- [ ] Todo `[finding]` de §7 com a Stage candidata (ex. #129, 8.1, 8.3).
 - [ ] `make check` verde no branch (após rebase em `origin/develop`);
       cobertura por arquivo (A14) colada.
 - [ ] Laço de tokens da matriz verde, saída colada.
@@ -1827,18 +2054,21 @@ python scripts/check_docs_pointers.py
 
 ```
 Task 01 (PreregistrationHash, shared) ─► Task 02 (Preregistration + donos 6.2/6.3)
-Task 02 ─► Task 03 (poder, quantil da t, VOs de evidência) ─► Task 04 (H1Gate + ConfirmatoryScorecard)
+Task 02 ─► Task 03 (poder, VOs de evidência) ─► Task 04 (H1Gate + ConfirmatoryScorecard)
 Task 05 (gold_schema + inversas + from_stored) ─► Task 07 (GoldGenerationReader + read_generation)
 Task 02 ─► Task 06 (PreregistrationSource + TOML)
-Tasks 04, 05, 07 ─► Task 08 (refresh_command_from + mapeador) ─► Task 09 (perfil) ─► Task 10 (use case)
-Tasks 06, 10 ─► Task 11 (wiring + e2e) ─► (rebase) ─► Task 12 (roadmap)
-[decisão humana: blinding_statement] + Tasks 06, 11 ─► Task 13 (congelamento + âncora r0) ─► §3
+Tasks 04, 05, 07 ─► Task 08 (refresh_command_from + mapeador + erros) ─► Task 09 (quantil da t + perfil) ─► Task 10 (use case)
+Task 06 ─► Task 10 (o use case consome o port PreregistrationSource e o fake)
+Task 07 ─► Task 10 (o use case consome o port GoldGenerationReader e o fake)
+Tasks 06, 10 ─► Task 11 (wiring + e2e) ─► (rebase) ─► Task 12 (roadmap + nota no ADR 6.5.0009)
+[decisão humana: blinding_statement] + [go-ahead da sessão mestra p/ publicar] + Tasks 06, 11 ─► Task 13 (congelamento + âncora r0) ─► §3
 ```
 
 - A 05 não depende de 01–04 (DTOs/builders da 6.4); pode vir antes da 06 sem
   mudar nada, mas fica depois da 04 para o Checkpoint C fechar o bloco de
   domínio primeiro.
-- A 06 usa o `PAYLOAD_TOML` da 02 no contrato; a 07 usa o `from_stored` da 05.
+- A 06 usa `valid_payload`/`to_toml` da 02 no contrato; a 07 usa o
+  `from_stored` da 05; a 10 usa os ports e fakes da 06 e da 07.
 - A 08 precisa do VO (02), da evidência (03), do `block_length_rule` (02), do
   schema/`from_stored` (05) e do leitor fake (07, pela fábrica).
 - A 13 precisa do adapter TOML (06) para calcular a referência e do teste de
@@ -1851,6 +2081,7 @@ Tasks 06, 10 ─► Task 11 (wiring + e2e) ─► (rebase) ─► Task 12 (roadm
 
 | Risco | Fallback |
 |---|---|
+| e2e de seed a mais não disparar `seeds` (o refresh filtrar seeds ou bloquear) | O refresh da 6.4 não filtra seeds do silver (conjunto vem do cohort sintético); se bloquear por `seed_horizon_coverage`, a seed 3 é gravada em todos os horizontes e folds; se ainda assim mudar, `[decision]` com o caso refeito como gold adulterado no nível do mapeador (Task 08 já cobre `mismatch_seed_extra_missing`) |
 | A decisão do `blinding_statement` atrasar | Tasks 01–12 seguem; a Stage fica pronta menos a 13 e o §3; PR só depois da 13 (A11 é critério) |
 | Coerção int/float esconder erro de digitação (ex. `reps = 1000.0`) | Campos `int` recusam float mesmo integral (§1); caso de teste `prereg_float_rejected_where_int` |
 | O `repr` das taxas de locação divergir entre plataformas no último ULP | O arquivo guarda o `repr` gerado uma vez; o teste compara com tolerância 1e-12 (declarada); o hash é do arquivo, não do cálculo |
@@ -1918,5 +2149,20 @@ Tasks 06, 10 ─► Task 11 (wiring + e2e) ─► (rebase) ─► Task 12 (roadm
 
 > Preenchida durante/após a Fase 4. Apenas esta seção é editável após
 > `status: done`. Cada entrada carrega data + autor.
+
+### 2026-09-30 — [finding] Checkpoint B r1 (T-F11): falsa reprovação exata do gate H1 ≈ 5 %, não "≤ 5 %" — Claude (Opus 5.5)
+**Contexto:** o ADR 6.5.0009 (linha do `dm_alpha`) justifica α = 0,05 citando
+"the H1 gate's ≤ 5 % false failure" (Bonferroni 97,5 % por cauda). Pelo cálculo
+exato do algoritmo do §1 (multinomial de 3 células, aceitação = as duas bandas
+de Wilson 97,5 % contêm 0,10), a probabilidade de reprovar um candidato
+calibrado é **0,0506 em n = 1 512** (n da geometria do cohort, não medido) e
+oscila entre ≈ 0,044 e 0,053 para n em 1 400–1 600 (em n = 500 é 0,041, a
+tabela do doc §8.5). Bonferroni sobre bandas de Wilson não garante ≤ 5 %
+exato. Nenhuma métrica do cohort foi usada (cálculo sobre taxas nominais).
+**Direção sugerida:** nota de emenda datada no topo do ADR 6.5.0009 (corpo
+`accepted` intacto), no 2º commit da Task 12; o espelho do pré-registro (Task
+13) declara a taxa como ≈ 5 % com o valor exato no n que o scorecard medir,
+nunca "≤ 5 %"; o `dm_alpha` = 0,05 não muda (é escolha de coerência, ADR
+6.5.0009). **Stage candidata:** esta (Tasks 12 e 13).
 
 <!-- END: post-execution -->
