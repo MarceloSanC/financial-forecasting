@@ -2346,6 +2346,15 @@ technical §2 Task 08). **Stage candidata:** esta.
    prefixo `_` quebraria os nomes que o technical e os testes citam. Mantido como está.
 **Stage candidata:** esta.
 
+### 2026-09-30 — [finding] Correção da faixa da falsa reprovação exata do gate H1 (Checkpoint C bloco 4, L1) — Claude (Opus 5.5)
+**Contexto:** o `[finding]` T-F11 acima e o §2 Task 12 (2º commit) dizem que a
+probabilidade exata de reprovar um candidato calibrado "oscila entre ≈ 0,044 e 0,053
+para n em 1 400–1 600". **Correção (medida pelo `H1GatePower` em todo n inteiro de
+1 400 a 1 600):** a faixa exata é **0,0442 (n = 1 555) a 0,0545 (n = 1 435)**; em
+n = 1 512 o valor é 0,0506 (confirmado). A nota no ADR 6.5.0009 cita só o 0,0506 e
+não muda. O espelho do pré-registro (Task 13) declara o valor exato no n que o
+scorecard medir, nunca uma faixa nem "≤ 5 %". **Stage candidata:** esta (Task 13).
+
 ### 2026-09-30 — [finding] Gate de saída §3 (A14): `coverage json` falha por módulos temporários do teste de import-contracts — Claude (Opus 5.5)
 **Contexto:** no bloco Container do §3, o `make check` passou nas duas rodadas
 (5 268 passed, 23 skipped; cobertura total 98,95 %), mas o passo seguinte
