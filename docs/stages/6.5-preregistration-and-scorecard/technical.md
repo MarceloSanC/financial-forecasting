@@ -2308,4 +2308,13 @@ sugerida:** caso no teste da 6.3 com o relatório montado com `lower == nominal`
 `evaluate`. **Stage candidata:** seguimento da 6.3 (issue de testes da sessão
 mestra), fora desta Stage.
 
+### 2026-09-30 — [decision] Checkpoint C bloco 2 (F2): `GoldGeneration.from_stored` recebe a partição pedida — Claude (Opus 5.5)
+**Contexto:** o leitor aceitava um `current/` cujo manifesto fosse de outra
+partição (ex. pasta copiada): `check_generation` só confere as linhas contra o
+**próprio** manifesto. **Decisão:** `from_stored(manifest, rows_by_table, *,
+partition)` — argumento keyword obrigatório (sem default) além da assinatura do
+technical §2 Task 05; manifesto de outra partição → `GoldGenerationCorruptError`.
+A conferência fica no dono único da montagem (fake e real passam a partição
+pedida), não em cada leitor. **Stage candidata:** esta.
+
 <!-- END: post-execution -->

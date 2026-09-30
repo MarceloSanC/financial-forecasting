@@ -592,23 +592,34 @@ class GoldGeneration:
 
     @classmethod
     def from_stored(
-        cls, manifest: Mapping[str, object], rows_by_table: Mapping[str, Sequence[Row]]
+        cls,
+        manifest: Mapping[str, object],
+        rows_by_table: Mapping[str, Sequence[Row]],
+        *,
+        partition: GoldPartition,
     ) -> GoldGeneration:
         """Montagem única de uma geração lida — usada pelo fake e pelo real (I7).
 
         Uma `GoldTable` por tabela do manifesto, com a chave do `GOLD_SCHEMAS`;
         `check_generation` no fim. Uma geração `BLOCKED` volta normal (a recusa é do
-        use case).
+        use case). `partition` é a partição pedida ao leitor: manifesto de outra
+        partição (ex. pasta copiada) é corrupção, conferida aqui — dono único, fake e
+        real (Checkpoint C bloco 2, F2).
 
         Raises:
             GoldGenerationCorruptError: manifesto inválido; tabela desconhecida,
                 ausente de `rows_by_table` ou a mais nele; contagem divergente; linha
-                inválida ou fora de ordem; geração incoerente (`check_generation`).
+                inválida ou fora de ordem; geração incoerente (`check_generation`);
+                manifesto de outra partição que a pedida.
         """
         try:
             parsed = GoldManifest.from_mapping(manifest)
         except ValueError as error:
             raise GoldGenerationCorruptError(f"invalid manifest: {error}") from error
+        if parsed.partition != partition:
+            raise GoldGenerationCorruptError(
+                f"the manifest is for partition {parsed.partition}, read as {partition}"
+            )
         listed = dict(parsed.rows_by_table)
         extra = sorted(set(rows_by_table) - set(listed))
         if extra:

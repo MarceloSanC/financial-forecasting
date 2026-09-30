@@ -454,6 +454,9 @@ def test_manifest_unknown_key_rejected() -> None:
         GoldManifest.from_mapping({k: v for k, v in mapping.items() if k != "n_runs"})
 
 
+_READ_PARTITION = GoldPartition("AAPL", "sweep-01")
+
+
 def _quality_row(index: int, asset: str = "AAPL") -> dict[str, object]:
     return {
         "asset": asset,
@@ -497,7 +500,9 @@ def _stored(**changes: object) -> tuple[dict[str, object], dict[str, list[dict[s
 def test_from_stored_empty_table() -> None:
     manifest, rows = _stored(rows_by_table={"gold_quality_checks": 4, "gold_dm_results": 0})
 
-    generation = GoldGeneration.from_stored(manifest, {**rows, "gold_dm_results": []})
+    generation = GoldGeneration.from_stored(
+        manifest, {**rows, "gold_dm_results": []}, partition=_READ_PARTITION
+    )
 
     assert generation.table(GOLD_DM_RESULTS).rows == ()
     assert len(generation.table(GOLD_QUALITY_CHECKS).rows) == 4  # noqa: PLR2004
@@ -509,12 +514,14 @@ def test_from_stored_missing_table_corrupt() -> None:
     del rows["gold_dm_results"]
 
     with pytest.raises(GoldGenerationCorruptError, match="is missing"):
-        GoldGeneration.from_stored(manifest, rows)
+        GoldGeneration.from_stored(manifest, rows, partition=_READ_PARTITION)
     with pytest.raises(GoldGenerationCorruptError, match="not in the manifest"):
-        GoldGeneration.from_stored(manifest, {**_stored()[1], "gold_mcs_results": []})
+        GoldGeneration.from_stored(
+            manifest, {**_stored()[1], "gold_mcs_results": []}, partition=_READ_PARTITION
+        )
     unknown, _ = _stored(rows_by_table={"gold_quality_checks": 4, "gold_other": 0})
     with pytest.raises(GoldGenerationCorruptError, match="unknown gold table"):
-        GoldGeneration.from_stored(unknown, {**rows, "gold_other": []})
+        GoldGeneration.from_stored(unknown, {**rows, "gold_other": []}, partition=_READ_PARTITION)
 
 
 @pytest.mark.unit
@@ -523,10 +530,10 @@ def test_from_stored_count_mismatch_corrupt() -> None:
     rows["gold_quality_checks"].pop()
 
     with pytest.raises(GoldGenerationCorruptError, match="has 3 rows, the manifest says 4"):
-        GoldGeneration.from_stored(manifest, rows)
+        GoldGeneration.from_stored(manifest, rows, partition=_READ_PARTITION)
     bad_manifest = {**manifest, "n_runs": -1}
     with pytest.raises(GoldGenerationCorruptError, match="invalid manifest") as raised:
-        GoldGeneration.from_stored(bad_manifest, _stored()[1])
+        GoldGeneration.from_stored(bad_manifest, _stored()[1], partition=_READ_PARTITION)
     assert isinstance(raised.value.__cause__, ValueError)
 
 
@@ -536,10 +543,14 @@ def test_from_stored_incoherent_corrupt() -> None:
     swapped = [rows["gold_dm_results"][1], rows["gold_dm_results"][0]]
 
     with pytest.raises(GoldGenerationCorruptError, match="strictly increasing"):
-        GoldGeneration.from_stored(manifest, {**rows, "gold_dm_results": swapped})
+        GoldGeneration.from_stored(
+            manifest, {**rows, "gold_dm_results": swapped}, partition=_READ_PARTITION
+        )
     other = [_quality_row(i, asset="MSFT" if i == 2 else "AAPL") for i in range(4)]  # noqa: PLR2004
     with pytest.raises(GoldGenerationCorruptError, match="incoherent generation"):
-        GoldGeneration.from_stored(manifest, {**rows, "gold_quality_checks": other})
+        GoldGeneration.from_stored(
+            manifest, {**rows, "gold_quality_checks": other}, partition=_READ_PARTITION
+        )
 
 
 @pytest.mark.unit
@@ -547,7 +558,7 @@ def test_from_stored_blocked_returned() -> None:
     manifest, rows = _stored(status=RefreshStatus.BLOCKED, rows_by_table={"gold_quality_checks": 4})
 
     generation = GoldGeneration.from_stored(
-        manifest, {"gold_quality_checks": rows["gold_quality_checks"]}
+        manifest, {"gold_quality_checks": rows["gold_quality_checks"]}, partition=_READ_PARTITION
     )
 
     assert generation.manifest.status is RefreshStatus.BLOCKED
@@ -558,7 +569,7 @@ def test_from_stored_blocked_returned() -> None:
 def test_from_stored_uses_schema_keys() -> None:
     manifest, rows = _stored()
 
-    generation = GoldGeneration.from_stored(manifest, rows)
+    generation = GoldGeneration.from_stored(manifest, rows, partition=_READ_PARTITION)
 
     for name, table in generation.tables.items():
         assert table.key == GOLD_SCHEMAS[name].key
@@ -587,3 +598,12 @@ def test_manifest_fields_rejected(changes: dict[str, object], message: str) -> N
     parameters = {**_PARAMETERS.as_mapping(), "dm_variance_estimators": ["parzen"]}
     with pytest.raises(ValueError, match="is not a valid DmVarianceEstimator"):
         RefreshParameters.from_mapping(parameters)
+
+
+@pytest.mark.unit
+def test_from_stored_other_partition_corrupt() -> None:
+    """Checkpoint C bloco 2, F2: manifesto de outra partição que a pedida é corrupção."""
+    manifest, rows = _stored()
+
+    with pytest.raises(GoldGenerationCorruptError, match="read as"):
+        GoldGeneration.from_stored(manifest, rows, partition=GoldPartition("AAPL", "sweep-02"))

@@ -16,6 +16,7 @@ contagem adulterada no `MANIFEST.json`, manifesto lido antes das tabelas e monta
 from __future__ import annotations
 
 import json
+import shutil
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -328,9 +329,11 @@ def test_real_single_assembly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         cls: type[GoldGeneration],
         manifest: Mapping[str, object],
         rows_by_table: Mapping[str, Sequence[Mapping[str, object]]],
+        *,
+        partition: GoldPartition,
     ) -> GoldGeneration:
         calls.append(tuple(sorted(rows_by_table)))
-        generation: GoldGeneration = original(cls, manifest, rows_by_table)
+        generation: GoldGeneration = original(cls, manifest, rows_by_table, partition=partition)
         return generation
 
     monkeypatch.setattr(GoldGeneration, "from_stored", classmethod(spy))
@@ -380,3 +383,16 @@ def test_reader_single_assembly_every_leg(
     harness.reader.read_generation(partition=_PARTITION)
 
     assert calls == [1]
+
+
+@pytest.mark.contract
+def test_real_manifest_of_other_partition_corrupt(tmp_path: Path) -> None:
+    """Checkpoint C bloco 2, F2: pasta `current/` copiada de outra partição é recusada."""
+    store, current = _published(tmp_path)
+    other = GoldPartition("AAPL", "sweep-02")
+    target = store.current_dir(other)
+    target.parent.mkdir(parents=True)
+    shutil.copytree(current, target)
+
+    with pytest.raises(GoldGenerationCorruptError, match="read as"):
+        store.read_generation(partition=other)

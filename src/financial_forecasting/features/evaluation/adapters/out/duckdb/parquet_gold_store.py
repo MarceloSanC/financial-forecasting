@@ -173,4 +173,4 @@ class ParquetGoldStore:
             if not path.is_file():
                 raise GoldGenerationCorruptError(f"table file {path.name} is missing")
             rows_by_table[name] = [] if count == 0 else _read_rows(path)
-        return GoldGeneration.from_stored(manifest, rows_by_table)
+        return GoldGeneration.from_stored(manifest, rows_by_table, partition=partition)

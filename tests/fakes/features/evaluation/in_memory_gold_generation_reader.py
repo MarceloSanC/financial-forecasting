@@ -29,4 +29,4 @@ class InMemoryGoldGenerationReader:
         if generation is None:
             raise GoldManifestNotFoundError(f"no gold generation for {partition}")
         manifest, rows_by_table = generation
-        return GoldGeneration.from_stored(manifest, rows_by_table)
+        return GoldGeneration.from_stored(manifest, rows_by_table, partition=partition)
