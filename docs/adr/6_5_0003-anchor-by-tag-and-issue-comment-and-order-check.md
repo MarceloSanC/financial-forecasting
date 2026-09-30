@@ -5,9 +5,9 @@ when-use: Reference when anchoring a preregistration, when asking how the Stage 
 keywords: [adr, evaluation, preregistration, anchor, tag, issue-comment, server-timestamp, blinding, order, b-ordem, anteriority]
 status: accepted
 created_at: 2026-09-29
-updated_at: 2026-09-29
+updated_at: 2026-09-30
 adr_id: 6.5.0003
-decision: After the revision file is committed, push the tag preregistration/<preregistration_ref> to that commit and post a comment on the Stage issue with the preregistration_ref, the full hash, the tag, the commit and the referenced cohort_id and cohort hash — the comment's server created_at is the anchor time; record tag, commit, comment URL and anchored_at in config/preregistration/<name>-r<rev>.anchor.toml (written after the hash, so outside it); BuildConfirmatoryScorecard loads the anchor of every revision in the chain and raises if one is missing, and sets academic_decision_ready to false when the gold manifest's started_at precedes the judged revision's anchored_at; the Stage proves the order cohort anchor < preregistration anchor from the two server timestamps and computes no metric on the cohort itself.
+decision: After the revision file is committed, push the tag preregistration/<preregistration_ref> to that commit and post a comment on the Stage issue with the preregistration_ref, the full hash, the tag, the commit and the referenced cohort_id and cohort hash — the comment's server created_at is the anchor time; record tag, commit, comment URL and anchored_at in config/preregistration/<name>-r<rev>.anchor.toml (written after the hash, so outside it); BuildConfirmatoryScorecard loads the anchor of every revision in the chain and raises if one is missing, and sets academic_decision_ready to false when the gold manifest's started_at precedes the judged revision's anchored_at; what the Stage proves is its own part of the order — the referenced cohort's anchor precedes the preregistration anchor (two server timestamps), the Stage computes nothing on the cohort, and the gold a scorecard reads must postdate the anchor; the first confirmatory refresh is the first one after the anchor (8.1's), and no statement is made about computations before it.
 context_stage: 6.5-preregistration-and-scorecard
 bounded_context: evaluation
 ---
@@ -18,7 +18,8 @@ bounded_context: evaluation
 
 ## Status
 
-`accepted`
+`accepted` — revised on 2026-09-30 after Checkpoint A round 1 (C-A2: scope of the
+order proof; B9: rebase)
 
 ## Context
 
@@ -45,7 +46,11 @@ comment is the project's server clock (5.5 precedent).
    commit (tags survive the feature-branch rebase; ADR 5.5.0001) → comment on the
    Stage issue with the `preregistration_ref`, the full hash, the tag, the
    commit, the `cohort_id` and the cohort hash it references. The comment's
-   `created_at` (GitHub server) is `anchored_at`.
+   `created_at` (GitHub server) is `anchored_at`. The freeze commit is rebased
+   later with the branch; the tag keeps the original commit reachable and the
+   anchor record names it. What the scorecard and the consistency test compare is
+   **content** (the hash of the revision file at HEAD equals the anchored
+   hash), not commit identity, so the rebase does not break the anchor.
 2. **Record:** `config/preregistration/<name>-r<rev>.anchor.toml` with `tag`,
    `commit`, `comment_url`, `anchored_at` (UTC ISO-8601), committed after the
    comment. It is outside the hash by construction (it cannot exist before the
@@ -58,14 +63,25 @@ comment is the project's server clock (5.5 precedent).
    is false with the reason "gold generated before the preregistration anchor".
    The manifest time is the refresh's local clock — the check catches the honest
    mistake, not a forged clock; the public proof is item 4.
-4. **Proof of order (this Stage):** the anchoring Task records, in the technical
-   §7, the server timestamps of the cohort anchor (issue #102 comment, 5.5) and of
-   the preregistration anchor (issue #127 comment) and that this Stage computes
-   no metric on the cohort (every test and the e2e use synthetic silver). The
-   exposure already recorded by Stage 6.4 is declared in the preregistration as
-   the human decides in fork P1 (concept §13). The 8.1 run posts its own comment
-   when it first refreshes the confirmatory gold, closing the chain cohort anchor
-   < preregistration anchor < first confirmatory refresh, all on the server.
+4. **What the order proof covers.** The roadmap DoD ("nenhuma métrica sobre o
+   `parent_sweep_id` … é calculada antes de o hash do pré-registro estar
+   publicado, e a Stage prova essa ordem") is rewritten by this Stage (concept
+   D10) to what the Stage can prove and does prove:
+   - the **referenced cohort's anchor** (for r0: the issue #102 comment, 5.5)
+     precedes the preregistration anchor (issue #127 comment) — two server
+     timestamps recorded by the anchoring Task in the technical §7;
+   - Stage 6.5 itself computes no metric on the cohort (every test and the e2e
+     use synthetic silver);
+   - the gold that a scorecard reads must be generated after the anchor (item 3
+     in code), and the **first confirmatory refresh** is, by definition, the
+     first refresh of the cohort's gold after the anchor with parameters derived
+     from the plan — the 8.1 run, which posts its own comment, closing the chain
+     cohort anchor < preregistration anchor < first confirmatory refresh on the
+     server.
+   It makes **no** claim that no metric was ever computed on the cohort before
+   the anchor: Stage 6.4 recorded one such computation (technical 6.4 §7), which
+   the human decided to leave as recorded, with the cohort unchanged
+   (ADR 6.5.0010, P1).
 
 ## Alternatives considered
 
@@ -105,7 +121,7 @@ comment is the project's server clock (5.5 precedent).
 
 ## References
 
-- Related ADRs: [5.5.0001](./5_5_0001-frozen-hashed-cohort-spec.md), [0.0.0011](./0_0_0011-preregistration-invariants-and-h1-gate.md), [6.5.0001](./6_5_0001-preregistration-canonical-toml-hashed-value-object.md), [6.5.0002](./6_5_0002-amendment-as-new-revision-file.md).
+- Related ADRs: [6.5.0010](./6_5_0010-human-decisions-blinding-threshold-deviation-winner.md), [5.5.0001](./5_5_0001-frozen-hashed-cohort-spec.md), [0.0.0011](./0_0_0011-preregistration-invariants-and-h1-gate.md), [6.5.0001](./6_5_0001-preregistration-canonical-toml-hashed-value-object.md), [6.5.0002](./6_5_0002-amendment-as-new-revision-file.md).
 - Haber, S.; Stornetta, W. S. (1991), J. Cryptology 3(2), doi:10.1007/BF00196791.
 - Mertens, G.; Krypotos, A.-M. (2019), Psychologica Belgica, doi:10.5334/pb.493.
 - Cramer, E. Y. et al. (2022), Scientific Data, doi:10.1038/s41597-022-01517-w.

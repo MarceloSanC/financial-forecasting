@@ -5,7 +5,7 @@ when-use: Reference when asking which profile or sensitivity the 6.5 scorecard s
 keywords: [adr, evaluation, scorecard, profile, sensitivity, dm-per-fold, dm-per-seed, dm-per-tau, mcs-block, christoffersen-monte-carlo, partial-degeneracy, sharpness, persistence, last-mile]
 status: accepted
 created_at: 2026-09-29
-updated_at: 2026-09-29
+updated_at: 2026-09-30
 adr_id: 6.5.0008
 decision: The preregistration lists every profile of the domain doc with its parameters (MCS block sensitivities l = h and l = √T, Monte Carlo Christoffersen draws and seed, DM per fold, per seed and per τ, stationarity diagnostic of d_t, partial degeneracy per pair, sharpness diagram), so all are protocol analyses; the 6.5 scorecard computes the gate sensitivities from seed-mean counts, the power, and the profile readable from the gold (both Wilson levels, both samples, with/without gaps, all comparators' calibration, per-seed LR_ind/LR_cc and the fraction of seeds rejecting, DM Bartlett, MCS moving-block, DM effect with CI, pinball/CRPS/IS/PICP/MPIW/VaR descriptors); the profiles that need new series (DM per fold/seed/τ, MCS block sensitivities, partial degeneracy per pair, stationarity diagnostic of d_t, Monte Carlo p-values) are a follow-up issue in evaluation to land before 8.1; the sharpness diagram stays in 8.3; the scorecard is a frozen result DTO with a single as_mapping serialization, and its persistence as the gold artifact gold_model_comparison_confirmatory_scorecard is done by 8.1.
 context_stage: 6.5-preregistration-and-scorecard
@@ -18,7 +18,8 @@ bounded_context: evaluation
 
 ## Status
 
-`accepted`
+`accepted` — revised on 2026-09-30 after Checkpoint A round 1 (B10 destination
+of the scorecard; profile items from C-BAIXA and P4)
 
 ## Context
 
@@ -65,7 +66,11 @@ gold confirmatórios e o veredito".
    guardrail rate) on both samples, the candidate's as seed means with the
    per-seed spread; `gold_calibration_table` at 95 %; per-seed LR_ind/LR_cc and
    the fraction of seeds rejecting; DM Bartlett and MCS moving-block with their
-   disagreements with the primary reading; and, per DM, the **effect with its
+   disagreements with the primary reading; each DM row's `fallback_applied`;
+   the comparators' mean degeneracy rate and whether it is above the H1
+   threshold (doc §5.3 item 4, reported, never filtering the family); the
+   outcome per tier and whether the candidate has the lowest P̄_G
+   (ADR 6.5.0007 items 4–5); and, per DM, the **effect with its
    CI** (doc §6.8: "o pré-registro reporta efeito + IC, não só p"): d̄ and the
    95 % interval d̄ ± t_{T−1, 0.975} · (d̄ / statistic), so the interval uses
    exactly the variance and HLN scaling of the reported statistic (undefined
@@ -80,7 +85,10 @@ gold confirmatórios e o veredito".
 5. **Emission:** `ScorecardResult` (application result DTO; `ConfirmatoryScorecard`
    is the domain service that builds its verdict) with a single
    `as_mapping()`; 8.1 writes it as `gold_model_comparison_confirmatory_scorecard`
-   next to the gold generation it read (roadmap line updated).
+   **outside** the generation directory it read — e.g. under
+   `gold/asset=<a>/parent_sweep_id=<p>/scorecard/<preregistration_ref>/`, never
+   inside `current/`, which the next refresh swaps out whole (ADR 6.4.0005) —
+   recording the manifest it read (roadmap line of 8.1 updated).
 6. **Not frozen here:** H3 (feature contribution, ≥ 2 of 3 methods) and the
    conformal benchmark (CQR) are also read by 8.1, but their rules belong to the
    Stages that own them — the CQR variant is deliberated and preregistered by

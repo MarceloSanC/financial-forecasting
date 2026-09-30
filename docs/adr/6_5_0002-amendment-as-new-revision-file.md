@@ -5,7 +5,7 @@ when-use: Reference before changing a preregistration after it was anchored, whe
 keywords: [adr, evaluation, preregistration, amendment, revision, blinding, exploratory, confirmatory, ich-e9, osf]
 status: accepted
 created_at: 2026-09-29
-updated_at: 2026-09-29
+updated_at: 2026-09-30
 adr_id: 6.5.0002
 decision: Revision r+1 of a preregistration is a new file config/preregistration/<name>-r<r+1>.toml whose payload carries amends (the preregistration_ref of revision r), a non-empty justification and blind_status ∈ {blinded, unblinded}; revision 0 carries none of them; files of anchored revisions are never edited; each revision is anchored on its own; the scorecard reports the revision chain, and an amendment declared unblinded sets academic_decision_ready to false with the reason "amended after unblinding" (its verdict is exploratory).
 context_stage: 6.5-preregistration-and-scorecard
@@ -18,7 +18,8 @@ bounded_context: evaluation
 
 ## Status
 
-`accepted`
+`accepted` — revised on 2026-09-30 after Checkpoint A round 1 (C-A2: definition
+of the first confirmatory refresh)
 
 ## Context
 
@@ -54,8 +55,12 @@ amendments) can be regarded as confirmatory" (domain doc §8.1).
    unblinding": the result is reported, labelled exploratory (Wagenmakers et al.
    2012, domain doc §8.3: other analyses "should be labeled 'exploratory'").
 5. `blind_status` is the author's declaration; its truth is checked by the
-   order of server timestamps (the amendment's anchor versus the first
-   confirmatory refresh of the cohort, ADR 6.5.0003), not by code.
+   order of server timestamps — the amendment's anchor versus the **first
+   confirmatory refresh**, defined as the first refresh of the cohort's gold
+   run **after the revision-0 anchor** with parameters derived from this plan
+   (the 8.1 run, which posts its own comment; ADR 6.5.0003 item 4) — not by
+   code. Nothing here asserts anything about computations made on the cohort
+   before the revision-0 anchor (ADR 6.5.0010, P1).
 
 ## Alternatives considered
 
