@@ -339,10 +339,13 @@ def _with_level(calibration: CalibrationEvidence, where: str) -> CalibrationEvid
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("where", ["gate", "common", "gate.dgt"])
+@pytest.mark.parametrize("where", ["gate", "common", "gate.dgt", "common.dgt"])
 def test_gate_levels_must_match_plan(where: str) -> None:
     """M2: as caudas lidas têm de ser as do par pré-registrado (gate, comum e DGT)."""
     evidence = _evidence(horizon=2)
+    # a amostra comum com sub-séries DGT (opcionais) também é conferida (CkC b2, F7)
+    common = dataclasses.replace(evidence.common, dgt=evidence.gate.dgt)
+    evidence = dataclasses.replace(evidence, common=common)
     name = where.split(".", maxsplit=1)[0]
     changed = dataclasses.replace(evidence, **{name: _with_level(getattr(evidence, name), where)})
 
