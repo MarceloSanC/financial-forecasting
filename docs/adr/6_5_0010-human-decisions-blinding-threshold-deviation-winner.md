@@ -14,6 +14,8 @@ bounded_context: evaluation
 
 # ADR 6.5.0010 — Human decisions (class P) of Stage 6.5
 
+> **Nota (2026-09-30, Stage 6.5 Task 13):** a parte em aberto do P1 foi decidida pelo pesquisador: o r0 leva a declaração curta de cegamento (texto em `config/preregistration/aapl_confirmatory-r0.toml`, chave `blinding_statement`, espelhada em `docs/preregistration/aapl_confirmatory.md`). A sessão mestra deu o go-ahead para as ações externas, e a âncora foi publicada: tag `preregistration/aapl_confirmatory-r0-4526c437c296` e comentário na #127 (`created_at` 2026-09-30T19:53:47Z) — ver technical 6.5 §7 `[decision]` "Task 13 — âncora do pré-registro r0".
+
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
 ## Status

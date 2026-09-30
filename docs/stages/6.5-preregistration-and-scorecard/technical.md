@@ -2457,4 +2457,31 @@ perfis de séries novas → **#129** (antes da 8.1); a fronteira `lower == nomin
 `WilsonBand` → seguimento de testes da 6.3 (sessão mestra).
 **Stage candidata:** esta.
 
+### 2026-09-30 — [decision] Aplicação da auditoria da Stage (PR #132) — Claude (Opus 5.5)
+**Contexto:** a auditoria da Stage aprovou a 6.5 sem blocker e listou F1–F9.
+**Disposições:**
+- **F1 (corrigido):** o ADR 6.5.0010 ganhou uma nota datada com a decisão final do
+  `blinding_statement` e o go-ahead da âncora. O concept está `done` e não é editado
+  (a regra de edição pós-`done` só abre o §7 do technical): **a questão em aberto do
+  concept §13 (declaração de cegamento do r0) está resolvida** pela entrada humana de
+  2026-09-30 registrada na `[decision]` da Task 13 acima; o cabeçalho, o §12 e o §13
+  do concept devem ser lidos com este registro.
+- **F4 (corrigido):** o use case confere a tag da âncora de cada revisão contra a
+  referência calculada da própria revisão (`PreregistrationNotAnchoredError`).
+- **F5 (corrigido):** o teste extra do `SeedSpread` renomeado para
+  `seed_spread_counts_equal_values` (o nome antigo continha o token do §3).
+- **F6 (corrigido):** docstring dos três módulos da application justifica os
+  `type: ignore[arg-type]`; acessores tipados do gold ficam para a #129.
+- **F9 (corrigido):** o espelho enumera o que o teste da 6.4 exibiu, ao lado da
+  declaração de cegamento (o TOML ancorado não muda).
+- **F3 (comentado):** o comentário do veredito no PR #132 registra que o concept D10 /
+  ADR 6.5.0003 item 4 reescreveram o critério original da #127 ("a Stage prova essa
+  ordem").
+- **F7/F8 (comentado na #129 e no PR):** parâmetros de perfil não congelados no r0,
+  extensão do `RefreshParameters`/`refresh_command_from`/conferência do manifesto e a
+  lista de revisões do teste de consistência; notas para a 8.1 e para as 7.2/7.3.
+- **F2 (não aplicado — decisão humana P1):** não reabrir nem anotar o episódio da 6.4
+  fora da 6.5; os textos da 5.5 não são editados.
+**Stage candidata:** esta.
+
 <!-- END: post-execution -->
