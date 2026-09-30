@@ -22,6 +22,13 @@ Concept 6.4 D8, C3, C9; ADR `6_4_0005` itens 2, 5 e 6. Layout por partição:
 5. `shutil.rmtree(.previous)` — `OSError` aqui vira `logger.warning` e o `publish`
    retorna normalmente (a geração nova já está viva; o próximo `publish` limpa).
 
+Também satisfaz o port `GoldGenerationReader` (Stage 6.5, ADR `6_5_0005` itens 1, 4, 5):
+`read_generation` lê o `MANIFEST.json` de `current/` **antes** de qualquer tabela, lê
+cada tabela listada com `pyarrow.parquet.read_table(path, partitioning=None)` (sem
+inferência hive: as colunas `asset`/`parent_sweep_id` vêm do conteúdo), passa `[]`
+para tabela com zero linhas no manifesto (o arquivo ainda precisa existir) e monta a
+geração **só** por `GoldGeneration.from_stored` — este adapter faz apenas I/O.
+
 Falha antes da troca propaga e deixa `current/` intacto (C9). Escritor único por
 partição é pré-condição do port (ADR `6_4_0005` item 6): sem lock.
 """
@@ -38,8 +45,12 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from financial_forecasting.features.evaluation.application.dtos.gold_schema import GOLD_SCHEMAS
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    GoldGeneration,
+    GoldGenerationCorruptError,
     GoldManifest,
+    GoldManifestNotFoundError,
     GoldPartition,
     GoldTable,
     check_generation,
@@ -65,6 +76,19 @@ def _write_manifest(path: Path, manifest: GoldManifest) -> None:
     path.write_text(
         json.dumps(manifest.as_mapping(), sort_keys=True, indent=2) + "\n", encoding="utf-8"
     )
+
+
+def _read_manifest(path: Path) -> object:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise GoldGenerationCorruptError(f"{path.name} is not valid JSON: {error}") from error
+
+
+def _read_rows(path: Path) -> list[dict[str, object]]:
+    table = pq.read_table(path, partitioning=None)  # type: ignore[no-untyped-call]
+    rows: list[dict[str, object]] = table.to_pylist()
+    return rows
 
 
 class ParquetGoldStore:
@@ -122,3 +146,31 @@ class ParquetGoldStore:
                     previous,
                     error,
                 )
+
+    def read_generation(self, *, partition: GoldPartition) -> GoldGeneration:
+        """A geração viva da partição — satisfaz o port `GoldGenerationReader`.
+
+        Raises:
+            GoldManifestNotFoundError: `current/MANIFEST.json` ausente.
+            GoldGenerationCorruptError: manifesto ilegível, tabela desconhecida ou com
+                arquivo ausente, ou a montagem do `from_stored` recusa a geração.
+        """
+        current = self.current_dir(partition)
+        manifest_path = current / MANIFEST_NAME
+        if not manifest_path.is_file():
+            raise GoldManifestNotFoundError(f"no gold generation for {partition}")
+        manifest = _read_manifest(manifest_path)
+        if not isinstance(manifest, dict):
+            raise GoldGenerationCorruptError(f"{MANIFEST_NAME} is not a JSON object")
+        listed = manifest.get("rows_by_table")
+        if not isinstance(listed, dict):
+            raise GoldGenerationCorruptError(f"{MANIFEST_NAME} has no rows_by_table table")
+        rows_by_table: dict[str, list[dict[str, object]]] = {}
+        for name, count in listed.items():
+            if name not in GOLD_SCHEMAS:  # antes de montar caminho com o nome lido
+                raise GoldGenerationCorruptError(f"unknown gold table {name!r} in the manifest")
+            path = current / f"{name}.parquet"
+            if not path.is_file():
+                raise GoldGenerationCorruptError(f"table file {path.name} is missing")
+            rows_by_table[name] = [] if count == 0 else _read_rows(path)
+        return GoldGeneration.from_stored(manifest, rows_by_table)
