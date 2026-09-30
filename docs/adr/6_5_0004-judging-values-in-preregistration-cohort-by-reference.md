@@ -97,6 +97,7 @@ Facts:
    | `mcs.block_rule` | `max_h_ceil_max_bsb` | conv. #16b, ADR 6.2.0005 |
    | `exclusions` | `none` | doc §5.3 item 5, conv. #12 |
    | `seed_aggregation` | `mean_losses_mean_counts` | conv. #19 |
+   | `h1_gate.form` | `per_tail_wilson_model_full_masked_seed_mean_v1` | ADR 6.5.0006 items 1–4 (rows, seed means, gate, sensitivities) |
    | `verdict.form` | `h1_gate_then_h2_tree_v1` | ADR 6.5.0007 |
    | `success_criterion` | `h1_not_rejected_in_at_least_one_horizon` | doc §8.8, conv. #28 |
 
@@ -122,11 +123,18 @@ Facts:
    - the set of models in `gold_dm_results` (candidate ∪ comparators), in
      `gold_mcs_results` (M0 = candidate ∪ comparators) or in the candidate's and
      comparators' calibration rows differs, in either direction, from the plan's;
-   - the seeds found per model differ, in either direction, from `seeds.<model>`;
+   - the seeds found per model in any table differ, in either direction, from
+     `seeds.<model>`;
    - the quantile levels found differ from `quantile_levels`;
    - a `gold_mcs_results` row has `statistic` ≠ the preregistered one or
      `block_size` ≠ max(h, ⌈`max_block_estimate`⌉) for its horizon (the block
      rule re-applied to the persisted estimate).
+   These **set** checks run first (manifest, then models, seeds and levels per
+   table, then the MCS statistic and block). Only then, for each model and seed
+   that is present, a missing expected row (a tail, a horizon, a DM estimator, an
+   MCS scheme) raises `GoldGenerationCorruptError` — the table is incomplete,
+   not from another plan. One rule: set difference → mismatch; present with a row
+   missing → corrupt.
    The DM direction, kernel/lag, small-sample correction and fallback are fixed
    by the 6.2 services (only the identified variants exist) and are checked
    through the identifiers of item 2 plus the estimator column.

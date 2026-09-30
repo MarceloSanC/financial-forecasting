@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-09-29
 updated_at: 2026-09-30
 adr_id: 6.5.0008
-decision: The preregistration lists every profile of the domain doc with its parameters (MCS block sensitivities l = h and l = √T, Monte Carlo Christoffersen draws and seed, DM per fold, per seed and per τ, stationarity diagnostic of d_t, partial degeneracy per pair, sharpness diagram), so all are protocol analyses; the 6.5 scorecard computes the gate sensitivities from seed-mean counts, the power, and the profile readable from the gold (both Wilson levels, both samples, with/without gaps, all comparators' calibration, per-seed LR_ind/LR_cc and the fraction of seeds rejecting, DM Bartlett, MCS moving-block, DM effect with CI, pinball/CRPS/IS/PICP/MPIW/VaR descriptors); the profiles that need new series (DM per fold/seed/τ, MCS block sensitivities, partial degeneracy per pair, stationarity diagnostic of d_t, Monte Carlo p-values) are a follow-up issue in evaluation to land before 8.1; the sharpness diagram stays in 8.3; the scorecard is a frozen result DTO with a single as_mapping serialization, and its persistence as the gold artifact gold_model_comparison_confirmatory_scorecard is done by 8.1.
+decision: The preregistration lists every profile of the domain doc with its parameters (MCS block sensitivities l = h and l = ⌈√T⌉, Monte Carlo Christoffersen draws and seed, DM per fold, per seed and per τ, stationarity diagnostic of d_t, partial degeneracy per pair, sharpness diagram), so all are protocol analyses; the 6.5 scorecard computes the gate sensitivities from seed-mean counts, the power, and the profile readable from the gold (both Wilson levels, both samples, with/without gaps, all comparators' calibration, per-seed LR_ind/LR_cc and the fraction of seeds rejecting, DM Bartlett, MCS moving-block, DM effect with CI, pinball/CRPS/IS/PICP/MPIW/VaR descriptors); the profiles that need new series (DM per fold/seed/τ, MCS block sensitivities, partial degeneracy per pair, stationarity diagnostic of d_t, Monte Carlo p-values) are a follow-up issue in evaluation to land before 8.1; the sharpness diagram stays in 8.3; the scorecard is a frozen result DTO with a single as_mapping serialization, and its persistence as the gold artifact gold_model_comparison_confirmatory_scorecard is done by 8.1.
 context_stage: 6.5-preregistration-and-scorecard
 bounded_context: evaluation
 ---
@@ -26,7 +26,7 @@ of the scorecard; profile items from C-BAIXA and P4)
 Stage 6.4 forwarded profiles it did not build (concept 6.4 §Fora do escopo;
 ADR 6.4.0007 item 5): DM per fold and per seed and the fraction of seeds
 rejecting (doc §6.8, §6.9), DM per τ (§6.4), MCS block sensitivities l = h and
-l = √T (§6.5), partial degeneracy per pair (§5.1), Monte Carlo Christoffersen
+l = ⌈√T⌉ (§6.5), partial degeneracy per pair (§5.1), Monte Carlo Christoffersen
 p-values (§7.6, `draws` and `seed` preregistered) and the width distribution
 (§4.3, 8.3). Each needs series and a builder, not only a builder: the per-fold
 and per-seed DM need `fold` carried into the samples and the 6.2 services run

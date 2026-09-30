@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-09-29
 updated_at: 2026-09-30
 adr_id: 6.5.0005
-decision: A port-out GoldGenerationReader with one method read_generation(*, partition) -> GoldGeneration lives in application/ports/out/gold_generation_reader.py together with GoldManifestNotFoundError and GoldGenerationCorruptError; its real is ParquetGoldStore.read_generation (the module cites the port by name) and its fake is InMemoryGoldGenerationReader in tests/fakes/features/evaluation/; a new application module dtos/gold_schema.py is the single owner of each gold table's name, key and the columns consumers read, imported by the five builders and by the reader; GoldGeneration.from_stored(manifest_mapping, rows_by_table) in the DTO module is the single assembly of a read generation — it rebuilds the manifest with GoldManifest.from_mapping (inverse of as_mapping, refusing a top-level preregistration_ref that differs from the parameters'), builds the GoldTables with the schema's keys, fills zero-row tables from rows_by_table and runs check_generation — so fake and real share it; the adapter only reads files (MANIFEST.json first, pyarrow partitioning=None); a BLOCKED generation is returned and refused by the use case with GoldNotReadyError.
+decision: A port-out GoldGenerationReader with one method read_generation(*, partition) -> GoldGeneration lives in application/ports/out/gold_generation_reader.py, which re-exports GoldManifestNotFoundError and GoldGenerationCorruptError defined in dtos/refresh_gold.py next to GoldGeneration.from_stored (no import cycle); its real is ParquetGoldStore.read_generation (the module cites the port by name) and its fake is InMemoryGoldGenerationReader in tests/fakes/features/evaluation/; a new application module dtos/gold_schema.py is the single owner of each gold table's name, key and the columns consumers read, imported by the five builders and by the reader; GoldGeneration.from_stored(manifest_mapping, rows_by_table) in the DTO module is the single assembly of a read generation — it rebuilds the manifest with GoldManifest.from_mapping (inverse of as_mapping, refusing a top-level preregistration_ref that differs from the parameters'), builds the GoldTables with the schema's keys, fills zero-row tables from rows_by_table and runs check_generation — so fake and real share it; the adapter only reads files (MANIFEST.json first, pyarrow partitioning=None); a BLOCKED generation is returned and refused by the use case with GoldNotReadyError.
 context_stage: 6.5-preregistration-and-scorecard
 bounded_context: evaluation
 ---
@@ -56,7 +56,7 @@ has one owner: `ParquetGoldStore` (`partition_root`, `current_dir`,
 
 1. **Port** (`application/ports/out/gold_generation_reader.py`):
    `GoldGenerationReader.read_generation(*, partition: GoldPartition) ->
-   GoldGeneration`, plus the two errors of item 5 in the same module.
+   GoldGeneration`; the module re-exports the two errors of item 5.
 2. **Schema owner** (`application/dtos/gold_schema.py`): for each of the five
    tables, its name, its key tuple and the columns a consumer reads. The builders
    import name and key from it (their private `_KEY` constants disappear); the
@@ -82,7 +82,9 @@ has one owner: `ParquetGoldStore` (`partition_root`, `current_dir`,
    is `None` in every row, a `BLOCKED` generation and a missing manifest (B7). The
    Parquet type of an all-`None` column (null vs int64) is forwarded to 8.3 as a
    reader concern for ad hoc DuckDB queries.
-5. **Errors** (in the port module): no `current/MANIFEST.json` →
+5. **Errors** (defined in `dtos/refresh_gold.py`, next to `from_stored`, which
+   raises the second — so the DTO module never imports the port; re-exported by
+   the port module for adapters and callers): no `current/MANIFEST.json` →
    `GoldManifestNotFoundError`; a listed table absent on disk, a row count that
    differs from `rows_by_table`, or rows that fail `check_generation` →
    `GoldGenerationCorruptError`. A `BLOCKED` manifest is returned as is (8.3 may

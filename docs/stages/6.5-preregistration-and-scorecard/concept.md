@@ -3,7 +3,7 @@ title: Concept — Stage 6.5 — Pré-registro imutável e scorecard confirmató
 description: Pré-registro do estudo AAPL como arquivo TOML por revisão, transformado num value object tipado, com identificadores das regras, hasheado sem arredondamento por um VO de shared, ancorado por tag e comentário na issue, com emendas como revisões novas; derivação única do comando do refresh a partir dele; leitura do gold por um port do consumidor com manifesto primeiro e dono único do schema; e o use case BuildConfirmatoryScorecard, que confere o gold contra o plano e aplica no domínio, por horizonte, o gate H1 sobre contagens médias entre seeds e a árvore H2 sobre DM/Holm/MCS lidos do gold, separa veredito de perfil e calcula academic_decision_ready
 when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; ao preencher ou emendar o pré-registro; ao ler o gold a partir de qualquer consumidor; ao questionar de onde vem cada parâmetro do refresh confirmatório, qual linha do gold alimenta o gate H1, o que é "vencedor primário" ou o que academic_decision_ready exige
 keywords: [concept, preregistration-and-scorecard, evaluation, preregistration, hash, anchor, amendment, scorecard, h1-gate, h2, verdict, profile, academic-decision-ready, gold-reader, gold-schema, manifest, seeds, wilson, power, blinding]
-status: draft
+status: done
 created_at: 2026-09-29
 updated_at: 2026-09-30
 stage_id: 6.5-preregistration-and-scorecard
@@ -245,8 +245,8 @@ Domínio (`evaluation/domain/`):
   `window_deficits: Mapping[str, int]` (um por modelo); `RuleIdentifiers`
   (`primary_metric`, `secondary_roles`, `dm.direction`, `dm.kernel_lag`,
   `dm.small_sample`, `dm.negative_variance_fallback`, `mcs.statistic`,
-  `mcs.block_rule`, `exclusions`, `seed_aggregation`, `verdict.form`,
-  `success_criterion`); `DmSpec` (`alpha`, `primary_estimator`,
+  `mcs.block_rule`, `exclusions`, `seed_aggregation`, `h1_gate.form`,
+  `verdict.form`, `success_criterion`); `DmSpec` (`alpha`, `primary_estimator`,
   `sensitivity_estimators`); `McsSpec` (`alpha`, `reps`, `seed`,
   `primary_scheme`, `sensitivity_schemes`, `block_sensitivities`);
   `H1GateSpec` (`lower_level`, `upper_level`, `gate_band_level`,
@@ -301,8 +301,11 @@ Application (`evaluation/application/`):
   `PreregistrationNotFoundError` (no módulo do port).
 - **`GoldGenerationReader`** (`port-out`,
   `ports/out/gold_generation_reader.py`) —
-  `read_generation(*, partition: GoldPartition) -> GoldGeneration`; no mesmo
-  módulo, `GoldManifestNotFoundError` e `GoldGenerationCorruptError`.
+  `read_generation(*, partition: GoldPartition) -> GoldGeneration`;
+  `GoldManifestNotFoundError` e `GoldGenerationCorruptError` são definidos em
+  `dtos/refresh_gold.py` (ao lado de `GoldGeneration.from_stored`, que ergue o
+  segundo) e reexportados pelo módulo do port — sem ciclo de import, e a Task 4
+  (DTOs) vem antes da Task 6 (port).
 - **Schema do gold** (`dtos/gold_schema.py`): nome, chave e colunas lidas de cada
   tabela — dono único, importado pelos cinco builders e pelo leitor.
 - **DTOs** (`dtos/refresh_gold.py`, aditivos): `GoldManifest.from_mapping`,
@@ -426,14 +429,21 @@ Artefatos versionados:
 - **C4 — Cadeia quebrada** → `PreregistrationChainError`.
 - **C5 — Revisão sem âncora** → `PreregistrationNotAnchoredError`.
 - **C6 — Partição sem manifesto** → `GoldManifestNotFoundError`; tabela do
-  `rows_by_table` ausente, contagem divergente, geração incoerente, ou linhas
-  esperadas faltando (seed pré-registrada sem cauda, comparador sem DM, esquema sem
-  MCS) → `GoldGenerationCorruptError`.
+  `rows_by_table` ausente, contagem divergente ou geração incoerente →
+  `GoldGenerationCorruptError`; **linha esperada faltando para um modelo ou
+  seed presente** na tabela (cauda, horizonte, estimador, esquema ou nível que
+  deveria existir) → `GoldGenerationCorruptError`. Regra única com C8: diferença
+  de **conjunto** (modelo ou seed ausente de uma tabela, ou a mais, frente ao
+  plano) é C8; modelo/seed presente com linha faltando é C6. Ordem: C8
+  (manifesto, depois conjuntos de modelos, seeds e níveis por tabela, depois
+  estatística e bloco do MCS) roda **antes** da checagem de linhas esperadas de
+  C6.
 - **C7 — Gold `BLOCKED`** → `GoldNotReadyError` com os checks que bloquearam.
 - **C8 — Gold de outro plano ou de outro cohort** (partição,
   `preregistration_ref`, parâmetros, horizontes, déficits ou fingerprint do
-  manifesto ≠ `refresh_command_from`; modelo a mais ou a menos em DM, MCS ou
-  calibração; seed a mais ou a menos; nível da grade diferente; `statistic` do MCS
+  manifesto ≠ `refresh_command_from`; modelo ausente ou a mais em DM, MCS ou
+  calibração; seed ausente ou a mais em qualquer tabela; conjunto de níveis da
+  grade diferente; `statistic` do MCS
   ≠ o pré-registrado; `block_size` ≠ max(h, ⌈`max_block_estimate`⌉)) →
   `PreregistrationMismatchError` nomeando o campo.
 - **C9 — Candidato 100 % degenerado** num horizonte → não é erro: banda "não
@@ -779,10 +789,12 @@ erDiagram
       quebrada e revisão sem âncora erguem **sem** chamar o leitor do gold);
       `GoldNotReadyError` para `BLOCKED`; `PreregistrationMismatchError` para cada
       campo do manifesto alterado (partição inclusive), para modelo a mais e a
-      menos em DM, MCS e calibração, seed a mais e a menos, nível de grade
-      diferente, `statistic` do MCS diferente e `block_size` fora da regra;
-      `GoldGenerationCorruptError` para seed pré-registrada sem cauda, comparador
-      sem DM e esquema sem MCS; `academic_decision_ready` falso, com a razão, para
+      menos em DM, MCS e calibração, seed ausente e a mais numa tabela, nível de
+      grade diferente, `statistic` do MCS diferente e `block_size` fora da regra;
+      `GoldGenerationCorruptError` para seed presente sem uma das caudas, modelo
+      presente sem a linha de um horizonte, comparador presente sem a linha de um
+      estimador e esquema sem MCS num horizonte; com as duas falhas ao mesmo tempo,
+      ergue a `PreregistrationMismatchError` (ordem de C6/C8); `academic_decision_ready` falso, com a razão, para
       gold anterior à âncora, emenda `unblinded` e check `SKIPPED`; verdadeiro com
       H1 reprovado em todos os horizontes (refutação pronta); a declaração de
       cegamento, quando existe, é ecoada e não muda a prontidão.

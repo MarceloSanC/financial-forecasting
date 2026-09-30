@@ -85,9 +85,10 @@ it leaves to 6.5 the seed averaging and the choice of sample and variant
    `kind = lower_tail`, `level_low = τ_l` and `kind = upper_tail`,
    `level_low = τ_u`, `sample = model_full`, `includes_degenerate = false`,
    `dgt_offset = null`, one band level (any — the scorecard reads only
-   `n_violations`, `n_observed` and `degeneracy_rate`). For each preregistered
-   seed there must be exactly one row per tail, else `GoldGenerationCorruptError`
-   (an unexpected seed is a `PreregistrationMismatchError`, ADR 6.5.0004).
+   `n_violations`, `n_observed` and `degeneracy_rate`). The rule of ADR 6.5.0004
+   item 5 applies, in its order: a seed absent from or extra in these rows versus
+   the plan is a `PreregistrationMismatchError` (checked first); a seed that is
+   present but lacks exactly one row for a tail is a `GoldGenerationCorruptError`.
 2. **Seed means:** c̄_l, c̄_u, n̄ = arithmetic means over the candidate's seeds;
    the two tails share n̄ (same series); degeneracy = mean of the per-seed
    `degeneracy_rate`. The band's estimate is c̄/n̄ (ratio of means, the input the

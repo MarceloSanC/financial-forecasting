@@ -35,7 +35,7 @@ whose choice is a point on a risk curve, is P — those were answered by the hum
 
 | Field | Value | Class · rung | Base |
 |---|---|---|---|
-| `dm_alpha` (Holm, per horizon) | 0.05 | C · 1 | the significance level the project already fixed for every confirmatory test — the H1 gate's ≤ 5 % false failure (ADR 0.0.0011, Bonferroni 97.5 % per tail), the 3-state LR_uc at 5 % (doc §8.5), α(N+1) at 0.05 (conv. #22) — and the conventional 5 % level of the field; Holm 1979 Thm 1 controls FWER at any chosen α |
+| `dm_alpha` (Holm, per horizon) | 0.05 | C · 1 | the significance level the project already fixed for every confirmatory test — the H1 gate's ≤ 5 % false failure (ADR 0.0.0011, Bonferroni 97.5 % per tail), the 3-state LR_uc at 5 % (doc §8.5), α(N+1) at 0.05 (conv. #22); Holm 1979 Thm 1 controls FWER at any chosen α, so the value is a coherence choice, not a result of the method |
 | DM direction | `candidate_lower_loss_one_sided` (H1: E[L_cand − L_comp] < 0) | E | doc §6.10, conv. #15 |
 | DM estimators | `rectangular` primary (lag h−1, HLN, t_{T−1}), `bartlett` sensitivity | C · 1 | conv. #14 |
 | DM variance ≤ 0 with h > 1 | recompute with h = 1, record (`fallback_applied`) | C · 2 | conv. #14b (R `dm.test`) |
