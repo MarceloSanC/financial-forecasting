@@ -2317,4 +2317,16 @@ technical §2 Task 05; manifesto de outra partição → `GoldGenerationCorruptE
 A conferência fica no dono único da montagem (fake e real passam a partição
 pedida), não em cada leitor. **Stage candidata:** esta.
 
+### 2026-09-30 — [deviation] Task 08: os cinco erros do scorecard moram em `dtos/confirmatory_scorecard.py`, não no módulo do use case — Claude (Opus 5.5)
+**Contexto:** o concept §4 põe `PreregistrationHashMismatchError`,
+`PreregistrationChainError`, `PreregistrationNotAnchoredError`,
+`PreregistrationMismatchError` e `GoldNotReadyError` "no módulo do use case". O
+mapeador `use_cases/scorecard_evidence.py` ergue o `PreregistrationMismatchError` e é
+importado pelo use case; defini-los no use case criaria ciclo. **Decisão (planejada
+no §1 e confirmada pela sessão mestra no Checkpoint B r1):** os cinco no módulo de
+DTOs, ao lado do comando; o use case os importa de lá, **sem** reexportação. Mesma
+forma dos erros do gold (definidos em `dtos/refresh_gold.py`, ADR 6.5.0005 item 5).
+O `PreregistrationMismatchError` carrega `field: MismatchField` (nomes fixos do
+technical §2 Task 08). **Stage candidata:** esta.
+
 <!-- END: post-execution -->
