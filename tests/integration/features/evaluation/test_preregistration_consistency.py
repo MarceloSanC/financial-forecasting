@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import importlib
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 from statistics import NormalDist
 from typing import Any
@@ -215,3 +216,20 @@ def test_no_claim_about_r0_past() -> None:
     assert claims_about_past(prereg.blinding_statement) == []
     for path in (_PREREG_DIR / "aapl_confirmatory-r0.toml", _MIRROR):
         assert claims_about_past(path.read_text(encoding="utf-8")) == [], path.name
+
+
+_COHORT_ANCHORED_AT = datetime(2026, 9, 28, 20, 27, 9, tzinfo=UTC)  # comentário na #102
+
+
+def test_anchor_record_matches_ref() -> None:
+    prereg, digest = _r0()
+    record = TomlPreregistrationSource(root=_PREREG_DIR).read(name="aapl_confirmatory", revision=0)
+
+    assert record.anchor is not None
+    assert record.anchor.tag == f"preregistration/{prereg.reference(digest)}"
+    assert record.anchor.anchored_at > _COHORT_ANCHORED_AT
+    assert record.anchor.comment_url.startswith("https://github.com/")
+    assert "/issues/127#issuecomment-" in record.anchor.comment_url
+    mirror = _MIRROR.read_text(encoding="utf-8")
+    assert record.anchor.comment_url in mirror
+    assert record.anchor.commit in mirror

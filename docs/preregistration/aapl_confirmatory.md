@@ -125,3 +125,15 @@ foi lido. Nenhuma escolha deste plano usou informação de desempenho.
 - Todo teste e o e2e da 6.5 usam dados sintéticos; a Stage não rodou o refresh do
   gold sobre o cohort.
 - O scorecard marca como não pronto um gold gerado antes da âncora desta revisão.
+
+### Âncora r0 (ADR 6.5.0003)
+
+- **Tag:** `preregistration/aapl_confirmatory-r0-4526c437c296` (commit
+  `128d23eec95eea4f7ab183e075dfacac14985c66`).
+- **Comentário na #127:**
+  <https://github.com/MarceloSanC/financial-forecasting/issues/127#issuecomment-5918567606>,
+  criado pelo servidor em **2026-09-30T19:53:47Z** — posterior à âncora do cohort
+  referenciado na #102 (2026-09-28T20:27:09Z).
+- **Registro:** `config/preregistration/aapl_confirmatory-r0.anchor.toml` (fora do
+  hash). A conferência é por conteúdo: o arquivo do plano na tag é byte-igual ao de
+  HEAD.

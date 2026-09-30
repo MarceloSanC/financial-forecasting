@@ -2410,4 +2410,26 @@ dois tokens marcados "rodada 2" acima. A lista de tokens do §3 não é editada 
 da aprovação (o `check_technical_postexec` a guarda): esta entrada é o registro.
 **Stage candidata:** esta.
 
+### 2026-09-30 — [decision] Task 13 — âncora do pré-registro r0 — Claude (Opus 5.5)
+**Entrada humana (2026-09-30, ADR 6.5.0010 P1):** o r0 leva a declaração curta de
+cegamento, gravada como `blinding_statement` e espelhada: "As tabelas
+confirmatórias do cohort r0 foram calculadas uma vez num teste de software da
+Stage 6.4 (Task 15), num container descartado. Nenhum valor resultante foi lido.
+Nenhuma escolha deste plano usou informação de desempenho." O texto passou pela
+regra `CLAIM_TERMS` sem mudança. **Go-ahead:** a sessão mestra autorizou
+explicitamente (2026-09-30) o push **só** da tag e o comentário na #127.
+**Congelamento:** commit `128d23eec95eea4f7ab183e075dfacac14985c66`;
+`preregistration_ref` `aapl_confirmatory-r0-4526c437c296`; hash completo
+`4526c437c2964eb5d38f634c4614074388ed4ce37c6f843c1780faa2ac8081b1`; tag
+`preregistration/aapl_confirmatory-r0-4526c437c296` no remoto (sem `--force`; ausente
+local e remotamente antes). **Carimbos do servidor, nesta ordem:** âncora do cohort
+referenciado na #102 = `2026-09-28T20:27:09Z`; âncora deste pré-registro na #127 =
+`2026-09-30T19:53:47Z`
+(<https://github.com/MarceloSanC/financial-forecasting/issues/127#issuecomment-5918567606>),
+lida de volta pela API: exatamente um comentário com a tag. Nenhum rebase entre o
+commit de congelamento e o push da tag (o `origin/develop` não se moveu). A Stage 6.5
+não calculou nenhuma métrica sobre o cohort: todo teste e o e2e usaram dados
+sintéticos e nenhum refresh foi rodado sobre o cohort nesta Task.
+**Stage candidata:** esta.
+
 <!-- END: post-execution -->
