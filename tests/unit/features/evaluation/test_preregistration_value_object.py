@@ -459,3 +459,38 @@ def test_prereg_gate_pair_symmetry_owner(monkeypatch: pytest.MonkeyPatch) -> Non
     _plan()
     monkeypatch.setattr(preregistration_module, "is_symmetric_pair", lambda _l, _u: False)
     _raises(valid_payload(), r"lower_level \+ upper_level == 1")
+
+
+# --- extras da auditoria de testes (rodada 1) -----------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("path", ["cohort.blinding_statement", "h1_gate.amends", "dm.blind_status"])
+def test_prereg_nested_optional_key_rejected(path: str) -> None:
+    """Auditoria F1: chave opcional e campos de emenda só são aceitos no topo."""
+    with pytest.raises(ValueError, match="unknown key") as raised:
+        Preregistration.from_mapping(with_leaf(valid_payload(), path, "x"))
+    assert f"'{path}'" in str(raised.value)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("path", "value", "message"),
+    [
+        pytest.param(
+            "horizons_not_evaluated",
+            [{"horizon": 30, "reason": "a"}, {"horizon": 30, "reason": "b"}],
+            "horizons_not_evaluated must not repeat horizons",
+            id="horizons_not_evaluated",
+        ),
+        pytest.param(
+            "mcs.block_sensitivities",
+            ["h", "h"],
+            "mcs.block_sensitivities must not repeat values",
+            id="block_sensitivities",
+        ),
+    ],
+)
+def test_prereg_repeated_list_values_rejected(path: str, value: object, message: str) -> None:
+    """Auditoria F6b/F7: valores repetidos nas listas erguem pela mensagem da regra."""
+    _raises(with_leaf(valid_payload(), path, value), message)
