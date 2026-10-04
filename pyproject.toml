@@ -292,6 +292,12 @@ omit = [
     # fora do pacote de domínio
     "*/migrations/*",
     "*/scripts/*",
+    # módulos "contaminados" temporários que tests/architecture/
+    # test_import_contracts.py grava DENTRO de src/ e apaga no `finally`; com
+    # xdist + pytest-cov, um worker que salva os dados enquanto o arquivo
+    # existe o registra como fonte e o `coverage json` (sem -i) erra com
+    # "No source for code" depois que ele some (#130).
+    "*/_arch_audit_taint*.py",
 ]
 
 [tool.coverage.report]
