@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 6 (
 keywords: [domain, evaluation, pinball, crps, interval-score, winkler, picp, mpiw, reliability, sharpness, degeneracy-gate, diebold-mariano, hln, holm, mcs, christoffersen, kupiec, var, preregistration, scorecard, per-horizon]
 status: accepted
 created_at: 2026-09-12
-updated_at: 2026-09-28
+updated_at: 2026-10-03
 bounded_context: evaluation
 subdomain: probabilistic-forecast-evaluation
 references:
@@ -1610,8 +1610,12 @@ primário** (τ_l, τ_u) = (α/2, 1 − α/2), com duas condições:
 
 1. **cada cauda** do par está dentro da **banda de Wilson a 97,5 %** (§4.4),
    pooled sobre folds: ĉ(τ_l) contém τ_l **e** 1 − ĉ(τ_u) contém 1 − τ_u —
-   Bonferroni sobre as duas caudas, logo a probabilidade de reprovar um
-   modelo calibrado é ≤ 5 %. Par recomendado: 80 % (~50 violações esperadas
+   Bonferroni sobre as duas caudas, cujo alvo **nominal** de reprovar um
+   modelo calibrado é 5 %. A taxa **exata** depende de n, porque a banda de
+   Wilson é discreta e não garante o limite: ≈ 5 %, não ≤ 5 % — 0,0506 em
+   n = 1 512 e, em todo n inteiro de 1 400 a 1 600, de 0,0442 (n = 1 555) a
+   0,0545 (n = 1 435), no par de 80 % (multinomial exata de três células;
+   technical 6.5 §7 `[finding]` T-F11). Par recomendado: 80 % (~50 violações esperadas
    por cauda em T = 500), **não** as caudas τ_1/τ_K (~10 violações, §7.3);
    qual par é o primário é conteúdo do pré-registro. Para o candidato com S
    seeds, ĉ é a média entre seeds, com n = pontos não-degenerados, nunca S·T (§6.9);
