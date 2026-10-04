@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 
 # Partições do silver usadas pelo refresh do gold (espelham o schema do 4.1).
 SILVER_PARTITIONS: Mapping[str, tuple[str, ...]] = {

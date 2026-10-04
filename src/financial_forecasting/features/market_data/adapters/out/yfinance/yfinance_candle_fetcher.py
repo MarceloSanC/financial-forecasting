@@ -12,8 +12,9 @@ na API ao vivo (robustez overnight, concept 2.2 I13). `yfinance` (sem chave de
 API) vive SÓ aqui (concept 2.2 I8).
 
 Diferenças vs old (corrigidas com julgamento):
-- injeta `asset=symbol` em cada `Candle` (o old não tinha `asset`; o bronze exige
-  — concept 2.2 I9/D4);
+- injeta `asset` em cada `Candle` (o old não tinha `asset`; o bronze exige
+  — concept 2.2 I9/D4), na forma canônica de `AssetId.parse` (issue #69 c); a
+  chamada ao `yf.download` usa o símbolo como veio;
 - normalização tz via `normalize_to_utc_day` (helper de domínio, Task 02), em vez
   de `datetime.combine` inline;
 - esgotados os retries → `ApplicationError` (não `RuntimeError` cru), coerente com
@@ -35,7 +36,8 @@ from financial_forecasting.features.market_data.domain.time.utc import (
     require_tz_aware,
     to_utc,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
+from financial_forecasting.shared.domain.value_objects.asset_id import AssetId
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +66,15 @@ class YfinanceCandleFetcher:
         end_utc = to_utc(end)
         if start_utc > end_utc:
             raise ValueError("start must be <= end")
+        # o provedor recebe o símbolo como veio (o sufixo de bolsa importa para ele,
+        # ex. `PETR4.SA`); a entidade leva a identidade canônica (#69 c). Fora do
+        # laço: símbolo inválido falha já, sem consumir retries.
+        asset = AssetId.parse(symbol).value
 
         last_error: Exception | None = None
         for attempt in range(self._max_retries + 1):
             try:
-                return self._download_and_map(symbol, start_utc, end_utc)
+                return self._download_and_map(symbol, asset, start_utc, end_utc)
             except (ValueError, KeyError, OSError) as exc:
                 last_error = exc
                 logger.warning(
@@ -83,7 +89,7 @@ class YfinanceCandleFetcher:
         )
 
     def _download_and_map(
-        self, symbol: str, start_utc: datetime, end_utc: datetime
+        self, symbol: str, asset: str, start_utc: datetime, end_utc: datetime
     ) -> list[Candle]:
         """Uma tentativa: baixa, normaliza colunas/tz e mapeia para `list[Candle]`."""
         frame = yf.download(
@@ -111,7 +117,7 @@ class YfinanceCandleFetcher:
             timestamp = normalize_to_utc_day(_index_to_datetime(index))
             candles.append(
                 Candle(
-                    asset=symbol,
+                    asset=asset,
                     timestamp=timestamp,
                     open=float(row["Open"]),
                     high=float(row["High"]),

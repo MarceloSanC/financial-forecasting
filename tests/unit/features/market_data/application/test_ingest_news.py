@@ -23,8 +23,8 @@ from financial_forecasting.features.market_data.application.use_cases.ingest_new
 from financial_forecasting.features.market_data.domain.entities.news_article import (
     NewsArticle,
 )
+from financial_forecasting.shared.application.exceptions import DuplicateKeyError
 from financial_forecasting.shared.application.ports.out.medallion_store import Row
-from financial_forecasting.shared.domain.exceptions.base import DuplicateKeyError
 from tests.fakes.features.market_data.in_memory_news_fetcher import FakeNewsFetcher
 from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 

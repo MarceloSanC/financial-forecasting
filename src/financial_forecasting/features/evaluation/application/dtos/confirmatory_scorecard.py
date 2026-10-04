@@ -37,7 +37,7 @@ from financial_forecasting.features.evaluation.domain.services.confirmatory_scor
 from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
     Preregistration,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 
 
 def refresh_command_from(prereg: Preregistration, reference: str) -> RefreshGoldCommand:

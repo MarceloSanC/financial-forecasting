@@ -67,7 +67,7 @@ from financial_forecasting.features.modeling.domain.services.training_grid impor
     TrainingGrid,
     build_training_grid,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.domain.value_objects.cohort_hash import CohortHash
 
 if TYPE_CHECKING:

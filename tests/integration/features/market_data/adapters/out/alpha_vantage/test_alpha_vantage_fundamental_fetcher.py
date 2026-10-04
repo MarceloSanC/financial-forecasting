@@ -50,12 +50,14 @@ class _FakeClient:
     def __init__(self, by_function: dict[str, object]) -> None:
         self._by_function = by_function
         self.calls: list[str] = []
+        self.symbols: list[str] = []
 
     def get(
         self, url: str, *, params: dict[str, str] | None = None, headers: object = None
     ) -> _FakeResponse:
         function = (params or {})["function"]
         self.calls.append(function)
+        self.symbols.append((params or {})["symbol"])
         return _FakeResponse(self._by_function[function])
 
 
@@ -144,6 +146,28 @@ def test_merges_four_endpoints_into_reports() -> None:
     assert annual.total_liabilities == pytest.approx(302_083_000_000.0)
     # os 4 endpoints foram consultados
     assert client.calls == ["INCOME_STATEMENT", "BALANCE_SHEET", "CASH_FLOW", "EARNINGS"]
+
+
+@pytest.mark.integration
+def test_api_gets_raw_symbol_and_reports_get_canonical_asset() -> None:
+    """Os 4 endpoints recebem `aapl.us` como veio; o report leva `AAPL` (#69 c)."""
+    fetcher, client = _fetcher(_payloads())
+
+    reports = fetcher.fetch_fundamentals("aapl.us")
+
+    assert client.symbols == ["aapl.us"] * 4
+    assert {r.asset_id for r in reports} == {"AAPL"}
+
+
+@pytest.mark.integration
+def test_invalid_symbol_fails_before_any_request() -> None:
+    """Símbolo que não vira `AssetId` falha já, sem chamada de rede."""
+    fetcher, client = _fetcher(_payloads())
+
+    with pytest.raises(ValueError, match="asset_id"):
+        fetcher.fetch_fundamentals("AA PL")
+
+    assert client.calls == []
 
 
 @pytest.mark.integration

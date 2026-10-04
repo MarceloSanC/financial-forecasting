@@ -17,6 +17,7 @@ from datetime import datetime
 
 from financial_forecasting.features.market_data.domain.entities.candle import Candle
 from financial_forecasting.features.market_data.domain.time.utc import require_tz_aware
+from financial_forecasting.shared.domain.value_objects.asset_id import AssetId
 
 
 class FakeCandleFetcher:
@@ -37,8 +38,9 @@ class FakeCandleFetcher:
         if start > end:
             raise ValueError("start must be <= end")
 
+        asset = AssetId.parse(symbol).value  # mesma identidade canônica do real (#69 c)
         return [
             candle
             for candle in self._candles
-            if candle.asset == symbol and start <= candle.timestamp <= end
+            if candle.asset == asset and start <= candle.timestamp <= end
         ]

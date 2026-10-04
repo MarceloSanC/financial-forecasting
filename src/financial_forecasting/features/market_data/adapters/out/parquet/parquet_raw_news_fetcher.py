@@ -14,7 +14,8 @@ Mapeamento (concept 2.3 §9): as 8 colunas do raw (`article_id`, `headline`,
 `published_at` `datetime64[ns, UTC]`, `asset_id`, `url`, `source`, `language`,
 `summary`, todas non-null) viram os campos da `NewsArticle`; `published_at` é
 convertido para `datetime` tz-aware UTC; as invariantes I1 são validadas na
-construção.
+construção. O ticker pedido e o `asset_id` de cada linha passam por
+`AssetId.parse` (issue #69 c): grafias do mesmo ativo resolvem à forma canônica.
 
 Erros (concept 2.3 C6):
 - `start_date`/`end_date` naive ou `start_date > end_date` → `ValueError` (fronteira);
@@ -36,7 +37,8 @@ from financial_forecasting.features.market_data.domain.time.utc import (
     require_tz_aware,
     to_utc,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
+from financial_forecasting.shared.domain.value_objects.asset_id import AssetId
 
 # Raiz default do raw de news (simples-e-trocável; injetável p/ teste — concept 2.3
 # §13). Layout: <root>/<symbol>/news_<symbol>.parquet.
@@ -72,6 +74,8 @@ class ParquetRawNewsFetcher:
         if start_date > end_date:
             raise ValueError("start_date must be <= end_date")
 
+        # identidade canônica (#69 c): o pedido E a coluna `asset_id` do arquivo
+        ticker = AssetId.parse(ticker).value
         path = self._parquet_path(ticker)
         if not path.exists():
             raise ApplicationError(f"Raw news source not found for {ticker!r}: {path}")
@@ -97,7 +101,7 @@ class ParquetRawNewsFetcher:
                 continue
             articles.append(
                 NewsArticle(
-                    asset_id=str(record["asset_id"]),
+                    asset_id=AssetId.parse(str(record["asset_id"])).value,
                     published_at=published_at,
                     headline=str(record["headline"]),
                     summary=str(record["summary"]),

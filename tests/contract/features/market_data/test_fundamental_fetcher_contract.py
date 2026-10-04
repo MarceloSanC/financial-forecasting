@@ -33,7 +33,7 @@ from financial_forecasting.features.market_data.application.ports.out.fundamenta
 from financial_forecasting.features.market_data.domain.entities.fundamental_report import (
     FundamentalReport,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 from tests.fakes.features.market_data.in_memory_fundamental_fetcher import (
     FakeFundamentalFetcher,
 )
@@ -165,6 +165,21 @@ def test_asset_id_matches_requested(fetcher: FundamentalFetcher) -> None:
     """`asset_id` dos reports é o ativo pedido (normalizado)."""
     for report in fetcher.fetch_fundamentals(_SYMBOL):
         assert report.asset_id == _SYMBOL
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("spelling", ["aapl", " Aapl ", "AAPL.US"])
+def test_other_spellings_resolve_to_the_canonical_asset(
+    fetcher: FundamentalFetcher, spelling: str
+) -> None:
+    """Grafias do mesmo ativo devolvem os mesmos reports nas DUAS pernas (#69 c).
+
+    Antes, só o real normalizava; o fake comparava por igualdade exata.
+    """
+    reports = fetcher.fetch_fundamentals(spelling)
+
+    assert len(reports) == len(_reports())
+    assert {r.asset_id for r in reports} == {_SYMBOL}
 
 
 # -- testes específicos do adapter real (origem default; concept 2.3 C6) -------

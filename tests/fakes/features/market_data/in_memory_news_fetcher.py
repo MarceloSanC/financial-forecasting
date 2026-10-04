@@ -19,6 +19,7 @@ from financial_forecasting.features.market_data.domain.entities.news_article imp
     NewsArticle,
 )
 from financial_forecasting.features.market_data.domain.time.utc import require_tz_aware
+from financial_forecasting.shared.domain.value_objects.asset_id import AssetId
 
 
 class FakeNewsFetcher:
@@ -42,8 +43,9 @@ class FakeNewsFetcher:
         if start_date > end_date:
             raise ValueError("start_date must be <= end_date")
 
+        asset = AssetId.parse(ticker).value  # mesma identidade canônica do real (#69 c)
         return [
             article
             for article in self._articles
-            if article.asset_id == ticker and start_date <= article.published_at <= end_date
+            if article.asset_id == asset and start_date <= article.published_at <= end_date
         ]

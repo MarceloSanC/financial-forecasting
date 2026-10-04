@@ -58,7 +58,7 @@ from financial_forecasting.features.modeling.domain.value_objects.scope_spec imp
 from financial_forecasting.shared.adapters.out.calendar.exchange_calendars_provider import (
     ExchangeCalendarsProvider,
 )
-from financial_forecasting.shared.domain.exceptions.base import DuplicateKeyError
+from financial_forecasting.shared.application.exceptions import DuplicateKeyError
 from financial_forecasting.shared.infrastructure.config.settings import Settings
 
 if TYPE_CHECKING:

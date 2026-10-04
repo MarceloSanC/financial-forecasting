@@ -16,6 +16,7 @@ from __future__ import annotations
 from financial_forecasting.features.market_data.domain.entities.fundamental_report import (
     FundamentalReport,
 )
+from financial_forecasting.shared.domain.value_objects.asset_id import AssetId
 
 
 class FakeFundamentalFetcher:
@@ -27,4 +28,5 @@ class FakeFundamentalFetcher:
 
     def fetch_fundamentals(self, asset_id: str) -> list[FundamentalReport]:
         """Devolve TODOS os reports pré-carregados de `asset_id` (sem filtrar, I10)."""
-        return [r for r in self._reports if r.asset_id == asset_id]
+        asset = AssetId.parse(asset_id).value  # mesma identidade canônica do real (#69 c)
+        return [r for r in self._reports if r.asset_id == asset]

@@ -28,7 +28,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Protocol
 
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 
 
 class CohortRunLockedError(ApplicationError):

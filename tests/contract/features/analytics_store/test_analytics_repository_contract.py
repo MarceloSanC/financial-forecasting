@@ -33,7 +33,7 @@ from financial_forecasting.features.analytics_store.application.ports.out.analyt
     AnalyticsRepository,
     Row,
 )
-from financial_forecasting.shared.domain.exceptions.base import (
+from financial_forecasting.shared.application.exceptions import (
     ApplicationError,
     DuplicateKeyError,
 )

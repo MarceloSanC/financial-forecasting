@@ -33,7 +33,7 @@ from financial_forecasting.features.market_data.application.ports.out.news_fetch
 from financial_forecasting.features.market_data.domain.entities.news_article import (
     NewsArticle,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 from tests.fakes.features.market_data.in_memory_news_fetcher import FakeNewsFetcher
 
 _SYMBOL = "AAPL"
@@ -121,6 +121,32 @@ def test_asset_id_is_the_requested_ticker(fetcher: NewsFetcher) -> None:
     """`asset_id` é o ticker pedido."""
     for article in fetcher.fetch_company_news(_SYMBOL, _START, _END):
         assert article.asset_id == _SYMBOL
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("spelling", ["aapl", " Aapl ", "AAPL.US"])
+def test_other_spellings_resolve_to_the_canonical_asset(
+    fetcher: NewsFetcher, spelling: str
+) -> None:
+    """Grafias do mesmo ativo leem as mesmas notícias, com `asset_id` canônico (#69 c)."""
+    articles = fetcher.fetch_company_news(spelling, _START, _END)
+
+    assert len(articles) == len(_articles())
+    assert {a.asset_id for a in articles} == {_SYMBOL}
+
+
+@pytest.mark.contract
+def test_real_asset_id_column_is_canonicalized(tmp_path: Path) -> None:
+    """O `asset_id` vem da COLUNA do arquivo: grafia não canônica nela também resolve (#69 c)."""
+    _write_raw_parquet(tmp_path, _SYMBOL, _articles())
+    path = tmp_path / _SYMBOL / f"news_{_SYMBOL}.parquet"
+    frame = pd.read_parquet(path)
+    frame["asset_id"] = pd.array(["aapl.us"] * len(frame), dtype="string")
+    frame.to_parquet(path)
+
+    articles = ParquetRawNewsFetcher(tmp_path).fetch_company_news(_SYMBOL, _START, _END)
+
+    assert {a.asset_id for a in articles} == {_SYMBOL}
 
 
 @pytest.mark.contract

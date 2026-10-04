@@ -14,7 +14,8 @@ Mapeamento (concept 2.3 §9, espelhando o old `parquet_fundamental_repository.py
 `:54`,`:93-94` na VOLTA — `datetime64 UTC → date`):
 - `fiscal_date_end` (`datetime64[ns, UTC]` → `.date()`, non-null);
 - `reported_date` (`NaT → None`, senão `.date()`);
-- os cinco floats (`NaN → None`); `asset_id` normalizado.
+- os cinco floats (`NaN → None`); `asset_id` normalizado por `AssetId.parse` (a
+  regra que nasceu aqui, old `:54`, virou o VO compartilhado na issue #69 c).
 
 O adapter NÃO filtra por `report_type`/intervalo (isso é do use case, I10) — devolve
 TODOS os reports do ativo. Arquivo ausente/ilegível → `ApplicationError` (C6).
@@ -30,7 +31,8 @@ import pandas as pd
 from financial_forecasting.features.market_data.domain.entities.fundamental_report import (
     FundamentalReport,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
+from financial_forecasting.shared.domain.value_objects.asset_id import AssetId
 
 # Raiz default dos fundamentos processados (injetável p/ teste — concept 2.3 §13).
 # Layout: <root>/<symbol>/fundamentals_<symbol>.parquet.
@@ -56,17 +58,12 @@ class ParquetFundamentalFetcher:
     def __init__(self, root: Path | str = DEFAULT_FUNDAMENTALS_ROOT) -> None:
         self._root = Path(root)
 
-    @staticmethod
-    def _normalize_symbol(asset_id: str) -> str:
-        """Normaliza o ativo (sufixo de bolsa removido, uppercase) — old `:54`."""
-        return asset_id.split(".", maxsplit=1)[0].upper()
-
     def _parquet_path(self, symbol: str) -> Path:
         return self._root / symbol / f"fundamentals_{symbol}.parquet"
 
     def fetch_fundamentals(self, asset_id: str) -> list[FundamentalReport]:
         """Lê e mapeia TODOS os fundamentos de `asset_id` do parquet existente."""
-        symbol = self._normalize_symbol(asset_id)
+        symbol = AssetId.parse(asset_id).value
         path = self._parquet_path(symbol)
         if not path.exists():
             raise ApplicationError(f"Fundamentals source not found for {asset_id!r}: {path}")
@@ -87,7 +84,7 @@ class ParquetFundamentalFetcher:
         for record in frame.to_dict(orient="records"):
             reports.append(
                 FundamentalReport(
-                    asset_id=self._normalize_symbol(str(record["asset_id"])),
+                    asset_id=AssetId.parse(str(record["asset_id"])).value,
                     report_type=str(record["report_type"]),
                     fiscal_date_end=_to_date_required(record["fiscal_date_end"]),
                     reported_date=_to_date_optional(record["reported_date"]),

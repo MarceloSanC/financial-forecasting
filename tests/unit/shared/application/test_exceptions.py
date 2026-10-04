@@ -10,11 +10,11 @@ fake↔real continue observável por um único `pytest.raises(DuplicateKeyError)
 
 import pytest
 
-from financial_forecasting.shared.domain.exceptions.base import (
+from financial_forecasting.shared.application.exceptions import (
     ApplicationError,
-    DomainError,
     DuplicateKeyError,
 )
+from financial_forecasting.shared.domain.exceptions.base import DomainError
 
 
 @pytest.mark.unit

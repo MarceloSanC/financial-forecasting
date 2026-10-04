@@ -41,13 +41,13 @@ import pytest
 from financial_forecasting.shared.adapters.out.parquet.parquet_medallion_store import (
     ParquetMedallionStore,
 )
+from financial_forecasting.shared.application.exceptions import (
+    ApplicationError,
+    DuplicateKeyError,
+)
 from financial_forecasting.shared.application.ports.out.medallion_store import (
     MedallionStore,
     Row,
-)
-from financial_forecasting.shared.domain.exceptions.base import (
-    ApplicationError,
-    DuplicateKeyError,
 )
 from tests.fakes.shared.in_memory_medallion_store import FakeMedallionStore
 

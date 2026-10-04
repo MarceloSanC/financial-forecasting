@@ -12,7 +12,8 @@ de `raw/` é decisão do autor (ledger §A) e a origem default do pipeline
 
 Mapeamento (concept 2.2 §9):
 - o raw NÃO tem coluna `asset`; o adapter injeta `asset=symbol` ao construir cada
-  `Candle` (concept 2.2 I9/D4);
+  `Candle` (concept 2.2 I9/D4), com `symbol` na forma canônica de `AssetId.parse`
+  (issue #69 c) — o mesmo vale para o caminho lido;
 - `timestamp` é convertido para tz-aware UTC e normalizado a `00:00 UTC`
   (`normalize_to_utc_day`, Task 02);
 - OHLC/volume viram `float`/`int` Python; as invariantes OHLC fortes da `Candle`
@@ -37,7 +38,8 @@ from financial_forecasting.features.market_data.domain.time.utc import (
     require_tz_aware,
     to_utc,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
+from financial_forecasting.shared.domain.value_objects.asset_id import AssetId
 
 # Raiz default do raw de candles (simples-e-trocável; injetável p/ teste —
 # concept 2.2 §13). Layout: <root>/<symbol>/candles_<symbol>_1d.parquet.
@@ -62,6 +64,8 @@ class ParquetRawCandleFetcher:
         if start > end:
             raise ValueError("start must be <= end")
 
+        # identidade canônica (#69 c): `"aapl"` lê `AAPL/` e grava `asset="AAPL"`
+        symbol = AssetId.parse(symbol).value
         path = self._parquet_path(symbol)
         if not path.exists():
             raise ApplicationError(f"Raw candle source not found for {symbol!r}: {path}")

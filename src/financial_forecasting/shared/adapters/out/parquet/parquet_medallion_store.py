@@ -57,7 +57,7 @@ from financial_forecasting.shared.adapters.out.parquet.schemas.bronze_schemas im
     BRONZE_REGISTRY,
     BronzeTable,
 )
-from financial_forecasting.shared.domain.exceptions.base import (
+from financial_forecasting.shared.application.exceptions import (
     ApplicationError,
     DuplicateKeyError,
 )

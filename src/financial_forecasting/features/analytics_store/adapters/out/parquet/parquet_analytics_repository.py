@@ -41,7 +41,7 @@ import pyarrow.parquet as pq
 from financial_forecasting.features.analytics_store.adapters.out.parquet.schemas.silver_registry import (  # noqa: E501
     SILVER_REGISTRY,
 )
-from financial_forecasting.shared.domain.exceptions.base import (
+from financial_forecasting.shared.application.exceptions import (
     ApplicationError,
     DuplicateKeyError,
 )

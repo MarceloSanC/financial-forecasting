@@ -117,9 +117,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_
 from financial_forecasting.features.evaluation.domain.value_objects.realized_returns import (
     RealizedReturns,
 )
+from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.application.ports.out.clock import Clock
 from financial_forecasting.shared.application.ports.out.hasher import Hasher
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
     DatasetContentFingerprint,
 )

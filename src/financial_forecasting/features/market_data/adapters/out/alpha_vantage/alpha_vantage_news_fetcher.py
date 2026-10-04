@@ -32,6 +32,7 @@ from financial_forecasting.features.market_data.domain.entities.news_article imp
     NewsArticle,
 )
 from financial_forecasting.features.market_data.domain.time.utc import require_tz_aware
+from financial_forecasting.shared.domain.value_objects.asset_id import AssetId
 
 _TIME_PUBLISHED_RE = re.compile(r"^\d{8}T\d{4}(\d{2})?$")  # YYYYMMDDTHHMM[SS]
 _LEN_HHMM = 13
@@ -91,6 +92,8 @@ class AlphaVantageNewsFetcher:
         end_utc = end_date.astimezone(UTC)
         if start_utc > end_utc:
             raise ValueError("start_date must be <= end_date")
+        # a API recebe o ticker como veio; o artigo leva a identidade canônica (#69 c)
+        asset_id = AssetId.parse(ticker).value
 
         params = {
             "function": "NEWS_SENTIMENT",
@@ -107,7 +110,7 @@ class AlphaVantageNewsFetcher:
             article
             for item in feed
             if isinstance(item, dict)
-            and (article := self._item_to_article(ticker, item)) is not None
+            and (article := self._item_to_article(asset_id, item)) is not None
         ]
 
     def _get(self, params: dict[str, str]) -> dict[str, object]:
@@ -128,7 +131,7 @@ class AlphaVantageNewsFetcher:
             raise RuntimeError(f"Alpha Vantage Information: {data['Information']}")
         return data
 
-    def _item_to_article(self, ticker: str, item: dict[str, object]) -> NewsArticle | None:
+    def _item_to_article(self, asset_id: str, item: dict[str, object]) -> NewsArticle | None:
         """Mapeia um item do `feed` → `NewsArticle`; item inválido → `None` (ignorado)."""
         time_published = item.get("time_published")
         if not time_published:
@@ -150,7 +153,7 @@ class AlphaVantageNewsFetcher:
 
         article_id = url_str or f"{time_published}:{headline[:_HEADLINE_ID_LEN]}"
         return NewsArticle(
-            asset_id=ticker,
+            asset_id=asset_id,
             published_at=published_at,
             headline=headline,
             summary=summary,

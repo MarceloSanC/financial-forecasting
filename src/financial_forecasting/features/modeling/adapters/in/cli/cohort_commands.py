@@ -57,7 +57,7 @@ from financial_forecasting.features.modeling.application.use_cases.train_gbm_qua
     grid_fingerprint,
 )
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import ScopeSpec
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.domain.value_objects.cohort_hash import CohortHash
 
 if TYPE_CHECKING:

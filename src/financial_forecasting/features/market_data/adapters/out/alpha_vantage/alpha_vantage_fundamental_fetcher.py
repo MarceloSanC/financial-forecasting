@@ -33,6 +33,7 @@ import httpx
 from financial_forecasting.features.market_data.domain.entities.fundamental_report import (
     FundamentalReport,
 )
+from financial_forecasting.shared.domain.value_objects.asset_id import AssetId
 
 # Field maps verbatim do old (`:139-150`): chave da API → campo da entity.
 _INCOME_MAP = {"totalRevenue": "revenue", "netIncome": "net_income"}
@@ -99,6 +100,8 @@ class AlphaVantageFundamentalFetcher:
 
     def fetch_fundamentals(self, asset_id: str) -> list[FundamentalReport]:
         """Busca os 4 endpoints, faz merge por `(report_type, fiscal_date_end)`."""
+        # a API recebe o símbolo como veio; o report leva a identidade canônica (#69 c)
+        canonical = AssetId.parse(asset_id).value
         income = self._get("INCOME_STATEMENT", asset_id)
         balance = self._get("BALANCE_SHEET", asset_id)
         cash_flow = self._get("CASH_FLOW", asset_id)
@@ -126,7 +129,7 @@ class AlphaVantageFundamentalFetcher:
 
         reports = [
             FundamentalReport(
-                asset_id=asset_id,
+                asset_id=canonical,
                 report_type=report_type,
                 fiscal_date_end=fiscal_end,
                 reported_date=values.get("reported_date"),
