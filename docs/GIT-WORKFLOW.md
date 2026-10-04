@@ -359,7 +359,8 @@ Se qualquer falhar: **PARAR** e corrigir antes de prosseguir.
 **Sincronize sempre antes do push.** `git fetch` + `git rebase origin/<base>`
 — não só quando houver carona de outro escopo. Rebasear na base **atualizada**
 mantém as implementações sequenciais e resolve **cedo** o conflito recorrente
-de `roadmap.md` (várias Stages/issues editam a mesma tabela), em vez de ele
+de `roadmap.md` (várias Stages — e issues cujo escopo toca o roadmap — editam
+a mesma tabela), em vez de ele
 estourar no merge.
 
 **Antes do push, conferir base remota.** O branch precisa carregar

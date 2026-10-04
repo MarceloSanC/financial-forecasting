@@ -82,7 +82,7 @@ seção correspondente. Cada uma traz três blocos:
   git rebase origin/<base>                     # sync sempre na base atualizada (não só se houver carona)
   ```
 - **GOTCHA (carona):** branch solo por > 1 sessão costuma ter commit de outro escopo perdido. Sempre cheque antes do primeiro push. Push direto em `main`/`develop` é bloqueado por branch protection.
-- **GOTCHA (sync/roadmap):** rebase na base **atualizada** antes de **todo** push (não só quando há carona) — mantém as implementações sequenciais e resolve **cedo** o conflito recorrente de `roadmap.md` (várias Stages/issues editam a mesma tabela), em vez de estourar no merge.
+- **GOTCHA (sync/roadmap):** rebase na base **atualizada** antes de **todo** push (não só quando há carona) — mantém as implementações sequenciais e resolve **cedo** o conflito recorrente de `roadmap.md` (várias Stages — e issues cujo escopo toca o roadmap — editam a mesma tabela), em vez de estourar no merge.
 
 ## 🚀 `gh pr create`
 
