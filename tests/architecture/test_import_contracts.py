@@ -27,8 +27,12 @@ fitness function contra dois modos de falha clássicos de gate inerte/míope
 
 Usa a API pública `importlinter.cli.lint_imports` (retorna o exit code int),
 evitando `subprocess` (mais determinístico, sem depender do PATH do ambiente).
-Toda chamada passa por `_lint_imports`, que isola o estado de processo que o
-CLI muta (issue #125) — ver o docstring dele.
+Toda chamada passa por `_lint_imports`, que restaura o `disabled` dos loggers e
+o `sys.path` que o CLI muta (issue #125) — ver o docstring dele. O isolamento é
+PARCIAL: o mesmo `dictConfig` também fecha os handlers já existentes no
+processo e deixa os loggers `importlinter`/`grimp` configurados; nenhum teste
+hoje depende disso (não há `FileHandler`/`log_file`). Se um dia depender, a
+saída é rodar o CLI em subprocess, só neste helper.
 """
 
 from __future__ import annotations
@@ -57,7 +61,8 @@ def _lint_imports(
     teste com `caplog` que rode depois no mesmo worker deixa de receber os
     registros do módulo sob teste e falha só em algumas ordens (issue #125).
     O CLI também faz `sys.path.insert(0, os.getcwd())` a cada chamada. Os dois
-    estados são salvos antes e restaurados no `finally`.
+    estados são salvos antes e restaurados no `finally`. Handlers fechados pelo
+    `dictConfig` não têm como ser reabertos (ver o docstring do módulo).
     """
     manager = logging.Logger.manager
     disabled_before = {
