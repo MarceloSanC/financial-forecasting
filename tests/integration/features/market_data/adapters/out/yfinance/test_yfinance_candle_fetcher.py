@@ -83,6 +83,38 @@ def test_maps_and_normalizes_multiindex_naive(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.integration
+def test_provider_gets_raw_symbol_and_candles_get_canonical_asset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """O provedor recebe `petr4.sa` como veio; a `Candle` leva `PETR4` (#69 c)."""
+    requested: list[object] = []
+
+    def _download(*args: object, **_kwargs: object) -> pd.DataFrame:
+        requested.append(args[0])
+        return _single_level_aware_frame()
+
+    monkeypatch.setattr(module.yf, "download", _download)
+
+    candles = YfinanceCandleFetcher().fetch_candles("petr4.sa", _START, _END)
+
+    assert requested == ["petr4.sa"]
+    assert {c.asset for c in candles} == {"PETR4"}
+
+
+@pytest.mark.integration
+def test_invalid_symbol_fails_before_any_download(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Símbolo que não vira `AssetId` falha já, sem chamar o provedor nem retentar."""
+    calls: list[object] = []
+    monkeypatch.setattr(module.yf, "download", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(module.sleep_time, "sleep", lambda _s: calls.append("sleep"))
+
+    with pytest.raises(ValueError, match="asset_id"):
+        YfinanceCandleFetcher().fetch_candles("AA PL", _START, _END)
+
+    assert calls == []
+
+
+@pytest.mark.integration
 def test_maps_single_level_columns_with_aware_index(monkeypatch: pytest.MonkeyPatch) -> None:
     """Colunas planas (nlevels==1) + índice já tz-aware → Candles UTC 00:00 corretos.
 
