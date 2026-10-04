@@ -27,21 +27,53 @@ fitness function contra dois modos de falha clássicos de gate inerte/míope
 
 Usa a API pública `importlinter.cli.lint_imports` (retorna o exit code int),
 evitando `subprocess` (mais determinístico, sem depender do PATH do ambiente).
+Toda chamada passa por `_lint_imports`, que isola o estado de processo que o
+CLI muta (issue #125) — ver o docstring dele.
 """
 
 from __future__ import annotations
 
 import ast
 import configparser
+import logging
 import sys
 import textwrap
 from pathlib import Path
+from typing import Any
 
 import pytest
 from importlinter.cli import EXIT_STATUS_ERROR, EXIT_STATUS_SUCCESS, lint_imports
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _IMPORTLINTER_PATH = _REPO_ROOT / ".importlinter"
+
+
+def _lint_imports(**kwargs: Any) -> int:
+    """`lint_imports` sem vazar estado de processo para os outros testes.
+
+    O CLI aplica `logging.config.dictConfig` com `disable_existing_loggers`
+    ligado (default), que marca `disabled=True` em TODO logger já criado; um
+    teste com `caplog` que rode depois no mesmo worker deixa de receber os
+    registros do módulo sob teste e falha só em algumas ordens (issue #125).
+    O CLI também faz `sys.path.insert(0, os.getcwd())` a cada chamada. Os dois
+    estados são salvos antes e restaurados no `finally`.
+    """
+    manager = logging.Logger.manager
+    disabled_before = {
+        name: logger.disabled
+        for name, logger in manager.loggerDict.items()
+        if isinstance(logger, logging.Logger)
+    }
+    sys_path_before = list(sys.path)
+    try:
+        return lint_imports(**kwargs)
+    finally:
+        sys.path[:] = sys_path_before
+        for name, logger in manager.loggerDict.items():
+            if isinstance(logger, logging.Logger):
+                # logger criado durante a chamada não existia antes: volta ao
+                # default de um logger novo (habilitado).
+                logger.disabled = disabled_before.get(name, False)
 
 # Contratos que DEVEM existir no .importlinter. Se um sumir, o gate perdeu
 # cobertura — o teste falha (guarda contra afrouxamento/remoção, concept C6).
@@ -154,11 +186,36 @@ def test_real_repo_has_zero_broken_contracts() -> None:
     arquitetura (ex.: domain importando pandas), este teste falha junto com o
     gate. `no_cache=True` evita resultado preso a cache de execução anterior.
     """
-    exit_code = lint_imports(config_filename=str(_IMPORTLINTER_PATH), no_cache=True)
+    exit_code = _lint_imports(config_filename=str(_IMPORTLINTER_PATH), no_cache=True)
     assert exit_code == EXIT_STATUS_SUCCESS, (
         "lint-imports deveria estar 0 broken no repo real; "
         f"exit={exit_code}. Rode `uv run lint-imports` para ver o contrato quebrado."
     )
+
+
+def test_lint_imports_helper_does_not_leak_process_state(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Depois de `_lint_imports`, loggers pré-existentes seguem ligados (#125).
+
+    Sem o isolamento, o `dictConfig` do CLI desliga este logger e o `caplog`
+    não recebe o registro — a falha dependente de ordem que a issue descreve.
+    """
+    probe = logging.getLogger("tests.architecture._lint_isolation_probe")
+    assert not probe.disabled
+    sys_path_before = list(sys.path)
+
+    _lint_imports(
+        config_filename=str(_IMPORTLINTER_PATH),
+        limit_to_contracts=("shared-no-features",),
+        no_cache=True,
+    )
+
+    assert not probe.disabled, "o CLI do import-linter desligou um logger pré-existente"
+    assert sys.path == sys_path_before, "o CLI do import-linter vazou entrada no sys.path"
+    with caplog.at_level(logging.INFO, logger=probe.name):
+        probe.info("registro depois do lint")
+    assert [r.getMessage() for r in caplog.records] == ["registro depois do lint"]
 
 
 def test_forbidden_contract_detects_violation(tmp_path: Path) -> None:
@@ -198,7 +255,7 @@ def test_forbidden_contract_detects_violation(tmp_path: Path) -> None:
 
     sys.path.insert(0, str(tmp_path))
     try:
-        exit_code = lint_imports(config_filename=str(config), no_cache=True)
+        exit_code = _lint_imports(config_filename=str(config), no_cache=True)
     finally:
         sys.path.remove(str(tmp_path))
         # limpa o pacote-fixture do cache de import para não vazar entre testes
@@ -219,7 +276,7 @@ def test_each_expected_contract_is_individually_checkable(contract_name: str) ->
     só — uma seção mal formada ou um contrato quebrado é pego aqui, não só no
     veredito agregado.
     """
-    exit_code = lint_imports(
+    exit_code = _lint_imports(
         config_filename=str(_IMPORTLINTER_PATH),
         limit_to_contracts=(contract_name,),
         no_cache=True,
@@ -842,7 +899,7 @@ def test_production_contract_reacts_to_real_violation(
             target.write_text(content, encoding="utf-8")
             created.append(target)
 
-        exit_code = lint_imports(
+        exit_code = _lint_imports(
             config_filename=str(_IMPORTLINTER_PATH),
             limit_to_contracts=(contract_name,),
             no_cache=True,
@@ -876,7 +933,7 @@ def test_real_repo_clean_after_injection_fixture() -> None:
     `test_production_contract_reacts_to_real_violation` não deixou módulo-lixo
     na árvore de produção (que tornaria o gate vermelho de forma espúria).
     """
-    exit_code = lint_imports(config_filename=str(_IMPORTLINTER_PATH), no_cache=True)
+    exit_code = _lint_imports(config_filename=str(_IMPORTLINTER_PATH), no_cache=True)
     assert exit_code == EXIT_STATUS_SUCCESS, (
         "o repo real não voltou a 0 broken — possível resíduo de fixture de "
         f"injeção não limpo; exit={exit_code}."
