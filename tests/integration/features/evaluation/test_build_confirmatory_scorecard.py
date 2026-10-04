@@ -145,27 +145,24 @@ def _write_silver(
     repo = deps.analytics_repository
     sweep = prereg.cohort.cohort_id
     middle = (_FIRST_DECISION + _N_SESSIONS) // 2
+    runs: list[dict[str, object]] = []
     facts: list[dict[str, object]] = []
     for model in prereg.models:
         for seed in _seeds(prereg, model, extra_seeds):
             for fold in ("f0", "f1"):
-                repo.write(  # um write por run (#119)
-                    layer=_SILVER,
-                    table="dim_run",
-                    rows=[
-                        {
-                            "schema_version": 1,
-                            "run_id": f"{sweep}-{model}-s{seed}-{fold}",
-                            "asset": _ASSET,
-                            "parent_sweep_id": sweep,
-                            "feature_set_name": "fs-core",
-                            "config_signature": f"sig-{model}",
-                            "split_fingerprint": "split-e2e",
-                            "fold": fold,
-                            "seed": seed,
-                            "model_version": model,
-                        }
-                    ],
+                runs.append(
+                    {
+                        "schema_version": 1,
+                        "run_id": f"{sweep}-{model}-s{seed}-{fold}",
+                        "asset": _ASSET,
+                        "parent_sweep_id": sweep,
+                        "feature_set_name": "fs-core",
+                        "config_signature": f"sig-{model}",
+                        "split_fingerprint": "split-e2e",
+                        "fold": fold,
+                        "seed": seed,
+                        "model_version": model,
+                    }
                 )
             for horizon in _HORIZONS:
                 for decision in range(_FIRST_DECISION, _N_SESSIONS - horizon):
@@ -192,6 +189,7 @@ def _write_silver(
                                 "year": int(_session(target)[:4]),
                             }
                         )
+    repo.write(layer=_SILVER, table="dim_run", rows=runs)
     repo.write(layer=_SILVER, table="fact_oos_predictions", rows=facts)
 
 

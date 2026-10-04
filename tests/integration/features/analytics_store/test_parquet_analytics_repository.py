@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 from pandera.errors import SchemaError
@@ -212,6 +213,61 @@ def test_real_seed_wrong_type_rejected_before_disk(tmp_path: Path, bad_seed: obj
         repo.write(layer=_SILVER, table="dim_run", rows=[row])
 
     assert not any(tmp_path.rglob("*.parquet"))
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "seeds",
+    [(None, "42"), (None, 4.0), (3, 4.0), (None, True)],
+    ids=["none+str", "none+float", "int+float", "none+bool"],
+)
+def test_real_mixed_batch_with_wrong_seed_type_rejected(
+    tmp_path: Path, seeds: tuple[object, object]
+) -> None:
+    """Lote misto não afrouxa o gate (#119): um `seed` não-int no lote reprova o lote.
+
+    O conserto lê os valores crus das linhas; um `4.0` genuíno ao lado de um `3`
+    (que o pandas inferiria juntos como `float64`) continua reprovando.
+    """
+    repo = _repo(tmp_path)
+    batch = [{**_dim_run_row(f"run-{i}"), "seed": seed} for i, seed in enumerate(seeds)]
+
+    with pytest.raises(SchemaError):
+        repo.write(layer=_SILVER, table="dim_run", rows=batch)
+
+    assert not any(tmp_path.rglob("*.parquet"))
+
+
+@pytest.mark.integration
+def test_real_row_without_seed_key_in_mixed_batch_is_null(tmp_path: Path) -> None:
+    """Linha sem a chave `seed` num lote misto grava NULL, como as outras nullable (#119)."""
+    repo = _repo(tmp_path)
+    without_seed = {k: v for k, v in _dim_run_row("run-a").items() if k != "seed"}
+    batch = [without_seed, {**_dim_run_row("run-b"), "seed": 3}]
+
+    repo.write(layer=_SILVER, table="dim_run", rows=batch)
+
+    rows = repo.read(layer=_SILVER, table="dim_run", filters={"asset": "AAPL"})
+    assert {row["run_id"]: row["seed"] for row in rows} == {"run-a": None, "run-b": 3}
+
+
+@pytest.mark.integration
+def test_real_numpy_int_seed_accepted(tmp_path: Path) -> None:
+    """`numpy.int64` é inteiro genuíno (`numbers.Integral`): aceito e relido como `int`.
+
+    Guarda contra regressão do conserto da #119: a versão anterior lia a coluna
+    via `tolist()`, que já convertia o numpy em `int` do Python.
+    """
+    repo = _repo(tmp_path)
+    batch = [
+        {**_dim_run_row("run-a"), "seed": None},
+        {**_dim_run_row("run-b"), "seed": np.int64(7)},
+    ]
+
+    repo.write(layer=_SILVER, table="dim_run", rows=batch)
+
+    rows = repo.read(layer=_SILVER, table="dim_run", filters={"asset": "AAPL"})
+    assert {row["run_id"]: row["seed"] for row in rows} == {"run-a": None, "run-b": 7}
 
 
 @pytest.mark.integration

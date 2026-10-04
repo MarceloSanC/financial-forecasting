@@ -27,6 +27,7 @@ Layout em disco (concept 4.2 §9):
 
 from __future__ import annotations
 
+import numbers
 import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -87,24 +88,26 @@ def _restore_value(key: str, value: object) -> object:
     return value
 
 
-def _materialize_nullable_int(series: pd.Series) -> pd.Series:
+def _materialize_nullable_int(values: list[object], index: pd.Index) -> pd.Series | None:
     """Materializa uma coluna `Int64` (nullable) SEM afrouxar o gate de escrita.
 
-    Converte apenas quando TODOS os valores são `int` genuínos ou `None` (bool
-    excluído); qualquer outro tipo (`"42"` str, `4.0` float) deixa a série
-    intacta para o pandera reprovar com `SchemaError` (dtype estrito,
-    `coerce=False`). Série já `Int64` volta intacta (idempotente).
+    Recebe os valores CRUS das linhas, não a coluna do `DataFrame`: o pandas
+    infere `[None, 3]` como `float64` (`[nan, 3.0]`), e depois disso um `int`
+    genuíno não se distingue de um `3.0` float (issue #119). Converte apenas
+    quando TODOS os valores são inteiros genuínos (`numbers.Integral`, que
+    inclui os inteiros do numpy, sem `bool`) ou `None`; qualquer outro tipo
+    (`"42"` str, `4.0` float) devolve `None` e a coluna inferida fica para o
+    pandera reprovar com `SchemaError` (dtype estrito, `coerce=False`). Linha sem
+    a chave conta como `None` (o chamador lê `row.get`), como nas demais colunas
+    nullable do schema.
     """
-    if str(series.dtype) == "Int64":
-        return series
-    values = series.tolist()
     strict_ints = all(
-        value is None or (isinstance(value, int) and not isinstance(value, bool))
+        value is None or (isinstance(value, numbers.Integral) and not isinstance(value, bool))
         for value in values
     )
     if not strict_ints:
-        return series
-    return pd.Series(pd.array(values, dtype="Int64"), index=series.index)
+        return None
+    return pd.Series(pd.array(values, dtype="Int64"), index=index)
 
 
 def _temp_path(path: Path) -> Path:
@@ -210,7 +213,10 @@ class ParquetAnalyticsRepository:
         # coluna object/null-type no Parquet e quebraria o merge por partição.
         for name, column in meta.schema.columns.items():
             if str(column.dtype) == "Int64" and name in incoming.columns:
-                incoming[name] = _materialize_nullable_int(incoming[name])
+                raw = [row.get(name) for row in prepared]
+                materialized = _materialize_nullable_int(raw, incoming.index)
+                if materialized is not None:
+                    incoming[name] = materialized
         # pandera ANTES do disco (I4/C3): schema/dtype/PK inválido → SchemaError
         # (coluna extra sob strict=True levanta SchemaErrors — ambos são erros
         # pandera que abortam o write antes de tocar o Parquet). Espelha o
