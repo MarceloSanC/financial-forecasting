@@ -31,7 +31,7 @@ from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet
 from financial_forecasting.features.analytics_store.domain.value_objects.run_record import (
     RunRecord,
 )
-from financial_forecasting.shared.domain.exceptions.base import (
+from financial_forecasting.shared.application.exceptions import (
     ApplicationError,
     DuplicateKeyError,
 )

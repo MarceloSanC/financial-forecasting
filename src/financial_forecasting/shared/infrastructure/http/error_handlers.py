@@ -12,7 +12,10 @@ de tratamento HTTP específico. Nunca coloque lógica de negócio nos handlers.
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from financial_forecasting.shared.domain.exceptions.base import DomainError, NotFoundError
+from financial_forecasting.shared.domain.exceptions.base import (
+    DomainError,
+    NotFoundError,
+)
 
 
 def register_error_handlers(app: FastAPI) -> None:

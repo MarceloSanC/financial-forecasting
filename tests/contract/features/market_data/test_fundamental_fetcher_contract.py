@@ -33,7 +33,7 @@ from financial_forecasting.features.market_data.application.ports.out.fundamenta
 from financial_forecasting.features.market_data.domain.entities.fundamental_report import (
     FundamentalReport,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 from tests.fakes.features.market_data.in_memory_fundamental_fetcher import (
     FakeFundamentalFetcher,
 )

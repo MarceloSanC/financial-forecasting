@@ -22,7 +22,7 @@ from pandera.errors import SchemaError
 from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
     ParquetAnalyticsRepository,
 )
-from financial_forecasting.shared.domain.exceptions.base import DuplicateKeyError
+from financial_forecasting.shared.application.exceptions import DuplicateKeyError
 from tests.fakes.shared.in_memory_clock import FIXED_NOW, FakeClock
 
 _SILVER = "silver"

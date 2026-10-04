@@ -37,7 +37,7 @@ from financial_forecasting.features.market_data.domain.time.utc import (
     require_tz_aware,
     to_utc,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 
 # Raiz default do raw de candles (simples-e-trocável; injetável p/ teste —
 # concept 2.2 §13). Layout: <root>/<symbol>/candles_<symbol>_1d.parquet.

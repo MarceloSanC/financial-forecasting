@@ -70,7 +70,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
 from financial_forecasting.features.evaluation.domain.value_objects.quality_check_result import (
     QualityCheckResult,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.domain.services.path_identifier import (
     validate_path_identifier,
 )

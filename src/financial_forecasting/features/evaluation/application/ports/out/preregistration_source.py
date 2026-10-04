@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Protocol
 
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 
 ANCHOR_TAG_PREFIX: Final = "preregistration/"
 """Prefixo da tag git da âncora (ADR 6.5.0003 item 1: `preregistration/<ref>`)."""

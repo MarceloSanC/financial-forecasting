@@ -26,7 +26,7 @@ from financial_forecasting.features.analytics_store.application.use_cases.persis
 from financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast import (
     QuantileForecast,
 )
-from financial_forecasting.shared.domain.exceptions.base import DuplicateKeyError
+from financial_forecasting.shared.application.exceptions import DuplicateKeyError
 from tests.fakes.features.analytics_store.in_memory_analytics_repository import (
     FakeAnalyticsRepository,
 )

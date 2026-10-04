@@ -30,7 +30,7 @@ import pandas as pd
 from financial_forecasting.features.market_data.domain.entities.fundamental_report import (
     FundamentalReport,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 
 # Raiz default dos fundamentos processados (injetável p/ teste — concept 2.3 §13).
 # Layout: <root>/<symbol>/fundamentals_<symbol>.parquet.

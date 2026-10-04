@@ -21,7 +21,7 @@ from financial_forecasting.features.market_data.adapters.out.parquet.parquet_raw
     ParquetRawCandleFetcher,
 )
 from financial_forecasting.features.market_data.domain.entities.candle import Candle
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 
 _SYMBOL = "AAPL"
 _EXPECTED_ROWS = 4024

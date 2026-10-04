@@ -36,7 +36,7 @@ from financial_forecasting.features.market_data.domain.time.utc import (
     require_tz_aware,
     to_utc,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 
 # Raiz default do raw de news (simples-e-trocável; injetável p/ teste — concept 2.3
 # §13). Layout: <root>/<symbol>/news_<symbol>.parquet.

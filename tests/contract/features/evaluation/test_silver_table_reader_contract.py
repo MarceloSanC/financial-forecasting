@@ -21,7 +21,7 @@ from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet
 from financial_forecasting.features.evaluation.application.ports.out.silver_table_reader import (
     SilverTableReader,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 from tests.fakes.features.evaluation.fake_silver_table_reader import FakeSilverTableReader
 from tests.fakes.shared.in_memory_clock import FakeClock
 

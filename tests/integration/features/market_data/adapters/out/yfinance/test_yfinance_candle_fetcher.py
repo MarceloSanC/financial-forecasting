@@ -24,7 +24,7 @@ from financial_forecasting.features.market_data.adapters.out.yfinance.yfinance_c
     YfinanceCandleFetcher,
 )
 from financial_forecasting.features.market_data.domain.entities.candle import Candle
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 
 _START = datetime(2024, 1, 1, tzinfo=UTC)
 _END = datetime(2024, 1, 5, tzinfo=UTC)

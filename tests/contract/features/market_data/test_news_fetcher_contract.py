@@ -33,7 +33,7 @@ from financial_forecasting.features.market_data.application.ports.out.news_fetch
 from financial_forecasting.features.market_data.domain.entities.news_article import (
     NewsArticle,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 from tests.fakes.features.market_data.in_memory_news_fetcher import FakeNewsFetcher
 
 _SYMBOL = "AAPL"

@@ -44,7 +44,8 @@ from financial_forecasting.features.market_data.application.use_cases.ingest_fun
 from financial_forecasting.features.market_data.application.use_cases.ingest_news import (
     IngestNewsRequest,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError, DomainError
+from financial_forecasting.shared.application.exceptions import ApplicationError
+from financial_forecasting.shared.domain.exceptions.base import DomainError
 from financial_forecasting.shared.infrastructure.config.settings import Settings
 
 if TYPE_CHECKING:

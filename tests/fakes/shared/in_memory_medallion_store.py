@@ -33,7 +33,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
-from financial_forecasting.shared.domain.exceptions.base import (
+from financial_forecasting.shared.application.exceptions import (
     ApplicationError,
     DuplicateKeyError,
 )

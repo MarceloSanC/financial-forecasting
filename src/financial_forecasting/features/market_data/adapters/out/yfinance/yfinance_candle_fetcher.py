@@ -35,7 +35,7 @@ from financial_forecasting.features.market_data.domain.time.utc import (
     require_tz_aware,
     to_utc,
 )
-from financial_forecasting.shared.domain.exceptions.base import ApplicationError
+from financial_forecasting.shared.application.exceptions import ApplicationError
 
 logger = logging.getLogger(__name__)
 
