@@ -39,7 +39,6 @@ import logging
 import sys
 import textwrap
 from pathlib import Path
-from typing import Any
 
 import pytest
 from importlinter.cli import EXIT_STATUS_ERROR, EXIT_STATUS_SUCCESS, lint_imports
@@ -48,7 +47,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _IMPORTLINTER_PATH = _REPO_ROOT / ".importlinter"
 
 
-def _lint_imports(**kwargs: Any) -> int:
+def _lint_imports(
+    *, config_filename: str, limit_to_contracts: tuple[str, ...] = (), no_cache: bool = True
+) -> int:
     """`lint_imports` sem vazar estado de processo para os outros testes.
 
     O CLI aplica `logging.config.dictConfig` com `disable_existing_loggers`
@@ -66,7 +67,11 @@ def _lint_imports(**kwargs: Any) -> int:
     }
     sys_path_before = list(sys.path)
     try:
-        return lint_imports(**kwargs)
+        return lint_imports(
+            config_filename=config_filename,
+            limit_to_contracts=limit_to_contracts,
+            no_cache=no_cache,
+        )
     finally:
         sys.path[:] = sys_path_before
         for name, logger in manager.loggerDict.items():
@@ -74,6 +79,7 @@ def _lint_imports(**kwargs: Any) -> int:
                 # logger criado durante a chamada não existia antes: volta ao
                 # default de um logger novo (habilitado).
                 logger.disabled = disabled_before.get(name, False)
+
 
 # Contratos que DEVEM existir no .importlinter. Se um sumir, o gate perdeu
 # cobertura — o teste falha (guarda contra afrouxamento/remoção, concept C6).
