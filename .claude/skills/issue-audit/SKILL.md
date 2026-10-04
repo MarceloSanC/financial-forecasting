@@ -56,7 +56,7 @@ Combina quatro coisas:
   `gh pr create`).
 - Antes de `gh pr merge` de um PR com `Closes #N` (auditoria do reviewer).
 - Ao retomar uma issue parada — confirmar se o que parece entregue
-  está mesmo entregue (e se o `done` do roadmap reflete a realidade).
+  está mesmo entregue (e se o `CLOSED` no GitHub reflete a realidade).
 - **Grupo de issues / épico:** auditar N issues correlatas de uma vez,
   conferindo também a **fronteira entre elas** (escopo de uma vazou
   para o card da outra? dependência entre elas respeitada?).
@@ -334,7 +334,7 @@ camada que a issue inclui (olhar os arquivos do diff). Piso, não teto.
 ## Auditoria — Issue #<num> (<título curto>)   [ou: Issues #<a>, #<b>, ...]
 
 ### Status global: ✅ APROVADA SEM BLOQUEANTES | ⚠️ APROVADA COM FINDINGS | ❌ BLOQUEADA
-Estado: GitHub <OPEN/CLOSED> · roadmap <open/done> · branch <mergeada?/em PR #N>
+Estado: GitHub <OPEN/CLOSED> · branch <mergeada?/em PR #N>
 
 ### 1. Conceitos principais
 <breve descrição dos conceitos que a issue define/usa (do `## Escopo` e
@@ -398,7 +398,7 @@ da issue vs futuro?>
 - **non-blocker** — desvio sem impacto funcional, refino dentro do
   escopo que dá pra fazer agora, doc derivado desatualizado.
 - **observação** — info que o reviewer deve saber sem ação obrigatória
-  (ex.: GitHub `OPEN` enquanto roadmap `done` — esperado pré-merge).
+  (ex.: GitHub `OPEN` com a branch já em PR — esperado pré-merge).
 
 ---
 
@@ -411,7 +411,7 @@ da issue vs futuro?>
 
 ### Escopo empurrado pra frente
 Um refino que é **da própria issue** é parqueado como "melhoria futura"
-porque a issue parece fechada (`done` no roadmap, muitos commits, etc.).
+porque a issue parece fechada (`CLOSED`/checklist marcado, muitos commits, etc.).
 O status vira desculpa para não terminar o escopo.
 - Sintoma: "isso fica pra um follow-up" sobre algo que mexeria nas
   **mesmas linhas** que a issue criou, ou que um critério literal exige.
@@ -488,8 +488,8 @@ e o card pequeno e coeso *parece* bem escopado justamente por ser pequeno.
 Decisão (off-task, silenciador, refactor, doc parcial) sem registro
 onde o reviewer procuraria.
 - `[#<num>/--]` sem justificativa no body; `# type: ignore`/`# noqa`
-  em boundary sem 1 linha de motivo; roadmap table atualizado mas
-  frontmatter esquecido (ou inverso); commit de outro escopo de carona
+  em boundary sem 1 linha de motivo; quando o escopo toca o roadmap, tabela
+  atualizada mas frontmatter esquecido (ou inverso); commit de outro escopo de carona
   na branch da issue.
 - **Tratamento:** non-blocker em geral (corrigir antes do PR); blocker
   se carona de escopo (pedir rebase — GIT-WORKFLOW §Etapa 4) ou padrão
