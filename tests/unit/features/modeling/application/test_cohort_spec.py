@@ -185,6 +185,11 @@ def test_spec_is_frozen_dataclass() -> None:
     [
         ({"name": ""}, "name"),
         ({"device": ""}, "device"),
+        # #69 c: a spec exige o ativo canônico (a ingestão grava a forma canônica e
+        # o BuildDataset lê com o texto da spec — par escrita/leitura coerente)
+        ({"asset_id": "aapl"}, "asset_id.*canonical"),
+        ({"asset_id": "AAPL.US"}, "asset_id.*canonical"),
+        ({"asset_id": "AA PL"}, "asset_id must match"),
         ({"revision": -1}, "revision"),
         ({"horizons": ()}, "horizons"),
         ({"horizons": (7, 1)}, "horizons"),

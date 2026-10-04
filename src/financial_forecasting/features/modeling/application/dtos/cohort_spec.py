@@ -40,6 +40,7 @@ from financial_forecasting.features.modeling.application.ports.out.tft_trainer i
     TftTrainingParams,
 )
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import ScopeSpec
+from financial_forecasting.shared.domain.value_objects.asset_id import AssetId
 
 if TYPE_CHECKING:
     from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (  # noqa: E501
@@ -136,6 +137,13 @@ class CohortSpec:
         ):
             if not getattr(self, field_name):
                 raise ValueError(f"CohortSpec.{field_name} must be non-empty")
+        # identidade canônica ESTRITA (#69 c): a ingestão grava `asset=<canônico>` e o
+        # `BuildDataset` lê com o texto da spec; recusar (e não normalizar) mantém o
+        # `cohort_hash` do que foi declarado — o "AAPL" congelado segue válido
+        try:
+            AssetId(self.asset_id)
+        except ValueError as exc:
+            raise ValueError(f"CohortSpec.asset_id: {exc}") from exc
         if self.revision < 0:
             raise ValueError(f"CohortSpec.revision must be >= 0; got {self.revision}")
         if (
