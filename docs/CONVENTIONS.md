@@ -91,7 +91,8 @@ Comentários e docstrings permanecem em português (conforme §4 de commits/PR).
   renumerado (número = identidade, não posição).
 - **Ordem de implementação = `depends_on`, não o número.** Como o número é
   identidade e não posição, a sequência cronológica real de implementação é
-  dada pelo `depends_on` de cada Stage/issue — não pela ordem dos números.
+  dada pelo `depends_on` de cada Stage (e, em issue avulsa, pelas dependências
+  declaradas no corpo dela) — não pela ordem dos números.
 - **Stage:** `N.M` dentro do Step `N`. Não recicla.
 - **Task:** `task-NN` dentro do `technical.md` da Stage, zero-padded
   (`task-01`, `task-02`).
