@@ -93,14 +93,14 @@ Combina quatro coisas:
      causa ou só o sintoma.
    - **`## Referências`** — arquivos/pontos de toque citados; viram o
      inventário esperado de arquivos tocados.
-2. **Estado da issue vs roadmap vs branch** (registrar, não bloquear):
-   - `state` no GitHub (`OPEN`/`CLOSED`).
-   - Status na tabela do `docs/roadmap.md` (`open`/`done`).
+2. **Estado da issue vs branch** (registrar, não bloquear):
+   - `state` no GitHub (`OPEN`/`CLOSED`) — é o registro de estado de
+     issue avulsa; o `docs/roadmap.md` não tem tabela de issues (só
+     Steps e Stages), então não há status de issue no roadmap a cobrar.
    - Branch mergeada em `develop`?
-   - **Divergência é normal pré-merge** (roadmap pode marcar `done`
-     antes do merge; GitHub fica `OPEN` até o PR fechar). Mas o status
-     do roadmap é **indício, não verdade** — a verdade é git + código +
-     critério de aceitação. Não deixe um `done` no roadmap encurtar a
+   - **`OPEN` é normal pré-merge** (o `Closes #N` só fecha ao mergear).
+     Estado no GitHub é **indício, não verdade** — a verdade é git +
+     código + critério de aceitação. Não deixe um `CLOSED` encurtar a
      auditoria.
 3. **Grupo de issues / épico:** se o alvo é mais de uma issue, listar
    todas e suas relações antes de julgar qualquer uma:
@@ -198,9 +198,12 @@ ambiental").
    estar definido e **nunca plugado** no pipeline real (ex. clássico:
    `configure_logging` existia e não era chamado por ninguém até ser
    ligado no boot). Definido-sem-chamador = finding.
-6. **Docs derivados.** `docs/roadmap.md`: status da issue na tabela e
-   frontmatter (`updated_at`/`last_reviewed_at`) coerentes? (Issue
-   **não** tem `§7 post-execution` — isso é de Stage; não cobrar aqui.)
+6. **Docs derivados.** Issue avulsa não tem linha no `docs/roadmap.md`
+   — não cobrar status nem frontmatter dele, **salvo** se o escopo da
+   issue mexe no roadmap (ex.: apontar a issue como dependência
+   satisfeita de uma Stage); aí a mudança é critério como outro qualquer.
+   (Issue **não** tem `§7 post-execution` — isso é de Stage; não cobrar
+   aqui.)
 
 ### Fase D — Judgment por tipo de mudança (não se mecaniza)
 
