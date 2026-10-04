@@ -135,7 +135,7 @@ Antes de decompor em sub-tasks, responda por escrito:
 3. **Qual o impacto?** Quais módulos, camadas ou contratos são afetados além do ponto
    óbvio descrito na issue? Quem consome o que vai mudar?
 4. **Há pré-requisitos ocultos?** Algo precisa existir ou estar correto antes desta
-   implementação, além do que está em `depends_on`? **Conferir a §7 das
+   implementação, além das dependências declaradas no corpo da issue? **Conferir a §7 das
    `technical.md` das Stages do BC** — algum `[finding]` anterior foi escalado
    para esta issue (ou descreve exatamente este problema)? Se sim, ele é parte
    do escopo, não descoberta nova.
@@ -287,7 +287,8 @@ como outra qualquer, com commit próprio.
 
 **Você ABRE o PR ao final** (`git push` + `gh pr create`) — a sessão que
 implementou é quem abre. Antes do push, **sincronize**: `git fetch` +
-`git rebase origin/develop` (o `roadmap.md` é o conflito recorrente; ver
+`git rebase origin/develop` (o `roadmap.md` é o conflito recorrente das Stages e
+de issues cujo escopo o toca; ver
 GIT-WORKFLOW §Etapa 4). **Você NÃO faz merge** — o merge é do usuário, após
 auditoria, salvo pedido explícito. Não execute `gh pr merge`.
 
@@ -351,7 +352,7 @@ copiáveis com o esperado, saída bruta obtida, o que mostra, decisão P se houv
 **Comandos que você executa** (o merge NÃO):
 ```powershell
 git fetch origin
-git rebase origin/develop        # resolver conflito de roadmap se houver
+git rebase origin/develop        # resolver conflito (ex.: roadmap) se houver
 git push -u origin <branch>
 gh pr create --base develop --title "<tipo>(<escopo>): issue #<issue> — <title_humano>" --body-file <corpo>
 # <escopo> = BC/módulo da mudança (ASCII/kebab), NUNCA a Stage/issue — CONVENTIONS §4(c)
