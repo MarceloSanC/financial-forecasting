@@ -167,6 +167,21 @@ def test_asset_id_matches_requested(fetcher: FundamentalFetcher) -> None:
         assert report.asset_id == _SYMBOL
 
 
+@pytest.mark.contract
+@pytest.mark.parametrize("spelling", ["aapl", " Aapl ", "AAPL.US"])
+def test_other_spellings_resolve_to_the_canonical_asset(
+    fetcher: FundamentalFetcher, spelling: str
+) -> None:
+    """Grafias do mesmo ativo devolvem os mesmos reports nas DUAS pernas (#69 c).
+
+    Antes, só o real normalizava; o fake comparava por igualdade exata.
+    """
+    reports = fetcher.fetch_fundamentals(spelling)
+
+    assert len(reports) == len(_reports())
+    assert {r.asset_id for r in reports} == {_SYMBOL}
+
+
 # -- testes específicos do adapter real (origem default; concept 2.3 C6) -------
 
 
