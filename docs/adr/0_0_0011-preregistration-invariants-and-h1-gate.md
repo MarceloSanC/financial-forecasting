@@ -5,7 +5,7 @@ when-use: Reference when questioning when the preregistration is hashed, what th
 keywords: [adr, preregistration, degeneracy-gate, h1-gate, calibration, wilson, bonferroni, christoffersen, power, scorecard, evaluation, step-6]
 status: accepted
 created_at: 2026-09-26
-updated_at: 2026-09-26
+updated_at: 2026-10-03
 adr_id: 0.0.0011
 decision: The preregistration is hashed after the cohort is frozen and trained and before any confirmatory metric; degenerate rows keep proper scores and leave only calibration metrics, with no row exclusion in inference; H1 is gated per horizon, on the candidate only, by both tails of the primary central pair inside Wilson 97.5 % bands plus a degeneracy-rate threshold, and is worded "calibration not rejected" with declared power.
 context_stage: 0.0-global
@@ -13,6 +13,8 @@ bounded_context: evaluation
 ---
 
 # ADR 0.0.0011 — Preregistration, degeneracy gate and the H1 gate
+
+> **Nota (2026-10-03, issue #131):** o "≤ 5 % false failure" do item 4 é o alvo nominal do Bonferroni sobre bandas de Wilson; a taxa exata de reprovar um candidato calibrado é ≈ 5 %, não ≤ 5 % — 0,0506 em n = 1 512 e, em todo n inteiro de 1 400 a 1 600, de 0,0442 (n = 1 555) a 0,0545 (n = 1 435) — ver technical 6.5 §7 `[finding]` T-F11. A regra do gate não muda.
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 
