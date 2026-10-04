@@ -135,6 +135,23 @@ def test_dim_run_round_trip(repo: AnalyticsRepository) -> None:
 
 
 @pytest.mark.contract
+def test_dim_run_mixed_seed_batch_round_trip(repo: AnalyticsRepository) -> None:
+    """Um lote `dim_run` com `seed` `None` e `int` grava e relê os valores exatos (#119).
+
+    Ex.: baseline determinístico (`seed=None`) no mesmo `write` que runs com semente.
+    O `0` cobre o inteiro falso-y; o tipo relido é `int`, nunca `float`.
+    """
+    seeds: dict[str, int | None] = {"run-a": None, "run-b": 3, "run-c": 0}
+    batch = [{**_dim_run_row(run_id), "seed": seed} for run_id, seed in seeds.items()]
+
+    repo.write(layer=_SILVER, table="dim_run", rows=batch)
+
+    rows = repo.read(layer=_SILVER, table="dim_run", filters={"asset": "AAPL"})
+    assert {row["run_id"]: row["seed"] for row in rows} == seeds
+    assert all(type(row["seed"]) is int for row in rows if row["seed"] is not None)
+
+
+@pytest.mark.contract
 def test_fact_oos_round_trip(repo: AnalyticsRepository) -> None:
     """Round-trip de `fact_oos_predictions` (partição asset/feature_set_name/year)."""
     repo.write(layer=_SILVER, table="fact_oos_predictions", rows=[_fact_oos_row("run-1")])
