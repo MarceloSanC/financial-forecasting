@@ -128,6 +128,28 @@ def test_maps_feed_to_news_articles() -> None:
 
 
 @pytest.mark.integration
+def test_api_gets_raw_ticker_and_articles_get_canonical_asset() -> None:
+    """A API recebe `aapl.us` como veio; o artigo leva `AAPL` (#69 c)."""
+    fetcher, client = _fetcher(_feed_payload())
+
+    articles = fetcher.fetch_company_news("aapl.us", _START, _END)
+
+    assert client.calls[0]["params"]["tickers"] == "aapl.us"
+    assert {a.asset_id for a in articles} == {"AAPL"}
+
+
+@pytest.mark.integration
+def test_invalid_ticker_fails_before_any_request() -> None:
+    """Ticker que não vira `AssetId` falha já, sem chamada de rede."""
+    fetcher, client = _fetcher(_feed_payload())
+
+    with pytest.raises(ValueError, match="asset_id"):
+        fetcher.fetch_company_news("AA PL", _START, _END)
+
+    assert client.calls == []
+
+
+@pytest.mark.integration
 def test_rate_limit_note_raises_runtime_error() -> None:
     """Resposta com chave `Note` → `RuntimeError` (guard de rate-limit, C7)."""
     fetcher, _ = _fetcher({"Note": "Thank you for using Alpha Vantage! Rate limit..."})
