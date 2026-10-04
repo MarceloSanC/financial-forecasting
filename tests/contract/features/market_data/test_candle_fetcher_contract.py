@@ -120,6 +120,18 @@ def test_asset_is_the_requested_symbol(fetcher: CandleFetcher) -> None:
 
 
 @pytest.mark.contract
+@pytest.mark.parametrize("spelling", ["aapl", " Aapl ", "AAPL.US"])
+def test_other_spellings_resolve_to_the_canonical_asset(
+    fetcher: CandleFetcher, spelling: str
+) -> None:
+    """Grafias do mesmo ativo leem a mesma série e injetam `asset` canônico (#69 c)."""
+    candles = fetcher.fetch_candles(spelling, _START, _END)
+
+    assert len(candles) == len(_candles())
+    assert {c.asset for c in candles} == {_SYMBOL}
+
+
+@pytest.mark.contract
 def test_filters_by_interval(fetcher: CandleFetcher) -> None:
     """Filtra por `[start, end]`: janela menor devolve menos candles."""
     narrow = fetcher.fetch_candles(
