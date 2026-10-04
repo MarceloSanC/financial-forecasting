@@ -32,7 +32,7 @@ Para não-Stage, ignore os itens irrelevantes.
 - [ ] Todas as Tasks do `technical.md` implementadas (1 Task = 1 commit)
 - [ ] `make check` verde localmente (lint + format-check + typecheck + layout-check + test)
 - [ ] Coverage ≥ 90% no código novo (via `pyproject.toml [tool.coverage.report]`)
-- [ ] `roadmap.md` sincronizado **neste PR**: Stage marcada `done` (`todo→done`) — ou, em PR de issue avulsa, o item `open→closed` — + `updated_at`/`last_reviewed_at` no frontmatter (para o roadmap não defasar do GitHub ao mergear)
+- [ ] `roadmap.md` sincronizado **neste PR**: Stage marcada `done` (`todo→done`) + `updated_at`/`last_reviewed_at` no frontmatter (para o roadmap não defasar do GitHub ao mergear) — **n/a para issue avulsa** (não tem linha no roadmap; o `Closes #N` fecha no GitHub), salvo se o escopo da issue mexe no roadmap
 - [ ] ADRs novos (se houve) em `status: accepted`
 - [ ] Runbooks operacionais criados se aplicável
 - [ ] `concept.md` não precisa de retoque retrospectivo
