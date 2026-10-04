@@ -1,11 +1,11 @@
 ---
 title: Prompt — Execução de Issue Avulsa em Sessão Única
-description: Prompt para colar em uma nova sessão Chat IDE e implementar uma issue avulsa da tabela de issues do roadmap em sessão única, sem perder gates objetivos
-when-use: Issue avulsa da tabela de issues do roadmap com escopo delimitado, sobre fundação já validada, onde o agente analisa o impacto e decompõe a issue (que é ponto de partida, não spec completa) em sessão única
+description: Prompt para colar em uma nova sessão Chat IDE e implementar uma issue avulsa (aberta no GitHub, fora das Stages do roadmap) em sessão única, sem perder gates objetivos
+when-use: Issue avulsa aberta no GitHub com escopo delimitado, sobre fundação já validada, onde o agente analisa o impacto e decompõe a issue (que é ponto de partida, não spec completa) em sessão única
 keywords: [prompt, issue, single-session, execucao, lifecycle]
 status: draft
 created_at: 2026-06-10
-updated_at: 2026-08-08
+updated_at: 2026-10-03
 ---
 
 # Prompt — Execução de Issue Avulsa em Sessão Única
@@ -14,14 +14,21 @@ Variante **colapsada** do [`./RUNBOOK-STAGE-LIFECYCLE.md`](./RUNBOOK-STAGE-LIFEC
 issues avulsas: sem Fases 3A/3B (não há `concept.md` nem `technical.md`), mas com os mesmos
 gates objetivos de execução e auditoria de testes. **Uma issue por sessão.**
 
-**Quando usar:** Issue com status `open` na tabela de issues do roadmap, cujo **concept+technical
+**Quando usar:** Issue `OPEN` no GitHub, cujo **concept+technical
 cabem no corpo da issue** (litmus de forma em [`PIPELINE.md`](./PIPELINE.md) §4.5 — não carrega
 conceito novo a definir) e cujo critério de aceite é objetivamente verificável.
 
+O registro de estado de issue avulsa é o **GitHub** (`OPEN`/`CLOSED`); o `docs/roadmap.md` só
+tem Tabela de Steps e Tabela de Stages, e issue avulsa **não** ganha linha nele. O roadmap só
+muda num PR de issue quando o **escopo da própria issue** pede (ex.: apontar a issue como
+dependência satisfeita de uma Stage).
+
 **Quando NÃO usar:**
-- Issue com status `placeholder` — essas são marcadores de backlog sem DoD definido; implementar
-  sem planejamento adequado introduz risco de contradição com o roadmap futuro.
-- Issue com status `blocked` — há dependência externa explícita não resolvida.
+- Issue-marcador sem critério de aceite definido (backlog especulativo, "reavaliar quando…" com
+  gatilho ainda não disparado) — implementar sem planejamento adequado introduz risco de
+  contradição com o roadmap futuro.
+- Issue com dependência declarada no corpo (seção de dependências, "depende de #N") ainda não
+  mergeada.
 - Issue que **carrega um conceito** (litmus [`PIPELINE.md`](./PIPELINE.md) §4.5): precisa
   definir modelo/invariante/contrato/regra nova, tem decisão que merece ADR, toca modelo de
   dados ou fronteira de BC, ou o corpo não segura o escopo — nesse caso deve virar uma
@@ -34,8 +41,7 @@ conceito novo a definir) e cujo critério de aceite é objetivamente verificáve
 1. **Cumprir as pré-condições no projeto:**
    - Branch criada a partir de `develop` atualizada (`fix/<issue>-<slug>` ou
      `feat/<issue>-<slug>` conforme o tipo).
-   - Issue existe no GitHub e está `open`.
-   - Issue está na tabela de issues do `docs/roadmap.md` com `status: open`.
+   - Issue existe no GitHub e está `OPEN`.
 2. Abrir **nova sessão** Chat IDE na raiz do repositório.
 3. Substituir as variáveis `<...>` no prompt abaixo e colar inteiro.
 
@@ -75,18 +81,19 @@ a issue pode ter deixado implícito.
 - `docs/CONVENTIONS.md` — branches, commits, convenções de código
 - `docs/GIT-WORKFLOW.md` — gates de PR e fluxo de branches
 - `docs/LAYOUT.md` — regras de dependência e estrutura
-- `docs/roadmap.md` — linha da issue `#<issue>` na tabela de issues (BC, camada-alvo, depends_on)
-- `gh issue view <issue> --comments` — descrição completa + comentários
+- `gh issue view <issue> --comments` — descrição completa + comentários (BC, camada-alvo e
+  dependências saem daqui; issue avulsa não tem linha no `docs/roadmap.md`)
 - Arquivos de código do BC afetado relevantes para entender o contexto da issue
 - ADRs em `docs/adr/` citados na issue **ou relevantes ao BC** (incluir os
   globais `0_0_*`/`1_1_*` e os do mesmo bounded context — têm chance de
   restringir a solução)
-- `docs/stages/<dep>/concept.md` das Stages que definiram o BC (identificar em `depends_on`
-  da linha da issue no roadmap) — para entender os contratos estabelecidos
+- `docs/stages/<dep>/concept.md` das Stages que definiram o BC (identificar pela coluna BC
+  da Tabela de Stages do `docs/roadmap.md` e pelas Stages citadas na issue) — para entender
+  os contratos estabelecidos
 - A **§7 (post-execution) do `technical.md`** dessas Stages que definiram o BC:
   ler `[finding]` (alguma foi escalada para esta issue?), `[decision]` e
   `[deviation]` que possam orientar ou restringir a implementação
-- Skills indicadas no campo `skills_hint` do roadmap (se presente na linha da issue)
+- Skills indicadas na issue ou no `skills_hint` das Stages do BC no roadmap (se houver)
 
 Antes de qualquer operação git, **invoque a skill `git-versioning-pointer`**
 para confirmar regra de commit/branch/push aplicável.
@@ -106,11 +113,9 @@ git branch --show-current   # deve retornar <branch>
 # 3. Issue existe e está OPEN no GitHub
 gh issue view <issue> --json number,state,title
 
-# 4. Issue está na tabela de issues do roadmap com status: open
-# (ler docs/roadmap.md, seção "Tabela de Issues", confirmar status = open)
-
-# 5. depends_on da issue estão concluídas
-# (checar no roadmap.md se cada Stage/issue listada em "Depende de" está done)
+# 4. Dependências declaradas no corpo da issue estão concluídas
+# (cada issue citada: gh issue view <N> --json state = CLOSED;
+#  cada Stage citada: status done na Tabela de Stages do docs/roadmap.md)
 ```
 
 Pré-condições **não são burocracia**: pular qualquer uma compromete o resto
@@ -130,7 +135,7 @@ Antes de decompor em sub-tasks, responda por escrito:
 3. **Qual o impacto?** Quais módulos, camadas ou contratos são afetados além do ponto
    óbvio descrito na issue? Quem consome o que vai mudar?
 4. **Há pré-requisitos ocultos?** Algo precisa existir ou estar correto antes desta
-   implementação, além do que está em `depends_on`? **Conferir a §7 das
+   implementação, além das dependências declaradas no corpo da issue? **Conferir a §7 das
    `technical.md` das Stages do BC** — algum `[finding]` anterior foi escalado
    para esta issue (ou descreve exatamente este problema)? Se sim, ele é parte
    do escopo, não descoberta nova.
@@ -238,7 +243,7 @@ do fluxo — sem ele, o resto dos gates dá falso positivo.
 
 # GATES DE SAÍDA (INEGOCIÁVEIS)
 
-Todos OBRIGATÓRIOS antes do commit de fechamento:
+Todos OBRIGATÓRIOS antes de abrir o PR:
 
 - [ ] `make check` verde localmente.
 - [ ] Coverage ≥ 90%: global (`make test-cov`, gate `fail_under`) **e**
@@ -247,18 +252,12 @@ Todos OBRIGATÓRIOS antes do commit de fechamento:
       a média global não substitui (gate míope).
 - [ ] Auditoria de Testes (acima) com todos os itens "sim".
 - [ ] `[finding]`s registrados como comentários na issue antes de fechá-la.
-- [ ] `docs/roadmap.md` atualizado: linha de `#<issue>` na tabela de issues
-      com `status: done`, `updated_at` e `last_reviewed_at` na data de hoje.
 - [ ] ADRs novos (se criados) em `status: accepted`.
 
-**Commit de fechamento** (apenas o roadmap — a implementação já está comitada):
-
-```bash
-git add docs/roadmap.md
-git commit -m "chore(roadmap): fechar issue #<issue>
-
-Refs #<issue>"
-```
+**Não há commit de fechamento no roadmap.** A issue avulsa não tem linha no `docs/roadmap.md`;
+o `Closes #<issue>` do PR fecha a issue no GitHub ao mergear. Se o escopo da issue pede mudança
+no roadmap (ex.: apontar a issue como dependência satisfeita de uma Stage), ela é uma sub-task
+como outra qualquer, com commit próprio.
 
 # PROTOCOLO DE PERGUNTA
 
@@ -288,7 +287,8 @@ Refs #<issue>"
 
 **Você ABRE o PR ao final** (`git push` + `gh pr create`) — a sessão que
 implementou é quem abre. Antes do push, **sincronize**: `git fetch` +
-`git rebase origin/develop` (o `roadmap.md` é o conflito recorrente; ver
+`git rebase origin/develop` (o `roadmap.md` é o conflito recorrente das Stages e
+de issues cujo escopo o toca; ver
 GIT-WORKFLOW §Etapa 4). **Você NÃO faz merge** — o merge é do usuário, após
 auditoria, salvo pedido explícito. Não execute `gh pr merge`.
 
@@ -338,7 +338,6 @@ copiáveis com o esperado, saída bruta obtida, o que mostra, decisão P se houv
 - [ ] Coverage ≥ 90% no código novo
 - [ ] Auditoria de testes todos os itens "sim"
 - [ ] Findings registrados na issue
-- [ ] `roadmap.md` atualizado (status done)
 - [ ] ADRs em `accepted` (se aplicável)
 
 ### 6. PR aberto
@@ -353,7 +352,7 @@ copiáveis com o esperado, saída bruta obtida, o que mostra, decisão P se houv
 **Comandos que você executa** (o merge NÃO):
 ```powershell
 git fetch origin
-git rebase origin/develop        # resolver conflito de roadmap se houver
+git rebase origin/develop        # resolver conflito (ex.: roadmap) se houver
 git push -u origin <branch>
 gh pr create --base develop --title "<tipo>(<escopo>): issue #<issue> — <title_humano>" --body-file <corpo>
 # <escopo> = BC/módulo da mudança (ASCII/kebab), NUNCA a Stage/issue — CONVENTIONS §4(c)
@@ -385,7 +384,7 @@ fonte mais alta na hierarquia.**
    necessário → commit `<type>(<scope>): <desc> [#<issue>/task-NN]`.
 6. **Auditoria de testes:** loop até todos os itens "sim". Testes faltantes
    viram sub-tasks extras com commit dedicado.
-7. **Gate de saída:** todos os gates verdes → commit de fechamento do roadmap.
+7. **Gate de saída:** todos os gates verdes (sem commit de fechamento no roadmap).
 8. **Abrir o PR** (`git fetch` + rebase + `git push` + `gh pr create`) + relatório final.
 
 **PARE no merge.** Você faz push e abre o PR; o **merge é do usuário** (salvo pedido explícito). Não execute `gh pr merge`.

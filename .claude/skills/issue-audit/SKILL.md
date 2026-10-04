@@ -56,7 +56,7 @@ Combina quatro coisas:
   `gh pr create`).
 - Antes de `gh pr merge` de um PR com `Closes #N` (auditoria do reviewer).
 - Ao retomar uma issue parada — confirmar se o que parece entregue
-  está mesmo entregue (e se o `done` do roadmap reflete a realidade).
+  está mesmo entregue (e se o `CLOSED` no GitHub reflete a realidade).
 - **Grupo de issues / épico:** auditar N issues correlatas de uma vez,
   conferindo também a **fronteira entre elas** (escopo de uma vazou
   para o card da outra? dependência entre elas respeitada?).
@@ -93,14 +93,14 @@ Combina quatro coisas:
      causa ou só o sintoma.
    - **`## Referências`** — arquivos/pontos de toque citados; viram o
      inventário esperado de arquivos tocados.
-2. **Estado da issue vs roadmap vs branch** (registrar, não bloquear):
-   - `state` no GitHub (`OPEN`/`CLOSED`).
-   - Status na tabela do `docs/roadmap.md` (`open`/`done`).
+2. **Estado da issue vs branch** (registrar, não bloquear):
+   - `state` no GitHub (`OPEN`/`CLOSED`) — é o registro de estado de
+     issue avulsa; o `docs/roadmap.md` não tem tabela de issues (só
+     Steps e Stages), então não há status de issue no roadmap a cobrar.
    - Branch mergeada em `develop`?
-   - **Divergência é normal pré-merge** (roadmap pode marcar `done`
-     antes do merge; GitHub fica `OPEN` até o PR fechar). Mas o status
-     do roadmap é **indício, não verdade** — a verdade é git + código +
-     critério de aceitação. Não deixe um `done` no roadmap encurtar a
+   - **`OPEN` é normal pré-merge** (o `Closes #N` só fecha ao mergear).
+     Estado no GitHub é **indício, não verdade** — a verdade é git +
+     código + critério de aceitação. Não deixe um `CLOSED` encurtar a
      auditoria.
 3. **Grupo de issues / épico:** se o alvo é mais de uma issue, listar
    todas e suas relações antes de julgar qualquer uma:
@@ -198,9 +198,12 @@ ambiental").
    estar definido e **nunca plugado** no pipeline real (ex. clássico:
    `configure_logging` existia e não era chamado por ninguém até ser
    ligado no boot). Definido-sem-chamador = finding.
-6. **Docs derivados.** `docs/roadmap.md`: status da issue na tabela e
-   frontmatter (`updated_at`/`last_reviewed_at`) coerentes? (Issue
-   **não** tem `§7 post-execution` — isso é de Stage; não cobrar aqui.)
+6. **Docs derivados.** Issue avulsa não tem linha no `docs/roadmap.md`
+   — não cobrar status nem frontmatter dele, **salvo** se o escopo da
+   issue mexe no roadmap (ex.: apontar a issue como dependência
+   satisfeita de uma Stage); aí a mudança é critério como outro qualquer.
+   (Issue **não** tem `§7 post-execution` — isso é de Stage; não cobrar
+   aqui.)
 
 ### Fase D — Judgment por tipo de mudança (não se mecaniza)
 
@@ -331,7 +334,7 @@ camada que a issue inclui (olhar os arquivos do diff). Piso, não teto.
 ## Auditoria — Issue #<num> (<título curto>)   [ou: Issues #<a>, #<b>, ...]
 
 ### Status global: ✅ APROVADA SEM BLOQUEANTES | ⚠️ APROVADA COM FINDINGS | ❌ BLOQUEADA
-Estado: GitHub <OPEN/CLOSED> · roadmap <open/done> · branch <mergeada?/em PR #N>
+Estado: GitHub <OPEN/CLOSED> · branch <mergeada?/em PR #N>
 
 ### 1. Conceitos principais
 <breve descrição dos conceitos que a issue define/usa (do `## Escopo` e
@@ -395,7 +398,7 @@ da issue vs futuro?>
 - **non-blocker** — desvio sem impacto funcional, refino dentro do
   escopo que dá pra fazer agora, doc derivado desatualizado.
 - **observação** — info que o reviewer deve saber sem ação obrigatória
-  (ex.: GitHub `OPEN` enquanto roadmap `done` — esperado pré-merge).
+  (ex.: GitHub `OPEN` com a branch já em PR — esperado pré-merge).
 
 ---
 
@@ -408,7 +411,7 @@ da issue vs futuro?>
 
 ### Escopo empurrado pra frente
 Um refino que é **da própria issue** é parqueado como "melhoria futura"
-porque a issue parece fechada (`done` no roadmap, muitos commits, etc.).
+porque a issue parece fechada (`CLOSED`/checklist marcado, muitos commits, etc.).
 O status vira desculpa para não terminar o escopo.
 - Sintoma: "isso fica pra um follow-up" sobre algo que mexeria nas
   **mesmas linhas** que a issue criou, ou que um critério literal exige.
@@ -485,8 +488,8 @@ e o card pequeno e coeso *parece* bem escopado justamente por ser pequeno.
 Decisão (off-task, silenciador, refactor, doc parcial) sem registro
 onde o reviewer procuraria.
 - `[#<num>/--]` sem justificativa no body; `# type: ignore`/`# noqa`
-  em boundary sem 1 linha de motivo; roadmap table atualizado mas
-  frontmatter esquecido (ou inverso); commit de outro escopo de carona
+  em boundary sem 1 linha de motivo; quando o escopo toca o roadmap, tabela
+  atualizada mas frontmatter esquecido (ou inverso); commit de outro escopo de carona
   na branch da issue.
 - **Tratamento:** non-blocker em geral (corrigir antes do PR); blocker
   se carona de escopo (pedir rebase — GIT-WORKFLOW §Etapa 4) ou padrão
