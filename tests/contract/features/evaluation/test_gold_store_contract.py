@@ -390,8 +390,6 @@ def test_real_previous_delete_warns(
         real_rmtree(path, *args, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(shutil, "rmtree", _refuse_previous)
-    # religa o logger do adapter se outro teste do processo o desligou (logging.config)
-    monkeypatch.setattr(logging.getLogger(parquet_gold_store_module.__name__), "disabled", False)
     second = [_table("gold_quality_checks", 2, offset=3.0)]
     with caplog.at_level(logging.WARNING):
         store.publish(partition=_PARTITION, tables=second, manifest=_manifest(second))

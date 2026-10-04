@@ -13,7 +13,6 @@ em erro.
 
 from __future__ import annotations
 
-import logging
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -650,14 +649,8 @@ def test_recorded_run_problems_names_each_defect() -> None:
     ]
 
 
-def test_each_unit_logs_its_start_and_outcome(
-    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_each_unit_logs_its_start_and_outcome(caplog: pytest.LogCaptureFixture) -> None:
     """G7 (Checkpoint C 24-31): corrida de horas precisa de rastro por unidade."""
-    # Na suíte inteira, algum teste anterior reconfigura o logging e desliga os
-    # loggers já criados; importado, montado e depois de o MLflow criar o banco,
-    # o logger segue ligado no processo do CLI (conferido no container, §7).
-    monkeypatch.setattr(logging.getLogger(RunConfirmatoryCohort.__module__), "disabled", False)
     harness = _Harness()
 
     with caplog.at_level("INFO"):

@@ -352,15 +352,13 @@ def scenario(tmp_path_factory: pytest.TempPathFactory) -> _Scenario:
     capture = _StepCapture()
     logger = logging.getLogger(refresh_gold_module.__name__)
     logger.addHandler(capture)
-    previous_level, previous_disabled = logger.level, logger.disabled
+    previous_level = logger.level
     logger.setLevel(logging.INFO)
-    logger.disabled = False  # outro teste do processo pode ter desligado loggers existentes
     try:
         completed = _snapshot(deps, _SWEEP_A, refresh(_command(_SWEEP_A, oracle)))  # (1)
     finally:
         logger.removeHandler(capture)
         logger.setLevel(previous_level)
-        logger.disabled = previous_disabled
     loaded = refresh._mcs_backend._delegate is not None  # type: ignore[attr-defined]
     rerun = _snapshot(deps, _SWEEP_A, refresh(_command(_SWEEP_A, oracle)))  # (2)
     before_mismatch = _bytes(_current(deps, _SWEEP_A))
