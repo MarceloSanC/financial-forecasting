@@ -97,7 +97,9 @@ def _materialize_nullable_int(values: list[object], index: pd.Index) -> pd.Serie
     quando TODOS os valores são inteiros genuínos (`numbers.Integral`, que
     inclui os inteiros do numpy, sem `bool`) ou `None`; qualquer outro tipo
     (`"42"` str, `4.0` float) devolve `None` e a coluna inferida fica para o
-    pandera reprovar com `SchemaError` (dtype estrito, `coerce=False`).
+    pandera reprovar com `SchemaError` (dtype estrito, `coerce=False`). Linha sem
+    a chave conta como `None` (o chamador lê `row.get`), como nas demais colunas
+    nullable do schema.
     """
     strict_ints = all(
         value is None or (isinstance(value, numbers.Integral) and not isinstance(value, bool))

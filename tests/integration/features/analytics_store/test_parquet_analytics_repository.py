@@ -239,6 +239,19 @@ def test_real_mixed_batch_with_wrong_seed_type_rejected(
 
 
 @pytest.mark.integration
+def test_real_row_without_seed_key_in_mixed_batch_is_null(tmp_path: Path) -> None:
+    """Linha sem a chave `seed` num lote misto grava NULL, como as outras nullable (#119)."""
+    repo = _repo(tmp_path)
+    without_seed = {k: v for k, v in _dim_run_row("run-a").items() if k != "seed"}
+    batch = [without_seed, {**_dim_run_row("run-b"), "seed": 3}]
+
+    repo.write(layer=_SILVER, table="dim_run", rows=batch)
+
+    rows = repo.read(layer=_SILVER, table="dim_run", filters={"asset": "AAPL"})
+    assert {row["run_id"]: row["seed"] for row in rows} == {"run-a": None, "run-b": 3}
+
+
+@pytest.mark.integration
 def test_real_numpy_int_seed_accepted(tmp_path: Path) -> None:
     """`numpy.int64` é inteiro genuíno (`numbers.Integral`): aceito e relido como `int`.
 
