@@ -454,7 +454,7 @@ git remote prune origin
 Verificar:
 - [ ] Issue fechada automaticamente
 - [ ] Deploy em dev disparado (quando o workflow de deploy existir)
-- [ ] Linha da Stage/issue no `docs/roadmap.md` coerente com o merge
+- [ ] Linha da Stage no `docs/roadmap.md` coerente com o merge (issue avulsa não tem linha no roadmap — n/a)
 
 ---
 
