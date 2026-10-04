@@ -1,9 +1,10 @@
 """E2E do refresh do gold sobre silver sintético, pelo `RefreshGold` wirado (Stage 6.4 Task 12).
 
 Um único `data_root` (fixture de módulo, padrão do `test_run_baselines.py`): silver
-sintético gravado pelo `ParquetAnalyticsRepository` real (`dim_run` um run por
-chamada — #119) e o dataset `processed/dataset_tft/<asset>/dataset_tft_<asset>.parquet`
-com `timestamp` e todas as colunas de `modeling_columns()` (5.5), com um prefixo de
+sintético gravado pelo `ParquetAnalyticsRepository` real (`dim_run` num único lote
+misto de `seed` `None`/`int` — #119) e o dataset
+`processed/dataset_tft/<asset>/dataset_tft_<asset>.parquet` com `timestamp` e todas
+as colunas de `modeling_columns()` (5.5), com um prefixo de
 aquecimento de `_WARMUP` linhas com NaN numa feature; o silver indexa o `decision_idx`
 na grade APARADA (ADR 6.4.0009) e o comando leva o fingerprint da grade calculado pela
 função da 5.5 (`grid_fingerprint`, o oráculo). O `RefreshGold` vem de
@@ -142,25 +143,25 @@ def _write_silver(
     index_offset: int = 0,
 ) -> None:
     repo = deps.analytics_repository
-    for run in cohort.runs:  # um write por run (#119)
-        repo.write(
-            layer=_SILVER,
-            table="dim_run",
-            rows=[
-                {
-                    "schema_version": 1,
-                    "run_id": prefix + run.run_id,
-                    "asset": _ASSET,
-                    "parent_sweep_id": sweep,
-                    "feature_set_name": run.feature_set_name,
-                    "config_signature": run.config_signature,
-                    "split_fingerprint": "split-e2e",
-                    "fold": run.fold,
-                    "seed": run.seed,
-                    "model_version": run.model,
-                }
-            ],
-        )
+    repo.write(
+        layer=_SILVER,
+        table="dim_run",
+        rows=[
+            {
+                "schema_version": 1,
+                "run_id": prefix + run.run_id,
+                "asset": _ASSET,
+                "parent_sweep_id": sweep,
+                "feature_set_name": run.feature_set_name,
+                "config_signature": run.config_signature,
+                "split_fingerprint": "split-e2e",
+                "fold": run.fold,
+                "seed": run.seed,
+                "model_version": run.model,
+            }
+            for run in cohort.runs
+        ],
+    )
     repo.write(
         layer=_SILVER,
         table="fact_oos_predictions",

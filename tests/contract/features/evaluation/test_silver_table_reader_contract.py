@@ -4,8 +4,8 @@ Prova (concept 6.4 A8, D3) que as duas pernas entregam a mesma leitura: filtro d
 partição aplicado; chave fora da partição ignorada (superconjunto, o consumidor
 pós-filtra); partição ausente → vazio; tabela desconhecida → `ApplicationError`; tipos
 preservados (`guardrail_applied` `int`, `seed` `None`/`int`). As linhas são gravadas
-nas duas pernas — na real, `dim_run` com **um `write` por run** (lote misto de `seed`
-`None`/`int` falha no schema — issue #119). Sem `skipif`.
+nas duas pernas — na real, `dim_run` num único lote misto de `seed` `None`/`int`
+(issue #119). Sem `skipif`.
 """
 
 from __future__ import annotations
@@ -82,8 +82,7 @@ def _fake(_root: Path) -> SilverTableReader:
 
 def _real(root: Path) -> SilverTableReader:
     repo = ParquetAnalyticsRepository(data_root=root, clock=FakeClock())
-    for run in _RUNS:  # um write por run (#119)
-        repo.write(layer=_SILVER, table="dim_run", rows=[run])
+    repo.write(layer=_SILVER, table="dim_run", rows=_RUNS)
     repo.write(layer=_SILVER, table="fact_oos_predictions", rows=_FACTS)
     return repo
 
