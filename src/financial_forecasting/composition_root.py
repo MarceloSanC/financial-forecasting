@@ -790,17 +790,17 @@ def wire_dependencies(
         )
 
     # BC evaluation (Stage 6.4, Tasks 12/15): `RefreshGold` sobre o MESMO repositório
-    # silver (como `SilverTableReader`, ADR 0.0.0053/6.4.0004) e o MESMO hasher; o
+    # silver (como `SilverTableReader`, ADR 0.0.0053/6.4.0004); o
     # realizado vem da grade de treino da 5.5 — `ReadTrainingGrid` (real do port
     # `TrainingGridReader`, ADR 6.4.0009) sobre o MESMO store e as MESMAS `columns`
-    # do cohort confirmatório, então o índice 0 é a origem do `decision_idx` gravado.
+    # do cohort confirmatório, então o índice 0 é a origem do `decision_idx` gravado;
+    # o `ReadTrainingGrid` recebe o MESMO hasher e devolve o fingerprint (#128).
     # O `ArchMcs` entra atrás do proxy lazy e o gold vai para `<data_root>/gold/` (ADR
     # 6.4.0005). A ordem dos builders é validada no construtor (C1: falha no wiring).
     gold_store = ParquetGoldStore(cfg.data_root)
     refresh_gold = RefreshGold(
         silver_reader=analytics_repository,
-        grid_reader=ReadTrainingGrid(store=store, columns=columns),
-        hasher=hasher,
+        grid_reader=ReadTrainingGrid(store=store, columns=columns, hasher=hasher),
         clock=SystemClock(),
         mcs_backend=_LazyArchMcs(),
         gold_store=gold_store,

@@ -5,7 +5,7 @@ when-use: Reference when asking why the gold's realized series starts after the 
 keywords: [adr, evaluation, modeling, training-grid, warmup, trim, realized, target-return, decision-idx, dataset-content-fingerprint, consumer-owned-port, bc-independence, type-checking, cohort-freeze]
 status: accepted
 created_at: 2026-09-29
-updated_at: 2026-09-29
+updated_at: 2026-10-04
 adr_id: 6.4.0009
 decision: The realized series of RefreshGold is the modeling slice's single training grid (build_training_grid via load_training_grid, ADR 5.5.0004), read once through a TrainingGridReader Protocol declared in evaluation/application/ports/out (`__call__(*, asset_id) -> TrainingGrid`, the supplier's type annotated under TYPE_CHECKING) and satisfied by duck typing by a new additive ReadTrainingGrid use case in modeling/application/use_cases that delegates to load_training_grid with the modeling columns computed once in the composition root; RealizedReturns is built from the grid's ISO timestamps and target_return, so I5 compares decision_idx with an index of the same trimmed grid by exact equality; the grid is identified by DatasetContentFingerprint.compute over its timestamps and columns, which must equal the frozen fingerprint carried by RefreshGoldCommand (else GridFingerprintMismatchError before any effect); the manifest and realized_provenance record that fingerprint and grid_trimmed_prefix. This amends items 3–4 of ADR 6.4.0004 and supersedes its decision 6.4-C4c.
 context_stage: 6.4-gold-builders-and-quality-gates
@@ -22,6 +22,19 @@ bounded_context: evaluation
 items 3 (realized read) and 4 (fingerprint), and supersedes its decision
 record `6.4-C4c`. Items 1, 2 and 5 of ADR 6.4.0004 (silver port, cohort read,
 data edge) stand.
+
+> **Amendment (2026-10-04, issue #128):** decision items 1, 2, 3 and 5 change (port
+> shape, real and fake signatures, wiring). `TrainingGridReader.__call__(*, asset_id)` now returns
+> `(TrainingGrid, DatasetContentFingerprint)`: `ReadTrainingGrid` receives the
+> `Hasher` and computes the fingerprint with the 5.5 `grid_fingerprint`, and
+> `RefreshGold` only compares the received value with
+> `RefreshGoldCommand.dataset_fingerprint` (same `GridFingerprintMismatchError`,
+> same point in the flow) and no longer depends on `Hasher`. This removes the
+> second call site listed in Consequences › Negative: the choice of the
+> fingerprint inputs of a grid has a single owner in `modeling`. The fake
+> delegates to `grid_fingerprint` too; `tests/architecture/test_fingerprint_single_owner.py`
+> keeps `DatasetContentFingerprint.compute` with exactly one call site in `src/`. Everything
+> else in this ADR stands; the text below is kept as decided.
 
 ## Context
 

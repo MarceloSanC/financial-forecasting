@@ -538,7 +538,8 @@ def test_wire_dependencies_wires_refresh_gold(tmp_path: Path) -> None:
     refresh = deps.refresh_gold
     assert isinstance(refresh, RefreshGold)
     assert refresh._silver_reader is deps.analytics_repository
-    assert refresh._hasher is deps.hasher
+    assert isinstance(refresh._grid_reader, ReadTrainingGrid)
+    assert refresh._grid_reader._hasher is deps.hasher  # o dono calcula o fingerprint (#128)
     assert isinstance(refresh._clock, SystemClock)
     assert isinstance(refresh._gold_store, ParquetGoldStore)
     assert refresh._gold_store.partition_root(GoldPartition("AAPL", "sweep-01")).is_relative_to(

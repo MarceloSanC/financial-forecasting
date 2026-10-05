@@ -229,9 +229,10 @@ def grid_fingerprint(grid: TrainingGrid, *, hasher: Hasher, asset_id: str) -> st
     aplicação, não no serviço de domínio do grid: o `Hasher` é port de aplicação e
     o hash só é chamado dentro dos VOs de shared (regra 6 do `check_layout`).
 
-    Não é o único ponto de chamada: o `RefreshGold` da `evaluation` recalcula o
-    mesmo `DatasetContentFingerprint` sobre a grade lida pelo `TrainingGridReader`
-    (ADR 6.4.0009), e o e2e dele usa esta função como oráculo da igualdade.
+    Dona única da escolha das entradas do fingerprint de uma grade (issue #128):
+    sweeps, cohort e o `ReadTrainingGrid` (que entrega grade + fingerprint ao
+    `RefreshGold` da `evaluation` pelo `TrainingGridReader`, ADR 6.4.0009) chamam
+    esta função; nenhum outro ponto recompõe a fórmula.
     """
     return DatasetContentFingerprint.compute(
         hasher=hasher,

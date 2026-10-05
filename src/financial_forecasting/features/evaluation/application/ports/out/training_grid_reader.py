@@ -14,11 +14,15 @@ perímetro do LAYOUT §7 e no comentário do contrato `bc-independence`. O
 `RefreshGold` só lê atributos do valor devolvido (`timestamps_iso()`,
 `column("target_return")`, `columns`, `trimmed_prefix`).
 
-Contrato de `__call__(asset_id=...)`:
+Contrato de `__call__(asset_id=...)` — devolve `(grade, fingerprint)`:
 
 - as linhas do ativo (partição `asset` do dataset), em ordem cronológica;
 - o prefixo sem valor (aquecimento dos indicadores) aparado — `trimmed_prefix` diz
   quantas linhas saíram; o índice 0 é a primeira sessão da grade;
+- o `DatasetContentFingerprint` DESSA grade, calculado pelo dono (`grid_fingerprint`
+  da `modeling`): a escolha das entradas do fingerprint de uma grade tem um único
+  dono, e o `evaluation` só compara o valor recebido (issue #128; emenda ao ADR
+  6.4.0009). O mesmo valor que os sweeps e o cohort congelam;
 - erros do dono propagam: `NoUsableRowsError` (sem linha utilizável ou ativo
   ausente), `InteriorMissingValuesError` (valor ausente depois do prefixo),
   `ValueError` (coluna pedida ausente, timestamp repetido ou sem fuso).
@@ -32,11 +36,14 @@ if TYPE_CHECKING:
     from financial_forecasting.features.modeling.domain.services.training_grid import (
         TrainingGrid,
     )
+    from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+        DatasetContentFingerprint,
+    )
 
 
 class TrainingGridReader(Protocol):
-    """Lê a grade de treino (aparada) de um ativo."""
+    """Lê a grade de treino (aparada) de um ativo e o fingerprint dela, calculado pelo dono."""
 
-    def __call__(self, *, asset_id: str) -> TrainingGrid:
-        """A grade de treino do ativo (ver o contrato no docstring do módulo)."""
+    def __call__(self, *, asset_id: str) -> tuple[TrainingGrid, DatasetContentFingerprint]:
+        """A grade de treino do ativo e o seu fingerprint (ver o contrato no módulo)."""
         ...

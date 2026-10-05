@@ -68,6 +68,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_
 from financial_forecasting.features.evaluation.domain.value_objects.realized_returns import (
     RealizedReturns,
 )
+from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
+    grid_fingerprint,
+)
 from financial_forecasting.features.modeling.domain.exceptions.cohort import NoUsableRowsError
 from financial_forecasting.features.modeling.domain.services.training_grid import (
     TrainingGrid,
@@ -215,14 +218,8 @@ def _grid(cohort: Cohort) -> TrainingGrid:
 
 
 def _fingerprint(cohort: Cohort) -> str:
-    """O fingerprint congelado do cohort: o `DatasetContentFingerprint` da sua grade."""
-    grid = _grid(cohort)
-    return DatasetContentFingerprint.compute(
-        hasher=_StubHasher(),
-        asset_id=_ASSET,
-        timestamps=grid.timestamps_iso(),
-        columns=grid.columns,
-    ).value
+    """O fingerprint congelado do cohort: o da sua grade, pela função do dono (#128)."""
+    return grid_fingerprint(_grid(cohort), hasher=_StubHasher(), asset_id=_ASSET)
 
 
 class _Log:
@@ -250,10 +247,12 @@ class _SpyReader(FakeSilverTableReader):
 
 class _SpyGrid(FakeTrainingGridReader):
     def __init__(self, rows: Sequence[Mapping[str, object]] | None, log: _Log) -> None:
-        super().__init__({} if rows is None else {_ASSET: rows}, columns=_GRID_COLUMNS)
+        super().__init__(
+            {} if rows is None else {_ASSET: rows}, columns=_GRID_COLUMNS, hasher=_StubHasher()
+        )
         self._log = log
 
-    def __call__(self, *, asset_id: str) -> TrainingGrid:
+    def __call__(self, *, asset_id: str) -> tuple[TrainingGrid, DatasetContentFingerprint]:
         self._log.events.append("read:grid")
         return super().__call__(asset_id=asset_id)
 
@@ -365,7 +364,6 @@ def _harness(  # noqa: PLR0913 — um parâmetro por colaborador trocável (keyw
     use_case = RefreshGold(
         silver_reader=reader,
         grid_reader=grid,
-        hasher=_StubHasher(),
         clock=FakeClock() if clock is None else clock,  # type: ignore[arg-type]
         mcs_backend=backend,
         gold_store=gold,
@@ -405,7 +403,6 @@ def test_graph_checked_before_read() -> None:
         RefreshGold(
             silver_reader=reader,
             grid_reader=_SpyGrid(None, log),
-            hasher=_StubHasher(),
             clock=FakeClock(),
             mcs_backend=_SpyBackend(log),
             gold_store=_SpyStoreGold(log),
