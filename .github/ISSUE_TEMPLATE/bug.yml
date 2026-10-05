@@ -1,0 +1,61 @@
+name: Bug
+description: Comportamento incorreto observado em ambiente real
+title: 'fix: <descrição curta>'
+labels: [bug]
+body:
+  - type: textarea
+    id: comportamento-atual
+    attributes:
+      label: Comportamento atual
+      description: O que está acontecendo de errado. Inclua mensagens de erro, logs, screenshots.
+  - type: input
+    id: bc
+    attributes:
+      label: BC / camada
+      description: >-
+        Bounded context / módulo e camada afetados. Issue avulsa não tem linha no
+        roadmap; a sessão executora tira o BC daqui (GIT-WORKFLOW §Etapa 1).
+      placeholder: 'ex.: market-data (adapters/out)'
+    validations:
+      required: true
+  - type: input
+    id: depende-de
+    attributes:
+      label: Depende de
+      description: >-
+        Issues (#N) ou Stages que precisam estar concluídas antes. Sem dependência,
+        escreva "nenhuma".
+      placeholder: 'ex.: #145, Stage 6.5 — ou "nenhuma"'
+    validations:
+      required: true
+  - type: textarea
+    id: comportamento-esperado
+    attributes:
+      label: Comportamento esperado
+      description: O que deveria acontecer.
+  - type: textarea
+    id: passos
+    attributes:
+      label: Passos para reproduzir
+      value: |
+        1.
+        2.
+        3.
+  - type: textarea
+    id: ambiente
+    attributes:
+      label: Ambiente
+      value: |
+        - Versão / commit:
+        - SO:
+        - Python:
+  - type: textarea
+    id: hipotese
+    attributes:
+      label: Hipótese (opcional)
+      description: Se tiver uma suspeita de causa raiz.
+  - type: textarea
+    id: impacto
+    attributes:
+      label: Impacto
+      description: Quem é afetado? Frequência? Severidade?

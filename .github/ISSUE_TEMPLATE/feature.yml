@@ -1,0 +1,51 @@
+name: Feature
+description: Nova funcionalidade ou capacidade do sistema
+title: 'feat: <descrição curta>'
+labels: [feature]
+body:
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto
+      description: Por que esta feature existe? Que problema resolve?
+  - type: input
+    id: bc
+    attributes:
+      label: BC / camada
+      description: >-
+        Bounded context / módulo e camada afetados. Issue avulsa não tem linha no
+        roadmap; a sessão executora tira o BC daqui (GIT-WORKFLOW §Etapa 1).
+      placeholder: 'ex.: market-data (adapters/out)'
+    validations:
+      required: true
+  - type: input
+    id: depende-de
+    attributes:
+      label: Depende de
+      description: >-
+        Issues (#N) ou Stages que precisam estar concluídas antes. Sem dependência,
+        escreva "nenhuma".
+      placeholder: 'ex.: #145, Stage 6.5 — ou "nenhuma"'
+    validations:
+      required: true
+  - type: textarea
+    id: comportamento-esperado
+    attributes:
+      label: Comportamento esperado
+      description: O que o sistema deve fazer. Descrição funcional.
+  - type: textarea
+    id: criterio-de-aceite
+    attributes:
+      label: Critério de aceite
+      value: |
+        - [ ]
+  - type: input
+    id: stage
+    attributes:
+      label: Stage do roadmap (se aplicável)
+      placeholder: 'ex.: Stage 2.3-s3-source-adapter'
+  - type: textarea
+    id: fora-de-escopo
+    attributes:
+      label: Fora de escopo
+      description: O que esta feature explicitamente NÃO inclui.
