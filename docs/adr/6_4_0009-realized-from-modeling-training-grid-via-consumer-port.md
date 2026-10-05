@@ -23,8 +23,8 @@ items 3 (realized read) and 4 (fingerprint), and supersedes its decision
 record `6.4-C4c`. Items 1, 2 and 5 of ADR 6.4.0004 (silver port, cohort read,
 data edge) stand.
 
-> **Amendment (2026-10-04, issue #128):** the port shape of decision items 1 and 5
-> changes. `TrainingGridReader.__call__(*, asset_id)` now returns
+> **Amendment (2026-10-04, issue #128):** decision items 1, 2, 3 and 5 change (port
+> shape, real and fake signatures, wiring). `TrainingGridReader.__call__(*, asset_id)` now returns
 > `(TrainingGrid, DatasetContentFingerprint)`: `ReadTrainingGrid` receives the
 > `Hasher` and computes the fingerprint with the 5.5 `grid_fingerprint`, and
 > `RefreshGold` only compares the received value with
@@ -32,7 +32,9 @@ data edge) stand.
 > same point in the flow) and no longer depends on `Hasher`. This removes the
 > second call site listed in Consequences › Negative: the choice of the
 > fingerprint inputs of a grid has a single owner in `modeling`. The fake
-> delegates to `grid_fingerprint` too. Everything else in this ADR stands.
+> delegates to `grid_fingerprint` too; `tests/architecture/test_fingerprint_single_owner.py`
+> keeps `DatasetContentFingerprint.compute` with exactly one call site in `src/`. Everything
+> else in this ADR stands; the text below is kept as decided.
 
 ## Context
 
