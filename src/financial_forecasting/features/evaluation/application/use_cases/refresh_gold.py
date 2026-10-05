@@ -11,8 +11,9 @@ de efeitos):
    de cada `feature_set_name` do cohort, pós-filtrado ao cohort → o realizado **uma
    vez** pela grade de treino da 5.5 (`TrainingGridReader`, ADR 6.4.0009: índice 0 =
    primeira sessão da grade aparada, a mesma origem do `decision_idx` dos escritores;
-   erros do dono propagam, C4) com o `DatasetContentFingerprint` conferido contra o
-   `command.dataset_fingerprint` — divergente → `GridFingerprintMismatchError` (C10),
+   erros do dono propagam, C4) com o `DatasetContentFingerprint` que o PRÓPRIO dono
+   calcula e devolve (issue #128) conferido contra o `command.dataset_fingerprint` —
+   divergente → `GridFingerprintMismatchError` (C10),
    antes da montagem e de qualquer efeito;
 4. `SeriesAssembly.assemble` (achados, nunca exceção — D1);
 5. passo de pré-condições (I11): por horizonte, `models_suffice` antes da fábrica
@@ -119,7 +120,6 @@ from financial_forecasting.features.evaluation.domain.value_objects.realized_ret
 )
 from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.application.ports.out.clock import Clock
-from financial_forecasting.shared.application.ports.out.hasher import Hasher
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
     DatasetContentFingerprint,
 )
@@ -160,12 +160,11 @@ class GridFingerprintMismatchError(ApplicationError):
 class RefreshGold:
     """Regenera por inteiro a geração gold de um cohort (ADR `6_4_0005`)."""
 
-    def __init__(  # noqa: PLR0913 — os sete colaboradores do concept 6.4 §4 (keyword-only)
+    def __init__(  # noqa: PLR0913 — os seis colaboradores do concept 6.4 §4 (keyword-only)
         self,
         *,
         silver_reader: SilverTableReader,
         grid_reader: TrainingGridReader,
-        hasher: Hasher,
         clock: Clock,
         mcs_backend: McsBackend,
         gold_store: GoldStore,
@@ -182,7 +181,6 @@ class RefreshGold:
         self._builders = tuple(by_name[name] for name in order)
         self._silver_reader = silver_reader
         self._grid_reader = grid_reader
-        self._hasher = hasher
         self._clock = clock
         self._mcs_backend = mcs_backend
         self._gold_store = gold_store
@@ -357,11 +355,9 @@ class RefreshGold:
         Raises:
             GridFingerprintMismatchError: fingerprint da grade != `expected` (C10).
         """
-        grid = self._grid_reader(asset_id=asset)
+        # o fingerprint vem do dono da grade (issue #128): aqui só se compara
+        grid, fingerprint = self._grid_reader(asset_id=asset)
         timestamps = grid.timestamps_iso()
-        fingerprint = DatasetContentFingerprint.compute(
-            hasher=self._hasher, asset_id=asset, timestamps=timestamps, columns=grid.columns
-        )
         if fingerprint.value != expected:
             raise GridFingerprintMismatchError(
                 f"training grid of {asset!r} has fingerprint "
