@@ -1,0 +1,46 @@
+name: Chore
+description: Manutenção, refactor sem mudança de comportamento, atualização de deps, ajuste de docs
+title: 'chore: <descrição curta>'
+labels: [chore]
+body:
+  - type: textarea
+    id: o-que
+    attributes:
+      label: O quê
+      description: A mudança técnica proposta.
+  - type: input
+    id: bc
+    attributes:
+      label: BC / camada
+      description: >-
+        Bounded context / módulo e camada afetados. Issue avulsa não tem linha no
+        roadmap; a sessão executora tira o BC daqui (GIT-WORKFLOW §Etapa 1).
+      placeholder: 'ex.: tooling (.claude/hooks)'
+    validations:
+      required: true
+  - type: input
+    id: depende-de
+    attributes:
+      label: Depende de
+      description: >-
+        Issues (#N) ou Stages que precisam estar concluídas antes. Sem dependência,
+        escreva "nenhuma".
+      placeholder: 'ex.: #145, Stage 6.5 — ou "nenhuma"'
+    validations:
+      required: true
+  - type: textarea
+    id: por-que
+    attributes:
+      label: Por quê
+      description: Motivação. Débito técnico? Limpeza? Atualização forçada?
+  - type: textarea
+    id: criterio-de-pronto
+    attributes:
+      label: Critério de pronto
+      value: |
+        - [ ]
+  - type: textarea
+    id: nao-objetivos
+    attributes:
+      label: Não-objetivos
+      description: O que NÃO é parte deste chore. Manter escopo apertado.

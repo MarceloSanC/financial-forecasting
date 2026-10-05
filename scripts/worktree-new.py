@@ -22,7 +22,8 @@ Uso:
 
     # Criar issue automaticamente antes (substitui <num> no nome):
     uv run python scripts/worktree-new.py feat/-add-google-login \\
-        --create-issue --issue-title "feat: adicionar login com Google"
+        --create-issue --issue-title "feat: adicionar login com Google" \\
+        --issue-body "$(cat corpo.md)"   # com ### BC / camada e ### Depende de
 
     # Skips:
     uv run python scripts/worktree-new.py fix/57-timeout --no-setup --no-vscode
@@ -48,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib.util
 import json
 import re
 import shutil
@@ -56,6 +58,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# Regra do corpo de issue (BC / camada + Depende de): fonte única no hook. O hook
+# PreToolUse não enxerga o `gh issue create` que este script roda por subprocess.
+ISSUE_GUARD = ROOT / ".claude" / "hooks" / "issue_guard.py"
 
 # Tipos aceitos no prefixo do branch — espelha CONVENTIONS.md §4.
 BRANCH_TYPES = {
@@ -219,6 +224,17 @@ def gh_issue_exists(num: int) -> bool:
         return False
 
 
+def issue_body_missing_fields(body: str, guard: Path = ISSUE_GUARD) -> list[str]:
+    """Campos obrigatórios sem valor no corpo — `missing_fields` do hook `issue_guard`."""
+    spec = importlib.util.spec_from_file_location("issue_guard", guard)
+    if spec is None or spec.loader is None:
+        _fail(f"não consegui carregar a regra do corpo de issue em {guard}", exit_code=2)
+        raise AssertionError  # _fail encerra; satisfaz o type checker
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return list(module.missing_fields(body))
+
+
 def gh_issue_create(title: str, body: str) -> int:
     """Cria issue via `gh issue create` e retorna o número."""
     cp = _run(
@@ -241,6 +257,17 @@ def gh_issue_create(title: str, body: str) -> int:
 
 def ensure_issue(num: int, *, create_title: str | None, create_body: str | None) -> int:
     """Garante que a issue existe; cria se solicitado. Retorna o número final."""
+    if create_title is not None and num == 0:
+        missing = issue_body_missing_fields(create_body or "")
+        if missing:
+            absent = ", ".join(f"`### {f}`" for f in missing)
+            _fail(
+                f"--issue-body sem valor válido em {absent}. O corpo precisa das seções "
+                "`### BC / camada` e `### Depende de`, cada uma com valor numa linha "
+                "própria (`nenhuma` vale; vazio, `_No response_` e `<...>` não) — "
+                "GIT-WORKFLOW.md §Etapa 1."
+            )
+
     if not gh_available():
         print(
             "  AVISO: `gh` indisponível ou não autenticado — não posso validar a issue\n"
@@ -254,7 +281,7 @@ def ensure_issue(num: int, *, create_title: str | None, create_body: str | None)
         if num != 0:
             _info(f"--create-issue ignorado: já há issue #{num} no nome do branch.")
         else:
-            body = create_body or "_criada via scripts/worktree-new.py_"
+            body = create_body or ""  # já validado no topo: tem BC / camada e Depende de
             _info(f"criando issue: {create_title!r}")
             num = gh_issue_create(create_title, body)
             _info(f"issue criada: #{num}")
@@ -493,7 +520,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--issue-title", default=None,
                         help="Título da issue a criar (Conventional PT).")
     parser.add_argument("--issue-body", default=None,
-                        help="Corpo da issue a criar (markdown PT).")
+                        help="Corpo da issue a criar (markdown PT). Obrigatório com "
+                             "--create-issue: precisa de `### BC / camada` e "
+                             "`### Depende de` com valor (GIT-WORKFLOW.md §Etapa 1).")
     parser.add_argument("--no-setup", action="store_true",
                         help="Pula `make setup` na nova worktree.")
     parser.add_argument("--no-env", action="store_true",

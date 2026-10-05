@@ -240,12 +240,27 @@ Não invente citação. Se não houver fonte primária para um ponto, escreva
 - "Sem fonte primária" num ponto *load-bearing* → classe C da mesma skill
   (escada de desempate + sensibilidade pré-registrada), não pergunta.
 
-**Gravar a issue** com o entendimento validado + `## Referências`:
+**Gravar a issue** com o entendimento validado + `## Referências`. O corpo
+leva também as seções `### BC / camada` e `### Depende de` (o hook
+`issue_guard` recusa `gh issue create` sem elas — GIT-WORKFLOW §Etapa 1):
+
+```markdown
+### BC / camada
+
+<BC e camada-alvo, copiados da linha da Stage na Tabela de Stages do docs/roadmap.md>
+
+### Depende de
+
+<Stages de que esta depende, da mesma linha do roadmap — ou "nenhuma">
+```
+
+Os `<...>` acima são para preencher: placeholder deixado no corpo é recusado.
 
 ```powershell
 gh issue create `
   --title "feat: stage $N.$M — $title_humano" `
-  --body-file <arquivo-com-corpo>   # ideia/abordagem validada em 1b + ## Referências da pesquisa
+  --body-file <arquivo-com-corpo>   # ideia/abordagem validada em 1b + ### BC / camada + ### Depende de
+                                    # + ## Referências da pesquisa
                                     # + "ver docs/roadmap.md e (após criação) docs/stages/$N.$M-$slug/concept.md"
 # issue já existente com corpo defasado:
 # gh issue edit <num> --body-file <arquivo-com-corpo>
