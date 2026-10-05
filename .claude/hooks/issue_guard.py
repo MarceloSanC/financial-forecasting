@@ -45,7 +45,10 @@ REASON_UNPARSEABLE = (
     "arquivo (ferramenta Write) e passe `--body-file <arquivo>`; " + _FORMAT
 )
 
-_SEPARATOR_CHARS = set(";&|\n")
+_PUNCTUATION = ";&|()<>\n"
+# o shlex funde pontuação vizinha (`);`, `)\n`, `>&`): token só de pontuação com separador ou
+# parêntese é fronteira de comando; `<`/`>` sozinhos (redirecionamento) não são
+_BOUNDARY_CHARS = set(";&|()\n")
 _CD = {"cd", "Set-Location", "pushd"}
 _NO_VALUE = {"", "_No response_"}
 _PLACEHOLDER = re.compile(r"<[^<>]*>")
@@ -183,7 +186,7 @@ def check(
     text, docs = _extract_docs(command)
     text = _EQUALS_FLAG.sub(r"\1 ", text)
     # quebra de linha fora de aspas separa comandos, como `;`
-    lexer = shlex.shlex(text, posix=False, punctuation_chars=";&|()<>\n")
+    lexer = shlex.shlex(text, posix=False, punctuation_chars=_PUNCTUATION)
     lexer.whitespace = " \t\r"
     lexer.whitespace_split = True
     try:  # posix=False preserva `\` de caminho Windows; aspas removidas à mão
@@ -192,7 +195,7 @@ def check(
         return REASON_UNPARSEABLE if re.search(r"\bgh\b.*\bissue\s+create\b", text) else None
     commands: list[list[str]] = [[]]
     for token in tokens:
-        if set(token) <= _SEPARATOR_CHARS:
+        if set(token) <= set(_PUNCTUATION) and set(token) & _BOUNDARY_CHARS:
             commands.append([])
         else:
             commands[-1].append(token)

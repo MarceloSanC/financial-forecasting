@@ -236,6 +236,26 @@ def test_create_on_a_later_line_is_checked() -> None:
     assert _reason('git status\ngh issue create --title "y" --body "sem campos"') is not None
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        'echo $(date); gh issue create -t x -b "sem"',
+        '$d = (Get-Date); gh issue create -t x -b "sem"',
+        'echo $(date)\ngh issue create -t x -b "sem"',
+        '(gh issue create -t x -b "sem")',
+        'ls 2>&1; gh issue create -t x -b "sem"',
+    ],
+)
+def test_create_after_fused_punctuation_is_checked(command: str) -> None:
+    """O shlex funde `);`, `)\\n` e `>&;` num token só; o `create` seguinte ainda é checado."""
+    assert _reason(command) is not None
+
+
+def test_redirect_does_not_split_the_create_command() -> None:
+    files = {CWD / "body.md": FULL_BODY}
+    assert _reason("gh issue create -t x -F body.md > out.txt 2>&1", files) is None
+
+
 def test_second_create_in_chain_is_checked() -> None:
     command = _heredoc(FULL_BODY) + ' && gh issue create --title "y" --body "sem campos"'
     assert _reason(command) is not None
