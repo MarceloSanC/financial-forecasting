@@ -144,10 +144,11 @@ Estrutura em `.github/workflows/`:
 Criar em `.github/`:
 
 ```
-ISSUE_TEMPLATE/
-├── feature.md       # Features novas
-├── bug.md           # Bug reports
-└── chore.md         # Manutenção
+ISSUE_TEMPLATE/       # Issue Forms (YAML): `BC / camada` e `Depende de` obrigatórios
+├── feature.yml      # Features novas
+├── bug.yml          # Bug reports
+├── chore.yml        # Manutenção
+└── config.yml       # desliga a issue em branco (pularia os campos obrigatórios)
 
 PULL_REQUEST_TEMPLATE.md
 ```
@@ -273,13 +274,24 @@ code review. Detalhes e exemplos: CONVENTIONS §4(c).
 
 Descrever claramente:
 - **Contexto:** por que estamos fazendo isso?
+- **BC / camada e dependências (obrigatórios):** seções `### BC / camada` e `### Depende de`, cada uma com valor numa linha própria — `#N`, Stage ou `nenhuma`. Issue avulsa não tem linha no `docs/roadmap.md`; a sessão executora tira daqui o BC e as pré-condições. Vazio, `_No response_` e placeholder `<...>` não valem.
 - **Critérios de aceite:** comportamento esperado (checklist)
 - **Tarefas técnicas:** passos de implementação (se conhecidos)
+
+**Onde isso é cobrado:** pelo site, os Issue Forms de `.github/ISSUE_TEMPLATE/` (`feature`, `bug`, `chore`) marcam os dois campos como obrigatórios e geram exatamente esses cabeçalhos. Pelo CLI, o hook `.claude/hooks/issue_guard.py` recusa `gh issue create` cujo corpo (inline ou `--body-file`) não traga os dois com valor; `--web` passa (abre o formulário). Corpo via stdin (`--body-file -`) não é verificável: grave o corpo num arquivo e use `--body-file <arquivo>`.
 
 Exemplo:
 ```markdown
 ## Contexto
 Usuários de Google querem autenticação automática via Google Account.
+
+### BC / camada
+
+auth (adapters/in/http + application)
+
+### Depende de
+
+nenhuma
 
 ## Critérios de aceite
 - [ ] Usuário pode clicar em "Login com Google" na página de login
@@ -296,7 +308,7 @@ Usuários de Google querem autenticação automática via Google Account.
 
 Criar com (título e corpo em português):
 ```bash
-gh issue create --title "feat: adicionar login com Google" --body "..."
+gh issue create --title "feat: adicionar login com Google" --body-file corpo.md
 ```
 
 ### Etapa 2: Criar branch
