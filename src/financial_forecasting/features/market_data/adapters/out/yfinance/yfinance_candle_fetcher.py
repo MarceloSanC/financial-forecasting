@@ -18,7 +18,16 @@ Diferenças vs old (corrigidas com julgamento):
 - normalização tz via `normalize_to_utc_day` (helper de domínio, Task 02), em vez
   de `datetime.combine` inline;
 - esgotados os retries → `ApplicationError` (não `RuntimeError` cru), coerente com
-  a hierarquia de exceções do BC (concept 2.2 C6).
+  a hierarquia de exceções do BC (concept 2.2 C6), com a falha da última tentativa
+  em `__cause__` (issue #69).
+
+Tradução de exceção (issue #69), por tipos ENUMERADOS — nunca `except Exception`.
+Em yfinance 1.5.1, `yf.download` engole a falha por ticker (o `except Exception` de
+`multi._download_one`; rede fora vira `DNSError` logado e frame vazio), e a tentativa
+sem dados vira o nosso `ValueError`. O que ainda pode escapar da chamada é a raiz
+`YFException` (`YFDataException`, `YFRateLimitError`…, subclasses diretas de
+`Exception`) e `OSError` (a família de erros do `curl_cffi` descende dele). `TypeError`
+fica FORA: neste caminho ele só nasce de bug nosso, e deve propagar.
 """
 
 from __future__ import annotations
@@ -29,6 +38,7 @@ from datetime import datetime
 
 import pandas as pd
 import yfinance as yf
+from yfinance.exceptions import YFException
 
 from financial_forecasting.features.market_data.domain.entities.candle import Candle
 from financial_forecasting.features.market_data.domain.time.utc import (
@@ -45,6 +55,12 @@ _REQUIRED_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
 _MULTIINDEX_LEVELS = 1
 _DEFAULT_MAX_RETRIES = 3
 _DEFAULT_RETRY_DELAY = 1.0
+# Falha de UMA tentativa (retentável): o vocabulário da lib (`YFException`, `OSError`,
+# e `KeyError` do pandas dentro do `download` — concat/reindex dos frames por ticker,
+# fora do `except` por ticker) e o que o nosso mapeamento ergue sobre um frame ruim
+# (`ValueError` — vazio, colunas faltando, OHLC que viola a `Candle`, `int(NaN)`). O
+# acesso `row["Open"]` do mapeamento não gera `KeyError`: as colunas já foram checadas.
+_ATTEMPT_ERRORS: tuple[type[Exception], ...] = (YFException, OSError, ValueError, KeyError)
 
 
 class YfinanceCandleFetcher:
@@ -75,7 +91,7 @@ class YfinanceCandleFetcher:
         for attempt in range(self._max_retries + 1):
             try:
                 return self._download_and_map(symbol, asset, start_utc, end_utc)
-            except (ValueError, KeyError, OSError) as exc:
+            except _ATTEMPT_ERRORS as exc:
                 last_error = exc
                 logger.warning(
                     "yfinance fetch attempt failed",
@@ -86,7 +102,7 @@ class YfinanceCandleFetcher:
 
         raise ApplicationError(
             f"Failed to fetch {symbol!r} after {self._max_retries} retries: {last_error}"
-        )
+        ) from last_error
 
     def _download_and_map(
         self, symbol: str, asset: str, start_utc: datetime, end_utc: datetime

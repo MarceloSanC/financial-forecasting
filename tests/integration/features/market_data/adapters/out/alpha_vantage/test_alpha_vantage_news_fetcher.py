@@ -3,15 +3,20 @@
 Injeta um cliente `httpx` FALSO (`_FakeClient`) devolvendo fixtures JSON — NUNCA bate
 na API ao vivo (free-tier ~25 req/dia, robustez overnight). Cobre: mapeamento →
 `NewsArticle` (parse regex de `time_published`, ID estável `url > time:title`),
-guard `Note`/`Information` → `RuntimeError`, item com `time_published` inválido
-ignorado sem quebrar o lote, throttle exercitado (sem dormir de verdade). Há um teste
-live OPCIONAL com `skipif` (não roda no CI overnight).
+guard `Note`/`Information` e formato inesperado → `ApplicationError`, item com
+`time_published` inválido ignorado sem quebrar o lote, throttle exercitado (sem dormir
+de verdade). As falhas do `httpx` (status, transporte, JSON inválido) usam um
+`httpx.Client` REAL sobre `httpx.MockTransport` — a lib erguendo o próprio tipo, sem
+rede — e provam a tradução para `ApplicationError` com a original em `__cause__`
+(issue #69). Há um teste live OPCIONAL com `skipif` (não roda no CI overnight).
 """
 
 from __future__ import annotations
 
+import json
 import os
 import socket
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -27,6 +32,7 @@ from financial_forecasting.features.market_data.adapters.out.alpha_vantage.alpha
 from financial_forecasting.features.market_data.domain.entities.news_article import (
     NewsArticle,
 )
+from financial_forecasting.shared.application.exceptions import ApplicationError
 
 _START = datetime(2024, 1, 1, tzinfo=UTC)
 _END = datetime(2024, 12, 31, tzinfo=UTC)
@@ -150,43 +156,96 @@ def test_invalid_ticker_fails_before_any_request() -> None:
 
 
 @pytest.mark.integration
-def test_rate_limit_note_raises_runtime_error() -> None:
-    """Resposta com chave `Note` → `RuntimeError` (guard de rate-limit, C7)."""
+def test_rate_limit_note_raises_application_error() -> None:
+    """Resposta com chave `Note` → `ApplicationError` (guard de rate-limit, C7; #69)."""
     fetcher, _ = _fetcher({"Note": "Thank you for using Alpha Vantage! Rate limit..."})
-    with pytest.raises(RuntimeError, match="rate limit"):
+    with pytest.raises(ApplicationError, match="rate limit"):
         fetcher.fetch_company_news("AAPL", _START, _END)
 
 
 @pytest.mark.integration
-def test_information_key_raises_runtime_error() -> None:
-    """Resposta com chave `Information` → `RuntimeError` (C7)."""
+def test_information_key_raises_application_error() -> None:
+    """Resposta com chave `Information` → `ApplicationError` (C7; #69)."""
     fetcher, _ = _fetcher({"Information": "Our standard API rate limit is 25 requests/day"})
-    with pytest.raises(RuntimeError, match="Information"):
+    with pytest.raises(ApplicationError, match="Information"):
         fetcher.fetch_company_news("AAPL", _START, _END)
 
 
 @pytest.mark.integration
 def test_non_dict_response_raises() -> None:
-    """Resposta JSON não-dict → `ValueError` (C7)."""
+    """Resposta JSON não-dict → `ApplicationError` (C7; #69)."""
     fetcher, _ = _fetcher(["not", "a", "dict"])
-    with pytest.raises(ValueError, match="expected dict"):
+    with pytest.raises(ApplicationError, match="expected dict"):
         fetcher.fetch_company_news("AAPL", _START, _END)
 
 
 @pytest.mark.integration
 def test_missing_feed_raises() -> None:
-    """Resposta sem `feed` → `ValueError` (C7)."""
+    """Resposta sem `feed` → `ApplicationError` (C7; #69)."""
     fetcher, _ = _fetcher({"something": "else"})
-    with pytest.raises(ValueError, match="Unexpected response shape"):
+    with pytest.raises(ApplicationError, match="Unexpected response shape"):
         fetcher.fetch_company_news("AAPL", _START, _END)
 
 
 @pytest.mark.integration
 def test_feed_not_a_list_raises() -> None:
-    """`feed` que não é lista → `ValueError` (C7)."""
+    """`feed` que não é lista → `ApplicationError` (C7; #69)."""
     fetcher, _ = _fetcher({"feed": {"not": "a list"}})
-    with pytest.raises(ValueError, match="'feed' is not a list"):
+    with pytest.raises(ApplicationError, match="'feed' is not a list"):
         fetcher.fetch_company_news("AAPL", _START, _END)
+
+
+# -- falhas do httpx: Client REAL + MockTransport, sem rede (issue #69) ----------
+
+
+def _mock_fetcher(handler: Callable[[httpx.Request], httpx.Response]) -> AlphaVantageNewsFetcher:
+    """Adapter sobre um `httpx.Client` real cujo transporte é o `handler` (sem rede)."""
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    return AlphaVantageNewsFetcher(api_key="demo", client=client)
+
+
+def _service_unavailable(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(503, text="Service Unavailable", request=request)
+
+
+def _connect_timeout(request: httpx.Request) -> httpx.Response:
+    raise httpx.ConnectTimeout("timed out", request=request)
+
+
+def _html_body(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(200, text="<html>maintenance</html>", request=request)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("handler", "cause_type"),
+    [
+        (_service_unavailable, httpx.HTTPStatusError),
+        (_connect_timeout, httpx.ConnectTimeout),
+        (_html_body, json.JSONDecodeError),
+    ],
+    ids=["http-503", "connect-timeout", "invalid-json"],
+)
+def test_httpx_failure_is_translated_with_cause(
+    handler: Callable[[httpx.Request], httpx.Response], cause_type: type[Exception]
+) -> None:
+    """Falha do `httpx` → `ApplicationError` com a exceção da lib em `__cause__` (#69)."""
+    with pytest.raises(ApplicationError, match="NEWS_SENTIMENT") as excinfo:
+        _mock_fetcher(handler).fetch_company_news("AAPL", _START, _END)
+
+    assert isinstance(excinfo.value.__cause__, cause_type)
+
+
+@pytest.mark.integration
+def test_mock_transport_happy_path_still_maps() -> None:
+    """Controle: o mesmo `httpx.Client` real, com resposta saudável, mapeia o feed."""
+
+    def _ok(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_feed_payload(), request=request)
+
+    articles = _mock_fetcher(_ok).fetch_company_news("AAPL", _START, _END)
+
+    assert len(articles) == _TWO
 
 
 @pytest.mark.integration
@@ -199,6 +258,23 @@ def test_empty_title_and_summary_get_placeholder() -> None:
     assert articles[0].headline == " "
     assert articles[0].summary == " "
     assert articles[0].source == "alpha_vantage"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("bad_url", ["www.example.com/a", "ftp://x"])
+def test_item_violating_the_entity_is_skipped_and_batch_survives(bad_url: str) -> None:
+    """Item com `url` que a `NewsArticle` recusa é ignorado; o resto do lote fica (#69)."""
+    payload = _feed_payload()
+    feed = payload["feed"]
+    assert isinstance(feed, list)
+    feed.insert(0, {"time_published": "20240301T0800", "title": "Bad url", "url": bad_url})
+    fetcher, _ = _fetcher(payload)
+
+    articles = fetcher.fetch_company_news("AAPL", _START, _END)
+
+    assert len(articles) == _TWO
+    assert all(a.url != bad_url for a in articles)
+    assert "Bad url" not in {a.headline for a in articles}
 
 
 @pytest.mark.integration

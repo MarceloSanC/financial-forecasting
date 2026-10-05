@@ -19,9 +19,13 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
 import pandas as pd
 import pytest
 
+from financial_forecasting.features.market_data.adapters.out.alpha_vantage.alpha_vantage_news_fetcher import (  # noqa: E501
+    AlphaVantageNewsFetcher,
+)
 from financial_forecasting.features.market_data.adapters.out.parquet.parquet_raw_news_fetcher import (  # noqa: E501
     ParquetRawNewsFetcher,
 )
@@ -186,6 +190,63 @@ def test_naive_bounds_raise(fetcher: NewsFetcher) -> None:
         fetcher.fetch_company_news(_SYMBOL, datetime(2024, 1, 1), _END)
 
 
+# -- origem indisponível: o tipo do contrato (issue #69) -----------------------
+# Cada perna falha DE VERDADE onde dá: o parquet sem arquivo; o Alpha Vantage com
+# um `httpx.Client` real cujo transporte responde 503 (sem rede). O fake simula o
+# tipo do contrato no mesmo ponto em que o real toca a origem.
+
+_UnavailableFactory = Callable[[Path, pytest.MonkeyPatch], NewsFetcher]
+
+
+def _unavailable_fake(_tmp_path: Path, _monkeypatch: pytest.MonkeyPatch) -> NewsFetcher:
+    return FakeNewsFetcher(_articles(), simulate_source_failure="source down")
+
+
+def _unavailable_parquet(tmp_path: Path, _monkeypatch: pytest.MonkeyPatch) -> NewsFetcher:
+    return ParquetRawNewsFetcher(tmp_path)  # sem arquivo: origem ausente
+
+
+def _unavailable_alpha_vantage(_tmp_path: Path, _monkeypatch: pytest.MonkeyPatch) -> NewsFetcher:
+    def _service_unavailable(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="Service Unavailable", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(_service_unavailable))
+    return AlphaVantageNewsFetcher(api_key="demo", client=client)
+
+
+_UNAVAILABLE: dict[str, _UnavailableFactory] = {
+    "fake": _unavailable_fake,
+    "parquet": _unavailable_parquet,
+    "alpha_vantage": _unavailable_alpha_vantage,
+}
+
+
+@pytest.fixture(params=list(_UNAVAILABLE))
+def unavailable_fetcher(
+    request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> NewsFetcher:
+    """Cada implementação do port com a origem fora do ar."""
+    return _UNAVAILABLE[request.param](tmp_path, monkeypatch)
+
+
+@pytest.mark.contract
+def test_unavailable_source_raises_application_error(unavailable_fetcher: NewsFetcher) -> None:
+    """Origem indisponível → `ApplicationError` em toda implementação (C6/C7)."""
+    with pytest.raises(ApplicationError):
+        unavailable_fetcher.fetch_company_news(_SYMBOL, _START, _END)
+
+
+@pytest.mark.contract
+def test_caller_error_is_value_error_even_with_source_down(
+    unavailable_fetcher: NewsFetcher,
+) -> None:
+    """Entrada inválida segue `ValueError` com a origem fora: é checada antes (C5)."""
+    with pytest.raises(ValueError, match="start_date must be <= end_date"):
+        unavailable_fetcher.fetch_company_news(_SYMBOL, _END, _START)
+    with pytest.raises(ValueError, match="asset_id"):
+        unavailable_fetcher.fetch_company_news("AA PL", _START, _END)
+
+
 # -- testes específicos do adapter real (origem default; concept 2.3 C6) -------
 
 
@@ -245,3 +306,25 @@ def test_real_optional_fields_null_and_naive_timestamp(tmp_path: Path) -> None:
     assert article.url is None
     assert article.language is None
     assert article.published_at == datetime(2024, 1, 2, 10, 0, tzinfo=UTC)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [("asset_id", "AA PL"), ("url", "ftp://x")],
+    ids=["asset-id-invalid", "url-without-http"],
+)
+def test_real_corrupted_row_raises_application_error(
+    tmp_path: Path, column: str, value: str
+) -> None:
+    """Linha que o `AssetId`/a `NewsArticle` recusa → `ApplicationError` com causa (#69)."""
+    _write_raw_parquet(tmp_path, _SYMBOL, _articles())
+    path = tmp_path / _SYMBOL / f"news_{_SYMBOL}.parquet"
+    frame = pd.read_parquet(path)
+    frame.loc[0, column] = value
+    frame.to_parquet(path)
+
+    with pytest.raises(ApplicationError, match="unreadable row") as excinfo:
+        ParquetRawNewsFetcher(tmp_path).fetch_company_news(_SYMBOL, _START, _END)
+
+    assert isinstance(excinfo.value.__cause__, ValueError)

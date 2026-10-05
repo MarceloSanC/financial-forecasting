@@ -85,21 +85,28 @@ class ParquetRawCandleFetcher:
         start_utc = to_utc(start)
         end_utc = to_utc(end)
         candles: list[Candle] = []
-        for record in frame.to_dict(orient="records"):
-            timestamp = normalize_to_utc_day(_as_datetime(record["timestamp"]))
-            if not (start_utc <= timestamp <= end_utc):
-                continue
-            candles.append(
-                Candle(
-                    asset=symbol,
-                    timestamp=timestamp,
-                    open=float(record["open"]),
-                    high=float(record["high"]),
-                    low=float(record["low"]),
-                    close=float(record["close"]),
-                    volume=int(record["volume"]),
+        # Linha corrompida (OHLC que viola a `Candle`, `int(NaN)`, NaT…) é origem
+        # ilegível → `ApplicationError`, como o port declara (issue #69). A entrada do
+        # chamador já foi validada acima, fora daqui.
+        try:
+            for record in frame.to_dict(orient="records"):
+                timestamp = normalize_to_utc_day(_as_datetime(record["timestamp"]))
+                if not (start_utc <= timestamp <= end_utc):
+                    continue
+                candles.append(
+                    Candle(
+                        asset=symbol,
+                        timestamp=timestamp,
+                        open=float(record["open"]),
+                        high=float(record["high"]),
+                        low=float(record["low"]),
+                        close=float(record["close"]),
+                        volume=int(record["volume"]),
+                    )
                 )
-            )
+        except (ValueError, TypeError, KeyError) as exc:
+            msg = f"Raw candle source for {symbol!r} has an unreadable row: {path} ({exc})"
+            raise ApplicationError(msg) from exc
         candles.sort(key=lambda c: c.timestamp)
         return candles
 

@@ -34,8 +34,21 @@ class CandleFetcher(Protocol):
     - O intervalo `[start, end]` é filtrado pela implementação; uma origem sem
       dados no intervalo devolve uma lista vazia, mas uma origem
       indisponível/ilegível levanta erro (não silencia em vazio; concept 2.2 C4).
+
+    Tipos de erro do contrato (issue #69): exceções de biblioteca (`yfinance`,
+    `pandas`, I/O) nunca atravessam o port — o adapter as traduz para o tipo abaixo,
+    com a original em `__cause__` (`operational-evolution-policy.md` §4, invariante 2).
     """
 
     def fetch_candles(self, symbol: str, start: datetime, end: datetime) -> list[Candle]:
-        """Devolve os candles diários de `symbol` no intervalo `[start, end]`."""
+        """Devolve os candles diários de `symbol` no intervalo `[start, end]`.
+
+        Raises:
+            ValueError: entrada inválida do chamador, checada ANTES de tocar a origem —
+                `start`/`end` naive, `start > end` (concept 2.2 C5) ou `symbol` que
+                não vira `AssetId`.
+            ApplicationError: origem indisponível ou ilegível — arquivo ausente ou
+                corrompido, falha do provedor, resposta vazia ou sem as colunas
+                esperadas (concept 2.2 C4/C6).
+        """
         ...

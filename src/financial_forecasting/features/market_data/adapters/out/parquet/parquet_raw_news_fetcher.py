@@ -95,22 +95,29 @@ class ParquetRawNewsFetcher:
         start_utc = to_utc(start_date)
         end_utc = to_utc(end_date)
         articles: list[NewsArticle] = []
-        for record in frame.to_dict(orient="records"):
-            published_at = _as_utc_datetime(record["published_at"])
-            if not (start_utc <= published_at <= end_utc):
-                continue
-            articles.append(
-                NewsArticle(
-                    asset_id=AssetId.parse(str(record["asset_id"])).value,
-                    published_at=published_at,
-                    headline=str(record["headline"]),
-                    summary=str(record["summary"]),
-                    source=str(record["source"]),
-                    url=_optional_str(record["url"]),
-                    article_id=_optional_str(record["article_id"]),
-                    language=_optional_str(record["language"]),
+        # Linha corrompida (`asset_id` que não vira `AssetId`, url inválida, NaT…) é
+        # origem ilegível → `ApplicationError`, como o port declara (issue #69). A
+        # entrada do chamador já foi validada acima, fora daqui.
+        try:
+            for record in frame.to_dict(orient="records"):
+                published_at = _as_utc_datetime(record["published_at"])
+                if not (start_utc <= published_at <= end_utc):
+                    continue
+                articles.append(
+                    NewsArticle(
+                        asset_id=AssetId.parse(str(record["asset_id"])).value,
+                        published_at=published_at,
+                        headline=str(record["headline"]),
+                        summary=str(record["summary"]),
+                        source=str(record["source"]),
+                        url=_optional_str(record["url"]),
+                        article_id=_optional_str(record["article_id"]),
+                        language=_optional_str(record["language"]),
+                    )
                 )
-            )
+        except (ValueError, TypeError, KeyError) as exc:
+            msg = f"Raw news source for {ticker!r} has an unreadable row: {path} ({exc})"
+            raise ApplicationError(msg) from exc
         articles.sort(key=lambda a: a.published_at)
         return articles
 

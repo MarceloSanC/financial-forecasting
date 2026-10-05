@@ -19,9 +19,13 @@ from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
 
+import httpx
 import pandas as pd
 import pytest
 
+from financial_forecasting.features.market_data.adapters.out.alpha_vantage.alpha_vantage_fundamental_fetcher import (  # noqa: E501
+    AlphaVantageFundamentalFetcher,
+)
 from financial_forecasting.features.market_data.adapters.out.parquet.parquet_fundamental_fetcher import (  # noqa: E501
     ParquetFundamentalFetcher,
 )
@@ -182,6 +186,65 @@ def test_other_spellings_resolve_to_the_canonical_asset(
     assert {r.asset_id for r in reports} == {_SYMBOL}
 
 
+# -- origem indisponível: o tipo do contrato (issue #69) -----------------------
+# Cada perna falha DE VERDADE onde dá: o parquet sem arquivo; o Alpha Vantage com
+# um `httpx.Client` real cujo transporte responde 503 (sem rede). O fake simula o
+# tipo do contrato no mesmo ponto em que o real toca a origem.
+
+_UnavailableFactory = Callable[[Path, pytest.MonkeyPatch], FundamentalFetcher]
+
+
+def _unavailable_fake(_tmp_path: Path, _monkeypatch: pytest.MonkeyPatch) -> FundamentalFetcher:
+    return FakeFundamentalFetcher(_reports(), simulate_source_failure="source down")
+
+
+def _unavailable_parquet(tmp_path: Path, _monkeypatch: pytest.MonkeyPatch) -> FundamentalFetcher:
+    return ParquetFundamentalFetcher(tmp_path)  # sem arquivo: origem ausente
+
+
+def _unavailable_alpha_vantage(
+    _tmp_path: Path, _monkeypatch: pytest.MonkeyPatch
+) -> FundamentalFetcher:
+    def _service_unavailable(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="Service Unavailable", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(_service_unavailable))
+    return AlphaVantageFundamentalFetcher(api_key="demo", client=client)
+
+
+_UNAVAILABLE: dict[str, _UnavailableFactory] = {
+    "fake": _unavailable_fake,
+    "parquet": _unavailable_parquet,
+    "alpha_vantage": _unavailable_alpha_vantage,
+}
+
+
+@pytest.fixture(params=list(_UNAVAILABLE))
+def unavailable_fetcher(
+    request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> FundamentalFetcher:
+    """Cada implementação do port com a origem fora do ar."""
+    return _UNAVAILABLE[request.param](tmp_path, monkeypatch)
+
+
+@pytest.mark.contract
+def test_unavailable_source_raises_application_error(
+    unavailable_fetcher: FundamentalFetcher,
+) -> None:
+    """Origem indisponível → `ApplicationError` em toda implementação (C6/C7)."""
+    with pytest.raises(ApplicationError):
+        unavailable_fetcher.fetch_fundamentals(_SYMBOL)
+
+
+@pytest.mark.contract
+def test_caller_error_is_value_error_even_with_source_down(
+    unavailable_fetcher: FundamentalFetcher,
+) -> None:
+    """`asset_id` inválido segue `ValueError` com a origem fora: é checado antes."""
+    with pytest.raises(ValueError, match="asset_id"):
+        unavailable_fetcher.fetch_fundamentals("AA PL")
+
+
 # -- testes específicos do adapter real (origem default; concept 2.3 C6) -------
 
 
@@ -224,3 +287,25 @@ def test_real_normalizes_asset_id_with_exchange_suffix(tmp_path: Path) -> None:
     reports = ParquetFundamentalFetcher(tmp_path).fetch_fundamentals("AAPL.US")
     assert reports
     assert all(r.asset_id == _SYMBOL for r in reports)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [("asset_id", "AA PL"), ("report_type", "monthly")],
+    ids=["asset-id-invalid", "report-type-invalid"],
+)
+def test_real_corrupted_row_raises_application_error(
+    tmp_path: Path, column: str, value: str
+) -> None:
+    """Linha que o `AssetId`/o `FundamentalReport` recusa → `ApplicationError` (#69)."""
+    _write_parquet(tmp_path, _SYMBOL, _reports())
+    path = tmp_path / _SYMBOL / f"fundamentals_{_SYMBOL}.parquet"
+    frame = pd.read_parquet(path)
+    frame.loc[0, column] = value
+    frame.to_parquet(path)
+
+    with pytest.raises(ApplicationError, match="unreadable row") as excinfo:
+        ParquetFundamentalFetcher(tmp_path).fetch_fundamentals(_SYMBOL)
+
+    assert isinstance(excinfo.value.__cause__, ValueError)
