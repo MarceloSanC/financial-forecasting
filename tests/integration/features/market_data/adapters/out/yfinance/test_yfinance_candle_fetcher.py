@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 import pytest
+from curl_cffi.requests.exceptions import DNSError
 from yfinance.exceptions import YFDataException, YFRateLimitError
 
 from financial_forecasting.features.market_data.adapters.out.yfinance import (
@@ -178,8 +179,8 @@ def test_empty_response_keeps_last_failure_as_cause(monkeypatch: pytest.MonkeyPa
     [
         YFRateLimitError(),
         YFDataException("*** YAHOO! FINANCE IS CURRENTLY DOWN! ***"),
-        # a família de erros de rede do `curl_cffi` (ex.: `DNSError`) descende de `OSError`
-        ConnectionError("Could not resolve host: guce.yahoo.com"),
+        # o tipo real da lib instalada (transporte do yfinance); descende de `OSError`
+        DNSError("Failed to perform, curl: (6) Could not resolve host: guce.yahoo.com"),
     ],
     ids=["rate-limit", "yf-data", "network"],
 )

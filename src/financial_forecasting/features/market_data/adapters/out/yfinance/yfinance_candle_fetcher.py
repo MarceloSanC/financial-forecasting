@@ -55,9 +55,11 @@ _REQUIRED_COLUMNS = ("Open", "High", "Low", "Close", "Volume")
 _MULTIINDEX_LEVELS = 1
 _DEFAULT_MAX_RETRIES = 3
 _DEFAULT_RETRY_DELAY = 1.0
-# Falha de UMA tentativa (retentável): o vocabulário da lib (`YFException`, `OSError`)
-# e o que o nosso mapeamento ergue sobre um frame ruim (`ValueError` — vazio, colunas
-# faltando, OHLC que viola a `Candle`, `int(NaN)`; `KeyError` — linha sem a coluna).
+# Falha de UMA tentativa (retentável): o vocabulário da lib (`YFException`, `OSError`,
+# e `KeyError` do pandas dentro do `download` — concat/reindex dos frames por ticker,
+# fora do `except` por ticker) e o que o nosso mapeamento ergue sobre um frame ruim
+# (`ValueError` — vazio, colunas faltando, OHLC que viola a `Candle`, `int(NaN)`). O
+# acesso `row["Open"]` do mapeamento não gera `KeyError`: as colunas já foram checadas.
 _ATTEMPT_ERRORS: tuple[type[Exception], ...] = (YFException, OSError, ValueError, KeyError)
 
 
