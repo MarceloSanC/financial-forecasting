@@ -14,9 +14,23 @@ vive SÓ aqui (concept 2.3 I3).
 
 Throttle `1.1s` (`_MIN_INTERVAL` + lock + `time.monotonic`) vive no adapter (I9, old
 `:32`); não acopla domínio nem use case. ID estável `url > f"{time_published}:
-{headline[:80]}"` (old `:169-170`). Guard `Note`/`Information` → `RuntimeError`
-(C7); itens com `time_published` inválido são ignorados (parse defensivo) sem
-quebrar o lote. Nenhuma chamada de rede em import/instanciação.
+{headline[:80]}"` (old `:169-170`). Itens com `time_published` inválido são
+ignorados (parse defensivo) sem quebrar o lote. Nenhuma chamada de rede em
+import/instanciação.
+
+Erros (issue #69 — o tipo que o port `NewsFetcher` declara): a origem fora do ar ou
+ilegível sai como `ApplicationError`, nunca como exceção do `httpx`. Os tipos
+capturados são ENUMERADOS — nunca `except Exception`:
+- `httpx.HTTPError` (raiz de `TransportError`/`TimeoutException`, `HTTPStatusError`
+  do `raise_for_status`, `DecodingError`, `TooManyRedirects` — httpx 0.28.1) em torno
+  do GET, com a original em `__cause__`;
+- `ValueError` em torno SÓ do `response.json()` (`json.JSONDecodeError` e
+  `UnicodeDecodeError` do corpo), também com a original em `__cause__`;
+- os guards da resposta — `Note`/`Information` (rate limit) e formato inesperado
+  (não-dict, `feed` ausente/não-lista; concept 2.3 C7) — erguem `ApplicationError`
+  direto, no lugar do `RuntimeError`/`ValueError` cru de antes.
+`ValueError` de entrada do chamador (bounds, ticker que não vira `AssetId`) segue
+`ValueError`: é checado antes de qualquer chamada de rede.
 """
 
 from __future__ import annotations
@@ -32,6 +46,7 @@ from financial_forecasting.features.market_data.domain.entities.news_article imp
     NewsArticle,
 )
 from financial_forecasting.features.market_data.domain.time.utc import require_tz_aware
+from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.domain.value_objects.asset_id import AssetId
 
 _TIME_PUBLISHED_RE = re.compile(r"^\d{8}T\d{4}(\d{2})?$")  # YYYYMMDDTHHMM[SS]
@@ -116,19 +131,27 @@ class AlphaVantageNewsFetcher:
     def _get(self, params: dict[str, str]) -> dict[str, object]:
         """Faz o GET throttled e valida a resposta (guard de rate-limit, C7)."""
         self._throttle()
-        response = self._client.get(
-            self.BASE_URL,
-            params=params,
-            headers={"Accept": "application/json", "User-Agent": self._user_agent},
-        )
-        response.raise_for_status()
-        data = response.json()
+        try:
+            response = self._client.get(
+                self.BASE_URL,
+                params=params,
+                headers={"Accept": "application/json", "User-Agent": self._user_agent},
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            msg = f"Alpha Vantage NEWS_SENTIMENT request failed: {type(exc).__name__}: {exc}"
+            raise ApplicationError(msg) from exc
+        try:
+            data = response.json()
+        except ValueError as exc:  # JSONDecodeError/UnicodeDecodeError do corpo
+            msg = f"Alpha Vantage NEWS_SENTIMENT response is not valid JSON: {exc}"
+            raise ApplicationError(msg) from exc
         if not isinstance(data, dict):
-            raise ValueError("Unexpected Alpha Vantage response format: expected dict")
+            raise ApplicationError("Unexpected Alpha Vantage response format: expected dict")
         if "Note" in data:
-            raise RuntimeError(f"Alpha Vantage rate limit hit: {data['Note']}")
+            raise ApplicationError(f"Alpha Vantage rate limit hit: {data['Note']}")
         if "Information" in data:
-            raise RuntimeError(f"Alpha Vantage Information: {data['Information']}")
+            raise ApplicationError(f"Alpha Vantage Information: {data['Information']}")
         return data
 
     def _item_to_article(self, asset_id: str, item: dict[str, object]) -> NewsArticle | None:
@@ -165,10 +188,10 @@ class AlphaVantageNewsFetcher:
 
 
 def _extract_feed(data: dict[str, object]) -> list[object]:
-    """Extrai a lista `feed` da resposta; ausente/não-lista → erro (C7)."""
+    """Extrai a lista `feed` da resposta; ausente/não-lista → `ApplicationError` (C7)."""
     feed = data.get("feed")
     if feed is None:
-        raise ValueError(f"Unexpected response shape. Keys: {sorted(data.keys())}")
+        raise ApplicationError(f"Unexpected response shape. Keys: {sorted(data.keys())}")
     if not isinstance(feed, list):
-        raise ValueError("Unexpected Alpha Vantage response: 'feed' is not a list")
+        raise ApplicationError("Unexpected Alpha Vantage response: 'feed' is not a list")
     return feed
