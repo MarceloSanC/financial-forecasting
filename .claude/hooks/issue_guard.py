@@ -53,6 +53,7 @@ _CD = {"cd", "Set-Location", "pushd"}
 _NO_VALUE = {"", "_No response_"}
 _PLACEHOLDER = re.compile(r"<[^<>]*>")
 _HEADING = re.compile(r"\s{0,3}#{1,6}\s")
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 # heredoc bash: `<<'EOF'` (resto da linha) ... linha só com `EOF`
 _HEREDOC = re.compile(
     r"<<-?[ \t]*(['\"]?)(\w+)\1([^\n]*)\n(?:(.*?)\n)??[ \t]*\2[ \t]*(?=\n|$)", re.DOTALL
@@ -72,8 +73,8 @@ def _read_file(path: Path) -> str | None:
 
 
 def missing_fields(body: str) -> list[str]:
-    """Campos obrigatórios ausentes ou sem valor válido no corpo."""
-    lines = body.splitlines()
+    """Campos obrigatórios ausentes ou sem valor válido no corpo (comentário HTML não conta)."""
+    lines = _HTML_COMMENT.sub("", body).splitlines()
     missing = []
     for field in REQUIRED_FIELDS:
         header = re.compile(rf"\s{{0,3}}###\s+{re.escape(field)}\s*")

@@ -169,6 +169,22 @@ def test_repeated_heading_passes_when_one_has_value() -> None:
     assert ig.missing_fields(body) == []
 
 
+@pytest.mark.parametrize(
+    ("body", "missing"),
+    [
+        (_body(bc="<!-- módulo afetado -->"), ["BC / camada"]),
+        (_body(deps="<!--\n#145\n-->"), ["Depende de"]),
+        ("<!--\n### BC / camada\n\ntooling\n-->\n" + _body(bc=None), ["BC / camada"]),
+    ],
+)
+def test_html_comment_does_not_count_as_value(body: str, missing: list[str]) -> None:
+    assert ig.missing_fields(body) == missing
+
+
+def test_value_next_to_html_comment_still_counts() -> None:
+    assert ig.missing_fields(_body(bc="<!-- dica -->\ntooling")) == []
+
+
 def test_heading_level_must_be_three() -> None:
     body = "## BC / camada\n\ntooling\n\n### Depende de\n\nnenhuma\n"
     assert _reason(_heredoc(body)) is not None
