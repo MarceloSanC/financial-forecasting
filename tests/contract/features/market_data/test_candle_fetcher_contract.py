@@ -222,3 +222,29 @@ def test_caller_error_is_value_error_even_with_source_down(
         unavailable_fetcher.fetch_candles(_SYMBOL, _END, _START)
     with pytest.raises(ValueError, match="asset_id"):
         unavailable_fetcher.fetch_candles("AA PL", _START, _END)
+
+
+# -- linha corrompida no parquet real: origem ilegível (issue #69) ------------
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [("high", 1.0), ("volume", float("nan"))],
+    ids=["high-below-low", "volume-nan"],
+)
+def test_real_corrupted_row_raises_application_error(
+    tmp_path: Path, column: str, value: float
+) -> None:
+    """Linha que a `Candle` recusa (high < low, `int(NaN)`) → `ApplicationError` com causa."""
+    _write_raw_parquet(tmp_path, _SYMBOL, _candles())
+    path = tmp_path / _SYMBOL / f"candles_{_SYMBOL}_1d.parquet"
+    frame = pd.read_parquet(path)
+    frame[column] = frame[column].astype("float64")
+    frame.loc[0, column] = value
+    frame.to_parquet(path)
+
+    with pytest.raises(ApplicationError, match="unreadable row") as excinfo:
+        ParquetRawCandleFetcher(tmp_path).fetch_candles(_SYMBOL, _START, _END)
+
+    assert isinstance(excinfo.value.__cause__, ValueError)

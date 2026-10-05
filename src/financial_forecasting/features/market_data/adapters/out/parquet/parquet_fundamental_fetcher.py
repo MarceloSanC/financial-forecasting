@@ -81,21 +81,28 @@ class ParquetFundamentalFetcher:
             )
 
         reports: list[FundamentalReport] = []
-        for record in frame.to_dict(orient="records"):
-            reports.append(
-                FundamentalReport(
-                    asset_id=AssetId.parse(str(record["asset_id"])).value,
-                    report_type=str(record["report_type"]),
-                    fiscal_date_end=_to_date_required(record["fiscal_date_end"]),
-                    reported_date=_to_date_optional(record["reported_date"]),
-                    revenue=_to_float(record["revenue"]),
-                    net_income=_to_float(record["net_income"]),
-                    operating_cash_flow=_to_float(record["operating_cash_flow"]),
-                    total_shareholder_equity=_to_float(record["total_shareholder_equity"]),
-                    total_liabilities=_to_float(record["total_liabilities"]),
-                    source=str(record["source"]),
+        # Linha corrompida (`asset_id` que não vira `AssetId`, `report_type` fora do
+        # domínio, `fiscal_date_end` NaT…) é origem ilegível → `ApplicationError`, como
+        # o port declara (issue #69). O `asset_id` do pedido já foi validado acima.
+        try:
+            for record in frame.to_dict(orient="records"):
+                reports.append(
+                    FundamentalReport(
+                        asset_id=AssetId.parse(str(record["asset_id"])).value,
+                        report_type=str(record["report_type"]),
+                        fiscal_date_end=_to_date_required(record["fiscal_date_end"]),
+                        reported_date=_to_date_optional(record["reported_date"]),
+                        revenue=_to_float(record["revenue"]),
+                        net_income=_to_float(record["net_income"]),
+                        operating_cash_flow=_to_float(record["operating_cash_flow"]),
+                        total_shareholder_equity=_to_float(record["total_shareholder_equity"]),
+                        total_liabilities=_to_float(record["total_liabilities"]),
+                        source=str(record["source"]),
+                    )
                 )
-            )
+        except (ValueError, TypeError, KeyError) as exc:
+            msg = f"Fundamentals source for {asset_id!r} has an unreadable row: {path} ({exc})"
+            raise ApplicationError(msg) from exc
         reports.sort(key=lambda r: (r.report_type, r.fiscal_date_end))
         return reports
 

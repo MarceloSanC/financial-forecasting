@@ -287,3 +287,25 @@ def test_real_normalizes_asset_id_with_exchange_suffix(tmp_path: Path) -> None:
     reports = ParquetFundamentalFetcher(tmp_path).fetch_fundamentals("AAPL.US")
     assert reports
     assert all(r.asset_id == _SYMBOL for r in reports)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [("asset_id", "AA PL"), ("report_type", "monthly")],
+    ids=["asset-id-invalid", "report-type-invalid"],
+)
+def test_real_corrupted_row_raises_application_error(
+    tmp_path: Path, column: str, value: str
+) -> None:
+    """Linha que o `AssetId`/o `FundamentalReport` recusa → `ApplicationError` (#69)."""
+    _write_parquet(tmp_path, _SYMBOL, _reports())
+    path = tmp_path / _SYMBOL / f"fundamentals_{_SYMBOL}.parquet"
+    frame = pd.read_parquet(path)
+    frame.loc[0, column] = value
+    frame.to_parquet(path)
+
+    with pytest.raises(ApplicationError, match="unreadable row") as excinfo:
+        ParquetFundamentalFetcher(tmp_path).fetch_fundamentals(_SYMBOL)
+
+    assert isinstance(excinfo.value.__cause__, ValueError)

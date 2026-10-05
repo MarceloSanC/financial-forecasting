@@ -306,3 +306,25 @@ def test_real_optional_fields_null_and_naive_timestamp(tmp_path: Path) -> None:
     assert article.url is None
     assert article.language is None
     assert article.published_at == datetime(2024, 1, 2, 10, 0, tzinfo=UTC)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [("asset_id", "AA PL"), ("url", "ftp://x")],
+    ids=["asset-id-invalid", "url-without-http"],
+)
+def test_real_corrupted_row_raises_application_error(
+    tmp_path: Path, column: str, value: str
+) -> None:
+    """Linha que o `AssetId`/a `NewsArticle` recusa → `ApplicationError` com causa (#69)."""
+    _write_raw_parquet(tmp_path, _SYMBOL, _articles())
+    path = tmp_path / _SYMBOL / f"news_{_SYMBOL}.parquet"
+    frame = pd.read_parquet(path)
+    frame.loc[0, column] = value
+    frame.to_parquet(path)
+
+    with pytest.raises(ApplicationError, match="unreadable row") as excinfo:
+        ParquetRawNewsFetcher(tmp_path).fetch_company_news(_SYMBOL, _START, _END)
+
+    assert isinstance(excinfo.value.__cause__, ValueError)
