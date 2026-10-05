@@ -5,7 +5,7 @@ when-use: Reference before dropping the EARNINGS call from the fundamental fetch
 keywords: [adr, market-data, fundamentals, alpha-vantage, earnings, reported-date, income-statement, balance-sheet, cash-flow, fundamental-fetcher, as-of, throttle]
 status: accepted
 created_at: 2026-06-29
-updated_at: 2026-06-29
+updated_at: 2026-10-05
 adr_id: "2.3.0001"
 decision: AlphaVantageFundamentalFetcher fetches four endpoints (INCOME_STATEMENT + BALANCE_SHEET + CASH_FLOW + EARNINGS), merging by (report_type, fiscal_date_end); EARNINGS is kept because it is the only source of reported_date, which is nullable in the bronze schema and feeds the as-of fallback of Stage 3.3 (ledger H-3)
 context_stage: 2.3-news-fundamentals-ingestion
@@ -13,6 +13,8 @@ bounded_context: market_data
 ---
 
 # ADR 2.3.0001 — Alpha Vantage fundamental fetcher uses four endpoints, including EARNINGS
+
+> ⚠️ **Errata (2026-10-05, issue #69):** "Decision" says a `"Note"`/`"Information"` key "raises `RuntimeError`". Since PR #149 the guards raise `ApplicationError`, the type the `FundamentalFetcher` port declares for an unavailable/unreadable source; `httpx` failures and an invalid JSON body are translated to it too, with the original in `__cause__`. The decision itself (four endpoints, EARNINGS as the sole source of `reported_date`) is unchanged.
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
