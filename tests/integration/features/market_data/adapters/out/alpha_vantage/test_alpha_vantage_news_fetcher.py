@@ -261,6 +261,23 @@ def test_empty_title_and_summary_get_placeholder() -> None:
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("bad_url", ["www.example.com/a", "ftp://x"])
+def test_item_violating_the_entity_is_skipped_and_batch_survives(bad_url: str) -> None:
+    """Item com `url` que a `NewsArticle` recusa é ignorado; o resto do lote fica (#69)."""
+    payload = _feed_payload()
+    feed = payload["feed"]
+    assert isinstance(feed, list)
+    feed.insert(0, {"time_published": "20240301T0800", "title": "Bad url", "url": bad_url})
+    fetcher, _ = _fetcher(payload)
+
+    articles = fetcher.fetch_company_news("AAPL", _START, _END)
+
+    assert len(articles) == _TWO
+    assert all(a.url != bad_url for a in articles)
+    assert "Bad url" not in {a.headline for a in articles}
+
+
+@pytest.mark.integration
 def test_throttle_sleeps_between_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     """Duas chamadas em sequência exercitam o ramo de `sleep` do throttle (I9)."""
     slept: list[float] = []

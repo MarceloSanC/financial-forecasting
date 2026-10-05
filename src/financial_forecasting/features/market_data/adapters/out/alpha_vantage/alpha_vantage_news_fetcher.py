@@ -175,16 +175,21 @@ class AlphaVantageNewsFetcher:
             summary = " "
 
         article_id = url_str or f"{time_published}:{headline[:_HEADLINE_ID_LEN]}"
-        return NewsArticle(
-            asset_id=asset_id,
-            published_at=published_at,
-            headline=headline,
-            summary=summary,
-            source=source or "alpha_vantage",
-            url=url_str,
-            article_id=article_id,
-            language="en",
-        )
+        try:
+            return NewsArticle(
+                asset_id=asset_id,
+                published_at=published_at,
+                headline=headline,
+                summary=summary,
+                source=source or "alpha_vantage",
+                url=url_str,
+                article_id=article_id,
+                language="en",
+            )
+        except ValueError:
+            # item que viola a entity (ex.: `url` sem esquema http(s)) é ignorado, como
+            # o `time_published` inválido — sem derrubar o lote (C7; issue #69)
+            return None
 
 
 def _extract_feed(data: dict[str, object]) -> list[object]:
