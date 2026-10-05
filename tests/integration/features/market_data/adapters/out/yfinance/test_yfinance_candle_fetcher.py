@@ -4,8 +4,9 @@ Usa `monkeypatch` de `yf.download` devolvendo um `DataFrame` fixture (com
 `MultiIndex` de colunas e índice tz-naive, para exercitar a normalização) — NUNCA
 bate na API ao vivo (robustez overnight). Cobre: mapeamento + normalização tz →
 `00:00 UTC`, injeção de `asset`, colunas faltando → `ApplicationError` após
-retries, `start > end`/naive → `ValueError`. Há um teste live OPCIONAL com
-`skipif` (não roda no CI overnight).
+retries, `start > end`/naive → `ValueError`, e a tradução das exceções da lib para
+`ApplicationError` com a original em `__cause__` (issue #69). Há um teste live
+OPCIONAL com `skipif` (não roda no CI overnight).
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 import pytest
+from yfinance.exceptions import YFDataException, YFRateLimitError
 
 from financial_forecasting.features.market_data.adapters.out.yfinance import (
     yfinance_candle_fetcher as module,
@@ -155,6 +157,70 @@ def test_missing_columns_raises_after_retries(monkeypatch: pytest.MonkeyPatch) -
 
     with pytest.raises(ApplicationError):
         YfinanceCandleFetcher(max_retries=1, retry_delay=0.0).fetch_candles("AAPL", _START, _END)
+
+
+@pytest.mark.integration
+def test_empty_response_keeps_last_failure_as_cause(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A falha da última tentativa vai em `__cause__` — não se perde (issue #69)."""
+    monkeypatch.setattr(module.yf, "download", lambda *a, **k: pd.DataFrame())
+    monkeypatch.setattr(module.sleep_time, "sleep", lambda _s: None)
+
+    with pytest.raises(ApplicationError) as excinfo:
+        YfinanceCandleFetcher(max_retries=0, retry_delay=0.0).fetch_candles("AAPL", _START, _END)
+
+    assert isinstance(excinfo.value.__cause__, ValueError)
+    assert "No data returned" in str(excinfo.value.__cause__)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "library_error",
+    [
+        YFRateLimitError(),
+        YFDataException("*** YAHOO! FINANCE IS CURRENTLY DOWN! ***"),
+        # a família de erros de rede do `curl_cffi` (ex.: `DNSError`) descende de `OSError`
+        ConnectionError("Could not resolve host: guce.yahoo.com"),
+    ],
+    ids=["rate-limit", "yf-data", "network"],
+)
+def test_library_error_is_retried_and_translated(
+    monkeypatch: pytest.MonkeyPatch, library_error: Exception
+) -> None:
+    """Exceção da lib → retentada e, esgotada, `ApplicationError` com ela em `__cause__`."""
+    calls: list[object] = []
+
+    def _download(*_args: object, **_kwargs: object) -> pd.DataFrame:
+        calls.append("download")
+        raise library_error
+
+    monkeypatch.setattr(module.yf, "download", _download)
+    monkeypatch.setattr(module.sleep_time, "sleep", lambda _s: None)
+
+    with pytest.raises(ApplicationError, match="after 1 retries") as excinfo:
+        YfinanceCandleFetcher(max_retries=1, retry_delay=0.0).fetch_candles("AAPL", _START, _END)
+
+    assert excinfo.value.__cause__ is library_error
+    assert len(calls) == len(["first try", "retry"])
+
+
+@pytest.mark.integration
+def test_type_error_is_a_bug_and_propagates_untranslated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`TypeError` não é falha da origem: propaga cru e sem retentar (só tipos enumerados)."""
+    calls: list[object] = []
+
+    def _download(*_args: object, **_kwargs: object) -> pd.DataFrame:
+        calls.append("download")
+        raise TypeError("download() got an unexpected keyword argument")
+
+    monkeypatch.setattr(module.yf, "download", _download)
+    monkeypatch.setattr(module.sleep_time, "sleep", lambda _s: None)
+
+    with pytest.raises(TypeError, match="unexpected keyword"):
+        YfinanceCandleFetcher(max_retries=3, retry_delay=0.0).fetch_candles("AAPL", _START, _END)
+
+    assert calls == ["download"]
 
 
 @pytest.mark.integration

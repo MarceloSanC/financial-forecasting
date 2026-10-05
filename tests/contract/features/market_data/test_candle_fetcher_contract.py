@@ -21,9 +21,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from yfinance.exceptions import YFRateLimitError
 
 from financial_forecasting.features.market_data.adapters.out.parquet.parquet_raw_candle_fetcher import (  # noqa: E501
     ParquetRawCandleFetcher,
+)
+from financial_forecasting.features.market_data.adapters.out.yfinance import (
+    yfinance_candle_fetcher as yfinance_module,
+)
+from financial_forecasting.features.market_data.adapters.out.yfinance.yfinance_candle_fetcher import (  # noqa: E501
+    YfinanceCandleFetcher,
 )
 
 # `CandleFetcher` (Protocol, duck-typed) tipa a fixture parametrizada [fake, real].
@@ -157,8 +164,9 @@ def test_naive_bounds_raise(fetcher: CandleFetcher) -> None:
 
 
 # -- origem indisponível: o tipo do contrato (issue #69) -----------------------
-# Cada perna falha DE VERDADE onde dá: o parquet sem arquivo. O fake simula o tipo
-# do contrato no mesmo ponto em que o real toca a origem.
+# Cada perna falha DE VERDADE onde dá: o parquet sem arquivo; o yfinance com a lib
+# erguendo o próprio tipo (a função da lib é dublada, nunca o port). O fake simula o
+# tipo do contrato no mesmo ponto em que o real toca a origem.
 
 _UnavailableFactory = Callable[[Path, pytest.MonkeyPatch], CandleFetcher]
 
@@ -171,9 +179,20 @@ def _unavailable_parquet(tmp_path: Path, _monkeypatch: pytest.MonkeyPatch) -> Ca
     return ParquetRawCandleFetcher(tmp_path)  # sem arquivo: origem ausente
 
 
+def _unavailable_yfinance(_tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> CandleFetcher:
+    # sem rede: a lib ergue o próprio tipo de erro (rate limit) em toda tentativa
+    def _download(*_args: object, **_kwargs: object) -> pd.DataFrame:
+        raise YFRateLimitError
+
+    monkeypatch.setattr(yfinance_module.yf, "download", _download)
+    monkeypatch.setattr(yfinance_module.sleep_time, "sleep", lambda _s: None)
+    return YfinanceCandleFetcher(max_retries=0, retry_delay=0.0)
+
+
 _UNAVAILABLE: dict[str, _UnavailableFactory] = {
     "fake": _unavailable_fake,
     "parquet": _unavailable_parquet,
+    "yfinance": _unavailable_yfinance,
 }
 
 
