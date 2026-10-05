@@ -935,7 +935,7 @@ arquivos_a_modificar:
 contratos_introduzidos: [Preregistration, PreregistrationHash, TailDeviation, VOs de evidência (value-objects), H1Gate, H1GatePower, ConfirmatoryScorecard (domain-services), PreregistrationSource, GoldGenerationReader (ports-out), BuildConfirmatoryScorecard (use case)]
 contratos_consumidos: [tabelas gold + manifesto (6.4) via GoldGenerationReader, RefreshParameters/GoldManifest/check_generation (6.4), WilsonBand, lr_uc_three_state, chi_square_sf (6.3, sobre contagens médias entre seeds), Hasher (1.4), cohort r0 por referência (5.5)]
 definition_of_done: "Pré-registro hasheado e imutável (qualquer campo alterado, inclusive regra nomeada, muda o hash); ancorado com carimbo do servidor depois da âncora do cohort referenciado; nenhuma métrica calculada pela 6.5 sobre o cohort; o scorecard recusa plano sem âncora, gold de outro plano/cohort e gold bloqueado, e marca como não pronto o gold gerado antes da âncora; aplica a regra pré-registrada mecanicamente por horizonte (primária = pinball + gate de calibração + DM/Holm + MCS); separa vencedor de perfil; `academic_decision_ready` exige todos os gates de validade (gold completo sem check bloqueante ou pulado, gold posterior à âncora, nenhuma emenda não-cega) e não depende do desfecho."
-non_goals: [execução do cohort (8.1), reabrir hipóteses, perfis de séries novas (6.6, ex-#129), plots (8.3)]
+non_goals: [execução do cohort (8.1), reabrir hipóteses, perfis de séries novas (6.6, issue #129), plots (8.3)]
 complexidade_estimada: M
 gate_mode: strict
 skills_hint: [ddd-tactical-patterns, hex-arch-python, dmls-ch05-model-development-and-evaluation]
@@ -943,9 +943,13 @@ skills_hint: [ddd-tactical-patterns, hex-arch-python, dmls-ch05-model-developmen
 
 #### Stage 6.6 — `6.6-scorecard-profiles`
 
-**Descrição humana:** Os perfis do scorecard que o pré-registro da 6.5 já declara, com parâmetros congelados, mas que exigem **séries que o gold da 6.4 não guarda**: DM por fold, DM por seed (com a fração de seeds que rejeitam a α), DM por nível quantílico τ, sensibilidades de bloco do MCS (l = h e l = ⌈√T⌉), diagnóstico de estacionariedade de d_t, degeneração parcial por par de quantis e p-valor Monte Carlo de Christoffersen em h+1. Cada perfil reusa o `SeriesAssembly` e os serviços de domínio da 6.2/6.3 (sem reimplementar DM, MCS ou Christoffersen) e vira **tabela gold nova** na mesma geração do `RefreshGold`. **Perfil nunca troca o veredito** (doc de domínio §8.6; I12 da 6.5): calcular depois não altera o claim, porque o quê foi declarado antes — sem emenda ao pré-registro. Bloqueia a 8.1 (ADR 6.5.0008 §Consequences). Origem: issue #129 (ex-issue avulsa, promovida a Stage por tocar schema persistido e ter decisões de concept em aberto).
+**Descrição humana:** Os perfis do scorecard que o pré-registro r0 da 6.5 **declara por nome** e que exigem **séries que o gold da 6.4 não guarda**: DM por fold, DM por seed (com a fração de seeds que rejeitam a α), DM por nível quantílico τ, sensibilidades de bloco do MCS (l = h e l = ⌈√T⌉), diagnóstico de estacionariedade de d_t, degeneração parcial por par de quantis e p-valor Monte Carlo de Christoffersen em h+1. Cinco deles têm parâmetros congelados no r0 (`mcs.block_sensitivities`, `backtests.monte_carlo`, α, níveis τ); o diagnóstico de estacionariedade (lags da ACF, teste de quebra) e a degeneração por par **não** têm. DM, MCS e Christoffersen reusam os serviços da 6.2/6.3; o diagnóstico de estacionariedade é **estatística nova** (não há serviço de ACF/quebra no código) e a degeneração por par é cálculo novo sobre a degeneração da 6.1. Cada perfil vira **tabela gold nova** na mesma geração do `RefreshGold`. **Perfil nunca troca o veredito** (doc de domínio §8.6; I12 da 6.5): calcular depois não altera o claim, desde que o quê e os parâmetros sejam fixados antes da primeira execução real (8.1). Bloqueia a 8.1 (ADR 6.5.0008 §Consequences). Issue da Stage: #129 (promovida de issue avulsa por tocar schema persistido e ter decisões de concept em aberto); o comentário de 2026-09-30 da #129 (achados F6–F8 da auditoria da 6.5) faz parte do escopo.
 
-**Em aberto para o concept/technical (ponto de partida, não definitivo):** se o `ScorecardProfile` da 6.5 passa a ler essas tabelas pelo `GoldGenerationReader` (perfil completo no `ScorecardResult`) ou se a 8.1 as anexa ao lado do scorecard; e se as tabelas por subconjunto (fold, seed, τ) viram uma tabela cada ou uma tabela com coluna de dimensão.
+**Em aberto para o concept/technical (ponto de partida, não definitivo; fechar E/C pela skill `evidence-resolution`):**
+1. **Parâmetros dos dois perfis sem valor no r0** (estacionariedade de d_t e degeneração por par): (a) emenda cega r1 (`blind_status = "blinded"`, ADR 6.5.0002) ancorada antes da 8.1; (b) valores tirados literalmente do doc de domínio, citando a seção; ou (c) os dois perfis rotulados exploratórios no relatório. Em qualquer caminho, nota datada no ADR 6.5.0008 corrigindo o "with its parameters".
+2. Se o `ScorecardProfile` da 6.5 passa a ler as tabelas novas pelo `GoldGenerationReader` (perfil completo no `ScorecardResult`) ou se a 8.1 as anexa ao lado do scorecard.
+3. Se as tabelas por subconjunto (fold, seed, τ) viram uma tabela cada ou uma tabela com coluna de dimensão.
+4. Tamanho: ~13–15 tasks está no teto de `ROADMAP-1`; se o technical passar disso, dividir a Stage (PIPELINE §4.2).
 
 **Descrição para IA:**
 ```yaml
@@ -953,21 +957,29 @@ stage_id: 6.6-scorecard-profiles
 bounded_context: evaluation
 camada_alvo: multi (domain + application + adapters/out)
 arquivos_a_criar:
+  - src/financial_forecasting/features/evaluation/domain/services/ (diagnóstico de estacionariedade de d_t; degeneração por par — nomes no technical)
   - src/financial_forecasting/features/evaluation/adapters/out/duckdb/gold_builders/ (um builder por perfil — nomes no technical)
-  - tests/unit/features/evaluation/ (montagem das séries novas: fold carregado, perda por τ, série por seed)
+  - tests/unit/features/evaluation/ (montagem das séries novas: fold carregado, perda por τ, série por seed; serviços novos contra oráculo)
   - tests/integration/features/evaluation/ (builders + e2e só sobre silver sintético)
+  - config/preregistration/aapl_confirmatory-r1.toml e .anchor.toml (só se o concept escolher a emenda cega r1)
 arquivos_a_modificar:
   - src/financial_forecasting/features/evaluation/domain/services/series_assembly.py (carregar `fold`; perdas por τ; série por seed)
   - src/financial_forecasting/features/evaluation/application/dtos/gold_schema.py (schemas das tabelas novas, dono único)
+  - src/financial_forecasting/features/evaluation/application/dtos/refresh_gold.py (`RefreshParameters` com `monte_carlo` e `block_sensitivities`, F8a)
+  - src/financial_forecasting/features/evaluation/application/dtos/confirmatory_scorecard.py (`refresh_command_from`, derivação única, F8a)
   - src/financial_forecasting/features/evaluation/application/use_cases/refresh_gold.py (builders novos no DAG, mesma geração, manifesto por último)
+  - src/financial_forecasting/features/evaluation/application/use_cases/scorecard_evidence.py (`check_manifest` confere os parâmetros novos; acessores tipados das células, F6)
+  - src/financial_forecasting/features/evaluation/application/use_cases/scorecard_profile.py (`NOT_BUILT_HERE` deixa de listar os perfis entregues; acessores tipados, F6)
   - src/financial_forecasting/composition_root.py
-contratos_introduzidos: [tabelas gold de perfil (DM por fold/seed/τ, MCS por comprimento de bloco, estacionariedade de d_t, degeneração por par, p-valor Monte Carlo de Christoffersen), builders gold correspondentes]
-contratos_consumidos: [SeriesAssembly e RefreshGold (6.4), DieboldMariano/HLN e ModelConfidenceSet (6.2), ChristoffersenTest.monte_carlo_p_values e degeneração (6.1/6.3), Preregistration.profiles + GoldGenerationReader + gold_schema (6.5)]
-definition_of_done: "As 7 análises são calculadas pelos serviços de domínio já existentes (6.2/6.3) sobre séries montadas pelo SeriesAssembly, sem reimplementar DM, MCS ou Christoffersen; cada perfil gera uma tabela gold nova com schema no gold_schema, produzida pelo RefreshGold na mesma geração e coberta pelo manifesto e pelo check_generation; todos os parâmetros (blocos {h, sqrt_T}, draws/seed, α, níveis τ) vêm do pré-registro ancorado, sem constante duplicada e sem emenda; o ScorecardVerdict é idêntico com e sem essas tabelas (I12); integração e e2e só sobre silver sintético, sem nenhuma métrica sobre o parent_sweep_id do cohort real (cegamento; a primeira execução real é da 8.1)."
-non_goals: [diagrama de sharpness, distribuição de largura e demais plots (8.3), perfis que já saem do gold da 6.4 (6.5), execução sobre o cohort AAPL real e gravação do scorecard (8.1), mudar regra do veredito ou parâmetros pré-registrados]
+  - docs/adr/6_5_0008-*.md (nota datada: o follow-up virou a Stage 6.6; "with its parameters" corrigido)
+  - docs/preregistration/aapl_confirmatory.md e tests/integration/features/evaluation/test_preregistration_consistency.py (só se houver r1, F8e)
+contratos_introduzidos: [tabelas gold de perfil (DM por fold/seed/τ, MCS por comprimento de bloco, estacionariedade de d_t, degeneração por par, p-valor Monte Carlo de Christoffersen), builders gold correspondentes, serviço de domínio do diagnóstico de estacionariedade de d_t (+ backend/oráculo se o concept exigir), cálculo de degeneração por par, extensão de RefreshParameters]
+contratos_consumidos: [SeriesAssembly e RefreshGold (6.4), DieboldMariano/HLN e ModelConfidenceSet (6.2), ChristoffersenTest.monte_carlo_p_values (6.3), degeneração (6.1), Preregistration.profiles + GoldGenerationReader + gold_schema + refresh_command_from + check_manifest (6.5)]
+definition_of_done: "DM, MCS e Christoffersen dos perfis reusam os serviços da 6.2/6.3 sobre séries montadas pelo SeriesAssembly, sem reimplementá-los; o diagnóstico de estacionariedade de d_t e a degeneração por par são serviços de domínio novos validados por oráculo; cada perfil gera uma tabela gold nova com schema no gold_schema, produzida pelo RefreshGold na mesma geração e coberta pelo manifesto e pelo check_generation; os parâmetros vêm do pré-registro ancorado (r0, ou r1 cega se o concept escolher) pela derivação única refresh_command_from, sem constante duplicada, e os perfis sem parâmetro congelado seguem o caminho fixado no concept (r1 cega antes da 8.1, valor citado do doc de domínio ou rótulo exploratório), com nota datada no ADR 6.5.0008; o ScorecardVerdict é idêntico com e sem essas tabelas (I12); integração e e2e só sobre silver sintético, sem nenhuma métrica sobre o parent_sweep_id do cohort real (cegamento; a primeira execução real é da 8.1)."
+non_goals: [diagrama de sharpness, distribuição de largura e demais plots (8.3), perfis que já saem do gold da 6.4 (6.5), execução sobre o cohort AAPL real e gravação do scorecard (8.1), mudar regra do veredito ou parâmetros já congelados no r0]
 complexidade_estimada: M
 gate_mode: strict
-skills_hint: [ddd-tactical-patterns, hex-arch-python, dmls-ch05-model-development-and-evaluation, model-performance-and-research-advisor]
+skills_hint: [ddd-tactical-patterns, hex-arch-python, composition-root, orchestrator-design, evidence-resolution, dmls-ch05-model-development-and-evaluation]
 ```
 
 ---
@@ -1091,7 +1103,7 @@ Roda o protocolo confirmatório completo em AAPL, audita equivalência vs evidê
 
 **Descrição humana:** Orquestração ponta-a-ponta do confirmatório: do cohort treinado (5.5) → métricas/inferência (Step 6) → scorecard pré-registrado, gerando os artefatos gold confirmatórios e o veredito mecânico por H1/H2/H3.
 
-**Notas da 6.5:** depende também da Stage **6.6** (ex-issue #129; perfis de séries novas — DM por fold/seed/τ, sensibilidades de bloco do MCS, estacionariedade de d_t, degeneração parcial por par, p-valor Monte Carlo — antes da 8.1) e dos pré-registros de H3 (7.3) e do CQR (7.2), todos ancorados antes da corrida. O refresh do gold é chamado com `refresh_command_from(plano, ref)` (derivação única do comando); o `ScorecardResult.as_mapping()` é gravado **fora** de `current/`, em `gold/asset=<a>/parent_sweep_id=<p>/scorecard/<preregistration_ref>/` (como `gold_model_comparison_confirmatory_scorecard`, registrando o manifesto lido); o primeiro refresh confirmatório posta um comentário na issue da Stage (fecho da ordem, ADR 6.5.0003 item 4).
+**Notas da 6.5:** depende também da Stage **6.6** (issue #129; perfis de séries novas — DM por fold/seed/τ, sensibilidades de bloco do MCS, estacionariedade de d_t, degeneração parcial por par, p-valor Monte Carlo — antes da 8.1) e dos pré-registros de H3 (7.3) e do CQR (7.2), todos ancorados antes da corrida. O refresh do gold é chamado com `refresh_command_from(plano, ref)` (derivação única do comando); o `ScorecardResult.as_mapping()` é gravado **fora** de `current/`, em `gold/asset=<a>/parent_sweep_id=<p>/scorecard/<preregistration_ref>/` (como `gold_model_comparison_confirmatory_scorecard`, registrando o manifesto lido); o primeiro refresh confirmatório posta um comentário na issue da Stage (fecho da ordem, ADR 6.5.0003 item 4).
 
 **Descrição para IA:**
 ```yaml
