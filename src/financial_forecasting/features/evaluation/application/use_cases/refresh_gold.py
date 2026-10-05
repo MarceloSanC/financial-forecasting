@@ -160,7 +160,7 @@ class GridFingerprintMismatchError(ApplicationError):
 class RefreshGold:
     """Regenera por inteiro a geração gold de um cohort (ADR `6_4_0005`)."""
 
-    def __init__(  # noqa: PLR0913 — os seis colaboradores do concept 6.4 §4 (keyword-only)
+    def __init__(  # noqa: PLR0913 — 6 colaboradores (concept 6.4 §4 sem o Hasher, #128)
         self,
         *,
         silver_reader: SilverTableReader,
