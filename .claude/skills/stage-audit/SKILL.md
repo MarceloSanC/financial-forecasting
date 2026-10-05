@@ -37,7 +37,9 @@ Procedimento para **auditar uma Stage** depois que ela é declarada
 > workflow `audit-gate` (CI) falha enquanto o status não for `complete` —
 > gravar `complete` é o que **destrava o merge**. Auditoria sem marca no
 > PR **não existe** para quem decide o merge.
-> **Nunca faz merge** — é do usuário, salvo pedido explícito. O push da fase
+> **Nunca faz merge** — é do usuário, salvo pedido explícito (a sessão mestra
+> do [PROMPT-step](../../../docs/PROMPT-step-single-session.md) §3.5 **é**
+> pedido explícito permanente: mergeia sozinha com auditoria `complete`). O push da fase
 > de aplicação vai **apenas para a branch do PR sob auditoria** (nunca outra):
 > se for branch de outra sessão, `git show` para ler e `checkout` + `push`
 > **só nessa branch** para aplicar.
@@ -346,6 +348,23 @@ aplicar **todas** as sub-seções cujas camadas a Stage inclui (frontmatter
    só foi **terceirizado**, não evitado (conceito "Delegação cega").
    Se o prompt do sub-agente não pediu verbatim, re-prompt antes de
    fechar.
+10. **Caça à regra fora do lugar.** O import-linter só prova que o
+    import é **permitido** — não que a regra mora no **dono** dela.
+    Para cada regra de negócio nova no diff (predicado de elegibilidade,
+    validação estrutural, política de emissão, tradução de erro),
+    perguntar **onde mora** e **quantas vezes existe**:
+    - **Duplicada?** `Grep` no predicado/constante central. A mesma
+      regra em fake **e** adapter, ou em dois slices = finding — sobe
+      para o domínio e ambos consomem.
+    - **Camada errada?** Decisão que muda resultado de negócio vivendo
+      em `adapters/` ou `application/` pertence a `domain/`.
+    - **Atravessando BC?** Um BC consumindo detalhe interno de outro
+      (tipo concreto, formato de arquivo, nome de coluna) em vez de
+      port/Protocol público = finding.
+    - **Sem dono?** Exceção, VO de identidade ou tradutor de erro criado
+      num slice e usado por outros: fica no slice dono; `shared/` só se
+      não há dono (LAYOUT §4).
+    Ver conceito "Estrutural ≠ semântico".
 
 ### Fase E — Relatório (explicação do valor entregue + gate)
 
@@ -590,6 +609,9 @@ ficou perdida.
   instâncias diferentes (semântica quebrada).
 - Use case implementa `IPort` (tipo OK), mas comportamento contradiz
   o contrato do Protocol em casos não testados.
+- Import permitido pelo import-linter (estrutural OK), mas a regra
+  mora fora do dono: duplicada entre fake e adapter, decisão de negócio
+  no adapter, BC lendo detalhe interno de outro (Fase D-bis #10).
 
 **Pergunta:** "este tipo/assinatura prova o comportamento que o
 concept prometeu, ou só a forma?"
@@ -703,6 +725,7 @@ cobre. Cresce sem inflar a seção conceitual.
 | Valor novo de enum entra no enum + predicado + teste do emissor, mas fica fora das famílias que particionam o enum — o agregado reprovaria em falso no ramo latente | Verificação assimétrica | classe importada do upstream |
 | Invariante negativa sem `Grep` ativo | Verificação assimétrica | recorrente em camadas com PII/boundary |
 | Engine compartilhado vira 2 instâncias | Estrutural ≠ semântico | D3 da 3.1 |
+| Regra no lugar errado com import legal — elegibilidade duplicada em fake e adapter do TFT; política de emissão dos baselines fora do domínio; BC lendo o interno do analytics_store; exceções/AssetId sem dono | Estrutural ≠ semântico | issues #64, #66, #57, #69 (escaparam das auditorias do Step 5) |
 | `roadmap.md` table sem frontmatter (ou inverso) | Rastro perdido | recorrente |
 | Branch com carona de outro escopo | Rastro perdido | GIT-WORKFLOW §Etapa 4 |
 | Silenciador sem justificativa em mapper | Rastro perdido | recorrente em fronteiras async↔sync |
