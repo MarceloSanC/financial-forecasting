@@ -61,6 +61,22 @@
             "args": [
               "${CLAUDE_PROJECT_DIR}/.claude/hooks/issue_guard.py"
             ]
+          },
+          {
+            "type": "command",
+            "if": "Bash(gh issue new*)",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/issue_guard.py"
+            ]
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(gh issue new*)",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/issue_guard.py"
+            ]
           }
         ]
       }

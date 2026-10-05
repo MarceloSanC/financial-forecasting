@@ -1,7 +1,8 @@
 """Hook PreToolUse (Bash/PowerShell): `gh issue create` exige BC e dependências no corpo.
 
 Issue avulsa não tem linha no `docs/roadmap.md`; a sessão executora tira o BC/camada e as
-dependências do corpo da issue. Este hook recusa `gh issue create` cujo corpo não traga as
+dependências do corpo da issue. Este hook recusa `gh issue create` (ou o alias
+`gh issue new`) cujo corpo não traga as
 seções `### BC / camada` e `### Depende de` (as mesmas que os Issue Forms de
 `.github/ISSUE_TEMPLATE/` geram), cada uma seguida de valor. Não valem como valor: vazio,
 `_No response_` (o que o GitHub grava para campo em branco) e placeholder `<...>`;
@@ -174,7 +175,13 @@ def _check_create(
 
 
 def _is_issue_create(words: list[str]) -> bool:
-    return bool(words) and Path(words[0]).stem.lower() == "gh" and words[1:3] == ["issue", "create"]
+    """`gh issue create` ou o alias `gh issue new`."""
+    return (
+        bool(words)
+        and Path(words[0]).stem.lower() == "gh"
+        and words[1:2] == ["issue"]
+        and words[2:3] in (["create"], ["new"])
+    )
 
 
 def check(
@@ -193,7 +200,8 @@ def check(
     try:  # posix=False preserva `\` de caminho Windows; aspas removidas à mão
         tokens = list(lexer)
     except ValueError:
-        return REASON_UNPARSEABLE if re.search(r"\bgh\b.*\bissue\s+create\b", text) else None
+        unparseable = re.search(r"\bgh\b.*\bissue\s+(create|new)\b", text)
+        return REASON_UNPARSEABLE if unparseable else None
     commands: list[list[str]] = [[]]
     for token in tokens:
         if set(token) <= set(_PUNCTUATION) and set(token) & _BOUNDARY_CHARS:

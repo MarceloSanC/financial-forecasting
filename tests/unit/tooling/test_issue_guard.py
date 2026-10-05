@@ -226,8 +226,9 @@ def test_no_body_at_all_is_denied() -> None:
     assert _reason('gh issue create --title "x"') == ig.REASON_NO_BODY
 
 
-def test_unbalanced_quotes_in_issue_create_are_denied() -> None:
-    assert _reason('gh issue create --title "x --body y') == ig.REASON_UNPARSEABLE
+@pytest.mark.parametrize("verb", ["create", "new"])
+def test_unbalanced_quotes_in_issue_create_are_denied(verb: str) -> None:
+    assert _reason(f'gh issue {verb} --title "x --body y') == ig.REASON_UNPARSEABLE
 
 
 # --- comandos fora do escopo do hook --------------------------------------------------------
@@ -270,6 +271,12 @@ def test_create_after_fused_punctuation_is_checked(command: str) -> None:
 def test_redirect_does_not_split_the_create_command() -> None:
     files = {CWD / "body.md": FULL_BODY}
     assert _reason("gh issue create -t x -F body.md > out.txt 2>&1", files) is None
+
+
+def test_issue_new_alias_is_checked() -> None:
+    assert _reason('gh issue new --title "y" --body "sem campos"') is not None
+    assert _reason(_heredoc(FULL_BODY).replace("issue create", "issue new")) is None
+    assert _reason("gh issue new --web") is None
 
 
 def test_second_create_in_chain_is_checked() -> None:
