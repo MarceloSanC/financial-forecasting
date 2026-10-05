@@ -19,9 +19,13 @@ from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
 
+import httpx
 import pandas as pd
 import pytest
 
+from financial_forecasting.features.market_data.adapters.out.alpha_vantage.alpha_vantage_fundamental_fetcher import (  # noqa: E501
+    AlphaVantageFundamentalFetcher,
+)
 from financial_forecasting.features.market_data.adapters.out.parquet.parquet_fundamental_fetcher import (  # noqa: E501
     ParquetFundamentalFetcher,
 )
@@ -183,8 +187,9 @@ def test_other_spellings_resolve_to_the_canonical_asset(
 
 
 # -- origem indisponível: o tipo do contrato (issue #69) -----------------------
-# Cada perna falha DE VERDADE onde dá: o parquet sem arquivo. O fake simula o tipo
-# do contrato no mesmo ponto em que o real toca a origem.
+# Cada perna falha DE VERDADE onde dá: o parquet sem arquivo; o Alpha Vantage com
+# um `httpx.Client` real cujo transporte responde 503 (sem rede). O fake simula o
+# tipo do contrato no mesmo ponto em que o real toca a origem.
 
 _UnavailableFactory = Callable[[Path, pytest.MonkeyPatch], FundamentalFetcher]
 
@@ -197,9 +202,20 @@ def _unavailable_parquet(tmp_path: Path, _monkeypatch: pytest.MonkeyPatch) -> Fu
     return ParquetFundamentalFetcher(tmp_path)  # sem arquivo: origem ausente
 
 
+def _unavailable_alpha_vantage(
+    _tmp_path: Path, _monkeypatch: pytest.MonkeyPatch
+) -> FundamentalFetcher:
+    def _service_unavailable(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="Service Unavailable", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(_service_unavailable))
+    return AlphaVantageFundamentalFetcher(api_key="demo", client=client)
+
+
 _UNAVAILABLE: dict[str, _UnavailableFactory] = {
     "fake": _unavailable_fake,
     "parquet": _unavailable_parquet,
+    "alpha_vantage": _unavailable_alpha_vantage,
 }
 
 

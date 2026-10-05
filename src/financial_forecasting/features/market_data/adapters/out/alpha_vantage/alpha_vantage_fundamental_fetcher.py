@@ -17,8 +17,21 @@ alimentando o fallback as-of H-3 da 3.3 (ADR 2.3.0001 / D3 / I11). Field maps
 **verbatim** do old. `_to_float`/`_to_date` defensivos (old `:89-105`):
 `"None"`/`"NaN"`/`""`/`"null"` → `None`; `fiscalDateEnding` ausente/ilegível → item
 pulado (`_to_date → None → continue`, C8). Throttle `12.5s` (`_MIN_INTERVAL` + lock +
-`time.monotonic`) no adapter (I9, old `:30`). Guard `Note`/`Information` →
-`RuntimeError` (C7); sem rede em import.
+`time.monotonic`) no adapter (I9, old `:30`); sem rede em import.
+
+Erros (issue #69 — o tipo que o port `FundamentalFetcher` declara): a origem fora do
+ar ou ilegível sai como `ApplicationError`, nunca como exceção do `httpx`. Os tipos
+capturados são ENUMERADOS — nunca `except Exception`:
+- `httpx.HTTPError` (raiz de `TransportError`/`TimeoutException`, `HTTPStatusError`
+  do `raise_for_status`, `DecodingError`, `TooManyRedirects` — httpx 0.28.1) em torno
+  do GET de cada endpoint, com a original em `__cause__`;
+- `ValueError` em torno SÓ do `response.json()` (`json.JSONDecodeError` e
+  `UnicodeDecodeError` do corpo), também com a original em `__cause__`;
+- os guards da resposta — `Note`/`Information` (rate limit), não-dict e lista de
+  relatórios que não é lista (concept 2.3 C7) — erguem `ApplicationError` direto, no
+  lugar do `RuntimeError`/`ValueError` cru (ou do `AttributeError` acidental) de antes.
+`ValueError` de `asset_id` que não vira `AssetId` segue `ValueError`: é checado antes
+de qualquer chamada de rede.
 """
 
 from __future__ import annotations
@@ -33,6 +46,7 @@ import httpx
 from financial_forecasting.features.market_data.domain.entities.fundamental_report import (
     FundamentalReport,
 )
+from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.domain.value_objects.asset_id import AssetId
 
 # Field maps verbatim do old (`:139-150`): chave da API → campo da entity.
@@ -83,19 +97,27 @@ class AlphaVantageFundamentalFetcher:
     def _get(self, function: str, symbol: str) -> dict[str, Any]:
         """GET throttled de um endpoint; valida resposta (guard de rate-limit, C7)."""
         self._throttle()
-        response = self._client.get(
-            self.BASE_URL,
-            params={"function": function, "symbol": symbol, "apikey": self._api_key},
-            headers={"Accept": "application/json", "User-Agent": self._user_agent},
-        )
-        response.raise_for_status()
-        data = response.json()
+        try:
+            response = self._client.get(
+                self.BASE_URL,
+                params={"function": function, "symbol": symbol, "apikey": self._api_key},
+                headers={"Accept": "application/json", "User-Agent": self._user_agent},
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            msg = f"Alpha Vantage {function} request failed: {type(exc).__name__}: {exc}"
+            raise ApplicationError(msg) from exc
+        try:
+            data = response.json()
+        except ValueError as exc:  # JSONDecodeError/UnicodeDecodeError do corpo
+            msg = f"Alpha Vantage {function} response is not valid JSON: {exc}"
+            raise ApplicationError(msg) from exc
         if not isinstance(data, dict):
-            raise ValueError(f"Unexpected response format for {function}")
+            raise ApplicationError(f"Unexpected response format for {function}")
         if "Note" in data:
-            raise RuntimeError(f"Alpha Vantage rate limit hit: {data['Note']}")
+            raise ApplicationError(f"Alpha Vantage rate limit hit: {data['Note']}")
         if "Information" in data:
-            raise RuntimeError(f"Alpha Vantage Information: {data['Information']}")
+            raise ApplicationError(f"Alpha Vantage Information: {data['Information']}")
         return data
 
     def fetch_fundamentals(self, asset_id: str) -> list[FundamentalReport]:
@@ -109,13 +131,13 @@ class AlphaVantageFundamentalFetcher:
 
         merged: dict[tuple[str, date], dict[str, Any]] = {}
         for report_type, key in _STATEMENT_KEYS:
-            _merge_reports(merged, report_type, income.get(key) or [], _INCOME_MAP)
-            _merge_reports(merged, report_type, balance.get(key) or [], _BALANCE_MAP)
-            _merge_reports(merged, report_type, cash_flow.get(key) or [], _CASH_FLOW_MAP)
+            _merge_reports(merged, report_type, _records(income, key), _INCOME_MAP)
+            _merge_reports(merged, report_type, _records(balance, key), _BALANCE_MAP)
+            _merge_reports(merged, report_type, _records(cash_flow, key), _CASH_FLOW_MAP)
 
         # EARNINGS é a única fonte de reported_date (nullable; ausente → None).
         for report_type, key in _EARNINGS_KEYS:
-            for item in earnings.get(key) or []:
+            for item in _records(earnings, key):
                 fiscal_end = _to_date(item.get("fiscalDateEnding"))
                 if fiscal_end is None:
                     continue
@@ -144,6 +166,18 @@ class AlphaVantageFundamentalFetcher:
         ]
         reports.sort(key=lambda r: (r.report_type, r.fiscal_date_end))
         return reports
+
+
+def _records(data: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    """Relatórios sob `key`: ausente → `[]`; não-lista → `ApplicationError` (C7).
+
+    Item que não é objeto JSON é ignorado, como no `feed` de notícias — sem isso, um
+    `dict` no lugar da lista faria o `.get` do merge estourar `AttributeError` cru.
+    """
+    records = data.get(key) or []
+    if not isinstance(records, list):
+        raise ApplicationError(f"Unexpected Alpha Vantage response: {key!r} is not a list")
+    return [item for item in records if isinstance(item, dict)]
 
 
 def _merge_reports(

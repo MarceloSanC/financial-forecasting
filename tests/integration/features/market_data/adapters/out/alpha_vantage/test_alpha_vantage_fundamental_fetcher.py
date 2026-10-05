@@ -5,14 +5,19 @@ payloads JSON dos 4 endpoints — NUNCA bate na API ao vivo (free-tier ~25 req/d
 robustez overnight). Cobre: merge por `(report_type, fiscal_date_end)` →
 `FundamentalReport`, EARNINGS → `reported_date` (`None` quando ausente),
 `"None"`/`"NaN"` em campos numéricos → `None`, `fiscalDateEnding` ausente → item
-pulado, guard `Note`/`Information` → `RuntimeError`, throttle 12.5s. Há um teste live
-OPCIONAL com `skipif`.
+pulado, guard `Note`/`Information` e formato inesperado → `ApplicationError`, throttle
+12.5s. As falhas do `httpx` (status, transporte, JSON inválido) usam um `httpx.Client`
+REAL sobre `httpx.MockTransport` — a lib erguendo o próprio tipo, sem rede — e provam
+a tradução para `ApplicationError` com a original em `__cause__` (issue #69). Há um
+teste live OPCIONAL com `skipif`.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import socket
+from collections.abc import Callable
 from datetime import date
 
 import httpx
@@ -27,6 +32,7 @@ from financial_forecasting.features.market_data.adapters.out.alpha_vantage.alpha
 from financial_forecasting.features.market_data.domain.entities.fundamental_report import (
     FundamentalReport,
 )
+from financial_forecasting.shared.application.exceptions import ApplicationError
 
 _SYMBOL = "AAPL"
 
@@ -207,33 +213,120 @@ def test_item_without_fiscal_date_is_skipped() -> None:
 
 
 @pytest.mark.integration
-def test_rate_limit_note_raises_runtime_error() -> None:
-    """Resposta com chave `Note` no primeiro endpoint → `RuntimeError` (C7)."""
+def test_rate_limit_note_raises_application_error() -> None:
+    """Resposta com chave `Note` no primeiro endpoint → `ApplicationError` (C7; #69)."""
     payloads = _payloads()
     payloads["INCOME_STATEMENT"] = {"Note": "rate limit hit"}
     fetcher, _ = _fetcher(payloads)
-    with pytest.raises(RuntimeError, match="rate limit"):
+    with pytest.raises(ApplicationError, match="rate limit"):
         fetcher.fetch_fundamentals(_SYMBOL)
 
 
 @pytest.mark.integration
-def test_information_key_raises_runtime_error() -> None:
-    """Resposta com chave `Information` → `RuntimeError` (C7)."""
+def test_information_key_raises_application_error() -> None:
+    """Resposta com chave `Information` → `ApplicationError` (C7; #69)."""
     payloads = _payloads()
     payloads["INCOME_STATEMENT"] = {"Information": "25 requests/day"}
     fetcher, _ = _fetcher(payloads)
-    with pytest.raises(RuntimeError, match="Information"):
+    with pytest.raises(ApplicationError, match="Information"):
         fetcher.fetch_fundamentals(_SYMBOL)
 
 
 @pytest.mark.integration
 def test_non_dict_response_raises() -> None:
-    """Resposta JSON não-dict → `ValueError` (C7)."""
+    """Resposta JSON não-dict → `ApplicationError` (C7; #69)."""
     payloads = _payloads()
     payloads["INCOME_STATEMENT"] = ["not", "a", "dict"]
     fetcher, _ = _fetcher(payloads)
-    with pytest.raises(ValueError, match="Unexpected response format"):
+    with pytest.raises(ApplicationError, match="Unexpected response format"):
         fetcher.fetch_fundamentals(_SYMBOL)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("function", "key"),
+    [("BALANCE_SHEET", "annualReports"), ("EARNINGS", "quarterlyEarnings")],
+)
+def test_reports_not_a_list_raises_application_error(function: str, key: str) -> None:
+    """Lista de relatórios que não é lista → `ApplicationError`, não `AttributeError` (#69)."""
+    payloads = _payloads()
+    payloads[function] = {key: {"fiscalDateEnding": "2022-09-30"}}
+    fetcher, _ = _fetcher(payloads)
+    with pytest.raises(ApplicationError, match=f"'{key}' is not a list"):
+        fetcher.fetch_fundamentals(_SYMBOL)
+
+
+@pytest.mark.integration
+def test_non_object_report_items_are_skipped() -> None:
+    """Item que não é objeto JSON é ignorado, sem quebrar o lote (como no feed de news)."""
+    payloads = _payloads()
+    income = payloads["INCOME_STATEMENT"]
+    assert isinstance(income, dict)
+    income["annualReports"] = ["garbage", *income["annualReports"]]
+    fetcher, _ = _fetcher(payloads)
+
+    by_key = {(r.report_type, r.fiscal_date_end): r for r in fetcher.fetch_fundamentals(_SYMBOL)}
+
+    assert by_key[("annual", date(2022, 9, 30))].revenue == pytest.approx(394_328_000_000.0)
+
+
+# -- falhas do httpx: Client REAL + MockTransport, sem rede (issue #69) ----------
+
+
+def _mock_fetcher(
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> AlphaVantageFundamentalFetcher:
+    """Adapter sobre um `httpx.Client` real cujo transporte é o `handler` (sem rede)."""
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    return AlphaVantageFundamentalFetcher(api_key="demo", client=client)
+
+
+def _service_unavailable(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(503, text="Service Unavailable", request=request)
+
+
+def _read_timeout(request: httpx.Request) -> httpx.Response:
+    raise httpx.ReadTimeout("timed out", request=request)
+
+
+def _html_body(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(200, text="<html>maintenance</html>", request=request)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("handler", "cause_type"),
+    [
+        (_service_unavailable, httpx.HTTPStatusError),
+        (_read_timeout, httpx.ReadTimeout),
+        (_html_body, json.JSONDecodeError),
+    ],
+    ids=["http-503", "read-timeout", "invalid-json"],
+)
+def test_httpx_failure_is_translated_with_cause(
+    handler: Callable[[httpx.Request], httpx.Response], cause_type: type[Exception]
+) -> None:
+    """Falha do `httpx` → `ApplicationError` com a exceção da lib em `__cause__` (#69)."""
+    with pytest.raises(ApplicationError, match="INCOME_STATEMENT") as excinfo:
+        _mock_fetcher(handler).fetch_fundamentals(_SYMBOL)
+
+    assert isinstance(excinfo.value.__cause__, cause_type)
+
+
+@pytest.mark.integration
+def test_mock_transport_happy_path_still_maps() -> None:
+    """Controle: o mesmo `httpx.Client` real, com respostas saudáveis, faz o merge."""
+    payloads = _payloads()
+
+    def _ok(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payloads[request.url.params["function"]], request=request)
+
+    reports = _mock_fetcher(_ok).fetch_fundamentals(_SYMBOL)
+
+    assert {(r.report_type, r.fiscal_date_end) for r in reports} == {
+        ("annual", date(2022, 9, 30)),
+        ("quarterly", date(2022, 12, 31)),
+    }
 
 
 @pytest.mark.integration
