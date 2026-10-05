@@ -148,7 +148,7 @@ ISSUE_TEMPLATE/       # Issue Forms (YAML): `BC / camada` e `Depende de` obrigat
 ├── feature.yml      # Features novas
 ├── bug.yml          # Bug reports
 ├── chore.yml        # Manutenção
-└── config.yml       # desliga a issue em branco (pularia os campos obrigatórios)
+└── config.yml       # esconde a issue em branco de quem não tem write; maintainers ainda a veem
 
 PULL_REQUEST_TEMPLATE.md
 ```
@@ -278,7 +278,7 @@ Descrever claramente:
 - **Critérios de aceite:** comportamento esperado (checklist)
 - **Tarefas técnicas:** passos de implementação (se conhecidos)
 
-**Onde isso é cobrado:** pelo site, os Issue Forms de `.github/ISSUE_TEMPLATE/` (`feature`, `bug`, `chore`) marcam os dois campos como obrigatórios e geram exatamente esses cabeçalhos. Pelo CLI, o hook `.claude/hooks/issue_guard.py` recusa `gh issue create` cujo corpo (inline ou `--body-file`) não traga os dois com valor; `--web` passa (abre o formulário). Corpo via stdin (`--body-file -`) não é verificável: grave o corpo num arquivo e use `--body-file <arquivo>`.
+**Onde isso é cobrado:** pelo site, os campos são obrigatórios quando se usa um formulário: os Issue Forms de `.github/ISSUE_TEMPLATE/` (`feature`, `bug`, `chore`) marcam os dois como obrigatórios e geram exatamente esses cabeçalhos. O `config.yml` esconde a issue em branco de quem não tem write; maintainers ainda a veem e, nela, ninguém cobra os campos. Pelo CLI, o hook `.claude/hooks/issue_guard.py` recusa `gh issue create` (ou `gh issue new`) cujo corpo (inline ou `--body-file`) não traga os dois com valor; `--web` passa porque abre o site (com formulário, os campos são obrigatórios). `scripts/worktree-new.py --create-issue` aplica a mesma regra ao `--issue-body`. Corpo via stdin (`--body-file -`) não é verificável: grave o corpo num arquivo e use `--body-file <arquivo>`.
 
 Exemplo:
 ```markdown
@@ -755,7 +755,7 @@ Exemplo de feedback construtivo:
 
 ```bash
 # Issues (título e corpo em português)
-gh issue create --title "feat: ..." --body "..."
+gh issue create --title "feat: ..." --body-file corpo.md  # com ### BC / camada e ### Depende de
 gh issue list --assignee @me
 gh issue view <num>
 
