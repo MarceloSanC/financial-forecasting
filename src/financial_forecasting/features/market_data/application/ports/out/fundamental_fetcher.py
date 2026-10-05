@@ -35,8 +35,20 @@ class FundamentalFetcher(Protocol):
       `report_type`/intervalo — isso é do use case, concept 2.3 I10).
     - Origem sem dados para o ativo devolve uma lista vazia; origem
       indisponível/ilegível levanta erro (não silencia em vazio; concept 2.3 C6).
+
+    Tipos de erro do contrato (issue #69): exceções de biblioteca (`httpx`,
+    `pandas`, I/O) nunca atravessam o port — o adapter as traduz para o tipo abaixo,
+    com a original em `__cause__` (`operational-evolution-policy.md` §4, invariante 2).
     """
 
     def fetch_fundamentals(self, asset_id: str) -> list[FundamentalReport]:
-        """Devolve os relatórios fundamentais de `asset_id` (annual + quarterly)."""
+        """Devolve os relatórios fundamentais de `asset_id` (annual + quarterly).
+
+        Raises:
+            ValueError: `asset_id` que não vira `AssetId` — entrada inválida do
+                chamador, checada ANTES de tocar a origem.
+            ApplicationError: origem indisponível ou ilegível — arquivo ausente ou
+                corrompido, falha de rede/HTTP, rate limit do provedor ou resposta
+                em formato inesperado (concept 2.3 C6/C7).
+        """
         ...

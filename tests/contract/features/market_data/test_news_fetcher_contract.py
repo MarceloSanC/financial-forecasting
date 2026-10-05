@@ -186,6 +186,53 @@ def test_naive_bounds_raise(fetcher: NewsFetcher) -> None:
         fetcher.fetch_company_news(_SYMBOL, datetime(2024, 1, 1), _END)
 
 
+# -- origem indisponível: o tipo do contrato (issue #69) -----------------------
+# Cada perna falha DE VERDADE onde dá: o parquet sem arquivo. O fake simula o tipo
+# do contrato no mesmo ponto em que o real toca a origem.
+
+_UnavailableFactory = Callable[[Path, pytest.MonkeyPatch], NewsFetcher]
+
+
+def _unavailable_fake(_tmp_path: Path, _monkeypatch: pytest.MonkeyPatch) -> NewsFetcher:
+    return FakeNewsFetcher(_articles(), simulate_source_failure="source down")
+
+
+def _unavailable_parquet(tmp_path: Path, _monkeypatch: pytest.MonkeyPatch) -> NewsFetcher:
+    return ParquetRawNewsFetcher(tmp_path)  # sem arquivo: origem ausente
+
+
+_UNAVAILABLE: dict[str, _UnavailableFactory] = {
+    "fake": _unavailable_fake,
+    "parquet": _unavailable_parquet,
+}
+
+
+@pytest.fixture(params=list(_UNAVAILABLE))
+def unavailable_fetcher(
+    request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> NewsFetcher:
+    """Cada implementação do port com a origem fora do ar."""
+    return _UNAVAILABLE[request.param](tmp_path, monkeypatch)
+
+
+@pytest.mark.contract
+def test_unavailable_source_raises_application_error(unavailable_fetcher: NewsFetcher) -> None:
+    """Origem indisponível → `ApplicationError` em toda implementação (C6/C7)."""
+    with pytest.raises(ApplicationError):
+        unavailable_fetcher.fetch_company_news(_SYMBOL, _START, _END)
+
+
+@pytest.mark.contract
+def test_caller_error_is_value_error_even_with_source_down(
+    unavailable_fetcher: NewsFetcher,
+) -> None:
+    """Entrada inválida segue `ValueError` com a origem fora: é checada antes (C5)."""
+    with pytest.raises(ValueError, match="start_date must be <= end_date"):
+        unavailable_fetcher.fetch_company_news(_SYMBOL, _END, _START)
+    with pytest.raises(ValueError, match="asset_id"):
+        unavailable_fetcher.fetch_company_news("AA PL", _START, _END)
+
+
 # -- testes específicos do adapter real (origem default; concept 2.3 C6) -------
 
 

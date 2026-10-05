@@ -35,10 +35,23 @@ class NewsFetcher(Protocol):
       sem dados no intervalo devolve uma lista vazia, mas uma origem
       indisponível/ilegível levanta erro (não silencia em vazio; concept 2.3 C6).
     - Cada `NewsArticle.published_at` devolvido é tz-aware em UTC.
+
+    Tipos de erro do contrato (issue #69): exceções de biblioteca (`httpx`,
+    `pandas`, I/O) nunca atravessam o port — o adapter as traduz para o tipo abaixo,
+    com a original em `__cause__` (`operational-evolution-policy.md` §4, invariante 2).
     """
 
     def fetch_company_news(
         self, ticker: str, start_date: datetime, end_date: datetime
     ) -> list[NewsArticle]:
-        """Devolve as notícias de `ticker` no intervalo `[start_date, end_date]`."""
+        """Devolve as notícias de `ticker` no intervalo `[start_date, end_date]`.
+
+        Raises:
+            ValueError: entrada inválida do chamador, checada ANTES de tocar a origem —
+                `start_date`/`end_date` naive, `start_date > end_date` (concept 2.3
+                C5) ou `ticker` que não vira `AssetId`.
+            ApplicationError: origem indisponível ou ilegível — arquivo ausente ou
+                corrompido, falha de rede/HTTP, rate limit do provedor ou resposta
+                em formato inesperado (concept 2.3 C6/C7).
+        """
         ...

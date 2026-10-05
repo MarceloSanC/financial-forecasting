@@ -182,6 +182,53 @@ def test_other_spellings_resolve_to_the_canonical_asset(
     assert {r.asset_id for r in reports} == {_SYMBOL}
 
 
+# -- origem indisponível: o tipo do contrato (issue #69) -----------------------
+# Cada perna falha DE VERDADE onde dá: o parquet sem arquivo. O fake simula o tipo
+# do contrato no mesmo ponto em que o real toca a origem.
+
+_UnavailableFactory = Callable[[Path, pytest.MonkeyPatch], FundamentalFetcher]
+
+
+def _unavailable_fake(_tmp_path: Path, _monkeypatch: pytest.MonkeyPatch) -> FundamentalFetcher:
+    return FakeFundamentalFetcher(_reports(), simulate_source_failure="source down")
+
+
+def _unavailable_parquet(tmp_path: Path, _monkeypatch: pytest.MonkeyPatch) -> FundamentalFetcher:
+    return ParquetFundamentalFetcher(tmp_path)  # sem arquivo: origem ausente
+
+
+_UNAVAILABLE: dict[str, _UnavailableFactory] = {
+    "fake": _unavailable_fake,
+    "parquet": _unavailable_parquet,
+}
+
+
+@pytest.fixture(params=list(_UNAVAILABLE))
+def unavailable_fetcher(
+    request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> FundamentalFetcher:
+    """Cada implementação do port com a origem fora do ar."""
+    return _UNAVAILABLE[request.param](tmp_path, monkeypatch)
+
+
+@pytest.mark.contract
+def test_unavailable_source_raises_application_error(
+    unavailable_fetcher: FundamentalFetcher,
+) -> None:
+    """Origem indisponível → `ApplicationError` em toda implementação (C6/C7)."""
+    with pytest.raises(ApplicationError):
+        unavailable_fetcher.fetch_fundamentals(_SYMBOL)
+
+
+@pytest.mark.contract
+def test_caller_error_is_value_error_even_with_source_down(
+    unavailable_fetcher: FundamentalFetcher,
+) -> None:
+    """`asset_id` inválido segue `ValueError` com a origem fora: é checado antes."""
+    with pytest.raises(ValueError, match="asset_id"):
+        unavailable_fetcher.fetch_fundamentals("AA PL")
+
+
 # -- testes específicos do adapter real (origem default; concept 2.3 C6) -------
 
 

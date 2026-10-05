@@ -31,6 +31,7 @@ from financial_forecasting.features.market_data.application.ports.out.candle_fet
     CandleFetcher,
 )
 from financial_forecasting.features.market_data.domain.entities.candle import Candle
+from financial_forecasting.shared.application.exceptions import ApplicationError
 from tests.fakes.features.market_data.in_memory_candle_fetcher import FakeCandleFetcher
 
 _SYMBOL = "AAPL"
@@ -153,3 +154,52 @@ def test_naive_bounds_raise(fetcher: CandleFetcher) -> None:
     """`start`/`end` naive → ValueError (C5)."""
     with pytest.raises(ValueError, match="timezone-aware"):
         fetcher.fetch_candles(_SYMBOL, datetime(2024, 1, 1), _END)  # naive start
+
+
+# -- origem indisponível: o tipo do contrato (issue #69) -----------------------
+# Cada perna falha DE VERDADE onde dá: o parquet sem arquivo. O fake simula o tipo
+# do contrato no mesmo ponto em que o real toca a origem.
+
+_UnavailableFactory = Callable[[Path, pytest.MonkeyPatch], CandleFetcher]
+
+
+def _unavailable_fake(_tmp_path: Path, _monkeypatch: pytest.MonkeyPatch) -> CandleFetcher:
+    return FakeCandleFetcher(_candles(), simulate_source_failure="source down")
+
+
+def _unavailable_parquet(tmp_path: Path, _monkeypatch: pytest.MonkeyPatch) -> CandleFetcher:
+    return ParquetRawCandleFetcher(tmp_path)  # sem arquivo: origem ausente
+
+
+_UNAVAILABLE: dict[str, _UnavailableFactory] = {
+    "fake": _unavailable_fake,
+    "parquet": _unavailable_parquet,
+}
+
+
+@pytest.fixture(params=list(_UNAVAILABLE))
+def unavailable_fetcher(
+    request: pytest.FixtureRequest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> CandleFetcher:
+    """Cada implementação do port com a origem fora do ar."""
+    return _UNAVAILABLE[request.param](tmp_path, monkeypatch)
+
+
+@pytest.mark.contract
+def test_unavailable_source_raises_application_error(
+    unavailable_fetcher: CandleFetcher,
+) -> None:
+    """Origem indisponível → `ApplicationError` em toda implementação (C4/C6)."""
+    with pytest.raises(ApplicationError):
+        unavailable_fetcher.fetch_candles(_SYMBOL, _START, _END)
+
+
+@pytest.mark.contract
+def test_caller_error_is_value_error_even_with_source_down(
+    unavailable_fetcher: CandleFetcher,
+) -> None:
+    """Entrada inválida segue `ValueError` com a origem fora: é checada antes (C5)."""
+    with pytest.raises(ValueError, match="start must be <= end"):
+        unavailable_fetcher.fetch_candles(_SYMBOL, _END, _START)
+    with pytest.raises(ValueError, match="asset_id"):
+        unavailable_fetcher.fetch_candles("AA PL", _START, _END)
