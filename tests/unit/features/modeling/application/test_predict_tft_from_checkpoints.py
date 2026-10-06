@@ -19,6 +19,7 @@ import pytest
 
 from financial_forecasting.features.modeling.application.pipeline_version import PIPELINE_VERSION
 from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (
+    ArtifactChangedError,
     TftCheckpointPrediction,
 )
 from financial_forecasting.features.modeling.application.use_cases.predict_tft_from_checkpoints import (  # noqa: E501
@@ -247,6 +248,7 @@ def test_guards_raise_before_predicting(tmp_path: Path, case: str) -> None:
         setup.predict(use_case=use_case, **command)
 
     assert setup.predictor.calls == []
+    assert setup.locator.calls == []
 
 
 def test_settings_normalizer_and_sha_are_forwarded(tmp_path: Path) -> None:
@@ -259,11 +261,39 @@ def test_settings_normalizer_and_sha_are_forwarded(tmp_path: Path) -> None:
         assert prediction.normalizer_center == _CENTER + run.fold_index
         assert prediction.normalizer_scale == _SCALE + run.fold_index
         assert set(prediction.grids) == {"test", "calib"}
+    sha_by_path = {f"{run.artifact_dir}/best.ckpt": setup.allowed[run.run_id] for run in setup.runs}
+    assert setup.predictor.calls
     for call in setup.predictor.calls:
-        assert call["expected_sha256"] in setup.allowed.values()
+        assert call["expected_sha256"] == sha_by_path[call["checkpoint_path"]]
     assert result.settings["num_threads"] == "6"
     assert result.cohort_id == cohort.cohort_id(setup.spec)
     assert result.seed == _SEED
+
+
+class _DriftingNormalizerPredictor(InMemoryTftCheckpointPredictor):
+    """Devolve, na segunda chamada de um mesmo checkpoint, outro centro (não pode)."""
+
+    def predict_from_checkpoint(self, **kwargs: Any) -> TftCheckpointPrediction:  # noqa: ANN401
+        result = super().predict_from_checkpoint(**kwargs)
+        seen = sum(1 for c in self.calls if c["checkpoint_path"] == kwargs["checkpoint_path"])
+        return replace(result, normalizer_center=result.normalizer_center + seen)
+
+
+def test_normalizer_must_agree_across_partitions(tmp_path: Path) -> None:
+    setup = _Setup(tmp_path, predictor=_DriftingNormalizerPredictor())
+
+    with pytest.raises(ValueError, match="normalizer"):
+        setup.predict(partitions=("test", "calib"))
+
+
+def test_located_sha256_must_be_the_allowed_one(tmp_path: Path) -> None:
+    setup = _Setup(tmp_path)
+    allowed = {run_id: "0" * 64 for run_id in setup.allowed}
+
+    with pytest.raises(ArtifactChangedError, match="C10"):
+        setup.predict(allowed=allowed)
+
+    assert setup.predictor.calls == []
 
 
 def test_batch_size_and_threads_reach_the_port(tmp_path: Path) -> None:

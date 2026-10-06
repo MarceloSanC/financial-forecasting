@@ -13,8 +13,9 @@ Guardas, antes de qualquer predição (concept 7.1 §4/§6):
 - **C2** — `check_cohort_declarations`;
 - **C6** — o `run_id` derivado de CADA fold tem de estar em `allowed`; senão
   `UnknownRunError` e nenhum checkpoint é carregado;
-- **C10** — `expected_sha256 = allowed[run_id]`: o adapter confere o sha256 dos
-  bytes que carrega;
+- **C10** — o sha256 que o locator leu tem de ser `allowed[run_id]` (falha cedo,
+  sem chamar o predictor); e `expected_sha256 = allowed[run_id]`: o adapter
+  confere de novo o sha256 dos bytes que carrega;
 - **I12** — a emissão só pode conter os pares pedidos
   (`assert_emission_within_request`, nomeando a partição).
 
@@ -29,6 +30,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (
+    ArtifactChangedError,
+)
 from financial_forecasting.features.modeling.application.use_cases.resolve_tft_checkpoints import (
     cohort_tft_folds,
     require_frozen_seed,
@@ -196,8 +200,13 @@ class PredictTftFromCheckpoints:
             location = self._locator.locate(
                 artifact_dir=str(tft_artifact_dir(self._artifacts_root, run_id))
             )
+            if location.sha256 != expected_sha256:  # C10 — antes de qualquer carga
+                raise ArtifactChangedError(
+                    f"run {run_id}: checkpoint sha256 {location.sha256[:12]} != expected "
+                    f"{expected_sha256[:12]} — not loaded (C10)"
+                )
             grids: dict[str, Mapping[int, Mapping[int, tuple[float, ...]]]] = {}
-            center = scale = 0.0
+            normalizer: tuple[float, float] | None = None
             for partition in command.partitions:
                 sessions = fold.test if partition == "test" else fold.calib
                 decisions = tuple(index_by_session[day] for day in sessions)
@@ -225,7 +234,15 @@ class PredictTftFromCheckpoints:
                     decision: {h: tuple(grid) for h, grid in by_horizon.items()}
                     for decision, by_horizon in prediction.grids.items()
                 }
-                center, scale = prediction.normalizer_center, prediction.normalizer_scale
+                # O normalizador é do checkpoint: o mesmo em toda partição pedida.
+                observed = (prediction.normalizer_center, prediction.normalizer_scale)
+                if normalizer is None:
+                    normalizer = observed
+                elif observed != normalizer:
+                    raise ValueError(
+                        f"run {run_id}: normalizer {observed} in {partition} differs from "
+                        f"{normalizer} of the first partition — one checkpoint, one normalizer"
+                    )
                 if settings is None:
                     settings = dict(prediction.settings)
             runs.append(
@@ -233,8 +250,8 @@ class PredictTftFromCheckpoints:
                     run_id=run_id,
                     fold_index=fold.fold_index,
                     checkpoint_sha256=expected_sha256,
-                    normalizer_center=center,
-                    normalizer_scale=scale,
+                    normalizer_center=normalizer[0] if normalizer else 0.0,
+                    normalizer_scale=normalizer[1] if normalizer else 0.0,
                     grids=grids,
                 )
             )

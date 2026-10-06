@@ -1351,4 +1351,8 @@ exit=0
 **Contexto:** o `InMemoryTftCheckpointPredictor` aceitava `decision_indices=()` e devolvia uma grade vazia, enquanto o adapter real ergue `ValueError`. A divergência não aparecia em nenhum contrato.
 **O que mudou:** o fake confere a faixa (não vazia, contígua e crescente) antes de qualquer outra conferência, na mesma ordem que o real usa desde a task-04-fix. O contrato ganhou `test_empty_decisions_raise_value_error` nas duas pernas.
 
+### 2026-10-06 — [deviation] task-05-fix — `PredictTftFromCheckpoints` falha cedo no sha256 do locator e exige um normalizador por checkpoint (Checkpoint C, C2-6/C2-8) — Claude (Opus 5.5)
+**Contexto:** o use case sobrescrevia `normalizer_center`/`normalizer_scale` a cada partição e só deixava o sha256 para o adapter conferir.
+**O que mudou:** o centro e a escala da primeira partição são guardados, e uma partição seguinte que divirja ergue `ValueError` (um checkpoint tem um só normalizador). O sha256 que o locator leu é comparado com `allowed[run_id]` antes de chamar o predictor: divergência ergue o `ArtifactChangedError` do port, sem carga. Os testes de guarda passaram a assegurar também que o locator não foi chamado, e o repasse do sha256 casa cada chamada pelo `checkpoint_path` (C2-5).
+
 <!-- END: post-execution -->
