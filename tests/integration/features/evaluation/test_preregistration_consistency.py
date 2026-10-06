@@ -302,3 +302,20 @@ def test_r0_to_r1_chain_read_by_the_source() -> None:
     assert plans[1].amendment is not None
     assert plans[1].amendment.amends == plans[0].reference(digests[0])
     assert plans[1].reference(digests[1]) == "aapl_confirmatory-r1-bfa8028498ca"
+
+
+def test_r1_anchor_after_r0() -> None:
+    """CA8 (Task 22): r0 e r1 ancorados — o insumo que o `BuildConfirmatoryScorecard`
+    confere — e a âncora da r1 posterior à do r0."""
+    source = TomlPreregistrationSource(root=_PREREG_DIR)
+    r0 = source.read(name="aapl_confirmatory", revision=0)
+    r1 = source.read(name="aapl_confirmatory", revision=1)
+    plan, digest = _revision(1)
+    assert r0.anchor is not None
+    assert r1.anchor is not None
+    assert r1.anchor.tag == f"preregistration/{plan.reference(digest)}"
+    assert r1.anchor.anchored_at > r0.anchor.anchored_at
+    assert "/issues/129#issuecomment-" in r1.anchor.comment_url
+    mirror = _MIRROR.read_text(encoding="utf-8")
+    assert r1.anchor.comment_url in mirror
+    assert r1.anchor.commit in mirror

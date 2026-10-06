@@ -183,3 +183,15 @@ de referência (registros `[decision]` da Stage 6.6), sem nenhum valor de desemp
 à vista. A única execução do refresh sobre o cohort é a do teste da Stage 6.4 descrita
 na declaração de cegamento do r0, da qual nenhum valor de desempenho foi lido. A
 emenda é ancorada antes da Stage 8.1, que julga pela r1.
+
+### Âncora r1 (ADR 6.5.0003)
+
+- **Tag:** `preregistration/aapl_confirmatory-r1-bfa8028498ca` (commit
+  `3b4285dec00c8f7b8f4bb8d14d767211e76eed21`).
+- **Comentário na #129:**
+  <https://github.com/MarceloSanC/financial-forecasting/issues/129#issuecomment-6013351867>,
+  criado pelo servidor em **2026-10-06T09:27:41Z** — posterior à âncora do r0
+  (2026-09-30T19:53:47Z).
+- **Registro:** `config/preregistration/aapl_confirmatory-r1.anchor.toml` (fora do
+  hash). A conferência é por conteúdo: o arquivo do plano na tag é byte-igual ao de
+  HEAD.
