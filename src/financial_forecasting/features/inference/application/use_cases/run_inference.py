@@ -85,6 +85,7 @@ if TYPE_CHECKING:
     from financial_forecasting.features.modeling.application.dtos.cohort_spec import CohortSpec
     from financial_forecasting.features.modeling.application.use_cases.predict_tft_from_checkpoints import (  # noqa: E501
         CheckpointRunPrediction,
+        PredictTftFromCheckpointsResult,
     )
     from financial_forecasting.features.modeling.application.use_cases.resolve_tft_checkpoints import (  # noqa: E501
         CheckpointResolution,
@@ -212,6 +213,20 @@ def _validate_justification(justification: str | None) -> str | None:
     return justification
 
 
+def _recorded_threads(environment: Mapping[str, str], cohort_id: str) -> int:
+    """`torch_threads` gravado pelo cohort, inteiro >= 1; senão o ambiente é inválido (C11)."""
+    value = environment.get(THREADS_KEY)
+    try:
+        threads = int(str(value))
+    except ValueError:
+        threads = 0
+    if value is None or threads < 1:
+        raise InferenceEnvironmentError(
+            f"cohort {cohort_id}: recorded {THREADS_KEY}={value!r} is not a positive integer (C11)"
+        )
+    return threads
+
+
 def _float(value: object) -> float:
     return float(value)  # type: ignore[arg-type]
 
@@ -290,6 +305,7 @@ class RunInference:
                 raise InferenceEnvironmentError(
                     f"cohort {cohort_id} has no recorded environment — run the cohort first (C11)"
                 )
+            _recorded_threads(recorded_environment, cohort_id)  # C11 — antes do resolver
             document = self._manifest.recorded(cohort_id) or {}
             runs = document.get("runs", {})
             recorded_runs: Mapping[str, Mapping[str, object]] = (
@@ -326,6 +342,11 @@ class RunInference:
         recorded_runs: Mapping[str, Mapping[str, object]],
     ) -> list[InferenceRunOutcome]:
         resolution = self._resolver(ResolveTftCheckpointsCommand(spec=spec, seed=seed))
+        if resolution.cohort_id != cohort_id or resolution.seed != seed:
+            raise UnknownRunError(
+                f"resolver answered for cohort {resolution.cohort_id} seed {resolution.seed}, "
+                f"asked for {cohort_id} seed {seed} (C6)"
+            )
         dim_rows = {
             str(row["run_id"]): row
             for row in self._silver.read(
@@ -352,9 +373,10 @@ class RunInference:
                 seed=seed,
                 allowed=allowed,
                 partitions=_PARTITIONS,
-                num_threads=int(cohort_environment[THREADS_KEY]),
+                num_threads=_recorded_threads(cohort_environment, cohort_id),
             )
         )
+        _check_prediction(prediction, cohort_id=cohort_id, seed=seed, allowed=allowed)
         context = _SeedContext(
             spec=spec,
             cohort_id=cohort_id,
@@ -456,26 +478,46 @@ class RunInference:
         calib_mode = reproduction_mode(
             first_environment, context.current_environment, context.justification
         )
-
         base_entry = self._entry(
-            context, run=run, resolution=resolution, mode=test_mode, reproduction=reproduction
-        )
-        self._manifest.record_run(
-            context.cohort_id, run.run_id, {**base_entry, "status": STARTED}
-        )  # write-ahead: antes da primeira linha de calib
-
-        written, verified = self._complete_calib(
             context,
             run=run,
-            dim_row=dim_row,
-            present=present,
-            mode=calib_mode,
-            center=center,
-            scale=scale,
+            resolution=resolution,
+            mode=test_mode,
+            calib_mode=calib_mode,
+            reproduction=reproduction,
         )
+
+        # C8 em memória, sobre os fatos já lidos, ANTES de qualquer escrita: uma
+        # divergência ergue sem tocar silver nem manifesto.
+        forecasts = _calib_forecasts(run, spec)
+        present_by_decision = _present_by_decision(run.run_id, present, forecasts)
+        verified = sum(
+            _verify_decision(
+                run_id=run.run_id,
+                decision=decision,
+                rows=rows,
+                forecasts=forecasts[decision],
+                dim_row=dim_row,
+                timestamps=context.dataset_timestamps,
+                mode=calib_mode.name,
+                center=center,
+                scale=scale,
+            )
+            for decision, rows in sorted(present_by_decision.items())
+        )
+        missing = [decision for decision in forecasts if decision not in present_by_decision]
+        written = 0
+        if missing:
+            # write-ahead: a entrada `started` imediatamente antes da 1ª escrita
+            self._manifest.record_run(
+                context.cohort_id, run.run_id, {**base_entry, "status": STARTED}
+            )
+            written = self._write_calib(
+                context, run=run, dim_row=dim_row, missing=missing, forecasts=forecasts
+            )
         reread = self._calib_rows(context.spec, run.run_id)
         expected = spec.geometry.calib_size * len(spec.horizons) * len(spec.quantile_levels)
-        if reread != expected:  # C9 — a entrada fica `started`
+        if reread != expected:  # C9 — a entrada fica como estava (`started` se escreveu)
             raise IncompleteCalibError(
                 f"run {run.run_id}: {reread} calib rows after writing, expected {expected} (C9)"
             )
@@ -502,22 +544,23 @@ class RunInference:
             calib_rows_verified=verified,
         )
 
-    def _entry(
+    def _entry(  # noqa: PLR0913 — os campos de uma entrada do manifesto
         self,
         context: _SeedContext,
         *,
         run: CheckpointRunPrediction,
         resolution: CheckpointResolution,
         mode: _Mode,
+        calib_mode: _Mode,
         reproduction: _Reproduction,
     ) -> dict[str, object]:
-        now = self._clock.now().isoformat()
+        """Campos comuns de `started` e `completed` (sem `verified_at`, só do `completed`)."""
         return {
             "cohort_environment": dict(context.cohort_environment),
             "checkpoint_sha256": run.checkpoint_sha256,
             "first_write_environment": dict(context.current_environment),
             "first_write_settings": dict(context.settings),
-            "first_written_at": now,
+            "first_written_at": self._clock.now().isoformat(),
             "fold_index": run.fold_index,
             "seed": context.seed,
             "checkpoint_path": resolution.checkpoint_path,
@@ -525,8 +568,12 @@ class RunInference:
             "settings": dict(context.settings),
             "normalizer_center": run.normalizer_center,
             "normalizer_scale": run.normalizer_scale,
+            # `reproduction_mode` é o modo do TESTE (referência: ambiente do cohort);
+            # o do calib presente (referência: ambiente da 1ª escrita) vem à parte.
             "reproduction_mode": mode.name,
             "mode_reason": mode.reason,
+            "calib_reproduction_mode": calib_mode.name,
+            "calib_mode_reason": calib_mode.reason,
             "forced": mode.forced,
             "justification": context.justification,
             "test_values_compared": reproduction.compared,
@@ -534,58 +581,20 @@ class RunInference:
             "max_normalized_diff": reproduction.max_normalized_diff,
             "calib_rows_written": 0,
             "calib_rows_verified": 0,
-            "verified_at": now,
         }
 
-    def _complete_calib(  # noqa: PLR0913 — estado coeso de um run
+    def _write_calib(
         self,
         context: _SeedContext,
         *,
         run: CheckpointRunPrediction,
         dim_row: Row,
-        present: Sequence[Row],
-        mode: _Mode,
-        center: float,
-        scale: float,
-    ) -> tuple[int, int]:
-        """Confere a linha inteira das decisões presentes (C8) e só então escreve as ausentes.
-
-        Todas as presentes são conferidas ANTES da primeira escrita: uma divergência
-        ergue sem que nada do run tenha sido gravado nesta execução.
-        """
-        spec = context.spec
-        present_by_decision: dict[int, dict[tuple[int, float], Row]] = {}
-        for row in present:
-            key = (_int(row["horizon"]), _float(row["quantile_level"]))
-            present_by_decision.setdefault(_int(row["decision_idx"]), {})[key] = row
-        forecasts_by_decision = {
-            decision: {
-                horizon: QuantileForecast.from_raw(
-                    levels=tuple(spec.quantile_levels), raw_values=tuple(grid)
-                )
-                for horizon, grid in sorted(by_horizon.items())
-            }
-            for decision, by_horizon in sorted(run.grids.get(_CALIB, {}).items())
-        }
-        verified = sum(
-            _verify_decision(
-                run_id=run.run_id,
-                decision=decision,
-                rows=present_by_decision[decision],
-                forecasts=forecasts,
-                dim_row=dim_row,
-                timestamps=context.dataset_timestamps,
-                mode=mode.name,
-                center=center,
-                scale=scale,
-            )
-            for decision, forecasts in forecasts_by_decision.items()
-            if decision in present_by_decision
-        )
+        missing: Sequence[int],
+        forecasts: Mapping[int, Mapping[int, QuantileForecast]],
+    ) -> int:
+        """Grava as decisões ausentes pelo `PersistPredictions` (identidade do run de treino)."""
         written = 0
-        for decision, forecasts in forecasts_by_decision.items():
-            if decision in present_by_decision:
-                continue
+        for decision in sorted(missing):
             result = self._persister(
                 PersistPredictionsCommand(
                     run_id=run.run_id,
@@ -596,11 +605,11 @@ class RunInference:
                     schema_version=_int(dim_row["schema_version"]),
                     decision_idx=decision,
                     dataset_timestamps=context.dataset_timestamps,
-                    forecasts=forecasts,
+                    forecasts=forecasts[decision],
                 )
             )
             written += result.rows_written
-        return written, verified
+        return written
 
     def _calib_rows(self, spec: CohortSpec, run_id: str) -> int:
         return sum(
@@ -612,6 +621,73 @@ class RunInference:
             )
             if str(fact["run_id"]) == run_id and fact.get("split") == _CALIB
         )
+
+
+def _check_prediction(
+    prediction: PredictTftFromCheckpointsResult,
+    *,
+    cohort_id: str,
+    seed: int,
+    allowed: Mapping[str, str],
+) -> None:
+    """A grade devolvida é exatamente a dos runs permitidos, com o sha256 esperado (C6/C10)."""
+    returned = {run.run_id for run in prediction.runs}
+    if (
+        prediction.cohort_id != cohort_id
+        or prediction.seed != seed
+        or returned != set(allowed)
+        or len(returned) != len(prediction.runs)
+    ):
+        raise UnknownRunError(
+            f"predictor answered runs {sorted(returned)} of cohort {prediction.cohort_id} seed "
+            f"{prediction.seed}; asked for {sorted(allowed)} of {cohort_id} seed {seed} (C6)"
+        )
+    changed = sorted(
+        run.run_id for run in prediction.runs if run.checkpoint_sha256 != allowed[run.run_id]
+    )
+    if changed:
+        raise ArtifactChangedError(f"runs {changed}: predicted from another checkpoint (C10)")
+
+
+def _calib_forecasts(
+    run: CheckpointRunPrediction, spec: CohortSpec
+) -> dict[int, dict[int, QuantileForecast]]:
+    """Grade re-predita do calib por decisão x horizonte, com o guardrail do 4.3 (I9)."""
+    return {
+        decision: {
+            horizon: QuantileForecast.from_raw(
+                levels=tuple(spec.quantile_levels), raw_values=tuple(grid)
+            )
+            for horizon, grid in sorted(by_horizon.items())
+        }
+        for decision, by_horizon in sorted(run.grids.get(_CALIB, {}).items())
+    }
+
+
+def _present_by_decision(
+    run_id: str,
+    present: Sequence[Row],
+    forecasts: Mapping[int, Mapping[int, QuantileForecast]],
+) -> dict[int, dict[tuple[int, float], Row]]:
+    """Calib presente por decisão, fail-closed (C8): sem chave repetida, só decisões re-preditas."""
+    by_decision: dict[int, dict[tuple[int, float], Row]] = {}
+    for row in present:
+        decision = _int(row["decision_idx"])
+        key = (_int(row["horizon"]), _float(row["quantile_level"]))
+        rows = by_decision.setdefault(decision, {})
+        if key in rows:
+            raise ReproductionError(
+                f"run {run_id} decision {decision}: calib key (horizon {key[0]}, level "
+                f"{key[1]}) present more than once — nothing written (C8)"
+            )
+        rows[key] = row
+    extra = sorted(set(by_decision) - set(forecasts))
+    if extra:
+        raise ReproductionError(
+            f"run {run_id}: calib rows present for decisions {extra} that were not "
+            "re-predicted — nothing written (C8)"
+        )
+    return by_decision
 
 
 def _reproduce_test(  # noqa: PLR0913 — o run, as linhas de referência e o critério

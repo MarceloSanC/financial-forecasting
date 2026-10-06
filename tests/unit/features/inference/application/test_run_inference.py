@@ -44,6 +44,7 @@ from financial_forecasting.features.inference.application.use_cases.run_inferenc
     RunInferenceCommand,
     RunInferenceResult,
     UnknownRunError,
+    within_mode,
 )
 from financial_forecasting.features.modeling.application.ports.out.cohort_progress_ledger import (
     CohortRunLockedError,
@@ -181,6 +182,11 @@ class _World:
     )
     resolver_error: Exception | None = None
     silver_patch: Callable[[Mapping[str, object]], Mapping[str, object]] | None = None
+    now: datetime = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
+    tamper_prediction: (
+        Callable[[PredictTftFromCheckpointsResult], PredictTftFromCheckpointsResult] | None
+    ) = None
+    resolved_cohort_id: str = _COHORT_ID
 
     def __post_init__(self) -> None:
         self.persister = _EventPersister(self.repository, self.events)
@@ -241,7 +247,7 @@ class _World:
         return InMemoryCheckpointResolver(
             {
                 _SEED: ResolveTftCheckpointsResult(
-                    cohort_id=_COHORT_ID,
+                    cohort_id=self.resolved_cohort_id,
                     seed=_SEED,
                     runs=tuple(
                         CheckpointResolution(
@@ -289,7 +295,9 @@ class _World:
         self.last_resolver = self.resolver()
         use_case = RunInference(
             resolver=self.last_resolver,
-            predictor=predictor,
+            predictor=_TamperingPredictor(predictor, self.tamper_prediction)
+            if self.tamper_prediction is not None
+            else predictor,
             probe=InMemoryRuntimeEnvironmentProbe(**self.current_environment),
             persister=self.persister,
             silver=_PatchedReader(self.repository, self.silver_patch)
@@ -298,7 +306,7 @@ class _World:
             ledger=self.ledger,
             manifest=self.manifest,
             hasher=cohort.HASHER,
-            clock=FakeClock(),
+            clock=FakeClock(self.now),
         )
         return use_case, predictor
 
@@ -319,6 +327,22 @@ class _World:
         document = self.manifest.recorded(_COHORT_ID)
         assert document is not None
         return document["runs"][run_id]  # type: ignore[index,no-any-return]
+
+
+class _TamperingPredictor:
+    """Predictor que devolve um resultado adulterado (o fake do inference não o faria)."""
+
+    def __init__(
+        self,
+        inner: InMemoryCheckpointGridPredictor,
+        tamper: Callable[[PredictTftFromCheckpointsResult], PredictTftFromCheckpointsResult],
+    ) -> None:
+        self._inner = inner
+        self._tamper = tamper
+        self.calls = inner.calls
+
+    def __call__(self, command: Any) -> PredictTftFromCheckpointsResult:  # noqa: ANN401
+        return self._tamper(self._inner(command))
 
 
 class _PatchedReader:
@@ -468,32 +492,41 @@ def test_started_entry_resumed_in_same_environment_completes() -> None:
 # -- conferência do calib presente (C8) ----------------------------------------------------
 
 
-def _flip_guardrail_present(world: _World) -> None:
-    """Calib presente gravado com `guardrail_applied` trocado em toda linha da decisão 50."""
+_TIE_DECISION = 50
+
+
+def _near_tie_present(world: _World) -> None:
+    """1ª escrita com quase-empate CRUZADO em q0.1/q0.5 (guardrail aplicado); a grade
+    re-predita da 2ª execução é a mesma a menos de ~1e-7, agora SEM cruzar — o
+    `guardrail_applied` muda e o `value_guardrail` difere dentro da tolerância."""
+    crossed = (0.0100001, 0.0100000, 0.03)
+    uncrossed = (0.0099999, 0.0100000, 0.03)
+    world.grids["run-f0"]["calib"][_TIE_DECISION] = {h: crossed for h in _HORIZONS}
     _complete_first_run(world)
-    rows = [r for r in world.facts("calib", "run-f0") if r["decision_idx"] == _F0_CALIB_FIRST]
-    assert rows
-    world.repository.write(
-        layer="silver",
-        table="fact_oos_predictions",
-        rows=[{**r, "guardrail_applied": 1 - int(r["guardrail_applied"])} for r in rows],  # type: ignore[call-overload]
-        allow_upsert=True,
-    )
+    applied = {
+        r["guardrail_applied"]
+        for r in world.facts("calib", "run-f0")
+        if r["decision_idx"] == _TIE_DECISION
+    }
+    assert applied == {1}
+    world.grids["run-f0"]["calib"][_TIE_DECISION] = {h: uncrossed for h in _HORIZONS}
 
 
 def test_tolerance_accepts_flipped_guardrail_applied_within_tolerance() -> None:
     world = _World()
-    _flip_guardrail_present(world)
+    _near_tie_present(world)
     world.current_environment = _environment(torch="2.14.0+cpu")
 
     result = world.run()
 
     assert result.outcomes[0].calib_rows_written == 0
+    assert result.outcomes[0].calib_rows_verified == _EXPECTED_CALIB
+    assert world.entry("run-f0")["calib_reproduction_mode"] == TOLERANCE
 
 
 def test_strict_rejects_flipped_guardrail_applied() -> None:
     world = _World()
-    _flip_guardrail_present(world)
+    _near_tie_present(world)
 
     with pytest.raises(ReproductionError, match="guardrail_applied"):
         world.run()
@@ -526,7 +559,8 @@ def test_present_row_with_divergent_non_value_field_raises(field_name: str, valu
 
     with pytest.raises(ReproductionError, match=field_name):
         world.run()
-    assert world.events == [f"manifest:run-f0:{STARTED}"]
+    assert world.events == []
+    assert world.entry("run-f0")["status"] == COMPLETED
 
 
 def test_partially_present_decision_raises() -> None:
@@ -702,6 +736,29 @@ def test_guards_in_order_never_call_the_predictor(case: str) -> None:
         world.run()
 
     assert world.last_predictor.calls == []
+    if case in {"code-dirty", "no-cohort-environment"}:
+        assert world.last_resolver.calls == []
+
+
+def test_first_violated_guard_wins() -> None:
+    world = _World(record_cohort_environment=False)
+    world.current_environment = _environment(**{DIRTY_KEY: "true"})
+
+    with pytest.raises(InferenceEnvironmentError, match="uncommitted"):
+        world.run()
+
+    assert world.last_resolver.calls == []
+
+
+@pytest.mark.parametrize("threads", ["abc", "0"])
+def test_invalid_recorded_threads_is_an_environment_error(threads: str) -> None:
+    world = _World(cohort_environment=_environment(**{THREADS_KEY: threads}))
+    world.current_environment = _environment(**{THREADS_KEY: threads})
+
+    with pytest.raises(InferenceEnvironmentError, match="C11"):
+        world.run()
+
+    assert world.last_resolver.calls == []
 
 
 # -- write-ahead e proveniência (I8) -------------------------------------------------------------
@@ -722,10 +779,13 @@ def test_started_entry_written_before_first_calib_write() -> None:
 
 
 def test_crash_between_decisions_rerun_completes_only_missing_and_keeps_first_write() -> None:
-    world = _World(current_environment=_environment(numpy="9.9.9"))
+    world = _World()
     _started_entry_after_crash(world)
     first = dict(world.entry("run-f0"))
     world.events.clear()
+    # Retomada permitida: só uma chave de CÓDIGO mudou; o relógio andou.
+    world.current_environment = _environment(**{"code.src": "tree-after-crash"})
+    world.now = datetime(2026, 10, 7, 9, 30, tzinfo=UTC)
 
     result = world.run()
 
@@ -734,8 +794,11 @@ def test_crash_between_decisions_rerun_completes_only_missing_and_keeps_first_wr
     outcome = next(o for o in result.outcomes if o.run_id == "run-f0")
     assert outcome.calib_rows_verified == 2 * len(_HORIZONS) * len(_LEVELS)
     entry = world.entry("run-f0")
-    assert entry["first_write_environment"] == first["first_write_environment"]
+    assert entry["first_write_environment"]["code.src"] == first["environment"]["code.src"]
+    assert entry["environment"]["code.src"] == "tree-after-crash"
     assert entry["first_written_at"] == first["first_written_at"]
+    assert entry["verified_at"] == world.now.isoformat()
+    assert entry["verified_at"] != first["first_written_at"]
     assert entry["status"] == COMPLETED
 
 
@@ -803,6 +866,18 @@ def test_second_run_writes_zero_and_verifies_all() -> None:
 
     assert [o.calib_rows_written for o in result.outcomes] == [0, 0]
     assert [o.calib_rows_verified for o in result.outcomes] == [_EXPECTED_CALIB] * 2
+    second_run_statuses = [status for _, status in world.manifest.history[4:]]
+    assert second_run_statuses == [COMPLETED, COMPLETED]
+
+
+def test_started_entry_has_no_verified_at() -> None:
+    world = _World()
+    world.persister.fail_after = 1
+    with pytest.raises(RuntimeError):
+        world.run()
+
+    assert world.entry("run-f0")["status"] == STARTED
+    assert "verified_at" not in world.entry("run-f0")
 
 
 def test_lock_released_on_error() -> None:
@@ -838,6 +913,8 @@ def test_manifest_entry_has_all_fields() -> None:
         "normalizer_scale",
         "reproduction_mode",
         "mode_reason",
+        "calib_reproduction_mode",
+        "calib_mode_reason",
         "forced",
         "justification",
         "test_values_compared",
@@ -869,3 +946,114 @@ def test_calib_rows_inherit_the_training_run_identity() -> None:
             tuple(r[k] for k in identity) for r in test_rows
         }
         assert {r["decision_idx"] for r in calib_rows} == set(fold.calib)
+
+
+# -- C8 fail-closed: decisão extra e chave duplicada (Checkpoint C, C3-2) -----------------------
+
+
+def _manifest_entry_for(world: _World, run_id: str) -> None:
+    world.manifest.record_run(
+        _COHORT_ID,
+        run_id,
+        {
+            "checkpoint_sha256": world.sha(run_id),
+            "first_write_environment": world.current_environment,
+            "status": COMPLETED,
+        },
+    )
+
+
+def test_present_decision_outside_the_prediction_raises_before_writing() -> None:
+    world = _World()
+    _manifest_entry_for(world, "run-f0")
+    fold = _FOLDS[0]
+    extra = 49  # antes do calib do fold: não é re-predita
+    PersistPredictions(repository=world.repository)(
+        world.command(fold.run_id, extra, "calib", {1: _grid(fold.run_id, extra, 1)})
+    )
+    world.events.clear()
+
+    with pytest.raises(ReproductionError, match="not re-predicted"):
+        world.run()
+
+    assert world.events == []
+
+
+def test_duplicated_present_key_raises_before_writing() -> None:
+    world = _World()
+    _complete_first_run(world)
+    [row] = [
+        r
+        for r in world.facts("calib", "run-f0")
+        if r["decision_idx"] == _F0_CALIB_FIRST
+        and r["horizon"] == 1
+        and r["quantile_level"] == _LEVELS[1]
+    ]
+    # Mesma (decisão, horizonte, nível) com outro timestamp: outra PK, mesma chave de C8.
+    world.repository.write(
+        layer="silver",
+        table="fact_oos_predictions",
+        rows=[{**row, "timestamp_utc": "2030-01-01T00:00:00+00:00"}],
+    )
+
+    with pytest.raises(ReproductionError, match="more than once"):
+        world.run()
+
+    assert world.events == []
+
+
+# -- consistência da resolução e da predição (C3-6) ------------------------------------------------
+
+
+def test_resolution_of_another_cohort_raises() -> None:
+    world = _World(resolved_cohort_id="other-cohort")
+
+    with pytest.raises(UnknownRunError, match="C6"):
+        world.run()
+
+    assert world.last_predictor.calls == []
+
+
+def _drop_last_run(result: PredictTftFromCheckpointsResult) -> PredictTftFromCheckpointsResult:
+    return replace(result, runs=result.runs[:-1])
+
+
+def _swap_sha(result: PredictTftFromCheckpointsResult) -> PredictTftFromCheckpointsResult:
+    first, *rest = result.runs
+    return replace(result, runs=(replace(first, checkpoint_sha256="f" * 64), *rest))
+
+
+@pytest.mark.parametrize(
+    ("tamper", "error"),
+    [(_drop_last_run, UnknownRunError), (_swap_sha, ArtifactChangedError)],
+    ids=["missing-run", "other-checkpoint"],
+)
+def test_prediction_must_match_the_allowed_runs(
+    tamper: Callable[[PredictTftFromCheckpointsResult], PredictTftFromCheckpointsResult],
+    error: type[Exception],
+) -> None:
+    world = _World(tamper_prediction=tamper)
+
+    with pytest.raises(error):
+        world.run()
+
+    assert world.facts("calib") == []
+
+
+# -- regra de tolerância na fronteira (C3-4) ------------------------------------------------------
+
+
+def test_tolerance_rtol_term_scales_with_the_normalized_reference() -> None:
+    scale, ref = 0.01, 1.0  # com c = 0, z_ref = 100
+    allowed = (1e-5 + 1.3e-6 * 100) * scale
+
+    assert within_mode(new=ref + 0.9 * allowed, ref=ref, center=0.0, scale=scale, mode=TOLERANCE)
+    assert not within_mode(
+        new=ref + 1.1 * allowed, ref=ref, center=0.0, scale=scale, mode=TOLERANCE
+    )
+    # Com c = ref (z_ref = 0) só vale o termo absoluto: o mesmo Δ reprova.
+    assert not within_mode(
+        new=ref + 0.9 * allowed, ref=ref, center=ref, scale=scale, mode=TOLERANCE
+    )
+    assert within_mode(new=ref, ref=ref, center=0.0, scale=scale, mode=STRICT)
+    assert not within_mode(new=ref + 1e-12, ref=ref, center=0.0, scale=scale, mode=STRICT)
