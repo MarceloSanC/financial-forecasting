@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-_REPO = Path(__file__).resolve().parents[4]
+_REPO = Path(__file__).resolve().parents[2]
 _USE_CASES = _REPO / "src/financial_forecasting/features/evaluation/application/use_cases"
 # literais do cohort real, partidos para este arquivo não casar consigo mesmo
 _REAL_COHORT = (
