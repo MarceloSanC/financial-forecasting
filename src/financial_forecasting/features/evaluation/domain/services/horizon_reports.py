@@ -158,7 +158,7 @@ class HorizonReports:
                 amostra comum; `band_levels`/`dm_variance_estimators` vazios; e os erros
                 de validação dos serviços chamados.
         """
-        _check_paired(samples, paired)
+        check_paired(samples, paired)
         if not band_levels:
             raise ValueError("band_levels must hold at least one band level")
         if not dm_variance_estimators:
@@ -196,7 +196,13 @@ class HorizonReports:
         )
 
 
-def _check_paired(samples: HorizonSamples, paired: PairedLossSeries) -> None:
+def check_paired(samples: HorizonSamples, paired: PairedLossSeries) -> None:
+    """`paired` é a série da amostra comum do horizonte (mesmos modelos e alvos) — dono
+    único da conferência, usado pelo `HorizonReports` e pelo `ProfileReports` (I2).
+
+    Raises:
+        ValueError: outro horizonte, outros modelos ou fora da amostra comum.
+    """
     if paired.horizon != samples.horizon:
         raise ValueError(
             f"paired series is for horizon {paired.horizon}, samples for {samples.horizon}"

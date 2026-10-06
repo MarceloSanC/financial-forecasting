@@ -29,10 +29,17 @@ from financial_forecasting.features.evaluation.domain.services.degeneracy_gate i
 from financial_forecasting.features.evaluation.domain.services.diebold_mariano import (
     DmVarianceEstimator,
 )
-from financial_forecasting.features.evaluation.domain.services.dm_profiles import ERROR
+from financial_forecasting.features.evaluation.domain.services.differential_stationarity import (
+    DifferentialStationarity,
+)
+from financial_forecasting.features.evaluation.domain.services.dm_profiles import (
+    ERROR,
+    DmProfiles,
+)
 from financial_forecasting.features.evaluation.domain.services.horizon_reports import (
     HorizonReport,
     HorizonReports,
+    SampleKind,
     hit_sequences,
 )
 from financial_forecasting.features.evaluation.domain.services.paired_pinball_losses import (
@@ -83,47 +90,57 @@ _PARAMETERS = ProfileParameters(
 )
 
 
-def _settings(parameters: ProfileParameters | None = _PARAMETERS) -> ProfileSettings:
-    return ProfileSettings(
-        candidate=_CAND,
-        alpha=0.05,
-        variance_estimator=_RECT,
+def _settings(
+    parameters: ProfileParameters | None = _PARAMETERS, **changes: object
+) -> ProfileSettings:
+    fields: dict[str, object] = {
+        "candidate": _CAND,
+        "alpha": 0.05,
+        "variance_estimator": _RECT,
+        "min_violations": _MIN_VIOLATIONS,
+        "tolerance": _TOLERANCE,
+        "draws": _DRAWS,
+        "seed": _MC_SEED,
+        "profile_parameters": parameters,
+    }
+    fields.update(changes)
+    return ProfileSettings(**fields)  # type: ignore[arg-type]
+
+
+def _reports_of(
+    samples: HorizonSamples, tolerance: float = _TOLERANCE
+) -> tuple[HorizonSamples, HorizonReport, PairedLossSeries]:
+    paired = paired_pinball_losses({m: samples.common[m] for m in samples.models})
+    report = HorizonReports.evaluate(
+        samples,
+        paired=paired,
+        tolerance=tolerance,
+        band_levels=(0.95,),
         min_violations=_MIN_VIOLATIONS,
-        tolerance=_TOLERANCE,
-        draws=_DRAWS,
-        seed=_MC_SEED,
-        profile_parameters=parameters,
+        candidate=_CAND,
+        dm_alpha=0.05,
+        dm_variance_estimators=(_RECT,),
     )
+    return samples, report, paired
 
 
 def _inputs(
     cohort: Cohort | None = None,
+    *,
+    prefixes: dict[str, int] | None = None,
+    tolerance: float = _TOLERANCE,
 ) -> list[tuple[HorizonSamples, HorizonReport, PairedLossSeries]]:
-    cohort = cohort or make_cohort()
+    cohort = cohort or make_cohort(prefixes=prefixes)
     assembled = SeriesAssembly.assemble(
         cohort.records,
         cohort.runs,
         cohort.realized,
         horizons=(1, 2),
-        window_deficits={},
+        window_deficits=dict(prefixes or {}),
         required_models=frozenset({_CAND}),
     )
     assert assembled.alignment.findings == ()
-    out = []
-    for samples in assembled.horizons:
-        paired = paired_pinball_losses({m: samples.common[m] for m in samples.models})
-        report = HorizonReports.evaluate(
-            samples,
-            paired=paired,
-            tolerance=_TOLERANCE,
-            band_levels=(0.95,),
-            min_violations=_MIN_VIOLATIONS,
-            candidate=_CAND,
-            dm_alpha=0.05,
-            dm_variance_estimators=(_RECT,),
-        )
-        out.append((samples, report, paired))
-    return out
+    return [_reports_of(samples, tolerance) for samples in assembled.horizons]
 
 
 def _evaluate(
@@ -315,4 +332,131 @@ def test_horizon_mismatch_is_a_call_error() -> None:
     with pytest.raises(ValueError, match="share the horizon"):
         ProfileReports.evaluate(
             first[0], horizon_report=second[1], paired=first[2], settings=_settings()
+        )
+
+
+# --- Checkpoint C bloco 4 -------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_settings_reach_every_service() -> None:
+    """F4, M-3: estimador, alpha, mínimo de violações e tolerância chegam aos serviços."""
+    tolerance = 1e-9
+    samples, horizon_report, paired = _inputs(tolerance=tolerance)[0]
+    settings = _settings(
+        variance_estimator=DmVarianceEstimator.BARTLETT,
+        alpha=0.2,
+        min_violations=3,
+        tolerance=tolerance,
+    )
+    report = ProfileReports.evaluate(
+        samples, horizon_report=horizon_report, paired=paired, settings=settings
+    )
+    assert report.dm_profiles == DmProfiles.evaluate(
+        samples, candidate=_CAND, alpha=0.2, variance_estimator=DmVarianceEstimator.BARTLETT
+    )
+    assert report.stationarity is not None
+    direct = DifferentialStationarity.evaluate(
+        paired,
+        parameters=_PARAMETERS.stationarity,
+        variance_estimator=DmVarianceEstimator.BARTLETT,
+    )
+    assert tuple(r.report for r in report.stationarity) == direct
+    series = samples.full[_CAND][0]
+    expected = [
+        ChristoffersenTest.monte_carlo_p_values(
+            sequence, min_violations=3, draws=_DRAWS, seed=_MC_SEED
+        )
+        for sequence, _ in hit_sequences(series, tolerance)
+    ]
+    rows = [
+        r.values
+        for r in report.monte_carlo
+        if (r.model, r.seed, r.sample) == (_CAND, 1, SampleKind.MODEL_FULL)
+    ]
+    assert rows == expected
+    assert report.partial_degeneracy is not None
+    adjacent = [
+        (r.level_low, r.level_high, r.collapse_rate)
+        for r in report.partial_degeneracy
+        if (r.model, r.seed, r.sample) == (_CAND, 1, SampleKind.COMMON)
+        and r.pair_kind is PairKind.ADJACENT
+    ]
+    assert adjacent == list(adjacent_collapse_rates(samples.common[_CAND][0], tolerance=tolerance))
+
+
+@pytest.mark.unit
+def test_every_series_and_sample_with_full_different_from_common() -> None:
+    """F2: com prefixo (full != common), todas as linhas de toda (modelo, seed, amostra)
+    batem com o gate e com a chamada direta do MC sobre a amostra certa."""
+    samples, horizon_report, paired = _inputs(prefixes={"gbm": 2})[0]
+    assert samples.full[_CAND][0].n_points > samples.n_common
+    report = ProfileReports.evaluate(
+        samples, horizon_report=horizon_report, paired=paired, settings=_settings()
+    )
+    assert report.partial_degeneracy is not None
+    for series_report in horizon_report.series:
+        key = (series_report.model, series_report.seed, series_report.sample)
+        symmetric = [
+            (r.level_low, r.level_high, r.collapse_rate)
+            for r in report.partial_degeneracy
+            if (r.model, r.seed, r.sample) == key and r.pair_kind is PairKind.SYMMETRIC
+        ]
+        assert symmetric == list(series_report.coverage.degeneracy.pair_collapse_rates)
+    for model in samples.models:
+        for index, seed in enumerate(samples.seeds[model]):
+            common = samples.common[model][index]
+            expected = [
+                ChristoffersenTest.monte_carlo_p_values(
+                    sequence, min_violations=_MIN_VIOLATIONS, draws=_DRAWS, seed=_MC_SEED
+                )
+                for sequence, _ in hit_sequences(common, _TOLERANCE)
+            ]
+            rows = [
+                r.values
+                for r in report.monte_carlo
+                if (r.model, r.seed, r.sample) == (model, seed, SampleKind.COMMON)
+            ]
+            assert rows == expected
+
+
+@pytest.mark.unit
+def test_undefined_dm_rows_are_not_errors() -> None:
+    """F3: `constant_differential` é indefinido legítimo, não conta em `error_units`."""
+    samples, _, _ = _inputs()[0]
+    twin = (samples.common[_CAND][0],)
+    changed = dataclasses.replace(
+        samples,
+        full={**samples.full, "gbm": (samples.full[_CAND][0],)},
+        common={**samples.common, "gbm": twin},
+    )
+    samples2, horizon_report, paired = _reports_of(changed)
+    report = ProfileReports.evaluate(
+        samples2, horizon_report=horizon_report, paired=paired, settings=_settings()
+    )
+    assert report.dm_profiles is not None
+    assert any(r.undefined_reason == "constant_differential" for r in report.dm_profiles.rows)
+    assert report.error_units == 0
+
+
+@pytest.mark.unit
+def test_paired_of_another_horizon_or_sample_is_a_call_error() -> None:
+    """F7, M-4: `paired` precisa ser a série da amostra comum do horizonte."""
+    (first, report, paired), (_, _, other_paired) = _inputs()
+    with pytest.raises(ValueError, match="horizon"):
+        ProfileReports.evaluate(
+            first, horizon_report=report, paired=other_paired, settings=_settings()
+        )
+    shorter = paired.window(1, paired.n_points)
+    with pytest.raises(ValueError, match="common sample"):
+        ProfileReports.evaluate(first, horizon_report=report, paired=shorter, settings=_settings())
+
+
+@pytest.mark.unit
+def test_tolerance_must_be_the_gate_tolerance() -> None:
+    """L-1: sequências e pares simétricos copiados são os do gate (mesma tolerância)."""
+    samples, report, paired = _inputs()[0]
+    with pytest.raises(ValueError, match="gate tolerance"):
+        ProfileReports.evaluate(
+            samples, horizon_report=report, paired=paired, settings=_settings(tolerance=1e-6)
         )

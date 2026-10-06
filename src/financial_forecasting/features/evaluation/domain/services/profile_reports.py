@@ -52,6 +52,7 @@ from financial_forecasting.features.evaluation.domain.services.dm_profiles impor
 from financial_forecasting.features.evaluation.domain.services.horizon_reports import (
     HorizonReport,
     SampleKind,
+    check_paired,
     hit_sequences,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
@@ -185,12 +186,21 @@ class ProfileReports:
         """Os perfis do horizonte; falha de unidade vira `error`, nunca exceção (I4).
 
         Raises:
-            ValueError: `horizon_report`/`paired` de outro horizonte (erro de chamada).
+            ValueError: `horizon_report` de outro horizonte; `paired` fora da amostra comum
+                (`check_paired`, I2); tolerância diferente da que o gate usou (as
+                sequências e os pares simétricos copiados são os do gold).
         """
-        if horizon_report.horizon != samples.horizon or paired.horizon != samples.horizon:
+        if horizon_report.horizon != samples.horizon:
             raise ValueError(
-                f"samples, horizon_report and paired must share the horizon, got "
-                f"{samples.horizon}, {horizon_report.horizon}, {paired.horizon}"
+                f"samples and horizon_report must share the horizon, got "
+                f"{samples.horizon} and {horizon_report.horizon}"
+            )
+        check_paired(samples, paired)
+        tolerances = {s.coverage.degeneracy.tolerance for s in horizon_report.series}
+        if tolerances != {settings.tolerance}:
+            raise ValueError(
+                f"settings.tolerance {settings.tolerance!r} must be the gate tolerance "
+                f"{sorted(tolerances)}"
             )
         monte_carlo = _monte_carlo(samples, settings)
         parameters = settings.profile_parameters
@@ -248,7 +258,7 @@ def _monte_carlo(samples: HorizonSamples, settings: ProfileSettings) -> tuple[Mo
     rows: list[MonteCarloRow] = []
     for model, seed, sample, series in _series_of(samples):
         for sequence, _ in hit_sequences(series, settings.tolerance):
-            if sequence.is_dgt_subseries:
+            if sequence.is_dgt_subseries:  # redundante em h = 1 (DGT só em h > 1): defesa
                 continue
             values, detail = _guarded(
                 partial(
