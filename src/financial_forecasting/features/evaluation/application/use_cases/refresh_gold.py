@@ -42,6 +42,8 @@ import logging
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from time import perf_counter
+from types import MappingProxyType
+from typing import Final
 
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldInputs,
@@ -324,13 +326,20 @@ class RefreshGold:
             lambda: self._gold_store.publish(partition=partition, tables=tables, manifest=manifest),
             lambda _: sum(rows_by_table.values()),
         )
-        logger.info("refresh_gold status=%s partition=%s", status.value, partition)
+        error_units = sum(p.error_units for p in profiles) + sum(
+            1 for b in blocks if b.status is UnitStatus.ERROR
+        )
+        logger.info(
+            "refresh_gold status=%s partition=%s profile_error_units=%d",
+            status.value,
+            partition,
+            error_units,
+        )
         return RefreshGoldResult(
             status=status,
             rows_by_table=rows_by_table,
             failed_checks=failed_checks_of(results),
-            profile_error_units=sum(p.error_units for p in profiles)
-            + sum(1 for b in blocks if b.status is UnitStatus.ERROR),
+            profile_error_units=error_units,
         )
 
     # -- leituras --------------------------------------------------------------------
@@ -538,6 +547,11 @@ class RefreshGold:
         )
 
 
+_SCHEME_INDEX: Final[Mapping[str, int]] = MappingProxyType({"primary_scheme": 0})
+"""Regra do esquema do MCS por bloco (catálogo do `ProfileParameters`) → posição em
+`mcs_schemes` (o primário vem primeiro: `refresh_command_from`)."""
+
+
 def mcs_block_runs(
     paired: Mapping[int, PairedLossSeries],
     parameters: RefreshParameters,
@@ -547,13 +561,15 @@ def mcs_block_runs(
 
     Só com as regras de perfil da revisão (`profile_parameters`; sem elas, nenhuma rodada
     — I9). O bloco sai do dono (`block_sensitivity_length`) e é passado ao backend; o
-    esquema é o primário do plano (`mcs_schemes[0]`, regra `primary_scheme`). Só a
+    esquema sai da regra `mcs_block_sensitivity_scheme` da revisão (`primary_scheme` →
+    `mcs_schemes[0]`; regra fora do mapa → `KeyError`, bug de contrato). Só a
     chamada ao backend e ao `ModelConfidenceSet.evaluate` fica na captura: `ValueError`/
     `ArithmeticError` vira rodada `error` (I4) — a outra regra e o MCS primário seguem.
     """
-    if parameters.profile_parameters is None:
+    rules = parameters.profile_parameters
+    if rules is None:
         return ()
-    scheme = parameters.mcs_schemes[0]
+    scheme = parameters.mcs_schemes[_SCHEME_INDEX[rules.mcs_block_sensitivity_scheme]]
     runs: list[McsBlockRun] = []
     for horizon in sorted(paired):
         series = paired[horizon]

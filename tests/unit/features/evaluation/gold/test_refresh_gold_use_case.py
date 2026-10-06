@@ -908,14 +908,17 @@ def test_shuffled_dataset_rows_same_result() -> None:
 class _BlockFailingBackend(_SpyBackend):
     """Spy que ergue para um `block_size` escolhido (só nas rodadas por bloco)."""
 
-    def __init__(self, log: _Log, *, failing_block: int) -> None:
+    def __init__(
+        self, log: _Log, *, failing_block: int, error: type[Exception] = ArithmeticError
+    ) -> None:
         super().__init__(log)
         self._failing_block = failing_block
+        self._error = error
 
     def bootstrap_indices(self, **kwargs: object) -> BootstrapIndices:  # type: ignore[override]
         if kwargs["block_size"] == self._failing_block:
             self.index_calls.append(dict(kwargs))
-            raise ArithmeticError("injected block failure")
+            raise self._error("injected block failure")
         return super().bootstrap_indices(**kwargs)
 
 
@@ -1037,7 +1040,63 @@ def test_profile_failure_leaves_the_verdict_inputs_identical(
 
     inputs = _inputs_of(make(), parameters=_R1_PARAMETERS)
     assert _verdict_inputs(inputs) == _verdict_inputs(baseline)
-    assert make()(parameters=_R1_PARAMETERS).profile_error_units > 0
+    expected = _affected_units(target, baseline)
+    # > 1 nas unidades de perfil: a contagem por horizonte (e não por unidade) seria pega
+    assert expected == 1 if target == "mcs_block" else expected > 1
+    assert make()(parameters=_R1_PARAMETERS).profile_error_units == expected
+
+
+def _affected_units(target: str, baseline: GoldInputs) -> int:
+    """Unidades que a falha injetada atinge, contadas a partir da execução sem falha."""
+    profiles = baseline.profile_reports
+    if target == "monte_carlo":
+        return sum(len(p.monte_carlo) for p in profiles)
+    if target == "stationarity":  # um par por d_t
+        return sum(len(p.differentials) for p in profiles)
+    if target == "adjacent":  # uma linha de erro por série (modelo, seed, amostra)
+        return sum(len(report.series) for report in baseline.horizon_reports)
+    if target == "dm":  # recortes com série: os que chegam à chamada do DM
+        return sum(
+            1
+            for p in profiles
+            if p.dm_profiles is not None
+            for row in p.dm_profiles.rows
+            if row.n_points is not None
+        )
+    return sum(1 for run in baseline.mcs_block_reports if run.block_size == 1)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("target", ["adjacent", "mcs_block"])
+def test_programming_errors_in_profiles_propagate(
+    monkeypatch: pytest.MonkeyPatch, target: str
+) -> None:
+    """I4: só `ValueError`/`ArithmeticError` vira unidade `error`; outro erro é bug e sobe."""
+    cohort = make_cohort()
+    harness = _harness(cohort)
+    if target == "adjacent":
+
+        def boom(*_args: object, **_kwargs: object) -> object:
+            raise TypeError("injected bug")
+
+        monkeypatch.setattr(profile_reports, "adjacent_collapse_rates", boom)
+    else:
+        harness.use_case._mcs_backend = _BlockFailingBackend(
+            _Log(), failing_block=1, error=TypeError
+        )
+    with pytest.raises(TypeError, match="injected"):
+        harness(parameters=_R1_PARAMETERS)
+
+
+@pytest.mark.unit
+def test_final_log_line_reports_profile_error_units(caplog: pytest.LogCaptureFixture) -> None:
+    """I4: a contagem de unidades de perfil com erro fica visível ao operador."""
+    harness = _with_backend(make_cohort(), 1)
+    with caplog.at_level(logging.INFO):
+        result = harness(parameters=_R1_PARAMETERS)
+    assert result.profile_error_units > 0
+    last = [r.getMessage() for r in caplog.records if r.getMessage().startswith("refresh_gold")]
+    assert last[-1].endswith(f"profile_error_units={result.profile_error_units}")
 
 
 class _FailingDm:
