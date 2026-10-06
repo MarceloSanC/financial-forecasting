@@ -50,6 +50,17 @@ def test_positive_variance_keeps_the_horizon() -> None:
     assert variance == pytest.approx(expected)
 
 
+def test_exactly_zero_rectangular_variance_falls_back_too() -> None:
+    """Checkpoint C bloco 1 (T5): desvios (1, -1, 0) exatos dão gamma_0 + 2 gamma_1 = 0 em
+    h = 2 sem a série ser constante; o fallback vale para <= 0, não só < 0."""
+    differences = (1.5, -0.5, 0.5)
+    variance, horizon_used = dm_long_run_variance(
+        differences, horizon=_H_TWO, variance_estimator=DmVarianceEstimator.RECTANGULAR
+    )
+    assert horizon_used == 1
+    assert variance == pytest.approx((2.0 / 3.0) / 3.0)
+
+
 @pytest.mark.parametrize("horizon", [1, 7])
 def test_constant_differential_gives_zero_with_h_1(horizon: int) -> None:
     assert dm_long_run_variance(
@@ -76,6 +87,7 @@ def test_the_dm_primitive_uses_the_same_variance() -> None:
         ((0.1,), 1, DmVarianceEstimator.RECTANGULAR, "T >= 2"),
         ((0.1, 0.2, 0.3), 0, DmVarianceEstimator.RECTANGULAR, "horizon"),
         ((0.1, 0.2, 0.3), 1, "rectangular", "variance_estimator"),
+        ((0.1,) * 12, 1, "rectangular", "variance_estimator"),
     ],
 )
 def test_invalid_requests(

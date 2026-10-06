@@ -56,6 +56,14 @@ class DmVarianceEstimator(StrEnum):
     BARTLETT = "bartlett"  # sensibilidade
 
 
+def check_variance_estimator(variance_estimator: object) -> None:
+    """Dono da conferência do estimador (enum, string crua recusada) — C3."""
+    if not isinstance(variance_estimator, DmVarianceEstimator):
+        raise ValueError(
+            f"variance_estimator must be a DmVarianceEstimator, got {variance_estimator!r}"
+        )
+
+
 def validate_dm_request(
     *,
     candidate_losses: Sequence[float],
@@ -83,10 +91,7 @@ def validate_dm_request(
     for name, losses in (("candidate", candidate_losses), ("comparator", comparator_losses)):
         for index, loss in enumerate(losses):
             check_loss(loss, where=f"{name}, point {index}")
-    if not isinstance(variance_estimator, DmVarianceEstimator):
-        raise ValueError(
-            f"variance_estimator must be a DmVarianceEstimator, got {variance_estimator!r}"
-        )
+    check_variance_estimator(variance_estimator)
 
 
 @dataclass(frozen=True)
@@ -268,15 +273,15 @@ def dm_long_run_variance(
     (`horizon_used = 1`). **Não ergue** por variância ≤ 0: quem decide é o chamador (o
     DM ergue "Variance of DM statistic is zero"; o CUSUM marca indefinido).
 
+    Pré-condição do chamador: `differences` finitas (vêm de uma `PairedLossSeries`, que as
+    garante; um NaN daria `(nan, h)` e escaparia da regra "≤ 0").
+
     Raises:
         ValueError: `horizon` inválido, T < 2 ou T ≤ h, estimador fora do enum.
     """
     check_horizon(horizon)
     check_points(len(differences), horizon)
-    if not isinstance(variance_estimator, DmVarianceEstimator):
-        raise ValueError(
-            f"variance_estimator must be a DmVarianceEstimator, got {variance_estimator!r}"
-        )
+    check_variance_estimator(variance_estimator)
     if is_constant(differences):
         # Com Bartlett o fallback é observacionalmente equivalente: a variância é PSD e só
         # zera com d constante (segue o dm.test, ramo único).
