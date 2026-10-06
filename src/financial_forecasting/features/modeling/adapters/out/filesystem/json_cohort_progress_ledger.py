@@ -15,6 +15,10 @@ lock é criado com `O_CREAT | O_EXCL` (falha se já existe) e guarda pid, host,
 início e um token único: esta instância só remove o lock cujo token é o dela —
 depois de um `break_stale=True` de outro processo, o antigo dono não apaga o lock
 do novo.
+
+Satisfaz também, por duck-typing, o port `CohortLedger` do slice `inference`
+(Stage 7.1) — subconjunto exato deste port: `acquire_writer`, `release_writer` e
+`environment`. Nenhum import muda.
 """
 
 from __future__ import annotations

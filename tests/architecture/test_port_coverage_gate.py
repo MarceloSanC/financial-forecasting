@@ -18,6 +18,16 @@
   que torna o baseline honesto (a #62 nasceu com o diagnóstico de que só o
   `DatasetAssemblerPort` faltava; a #72 fechou esse, e a correção pós-verificação da
   própria issue listou os três).
+
+**O gate é vácuo para homônimos (Stage 7.1).** Ele indexa fakes por NOME de classe e
+escolhe um contrato por port ordenando por caminho — é cego a slice. Os ports
+espelho do `inference` (`RuntimeEnvironmentProbe`, `PredictionPersister`,
+`SilverTableReader`) ficam verdes só porque os homônimos do `modeling`/`evaluation`
+já estão cobertos. Por isso os testes de inventário real indexam por
+`(slice, nome)` (`gate.slice_of`), e
+`test_real_repo_inference_mirror_ports_have_their_own_contract` amarra a suíte do
+`inference` a cada port pelo predicado do próprio gate; a prova de que o port DO
+INFERENCE é satisfeito é a fixture tipada pelo Protocol do inference + mypy.
 """
 
 from __future__ import annotations
@@ -26,6 +36,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -280,23 +291,65 @@ def test_real_repo_violations_are_exactly_the_declared_baseline(gate: ModuleType
     assert len(ports) >= 28  # noqa: PLR2004
 
 
+def _by_slice_and_name(gate: ModuleType) -> dict[tuple[str, str], object]:
+    """Inventário real por `(slice, nome)` — o gate em si é cego a slice (ver módulo)."""
+    return {(gate.slice_of(port.module), port.name): port for port in gate.inventory()}
+
+
+def _contract_satisfies(gate: ModuleType, contract: Path, fake: str, real: str) -> bool:
+    """O predicado do gate: o contrato importa o fake, cita o real e parametriza."""
+    source = contract.read_text(encoding="utf-8")
+    return (
+        gate.imports_class(source, fake)
+        and gate.mentions_class(source, real)
+        and gate._PARAMETRIZATION.search(source) is not None
+    )
+
+
 def test_real_repo_consumer_ports_resolve_to_the_supplier_use_cases(gate: ModuleType) -> None:
     """#93: os ports da #68 têm como real o use case de `analytics_store` (ADR 0.0.0053)."""
-    by_name = {port.name: port for port in gate.inventory()}
+    ports: dict[tuple[str, str], Any] = _by_slice_and_name(gate)
+    persistence = (
+        gate.CONTRACT_ROOT / "features" / "modeling" / "test_persistence_ports_contract.py"
+    )
 
-    assert by_name["PredictionPersister"].adapters == ("PersistPredictions",)
-    assert by_name["RunRecordPersister"].adapters == ("PersistRunRecord",)
-    for name in ("PredictionPersister", "RunRecordPersister"):
-        contract = by_name[name].contract
-        assert contract is not None and contract.name == "test_persistence_ports_contract.py"
+    assert ports[("modeling", "PredictionPersister")].adapters == ("PersistPredictions",)
+    assert ports[("modeling", "RunRecordPersister")].adapters == ("PersistRunRecord",)
+    for name, fake, real in (
+        ("PredictionPersister", "InMemoryPredictionPersister", "PersistPredictions"),
+        ("RunRecordPersister", "InMemoryRunRecordPersister", "PersistRunRecord"),
+    ):
+        assert ports[("modeling", name)].contract is not None
+        assert _contract_satisfies(gate, persistence, fake, real)
+
+
+def test_real_repo_inference_mirror_ports_have_their_own_contract(gate: ModuleType) -> None:
+    """Stage 7.1: cada port espelho do `inference` é coberto pela suíte DO inference."""
+    ports: dict[tuple[str, str], Any] = _by_slice_and_name(gate)
+    mirror = (
+        gate.CONTRACT_ROOT / "features" / "inference" / "test_consumer_mirror_ports_contract.py"
+    )
+    expected = {
+        "RuntimeEnvironmentProbe": (
+            "InMemoryRuntimeEnvironmentProbe",
+            "GitRuntimeEnvironmentProbe",
+        ),
+        "PredictionPersister": ("InMemoryPredictionPersister", "PersistPredictions"),
+        "SilverTableReader": ("FakeSilverTableReader", "ParquetAnalyticsRepository"),
+        "CohortLedger": ("InMemoryCohortLedger", "JsonCohortProgressLedger"),
+    }
+    for name, (fake, real) in expected.items():
+        port = ports[("inference", name)]
+        assert port.violation is None, name
+        assert _contract_satisfies(gate, mirror, fake, real), name
 
 
 def test_real_repo_training_grid_reader_resolves_to_the_modeling_use_case(
     gate: ModuleType,
 ) -> None:
     """ADR 6.4.0009: o port do `evaluation` tem como real o use case `ReadTrainingGrid`."""
-    by_name = {port.name: port for port in gate.inventory()}
-    port = by_name["TrainingGridReader"]
+    ports: dict[tuple[str, str], Any] = _by_slice_and_name(gate)
+    port = ports[("evaluation", "TrainingGridReader")]
     assert port.adapters == ("ReadTrainingGrid",)
     assert port.contract is not None
     assert port.contract.name == "test_training_grid_reader_contract.py"
@@ -305,7 +358,7 @@ def test_real_repo_training_grid_reader_resolves_to_the_modeling_use_case(
 
 def test_real_repo_scorecard_ports_resolve(gate: ModuleType) -> None:
     """Stage 6.5: os dois ports do scorecard têm fake, real e contrato `[fake, real]`."""
-    by_name = {port.name: port for port in gate.inventory()}
+    ports: dict[tuple[str, str], Any] = _by_slice_and_name(gate)
     expected = {
         "PreregistrationSource": (
             "TomlPreregistrationSource",
@@ -314,7 +367,7 @@ def test_real_repo_scorecard_ports_resolve(gate: ModuleType) -> None:
         "GoldGenerationReader": ("ParquetGoldStore", "test_gold_generation_reader_contract.py"),
     }
     for name, (adapter, contract) in expected.items():
-        port = by_name[name]
+        port = ports[("evaluation", name)]
         assert adapter in port.adapters
         assert port.contract is not None
         assert port.contract.name == contract

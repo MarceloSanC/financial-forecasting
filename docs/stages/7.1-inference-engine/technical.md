@@ -1338,4 +1338,9 @@ exit=0
 **Contexto:** o contrato do locator não conferia que o caminho devolvido é absoluto. O adapter real o torna absoluto por `resolve()`, mas o fake devolvia o diretório como recebido.
 **O que mudou:** o fake normaliza os diretórios (`os.path.abspath`) no registro e na consulta, de modo que um diretório relativo e o seu absoluto são o mesmo. O contrato agora assere `Path(location.path).is_absolute()` e ganhou o caso `test_relative_directory_resolves_to_an_absolute_path` nas duas pernas.
 
+### 2026-10-06 — [deviation] task-08 — colisão de PK do persister só na perna real — Claude (Opus 5.5)
+**Contexto:** a Task 08 lista `test_persister_collision_propagates` entre os testes `[fake, real]` do `PredictionPersister` do `inference`. Só que o fake reaproveitado, `InMemoryPredictionPersister`, não guarda linhas: ele conta as resolvíveis e por isso não tem como colidir. Alterar esse fake está fora da lista fechada da Task.
+**O que mudou:** o teste de colisão roda só sobre o `PersistPredictions` real, com o silver Parquet em `tmp_path`, e a docstring da suíte declara isso. O caso compartilhado pelas duas pernas é `test_persister_writes_a_calib_decision_atomically` (contagens). Na perna real, um caso extra confere `split = "calib"` e o guardrail das linhas gravadas.
+**Razão:** o caminho de produção (o `PersistPredictions`) fica provado. Fazer o fake guardar linhas só para colidir seria uma segunda implementação do repositório; o `FakeAnalyticsRepository` já cumpre esse papel nos testes do `RunInference`.
+
 <!-- END: post-execution -->
