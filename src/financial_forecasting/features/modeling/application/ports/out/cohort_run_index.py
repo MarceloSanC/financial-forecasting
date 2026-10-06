@@ -2,8 +2,10 @@
 
 A retomada classifica cada unidade pelo que está gravado (ADR 5.5.0003, I7) e o
 `verify` confere contagens e alinhamento (A8). Ambos precisam, por cohort, de:
-quais runs existem em `dim_run`, de que fold, quantas linhas de predição cada um
-tem em `fact_oos_predictions` e quais `target_timestamp` por horizonte.
+quais runs existem em `dim_run`, de que fold, quantas linhas **de teste** de
+`fact_oos_predictions` cada um tem e quais `target_timestamp` por horizonte
+nessas linhas (as linhas `split = "calib"` da inferência não contam — ADR
+7.1.0002 item 4).
 
 Port consumer-owned do slice modeling (ADR 0.0.0053): o use case do cohort NÃO
 recebe o `AnalyticsRepository` alheio. A assinatura usa só tipos builtin porque o

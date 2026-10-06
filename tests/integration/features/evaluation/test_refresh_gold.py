@@ -84,6 +84,7 @@ from financial_forecasting.shared.infrastructure.config.settings import Settings
 from tests.unit.features.evaluation._profile_parameters import profile_parameters
 from tests.unit.features.evaluation.gold._cohort_factory import (
     Cohort,
+    add_records,
     make_cohort,
     replace_records,
     targets_of,
@@ -572,3 +573,63 @@ def test_e2e_full_index_silver_blocked(scenario: _Scenario) -> None:
     assert generation.files == ("MANIFEST.json", "gold_quality_checks.parquet")
     kinds = {(f.check, f.kind) for f in generation.result.failed_checks}
     assert ("alignment_check", "decision_index_mismatch") in kinds
+
+
+# --- Stage 7.1 (I10, "Avaliação intocada"): linhas de calib não mudam o gold -------
+#
+# Dois `data_root` sintéticos iguais exceto pelas linhas `split = "calib"` de um run
+# TFT (cópias das linhas de teste do run, com valores deslocados — se vazassem para a
+# avaliação, mudariam as métricas). O `RefreshGold` wirado (que monta pela
+# `SeriesAssembly`) tem de produzir o mesmo gold: mesmas tabelas, linhas e ordem.
+
+_CALIB_SHIFT = 1.0
+
+
+def _with_calib_rows(cohort: Cohort) -> Cohort:
+    run = next(r for r in cohort.runs if r.model == _CANDIDATE and r.seed == 0)
+    calib = [
+        dataclasses.replace(
+            record,
+            split="calib",
+            value_raw=record.value_raw + _CALIB_SHIFT,
+            value_guardrail=record.value_guardrail + _CALIB_SHIFT,
+        )
+        for record in cohort.records
+        if record.run_id == run.run_id
+    ]
+    assert calib
+    return add_records(cohort, *calib)
+
+
+def _refresh_once(data_root: Path, cohort: Cohort) -> _Generation:
+    deps = wire_dependencies(
+        settings=Settings(
+            _env_file=None,
+            data_root=data_root,
+            mlflow_tracking_uri=f"sqlite:///{data_root}/mlruns.db",
+        )
+    )
+    _write_silver(deps, cohort, sweep=_SWEEP_A, prefix="")
+    rows = _dataset_rows(cohort)
+    _write_dataset(data_root, rows)
+    return _snapshot(
+        deps, _SWEEP_A, deps.refresh_gold(_command(_SWEEP_A, _oracle_fingerprint(rows)))
+    )
+
+
+def test_refresh_gold_identical_with_and_without_calib_rows(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    cohort = _cohort()
+    plain = _refresh_once(tmp_path_factory.mktemp("gold-test-only"), cohort)
+    with_calib = _refresh_once(tmp_path_factory.mktemp("gold-with-calib"), _with_calib_rows(cohort))
+
+    assert plain.result.status is RefreshStatus.COMPLETED
+    assert with_calib.result == plain.result
+    assert with_calib.files == plain.files
+    assert with_calib.columns == plain.columns
+    assert with_calib.counts == plain.counts
+    for name, rows in plain.tables.items():
+        assert _same(rows, with_calib.tables[name]), name
+    changed = {k for k in plain.manifest if plain.manifest[k] != with_calib.manifest.get(k)}
+    assert changed <= {"started_at", "finished_at"}

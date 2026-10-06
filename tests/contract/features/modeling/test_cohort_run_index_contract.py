@@ -25,6 +25,13 @@ from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet
 from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_cohort_run_index import (  # noqa: E501
     ParquetCohortRunIndex,
 )
+from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
+    PersistPredictions,
+    PersistPredictionsCommand,
+)
+from financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast import (
+    QuantileForecast,
+)
 from financial_forecasting.features.analytics_store.domain.value_objects.run_record import (
     RunRecord,
 )
@@ -263,3 +270,111 @@ def test_tft_seeds_and_null_seed_baselines_coexist_in_one_cohort(
     assert set(runs) == {
         ("tft_quantile", 11), ("tft_quantile", 22), ("tft_quantile", 2**40), ("baseline_ar1", None)
     }
+
+
+# --- Stage 7.1 (I10, ADR 7.1.0002 item 4): só linhas de teste contam -------------
+#
+# A inferência grava `split = "calib"` no mesmo `fact_oos_predictions`. Na perna
+# real as linhas de calib entram pelo `PersistPredictions` (o caminho de produção),
+# sobre um segundo repositório no mesmo `data_root`; no fake, por
+# `record(..., split="calib")`.
+
+_CALIB_TIMESTAMPS = tuple(f"2023-12-{day:02d}T00:00:00+00:00" for day in range(1, 11))
+_SeedCalib = Callable[..., None]
+
+
+def _fake_calib_leg() -> tuple[CohortRunIndex, _SeedRun, _SeedCalib]:
+    index, seed_run = _fake_leg()
+    assert isinstance(index, InMemoryCohortRunIndex)
+
+    def seed_calib(*, model_version: str, seed: int | None, run_id: str, fold: str) -> None:
+        index.record(
+            asset_id=_ASSET,
+            feature_set_name=_FEATURE_SET,
+            cohort_id=_COHORT,
+            model_version=model_version,
+            seed=seed,
+            run_id=run_id,
+            fold=fold,
+            targets_by_horizon={1: _CALIB_TIMESTAMPS[1:4]},
+            rows=3 * len(_LEVELS),
+            split="calib",
+        )
+
+    return index, seed_run, seed_calib
+
+
+def _real_calib_leg(tmp_path: Path) -> tuple[CohortRunIndex, _SeedRun, _SeedCalib]:
+    index, seed_run = _real_leg(tmp_path)
+    persist = PersistPredictions(
+        repository=ParquetAnalyticsRepository(data_root=tmp_path, clock=FakeClock())
+    )
+
+    def seed_calib(*, model_version: str, seed: int | None, run_id: str, fold: str) -> None:
+        del seed, fold  # a partição de calib é do run; dim_run já foi gravado (ou não)
+        for decision_idx in range(3):
+            persist(
+                PersistPredictionsCommand(
+                    run_id=run_id,
+                    split="calib",
+                    model_version=model_version,
+                    asset=_ASSET,
+                    feature_set_name=_FEATURE_SET,
+                    schema_version=1,
+                    decision_idx=decision_idx,
+                    dataset_timestamps=_CALIB_TIMESTAMPS,
+                    forecasts={
+                        1: QuantileForecast.from_raw(levels=_LEVELS, raw_values=(-0.1, 0.0, 0.1))
+                    },
+                )
+            )
+
+    return index, seed_run, seed_calib
+
+
+@pytest.fixture(params=["fake", "real"])
+def calib_leg(
+    request: pytest.FixtureRequest, tmp_path: Path
+) -> tuple[CohortRunIndex, _SeedRun, _SeedCalib]:
+    if request.param == "fake":
+        return _fake_calib_leg()
+    return _real_calib_leg(tmp_path)
+
+
+@pytest.mark.contract
+def test_calib_rows_do_not_change_counts_or_targets(
+    calib_leg: tuple[CohortRunIndex, _SeedRun, _SeedCalib],
+) -> None:
+    index, seed_run, seed_calib = calib_leg
+    seed_run(
+        cohort_id=_COHORT, model_version="tft_quantile", seed=11,
+        run_id="run-f0", fold="0", decisions=_decisions(1, [2, 3]) + _decisions(7, [2, 3]),
+    )
+    seed_run(
+        cohort_id=_COHORT, model_version="baseline_ar1", seed=None,
+        run_id="run-ar1", fold="0", decisions=_decisions(1, [2]),
+    )
+    without_calib = _read(index)
+
+    seed_calib(model_version="tft_quantile", seed=11, run_id="run-f0", fold="0")
+
+    with_calib = _read(index)
+    assert with_calib == without_calib
+    assert with_calib[("tft_quantile", 11)]["run-f0"][1] == 4 * len(_LEVELS)
+
+
+@pytest.mark.contract
+def test_calib_only_run_counts_as_orphan(
+    calib_leg: tuple[CohortRunIndex, _SeedRun, _SeedCalib],
+) -> None:
+    index, seed_run, seed_calib = calib_leg
+    seed_run(
+        cohort_id=_COHORT, model_version="tft_quantile", seed=11,
+        run_id="run-calib-only", fold="1", decisions=[],
+    )
+    seed_calib(model_version="tft_quantile", seed=11, run_id="run-calib-only", fold="1")
+
+    fold, rows, targets = _read(index)[("tft_quantile", 11)]["run-calib-only"]
+
+    assert (fold, rows) == ("1", 0)
+    assert all(not ts for ts in targets.values())
