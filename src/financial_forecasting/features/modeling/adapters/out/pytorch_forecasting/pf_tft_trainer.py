@@ -16,7 +16,7 @@ quadro** passado a cada dataset:
 
 O recorte da predição não é simetria estética: sem ele o dataset geraria
 decisões DEPOIS do bloco de teste, e todo fold que não é o último tem painel
-adiante dele — o use case reprovaria com `_assert_emission_within_request`.
+adiante dele — o use case reprovaria com `assert_emission_within_request`.
 
 O quadro do monitor terminar antes de `calib` é o que torna a invariância de
 A4(a) **estrutural**, e não uma esperança: as sessões de `calib`/`test` sequer
@@ -397,6 +397,8 @@ class PfTftTrainer:
             TftCheckpointPrediction,
         )
 
+        decisions = tuple(decision_indices)
+        _require_contiguous(decisions)  # regra do pedido: antes de ler qualquer byte
         data = Path(checkpoint_path).read_bytes()  # lidos UMA vez (C10)
         observed = sha256_of_stream(io.BytesIO(data))
         if observed != expected_sha256:
@@ -421,12 +423,11 @@ class PfTftTrainer:
                 f"checkpoint {checkpoint_path} declares other inputs: {'; '.join(mismatches)} (C4)"
             )
             raise CheckpointMismatchError(msg)
-        decisions = tuple(decision_indices)
-        _require_contiguous(decisions)
         frame = self._panel_frame(feature_names, rows, target)
 
         threads_before = torch.get_num_threads()
         deterministic_before = torch.are_deterministic_algorithms_enabled()
+        warn_only_before = torch.is_deterministic_algorithms_warn_only_enabled()
         try:
             torch.set_num_threads(num_threads)
             torch.use_deterministic_algorithms(False)
@@ -445,7 +446,7 @@ class PfTftTrainer:
             )
         finally:
             torch.set_num_threads(threads_before)
-            torch.use_deterministic_algorithms(deterministic_before)
+            torch.use_deterministic_algorithms(deterministic_before, warn_only=warn_only_before)
         return TftCheckpointPrediction(
             grids=grids,
             normalizer_center=center,

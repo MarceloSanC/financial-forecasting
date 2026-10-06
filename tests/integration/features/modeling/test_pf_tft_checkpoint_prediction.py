@@ -112,7 +112,10 @@ def test_prediction_independent_of_global_rng(trained: TrainedCheckpoint) -> Non
     assert _plain(first.grids) == _plain(second.grids)
 
 
-def test_prediction_in_subprocess_is_identical(trained: TrainedCheckpoint) -> None:
+@pytest.mark.parametrize("partition", ["calib", "test"])
+def test_prediction_in_subprocess_is_identical(trained: TrainedCheckpoint, partition: str) -> None:
+    """Outro processo prediz o mesmo; no teste, o que o treino gravou (ADR 7.1.0003 item 7)."""
+    decisions = trained.calib_decisions if partition == "calib" else trained.test_decisions
     payload = {
         "checkpoint_path": trained.path,
         "expected_sha256": trained.sha256,
@@ -120,7 +123,7 @@ def test_prediction_in_subprocess_is_identical(trained: TrainedCheckpoint) -> No
         "known_feature_names": list(trained.known_feature_names),
         "rows": [[v.hex() for v in row] for row in trained.rows],
         "target": [v.hex() for v in trained.target],
-        "decision_indices": list(trained.calib_decisions),
+        "decision_indices": list(decisions),
         "max_horizon": trained.max_horizon,
         "horizons": list(trained.horizons),
         "quantile_levels": list(trained.quantile_levels),
@@ -151,11 +154,17 @@ def test_prediction_in_subprocess_is_identical(trained: TrainedCheckpoint) -> No
 
     [line] = [ln for ln in completed.stdout.splitlines() if ln.startswith("GRIDS=")]
     child = json.loads(line.removeprefix("GRIDS="))
-    here = _predict(trained, decisions=trained.calib_decisions).grids
+    here = _predict(trained, decisions=decisions).grids
     expected = {
         str(d): {str(h): [v.hex() for v in g] for h, g in by_h.items()} for d, by_h in here.items()
     }
     assert child == expected
+    if partition == "test":
+        trained_grids = {
+            str(d): {str(h): [v.hex() for v in g] for h, g in by_h.items()}
+            for d, by_h in trained.test_grids.items()
+        }
+        assert child == trained_grids
 
 
 def test_calib_decisions_emit_one_entry_per_decision_and_horizon(
@@ -212,8 +221,11 @@ def test_loader_receives_the_hashed_bytes_as_file_object(
         {"quantile_levels": (0.2, 0.5, 0.8)},
         {"known_feature_names": ("day_of_week",)},
         {"max_horizon": 3, "horizons": (1, 2)},
+        # SÓ as desconhecidas mudam (conhecidas iguais): uma a menos e uma a mais.
+        {"feature_names": ("close_return", "day_of_week", "month")},
+        {"feature_names": ("close_return", "rsi_14", "extra_unknown", "day_of_week", "month")},
     ],
-    ids=["levels", "known-reals", "decoder-length"],
+    ids=["levels", "known-reals", "decoder-length", "one-unknown-less", "one-unknown-more"],
 )
 def test_mismatched_levels_or_reals_raise_checkpoint_mismatch(
     trained: TrainedCheckpoint, overrides: dict[str, object]

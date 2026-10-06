@@ -1343,4 +1343,8 @@ exit=0
 **O que mudou:** o teste de colisão roda só sobre o `PersistPredictions` real, com o silver Parquet em `tmp_path`, e a docstring da suíte declara isso. O caso compartilhado pelas duas pernas é `test_persister_writes_a_calib_decision_atomically` (contagens). Na perna real, um caso extra confere `split = "calib"` e o guardrail das linhas gravadas.
 **Razão:** o caminho de produção (o `PersistPredictions`) fica provado. Fazer o fake guardar linhas só para colidir seria uma segunda implementação do repositório; o `FakeAnalyticsRepository` já cumpre esse papel nos testes do `RunInference`.
 
+### 2026-10-06 — [deviation] task-04-fix — faixa de decisões conferida antes de ler o checkpoint; `warn_only` restaurado (Checkpoint C, C2-9) — Claude (Opus 5.5)
+**Contexto:** no `predict_from_checkpoint`, a faixa contígua era conferida depois da carga, e o `finally` restaurava a flag de algoritmos determinísticos sem o `warn_only`.
+**O que mudou:** `_require_contiguous` passou a rodar antes da leitura dos bytes. Uma faixa inválida é erro do pedido e ergue `ValueError` sem tocar o arquivo; a ordem sha256 → carga → C4 entre as demais conferências fica igual. O `finally` agora restaura a flag junto com o `warn_only` anterior. No mesmo commit, sem mudança de comportamento: a docstring cita `assert_emission_within_request` (C2-1); o C4 ganhou casos que mudam só as reais desconhecidas (C2-3); o teste de subprocesso também roda sobre o bloco de teste e compara com a grade gravada pelo treino (C2-4).
+
 <!-- END: post-execution -->
