@@ -179,20 +179,9 @@ def diebold_mariano(
     differences = differential(candidate_losses, comparator_losses)
     n_points = len(differences)
     mean = math.fsum(differences) / n_points
-    deviations = [value - mean for value in differences]
-    horizon_used = horizon
-    # d constante tem var̂ = 0 por definição (o `acf` do R dá 0 exato); com média inexata
-    # em float (ex.: 0,1 x 12) os desvios sairiam ~1e-17 e var̂ ~1e-35 > 0 — o DM daria
-    # S1* ~1e16 onde o R ergue. Mesmo caminho de fallback/erro, mesma mensagem.
-    constant = is_constant(differences)
-    variance = 0.0 if constant else _long_run_variance(deviations, horizon, variance_estimator)
-    # Com Bartlett o fallback é observacionalmente equivalente: a variância é PSD e só zera
-    # com d constante, que ergue do mesmo jeito em h = 1 (segue o dm.test, ramo único).
-    if variance <= 0.0 and horizon > 1:
-        horizon_used = 1
-        variance = (
-            0.0 if constant else _long_run_variance(deviations, horizon_used, variance_estimator)
-        )
+    variance, horizon_used = dm_long_run_variance(
+        differences, horizon=horizon, variance_estimator=variance_estimator
+    )
     if variance <= 0.0:
         raise ValueError("Variance of DM statistic is zero")
     statistic = _hln_factor(n_points, horizon_used) * mean / math.sqrt(variance)
@@ -265,6 +254,39 @@ class DieboldMariano:
             horizon=series.horizon,
             variance_estimator=variance_estimator,
         )
+
+
+def dm_long_run_variance(
+    differences: Sequence[float], *, horizon: int, variance_estimator: DmVarianceEstimator
+) -> tuple[float, int]:
+    """var̂(d̄) do DM com o fallback do `dm.test` — `(variância, horizon_used)`.
+
+    Escrita única da variância de longo prazo de d̄ (Stage 6.6, ADR `6_6_0001` ST3):
+    consumida pelo primitivo `diebold_mariano` e pelo CUSUM do diagnóstico de
+    estacionariedade de d_t. d constante → 0,0 sem calcular (o `acf` do R dá 0 exato;
+    em float os desvios sairiam ~1e-17); var̂ ≤ 0 com h > 1 → recalcula com h = 1
+    (`horizon_used = 1`). **Não ergue** por variância ≤ 0: quem decide é o chamador (o
+    DM ergue "Variance of DM statistic is zero"; o CUSUM marca indefinido).
+
+    Raises:
+        ValueError: `horizon` inválido, T < 2 ou T ≤ h, estimador fora do enum.
+    """
+    check_horizon(horizon)
+    check_points(len(differences), horizon)
+    if not isinstance(variance_estimator, DmVarianceEstimator):
+        raise ValueError(
+            f"variance_estimator must be a DmVarianceEstimator, got {variance_estimator!r}"
+        )
+    if is_constant(differences):
+        # Com Bartlett o fallback é observacionalmente equivalente: a variância é PSD e só
+        # zera com d constante (segue o dm.test, ramo único).
+        return 0.0, 1
+    mean = math.fsum(differences) / len(differences)
+    deviations = [value - mean for value in differences]
+    variance = _long_run_variance(deviations, horizon, variance_estimator)
+    if variance <= 0.0 and horizon > 1:
+        return _long_run_variance(deviations, 1, variance_estimator), 1
+    return variance, horizon
 
 
 def _long_run_variance(
