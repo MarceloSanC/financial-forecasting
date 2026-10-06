@@ -71,6 +71,12 @@ containers =
     # application (port-out ScoringBackend) e adapters/out/scoring — nesta Task ainda
     # vazios; `(adapters)` opcional + `exhaustive = False` toleram as camadas esparsas.
     financial_forecasting.features.evaluation
+    # Stage 7.1 (concept 7.1 I2/I13 / ADR 7.1.0001 item 4 / LAYOUT §3): novo slice
+    # inference entra como container layered. Nasce com domain/application/adapters
+    # vazios (pacotes); os ports do consumidor chegam nas Tasks 07–09 — `(adapters)`
+    # opcional + `exhaustive = False` toleram as camadas esparsas. Caso
+    # `hexagonal-layers:inference-domain-imports-application`.
+    financial_forecasting.features.inference
 exhaustive = False
 
 # -----------------------------------------------------------------------------
@@ -114,6 +120,10 @@ source_modules =
     # CoverageMetrics) é stdlib-only + o VO QuantileForecast do 4.3; `import pandas`/
     # `numpy` aqui REPROVA — caso `domain-purity:evaluation-domain-imports-pandas`.
     financial_forecasting.features.evaluation.domain
+    # Stage 7.1 (concept 7.1 I2 / ADR 7.1.0001 item 4): o domain de inference é
+    # stdlib-only (o slice nasce sem módulos de domínio; o contrato vale desde já);
+    # `import pandas` aqui REPROVA — caso `domain-purity:inference-domain-imports-pandas`.
+    financial_forecasting.features.inference.domain
 forbidden_modules =
     pandas
     pyarrow
@@ -157,6 +167,9 @@ source_modules =
     # Stage 6.1 (concept 6.1 A9): caso `inward-only:evaluation-application-imports-infrastructure`.
     financial_forecasting.features.evaluation.application
     financial_forecasting.features.evaluation.domain
+    # Stage 7.1 (ADR 7.1.0001 item 4): caso `inward-only:inference-application-imports-infrastructure`.
+    financial_forecasting.features.inference.application
+    financial_forecasting.features.inference.domain
 forbidden_modules =
     financial_forecasting.shared.infrastructure
 
@@ -254,6 +267,11 @@ source_modules =
     # `store-no-storage-leak:evaluation-application-imports-pandas`.
     financial_forecasting.features.evaluation.application
     financial_forecasting.features.evaluation.domain
+    # Stage 7.1 (ADR 7.1.0001 item 4): o `RunInference` lê o silver pelo port
+    # `SilverTableReader` e troca só primitivos; pandas/pyarrow/duckdb/pandera nunca na
+    # application/domain de inference. Caso `store-no-storage-leak:inference-application-imports-pandas`.
+    financial_forecasting.features.inference.application
+    financial_forecasting.features.inference.domain
 forbidden_modules =
     pandas
     pyarrow
@@ -383,6 +401,27 @@ forbidden_modules =
     pytorch_forecasting
 allow_indirect_imports = False
 
+# Contrato 11b — inference-no-torch-leak (type = forbidden) — Stage 7.1 (I2/I13)
+# Mesmo perímetro do `modeling-no-torch-leak` para o slice `inference` (ADR 7.1.0001
+# item 4): a predição a partir do checkpoint é fornecida pelo `modeling` através dos
+# ports do consumidor (`CheckpointResolver`/`CheckpointGridPredictor`), que trocam só
+# DTOs/primitivos — `torch`/`lightning`/`pytorch_forecasting` nunca na application/
+# domain de inference. Adapters do slice podem hospedar uma lib (o roadmap da 7.3
+# prevê pesos de VSN); nesta Stage nenhum hospeda. Um caso POR módulo proibido em
+# `_REAL_VIOLATION_CASES`, mais `lightning` no domain (matrícula de
+# `inference.domain`, que o `domain-purity` não cobre para `lightning`).
+[importlinter:contract:inference-no-torch-leak]
+name = Application/domain de inference não importam torch/lightning/pytorch_forecasting
+type = forbidden
+source_modules =
+    financial_forecasting.features.inference.application
+    financial_forecasting.features.inference.domain
+forbidden_modules =
+    torch
+    lightning
+    pytorch_forecasting
+allow_indirect_imports = False
+
 # Contrato 12 — modeling-no-optuna-leak (type = forbidden) — Stage 5.4 (A14)
 # Contrato SEPARADO do 11 de propósito (postura single-purpose do contrato 10):
 # `optuna` é outro concern — busca de hiperparâmetros, não a lib do modelo. O
@@ -490,7 +529,7 @@ allow_indirect_imports = False
 # o ponto.
 # -----------------------------------------------------------------------------
 [importlinter:contract:bc-independence]
-name = Bounded contexts independentes (modeling / analytics_store / feature_engineering / market_data / evaluation)
+name = Bounded contexts independentes (modeling / analytics_store / feature_engineering / market_data / evaluation / inference)
 type = independence
 modules =
     financial_forecasting.features.modeling
@@ -498,6 +537,10 @@ modules =
     financial_forecasting.features.feature_engineering
     financial_forecasting.features.market_data
     financial_forecasting.features.evaluation
+    # Stage 7.1 (ADR 7.1.0001 item 4): `inference` entra SEM aresta de runtime — os
+    # ports do consumidor anotam os DTOs do `modeling`/`analytics_store` só sob
+    # TYPE_CHECKING. Caso `bc-independence:inference-imports-new-evaluation-edge`.
+    financial_forecasting.features.inference
 ignore_imports =
     # -- modeling -> analytics_store (dono único do target_timestamp, ADR 4.3.0001)
     # O use case de modeling monta o `PersistPredictionsCommand` (DTO do port-in

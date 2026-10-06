@@ -1310,4 +1310,20 @@ E         {40: {1: (0.01977621018886566, 0.01697353646159172, 0.0200383588671684
 **O que mudou:** o use case recebe `locator: CheckpointLocator` e obtém o caminho por `locator.locate(artifact_dir=tft_artifact_dir(artifacts_root, run_id)).path`, com a mesma regra de "exatamente um `*.ckpt`" (C3) da `ResolveTftCheckpoints`. O sha256 que o locator devolve não é usado. A conferência C10 continua no adapter, sobre os bytes efetivamente carregados, com `expected_sha256 = allowed[run_id]`. A guarda C6 (`UnknownRunError`) roda antes do primeiro `locate`. Ao contrário do "por fold" do texto, ela confere todos os folds antes de predizer qualquer um: nada é carregado se algum run estiver fora da lista. A Task 11 (wiring) passa o `FilesystemCheckpointLocator` também a este use case.
 **Razão:** é reversível e ancorado no ADR 7.1.0004 item 1 (resolução pelo locator stdlib, sem carga) e no LAYOUT §3. O port do concept fica como está, e a lista do construtor é detalhe de wiring dentro do mesmo slice. Ficou abaixo do limiar de pergunta.
 
+### 2026-10-06 — [deviation] task-06 — prova manual do `inference-no-torch-leak` (concept §11 "Gates") — Claude (Opus 5.5)
+**Contexto:** a Task 06 exige colar aqui as duas saídas da prova manual. Não houve desvio de código. O registro só guarda a evidência que o plano pede, já que nenhuma das três tags descreve esse caso.
+**Com a violação:** criado `src/financial_forecasting/features/inference/application/_taint.py` contendo `import torch`, e rodado `uv run --no-sync lint-imports` (saída filtrada):
+```
+Application/domain de inference não importam torch/lightning/pytorch_forecastingBROKEN
+Contracts: 15 kept, 1 broken.
+-   financial_forecasting.features.inference.application._taint -> torch (l.1)
+exit=1
+```
+**Sem a violação:** com o arquivo apagado, o mesmo comando deu:
+```
+Contracts: 16 kept, 0 broken.
+exit=0
+```
+**Razão:** o slice nasce vazio, e `lint-imports` verde sobre pacotes vazios não prova nada. Esta prova manual, junto com os oito casos novos de `_REAL_VIOLATION_CASES`, um por contrato e por módulo proibido, mostra que o contrato reage.
+
 <!-- END: post-execution -->

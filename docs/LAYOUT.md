@@ -282,9 +282,12 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 
   **Perímetro do gate hoje** — dito aqui porque doutrina mais larga que o gate é
   falso verde de segunda ordem, o defeito que a issue #60 existe para matar: o
-  contrato `bc-independence` do `.importlinter` cobre os **cinco** slices
+  contrato `bc-independence` do `.importlinter` cobre os **seis** slices
   (`modeling`, `analytics_store`, `feature_engineering`, `market_data`,
-  `evaluation` — este desde a Stage 6.1). As 22 arestas de runtime existentes
+  `evaluation` — este desde a Stage 6.1 —, e `inference` — desde a Stage 7.1, sem
+  aresta de runtime: seus ports do consumidor só têm imports de tipo; o contrato
+  `inference-no-torch-leak` mantém `torch`/`lightning`/`pytorch_forecasting` fora
+  da application/domain do slice, ADR 7.1.0001 item 4). As 22 arestas de runtime existentes
   estão declaradas UMA A UMA como exceção comentada (débito medido, não
   permissão) — as 8 `feature_engineering → market_data.domain.entities`
   (`Candle`, `NewsArticle`, `FundamentalReport`, #95) e as duas
