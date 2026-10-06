@@ -3,7 +3,7 @@ title: ADR 0.0.0057 — Single inference domain doc covering Step 7, with bounda
 description: Architecture Decision Record
 when-use: Reference when questioning why the Step 7 domain gate is satisfied by one doc (conformal-benchmark-and-feature-attribution.md), why it does not re-derive coverage metrics, the bootstrap or the preregistration machinery, or why the roadmap's orphan vocabulary ("contrato P2", "≥2/3", "N+1") is abandoned or defined there
 keywords: [adr, domain-doc, inference, conformal-benchmark-and-feature-attribution, scope, boundary, step-7, cqr, h3, explainability, api, doc-category]
-status: proposed
+status: accepted
 created_at: 2026-10-06
 updated_at: 2026-10-06
 adr_id: 0.0.0057
@@ -18,7 +18,9 @@ bounded_context: inference
 
 ## Status
 
-`proposed` — awaiting human ratification together with the inference domain doc (issue #150).
+`accepted` — ratified on 2026-10-06 by delegation of the human (Marcelo),
+together with the inference domain doc (issue #150); the Step 7 gate is
+closed.
 
 ## Context
 
@@ -104,12 +106,14 @@ on 2026-10-06. The load-bearing ones are recorded in
 
 ### Negative
 - A long doc; mitigated by the consumption map.
-- Two items are flagged in the doc as still open for Stage 7.3's
-  preregistration (interval level/multiplicity; negative importances), and
-  one as an out-of-scope issue (the volatility features' family).
+- Five items are flagged in the doc (§5.7) as still open for Stage 7.3's
+  preregistration (interval level; multiplicity; negative importances;
+  pairing key between horizons; joint bootstrap block), and one as an
+  out-of-scope issue to be opened (the volatility features' family).
 
 ### Neutral / trade-offs accepted
-- The doc is `draft` until ratified; the gate is not closed before that.
+- The doc was ratified (`accepted`) on 2026-10-06 by delegation of the human;
+  the Step 7 gate is closed.
 
 ## References
 

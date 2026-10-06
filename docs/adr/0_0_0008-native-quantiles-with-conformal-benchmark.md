@@ -3,7 +3,7 @@ title: ADR 0.0.0008 — Native quantiles as the H1 object, asymmetric split-CQR 
 description: Architecture Decision Record
 when-use: Reference when questioning why H1 judges the native quantile grid and not a conformalized one, how CQR is applied (asymmetric, per pair, per horizon, per seed), which variant is of record and which is sensitivity, why ACI/EnbPI are out, or how conformal coverage may be worded
 keywords: [adr, h1, native-quantiles, conformal, cqr, split-conformal, asymmetric-cqr, nexcp, aci, enbpi, exchangeability, empirical-coverage, calibration-partition, per-horizon, seeds, inference, step-7]
-status: proposed
+status: accepted
 created_at: 2026-10-06
 updated_at: 2026-10-06
 adr_id: 0.0.0008
@@ -18,8 +18,9 @@ bounded_context: inference
 
 ## Status
 
-`proposed` — becomes `accepted` with the ratification of the inference domain
-doc (issue #150). Supersedes the roadmap's "variant deferred to the Stage":
+`accepted` — ratified on 2026-10-06 by delegation of the human (Marcelo),
+together with the inference domain doc (issue #150); the Step 7 gate is
+closed. Supersedes the roadmap's "variant deferred to the Stage":
 the variant of record and the sensitivity are fixed here; Stage 7.2 keeps the
 implementation and preregistration details (`7_2_0001`).
 
@@ -48,7 +49,8 @@ conformal coverage.
 2. **Mechanics (E): asymmetric split-CQR.** One-sided scores per tail,
    E^lo = q̂_lo − Y and E^hi = Y − q̂_hi, each corrected by its
    ⌈(n+1)(1−α_tail)⌉-th smallest score (the inflated (1−α)(1+1/n) quantile of
-   Romano et al. 2019 Eq. (11)), α_lo = τ_lo, α_hi = 1 − τ_hi (Theorem 2,
+   Romano et al. 2019 Eq. (11) — equation numbering not checked against the
+   source), α_lo = τ_lo, α_hi = 1 − τ_hi (Theorem 2,
    Eqs. (15)–(16)). Reason: the H1 gate is per tail (ADR 0.0.0011, 6.5.0006),
    and only Theorem 2 yields a per-tail object. Cost: slightly wider intervals
    (paper §6.2). The input pair is the rearranged one (the delivered forecast).
@@ -68,9 +70,12 @@ conformal coverage.
    so the 0.02 tail would become infinite (derivation); ρ = 0.99 gives 0.0109
    and is the value of the paper's experiments (§5.1).
 6. **ACI and EnbPI out (E).** Their guarantees rely on online updates with the
-   realized value at each step (Gibbs & Candès 2021 Prop. 4.1, §7 on delayed
-   feedback; Xu & Xie 2021 §3.1), incompatible with one calibration per fold;
-   Oliveira et al. 2024 §2.
+   realized value at each step, incompatible with one calibration per fold.
+   ACI's main guarantee is a long-run frequency bound (Gibbs & Candès 2021
+   Prop. 4.1) that needs Y observed online; §4.2 shows only *approximate*
+   marginal coverage under small drifts in a specific model, and §7 lists
+   delayed/batched feedback as an open problem. EnbPI leverages feedback
+   (Xu & Xie 2021 §3.1). See also Oliveira et al. 2024 §2.
 7. **Per horizon (E).** Marginal coverage per horizon, each horizon calibrated
    separately (Oliveira et al. 2024 Theorems 1/4; ADR 0.0.0010). Joint
    Bonferroni coverage (Stankevičiūtė et al. 2021 §3.3) is rejected: it
@@ -148,11 +153,11 @@ it. This is why coverage is always empirical.
 
 ## References
 
-- Romano, Y.; Patterson, E.; Candès, E. (2019). "Conformalized Quantile Regression". *NeurIPS 32*. arXiv:1905.03222. (Eqs. (9), (11); Theorems 1–2; §4; §6.2.)
-- Barber, R. F.; Candès, E. J.; Ramdas, A.; Tibshirani, R. J. (2023). "Conformal prediction beyond exchangeability". *Annals of Statistics*, 51(2), 816–845. DOI: 10.1214/23-AOS2276. (Eqs. (10)–(11); Theorem 2; §4.3–§4.4; §5.1; Appendix A.)
+- Romano, Y.; Patterson, E.; Candès, E. (2019). "Conformalized Quantile Regression". *NeurIPS 32*. arXiv:1905.03222. (Eqs. (9), (11) — equation numbering not checked; Theorems 1–2; §4; §6.2.)
+- Barber, R. F.; Candès, E. J.; Ramdas, A.; Tibshirani, R. J. (2023). "Conformal prediction beyond exchangeability". *Annals of Statistics*, 51(2), 816–845. DOI: 10.1214/23-AOS2276. (Eqs. (10)–(11); §4.1 Theorem 2; §4.3–§4.4; §5.1; Appendix A.)
 - Lei, J. et al. (2018). *JASA*, 113(523), 1094–1111. DOI: 10.1080/01621459.2017.1307116.
 - Oliveira, R. I.; Orenstein, P.; Ramos, T.; Romano, J. V. (2024). *JMLR*, 25(225). arXiv:2203.15885. (§2; Theorems 1, 4, 6.)
-- Gibbs, I.; Candès, E. (2021). *NeurIPS 34*. arXiv:2106.00170. (Eq. (2); Prop. 4.1; §7.)
+- Gibbs, I.; Candès, E. (2021). *NeurIPS 34*. arXiv:2106.00170. (Eq. (2); Prop. 4.1; §4.2; §7.)
 - Xu, C.; Xie, Y. (2021). *ICML*, PMLR 139. arXiv:2010.09107. (§3.1; §4.1.)
 - Stankevičiūtė, K.; Alaa, A. M.; van der Schaar, M. (2021). "Conformal time-series forecasting". *NeurIPS 34*. (§3.3; Fig. 1.)
 - Gupta, C.; Kuchibhotla, A. K.; Ramdas, A. (2022). *Pattern Recognition*, 127, 108496. DOI: 10.1016/j.patcog.2021.108496. (Table 1.)
