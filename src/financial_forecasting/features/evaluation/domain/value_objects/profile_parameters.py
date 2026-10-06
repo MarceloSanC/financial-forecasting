@@ -30,6 +30,10 @@ from typing import Final
 from financial_forecasting.features.evaluation.domain.services.inference_input_validation import (
     validate_alpha,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._mapping_keys import (
+    missing_key_error,
+    unknown_key_error,
+)
 
 PROFILE_RULE_CATALOG: Final[Mapping[str, str]] = MappingProxyType(
     {
@@ -70,10 +74,10 @@ def _check_keys(mapping: object, expected: tuple[str, ...], *, path: str) -> Map
         raise ValueError(f"{path} must be a table, got {mapping!r}")
     unknown = sorted(str(key) for key in mapping if key not in expected)
     if unknown:
-        raise ValueError(f"preregistration has unknown key '{path}.{unknown[0]}'")
+        raise unknown_key_error(f"{path}.{unknown[0]}")
     for key in expected:
         if key not in mapping:
-            raise ValueError(f"preregistration misses the key '{path}.{key}'")
+            raise missing_key_error(f"{path}.{key}")
     return mapping
 
 

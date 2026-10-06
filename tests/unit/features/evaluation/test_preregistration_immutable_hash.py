@@ -121,6 +121,10 @@ def test_reference_uses_hash12() -> None:
 _BLOCK_PAYLOAD = Preregistration.from_mapping(
     {
         **valid_payload(),
+        "revision": 1,
+        "amends": "test_plan-r0-0123456789ab",
+        "justification": "blinded profile rules",
+        "blind_status": "blinded",
         "profile_parameters": {
             "subset_multiplicity": "none_raw_p_descriptive_v1",
             "partial_degeneracy_pairs": "symmetric_and_adjacent_non_degenerate_rows_v1",
@@ -147,5 +151,6 @@ def test_every_profile_parameter_leaf_changes_hash(path: str) -> None:
 
 @pytest.mark.unit
 def test_the_block_changes_the_hash_and_its_absence_keeps_r0() -> None:
-    assert _digest(_BLOCK_PAYLOAD) != _digest(_BASE_PAYLOAD)
+    without_block = {k: v for k, v in _BLOCK_PAYLOAD.items() if k != "profile_parameters"}
+    assert _digest(_BLOCK_PAYLOAD) != _digest(without_block)
     assert "profile_parameters" not in _BASE_PAYLOAD

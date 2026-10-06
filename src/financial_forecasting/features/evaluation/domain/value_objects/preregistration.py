@@ -66,6 +66,10 @@ from financial_forecasting.features.evaluation.domain.services.model_confidence_
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     validate_horizon,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._mapping_keys import (
+    missing_key_error,
+    unknown_key_error,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._tolerance import (
     validate_tolerance,
 )
@@ -599,10 +603,10 @@ def _check_keys(mapping: object, schema: Mapping[str, object], *, path: str) -> 
     allowed = set(schema) | (_OPTIONAL_KEYS | set(_AMENDMENT_KEYS) if not path else set())
     unknown = sorted(str(key) for key in mapping if key not in allowed)
     if unknown:
-        raise ValueError(f"preregistration has unknown key '{path}{unknown[0]}'")
+        raise unknown_key_error(f"{path}{unknown[0]}")
     for key, sub in schema.items():
         if key not in mapping:
-            raise ValueError(f"preregistration misses the key '{path}{key}'")
+            raise missing_key_error(f"{path}{key}")
         value = mapping[key]
         if isinstance(sub, Mapping):
             _check_keys(value, sub, path=f"{path}{key}.")
@@ -817,6 +821,11 @@ class Preregistration:
         if self.revision == 0 and self.amendment is not None:
             raise ValueError(
                 "amendment fields (amends, justification, blind_status) are forbidden in revision 0"
+            )
+        if self.revision == 0 and self.profile_parameters is not None:
+            raise ValueError(
+                "profile_parameters is forbidden in revision 0 (profile rules the anchored r0 "
+                "does not name enter by a blinded amendment, ADR 6.6.0001)"
             )
         if self.revision >= 1 and self.amendment is None:
             raise ValueError(

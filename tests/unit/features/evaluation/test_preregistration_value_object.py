@@ -532,7 +532,7 @@ def test_prereg_profile_parameters_round_trip() -> None:
 def test_prereg_profile_parameters_rule_outside_the_catalog() -> None:
     block = {**_PROFILE_BLOCK, "subset_multiplicity": "holm_within_subset"}
     _raises(
-        {**valid_payload(), "profile_parameters": block},
+        {**valid_payload(), **_R1_AMENDMENT, "profile_parameters": block},
         r"profile_parameters\.subset_multiplicity must be",
     )
 
@@ -541,7 +541,8 @@ def test_prereg_profile_parameters_rule_outside_the_catalog() -> None:
 def test_prereg_profile_parameters_nested_unknown_key() -> None:
     block = {**_PROFILE_BLOCK, "extra": 1}
     _raises(
-        {**valid_payload(), "profile_parameters": block}, "unknown key 'profile_parameters.extra'"
+        {**valid_payload(), **_R1_AMENDMENT, "profile_parameters": block},
+        "unknown key 'profile_parameters.extra'",
     )
 
 
@@ -549,3 +550,21 @@ def test_prereg_profile_parameters_nested_unknown_key() -> None:
 def test_prereg_profile_parameters_only_at_the_top() -> None:
     with pytest.raises(ValueError, match="unknown key"):
         Preregistration.from_mapping(with_leaf(valid_payload(), "mcs.profile_parameters", "x"))
+
+
+@pytest.mark.unit
+def test_prereg_profile_parameters_forbidden_in_revision_zero() -> None:
+    """Checkpoint C bloco 3 (L5): regras de perfil que o r0 não nomeia só entram por
+    emenda cega (ADR 6.6.0001); um r0 com o bloco é recusado."""
+    _raises(
+        {**valid_payload(), "profile_parameters": _PROFILE_BLOCK},
+        "profile_parameters is forbidden in revision 0",
+    )
+
+
+@pytest.mark.unit
+def test_prereg_profile_parameters_must_be_typed() -> None:
+    """Checkpoint C bloco 3 (L4): construção direta com um dict é recusada."""
+    plan = _plan({**valid_payload(), **_R1_AMENDMENT, "profile_parameters": _PROFILE_BLOCK})
+    with pytest.raises(ValueError, match="must be a ProfileParameters"):
+        dataclasses.replace(plan, profile_parameters=_PROFILE_BLOCK)
