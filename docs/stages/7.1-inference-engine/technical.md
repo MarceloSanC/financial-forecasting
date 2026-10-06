@@ -1355,4 +1355,18 @@ exit=0
 **Contexto:** o use case sobrescrevia `normalizer_center`/`normalizer_scale` a cada partição e só deixava o sha256 para o adapter conferir.
 **O que mudou:** o centro e a escala da primeira partição são guardados, e uma partição seguinte que divirja ergue `ValueError` (um checkpoint tem um só normalizador). O sha256 que o locator leu é comparado com `allowed[run_id]` antes de chamar o predictor: divergência ergue o `ArtifactChangedError` do port, sem carga. Os testes de guarda passaram a assegurar também que o locator não foi chamado, e o repasse do sha256 casa cada chamada pelo `checkpoint_path` (C2-5).
 
+### 2026-10-06 — [deviation] task-09-fix — `RunInference`: C8 antes de escrever, write-ahead só quando há o que escrever, conferências extras (Checkpoint C, C3-1 a C3-7) — Claude (Opus 5.5)
+**Contexto:** havia três problemas no `RunInference`. A entrada `started` era gravada antes da conferência C8, até num rerun que só verifica, de modo que um `completed` voltava a `started`; com uma linha divergente, o run ficava preso em C11 em outro ambiente. A C8 era fail-open para decisão presente fora da grade re-predita e para chave repetida. E faltavam conferências de consistência.
+**O que mudou:**
+- C8 roda em memória, sobre os fatos já lidos, antes de qualquer escrita. Decisão presente fora da grade re-predita, ou chave `(decisão, horizonte, nível)` repetida, ergue `ReproductionError` sem tocar silver nem manifesto.
+- `started` (sem `verified_at`) só é gravado quando há decisão ausente, imediatamente antes do primeiro persister. Um rerun que só verifica grava direto `completed`.
+- O manifesto ganha `calib_reproduction_mode`/`calib_mode_reason`. O `reproduction_mode` (manifesto e outcome) continua sendo o do teste.
+- A resolução precisa responder pelo cohort e pela seed pedidos, e a predição precisa trazer exatamente os runs da lista permitida, com o sha256 esperado. Senão erguem `UnknownRunError`/`ArtifactChangedError`.
+- `torch_threads` gravado ausente ou inválido ergue `InferenceEnvironmentError` (C11) antes do resolver, e não mais `KeyError`.
+**Testes:** a retomada usa uma chave de código diferente e um relógio novo (a mutação da guarda de `FIRST_WRITE_FIELDS` agora derruba o teste). A fronteira do termo rtol de `within_mode` tem teste direto (a mutação "só ATOL" derruba). O teste de tolerância usa quase-empate cruzado. As guardas asseguram que o resolver não é chamado.
+
+### 2026-10-06 — [deviation] task-09-fix — testes de C8 de campos fora da PK usam um leitor que adultera a linha (Checkpoint C, C3-10) — Claude (Opus 5.5)
+**Contexto:** gravar no silver uma linha de calib com `asset`, `feature_set_name`, `timestamp_utc` ou `target_timestamp_utc` diferentes cria outra PK ou outra partição. A linha original continua lá, e a conferência C8 desses campos ficaria sem objeto.
+**O que mudou:** `test_present_row_with_divergent_non_value_field_raises` serve as linhas presentes por `_PatchedReader`, um `SilverTableReader` de teste que troca o campo da decisão escolhida. Assim a C8 vê exatamente a linha divergente. As divergências que não mudam a PK (`guardrail_applied`, `value_raw`) continuam gravadas direto no repositório.
+
 <!-- END: post-execution -->
