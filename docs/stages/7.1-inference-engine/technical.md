@@ -1330,4 +1330,8 @@ exit=0
 **Contexto:** na Task 01, o `record(..., split="calib")` do `InMemoryCohortRunIndex` criava um órfão quando o run ainda não existia. O ADR 7.1.0002 item 4 não prevê isso (diz "discards non-test entries"), e nenhum contrato exercitava o caso.
 **O que mudou:** agora o registro de calib é descartado sem efeito algum. Num run só com calib, o órfão vem do `record(..., rows=0)` de teste, como a perna fake do contrato já fazia. Os dois testes de calib continuam verdes nas duas pernas.
 
+### 2026-10-06 — [deviation] task-03-fix — chaves de `settings` fixadas no port `TftCheckpointPredictor` (Checkpoint C, C1-4) — Claude (Opus 5.5)
+**Contexto:** o contrato do predictor não fixava as chaves de `settings`, e o fake devolvia só cinco das oito que o adapter real produz.
+**O que mudou:** o port ganhou `SETTINGS_KEYS` (`batch_size`, `num_workers`, `accelerator`, `num_threads`, `deterministic_algorithms`, `cpu_capability`, `platform`, `scikit-learn`), documentados conforme o concept §4 e o ADR 7.1.0004 item 4. O fake passou a devolver as oito, e o contrato confere, nas duas pernas, o conjunto exato e os valores fixos.
+
 <!-- END: post-execution -->
