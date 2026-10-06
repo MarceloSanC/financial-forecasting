@@ -26,6 +26,7 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
     GOLD_DM_RESULTS,
     GOLD_MCS_RESULTS,
     GOLD_METRICS_BY_RUN,
+    GOLD_QUALITY_CHECKS,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldGenerationCorruptError,
@@ -475,4 +476,28 @@ def test_mcs_horizon_of_wrong_type_alone_is_named_corruption() -> None:
     with pytest.raises(
         GoldGenerationCorruptError, match=r"gold_mcs_results\.horizon: expected int"
     ):
+        _map(stored)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("column", ["severity", "outcome"])
+def test_quality_check_cell_of_wrong_type_is_named_corruption(column: str) -> None:
+    """Checkpoint C bloco 2 (T4): `severity`/`outcome` de tipo errado num `COMPLETED` é
+    corrupção nomeada (com `col` cru, `1 != "ERROR"` passaria calado)."""
+    stored = make_stored(_PLAN)
+    assert stored.set_cell(GOLD_QUALITY_CHECKS.name, lambda _row: True, column, 1)
+    with pytest.raises(
+        GoldGenerationCorruptError, match=rf"gold_quality_checks\.{column}: expected str"
+    ):
+        _map(stored)
+
+
+@pytest.mark.unit
+def test_outcome_of_wrong_type_on_a_non_error_row_is_corruption() -> None:
+    """Checkpoint C bloco 2 (B1): o tipo do `outcome` é conferido em toda linha, não só nas
+    de severidade ERROR (sem curto-circuito)."""
+    stored = make_stored(_PLAN)
+    assert stored.set_cell(GOLD_QUALITY_CHECKS.name, lambda _row: True, "severity", "warn")
+    assert stored.set_cell(GOLD_QUALITY_CHECKS.name, lambda _row: True, "outcome", 123)
+    with pytest.raises(GoldGenerationCorruptError, match=r"gold_quality_checks\.outcome"):
         _map(stored)

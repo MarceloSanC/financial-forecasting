@@ -258,10 +258,10 @@ def check_completed(tables: _Tables) -> None:
                 f"max_block_estimate {estimate!r} (the block rule needs a finite number >= 0)"
             )
     for row in tables.checks:
-        failed = (
-            col_str(row, GOLD_QUALITY_CHECKS, "severity") == CheckSeverity.ERROR.value
-            and col_str(row, GOLD_QUALITY_CHECKS, "outcome") == CheckOutcome.FAIL.value
-        )
+        # os dois tipos conferidos em toda linha (sem curto-circuito do `and`)
+        severity = col_str(row, GOLD_QUALITY_CHECKS, "severity")
+        outcome = col_str(row, GOLD_QUALITY_CHECKS, "outcome")
+        failed = severity == CheckSeverity.ERROR.value and outcome == CheckOutcome.FAIL.value
         if failed:
             raise GoldGenerationCorruptError(
                 f"a COMPLETED generation holds the blocking check "
