@@ -26,9 +26,12 @@ As colunas são lidas **só** pelo schema (`gold_schema`): uma coluna fora de `k
 linhas com `band_level == gate_band_level` (a calibração tem uma linha por nível de
 banda, com as mesmas contagens por construção da 6.4).
 
-As células são lidas pelos acessores tipados de `refresh_gold` (`col_int`,
+A evidência é montada pelos acessores tipados de `refresh_gold` (`col_int`,
 `col_float`, `col_bool`, ...; F6): tipo divergente do schema é corrupção nomeada
-(`GoldGenerationCorruptError`), não deriva silenciosa.
+(`GoldGenerationCorruptError`), não deriva silenciosa. As fases 1-3 (mismatch) leem com
+`col` cru **de propósito** — comparam valores e conjuntos por igualdade, e um acessor
+tipado ali ergueria corrupção antes de um mismatch posterior, quebrando a regra
+"todo mismatch antes de toda corrupção"; o tipo é conferido na fase 4/5.
 """
 
 from __future__ import annotations
@@ -226,10 +229,11 @@ def _block_rule(row: Row) -> int | None:
     # finitude e o sinal são do dono da regra
     if isinstance(estimate, bool) or not isinstance(estimate, int | float):
         return None
+    horizon = col(row, GOLD_MCS_RESULTS, "horizon")
+    if isinstance(horizon, bool) or not isinstance(horizon, int):
+        return None  # horizonte de tipo errado: corrupção, depois de todo mismatch
     try:
-        return block_length_rule(
-            horizon=col_int(row, GOLD_MCS_RESULTS, "horizon"), max_estimate=estimate
-        )
+        return block_length_rule(horizon=horizon, max_estimate=estimate)
     except ValueError:
         return None
 

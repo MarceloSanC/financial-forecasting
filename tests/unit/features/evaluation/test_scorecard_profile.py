@@ -22,6 +22,9 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
     GOLD_DM_RESULTS,
     GOLD_MCS_RESULTS,
 )
+from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    GoldGenerationCorruptError,
+)
 from financial_forecasting.features.evaluation.application.use_cases.scorecard_evidence import (
     evidence_from_generation,
 )
@@ -376,3 +379,21 @@ def test_profile_moving_block_divergence_without_scheme() -> None:
     profile = _profile_for(plan, make_stored(plan))
 
     assert profile.horizons[0].mcs_moving_block_divergence is False
+
+
+@pytest.mark.unit
+def test_profile_p_ind_of_wrong_type_is_named_corruption() -> None:
+    """Checkpoint C bloco 1 (T2, F6): célula `p_ind` nula numa linha "applicable" é
+    corrupção nomeada (antes: `TypeError` cru na comparação com alpha)."""
+    stored = make_stored(_PLAN)
+    hits = stored.set_cell(
+        GOLD_CALIBRATION_TABLE.name,
+        _is(independence_status="applicable", band_level=_PLAN.h1_gate.profile_band_level),
+        "p_ind",
+        None,
+    )
+    assert hits
+    with pytest.raises(
+        GoldGenerationCorruptError, match=r"gold_calibration_table\.p_ind: expected float"
+    ):
+        _profile(stored)

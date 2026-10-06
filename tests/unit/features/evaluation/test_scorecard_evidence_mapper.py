@@ -450,3 +450,16 @@ def test_evidence_pinball_seed_mean() -> None:
     assert evidence[0].mean_pinball[_CAND] == pytest.approx(0.25)  # type: ignore[index]
     verdict = ConfirmatoryScorecard.decide(_PLAN, evidence)  # type: ignore[arg-type]
     assert verdict.horizons[0].candidate_has_lowest_mean_pinball is False
+
+
+@pytest.mark.unit
+def test_mcs_horizon_of_wrong_type_does_not_mask_a_later_mismatch() -> None:
+    """Checkpoint C bloco 1 (C1): horizonte de tipo errado numa linha do MCS é corrupção,
+    conferida **depois** de todo mismatch — o mismatch de bloco numa linha posterior vence."""
+    stored = make_stored(_PLAN)
+    first = _is(horizon=1, scheme="moving_block", model="baseline_ar1")
+    later = _is(horizon=7, scheme="stationary", model=_CAND)
+    assert stored.set_cell(GOLD_MCS_RESULTS.name, later, "block_size", 99)
+    assert stored.set_cell(GOLD_MCS_RESULTS.name, first, "horizon", 1.0)
+
+    _mismatch(stored, MismatchField.MCS_BLOCK_RULE)

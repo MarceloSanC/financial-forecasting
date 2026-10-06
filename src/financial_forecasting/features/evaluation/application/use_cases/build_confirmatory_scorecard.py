@@ -51,7 +51,6 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     FailedCheck,
     GoldGeneration,
     RefreshStatus,
-    col,
     col_int,
     col_int_or_none,
     col_str,
@@ -113,16 +112,16 @@ def _failed_checks(generation: GoldGeneration) -> tuple[FailedCheck, ...]:
             detail=col_str(row, schema, "detail"),
         )
         for row in generation.table(schema).rows
-        if col(row, schema, "severity") == CheckSeverity.ERROR.value
-        and col(row, schema, "outcome") == CheckOutcome.FAIL.value
+        if col_str(row, schema, "severity") == CheckSeverity.ERROR.value
+        and col_str(row, schema, "outcome") == CheckOutcome.FAIL.value
     )
 
 
 def _required_check_skipped(generation: GoldGeneration) -> bool:
     schema = GOLD_QUALITY_CHECKS
     return any(
-        col(row, schema, "check") in REQUIRED_CHECKS
-        and col(row, schema, "outcome") == CheckOutcome.SKIPPED.value
+        col_str(row, schema, "check") in REQUIRED_CHECKS
+        and col_str(row, schema, "outcome") == CheckOutcome.SKIPPED.value
         for row in generation.table(schema).rows
     )
 

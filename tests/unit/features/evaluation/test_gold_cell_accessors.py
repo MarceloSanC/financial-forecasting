@@ -20,6 +20,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     Row,
     col,
     col_bool,
+    col_bool_or_none,
     col_float,
     col_float_or_none,
     col_int,
@@ -59,6 +60,8 @@ def test_col_reads_key_and_read_columns_only() -> None:
         (col_float_or_none, 1, 1.0),
         (col_str_or_none, None, None),
         (col_str_or_none, "y", "y"),
+        (col_bool_or_none, None, None),
+        (col_bool_or_none, False, False),
     ],
 )
 def test_accepted_values(
@@ -91,18 +94,33 @@ def test_col_float_returns_a_float_for_an_int_cell() -> None:
         (col_int_or_none, True, "int"),
         (col_float_or_none, "x", "float"),
         (col_str_or_none, 2, "str"),
+        (col_float_or_none, True, "float"),
+        (col_bool_or_none, 1, "bool"),
     ],
 )
 def test_refused_values_name_table_and_column(
     accessor: Callable[[Row, GoldTableSchema, str], object], value: object, expected_name: str
 ) -> None:
     with pytest.raises(
-        GoldGenerationCorruptError, match=rf"gold_example\.v: expected {expected_name}"
+        GoldGenerationCorruptError,
+        match=rf"gold_example\.v: expected {expected_name}, got {type(value).__name__} ",
     ):
         accessor(_row(value), _SCHEMA, "v")
 
 
-@pytest.mark.parametrize("accessor", [col_int, col_float, col_bool, col_str, col_int_or_none])
+@pytest.mark.parametrize(
+    "accessor",
+    [
+        col_int,
+        col_float,
+        col_bool,
+        col_str,
+        col_int_or_none,
+        col_float_or_none,
+        col_str_or_none,
+        col_bool_or_none,
+    ],
+)
 def test_typed_accessors_keep_the_schema_rule(
     accessor: Callable[[Row, GoldTableSchema, str], object],
 ) -> None:

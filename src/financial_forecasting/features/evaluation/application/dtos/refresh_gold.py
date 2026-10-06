@@ -623,6 +623,11 @@ def col_bool(row: Row, schema: GoldTableSchema, column: str) -> bool:
     return value
 
 
+def col_bool_or_none(row: Row, schema: GoldTableSchema, column: str) -> bool | None:
+    """Como `col_bool`, aceitando `None`."""
+    return None if col(row, schema, column) is None else col_bool(row, schema, column)
+
+
 def col_str(row: Row, schema: GoldTableSchema, column: str) -> str:
     """A célula como `str`; outro tipo → `GoldGenerationCorruptError`."""
     value = col(row, schema, column)

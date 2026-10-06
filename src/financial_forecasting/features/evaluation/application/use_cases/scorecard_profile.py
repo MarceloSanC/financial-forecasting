@@ -44,8 +44,8 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldGeneration,
     Row,
-    col,
     col_bool,
+    col_bool_or_none,
     col_float,
     col_float_or_none,
     col_int,
@@ -211,17 +211,19 @@ def _calibration_series(
     schema = GOLD_CALIBRATION_TABLE
     groups: dict[_CalibrationKey, list[Row]] = defaultdict(list)
     for row in rows:
-        if col(row, schema, "horizon") != horizon:
+        if col_int(row, schema, "horizon") != horizon:
             continue
-        if col(row, schema, "band_level") != prereg.h1_gate.profile_band_level:
+        if col_float(row, schema, "band_level") != prereg.h1_gate.profile_band_level:
             continue
         groups[_calibration_key(row)].append(row)
     alpha = prereg.h1_gate.sensitivity_alpha
     series: list[CalibrationSeriesProfile] = []
     for key, members in groups.items():
-        contains = [col(r, schema, "wilson_contains_nominal") for r in members]
+        contains = [col_bool_or_none(r, schema, "wilson_contains_nominal") for r in members]
         applicable = [
-            r for r in members if col(r, schema, "independence_status") == _INDEPENDENCE_APPLICABLE
+            r
+            for r in members
+            if col_str(r, schema, "independence_status") == _INDEPENDENCE_APPLICABLE
         ]
         series.append(
             CalibrationSeriesProfile(
@@ -259,14 +261,14 @@ def _without_gaps(
         members = [
             r
             for r in rows
-            if col(r, schema, "model") == prereg.candidate
-            and col(r, schema, "horizon") == horizon
-            and col(r, schema, "sample") == GATE_SAMPLE
-            and col(r, schema, "kind") == kind
-            and col(r, schema, "level_low") == level
-            and col(r, schema, "includes_degenerate") is True
-            and col(r, schema, "dgt_offset") is None
-            and col(r, schema, "band_level") == gate.gate_band_level
+            if col_str(r, schema, "model") == prereg.candidate
+            and col_int(r, schema, "horizon") == horizon
+            and col_str(r, schema, "sample") == GATE_SAMPLE
+            and col_str(r, schema, "kind") == kind
+            and col_float(r, schema, "level_low") == level
+            and col_bool(r, schema, "includes_degenerate")
+            and col_int_or_none(r, schema, "dgt_offset") is None
+            and col_float(r, schema, "band_level") == gate.gate_band_level
         ]
         if members:
             summaries.append(
@@ -284,7 +286,7 @@ def _descriptors(rows: Sequence[Row], horizon: int) -> tuple[DescriptorProfile, 
     schema = GOLD_METRICS_BY_RUN
     groups: dict[tuple[str, str, str, float | None, float | None], list[float]] = defaultdict(list)
     for row in rows:
-        if col(row, schema, "horizon") != horizon:
+        if col_int(row, schema, "horizon") != horizon:
             continue
         key = (
             col_str(row, schema, "model"),
