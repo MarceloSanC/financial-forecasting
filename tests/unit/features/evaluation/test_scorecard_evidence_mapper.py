@@ -501,3 +501,32 @@ def test_outcome_of_wrong_type_on_a_non_error_row_is_corruption() -> None:
     assert stored.set_cell(GOLD_QUALITY_CHECKS.name, lambda _row: True, "outcome", 123)
     with pytest.raises(GoldGenerationCorruptError, match=r"gold_quality_checks\.outcome"):
         _map(stored)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("monte_carlo_draws", 499),
+        ("monte_carlo_seed", 7),
+        ("mcs_block_sensitivities", ["h"]),
+        (
+            "profile_parameters",
+            {
+                "subset_multiplicity": "none_raw_p_descriptive_v1",
+                "partial_degeneracy_pairs": "symmetric_and_adjacent_non_degenerate_rows_v1",
+                "mcs_block_sensitivity_scheme": "primary_scheme",
+                "stationarity": {
+                    "acf_max_lag": "min_floor_10_log10_T_T_minus_1",
+                    "break_test": "cusum_mean_dm_primary_variance_kolmogorov_v1",
+                    "break_alpha": 0.05,
+                },
+            },
+        ),
+    ],
+)
+def test_mismatch_on_each_profile_parameter(key: str, value: object) -> None:
+    """Stage 6.6 (CA9): `check_manifest` recusa divergência em cada campo novo."""
+    stored = make_stored(_PLAN)
+    stored.manifest["parameters"][key] = value  # type: ignore[index]
+    _mismatch(stored, MismatchField.PARAMETERS)

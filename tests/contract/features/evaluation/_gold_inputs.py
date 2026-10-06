@@ -74,6 +74,7 @@ from financial_forecasting.shared.domain.value_objects.dataset_content_fingerpri
     DatasetContentFingerprint,
 )
 from tests.fakes.features.evaluation.fake_mcs_backend import FakeMcsBackend
+from tests.unit.features.evaluation._profile_parameters import profile_parameters
 from tests.unit.features.evaluation.gold._cohort_factory import (
     Cohort,
     at_point,
@@ -99,6 +100,10 @@ PARAMETERS = RefreshParameters(
     mcs_reps=1000,
     mcs_seed=20260929,
     mcs_schemes=(BootstrapScheme.STATIONARY, BootstrapScheme.MOVING_BLOCK),
+    monte_carlo_draws=19,
+    monte_carlo_seed=128,
+    mcs_block_sensitivities=("h", "sqrt_T"),
+    profile_parameters=profile_parameters(),  # forma da r1: todo builder de perfil com linhas
 )
 FINGERPRINT = DatasetContentFingerprint(value="e3" * 32)
 GRID_TRIMMED_PREFIX = 3

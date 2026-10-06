@@ -43,6 +43,10 @@ from financial_forecasting.features.evaluation.domain.value_objects.quality_chec
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
     DatasetContentFingerprint,
 )
+from tests.unit.features.evaluation._profile_parameters import (
+    profile_block,
+    profile_parameters,
+)
 
 _PREREG = "prereg-test-0001"  # literal declarado até a 6.5 fornecer o hash congelado
 _VALID: dict[str, object] = {
@@ -57,6 +61,10 @@ _VALID: dict[str, object] = {
     "mcs_reps": 1000,
     "mcs_seed": 20260929,
     "mcs_schemes": (BootstrapScheme.STATIONARY, BootstrapScheme.MOVING_BLOCK),
+    "monte_carlo_draws": 999,
+    "monte_carlo_seed": 128,
+    "mcs_block_sensitivities": ("h", "sqrt_T"),
+    "profile_parameters": None,
 }
 _PARAMETERS = RefreshParameters(**_VALID)  # type: ignore[arg-type]
 _NOW = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
@@ -99,6 +107,19 @@ def test_parameters_no_default(missing: str) -> None:
             {"dm_variance_estimators": ("rectangular",)}, "DmVarianceEstimator", id="estimator"
         ),
         pytest.param({"mcs_schemes": ("stationary",)}, "BootstrapScheme", id="scheme"),
+        pytest.param({"monte_carlo_draws": 0}, "draws", id="mc-draws"),
+        pytest.param({"monte_carlo_draws": True}, "draws", id="mc-draws-bool"),
+        pytest.param({"monte_carlo_seed": True}, "seed must be an int (not bool)", id="mc-seed"),
+        pytest.param(
+            {"mcs_block_sensitivities": ("sqrt_t",)}, "mcs_block_sensitivities", id="block-rule"
+        ),
+        pytest.param(
+            {"mcs_block_sensitivities": ["h"]}, "mcs_block_sensitivities", id="block-list"
+        ),
+        pytest.param({"mcs_block_sensitivities": ("h", "h")}, "must not repeat", id="block-repeat"),
+        pytest.param(
+            {"profile_parameters": {"subset_multiplicity": "x"}}, "ProfileParameters", id="rules"
+        ),
     ],
 )
 def test_parameters_owner_messages(changes: dict[str, object], message: str) -> None:
@@ -607,3 +628,38 @@ def test_from_stored_other_partition_corrupt() -> None:
 
     with pytest.raises(GoldGenerationCorruptError, match="read as"):
         GoldGeneration.from_stored(manifest, rows, partition=GoldPartition("AAPL", "sweep-02"))
+
+
+# --- Stage 6.6 Task 12: parâmetros de perfil (F8a) ------------------------------------
+
+
+@pytest.mark.unit
+def test_parameters_with_profile_rules_round_trip() -> None:
+    parameters = _parameters(profile_parameters=profile_parameters(), mcs_block_sensitivities=())
+    mapping = parameters.as_mapping()
+    assert mapping["profile_parameters"] == profile_block()
+    assert mapping["mcs_block_sensitivities"] == []
+    assert RefreshParameters.from_mapping(mapping) == parameters
+    assert RefreshParameters.from_mapping(json.loads(json.dumps(mapping))) == parameters
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "key",
+    ["monte_carlo_draws", "monte_carlo_seed", "mcs_block_sensitivities", "profile_parameters"],
+)
+def test_new_parameter_keys_are_required(key: str) -> None:
+    mapping = {k: v for k, v in _PARAMETERS.as_mapping().items() if k != key}
+    with pytest.raises(ValueError, match=key):
+        RefreshParameters.from_mapping(mapping)
+
+
+@pytest.mark.unit
+def test_manifest_without_the_new_keys_is_corrupt() -> None:
+    """Geração anterior à 6.6 (manifesto sem as chaves de perfil) não lê (D6)."""
+    manifest = _manifest().as_mapping()
+    parameters = {k: v for k, v in manifest["parameters"].items() if k != "profile_parameters"}  # type: ignore[union-attr]
+    with pytest.raises(GoldGenerationCorruptError, match="profile_parameters"):
+        GoldGeneration.from_stored(
+            {**manifest, "parameters": parameters}, {}, partition=_manifest().partition
+        )

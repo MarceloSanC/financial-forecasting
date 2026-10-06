@@ -113,6 +113,10 @@ _PARAMETERS = RefreshParameters(
     mcs_reps=1500,  # ≠ MIN_MCS_REPS: o repasse de `reps` é distinguível do piso (A2)
     mcs_seed=20260929,
     mcs_schemes=(BootstrapScheme.STATIONARY, BootstrapScheme.MOVING_BLOCK),
+    monte_carlo_draws=999,
+    monte_carlo_seed=128,
+    mcs_block_sensitivities=("h", "sqrt_T"),
+    profile_parameters=None,
 )
 _WARMUP = 3  # linhas de aquecimento com NaN numa feature, aparadas pela grade
 _GRID_COLUMNS = ("feat_a", "target_return")

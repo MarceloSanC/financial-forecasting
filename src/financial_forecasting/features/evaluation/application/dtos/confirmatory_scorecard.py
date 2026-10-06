@@ -46,7 +46,9 @@ def refresh_command_from(prereg: Preregistration, reference: str) -> RefreshGold
     `asset` e `horizons` do plano; `parent_sweep_id` = o `cohort_id` referenciado;
     `window_deficits` e `dataset_fingerprint` (do realizado) do plano; os
     `RefreshParameters` com `preregistration_ref = reference`, as bandas do gate e do
-    perfil ordenadas, e o primário seguido das sensibilidades no DM e no MCS.
+    perfil ordenadas, e o primário seguido das sensibilidades no DM e no MCS; e, da
+    Stage 6.6 (F8a), o `draws`/`seed` do Monte Carlo, as sensibilidades de bloco do MCS e
+    o bloco de regras de perfil da revisão (`None` no r0).
     """
     gate = prereg.h1_gate
     parameters = RefreshParameters(
@@ -61,6 +63,10 @@ def refresh_command_from(prereg: Preregistration, reference: str) -> RefreshGold
         mcs_reps=prereg.mcs.reps,
         mcs_seed=prereg.mcs.seed,
         mcs_schemes=(prereg.mcs.primary_scheme, *prereg.mcs.sensitivity_schemes),
+        monte_carlo_draws=prereg.monte_carlo.draws,
+        monte_carlo_seed=prereg.monte_carlo.seed,
+        mcs_block_sensitivities=prereg.mcs.block_sensitivities,
+        profile_parameters=prereg.profile_parameters,
     )
     return RefreshGoldCommand(
         asset=prereg.asset,

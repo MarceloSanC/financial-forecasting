@@ -118,6 +118,10 @@ _PARAMETERS = RefreshParameters(
     mcs_reps=1000,
     mcs_seed=20260929,
     mcs_schemes=_SCHEMES,
+    monte_carlo_draws=999,
+    monte_carlo_seed=128,
+    mcs_block_sensitivities=("h", "sqrt_T"),
+    profile_parameters=None,
 )
 
 Rows = list[tuple[object, ...]]

@@ -36,6 +36,7 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
     GoldTableSchema,
 )
 from financial_forecasting.features.evaluation.domain.services.christoffersen_test import (
+    validate_draws_and_seed,
     validate_min_violations,
 )
 from financial_forecasting.features.evaluation.domain.services.count_input_validation import (
@@ -51,6 +52,7 @@ from financial_forecasting.features.evaluation.domain.services.inference_input_v
     validate_alpha,
 )
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
+    BLOCK_SENSITIVITIES,
     McsReport,
     validate_mcs_reps,
 )
@@ -66,6 +68,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.block_estima
 from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
     BootstrapScheme,
     validate_bootstrap_parameters,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.profile_parameters import (
+    ProfileParameters,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.quality_check_result import (
     QualityCheckResult,
@@ -145,6 +150,10 @@ class RefreshParameters:
     mcs_reps: int
     mcs_seed: int
     mcs_schemes: tuple[BootstrapScheme, ...]
+    monte_carlo_draws: int
+    monte_carlo_seed: int
+    mcs_block_sensitivities: tuple[str, ...]
+    profile_parameters: ProfileParameters | None
 
     def __post_init__(self) -> None:
         """Presença, estrutura e os validadores públicos donos (ADR `6_4_0006` item 2)."""
@@ -169,6 +178,23 @@ class RefreshParameters:
         for scheme in self.mcs_schemes:
             if not isinstance(scheme, BootstrapScheme):
                 raise ValueError(f"mcs_schemes must hold BootstrapScheme, got {scheme!r}")
+        # Stage 6.6 (F8a): os parâmetros dos perfis pelos donos (ADR 6.6.0002 item 5)
+        validate_draws_and_seed(self.monte_carlo_draws, self.monte_carlo_seed)
+        blocks = self.mcs_block_sensitivities
+        if not isinstance(blocks, tuple) or any(b not in BLOCK_SENSITIVITIES for b in blocks):
+            raise ValueError(
+                f"mcs_block_sensitivities must be a tuple of {list(BLOCK_SENSITIVITIES)}, "
+                f"got {blocks!r}"
+            )
+        if len(set(blocks)) != len(blocks):
+            raise ValueError(f"mcs_block_sensitivities must not repeat values, got {blocks}")
+        if self.profile_parameters is not None and not isinstance(
+            self.profile_parameters, ProfileParameters
+        ):
+            raise ValueError(
+                f"profile_parameters must be a ProfileParameters or None, got "
+                f"{self.profile_parameters!r}"
+            )
 
     def as_mapping(self) -> dict[str, object]:
         """Os parâmetros em forma JSON-safe (enums pelo valor, tuplas como listas)."""
@@ -184,6 +210,12 @@ class RefreshParameters:
             "mcs_reps": self.mcs_reps,
             "mcs_seed": self.mcs_seed,
             "mcs_schemes": [s.value for s in self.mcs_schemes],
+            "monte_carlo_draws": self.monte_carlo_draws,
+            "monte_carlo_seed": self.monte_carlo_seed,
+            "mcs_block_sensitivities": list(self.mcs_block_sensitivities),
+            "profile_parameters": (
+                None if self.profile_parameters is None else self.profile_parameters.as_payload()
+            ),
         }
 
     @classmethod
@@ -209,6 +241,19 @@ class RefreshParameters:
             mcs_reps=fields["mcs_reps"],  # type: ignore[arg-type]
             mcs_seed=fields["mcs_seed"],  # type: ignore[arg-type]
             mcs_schemes=tuple(BootstrapScheme(str(v)) for v in schemes),
+            monte_carlo_draws=fields["monte_carlo_draws"],  # type: ignore[arg-type]
+            monte_carlo_seed=fields["monte_carlo_seed"],  # type: ignore[arg-type]
+            mcs_block_sensitivities=tuple(
+                str(v)
+                for v in _as_list(
+                    fields["mcs_block_sensitivities"], field="mcs_block_sensitivities"
+                )
+            ),
+            profile_parameters=(
+                None
+                if fields["profile_parameters"] is None
+                else ProfileParameters.from_mapping(fields["profile_parameters"])
+            ),
         )
 
 
@@ -224,6 +269,10 @@ _PARAMETER_KEYS = (
     "mcs_reps",
     "mcs_seed",
     "mcs_schemes",
+    "monte_carlo_draws",
+    "monte_carlo_seed",
+    "mcs_block_sensitivities",
+    "profile_parameters",
 )
 
 
