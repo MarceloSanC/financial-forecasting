@@ -45,7 +45,7 @@ def paired_pinball_losses(
     *,
     level: float | None = None,
 ) -> PairedLossSeries:
-    """Monta a `PairedLossSeries` de L_t a partir das séries de cada modelo.
+    """Monta a `PairedLossSeries` de L_t (ou de rho_τ, com `level`) das séries de cada modelo.
 
     Args:
         series_by_model: modelo → S ≥ 1 `CoverageSeries` (uma por seed), todas do mesmo

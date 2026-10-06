@@ -211,3 +211,33 @@ def test_factory_one_candidate_seed_is_the_per_seed_series(make_series: SeriesFa
     assert paired.losses_of("cand") == PinballScore.per_point_losses(seeds[1])
     full = paired_pinball_losses({"cand": seeds, "comp": comparator_seeds})
     assert paired.losses_of("comp") == full.losses_of("comp")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("level", "expected"),
+    [
+        # q = -1,0; y = (0,25, -0,75, 1,5, 0,0, -2,0); u = y - q; rho = u (tau - 1{u<0})
+        (0.125, (0.15625, 0.03125, 0.3125, 0.125, 0.875)),
+        # q = 1,0; u = (-0,75, -1,75, 0,5, -1,0, -3,0)
+        (0.875, (0.09375, 0.21875, 0.4375, 0.125, 0.375)),
+    ],
+)
+def test_per_point_losses_at_absolute_values(
+    make_series: SeriesFactory, level: float, expected: tuple[float, ...]
+) -> None:
+    """Checkpoint C bloco 2 (T1): oráculo absoluto (diádicos, `==`) — pega devolver L_t ou
+    trocar o nível pelo espelhado, que a identidade da média sobre os níveis não pega."""
+    series = _build(make_series, 0.0)
+    assert PinballScore.per_point_losses_at(series, level) == expected
+    assert PinballScore.per_point_losses_at(series, 0.125) != PinballScore.per_point_losses_at(
+        series, 0.875
+    )
+
+
+@pytest.mark.unit
+def test_factory_level_outside_the_grid_raises(make_series: SeriesFactory) -> None:
+    """Checkpoint C bloco 2 (N1): nível fora da grade recusado pelo dono (`per_point_losses_at`)."""
+    first, second = _build(make_series, 0.25), _build(make_series, -0.5)
+    with pytest.raises(ValueError, match="is not in the grid"):
+        paired_pinball_losses({"cand": [first], "comp": [second]}, level=0.5)
