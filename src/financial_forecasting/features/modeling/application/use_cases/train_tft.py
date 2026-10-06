@@ -412,13 +412,17 @@ class TrainTft:
         """Executa o fluxo por fold e devolve um summary por fold (ver módulo)."""
         _validate_command(command)  # C2 — antes de qualquer I/O
 
-        unknown_names = unknown_feature_names()
-        known_names = known_feature_names()
-        feature_names = unknown_names + known_names
-
-        dataset_timestamps, returns, sessions, feature_rows = self._load_dataset(
-            command.scope, feature_names
-        )  # C1/C6
+        # Painel e tipagem pela MESMA função que a predição a partir do checkpoint
+        # usa (Stage 7.1): a ordem desconhecidas + conhecidas tem uma definição só.
+        panel = load_tft_panel(store=self._store, asset_id=command.scope.asset_id)  # C1/C6
+        feature_names = panel.feature_names
+        known_names = panel.known_feature_names
+        dataset_timestamps, returns, sessions, feature_rows = (
+            panel.timestamps,
+            panel.target,
+            panel.sessions,
+            panel.rows,
+        )
         folds = self._splitter.split(
             sessions,
             command.scope,
@@ -599,7 +603,10 @@ class TrainTft:
     ) -> tuple[tuple[str, ...], tuple[float, ...], tuple[date, ...], tuple[tuple[float, ...], ...]]:
         """Lê o dataset TFT pelo grid único: (timestamps ISO, target_return, sessões, matriz).
 
-        Delega ao corpo único `_read_panel` (o mesmo de `load_tft_panel`).
+        Delega ao corpo único `_read_panel` (o mesmo de `load_tft_panel`). O fluxo do
+        use case lê por `load_tft_panel`; este método fica para a caracterização da
+        5.5 (`test_dataset_loading_characterization.py`), que o chama com colunas
+        arbitrárias.
         """
         panel = _read_panel(
             store=self._store,
