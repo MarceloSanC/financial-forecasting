@@ -9,7 +9,7 @@ itens 2-3). Antes cada builder da 6.4 tinha a sua chave privada (`_KEY`) e o nom
 - `read_columns` — as colunas fora da chave que o scorecard e o perfil leem por
   nome; nenhuma outra coluna é lida por nome fora deste schema.
 
-Consumidores: os cinco builders (`build` devolve a tabela com `name`/`key` daqui) e
+Consumidores: os treze builders (`build` devolve a tabela com `name`/`key` daqui) e
 `GoldGeneration.from_stored` (monta cada tabela lida com a chave daqui).
 """
 

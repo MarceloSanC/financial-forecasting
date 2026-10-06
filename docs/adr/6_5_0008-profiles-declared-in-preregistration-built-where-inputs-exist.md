@@ -20,7 +20,8 @@ bounded_context: evaluation
 
 > **Note (2026-10-06, Stage 6.6, issue #129).** The follow-up of item 3 became Stage
 > 6.6 (`6.6-scorecard-profiles`), which builds the new-series profiles as eight gold
-> tables read by the scorecard profile and never by the verdict (ADR 6.6.0002). Two
+> tables — seven read by the scorecard profile, the loss differentials feeding the 8.3
+> plots — none read by the verdict (ADR 6.6.0002). Two
 > statements of this ADR are corrected: "with its parameters" and "no amendment
 > needed". The r0 did freeze the degeneracy tolerance, the Monte Carlo draws and seed
 > and the MCS block lengths (l = h, l = ⌈√T⌉); it did **not** name the rules of the

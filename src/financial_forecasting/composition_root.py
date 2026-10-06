@@ -49,7 +49,7 @@ Stage 6.4 (Tasks 12/15): o use case `RefreshGold` é montado aqui com o
 modelagem (como `TrainingGridReader`, ADR 6.4.0009), o `CanonicalJsonHasher`, o
 `SystemClock`, o `ArchMcs` atrás do proxy lazy `_LazyArchMcs` (`import arch` ~8 s a
 frio, medido no technical 6.4 §1 — só carrega na primeira chamada), o
-`ParquetGoldStore(data_root)` e os cinco gold builders.
+`ParquetGoldStore(data_root)` e os treze gold builders (cinco da 6.4, oito de perfil da 6.6).
 """
 
 from collections.abc import Callable, Mapping, Sequence
