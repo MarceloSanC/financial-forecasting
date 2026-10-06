@@ -40,6 +40,17 @@ from tests.unit.features.evaluation._preregistration_payload import (
     without_key,
 )
 
+_PROFILE_BLOCK: dict[str, object] = {
+    "subset_multiplicity": "none_raw_p_descriptive_v1",
+    "partial_degeneracy_pairs": "symmetric_and_adjacent_non_degenerate_rows_v1",
+    "mcs_block_sensitivity_scheme": "primary_scheme",
+    "stationarity": {
+        "acf_max_lag": "min_floor_10_log10_T_T_minus_1",
+        "break_test": "cusum_mean_dm_primary_variance_kolmogorov_v1",
+        "break_alpha": 0.05,
+    },
+}
+
 _R1_AMENDMENT: dict[str, object] = {
     "revision": 1,
     "amends": "test_plan-r0-0123456789ab",
@@ -494,3 +505,47 @@ def test_prereg_nested_optional_key_rejected(path: str) -> None:
 def test_prereg_repeated_list_values_rejected(path: str, value: object, message: str) -> None:
     """Auditoria F6b/F7: valores repetidos nas listas erguem pela mensagem da regra."""
     _raises(with_leaf(valid_payload(), path, value), message)
+
+
+# --- Stage 6.6 Task 08: bloco opcional `profile_parameters` -----------------------------
+
+
+@pytest.mark.unit
+def test_prereg_profile_parameters_absent_in_r0() -> None:
+    plan = _plan()
+    assert plan.profile_parameters is None
+    assert "profile_parameters" not in plan.as_payload()
+
+
+@pytest.mark.unit
+def test_prereg_profile_parameters_round_trip() -> None:
+    payload = {**valid_payload(), **_R1_AMENDMENT, "profile_parameters": _PROFILE_BLOCK}
+    plan = _plan(payload)
+    assert plan.profile_parameters is not None
+    assert plan.profile_parameters.stationarity.break_alpha == 0.05  # noqa: PLR2004
+    assert plan.as_payload()["profile_parameters"] == _PROFILE_BLOCK
+    assert Preregistration.from_mapping(plan.as_payload()) == plan
+    assert tomllib.loads(to_toml(plan.as_payload())) == plan.as_payload()
+
+
+@pytest.mark.unit
+def test_prereg_profile_parameters_rule_outside_the_catalog() -> None:
+    block = {**_PROFILE_BLOCK, "subset_multiplicity": "holm_within_subset"}
+    _raises(
+        {**valid_payload(), "profile_parameters": block},
+        r"profile_parameters\.subset_multiplicity must be",
+    )
+
+
+@pytest.mark.unit
+def test_prereg_profile_parameters_nested_unknown_key() -> None:
+    block = {**_PROFILE_BLOCK, "extra": 1}
+    _raises(
+        {**valid_payload(), "profile_parameters": block}, "unknown key 'profile_parameters.extra'"
+    )
+
+
+@pytest.mark.unit
+def test_prereg_profile_parameters_only_at_the_top() -> None:
+    with pytest.raises(ValueError, match="unknown key"):
+        Preregistration.from_mapping(with_leaf(valid_payload(), "mcs.profile_parameters", "x"))

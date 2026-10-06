@@ -5,9 +5,10 @@ D4, D9, I1-I4, I14, C1; ADRs `6_5_0001` item 2, `6_5_0002` item 1, `6_5_0004`
 itens 1-2, `6_5_0009`, `6_5_0010`). Um arquivo TOML por revisão é lido pelo
 adapter e entregue aqui como mapeamento; `Preregistration.from_mapping`:
 
-1. recusa chave desconhecida e chave ausente, nomeando o caminho pontuado (a
-   única chave opcional é `blinding_statement`; os três campos de emenda são
-   proibidos em r0 e obrigatórios em r ≥ 1 — ADR 6.5.0002);
+1. recusa chave desconhecida e chave ausente, nomeando o caminho pontuado (as
+   chaves opcionais são `blinding_statement` e o bloco `profile_parameters` —
+   Stage 6.6, conferido pelo seu VO, ADR 6.6.0001 item 5; os três campos de emenda
+   são proibidos em r0 e obrigatórios em r ≥ 1 — ADR 6.5.0002);
 2. coage cada número ao tipo declarado — `float` aceita `int`/`float` não-`bool`
    e guarda `float` (`0` e `0.0` são o mesmo plano); `int` aceita só `int`
    não-`bool` (float, mesmo integral, é erro);
@@ -74,6 +75,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     is_symmetric_pair,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.profile_parameters import (
+    ProfileParameters,
 )
 from financial_forecasting.shared.domain.services.path_identifier import (
     validate_path_identifier,
@@ -583,7 +587,7 @@ _SCHEMA: Final[Mapping[str, object]] = {
     "backtests": {"min_violations": _LEAF, "monte_carlo": {"draws": _LEAF, "seed": _LEAF}},
     "profiles": {"declared": _LEAF},
 }
-_OPTIONAL_KEYS: Final = frozenset({"blinding_statement"})
+_OPTIONAL_KEYS: Final = frozenset({"blinding_statement", "profile_parameters"})
 _AMENDMENT_KEYS: Final = ("amends", "justification", "blind_status")
 
 
@@ -728,6 +732,7 @@ class Preregistration:
     profiles: ProfileSpec
     blinding_statement: str | None
     amendment: Amendment | None
+    profile_parameters: ProfileParameters | None
 
     def __post_init__(self) -> None:
         """Forma dos campos de topo pelos donos e as regras cruzadas (C1)."""
@@ -738,6 +743,12 @@ class Preregistration:
         _check_text(self.candidate, field="candidate")
         if self.blinding_statement is not None:
             _check_text(self.blinding_statement, field="blinding_statement")
+        if self.profile_parameters is not None and not isinstance(
+            self.profile_parameters, ProfileParameters
+        ):
+            raise ValueError(
+                f"profile_parameters must be a ProfileParameters, got {self.profile_parameters!r}"
+            )
         validate_min_violations(self.min_violations)
         if self.candidate in self.comparator_tiers.all:
             raise ValueError(f"candidate {self.candidate!r} must not be a comparator tier member")
@@ -881,6 +892,11 @@ class Preregistration:
                 else None
             ),
             amendment=_amendment_from(mapping),
+            profile_parameters=(
+                ProfileParameters.from_mapping(mapping["profile_parameters"])
+                if "profile_parameters" in mapping
+                else None
+            ),
         )
 
     def as_payload(self) -> dict[str, object]:
@@ -940,6 +956,8 @@ class Preregistration:
             },
             "profiles": {"declared": list(self.profiles.declared)},
         }
+        if self.profile_parameters is not None:
+            payload["profile_parameters"] = self.profile_parameters.as_payload()
         return payload
 
     def _rules_payload(self) -> dict[str, object]:
