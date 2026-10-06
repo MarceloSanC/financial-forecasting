@@ -104,4 +104,17 @@ def test_fallback_uses_the_h1_scale() -> None:
 
 @pytest.mark.parametrize("x", [0.05, 0.1, 0.2, 0.3, 0.5, 1.0, 1.18, 1.3580986, 1.63, 2.0, 3.0])
 def test_kolmogorov_sf_matches_scipy(x: float) -> None:
-    assert kolmogorov_sf(x) == pytest.approx(float(kstwobign.sf(x)), rel=1e-9, abs=1e-14)
+    assert kolmogorov_sf(x) == pytest.approx(float(kstwobign.sf(x)), rel=1e-12, abs=1e-12)
+
+
+def test_h7_fallback_uses_the_h1_scale() -> None:
+    """Checkpoint C bloco 3 (L2): série sobrediferenciada (e_t - e_{t-1}, seed 0) com
+    variância retangular até o lag 6 negativa -> fallback para h = 1."""
+    rng = random.Random(0)
+    shocks = [rng.gauss(0.0, 1.0) for _ in range(201)]
+    values = [shocks[t] - shocks[t - 1] for t in range(1, 201)]
+    found = cusum_mean_break(values, horizon=7, variance_estimator=_RECT)
+    assert found is not None
+    assert found.horizon_used == 1
+    statistic, _ = _composed(values, maxlags=0)
+    assert found.statistic == pytest.approx(statistic, rel=1e-9)

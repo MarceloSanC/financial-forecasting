@@ -30,6 +30,7 @@ from typing import Final
 
 from financial_forecasting.features.evaluation.domain.services.diebold_mariano import (
     DmVarianceEstimator,
+    check_variance_estimator,
     dm_long_run_variance,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
@@ -199,6 +200,7 @@ class DifferentialStationarity:
         """
         if not isinstance(parameters, StationarityParameters):
             raise ValueError(f"parameters must be a StationarityParameters, got {parameters!r}")
+        check_variance_estimator(variance_estimator)
         check_points(series.n_points, series.horizon)
         max_lag = acf_max_lag(series.n_points)
         return tuple(

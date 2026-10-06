@@ -50,6 +50,7 @@ _PARAMETERS = StationarityParameters(
 _STEP = tuple([0.0] * 10 + [1.0] * 10)
 _STEP_BREAK_INDEX = 9
 _KOLMOGOROV_CRITICAL_5PCT = 1.3580986
+_SHIFT_AT = 30
 
 
 def _timestamps(n_points: int) -> tuple[str, ...]:
@@ -159,3 +160,86 @@ def test_evaluate_refuses_untyped_parameters() -> None:
             parameters={"break_alpha": 0.05},  # type: ignore[arg-type]
             variance_estimator=_RECT,
         )
+
+
+@pytest.mark.parametrize("estimator", list(DmVarianceEstimator))
+def test_evaluate_passes_the_horizon_and_the_estimator(estimator: DmVarianceEstimator) -> None:
+    """Checkpoint C bloco 3 (M1): em h = 2 os estimadores diferem; o serviço repassa h e o
+    estimador recebido ao CUSUM (nunca h = 1 nem retangular fixos)."""
+    differences = tuple(
+        0.1 * ((7 * i) % 11) - 0.5 + (0.4 if i > _SHIFT_AT else 0.0) for i in range(60)
+    )
+    series = _paired(differences, horizon=2)
+    first = DifferentialStationarity.evaluate(
+        series, parameters=_PARAMETERS, variance_estimator=estimator
+    )[0]
+    direct = cusum_mean_break(
+        series.differential("a", "b"), horizon=2, variance_estimator=estimator
+    )
+    assert direct is not None
+    assert first.statistic == direct.statistic
+    assert first.horizon_used == direct.horizon_used == 2  # noqa: PLR2004
+    other = next(e for e in DmVarianceEstimator if e is not estimator)
+    assert (
+        direct.statistic
+        != cusum_mean_break(
+            series.differential("a", "b"), horizon=2, variance_estimator=other
+        ).statistic
+    )  # type: ignore[union-attr]
+
+
+def test_evaluate_refuses_a_raw_estimator_even_with_constant_differentials() -> None:
+    """Checkpoint C bloco 3 (L3): o estimador é conferido no topo, não só quando d_t varia."""
+    flat = PairedLossSeries(
+        horizon=1,
+        models=("a", "b"),
+        target_timestamps=_timestamps(6),
+        losses=((1.0,) * 6, (2.0,) * 6),
+    )
+    with pytest.raises(ValueError, match="variance_estimator"):
+        DifferentialStationarity.evaluate(
+            flat,
+            parameters=_PARAMETERS,
+            variance_estimator="rectangular",  # type: ignore[arg-type]
+        )
+
+
+def test_report_values_come_from_the_differential() -> None:
+    """Checkpoint C bloco 3 (M3): ACF, estatística, p-valor e h usado são os do d_t do par."""
+    series = _paired(_STEP)
+    first = DifferentialStationarity.evaluate(
+        series, parameters=_PARAMETERS, variance_estimator=_RECT
+    )[0]
+    direct = cusum_mean_break(first.differential, horizon=1, variance_estimator=_RECT)
+    assert direct is not None
+    assert first.acf == sample_acf(first.differential, first.max_lag)
+    assert (first.statistic, first.p_value, first.horizon_used) == (
+        direct.statistic,
+        direct.p_value,
+        direct.horizon_used,
+    )
+    assert first.alpha == _ALPHA
+
+
+def test_break_alpha_of_the_plan_reaches_the_decision_at_the_boundary() -> None:
+    """Checkpoint C bloco 3 (M2, L2): o alpha do VO chega ao relatório e p == alpha rejeita."""
+    series = _paired(_STEP)
+    p_value = cusum_mean_break(series.differential("a", "b"), horizon=1, variance_estimator=_RECT)
+    assert p_value is not None
+    at_boundary = StationarityParameters(
+        acf_max_lag=_PARAMETERS.acf_max_lag,
+        break_test=_PARAMETERS.break_test,
+        break_alpha=p_value.p_value,
+    )
+    first = DifferentialStationarity.evaluate(
+        series, parameters=at_boundary, variance_estimator=_RECT
+    )[0]
+    assert first.alpha == p_value.p_value
+    assert first.rejected is True
+
+
+def test_cusum_tie_keeps_the_first_argmax() -> None:
+    """Checkpoint C bloco 3 (L1): S_k = 1, 0, 1, 0, ... empata; a quebra é a primeira."""
+    found = cusum_mean_break((1.0, -1.0, 1.0, -1.0, 1.0, -1.0), horizon=1, variance_estimator=_RECT)
+    assert found is not None
+    assert found.break_index == 0
