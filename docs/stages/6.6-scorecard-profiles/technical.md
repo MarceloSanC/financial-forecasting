@@ -1009,4 +1009,24 @@ o `MonteCarloPValues` da 6.3 (ADR 6.3.0006) tem **um** contador `attempts` (o LR
 os N primeiros sorteios do mesmo laço). A tabela grava `attempts` como o VO o define —
 nenhuma informação perdida; abaixo do limiar de pergunta (forma, não contrato).
 
+### 2026-10-06 — [decision] Checkpoint C bloco 5: vocabulário de falha nas tabelas de perfil — Claude (Opus 5.5)
+A falha de uma unidade de perfil (I4) chega às tabelas por dois caminhos, conforme o
+relatório de domínio de onde a linha sai:
+- `gold_christoffersen_monte_carlo`, `gold_partial_degeneracy`: `status="error"` (o
+  `UnitStatus` do `ProfileReports`), sem coluna de motivo;
+- `gold_mcs_block_sensitivity`, `gold_differential_breaks`: `status="error"` e
+  `undefined_reason="error"` (as duas colunas existem porque a tabela também tem linha
+  `undefined`/calculada);
+- `gold_dm_profiles`: `status="undefined"` e `undefined_reason="error"` — o
+  `DmSubsetRow` só tem `computed|undefined`, e o erro é um motivo como `too_short`.
+Regra para quem lê (Task 18): unidade com erro = `status == "error"` **ou**
+`undefined_reason == "error"`. Uniformizar exigiria um terceiro estado no `SubsetStatus`
+só para a tabela; a regra de leitura é mais barata e não muda conteúdo.
+
+### 2026-10-06 — [deviation] Task 13/15: `McsBlockRun` sem `undefined_reason` — Claude (Opus 5.5)
+O technical listava `undefined_reason` no `McsBlockRun` e falava em "run `undefined`". A
+rodada por bloco só tem dois estados (`computed` ou `error` da chamada, I4): não há motivo
+de indefinição além do erro. O DTO carrega `status` (`UnitStatus`) e `detail`; o builder
+grava `undefined_reason="error"` na linha de erro, coerente com a regra de leitura acima.
+
 <!-- END: post-execution -->
