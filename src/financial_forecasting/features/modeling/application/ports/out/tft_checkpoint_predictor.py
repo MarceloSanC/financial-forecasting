@@ -23,7 +23,12 @@ Contrato (concept 7.1 §4; C4/C10; A2):
   mesma entrada ⇒ mesma saída, independente do RNG global e do processo.
 - **Saída:** `grids` (decisão → horizonte → tupla crua alinhada a
   `quantile_levels`), centro/escala do normalizador lidos do checkpoint (nunca
-  reajustados) e `settings` (os parâmetros da inferência, em texto).
+  reajustados) e `settings` — os parâmetros da inferência, em texto, com
+  exatamente as chaves de `SETTINGS_KEYS` (concept 7.1 §4; ADR 7.1.0004 item 4,
+  campos de settings do manifesto): `batch_size`, `num_workers` (`"0"`),
+  `accelerator` (`"cpu"`), `num_threads`, `deterministic_algorithms`
+  (`"false"`), `cpu_capability` (`torch.backends.cpu.get_cpu_capability()`),
+  `platform` (`platform.platform()`) e `scikit-learn` (versão instalada).
 """
 
 from __future__ import annotations
@@ -36,6 +41,18 @@ from financial_forecasting.features.modeling.application.ports.out.baseline_fore
     GridByHorizon,
 )
 from financial_forecasting.shared.application.exceptions import ApplicationError
+
+SETTINGS_KEYS = (
+    "batch_size",
+    "num_workers",
+    "accelerator",
+    "num_threads",
+    "deterministic_algorithms",
+    "cpu_capability",
+    "platform",
+    "scikit-learn",
+)
+"""Chaves de `TftCheckpointPrediction.settings` — o que o manifesto da inferência grava."""
 
 
 class CheckpointMismatchError(ApplicationError):

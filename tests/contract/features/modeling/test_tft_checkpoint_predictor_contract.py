@@ -23,6 +23,7 @@ from financial_forecasting.features.modeling.adapters.out.pytorch_forecasting.pf
     PfTftTrainer,
 )
 from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (
+    SETTINGS_KEYS,
     ArtifactChangedError,
     CheckpointMismatchError,
     TftCheckpointPrediction,
@@ -154,6 +155,19 @@ def test_emits_one_entry_per_requested_decision_and_horizon(leg: _Leg) -> None:
     assert prediction.normalizer_scale > 0
     assert prediction.settings["batch_size"] == "8"
     assert prediction.settings["num_threads"] == "1"
+
+
+@pytest.mark.contract
+def test_settings_have_exactly_the_declared_keys(leg: _Leg) -> None:
+    settings = leg.predict(batch_size=4, num_threads=2).settings
+
+    assert sorted(settings) == sorted(SETTINGS_KEYS)
+    assert settings["batch_size"] == "4"
+    assert settings["num_threads"] == "2"
+    assert settings["num_workers"] == "0"
+    assert settings["accelerator"] == "cpu"
+    assert settings["deterministic_algorithms"] == "false"
+    assert all(isinstance(value, str) and value for value in settings.values())
 
 
 @pytest.mark.contract

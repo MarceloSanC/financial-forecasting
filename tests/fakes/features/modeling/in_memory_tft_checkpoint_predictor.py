@@ -118,6 +118,9 @@ class InMemoryTftCheckpointPredictor:
                 "accelerator": "cpu",
                 "num_threads": str(num_threads),
                 "deterministic_algorithms": "false",
+                "cpu_capability": "fake",
+                "platform": "fake-platform",
+                "scikit-learn": "0",
             },
         )
 
