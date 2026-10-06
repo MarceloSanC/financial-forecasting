@@ -51,6 +51,9 @@ class _Leg:
     max_horizon: int
     horizons: tuple[int, ...]
     quantile_levels: tuple[float, ...]
+    # Faixa que encosta no fim do painel: a penúltima decisão só tem o horizonte 1
+    # e a última não tem nenhum (I16 — regra de emissão na cauda).
+    tail_decisions: tuple[int, ...]
 
     def predict(self, **overrides: object) -> TftCheckpointPrediction:
         arguments: dict[str, object] = {
@@ -101,6 +104,7 @@ def _fake_leg() -> _Leg:
         max_horizon=2,
         horizons=(1, 2),
         quantile_levels=levels,
+        tail_decisions=(n_rows - 3, n_rows - 2, n_rows - 1),
     )
 
 
@@ -117,6 +121,7 @@ def _real_leg(trained: TrainedCheckpoint) -> _Leg:
         max_horizon=trained.max_horizon,
         horizons=trained.horizons,
         quantile_levels=trained.quantile_levels,
+        tail_decisions=trained.test_decisions,
     )
 
 
@@ -149,6 +154,26 @@ def test_emits_one_entry_per_requested_decision_and_horizon(leg: _Leg) -> None:
     assert prediction.normalizer_scale > 0
     assert prediction.settings["batch_size"] == "8"
     assert prediction.settings["num_threads"] == "1"
+
+
+@pytest.mark.contract
+def test_tail_decisions_omit_horizons_beyond_the_panel(leg: _Leg) -> None:
+    """I16 na cauda: horizonte além do fim é omitido; decisão sem horizonte some."""
+    last = len(leg.target) - 1
+    expected = {
+        decision: [h for h in leg.horizons if decision + h <= last]
+        for decision in leg.tail_decisions
+    }
+    assert any(len(hs) == len(leg.horizons) for hs in expected.values())
+    assert any(0 < len(hs) < len(leg.horizons) for hs in expected.values())
+    assert any(not hs for hs in expected.values())
+
+    prediction = leg.predict(decision_indices=leg.tail_decisions)
+
+    assert sorted(prediction.grids) == sorted(d for d, hs in expected.items() if hs)
+    for decision, horizons in expected.items():
+        if horizons:
+            assert sorted(prediction.grids[decision]) == horizons
 
 
 @pytest.mark.contract
