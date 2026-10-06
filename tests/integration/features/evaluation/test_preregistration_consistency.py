@@ -301,4 +301,4 @@ def test_r0_to_r1_chain_read_by_the_source() -> None:
     ]
     assert plans[1].amendment is not None
     assert plans[1].amendment.amends == plans[0].reference(digests[0])
-    assert plans[1].reference(digests[1]) == "aapl_confirmatory-r1-d0d20b9ddbb7"
+    assert plans[1].reference(digests[1]) == "aapl_confirmatory-r1-bfa8028498ca"

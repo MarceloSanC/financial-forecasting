@@ -147,9 +147,9 @@ contagens — nenhum valor de desempenho (registro completo no technical da Stag
 ## Revisão r1 (emenda cega, Stage 6.6)
 
 - **Arquivo:** `config/preregistration/aapl_confirmatory-r1.toml`
-- **`preregistration_ref`:** `aapl_confirmatory-r1-d0d20b9ddbb7`
+- **`preregistration_ref`:** `aapl_confirmatory-r1-bfa8028498ca`
 - **Hash completo (sha256, floats codificados exatamente):**
-  `d0d20b9ddbb71edae3a3745b049633979d4c1b1d300fa5c8f45d8c79d4645417`
+  `bfa8028498ca0768bce8d9a5ae24af1d0ff7fb143216fd09639fa4de29a674bb`
 - **Emenda de:** `aapl_confirmatory-r0-4526c437c296` (`blind_status = "blinded"`).
 
 ### O que muda
@@ -179,6 +179,7 @@ semente já estão no r0, roda nas duas revisões.
 ### Declaração de cegamento da emenda
 
 As regras acima foram escolhidas pela literatura e pelos defaults das bibliotecas
-de referência (registros `[decision]` da Stage 6.6), antes de qualquer execução do
-refresh sobre o cohort e sem nenhum valor de desempenho à vista. A emenda é
-ancorada antes da Stage 8.1, que julga pela r1.
+de referência (registros `[decision]` da Stage 6.6), sem nenhum valor de desempenho
+à vista. A única execução do refresh sobre o cohort é a do teste da Stage 6.4 descrita
+na declaração de cegamento do r0, da qual nenhum valor de desempenho foi lido. A
+emenda é ancorada antes da Stage 8.1, que julga pela r1.

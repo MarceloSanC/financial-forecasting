@@ -1,13 +1,13 @@
 # Pré-registro confirmatório AAPL — revisão r1 (Stage 6.6; ADRs 6.6.0001-0003).
 # Emenda cega do r0: idêntica a ele exceto `revision`, os campos da emenda e o bloco
 # [profile_parameters] (as regras dos perfis de séries novas, que o r0 não nomeia).
-# Arquivo CANÔNICO e ancorado como o r0; o espelho docs/preregistration/aapl_confirmatory.md
-# cita o hash completo (ADR 6.5.0002).
+# Arquivo CANÔNICO, ancorado como o r0 (registro .anchor.toml ao lado); o espelho
+# docs/preregistration/aapl_confirmatory.md cita o hash completo (ADR 6.5.0002).
 
 name = "aapl_confirmatory"
 revision = 1
 amends = "aapl_confirmatory-r0-4526c437c296"
-justification = "O r0 declara os perfis de séries novas (DM por fold, seed e quantil; MCS com bloco h e raiz de T; degeneração parcial por par; estacionariedade do diferencial de perdas) sem nomear as regras que os calculam (auditoria F7). Esta revisão congela essas regras antes de qualquer execução sobre o cohort: recortes descritivos com p bruto, pares simétricos e adjacentes, MCS por bloco no esquema primário, ACF com o default de lags do statsmodels e CUSUM da média escalado pela variância do DM primário (ADR 6.6.0001). Nada que julga H1, H2 ou H3 muda."
+justification = "O r0 declara os perfis de séries novas (DM por fold, seed e quantil; MCS com bloco h e raiz de T; degeneração parcial por par; estacionariedade do diferencial de perdas) sem nomear as regras que os calculam (auditoria F7). Esta revisão congela essas regras sem nenhum valor de desempenho à vista (a única execução do refresh sobre o cohort é a do teste da Stage 6.4 descrito no blinding_statement, sem valor lido): recortes descritivos com p bruto, pares simétricos e adjacentes, MCS por bloco no esquema primário, ACF com o default de lags do statsmodels e CUSUM da média escalado pela variância do DM primário (ADR 6.6.0001). Nada que julga H1, H2 ou H3 muda."
 blind_status = "blinded"
 asset = "AAPL"
 horizons = [1, 7]
