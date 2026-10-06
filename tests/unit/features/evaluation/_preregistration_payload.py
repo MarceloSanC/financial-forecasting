@@ -359,3 +359,18 @@ class FloatRefusingHasher:
     def hash_text(self, text: str) -> str:
         """sha256 hex do texto."""
         return sha256(text.encode("utf-8")).hexdigest()
+
+
+R1_AMENDMENT: dict[str, object] = {
+    "revision": 1,
+    "amends": "test_plan-r0-0123456789ab",
+    "justification": "a blinded correction",
+    "blind_status": "blinded",
+}
+
+
+def r1_payload() -> dict[str, object]:
+    """O plano válido emendado como r1, com `[profile_parameters]` (Stage 6.6)."""
+    from tests.unit.features.evaluation._profile_parameters import profile_block  # noqa: PLC0415
+
+    return {**valid_payload(), **R1_AMENDMENT, "profile_parameters": profile_block()}
