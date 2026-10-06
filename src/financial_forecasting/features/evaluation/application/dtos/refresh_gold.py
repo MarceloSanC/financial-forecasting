@@ -32,6 +32,7 @@ from itertools import pairwise
 from types import MappingProxyType
 
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
+    CONFIRMATORY_TABLES,
     GOLD_SCHEMAS,
     GoldTableSchema,
 )
@@ -729,7 +730,8 @@ class GoldGeneration:
             GoldGenerationCorruptError: manifesto inválido; tabela desconhecida,
                 ausente de `rows_by_table` ou a mais nele; contagem divergente; linha
                 inválida ou fora de ordem; geração incoerente (`check_generation`);
-                manifesto de outra partição que a pedida.
+                manifesto de outra partição que a pedida; geração `COMPLETED` sem alguma
+                tabela de `GOLD_SCHEMAS` ou `BLOCKED` com tabela confirmatória (6.6).
         """
         try:
             parsed = GoldManifest.from_mapping(manifest)
@@ -743,6 +745,9 @@ class GoldGeneration:
         extra = sorted(set(rows_by_table) - set(listed))
         if extra:
             raise GoldGenerationCorruptError(f"tables {extra} are not in the manifest")
+        defect = _table_set_defect(parsed.status, set(listed))
+        if defect is not None:
+            raise GoldGenerationCorruptError(defect)
         tables: list[GoldTable] = []
         for name, count in listed.items():
             schema = GOLD_SCHEMAS.get(name)
@@ -764,6 +769,20 @@ class GoldGeneration:
         except ValueError as error:
             raise GoldGenerationCorruptError(f"incoherent generation: {error}") from error
         return cls(manifest=parsed, tables={table.name: table for table in tables})
+
+
+def _table_set_defect(status: RefreshStatus, listed: set[str]) -> str | None:
+    """O conjunto de tabelas que o status exige (Stage 6.6, Task 17).
+
+    `COMPLETED` lista **toda** tabela de `GOLD_SCHEMAS` (tabela de perfil ausente é
+    corrupção, não "perfil não calculado" — concept A6); `BLOCKED` só as que rodam
+    bloqueadas (`GOLD_SCHEMAS` menos `CONFIRMATORY_TABLES`), sem o DTO conhecer builders.
+    """
+    if status is RefreshStatus.COMPLETED:
+        missing = sorted(set(GOLD_SCHEMAS) - listed)
+        return None if not missing else f"a COMPLETED generation lacks tables {missing}"
+    confirmatory = sorted(listed & set(CONFIRMATORY_TABLES))
+    return None if not confirmatory else f"a BLOCKED generation lists {confirmatory}"
 
 
 def profile_settings_from(parameters: RefreshParameters) -> ProfileSettings:

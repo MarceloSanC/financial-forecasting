@@ -75,14 +75,38 @@ from financial_forecasting.features.analytics_store.application.use_cases.persis
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.calibration_table import (  # noqa: E501
     CalibrationTableGoldBuilder,
 )
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.christoffersen_monte_carlo import (  # noqa: E501
+    ChristoffersenMonteCarloGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.differential_acf import (  # noqa: E501
+    DifferentialAcfGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.differential_breaks import (  # noqa: E501
+    DifferentialBreaksGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_profiles import (  # noqa: E501
+    DmProfilesGoldBuilder,
+)
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_results import (
     DmResultsGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_seed_fraction import (  # noqa: E501
+    DmSeedFractionGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.loss_differentials import (  # noqa: E501
+    LossDifferentialsGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.mcs_block_sensitivity import (  # noqa: E501
+    McsBlockSensitivityGoldBuilder,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.mcs_results import (  # noqa: E501
     McsResultsGoldBuilder,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.metrics_by_run import (  # noqa: E501
     MetricsByRunGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.partial_degeneracy import (  # noqa: E501
+    PartialDegeneracyGoldBuilder,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.quality_checks import (  # noqa: E501
     QualityChecksGoldBuilder,
@@ -810,6 +834,15 @@ def wire_dependencies(
             CalibrationTableGoldBuilder(),
             DmResultsGoldBuilder(),
             McsResultsGoldBuilder(),
+            # perfis de séries novas (Stage 6.6; fora do veredito — ADR 6.6.0002)
+            DmProfilesGoldBuilder(),
+            DmSeedFractionGoldBuilder(),
+            McsBlockSensitivityGoldBuilder(),
+            ChristoffersenMonteCarloGoldBuilder(),
+            PartialDegeneracyGoldBuilder(),
+            DifferentialAcfGoldBuilder(),
+            DifferentialBreaksGoldBuilder(),
+            LossDifferentialsGoldBuilder(),
         ),
     )
 

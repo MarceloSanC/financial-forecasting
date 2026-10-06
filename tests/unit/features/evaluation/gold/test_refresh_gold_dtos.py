@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+import re
 from datetime import UTC, datetime
 
 import pytest
@@ -523,12 +524,24 @@ def _dm_row(comparator: str) -> dict[str, object]:
     }
 
 
+_LISTING = {"gold_quality_checks": 4, "gold_dm_results": 2}
+
+
+def _listing(rows_by_table: object) -> dict[str, int]:
+    """Listagem `COMPLETED`: toda tabela de `GOLD_SCHEMAS` (6.6), as não dadas com 0 linhas."""
+    return {**dict.fromkeys(GOLD_SCHEMAS, 0), **rows_by_table}  # type: ignore[dict-item]
+
+
 def _stored(**changes: object) -> tuple[dict[str, object], dict[str, list[dict[str, object]]]]:
-    manifest = _manifest(**changes)
-    rows = {
+    base = {
         "gold_quality_checks": [_quality_row(i) for i in range(4)],
         "gold_dm_results": [_dm_row("a"), _dm_row("b")],
     }
+    if changes.get("status", RefreshStatus.COMPLETED) is not RefreshStatus.COMPLETED:
+        return _manifest(**changes).as_mapping(), base
+    listing = _listing(changes.pop("rows_by_table", _LISTING))
+    manifest = _manifest(rows_by_table=listing, **changes)
+    rows = {name: base[name] if count and name in base else [] for name, count in listing.items()}
     return manifest.as_mapping(), rows
 
 
@@ -553,11 +566,11 @@ def test_from_stored_missing_table_corrupt() -> None:
         GoldGeneration.from_stored(manifest, rows, partition=_READ_PARTITION)
     with pytest.raises(GoldGenerationCorruptError, match="not in the manifest"):
         GoldGeneration.from_stored(
-            manifest, {**_stored()[1], "gold_mcs_results": []}, partition=_READ_PARTITION
+            manifest, {**_stored()[1], "gold_extra": []}, partition=_READ_PARTITION
         )
-    unknown, _ = _stored(rows_by_table={"gold_quality_checks": 4, "gold_other": 0})
+    unknown, unknown_rows = _stored(rows_by_table={"gold_quality_checks": 4, "gold_other": 0})
     with pytest.raises(GoldGenerationCorruptError, match="unknown gold table"):
-        GoldGeneration.from_stored(unknown, {**rows, "gold_other": []}, partition=_READ_PARTITION)
+        GoldGeneration.from_stored(unknown, unknown_rows, partition=_READ_PARTITION)
 
 
 @pytest.mark.unit
@@ -609,9 +622,38 @@ def test_from_stored_uses_schema_keys() -> None:
 
     for name, table in generation.tables.items():
         assert table.key == GOLD_SCHEMAS[name].key
-    assert generation.manifest == _manifest()
+    assert generation.manifest == _manifest(rows_by_table=_listing(_LISTING))
+    blocked, rows = _stored(status=RefreshStatus.BLOCKED, rows_by_table={"gold_quality_checks": 4})
+    only_checks = GoldGeneration.from_stored(
+        blocked, {"gold_quality_checks": rows["gold_quality_checks"]}, partition=_READ_PARTITION
+    )
     with pytest.raises(GoldGenerationCorruptError, match="has no table 'gold_mcs_results'"):
-        generation.table(GOLD_MCS_RESULTS)
+        only_checks.table(GOLD_MCS_RESULTS)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", sorted(GOLD_SCHEMAS))
+def test_from_stored_completed_needs_every_table(name: str) -> None:
+    """Stage 6.6 Task 17: geração `COMPLETED` sem uma tabela de `GOLD_SCHEMAS` é corrupta."""
+    manifest, rows = _stored()
+    listed = manifest["rows_by_table"]
+    assert isinstance(listed, dict)
+    manifest["rows_by_table"] = {k: v for k, v in listed.items() if k != name}
+    rows.pop(name)
+    with pytest.raises(GoldGenerationCorruptError, match=re.escape(f"lacks tables ['{name}']")):
+        GoldGeneration.from_stored(manifest, rows, partition=_READ_PARTITION)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", CONFIRMATORY_TABLES)
+def test_from_stored_blocked_with_a_confirmatory_table_is_corrupt(name: str) -> None:
+    """Stage 6.6 Task 17: geração `BLOCKED` só lista as tabelas que rodam bloqueadas."""
+    manifest, rows = _stored(
+        status=RefreshStatus.BLOCKED, rows_by_table={"gold_quality_checks": 4, name: 0}
+    )
+    stored = {"gold_quality_checks": rows["gold_quality_checks"], name: []}
+    with pytest.raises(GoldGenerationCorruptError, match=re.escape(f"lists ['{name}']")):
+        GoldGeneration.from_stored(manifest, stored, partition=_READ_PARTITION)
 
 
 @pytest.mark.unit

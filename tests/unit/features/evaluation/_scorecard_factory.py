@@ -1,11 +1,13 @@
 """Fábrica de gold sintético coerente com um plano (Stage 6.5, technical §2 Task 08).
 
 Módulo privado (sem `test_`), stdlib + DTOs + domínio (gate de pureza do `evaluation`:
-nenhum adapter, nenhum arquivo). `make_stored(prereg, ...)` gera as linhas das cinco
-tabelas gold **coerentes com o plano** — as chaves do `gold_schema`, o manifesto do
-`refresh_command_from` — como um `StoredGold` mutável; cada teste aplica **uma**
-violação pelos mutadores (`drop_rows`, `set_cell`, `add_seed`, `manifest`) e monta a
-geração com `generation()` (pelo dono único `GoldGeneration.from_stored`).
+nenhum adapter, nenhum arquivo). `make_stored(prereg, ...)` gera as linhas das treze
+tabelas gold (as cinco da 6.4 e as oito de perfil da 6.6, que uma geração `COMPLETED`
+precisa listar — `GoldGeneration.from_stored`) **coerentes com o plano** — as chaves
+do `gold_schema`, o manifesto do `refresh_command_from` — como um `StoredGold` mutável;
+cada teste aplica **uma** violação pelos mutadores (`drop_rows`, `set_cell`, `add_seed`,
+`manifest`) e monta a geração com `generation()` (pelo dono único
+`GoldGeneration.from_stored`).
 
 Contagens por omissão: calibradas (25 violações em 250 pontos por cauda, degeneração
 0); sub-séries DGT com `n // h`. O perfil (Task 09) e o use case (Task 10) reusam a
