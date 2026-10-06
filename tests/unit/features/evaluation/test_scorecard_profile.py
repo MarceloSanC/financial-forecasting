@@ -490,3 +490,17 @@ def test_profile_p_ind_of_wrong_type_is_named_corruption() -> None:
         GoldGenerationCorruptError, match=r"gold_calibration_table\.p_ind: expected float"
     ):
         _profile(stored)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("declared", [(), ("b", "a"), ("a", "b", "c")])
+def test_declared_not_built_must_be_the_not_built_here_states(declared: tuple[str, ...]) -> None:
+    """Checkpoint C bloco 6, H-3: `declared_not_built` = os `not_built_here`, na ordem."""
+    states = (
+        ("a", ProfileState.NOT_BUILT_HERE),
+        ("x", ProfileState.BUILT),
+        ("b", ProfileState.NOT_BUILT_HERE),
+    )
+    with pytest.raises(ValueError, match="not_built_here"):
+        ScorecardProfile(horizons=(), declared_not_built=declared, profile_states=states)
+    ScorecardProfile(horizons=(), declared_not_built=("a", "b"), profile_states=states)
