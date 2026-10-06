@@ -10,7 +10,9 @@ ADR `6_4_0003`, `6_4_0007`). São a saída do `SeriesAssembly.assemble`:
   (`common_points`);
 - `HorizonSamples` — as duas amostras de um horizonte (D5; ADR `6_4_0007`): `full`
   (toda a série de cada (modelo, seed)) e `common` (a fatia da interseção comum), S
-  séries por modelo alinhadas às seeds;
+  séries por modelo alinhadas às seeds, e o fold de cada ponto da amostra comum
+  (`common_folds`, Stage 6.6; ADR `6_6_0003`) — ou `None` com o motivo quando as séries
+  discordam (nunca achado: o fold só serve ao perfil "DM por fold");
 - `AssembledCohort` — o relatório e, **só quando não há achado**, as amostras por
   horizonte (D1: achado bloqueia a montagem, nunca vira exceção).
 
@@ -155,6 +157,11 @@ class HorizonSamples:
         n_common: T da amostra comum (≥ 1) — `n_points` de toda série `common`.
         common_first_target_timestamp, common_last_target_timestamp: primeiro e
             último `target_timestamp` de toda série `common`.
+        common_folds: o `fold` do run que previu cada ponto da amostra comum (um por
+            ponto, na ordem dos alvos; `str` não-vazia ou `None`), quando todas as
+            séries concordam; `None` quando discordam.
+        fold_mismatch_detail: `None` com `common_folds`; senão o motivo (`str`
+            não-vazia, o primeiro alvo divergente).
 
     Raises:
         ValueError: qualquer incoerência entre os campos, na construção.
@@ -169,9 +176,11 @@ class HorizonSamples:
     n_common: int
     common_first_target_timestamp: str
     common_last_target_timestamp: str
+    common_folds: tuple[str | None, ...] | None
+    fold_mismatch_detail: str | None
 
     def __post_init__(self) -> None:
-        """Modelos, chaves, seeds, séries e amostra comum coerentes."""
+        """Modelos, chaves, seeds, séries, amostra comum e folds coerentes."""
         validate_horizon(self.horizon, field="horizon")
         self._check_models()
         n_common = self.n_common
@@ -192,6 +201,25 @@ class HorizonSamples:
                 raise ValueError(f"{name} keys must be the models {self.models}, got {keys}")
         for model in self.models:
             self._check_model(model)
+        self._check_folds()
+
+    def _check_folds(self) -> None:
+        folds, detail = self.common_folds, self.fold_mismatch_detail
+        if folds is None:
+            check_non_empty_str(detail, field="fold_mismatch_detail")
+            return
+        if detail is not None:
+            raise ValueError(
+                f"fold_mismatch_detail must be None when common_folds is set, got {detail!r}"
+            )
+        if not isinstance(folds, tuple) or len(folds) != self.n_common:
+            raise ValueError(
+                f"common_folds must be a tuple with one fold per common point "
+                f"({self.n_common}), got {folds!r}"
+            )
+        for fold in folds:
+            if fold is not None:
+                check_non_empty_str(fold, field="common_folds")
 
     def _check_models(self) -> None:
         models = self.models

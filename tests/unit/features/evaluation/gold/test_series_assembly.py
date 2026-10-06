@@ -676,3 +676,62 @@ def test_run_with_only_val_rows_orphaned() -> None:
     [finding] = _only(_assemble(cohort), AlignmentKind.ORPHAN_RUN)
     assert _scope(finding) == (None, "gbm", None)
     assert "gbm-extra" in finding.detail
+
+
+# --- Stage 6.6 Task 05: fold da amostra comum (CA1; ADR 6.6.0003) ----------------------
+
+
+def _folds_by_target(cohort: Cohort, horizon: int) -> dict[str, str | None]:
+    return {
+        r.target_timestamp: r.fold
+        for r in cohort.records
+        if r.horizon == horizon and r.model == "tft" and r.seed == 1
+    }
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("folds", [("f0", "f1"), ("a", "b", "c")])
+def test_common_folds_follow_the_run_of_each_point(folds: tuple[str, ...]) -> None:
+    """Folds de tamanhos distintos: um rótulo por ponto comum, o do run que o previu."""
+    cohort = make_cohort(folds=folds)
+    result = _assemble(cohort)
+    assert result.alignment.findings == ()
+    for samples in result.horizons:
+        expected = _folds_by_target(cohort, samples.horizon)
+        targets = samples.common["tft"][0].target_timestamps
+        assert samples.common_folds == tuple(expected[t] for t in targets)
+        assert samples.fold_mismatch_detail is None
+        assert set(samples.common_folds) == set(folds)
+
+
+@pytest.mark.unit
+def test_common_folds_none_label() -> None:
+    """Cohort sem folds (`fold = None` em todo run): uma tupla de `None`, sem achado."""
+    cohort = make_cohort(folds=("f0",))
+    cohort = replace_runs(cohort, lambda _: True, lambda r: dataclasses.replace(r, fold=None))
+    cohort = replace_records(cohort, lambda _: True, lambda r: dataclasses.replace(r, fold=None))
+    result = _assemble(cohort)
+    assert result.alignment.findings == ()
+    for samples in result.horizons:
+        assert samples.common_folds == (None,) * samples.n_common
+
+
+@pytest.mark.unit
+def test_diverging_fold_labels_are_not_a_finding() -> None:
+    """Um modelo com o fold trocado num alvo: `common_folds = None` + motivo, sem achado e
+    com as amostras montadas (o fold não bloqueia o veredito — ADR 6.6.0003)."""
+    cohort = make_cohort()
+    target = targets_of(cohort, "gbm", None, 1)[3]
+    cohort = replace_records(
+        cohort,
+        at_point("gbm", None, 1, target),
+        lambda r: dataclasses.replace(r, fold="f9"),
+    )
+    result = _assemble(cohort)
+    assert result.alignment.findings == ()
+    first = result.horizons[0]
+    assert first.common_folds is None
+    assert first.fold_mismatch_detail is not None
+    assert target in first.fold_mismatch_detail
+    assert "f9" in first.fold_mismatch_detail
+    assert result.horizons[1].common_folds is not None
