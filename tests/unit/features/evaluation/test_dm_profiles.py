@@ -122,6 +122,28 @@ def test_two_folds_are_two_windows_in_temporal_order() -> None:
 
 
 @pytest.mark.unit
+def test_subset_rows_carry_the_exact_window_bounds() -> None:
+    """Cada recorte grava o 1º e o último alvo exatos da sua janela (Auditoria r3, M4):
+    fold = o trecho contíguo do rótulo na amostra comum; seed e τ = a amostra inteira."""
+    samples = _samples()
+    targets = samples.common[_CAND][0].target_timestamps
+    assert samples.common_folds is not None
+    bounds: dict[str | None, tuple[str, str]] = {}
+    for index, label in enumerate(samples.common_folds):
+        first = bounds.get(label, (targets[index], targets[index]))[0]
+        bounds[label] = (first, targets[index])
+    rows = _evaluate(samples).rows
+    folds = [r for r in rows if r.dimension is DmProfileDimension.FOLD]
+    assert folds
+    for row in folds:
+        assert (row.first_target_timestamp, row.last_target_timestamp) == bounds[row.fold]
+    others = [r for r in rows if r.dimension is not DmProfileDimension.FOLD]
+    assert others
+    for row in others:
+        assert (row.first_target_timestamp, row.last_target_timestamp) == (targets[0], targets[-1])
+
+
+@pytest.mark.unit
 def test_seed_and_tau_subsets() -> None:
     samples = _samples()
     report = _evaluate(samples)
