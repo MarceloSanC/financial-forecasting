@@ -1369,4 +1369,8 @@ exit=0
 **Contexto:** gravar no silver uma linha de calib com `asset`, `feature_set_name`, `timestamp_utc` ou `target_timestamp_utc` diferentes cria outra PK ou outra partição. A linha original continua lá, e a conferência C8 desses campos ficaria sem objeto.
 **O que mudou:** `test_present_row_with_divergent_non_value_field_raises` serve as linhas presentes por `_PatchedReader`, um `SilverTableReader` de teste que troca o campo da decisão escolhida. Assim a C8 vê exatamente a linha divergente. As divergências que não mudam a PK (`guardrail_applied`, `value_raw`) continuam gravadas direto no repositório.
 
+### 2026-10-06 — [deviation] task-02-fix — `TrainTft._load_dataset` removido; caracterização da 5.5 lê pelo corpo de `load_tft_panel` (Checkpoint C, C3-12) — Claude (Opus 5.5)
+**Contexto:** depois da task-02-fix anterior, `TrainTft._load_dataset` existia só para `test_dataset_loading_characterization.py`, que fica fora da lista fechada da Task 02. O revisor pediu para apontar a caracterização ao caminho único.
+**O que mudou:** o método saiu. A caracterização chama `train_tft._read_panel`, o corpo único que `load_tft_panel` usa, porque precisa das colunas arbitrárias da 5.5, e `load_tft_panel` lê as colunas da registry. As asserções da caracterização não mudaram.
+
 <!-- END: post-execution -->
