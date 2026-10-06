@@ -3,7 +3,7 @@ title: Benchmark conformal e atribuição por família — teoria do Step 7 (inf
 description: Teoria canônica do subdomínio conformal-benchmark-and-feature-attribution — o que a inferência do candidato garante reproduzir, como o CQR assimétrico recalibra os pares da grade como benchmark de cobertura empírica sob dependência temporal, como se mede e se lê a contribuição das famílias de features entre horizontes (H3) e o que a API serve
 when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 7 (7.1–7.4), ao questionar a mecânica ou a variante do CQR, a leitura de H3 ou o contrato de reprodução da inferência, e antes de pré-registrar CQR e H3 para a 8.1
 keywords: [domain, inference, determinism, reproducibility, dropout, mc-dropout, guardrail, conformal, split-conformal, cqr, asymmetric-cqr, nexcp, aci, enbpi, exchangeability, beta-coverage, empirical-coverage, h3, feature-attribution, vsn, permutation-importance, grouped-importance, loco, ablation, block-bootstrap, per-horizon, preregistration, api]
-status: draft
+status: accepted
 created_at: 2026-10-06
 updated_at: 2026-10-06
 bounded_context: inference
@@ -40,8 +40,8 @@ references:
 > (2026-10-05/06): as de classe E/C foram fechadas pelo agente e registradas em
 > §10.1 no formato `[decision:E|C]`, com o degrau que decidiu; as duas de
 > classe P (papel da VSN em H3 e desenho da ablação) foram decididas pelo
-> humano em 2026-10-06. **Status `draft`** — o gate do Step 7 só fecha com a
-> ratificação humana (`accepted`).
+> humano em 2026-10-06. **Doc ratificado em 2026-10-06 por delegação do
+> humano — gate do Step 7 fechado.**
 
 ## 1. Escopo e como consumir este doc
 
@@ -216,6 +216,15 @@ determinismo entre processos distintos na mesma máquina (só "same
 environment"), e o efeito do número de threads intra-op não foi verificado — o
 `technical.md` da 7.1 fixa e registra esses parâmetros.
 
+**Referência de reprodução da 7.1.** A referência é o **artefato**
+(checkpoint) de cada (fold, seed) **re-executado no mesmo ambiente**, com o
+lote de inferência igual ao `batch_size` do treinador — o treinador emite as
+predições de teste com o mesmo `batch_size` do treino (111 no cohort;
+`pf_tft_trainer.py` l. 258–266 e 311–317; `config/cohorts/aapl_confirmatory.toml`
+l. 119). Comparar a reprodução com as predições de teste **já persistidas no
+silver** é **teste de equivalência por tolerância**, não bit a bit — a menos
+que o lote e o ambiente coincidam com os da corrida que as gravou.
+
 ### 3.2 Seed, dropout e por que MC dropout fica fora
 
 **A seed não importa na inferência.** Nenhum componente do caminho de predição
@@ -280,7 +289,8 @@ do intervalo. A validade vem da separação de papéis (ADR 5.1.0002; modeling
     E_i = max{ q̂_lo(X_i) − Y_i ,  Y_i − q̂_hi(X_i) }                (Eq. (9))
 
 e o intervalo é [q̂_lo(X) − Q̂, q̂_hi(X) + Q̂], com Q̂ = "(1 − α)(1 + 1/|I2|)-th
-empirical quantile of {E_i : i ∈ I2}" (Eq. (11); I2 = calib, |I2| = n) — isto
+empirical quantile of {E_i : i ∈ I2}" (Eq. (11); I2 = calib, |I2| = n) —
+(numeração de equação não conferida) — isto
 é, o ⌈(n+1)(1−α)⌉-ésimo menor escore. **Theorem 1:** "If (X_i, Y_i), i = 1, …,
 n + 1 are exchangeable … P{Y_{n+1} ∈ C(X_{n+1})} ≥ 1 − α"; com escores quase
 certamente distintos, a cobertura também é "≤ 1 − α + 1/(|I2| + 1)"; a prova
@@ -347,7 +357,7 @@ e mudam de regime; os escores do calib e o ponto de teste não são permutáveis
 O que a literatura oferece sem permutabilidade são **limites com um termo de
 perda**:
 
-- **Barber et al. (2023), Theorem 2** (p. 15): com pesos fixos w_i,
+- **Barber et al. (2023), §4.1 Theorem 2** (p. 15): com pesos fixos w_i,
   P{Y_{n+1} ∈ Ĉ_n(X_{n+1})} ≥ 1 − α − Σ_i w̃_i · d_TV(R(Z), R(Z^i)), e "the same
   result holds true for nonexchangeable split conformal"; com w_i ≡ 1 o termo
   mede a perda do split comum. §4.4 (pp. 18–19): sob uma quebra (changepoint)
@@ -419,20 +429,22 @@ ponderação com decaimento (p. 17). É de onde vem o "0,90 → 0,84" do ADR
 ### 4.6 ACI e EnbPI fora do confirmatório
 
 **ACI** (Gibbs & Candès 2021) atualiza o nível a cada passo,
-α_{t+1} := α_t + γ(α − err_t) (Eq. (2), p. 3); a garantia é de **frequência
-de longo prazo** — |1/T Σ err_t − α| ≤ (max{α_1, 1−α_1} + γ)/(Tγ) (Prop. 4.1,
-p. 6) —, não de cobertura marginal, e depende de ver Y_t a cada passo: o caso
-em que Y chega "in a delayed fashion or in large batches" é problema aberto
-(§7, p. 10) — exatamente h+7. **EnbPI** (Xu & Xie 2021, 2023) "leverages
+α_{t+1} := α_t + γ(α − err_t) (Eq. (2), p. 3); a garantia principal é de
+**frequência de longo prazo** — |1/T Σ err_t − α| ≤ (max{α_1, 1−α_1} + γ)/(Tγ)
+(Prop. 4.1, p. 6) — e depende de atualização online com Y_t observado a cada
+passo. Cobertura marginal o paper só afirma **aproximada**, sob pequenos
+drifts num modelo específico (§4.2). O caso em que Y chega "in a delayed
+fashion or in large batches" é problema aberto (§7, p. 10) — exatamente h+7. **EnbPI** (Xu & Xie 2021, 2023) "leverages
 feedback by updating past residuals using a sliding window" (§3.1, p. 4); sem
 feedback ("When s = ∞, no feedback is available", §3, item (5)) a garantia
 aproximada do Theorem 1 apoia-se em resíduos estacionários e fortemente
-mixing (§4.1, Assumption 1). Oliveira et al. (2024, §2, p. 4) resumem: ACI e
-afins "have no marginal coverage guarantees, and the online aspect of their
-method, which requires updates at every step, may be undesirable". **B3
-(decidida, §10.1):** ambos ficam fora do caminho confirmatório — suas
-garantias pressupõem atualização online com o realizado, incompatível com a
-calibração uma vez por fold dos 4 invariantes.
+mixing (§4.1, Assumption 1). Oliveira et al. (2024, §2, p. 4) resumem, na
+leitura deles, que ACI e afins "have no marginal coverage guarantees, and the
+online aspect of their method, which requires updates at every step, may be
+undesirable" — a ressalva que pesa aqui é a segunda. **B3 (decidida, §10.1):**
+ambos ficam fora do caminho confirmatório — o motivo é o **online**: suas
+garantias pressupõem atualização com o realizado a cada passo, incompatível
+com a calibração uma vez por fold dos 4 invariantes.
 
 ### 4.7 Por horizonte: cobertura marginal, não conjunta
 
@@ -590,13 +602,20 @@ s_f é calculada **só sobre as 4 famílias**. As interações cross-família
 (sentiment) — ressalva declarada: parte do sinal atribuído a sentiment passa
 por variáveis de outras famílias.
 
+**Premissa verificável antes da 7.3 (C6, P-H3-VSN).** Nenhuma feature de
+família é `known`: hoje a registry só tem specs `unknown` (observed), e o caso
+de uso do TFT incorpora **automaticamente** qualquer spec `known` às entradas
+do decoder (`train_tft.py` l. 23–26, 196–207). Se uma feature de família passar
+a `known`, a VSN do decoder ganha eixo de horizonte, o argumento de §5.3 deixa
+de valer e a decisão P-H3-VSN deve ser **reaberta**.
+
 **Ressalva pendente — partição da volatilidade.** O ADR 0.0.0016 diz que
 features derivadas de preço "(returns, momentum, drawdown, volatility) all
 belong to the **price** family", mas o registry classifica seis features de
 volatilidade (`volatility_20d`, `volatility_parkinson`,
 `volatility_garman_klass`, `downside_semivolatility`, `vol_of_vol`,
 `volatility_regime`) como **technical**. A divergência muda a partição de H3 e
-fica **fora do escopo deste doc** (issue separada): ela **precisa estar
+fica **fora do escopo deste doc** (issue separada, a abrir): ela **precisa estar
 resolvida antes do pré-registro de H3**, porque a partição é parte do que se
 pré-registra (§7).
 
@@ -645,9 +664,15 @@ amostras do teste a **janela inteira** (todos os lags do encoder) de **todas**
 as features de f, **em conjunto**; o resto da entrada fica intacto e o modelo
 fica fixo. É o "switch" de Fisher, Rudin & Dominici (2019, §2) com um
 subconjunto multivariado de covariáveis ("the covariate subsets X_1 ... may each
-be multivariate"); a importância de grupo é a quantidade certa porque "the
-grouped variable importance is not comparable with the sum of the individual
-importances" (Gregorutti, Michel & Saint-Pierre 2015, §2.1). Embaralhar
+be multivariate"); a importância de grupo é a quantidade certa porque, "in
+general, the grouped variable importance is not comparable with the sum of the
+individual importances" — com a exceção explícita "If f is additive and if the
+variables of the group are independent, the grouped variable importance is
+nothing more than the sum of the individual importances" (Gregorutti, Michel &
+Saint-Pierre 2015, arXiv:1411.4170 §2.1; versão publicada CSDA 90). A exceção
+não se aplica aqui (inferência deste doc: o TFT não é aditivo e as features de
+uma família são correlacionadas), então se permuta o grupo em vez de somar
+importâncias individuais. Embaralhar
 **dentro** do tempo (a ordem dos lags) foi rejeitado: quebra a estrutura
 temporal da própria variável e força o modelo a extrapolar ("breaking
 dependencies between features in hold-out data ... forcing the original model
@@ -706,12 +731,34 @@ configuração seria busca. O dispositivo (CPU ou GPU/ROCm) e a build do torch
 são decisão da Stage 7.3 e **entram no hash** do cohort de ablação; comparar o
 completo da ablação com o candidato confirmatório, se feito, é por tolerância.
 
+**Custo, ancorado no medido** (exigência do ADR 0.0.0010 item 5 e do D8 da
+5.5). O cohort confirmatório real de 10 seeds × 6 folds levou **~19 h em CPU**
+(~1,5–2,9 h por seed; `docs/stages/5.5-confirmatory-retrain/technical.md`,
+Task 35). A ablação são 5 configurações × 6 folds × 10 seeds ≈ **300 treinos ≈
+~95 h em CPU**. Decisão do humano: **10 seeds**, rodando em **GPU no Linux**
+(RX 7700 XT / ROCm), com um **piloto de 1 seed × 1 fold** antes; o número de
+seeds pode ser revisto na 7.3 à luz do piloto (ADR 0.0.0007, Consequences).
+
+**Código novo de modelagem exigido pela 7.3** (declarado aqui; o desenho é do
+concept/technical da Stage):
+
+- treinar o TFT com um **subconjunto** de famílias — hoje o caso de uso usa a
+  registry inteira (`train_tft.py` l. 286–288);
+- **identidade** de run / `feature_set_hash` por configuração — hoje o
+  `feature_set_hash` é o da registry (`train_tft.py` l. 562);
+- um **cohort spec de ablação** com as 5 configurações — hoje o executor de
+  cohort recusa `feature_set_hash` diferente do da registry
+  (`run_confirmatory_cohort.py` l. 346–357);
+- **dispositivo ≠ `cpu`** — hoje o composition root só aceita `cpu`
+  (`composition_root.py` l. 287–289).
+
 **Alternativa descartada: substituir sem re-treinar.** Zerar ou trocar pela
 média as features de f mantendo o modelo fixo é o precedente de Gu, Kelly & Xiu
 (2020, §1.9: "setting all values of predictor j to zero, while holding the
-remaining model estimates fixed"), mas assume linearidade e independência
-(Covert et al. 2021, §8.2) e avalia o **mesmo modelo fixo fora do suporte** que
-a permutação — os dois métodos deixariam de ser independentes.
+remaining model estimates fixed"), mas substituir por um valor fixo "can be
+interpreted as an additional assumption of model linearity" (Covert et al.
+2021, §8.2) e avalia o **mesmo modelo fixo fora do suporte** que a permutação —
+os dois métodos deixariam de ser independentes.
 
 **"Sem re-treino" do overview §4.** O critério de sucesso fala de artefatos de
 decisão reconstruíveis **a partir de dados persistidos** sem re-treino. A
@@ -722,25 +769,41 @@ persistidas; a leitura de H3 (§5.7) é reconstruível delas sem re-treino.
 
 **C3 (decidida, §10.1).** Três fontes, tratadas separadamente:
 
-1. **Monte Carlo da permutação** — repetir K_p permutações reduz só esse erro:
-   "Variance estimators for model-PD/PFI only account for variance due to Monte
-   Carlo integration" (Molnar et al. 2023, §5).
+1. **Monte Carlo da permutação** — repetir K_p permutações reduz o erro de
+   Monte Carlo da permutação, não a incerteza de amostragem: "Variance
+   estimators for model-PD/PFI only account for variance due to Monte Carlo
+   integration" (Molnar et al. 2023, §5). Nota sobre a fonte: em Molnar et
+   al. a variância de Monte Carlo dos estimadores PFI é calculada **entre as
+   instâncias de teste (n2)**, não por repetição de permutações, e o IC t do
+   model-PFI se justifica por **amostras independentes**.
 2. **Amostragem do teste (dependente)** — **bootstrap em bloco estacionário**
    (Politis & Romano 1994) sobre as séries d_{f,t}, com bloco por Politis &
    White (2004) — a mesma maquinaria do MCS (evaluation §6.5). O bootstrap é
-   **pareado**: os mesmos índices de tempo reamostrados entram nas séries de
-   h+1 e de h+7 e em todas as famílias, de modo que s_f e Δ_f de cada réplica
-   são coerentes. Bootstrap iid é inválido sob dependência; as fontes de
+   **pareado**: os mesmos índices reamostrados entram nas séries de h+1 e de
+   h+7 e em todas as famílias, de modo que s_f e Δ_f de cada réplica são
+   coerentes. Bootstrap iid é inválido sob dependência; as fontes de
    inferência para importância supõem observações independentes (Williamson et
-   al. 2023, §2: "observations Z_1, ..., Z_n are drawn independently").
-   **Lacuna declarada:** não há fonte primária de intervalo para importância
-   por permutação sob dependência serial — o bootstrap em bloco é
-   **transposição** do que a avaliação já usa para d_t `[SEM-FONTE-PRIMÁRIA
-   para a combinação]`.
+   al. 2023, §2: "observations Z_1, ..., Z_n are drawn independently"; Molnar
+   et al. 2023, acima). Como as nossas instâncias de teste são **serialmente
+   dependentes**, o bootstrap em bloco sobre d_t é **transposição declarada**
+   do que a avaliação já usa para d_t — não há fonte primária de intervalo
+   para importância por permutação sob dependência serial
+   `[SEM-FONTE-PRIMÁRIA para a combinação]`.
+   **Regra de bloco.** O bootstrap conjunto h+1/h+7 usa **um único
+   comprimento de bloco**, com **piso ≥ max horizonte (7)**, por coerência com
+   a regra do MCS (ADR 0.0.0010: bloco = max(h, ⌈max b̂_sb⌉) — o piso cobre a
+   dependência MA(h−1); r0 `block_rule = "max_h_ceil_max_bsb"`), com b̂ = o
+   máximo dos b̂ de Politis–White das séries envolvidas. O detalhe numérico vai
+   ao pré-registro (§5.7).
+   **Chave de pareamento entre horizontes** — ver §5.7 (ponto aberto do
+   pré-registro).
 3. **Variância do modelo** — seeds: as séries entram como **média ponto a
    ponto entre seeds** (§2.3); a dispersão entre seeds vai ao perfil
-   (Bouthillier et al. 2021; Molnar et al. 2023, §7: a variância do modelo
-   exige refits).
+   (Bouthillier et al. 2021). Em Molnar et al. (2023, §7: "average the PD/PFI
+   over m model fits") a variância do modelo exige **refits**, e para o
+   learner-PFI o artigo corrige o caso de dados compartilhados entre refits
+   (Nadeau–Bengio); aqui os refits são as seeds sobre os mesmos dados, e a sua
+   dispersão é reportada como perfil, não somada ao IC.
 
 A ablação usa a **mesma maquinaria** sobre as séries L_t^{−f} − L_t^{full},
 agregando as seeds da mesma forma. Bloco, número de réplicas B e semente são
@@ -761,16 +824,35 @@ teste formal; Lim 2021 §7.1–§7.2 não o faz para variáveis).
 
 **Concordância (C5 — decidida, §10.1).** H3 é **sustentada** se permutação e
 ablação **concordam no sinal de Δ_f e ambas têm intervalo excluindo 0** para a
-mesma família (ou famílias) — a métrica de "sign agreement" de Krishna et al.
-(2024, §3.2), aplicada à variação entre horizontes. A VSN não entra na regra
-(§5.3).
+mesma família (ou famílias) — inspirado no "sign agreement", uma das seis
+métricas de discordância que Krishna et al. (2024, §3.2) **propõem** ("we
+propose six different metrics") — proposta do artigo, não prática geral
+estabelecida —, aplicada aqui à variação entre horizontes. A VSN não entra na
+regra (§5.3).
 
 **Pontos que a Stage 7.3 ainda precisa fixar no pré-registro** (não decididos
-neste gate): o **nível** do intervalo e se há ajuste pela leitura de "≥ 1 de 4
-famílias"; e o tratamento de importâncias **negativas** ou de soma Σ_g I_g(h)
-próxima de zero, caso em que a participação normalizada fica mal definida.
-Ambos mudam o veredito descritivo e, por isso, entram no pré-registro (§7) —
-não podem ser escolhidos depois de ver os números.
+neste gate; lista única — §5.6, §7 e §8 apontam para cá). Todos mudam o
+veredito descritivo e, por isso, entram no pré-registro (§7) — não podem ser
+escolhidos depois de ver os números:
+
+1. **Nível do intervalo** de Δ_f.
+2. **Multiplicidade** — se há ajuste pela leitura de "≥ 1 de 4 famílias".
+3. **Importâncias negativas / Σ_g I_g(h) ≈ 0** — caso em que a participação
+   normalizada fica mal definida.
+4. **Chave de pareamento entre horizontes.** A avaliação alinha **por
+   horizonte** por `target_timestamp` (evaluation §2.1, §6.7): o mesmo t em
+   h+1 e em h+7 vem de **decisões diferentes** (t−1 vs t−7), e o número de
+   pontos difere (T = 1511 em h+1 e 1505 em h+7 no cohort; concept 5.5 D6).
+   Opções: parear por `target_timestamp` ou por **ponto de decisão**.
+   Recomendação deste doc, como convenção a pré-registrar
+   `[SEM-FONTE-PRIMÁRIA]`: parear por **ponto de decisão**, restrito à
+   **interseção** dos pontos dos dois horizontes — coerente com o argumento da
+   VSN (§5.3: para um mesmo ponto de decisão a entrada é a mesma) e com a
+   atribuição agir sobre a mesma entrada (permutar a janela do encoder de uma
+   decisão afeta h+1 e h+7 juntos).
+5. **Bloco do bootstrap conjunto** — comprimento único com piso ≥ 7 pela regra
+   de §5.6; o valor numérico (b̂ de Politis–White das séries envolvidas) e
+   B/semente.
 
 ### 5.8 Linguagem e "veredito mecânico"
 
@@ -809,8 +891,9 @@ cohort confirmatório antes do pré-registro (§7).
 - **CQR** — o listado em §4.13;
 - **H3** — a partição de famílias (com a ressalva de §5.2 resolvida), o
   esquema de permutação, K_p, a medida, bloco/B/semente do bootstrap, a regra
-  C4/C5 com os pontos abertos de §5.7, e o desenho da ablação (cohort de
-  ablação hasheado).
+  C4/C5 com os 5 pontos abertos listados em §5.7 (nível do IC,
+  multiplicidade, importâncias negativas, chave de pareamento, bloco), e o
+  desenho da ablação (cohort de ablação hasheado).
 
 **Mecanismo.** A mesma maquinaria de pré-registro ratificada na 6.5 — TOML
 hasheado + âncora por tag e comentário (ADRs 6.5.0001, 6.5.0002, 6.5.0003;
@@ -857,9 +940,10 @@ ablação; schema e versionamento do payload da API.
 
 ### 8.3 O que este doc não decide
 
-A partição da volatilidade (§5.2 — issue separada); o tratamento de
-importâncias negativas e o ajuste por multiplicidade em H3 (§5.7 — pré-registro
-da 7.3); qualquer teste de hipótese sobre o CQR.
+A partição da volatilidade (§5.2 — issue separada, a abrir); os 5 pontos
+abertos de H3 listados em §5.7 (nível do IC, multiplicidade, importâncias
+negativas, chave de pareamento, bloco — pré-registro da 7.3); qualquer teste de
+hipótese sobre o CQR.
 
 ## 9. Vocabulário órfão do roadmap
 
@@ -887,8 +971,8 @@ em §10.1.
 | 2 | Seed irrelevante na inferência; dropout off; MC dropout fora | pytorch-forecasting 1.8.0; Lightning 2.6.5; Gal & Ghahramani 2016 §4; Kendall & Gal 2017 | [E] A2 | 7.1 |
 | 3 | Guardrail reusado (rearranjo do ADR 4.3.0002), sem serviço novo | modeling §2.4; ADR 4.3.0002 | [C] A3, degrau 1 | 7.1 |
 | 4 | A inferência emite predições da partição calib (requisito 7.1 → 7.2) | concept 5.2; ADR 5.1.0002 | [C] A4, degrau 1 | 7.1, 7.2 |
-| 5 | Split-CQR assimétrico (Thm 2), quantil inflado (1−α)(1+1/n) | Romano et al. 2019 Eqs. (9), (11), Thms 1–2 | [E] B1 | 7.2 |
-| 6 | Variante de registro sem pesos; NexCP ρ = 0,99 como sensibilidade; ρ ≤ 0,98 descartado | Barber et al. 2023 Eqs. (10)–(11), Thm 2, §4.4, §5.1; derivação | [C] B2, degrau 2 | 7.2 |
+| 5 | Split-CQR assimétrico (Thm 2), quantil inflado (1−α)(1+1/n) | Romano et al. 2019 Eqs. (9), (11) (numeração de equação não conferida), Thms 1–2 | [E] B1 | 7.2 |
+| 6 | Variante de registro sem pesos; NexCP ρ = 0,99 como sensibilidade; ρ ≤ 0,98 descartado | Barber et al. 2023 Eqs. (10)–(11), §4.1 Thm 2, §4.4, §5.1; derivação | [C] B2, degrau 2 | 7.2 |
 | 7 | ACI/EnbPI fora do confirmatório | Gibbs & Candès 2021; Xu & Xie 2021; Oliveira et al. 2024 §2 | [E] B3 | 7.2 |
 | 8 | Cobertura marginal por horizonte; conjunta Bonferroni rejeitada | Oliveira et al. 2024 Thms 1/4; Stankevičiūtė et al. 2021 §3.3 | [E] B4 | 7.2 |
 | 9 | 3 pares simétricos, caudas independentes; primário (0.10, 0.90); sem rearranjo da saída conformal; taxa de violação de aninhamento no perfil; par extremo reportado | Gupta et al. 2022 Tab. 1; CWZ 2021; ADR 6.5.0006 | [C] B5, degraus 4/5 | 7.2 |
@@ -900,10 +984,10 @@ em §10.1.
 | 15 | Ablação = LOCO com re-treino, 10 seeds, cohort de ablação próprio com referência no mesmo ambiente | Lei et al. 2018 §6; Hooker et al. 2021 §5; Covert et al. 2021 §8.2 | [P] P-ABLACAO | 7.3 |
 | 16 | Permutação da janela inteira da família, entre amostras, em conjunto | Fisher et al. 2019 §2; Gregorutti et al. 2015 §2.1; Hooker et al. 2021 | [E] C1 | 7.3 |
 | 17 | Medida = diferença de pinball média da grade, por horizonte; participação normalizada | Gu, Kelly & Xiu 2020 §1.9; evaluation §6 | [C] C2, degraus 1/5 | 7.3 |
-| 18 | Incerteza por bootstrap em bloco estacionário pareado; seeds pela média | Politis & Romano 1994; Politis & White 2004; Molnar et al. 2023 §5 | [E] C3 | 7.3 |
+| 18 | Incerteza por bootstrap em bloco estacionário pareado (transposição declarada; bloco único com piso ≥ 7, regra do MCS); seeds pela média | Politis & Romano 1994; Politis & White 2004; Molnar et al. 2023 §5, §7; ADR 0.0.0010 | [E] C3 | 7.3 |
 | 19 | "Heterogênea" = IC de Δ_f exclui 0 para ≥ 1 família | `[SEM-FONTE-PRIMÁRIA]` | [C] C4, degrau 4 | 7.3, 8.1 |
-| 20 | H3 sustentada = mesmo sinal de Δ_f e IC excluindo 0 nos dois métodos, mesma família | Krishna et al. 2024 §3.2 | [C] C5, degrau 4 | 7.3, 8.1 |
-| 21 | Features sem família ficam no modelo, fora da participação; interações seguem o registry | ADR 0.0.0016; registry | [C] C6, degrau 1 | 7.3 |
+| 20 | H3 sustentada = mesmo sinal de Δ_f e IC excluindo 0 nos dois métodos, mesma família | Krishna et al. 2024 §3.2 (métrica proposta pelo artigo) | [C] C5, degrau 4 | 7.3, 8.1 |
+| 21 | Features sem família ficam no modelo, fora da participação; interações seguem o registry; premissa: nenhuma feature de família é `known` | ADR 0.0.0016; registry; `train_tft.py` | [C] C6, degrau 1 | 7.3 |
 | 22 | Linguagem descritiva; veredito H3 = regra de leitura mecânica separada de H1 → H2 | overview §3; ADR 0.0.0002; evaluation §8.6 | [C] C7, degrau 1 | 7.3, 8.1 |
 | 23 | Pré-registro de CQR e H3 pela maquinaria da 6.5, antes de qualquer métrica sobre o cohort real | ADRs 6.5.0001–3, 6.5.0008 item 6 | [C] E1, degrau 1 | 7.2, 7.3, 8.1 |
 | 24 | Vocabulário órfão abandonado ou definido (§9) | — | [C] E2, degrau 1 | 7.3, 7.4 |
@@ -927,12 +1011,12 @@ Base: Lim et al. 2021 §4.2 Eq. (6) "Variable selection weights are generated by
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash do pré-registro de H3
 
 [decision:P] P-ABLACAO — desenho da ablação
-Escolha: LOCO com re-treino; 10 seeds; 4 famílias × 6 folds + modelo completo de referência (N+1 = 5 configurações) num cohort de ablação congelado e hasheado próprio, mesmo ambiente; dispositivo decidido na 7.3 e incluído no hash · Alternativas: substituição sem re-treino; sem ablação · Decisor: humano (2026-10-06)
-Base: Lei et al. 2018 §6 (LOCO; localizador não relido nesta sessão); Hooker et al. 2021 §5 p. 12 "Dropped Variable Importance … learning a model f−j … This is equivalent to the LOCO methods"; Covert, Lundberg & Lee 2021 §8.2 "Training separate models should provide the best approximation"
+Escolha: LOCO com re-treino; 10 seeds; 4 famílias × 6 folds + modelo completo de referência (N+1 = 5 configurações) num cohort de ablação congelado e hasheado próprio, mesmo ambiente; GPU no Linux (RX 7700 XT / ROCm) com piloto 1 seed × 1 fold antes; dispositivo e build incluídos no hash; nº de seeds revisável na 7.3 à luz do piloto · Alternativas: substituição sem re-treino; sem ablação · Decisor: humano (2026-10-06)
+Base: Lei et al. 2018 §6 (LOCO; localizador não relido nesta sessão); Hooker et al. 2021 §5 p. 12 "Dropped Variable Importance … learning a model f−j … This is equivalent to the LOCO methods"; Covert, Lundberg & Lee 2021 §8.2 "Training separate models should provide the best approximation"; custo medido: cohort confirmatório 10 seeds × 6 folds ≈ 19 h em CPU (technical 5.5, Task 35) → ablação ≈ 300 treinos ≈ 95 h em CPU (§5.5)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash do cohort de ablação
 
 [decision:E] A1 — contrato de reprodução da inferência
-Escolha: bit a bit só no mesmo ambiente pinado (build do torch, SO/CPU, lote de inferência fixo e registrado, num_workers = 0); entre ambientes, igualdade por tolerância declarada · Alternativas: bit a bit em qualquer ambiente; só tolerância
+Escolha: bit a bit só no mesmo ambiente pinado (build do torch, SO/CPU, lote de inferência fixo e registrado, num_workers = 0); entre ambientes, igualdade por tolerância declarada; referência da 7.1 = artefato re-executado no mesmo ambiente com lote = batch_size do treinador (111 no cohort); contra as predições já no silver, equivalência por tolerância salvo lote e ambiente coincidentes · Alternativas: bit a bit em qualquer ambiente; só tolerância
 Base: PyTorch notes/randomness.md (v2.13.0) "Completely reproducible results are not guaranteed across PyTorch releases, individual commits, or different platforms."; notes/numerical_accuracy.md §Batched computations "(A@B)[0] ... is not guaranteed to be bitwise identical to A[0]@B[0]"; docstring de torch.use_deterministic_algorithms "same software and hardware"; Goldberg 1991 (DOI 10.1145/103162.103163) "the associative laws of algebra do not necessarily hold for floating-point numbers"
 Sensibilidade pré-registrada: nenhuma · Reversível: sim (corrige a DoD da 7.1; coerente com concept 5.4 I9 e ROADMAP-5)
 
@@ -953,17 +1037,17 @@ Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:E] B1 — mecânica do CQR
 Escolha: split-CQR, versão assimétrica (Thm 2), α por cauda = τ_lo e 1 − τ_hi, quantil inflado (1 − α)(1 + 1/n) · Alternativas: simétrico (Thm 1)
-Base: Romano, Patterson & Candès 2019 (arXiv:1905.03222) Eq. (9) "Ei := max{q̂lo(Xi) − Yi, Yi − q̂hi(Xi)}"; Eq. (11) "(1 − α)(1 + 1/|I2|)-th empirical quantile"; Thm 1; §4 Thm 2 "control[s] the left and right tails independently"; §6.2 "increases from 1.40 to 1.58"; gate de H1 por cauda (evaluation §10 conv. 26)
+Base: Romano, Patterson & Candès 2019 (arXiv:1905.03222) Eq. (9) "Ei := max{q̂lo(Xi) − Yi, Yi − q̂hi(Xi)}"; Eq. (11) "(1 − α)(1 + 1/|I2|)-th empirical quantile" (numeração de equação não conferida); Thm 1; §4 Thm 2 "control[s] the left and right tails independently"; §6.2 "increases from 1.40 to 1.58"; gate de H1 por cauda (evaluation §10 conv. 26)
 Sensibilidade pré-registrada: nenhuma (o simétrico daria intervalos mais estreitos com a mesma garantia só no PICP) · Reversível: sim, até o hash do pré-registro do CQR
 
 [decision:C] B2 — variante do CQR
 Escolha: split-CQR sem pesos como registro; NexCP com w_i = ρ^(n+1−i), ρ = 0,99, como sensibilidade pré-registrada (perfil) · Alternativas: NexCP como registro; não fazer (contraria overview §3/§11) · Degrau: 2 (default do oráculo MAPIE 1.5.0, sem pesos; recência já garantida pelo calib mais recente, ADR 5.1.0002)
-Base: Barber et al. 2023 (DOI 10.1214/23-AOS2276) Eqs. (10)–(11) pp. 10–11; §3.1 "We assume the weights wi are fixed"; Thm 2 p. 15 "1 − α − Σ w̃i · dTV(R(Z), R(Zi))"; §4.4 pp. 18–19 "≤ ρ^k"; §5.1 p. 22 "wi = 0.99^(n+1−i)"; derivação deste doc: w̃_{n+1} = 0,0109 (ρ = 0,99) / 0,0201 (ρ = 0,98) > α_cauda 0,02 ⇒ limite infinito na cauda 0,02; contexto: Stocker et al. 2025 (arXiv:2511.13608, preprint) p. 17
+Base: Barber et al. 2023 (DOI 10.1214/23-AOS2276) Eqs. (10)–(11) pp. 10–11; §3.1 "We assume the weights wi are fixed"; §4.1 Thm 2 p. 15 "1 − α − Σ w̃i · dTV(R(Z), R(Zi))"; §4.4 pp. 18–19 "≤ ρ^k"; §5.1 p. 22 "wi = 0.99^(n+1−i)"; derivação deste doc: w̃_{n+1} = 0,0109 (ρ = 0,99) / 0,0201 (ρ = 0,98) > α_cauda 0,02 ⇒ limite infinito na cauda 0,02; contexto: Stocker et al. 2025 (arXiv:2511.13608, preprint) p. 17
 Sensibilidade pré-registrada: NexCP ρ = 0,99 · Reversível: sim, até o hash
 
 [decision:E] B3 — ACI e EnbPI
 Escolha: fora do confirmatório · Alternativas: incluir
-Base: Gibbs & Candès 2021 (arXiv:2106.00170) Eq. (2) p. 3, Prop. 4.1 p. 6, §7 p. 10 "delayed fashion or in large batches"; Xu & Xie 2021 (PMLR 139) §3.1 p. 4, §3 item (5) "When s=∞, no feedback is available", §4.1 Assumption 1; Oliveira et al. 2024 (arXiv:2203.15885) §2 p. 4 "have no marginal coverage guarantees"
+Base: Gibbs & Candès 2021 (arXiv:2106.00170) Eq. (2) p. 3, Prop. 4.1 p. 6 (garantia de frequência de longo prazo, com atualização online), §4.2 (cobertura marginal só aproximada, sob pequenos drifts num modelo específico), §7 p. 10 "delayed fashion or in large batches" (problema aberto); Xu & Xie 2021 (PMLR 139) §3.1 p. 4, §3 item (5) "When s=∞, no feedback is available", §4.1 Assumption 1; Oliveira et al. 2024 (arXiv:2203.15885) §2 p. 4 "have no marginal coverage guarantees"
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:E] B4 — por horizonte
@@ -998,7 +1082,7 @@ Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:E] C1 — esquema de permutação
 Escolha: permutar entre amostras do teste a janela inteira (todos os lags) das features da família, em conjunto · Alternativas: embaralhar dentro do tempo; blocos
-Base: Fisher, Rudin & Dominici 2019 (arXiv:1801.01489) §2 "the covariate subsets X1 ... may each be multivariate"; Gregorutti, Michel & Saint-Pierre 2015 (DOI 10.1016/j.csda.2015.04.002) §2.1 "the grouped variable importance is not comparable with the sum of the individual importances"; Hooker, Mentch & Zhou 2021 (DOI 10.1007/s11222-021-10057-z) Abstract; Leung et al. 2023 (arXiv:2107.14317)
+Base: Fisher, Rudin & Dominici 2019 (arXiv:1801.01489) §2 "the covariate subsets X1 ... may each be multivariate"; Gregorutti, Michel & Saint-Pierre 2015 (DOI 10.1016/j.csda.2015.04.002; arXiv:1411.4170 §2.1) "in general, the grouped variable importance is not comparable with the sum of the individual importances", com a exceção "If f is additive and if the variables of the group are independent, the grouped variable importance is nothing more than the sum of the individual importances"; Hooker, Mentch & Zhou 2021 (DOI 10.1007/s11222-021-10057-z) Abstract; Leung et al. 2023 (arXiv:2107.14317)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash de H3
 
 [decision:C] C2 — medida da permutação
@@ -1007,23 +1091,23 @@ Base: Breiman 2001 (DOI 10.1023/A:1010933404324) §10; Fisher et al. 2019 §3 Eq
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash de H3
 
 [decision:E] C3 — incerteza da importância
-Escolha: bootstrap em bloco estacionário pareado (mesmas datas para h+1 e h+7) sobre d_{f,t}; seeds pela média, dispersão no perfil · Alternativas: repetir permutações; bootstrap iid
-Base: Molnar et al. 2023 (DOI 10.1007/978-3-031-44064-9_24) §5 "Variance estimators for model-PD/PFI only account for variance due to Monte Carlo integration"; Williamson et al. 2023 (DOI 10.1080/01621459.2021.2003200) §2; Politis & Romano 1994; Politis & White 2004; Bouthillier et al. 2021
-Sensibilidade pré-registrada: nenhuma · Reversível: sim · Lacuna: sem fonte de IC de PFI sob dependência (transposição)
+Escolha: bootstrap em bloco estacionário pareado (mesmos índices para h+1, h+7 e todas as famílias) sobre d_{f,t}, bloco único com piso ≥ 7 (regra do MCS, ADR 0.0.0010); chave de pareamento entre horizontes a fixar no pré-registro (recomendação: ponto de decisão, interseção); seeds pela média, dispersão no perfil · Alternativas: repetir permutações; bootstrap iid; IC t entre instâncias (Molnar)
+Base: Molnar et al. 2023 (DOI 10.1007/978-3-031-44064-9_24; arXiv:2109.01433) §5 "Variance estimators for model-PD/PFI only account for variance due to Monte Carlo integration" — variância de MC calculada entre as n2 instâncias de teste, IC t justificado por amostras independentes; §7 "average the PD/PFI over m model fits" (variância do modelo exige refits; learner-PFI corrigido para dados compartilhados, Nadeau–Bengio); Williamson et al. 2023 (DOI 10.1080/01621459.2021.2003200) §2; Politis & Romano 1994; Politis & White 2004; Bouthillier et al. 2021; ADR 0.0.0010 (block = max(h, ⌈max b̂_sb⌉))
+Sensibilidade pré-registrada: nenhuma · Reversível: sim · Lacuna: sem fonte de IC de PFI sob dependência — transposição declarada (instâncias de teste serialmente dependentes)
 
 [decision:C] C4 — "heterogênea entre horizontes"
 Escolha: Δ_f = s_f(h+7) − s_f(h+1); heterogênea se o IC bootstrap pareado de Δ_f exclui 0 para ≥ 1 família · Alternativas: mudança de ranking · Degrau: 4
-Base: [SEM-FONTE-PRIMÁRIA] — convenção
+Base: [SEM-FONTE-PRIMÁRIA] — convenção; pontos abertos do pré-registro listados em §5.7 (nível, multiplicidade, importâncias negativas, chave de pareamento — alinhamento por target_timestamp por horizonte em evaluation §2.1/§6.7, T = 1511/1505 no concept 5.5 D6 —, bloco)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash de H3
 
 [decision:C] C5 — concordância entre métodos
 Escolha: H3 sustentada se permutação e ablação concordam no sinal de Δ_f e ambas têm IC excluindo 0 para a mesma família; VSN reportada à parte (percentis 10/50/90; soma por família) · Alternativas: concordância de ranking (Spearman, top-k) · Degrau: 4
-Base: Krishna et al. 2024 (arXiv:2202.01602) §3.2 "feature agreement, rank agreement, sign agreement, ..."; Jain & Wallace 2019; Wiegreffe & Pinter 2019
+Base: Krishna et al. 2024 (arXiv:2202.01602) §3.2 "we propose six different metrics" — "feature agreement, rank agreement, sign agreement, ..." (métricas propostas pelo artigo, não prática geral estabelecida); Jain & Wallace 2019; Wiegreffe & Pinter 2019
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash de H3
 
 [decision:C] C6 — features sem família
-Escolha: calendário, alvo passado e índice relativo não são permutados nem ablacionados; participação só sobre as 4 famílias; interações seguem o registry · Alternativas: 5ª "família" residual · Degrau: 1
-Base: ADR 0.0.0016; registry de features
+Escolha: calendário, alvo passado e índice relativo não são permutados nem ablacionados; participação só sobre as 4 famílias; interações seguem o registry; premissa verificável antes da 7.3: nenhuma feature de família é known (senão reabrir P-H3-VSN) · Alternativas: 5ª "família" residual · Degrau: 1
+Base: ADR 0.0.0016; registry de features; train_tft.py l. 23–26, 196–207 (spec known vai ao decoder automaticamente)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:C] C7 — linguagem e "veredito mecânico H3"
@@ -1062,8 +1146,8 @@ foi lida em primária durante o gate.
 
 ### 11.1 Já ratificadas no overview §10
 
-- Romano, Y.; Patterson, E.; Candès, E. (2019). "Conformalized Quantile Regression". *Advances in Neural Information Processing Systems 32 (NeurIPS 2019)*. arXiv:1905.03222. (Eqs. (9), (11); Theorem 1; §4 Theorem 2, Eqs. (15)–(16); §4 "Practical considerations"; §6.2.)
-- Barber, R. F.; Candès, E. J.; Ramdas, A.; Tibshirani, R. J. (2023). "Conformal prediction beyond exchangeability". *Annals of Statistics*, 51(2), 816–845. DOI: 10.1214/23-AOS2276. arXiv:2202.13415v5 (versão lida; paginação do arXiv). (§3, §3.1 p. 10; Eqs. (10)–(11) pp. 10–11; Theorem 2 p. 15; §4.3 p. 18; §4.4 pp. 18–19; §5.1 p. 22; Appendix A.)
+- Romano, Y.; Patterson, E.; Candès, E. (2019). "Conformalized Quantile Regression". *Advances in Neural Information Processing Systems 32 (NeurIPS 2019)*. arXiv:1905.03222. (Eqs. (9), (11) — numeração de equação não conferida; Theorem 1; §4 Theorem 2, Eqs. (15)–(16); §4 "Practical considerations"; §6.2.)
+- Barber, R. F.; Candès, E. J.; Ramdas, A.; Tibshirani, R. J. (2023). "Conformal prediction beyond exchangeability". *Annals of Statistics*, 51(2), 816–845. DOI: 10.1214/23-AOS2276. arXiv:2202.13415v5 (versão lida; paginação do arXiv). (§3, §3.1 p. 10; Eqs. (10)–(11) pp. 10–11; §4.1 Theorem 2 p. 15; §4.3 p. 18; §4.4 pp. 18–19; §5.1 p. 22; Appendix A.)
 - Lei, J.; G'Sell, M.; Rinaldo, A.; Tibshirani, R. J.; Wasserman, L. (2018). "Distribution-Free Predictive Inference for Regression". *Journal of the American Statistical Association*, 113(523), 1094–1111. DOI: 10.1080/01621459.2017.1307116. (Split conformal; §6 LOCO — localizador da sessão de pesquisa, não relido.)
 - Lim, B.; Arık, S. Ö.; Loeff, N.; Pfister, T. (2021). "Temporal Fusion Transformers for interpretable multi-horizon time series forecasting". *International Journal of Forecasting*, 37(4), 1748–1764. DOI: 10.1016/j.ijforecast.2021.03.012. (Lido em arXiv:1912.09363v3; paginação do periódico não conferida: §4.2 Eqs. (6) e (8); §7.1 Eq. (27); §7.2.)
 - Gu, S.; Kelly, B.; Xiu, D. (2020). "Empirical Asset Pricing via Machine Learning". *The Review of Financial Studies*, 33(5), 2223–2273. DOI: 10.1093/rfs/hhaa009. (§1.9 pp. 2246–2247.)
@@ -1090,7 +1174,7 @@ Conformal:
 - Oliveira, R. I.; Orenstein, P.; Ramos, T.; Romano, J. V. (2024). "Split Conformal Prediction and Non-Exchangeable Data". *Journal of Machine Learning Research*, 25(225). arXiv:2203.15885. (§2 p. 4; Theorem 1 p. 5; Theorem 4 p. 8; §3.4 Theorem 6 p. 9.)
 - Chernozhukov, V.; Wüthrich, K.; Zhu, Y. (2018). "Exact and Robust Conformal Inference Methods for Predictive Machine Learning With Dependent Data". *Proceedings of the 31st Conference on Learning Theory (COLT)*, PMLR 75. arXiv:1802.06300. (§3.2 Theorem 2 p. 7; §3.3.)
 - Stankevičiūtė, K.; Alaa, A. M.; van der Schaar, M. (2021). "Conformal time-series forecasting". *Advances in Neural Information Processing Systems 34 (NeurIPS 2021)*. (Já citado no ADR 5.4.0001; ausente do overview §10 até aqui. §3.3 p. 5; Fig. 1 p. 3.)
-- Gibbs, I.; Candès, E. (2021). "Adaptive Conformal Inference Under Distribution Shift". *Advances in Neural Information Processing Systems 34 (NeurIPS 2021)*. arXiv:2106.00170. (Eq. (2) p. 3; Proposition 4.1 p. 6; §7 p. 10.)
+- Gibbs, I.; Candès, E. (2021). "Adaptive Conformal Inference Under Distribution Shift". *Advances in Neural Information Processing Systems 34 (NeurIPS 2021)*. arXiv:2106.00170. (Eq. (2) p. 3; Proposition 4.1 p. 6; §4.2; §7 p. 10.)
 - Xu, C.; Xie, Y. (2021). "Conformal prediction interval for dynamic time-series". *Proceedings of the 38th ICML*, PMLR 139 (https://proceedings.mlr.press/v139/xu21h.html). arXiv:2010.09107 (título do arXiv: "Conformal prediction for time series"; título da versão PMLR não conferido mecanicamente). (§3 item (5) e §3.1 p. 4; §4.1 Assumption 1; Theorem 1.) Versão de periódico: Xu, C.; Xie, Y. (2023). "Conformal Prediction for Time Series". *IEEE Transactions on Pattern Analysis and Machine Intelligence*. DOI: 10.1109/TPAMI.2023.3272339 (não lida; os localizadores são da versão PMLR).
 - Gupta, C.; Kuchibhotla, A. K.; Ramdas, A. (2022). "Nested conformal prediction and quantile out-of-bag ensemble methods". *Pattern Recognition*, 127, 108496. DOI: 10.1016/j.patcog.2021.108496. (Table 1.)
 - Chernozhukov, V.; Wüthrich, K.; Zhu, Y. (2021). "Distributional conformal prediction". *PNAS*, 118(48), e2107794118. DOI: 10.1073/pnas.2107794118. (Algorithm 2; Theorems 1–3.)
@@ -1103,11 +1187,11 @@ Atribuição de features:
 
 - Breiman, L. (2001). "Random Forests". *Machine Learning*, 45(1), 5–32. DOI: 10.1023/A:1010933404324. (§10; paginação não conferida.)
 - Fisher, A.; Rudin, C.; Dominici, F. (2019). "All Models are Wrong, but Many are Useful: Learning a Variable's Importance by Studying an Entire Class of Prediction Models Simultaneously". *Journal of Machine Learning Research*, 20(177), 1–81. arXiv:1801.01489. (§2; §3 Eq. (3.1).)
-- Gregorutti, B.; Michel, B.; Saint-Pierre, P. (2015). "Grouped variable importance with random forests and application to multiple functional data analysis". *Computational Statistics & Data Analysis*, 90, 15–35. DOI: 10.1016/j.csda.2015.04.002. (§2; §2.1.)
+- Gregorutti, B.; Michel, B.; Saint-Pierre, P. (2015). "Grouped variable importance with random forests and application to multiple functional data analysis". *Computational Statistics & Data Analysis*, 90, 15–35. DOI: 10.1016/j.csda.2015.04.002. arXiv:1411.4170 (versão lida; localizador §2.1, correspondente à versão publicada no CSDA 90). (§2; §2.1.)
 - Hooker, G.; Mentch, L.; Zhou, S. (2021). "Unrestricted permutation forces extrapolation: variable importance requires at least one more model, or there is no free variable importance". *Statistics and Computing*, 31, 82. DOI: 10.1007/s11222-021-10057-z. (Abstract; §5 pp. 12–13; §5.1.)
 - Strobl, C.; Boulesteix, A.-L.; Kneib, T.; Augustin, T.; Zeileis, A. (2008). "Conditional variable importance for random forests". *BMC Bioinformatics*, 9, 307. DOI: 10.1186/1471-2105-9-307.
 - Leung, K. K.; Rooke, C.; Smith, J.; Zuberi, S.; Volkovs, M. (2023). "Temporal Dependencies in Feature Importance for Time Series Predictions". *International Conference on Learning Representations (ICLR 2023)*. arXiv:2107.14317.
-- Molnar, C.; Freiesleben, T.; König, G.; Herbinger, J.; Reisinger, T.; Casalicchio, G.; Wright, M. N.; Bischl, B. (2023). "Relating the Partial Dependence Plot and Permutation Feature Importance to the Data Generating Process". In *Explainable Artificial Intelligence (xAI 2023)*, Communications in Computer and Information Science, Springer. DOI: 10.1007/978-3-031-44064-9_24. (Lido em arXiv:2109.01433v1: §5; §6; §7.)
+- Molnar, C.; Freiesleben, T.; König, G.; Herbinger, J.; Reisinger, T.; Casalicchio, G.; Wright, M. N.; Bischl, B. (2023). "Relating the Partial Dependence Plot and Permutation Feature Importance to the Data Generating Process". In *Explainable Artificial Intelligence (xAI 2023)*, Communications in Computer and Information Science, Springer. DOI: 10.1007/978-3-031-44064-9_24. (Lido em arXiv:2109.01433v1: §5 — variância de MC entre as n2 instâncias de teste, IC t por amostras independentes; §6; §7 — refits, "average the PD/PFI over m model fits", correção de Nadeau–Bengio para dados compartilhados no learner-PFI.)
 - Williamson, B. D.; Gilbert, P. B.; Simon, N. R.; Carone, M. (2023). "A General Framework for Inference on Algorithm-Agnostic Variable Importance". *Journal of the American Statistical Association*, 118(543), 1645–1658. DOI: 10.1080/01621459.2021.2003200. (§2.)
 - Covert, I.; Lundberg, S.; Lee, S.-I. (2021). "Explaining by Removing: A Unified Framework for Model Explanation". *Journal of Machine Learning Research*, 22(209), 1–90. arXiv:2011.14878. (§8.2.)
 - Krishna, S.; Han, T.; Gu, A.; Wu, S.; Jabbari, S.; Lakkaraju, H. (2024). "The Disagreement Problem in Explainable Machine Learning: A Practitioner's Perspective". *Transactions on Machine Learning Research*. arXiv:2202.01602. (§3.2.)
