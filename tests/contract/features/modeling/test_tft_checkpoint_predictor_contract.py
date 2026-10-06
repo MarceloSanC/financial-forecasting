@@ -204,6 +204,12 @@ def test_non_contiguous_decisions_raise_value_error(leg: _Leg) -> None:
 
 
 @pytest.mark.contract
+def test_empty_decisions_raise_value_error(leg: _Leg) -> None:
+    with pytest.raises(ValueError, match="non-empty"):
+        leg.predict(decision_indices=())
+
+
+@pytest.mark.contract
 @pytest.mark.parametrize(
     "mutation",
     ["levels", "known", "max_horizon"],
