@@ -122,8 +122,8 @@ Forces:
    `inference.application` and `inference.domain` — the same perimeter as
    `modeling-no-torch-leak` (adapters may host a library, as the 7.3 roadmap
    foresees for VSN weights; in this Stage none does). The slice joins
-   `hexagonal-layers`, `inward-only`, `store-no-storage-leak` and
-   `bc-independence`.
+   `hexagonal-layers`, `domain-purity`, `inward-only`, `store-no-storage-leak`
+   and `bc-independence`.
 5. **Runtime surface = CLI subcommand.** `python -m financial_forecasting.cli
    infer --data-root … --cohort … [--break-stale-lock] [--cross-environment "<justification>"]`,
    implemented in `inference/adapters/in/cli/inference_commands.py` and loaded by
