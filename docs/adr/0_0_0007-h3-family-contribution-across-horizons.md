@@ -127,7 +127,7 @@ the ablation, and the gate's research found a structural problem:
 
 **Pending outside this ADR:** ADR 0.0.0016 puts volatility features in the
 price family while the registry labels six of them technical; this changes the
-H3 partition and must be resolved (separate issue, to be opened) before H3 is
+H3 partition and must be resolved (separate issue [#151](https://github.com/MarceloSanC/financial-forecasting/issues/151)) before H3 is
 preregistered.
 
 ## Alternatives considered

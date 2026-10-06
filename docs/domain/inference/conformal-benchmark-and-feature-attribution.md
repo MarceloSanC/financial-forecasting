@@ -615,7 +615,7 @@ belong to the **price** family", mas o registry classifica seis features de
 volatilidade (`volatility_20d`, `volatility_parkinson`,
 `volatility_garman_klass`, `downside_semivolatility`, `vol_of_vol`,
 `volatility_regime`) como **technical**. A divergência muda a partição de H3 e
-fica **fora do escopo deste doc** (issue separada, a abrir): ela **precisa estar
+fica **fora do escopo deste doc** (issue separada, [#151](https://github.com/MarceloSanC/financial-forecasting/issues/151)): ela **precisa estar
 resolvida antes do pré-registro de H3**, porque a partição é parte do que se
 pré-registra (§7).
 
@@ -940,7 +940,7 @@ ablação; schema e versionamento do payload da API.
 
 ### 8.3 O que este doc não decide
 
-A partição da volatilidade (§5.2 — issue separada, a abrir); os 5 pontos
+A partição da volatilidade (§5.2 — issue [#151](https://github.com/MarceloSanC/financial-forecasting/issues/151)); os 5 pontos
 abertos de H3 listados em §5.7 (nível do IC, multiplicidade, importâncias
 negativas, chave de pareamento, bloco — pré-registro da 7.3); qualquer teste de
 hipótese sobre o CQR.
