@@ -30,7 +30,10 @@ A marcação no ledger só acontece depois de o use case da unidade retornar.
 
 `cohort_model_keys` e `load_training_grid` são públicos para o comando `verify`
 e o `freeze` do CLI usarem a MESMA enumeração de modelos e a MESMA leitura do
-grid que a corrida — uma fonte só.
+grid que a corrida — uma fonte só. Pelo mesmo motivo, `check_cohort_declarations`
+(I4 + geometria) e `tft_train_command` (o `TrainTftCommand` de uma seed) são
+públicos para a predição a partir do checkpoint (Stage 7.1, ADR 7.1.0001 item 2)
+conferir as declarações e reconstruir a identidade do run sem recopiá-las.
 """
 
 from __future__ import annotations
@@ -265,6 +268,80 @@ def load_training_grid(
     return build_training_grid(rows, columns=columns)
 
 
+def check_cohort_declarations(  # noqa: PLR0913 — as declarações conferidas, uma por argumento
+    spec: CohortSpec,
+    *,
+    store: MedallionStore,
+    hasher: Hasher,
+    modeling_columns: Sequence[str],
+    observed_feature_set_hash: str,
+    pipeline_version: str,
+    supported_device: str,
+) -> TrainingGrid:
+    """I4 + geometria: o dado e o código de agora são os que o spec declara.
+
+    Devolve o grid lido (o mesmo da corrida). Erros: `DatasetMismatchError`
+    (impressão digital do dado), `CohortDeclarationMismatchError` (proveniência
+    dos sweeps, `feature_set_hash`, device, `pipeline_version`) e o erro de
+    geometria do domínio.
+    """
+    grid = load_training_grid(store=store, asset_id=spec.asset_id, columns=modeling_columns)
+    observed = grid_fingerprint(grid, hasher=hasher, asset_id=spec.asset_id)
+    if observed != spec.dataset_fingerprint:
+        raise DatasetMismatchError(
+            f"dataset fingerprint {observed[:12]} != declared "
+            f"{str(spec.dataset_fingerprint)[:12]} — the materialized data changed"
+        )
+    provenance = spec.provenance
+    if provenance is None or provenance.dataset_fingerprint != spec.dataset_fingerprint:
+        raise CohortDeclarationMismatchError(
+            "sweeps ran on a different dataset than the one declared for the run"
+        )
+    if spec.feature_set_hash != observed_feature_set_hash:
+        raise CohortDeclarationMismatchError(
+            f"feature_set_hash {spec.feature_set_hash[:12]} != registry "
+            f"{observed_feature_set_hash[:12]}"
+        )
+    if spec.device != supported_device:
+        # O probe grava o device DECLARADO; sem esta igualdade, um spec com
+        # "rocm" rodaria em CPU e carimbaria "rocm" no hash e no ledger.
+        raise CohortDeclarationMismatchError(
+            f"device {spec.device!r} declared, but the trainers run on {supported_device!r}"
+        )
+    if spec.pipeline_version != pipeline_version:
+        raise CohortDeclarationMismatchError(
+            f"pipeline_version {spec.pipeline_version!r} != code {pipeline_version!r}"
+        )
+    spec.geometry.fits(n_sessions=len(grid.timestamps), max_horizon=spec.max_horizon)
+    return grid
+
+
+def tft_train_command(
+    spec: CohortSpec, *, scope: ScopeSpec, seed: int, schema_version: int
+) -> TrainTftCommand:
+    """O `TrainTftCommand` da unidade `tft:seed=<seed>` — params congelados com a seed.
+
+    Campos nomeados um a um (sem `**dict`): o mypy confere nome e tipo, e uma
+    troca val_size/calib_size não passa despercebida. Exige o spec congelado.
+    """
+    tft_params = spec.tft_params
+    if tft_params is None:
+        raise CohortNotFrozenError(f"cohort {spec.name!r} has no frozen tft_params")
+    geometry = spec.geometry
+    return TrainTftCommand(
+        params=replace(tft_params, seed=seed),
+        scope=scope,
+        horizons=spec.horizons,
+        quantile_levels=spec.quantile_levels,
+        n_folds=geometry.n_folds,
+        test_size=geometry.test_size,
+        val_size=geometry.val_size,
+        calib_size=geometry.calib_size,
+        embargo=geometry.embargo,
+        schema_version=schema_version,
+    )
+
+
 class RunConfirmatoryCohort:
     """Orquestra a corrida do cohort congelado, retomável por unidade."""
 
@@ -328,38 +405,16 @@ class RunConfirmatoryCohort:
     # -- pré-condições ----------------------------------------------------------
 
     def _check_declarations(self, spec: CohortSpec) -> None:
-        """I4 + geometria: o dado e o código de agora são os que o spec declara."""
-        grid = load_training_grid(
-            store=self._store, asset_id=spec.asset_id, columns=self._modeling_columns
+        """I4 + geometria — delega a `check_cohort_declarations`."""
+        check_cohort_declarations(
+            spec,
+            store=self._store,
+            hasher=self._hasher,
+            modeling_columns=self._modeling_columns,
+            observed_feature_set_hash=self._observed_feature_set_hash,
+            pipeline_version=self._pipeline_version,
+            supported_device=self._supported_device,
         )
-        observed = grid_fingerprint(grid, hasher=self._hasher, asset_id=spec.asset_id)
-        if observed != spec.dataset_fingerprint:
-            raise DatasetMismatchError(
-                f"dataset fingerprint {observed[:12]} != declared "
-                f"{str(spec.dataset_fingerprint)[:12]} — the materialized data changed"
-            )
-        provenance = spec.provenance
-        if provenance is None or provenance.dataset_fingerprint != spec.dataset_fingerprint:
-            raise CohortDeclarationMismatchError(
-                "sweeps ran on a different dataset than the one declared for the run"
-            )
-        if spec.feature_set_hash != self._observed_feature_set_hash:
-            raise CohortDeclarationMismatchError(
-                f"feature_set_hash {spec.feature_set_hash[:12]} != registry "
-                f"{self._observed_feature_set_hash[:12]}"
-            )
-        if spec.device != self._supported_device:
-            # O probe grava o device DECLARADO; sem esta igualdade, um spec com
-            # "rocm" rodaria em CPU e carimbaria "rocm" no hash e no ledger.
-            raise CohortDeclarationMismatchError(
-                f"device {spec.device!r} declared, but the trainers run on "
-                f"{self._supported_device!r}"
-            )
-        if spec.pipeline_version != self._pipeline_version:
-            raise CohortDeclarationMismatchError(
-                f"pipeline_version {spec.pipeline_version!r} != code {self._pipeline_version!r}"
-            )
-        spec.geometry.fits(n_sessions=len(grid.timestamps), max_horizon=spec.max_horizon)
 
     def _check_environment(self, cohort_id: str) -> None:
         """I5: árvore limpa sempre; ambiente gravado na 1ª vez e igual nas seguintes."""
@@ -387,8 +442,7 @@ class RunConfirmatoryCohort:
     def _units(self, spec: CohortSpec, scope: ScopeSpec) -> list[_Unit]:
         geometry = spec.geometry
         gbm_params = spec.gbm_params
-        tft_params = spec.tft_params
-        assert gbm_params is not None and tft_params is not None  # is_frozen garante
+        assert gbm_params is not None  # is_frozen garante
         model_keys = cohort_model_keys(spec)
         # Campos nomeados um a um (sem `**dict`): o mypy confere nome e tipo, e
         # uma troca val_size/calib_size não passa despercebida.
@@ -430,17 +484,8 @@ class RunConfirmatoryCohort:
         def tft(seed: int) -> Callable[[], Mapping[str, int]]:
             def execute() -> Mapping[str, int]:
                 result = self._train_tft(
-                    TrainTftCommand(
-                        params=replace(tft_params, seed=seed),
-                        scope=scope,
-                        horizons=spec.horizons,
-                        quantile_levels=spec.quantile_levels,
-                        n_folds=geometry.n_folds,
-                        test_size=geometry.test_size,
-                        val_size=geometry.val_size,
-                        calib_size=geometry.calib_size,
-                        embargo=geometry.embargo,
-                        schema_version=self._schema_version,
+                    tft_train_command(
+                        spec, scope=scope, seed=seed, schema_version=self._schema_version
                     )
                 )
                 return {run.run_id: run.rows_written for run in result.runs}
