@@ -158,7 +158,7 @@ class HorizonReports:
                 amostra comum; `band_levels`/`dm_variance_estimators` vazios; e os erros
                 de validação dos serviços chamados.
         """
-        _check_paired(samples, paired)
+        check_paired(samples, paired)
         if not band_levels:
             raise ValueError("band_levels must hold at least one band level")
         if not dm_variance_estimators:
@@ -196,7 +196,13 @@ class HorizonReports:
         )
 
 
-def _check_paired(samples: HorizonSamples, paired: PairedLossSeries) -> None:
+def check_paired(samples: HorizonSamples, paired: PairedLossSeries) -> None:
+    """`paired` é a série da amostra comum do horizonte (mesmos modelos e alvos) — dono
+    único da conferência, usado pelo `HorizonReports` e pelo `ProfileReports` (I2).
+
+    Raises:
+        ValueError: outro horizonte, outros modelos ou fora da amostra comum.
+    """
     if paired.horizon != samples.horizon:
         raise ValueError(
             f"paired series is for horizon {paired.horizon}, samples for {samples.horizon}"
@@ -248,15 +254,19 @@ def _series_reports(  # noqa: PLR0913 — uma série e o seu escopo, keyword-onl
                 ),
                 var_level=var_level,
             )
-            for sequence, var_level in _hit_sequences(series, tolerance)
+            for sequence, var_level in hit_sequences(series, tolerance)
         ),
     )
 
 
-def _hit_sequences(
+def hit_sequences(
     series: CoverageSeries, tolerance: float
 ) -> Iterator[tuple[HitSequence, float | None]]:
-    """Sequências de hits na ordem: intervalos, caudas; sem/com degeneradas; + DGT."""
+    """Sequências de hits na ordem: intervalos, caudas; sem/com degeneradas; + DGT.
+
+    Pública (Stage 6.6): o `ProfileReports` reusa a mesma lista de sequências testadas
+    para o Monte Carlo de h = 1 — uma escrita só.
+    """
     for include in _INCLUDE_DEGENERATE:
         for pair in series.symmetric_pairs:
             sequence = HitSequences.interval(

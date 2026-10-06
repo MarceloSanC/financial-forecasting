@@ -1,14 +1,18 @@
 """Fábrica de gold sintético coerente com um plano (Stage 6.5, technical §2 Task 08).
 
 Módulo privado (sem `test_`), stdlib + DTOs + domínio (gate de pureza do `evaluation`:
-nenhum adapter, nenhum arquivo). `make_stored(prereg, ...)` gera as linhas das cinco
-tabelas gold **coerentes com o plano** — as chaves do `gold_schema`, o manifesto do
-`refresh_command_from` — como um `StoredGold` mutável; cada teste aplica **uma**
-violação pelos mutadores (`drop_rows`, `set_cell`, `add_seed`, `manifest`) e monta a
-geração com `generation()` (pelo dono único `GoldGeneration.from_stored`).
+nenhum adapter, nenhum arquivo). `make_stored(prereg, ...)` gera as linhas das treze
+tabelas gold (as cinco da 6.4 e as oito de perfil da 6.6, que uma geração `COMPLETED`
+precisa listar — `GoldGeneration.from_stored`) **coerentes com o plano** — as chaves
+do `gold_schema`, o manifesto do `refresh_command_from` — como um `StoredGold` mutável;
+cada teste aplica **uma** violação pelos mutadores (`drop_rows`, `set_cell`, `add_seed`,
+`manifest`) e monta a geração com `generation()` (pelo dono único
+`GoldGeneration.from_stored`).
 
 Contagens por omissão: calibradas (25 violações em 250 pontos por cauda, degeneração
-0); sub-séries DGT com `n // h`. O perfil (Task 09) e o use case (Task 10) reusam a
+0); sub-séries DGT com `n // h`. Perfis (6.6): uma linha coerente por tabela e horizonte
+(candidato e 1º comparador); sob uma revisão sem `[profile_parameters]` só o Monte Carlo
+e a série d_t têm linhas (concept 6.6 I9). O perfil (Task 09) e o use case (Task 10) reusam a
 fábrica.
 """
 
@@ -24,9 +28,17 @@ from financial_forecasting.features.evaluation.application.dtos.confirmatory_sco
 )
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
     GOLD_CALIBRATION_TABLE,
+    GOLD_CHRISTOFFERSEN_MONTE_CARLO,
+    GOLD_DIFFERENTIAL_ACF,
+    GOLD_DIFFERENTIAL_BREAKS,
+    GOLD_DM_PROFILES,
     GOLD_DM_RESULTS,
+    GOLD_DM_SEED_FRACTION,
+    GOLD_LOSS_DIFFERENTIALS,
+    GOLD_MCS_BLOCK_SENSITIVITY,
     GOLD_MCS_RESULTS,
     GOLD_METRICS_BY_RUN,
+    GOLD_PARTIAL_DEGENERACY,
     GOLD_QUALITY_CHECKS,
     GOLD_SCHEMAS,
 )
@@ -51,6 +63,9 @@ from financial_forecasting.features.evaluation.domain.services.quality_checks.st
 )
 from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
     Preregistration,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.scorecard_evidence import (
+    GATE_SAMPLE,
 )
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
     DatasetContentFingerprint,
@@ -163,6 +178,7 @@ def make_stored(  # noqa: PLR0913 — um eixo por parâmetro da geração sinté
         )
     if status is RefreshStatus.COMPLETED:
         _completed_rows(prereg, rows, confirmatory, counts, rejected, included, p_bar)
+        _profile_rows(prereg, rows, confirmatory)
     else:
         rows = {GOLD_QUALITY_CHECKS.name: rows[GOLD_QUALITY_CHECKS.name]}
     manifest = GoldManifest(
@@ -302,6 +318,161 @@ def _series_rows(  # noqa: PLR0913 — uma série (modelo, seed, horizonte, amos
                             "independence_status": "applicable",
                         }
                     )
+
+
+PROFILE_PAIR_ACF = (0.25, -0.125)
+"""ACF de d_t (lags 1 e 2) do par (candidato, 1º comparador) — lida em ordem de lag."""
+
+
+def _profile_rows(prereg: Preregistration, rows: dict[str, list[Row]], confirmatory: Row) -> None:
+    """Uma linha coerente por tabela de perfil e horizonte (I9: o r0 só tem MC e d_t)."""
+    candidate, comparator = prereg.candidate, prereg.comparators[0]
+    seed = _seeds(prereg, candidate)[0]
+    frozen = prereg.profile_parameters is not None
+    for h in prereg.horizons:
+        rows[GOLD_LOSS_DIFFERENTIALS.name] += [
+            {
+                **confirmatory,
+                "horizon": h,
+                "model_a": candidate,
+                "model_b": comparator,
+                "target_timestamp": f"2024-01-0{day}T00:00:00+00:00",
+                "fold": "fold_0",
+                "differential": -0.001 * day,
+            }
+            for day in (2, 3)
+        ]
+        if h == 1:
+            rows[GOLD_CHRISTOFFERSEN_MONTE_CARLO.name].append(
+                {
+                    **confirmatory,
+                    "model": candidate,
+                    "seed": seed,
+                    "horizon": h,
+                    "sample": GATE_SAMPLE,
+                    "kind": "lower_tail",
+                    "level_low": prereg.h1_gate.lower_level,
+                    "level_high": None,
+                    "includes_degenerate": True,
+                    "status": "computed",
+                    "detail": "",
+                    "uc_status": "applicable",
+                    "ind_status": "applicable",
+                    "mc_p_uc": 0.41,
+                    "mc_p_ind": 0.52,
+                    "mc_p_cc": 0.47,
+                    "draws": prereg.monte_carlo.draws,
+                    "mc_seed": prereg.monte_carlo.seed,
+                    "attempts": prereg.monte_carlo.draws,
+                }
+            )
+        if not frozen:
+            continue
+        _frozen_profile_rows(prereg, rows, confirmatory, h, seed)
+
+
+def _frozen_profile_rows(
+    prereg: Preregistration, rows: dict[str, list[Row]], confirmatory: Row, h: int, seed: int | None
+) -> None:
+    candidate, comparator = prereg.candidate, prereg.comparators[0]
+    dm_common = {
+        **confirmatory,
+        "horizon": h,
+        "comparator": comparator,
+        "candidate": candidate,
+        "status": "computed",
+        "undefined_reason": None,
+        "detail": "",
+        "n_points": 40,
+        "first_target_timestamp": "2024-01-02T00:00:00+00:00",
+        "last_target_timestamp": "2024-03-01T00:00:00+00:00",
+        "variance_estimator": prereg.dm.primary_estimator.value,
+        "mean_differential": -0.002,
+        "statistic": -2.5,
+        "p_value": 0.012,
+        "rejected": True,
+        "fallback_applied": False,
+        "horizon_used": h,
+        "alpha": prereg.dm.alpha,
+    }
+    rows[GOLD_DM_PROFILES.name] += [
+        {**dm_common, "dimension": "fold", "fold": "fold_0", "seed": None, "level": None},
+        {**dm_common, "dimension": "seed", "fold": None, "seed": seed, "level": None},
+        {**dm_common, "dimension": "tau", "fold": None, "seed": None, "level": 0.5},
+    ]
+    rows[GOLD_DM_SEED_FRACTION.name].append(
+        {
+            **confirmatory,
+            "horizon": h,
+            "comparator": comparator,
+            "candidate": candidate,
+            "n_seeds": 3,
+            "n_rejecting": 2,
+            "n_undefined": 0,
+            "fraction_rejecting": 2 / 3,
+            "alpha": prereg.dm.alpha,
+        }
+    )
+    for rule, block in (("h", h), ("sqrt_T", 16)):
+        for rank, model in enumerate((comparator, candidate), start=1):
+            rows[GOLD_MCS_BLOCK_SENSITIVITY.name].append(
+                {
+                    **confirmatory,
+                    "horizon": h,
+                    "block_rule": rule,
+                    "model": model,
+                    "status": "computed",
+                    "undefined_reason": None,
+                    "detail": "",
+                    "scheme": prereg.mcs.primary_scheme.value,
+                    "block_size": block,
+                    "elimination_rank": rank,
+                    "step_p_value": 0.03 if rank == 1 else 1.0,
+                    "mcs_p_value": 0.03 if rank == 1 else 1.0,
+                    "included": rank == 2,  # noqa: PLR2004
+                    "alpha": prereg.mcs.alpha,
+                    "reps": prereg.mcs.reps,
+                    "seed": prereg.mcs.seed,
+                    "n_points": T_POINTS,
+                }
+            )
+    rows[GOLD_PARTIAL_DEGENERACY.name].append(
+        {
+            **confirmatory,
+            "model": candidate,
+            "seed": seed,
+            "horizon": h,
+            "sample": GATE_SAMPLE,
+            "pair_kind": "adjacent",
+            "level_low": 0.4,
+            "level_high": 0.5,
+            "status": "computed",
+            "detail": "",
+            "collapse_rate": 0.0,
+            "tolerance": prereg.h1_gate.degeneracy_tolerance,
+        }
+    )
+    pair = {**confirmatory, "horizon": h, "model_a": candidate, "model_b": comparator}
+    rows[GOLD_DIFFERENTIAL_ACF.name] += [
+        {**pair, "lag": lag, "acf": value, "n_points": T_POINTS, "max_lag": 2}
+        for lag, value in enumerate(PROFILE_PAIR_ACF, start=1)
+    ]
+    rows[GOLD_DIFFERENTIAL_BREAKS.name].append(
+        {
+            **pair,
+            "status": "computed",
+            "undefined_reason": None,
+            "detail": "",
+            "statistic": 0.8,
+            "p_value": 0.54,
+            "rejected": False,
+            "alpha": 0.05,
+            "horizon_used": h,
+            "break_target_timestamp": "2024-02-01T00:00:00+00:00",
+            "n_points": T_POINTS,
+            "max_lag": 2,
+        }
+    )
 
 
 def make_generation(prereg: Preregistration, **kwargs: object) -> GoldGeneration:

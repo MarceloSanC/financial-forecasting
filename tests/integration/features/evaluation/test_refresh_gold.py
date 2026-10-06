@@ -30,6 +30,7 @@ import dataclasses
 import json
 import logging
 import math
+import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -42,7 +43,15 @@ import pyarrow.parquet as pq
 import pytest
 
 from financial_forecasting.composition_root import ApplicationDependencies, wire_dependencies
+from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
+    ParquetGoldStore,
+)
+from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
+    CONFIRMATORY_TABLES,
+    GOLD_SCHEMAS,
+)
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    GoldGenerationCorruptError,
     GoldPartition,
     RefreshGoldCommand,
     RefreshGoldResult,
@@ -72,6 +81,7 @@ from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher imp
     CanonicalJsonHasher,
 )
 from financial_forecasting.shared.infrastructure.config.settings import Settings
+from tests.unit.features.evaluation._profile_parameters import profile_parameters
 from tests.unit.features.evaluation.gold._cohort_factory import (
     Cohort,
     make_cohort,
@@ -102,6 +112,17 @@ _TABLES = (
     "gold_mcs_results",
     "gold_metrics_by_run",
 )
+_PROFILE_TABLES = (  # Stage 6.6: perfis de séries novas (forma da r1)
+    "gold_dm_profiles",
+    "gold_dm_seed_fraction",
+    "gold_mcs_block_sensitivity",
+    "gold_christoffersen_monte_carlo",
+    "gold_partial_degeneracy",
+    "gold_differential_acf",
+    "gold_differential_breaks",
+    "gold_loss_differentials",
+)
+_ALL_TABLES = _TABLES + _PROFILE_TABLES
 _K = len(_SEEDS)
 _ESTIMATORS = (DmVarianceEstimator.RECTANGULAR, DmVarianceEstimator.BARTLETT)
 _SCHEMES = (BootstrapScheme.STATIONARY, BootstrapScheme.MOVING_BLOCK)
@@ -118,6 +139,10 @@ _PARAMETERS = RefreshParameters(
     mcs_reps=1000,
     mcs_seed=20260929,
     mcs_schemes=_SCHEMES,
+    monte_carlo_draws=999,
+    monte_carlo_seed=128,
+    mcs_block_sensitivities=("h", "sqrt_T"),
+    profile_parameters=profile_parameters(),
 )
 
 Rows = list[tuple[object, ...]]
@@ -275,8 +300,11 @@ def _snapshot(deps: ApplicationDependencies, sweep: str, result: RefreshGoldResu
     columns: dict[str, list[str]] = {}
     counts: dict[str, int] = {}
     connection = duckdb.connect()
-    for name in manifest["rows_by_table"]:
+    for name, count in manifest["rows_by_table"].items():
         path = str(current / f"{name}.parquet")
+        if count == 0:  # parquet sem coluna: o store também não o lê (read_generation)
+            columns[name], tables[name], counts[name] = [], [], 0
+            continue
         cursor = connection.execute(
             "SELECT * FROM read_parquet(?, hive_partitioning = false)", [path]
         )
@@ -410,14 +438,48 @@ def test_e2e_wired_lazy_backend_loaded(scenario: _Scenario) -> None:
     assert scenario.step_1_logs[-1].startswith("refresh_gold status=COMPLETED")
 
 
-def test_e2e_completed_five_tables(scenario: _Scenario) -> None:
+def test_e2e_completed_all_tables(scenario: _Scenario) -> None:
+    """As cinco tabelas da 6.4 e as oito de perfil da 6.6 na mesma geração (CA10)."""
     generation = scenario.completed
     assert generation.result.status is RefreshStatus.COMPLETED
     assert generation.manifest["status"] == "COMPLETED"
     assert generation.manifest["preregistration_ref"] == _PREREG
-    assert sorted(generation.manifest["rows_by_table"]) == sorted(_TABLES)  # type: ignore[arg-type]
-    assert generation.files == tuple(sorted(("MANIFEST.json", *(f"{t}.parquet" for t in _TABLES))))
-    assert all(generation.tables[name] for name in _TABLES)
+    assert sorted(_ALL_TABLES) == sorted(GOLD_SCHEMAS)
+    assert sorted(generation.manifest["rows_by_table"]) == sorted(_ALL_TABLES)  # type: ignore[arg-type]
+    assert sorted(generation.result.rows_by_table) == sorted(_ALL_TABLES)
+    files = ("MANIFEST.json", *(f"{t}.parquet" for t in _ALL_TABLES))
+    assert generation.files == tuple(sorted(files))
+    assert all(generation.tables[name] for name in _ALL_TABLES)
+    assert generation.result.profile_error_units == 0
+
+
+def test_e2e_completed_generation_reads_back(scenario: _Scenario) -> None:
+    """A geração com as treze tabelas passa no `from_stored`/`check_generation`.
+
+    Cohort B: o A termina `BLOCKED` no fim do cenário (passo 3); o B fica `COMPLETED`.
+    """
+    store = scenario.deps.refresh_gold._gold_store  # type: ignore[attr-defined]
+    generation = store.read_generation(partition=GoldPartition(_ASSET, _SWEEP_B))
+    assert generation.manifest.status is RefreshStatus.COMPLETED
+    assert sorted(generation.tables) == sorted(_ALL_TABLES)
+
+
+@pytest.mark.parametrize("pruned", _PROFILE_TABLES)
+def test_e2e_pruned_profile_table_is_corrupt(
+    scenario: _Scenario, tmp_path: Path, pruned: str
+) -> None:
+    """Geração `COMPLETED` podada de uma tabela de perfil (manifesto + arquivo) → corrupta."""
+    source = scenario.deps.refresh_gold._gold_store  # type: ignore[attr-defined]
+    partition = GoldPartition(_ASSET, _SWEEP_B)  # COMPLETED até o fim do cenário
+    copy = ParquetGoldStore(tmp_path)
+    shutil.copytree(source.partition_root(partition), copy.partition_root(partition))
+    current = copy.current_dir(partition)
+    manifest = json.loads((current / "MANIFEST.json").read_text(encoding="utf-8"))
+    del manifest["rows_by_table"][pruned]
+    (current / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (current / f"{pruned}.parquet").unlink()
+    with pytest.raises(GoldGenerationCorruptError, match=pruned):
+        copy.read_generation(partition=partition)
 
 
 def test_e2e_duckdb_counts(scenario: _Scenario) -> None:
@@ -434,7 +496,7 @@ def test_e2e_duckdb_counts(scenario: _Scenario) -> None:
 
 
 def test_e2e_rerun_identical(scenario: _Scenario) -> None:
-    """Rerun sem apagar: toda linha das cinco tabelas idêntica (NaN = NaN) — I16."""
+    """Rerun sem apagar: toda linha das treze tabelas idêntica (NaN = NaN) — I16."""
     assert scenario.rerun.result == scenario.completed.result
     assert set(scenario.rerun.tables) == set(scenario.completed.tables)
     for name, rows in scenario.completed.tables.items():
@@ -454,6 +516,8 @@ def test_e2e_blocked_replaces(scenario: _Scenario) -> None:
     assert generation.result.status is RefreshStatus.BLOCKED
     assert generation.manifest["status"] == "BLOCKED"
     assert generation.files == ("MANIFEST.json", "gold_quality_checks.parquet")
+    assert not set(generation.manifest["rows_by_table"]) & set(CONFIRMATORY_TABLES)  # type: ignore[arg-type]
+    assert generation.result.profile_error_units == 0
     failed = {(f.check, f.kind, f.model) for f in generation.result.failed_checks}
     assert ("alignment_check", "interior_gap", _GBM) in failed
     connection = duckdb.connect()

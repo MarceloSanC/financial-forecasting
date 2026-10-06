@@ -158,3 +158,86 @@ def test_factory_imports_min_models() -> None:
     """A fábrica usa o `MIN_MODELS` do VO (mesmo objeto), sem cópia privada (6.4 Task 01)."""
     assert paired_pinball_losses_module.MIN_MODELS is paired_loss_series_module.MIN_MODELS
     assert not hasattr(paired_pinball_losses_module, "_MIN_MODELS")
+
+
+# --- Stage 6.6 Task 04: perda por nível (DM por τ) e série por seed ------------------
+
+
+@pytest.mark.unit
+def test_per_point_losses_at_mean_over_levels_is_the_grid_loss(make_series: SeriesFactory) -> None:
+    """A média dos K vetores rho_τ, ponto a ponto, é L_t (diádicos: igualdade exata)."""
+    series = _build(make_series, 0.25)
+    per_level = [PinballScore.per_point_losses_at(series, level) for level in _DYADIC_LEVELS]
+    grid = PinballScore.per_point_losses(series)
+    for point in range(_N_POINTS):
+        assert sum(column[point] for column in per_level) / len(_DYADIC_LEVELS) == grid[point]
+
+
+@pytest.mark.unit
+def test_per_point_losses_at_refuses_a_level_outside_the_grid(make_series: SeriesFactory) -> None:
+    with pytest.raises(ValueError, match="is not in the grid"):
+        PinballScore.per_point_losses_at(_build(make_series), 0.5)
+
+
+@pytest.mark.unit
+def test_factory_level_uses_the_loss_of_that_level(make_series: SeriesFactory) -> None:
+    """`level=τ`: a coluna é rho_τ por ponto, média entre seeds igual à de L_t."""
+    seeds = [_build(make_series, shift) for shift in (0.25, -0.5, 0.75)]
+    other = _build(make_series, -0.25)
+    level = _DYADIC_LEVELS[1]
+    paired = paired_pinball_losses({"cand": seeds, "comp": [other]}, level=level)
+    per_seed = [PinballScore.per_point_losses_at(series, level) for series in seeds]
+    expected = tuple(sum(point) / len(seeds) for point in zip(*per_seed, strict=True))
+    assert paired.losses_of("cand") == expected
+    assert paired.losses_of("comp") == PinballScore.per_point_losses_at(other, level)
+
+
+@pytest.mark.unit
+def test_factory_default_level_keeps_the_grid_loss(make_series: SeriesFactory) -> None:
+    first, second = _build(make_series, 0.25), _build(make_series, -0.5)
+    default = paired_pinball_losses({"cand": [first], "comp": [second]})
+    explicit = paired_pinball_losses({"cand": [first], "comp": [second]}, level=None)
+    assert default == explicit
+    assert default.losses_of("cand") == PinballScore.per_point_losses(first)
+
+
+@pytest.mark.unit
+def test_factory_one_candidate_seed_is_the_per_seed_series(make_series: SeriesFactory) -> None:
+    """Série por seed (DM por seed da 6.6): a fábrica com a seed s do candidato, sem código
+    novo; os comparadores seguem com a média das suas seeds."""
+    seeds = [_build(make_series, shift) for shift in (0.25, -0.5)]
+    comparator_seeds = [_build(make_series, shift) for shift in (0.5, -0.75)]
+    paired = paired_pinball_losses({"cand": [seeds[1]], "comp": comparator_seeds})
+    assert paired.losses_of("cand") == PinballScore.per_point_losses(seeds[1])
+    full = paired_pinball_losses({"cand": seeds, "comp": comparator_seeds})
+    assert paired.losses_of("comp") == full.losses_of("comp")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("level", "expected"),
+    [
+        # q = -1,0; y = (0,25, -0,75, 1,5, 0,0, -2,0); u = y - q; rho = u (tau - 1{u<0})
+        (0.125, (0.15625, 0.03125, 0.3125, 0.125, 0.875)),
+        # q = 1,0; u = (-0,75, -1,75, 0,5, -1,0, -3,0)
+        (0.875, (0.09375, 0.21875, 0.4375, 0.125, 0.375)),
+    ],
+)
+def test_per_point_losses_at_absolute_values(
+    make_series: SeriesFactory, level: float, expected: tuple[float, ...]
+) -> None:
+    """Checkpoint C bloco 2 (T1): oráculo absoluto (diádicos, `==`) — pega devolver L_t ou
+    trocar o nível pelo espelhado, que a identidade da média sobre os níveis não pega."""
+    series = _build(make_series, 0.0)
+    assert PinballScore.per_point_losses_at(series, level) == expected
+    assert PinballScore.per_point_losses_at(series, 0.125) != PinballScore.per_point_losses_at(
+        series, 0.875
+    )
+
+
+@pytest.mark.unit
+def test_factory_level_outside_the_grid_raises(make_series: SeriesFactory) -> None:
+    """Checkpoint C bloco 2 (N1): nível fora da grade recusado pelo dono (`per_point_losses_at`)."""
+    first, second = _build(make_series, 0.25), _build(make_series, -0.5)
+    with pytest.raises(ValueError, match="is not in the grid"):
+        paired_pinball_losses({"cand": [first], "comp": [second]}, level=0.5)

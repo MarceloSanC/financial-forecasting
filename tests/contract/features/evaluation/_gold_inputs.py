@@ -6,7 +6,11 @@ Módulo privado (sem `test_`, importado absolutamente). Monta os insumos dos bui
 e um baseline pontual `naive` (grade toda igual em todo ponto — 100 % degenerado).
 
 - `completed_inputs()`: montagem sem achado → checks → `HorizonReports` por horizonte →
-  b̂_sb por par (`FakeMcsBackend`) → MCS por (horizonte, esquema) → `COMPLETED`;
+  b̂_sb por par (`FakeMcsBackend`) → MCS por (horizonte, esquema) → perfis de séries
+  novas (`ProfileReports`) e MCS por bloco (`mcs_block_runs`), com as regras de perfil da
+  forma da r1 → `COMPLETED`;
+- `completed_inputs_r0()`: o mesmo, com `profile_parameters = None` (perfis "não
+  congelados": só Monte Carlo e diferenciais, nenhuma rodada por bloco);
 - `blocked_inputs()`: o mesmo cohort com um ponto interno removido (achado
   `interior_gap`) → checks → `BLOCKED`, sem relatórios.
 
@@ -24,6 +28,10 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     GoldPartition,
     RefreshParameters,
     RefreshStatus,
+    profile_settings_from,
+)
+from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
+    mcs_block_runs,
 )
 from financial_forecasting.features.evaluation.domain.services.diebold_mariano import (
     DmVarianceEstimator,
@@ -37,6 +45,9 @@ from financial_forecasting.features.evaluation.domain.services.model_confidence_
 )
 from financial_forecasting.features.evaluation.domain.services.paired_pinball_losses import (
     paired_pinball_losses,
+)
+from financial_forecasting.features.evaluation.domain.services.profile_reports import (
+    ProfileReports,
 )
 from financial_forecasting.features.evaluation.domain.services.quality_checks.alignment_check import (  # noqa: E501
     AlignmentCheck,
@@ -60,6 +71,7 @@ from financial_forecasting.features.evaluation.domain.services.series_assembly i
 )
 from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
     AssembledCohort,
+    HorizonSamples,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.block_estimate import (
     BlockEstimate,
@@ -74,6 +86,7 @@ from financial_forecasting.shared.domain.value_objects.dataset_content_fingerpri
     DatasetContentFingerprint,
 )
 from tests.fakes.features.evaluation.fake_mcs_backend import FakeMcsBackend
+from tests.unit.features.evaluation._profile_parameters import profile_parameters
 from tests.unit.features.evaluation.gold._cohort_factory import (
     Cohort,
     at_point,
@@ -99,6 +112,10 @@ PARAMETERS = RefreshParameters(
     mcs_reps=1000,
     mcs_seed=20260929,
     mcs_schemes=(BootstrapScheme.STATIONARY, BootstrapScheme.MOVING_BLOCK),
+    monte_carlo_draws=19,
+    monte_carlo_seed=128,
+    mcs_block_sensitivities=("h", "sqrt_T"),
+    profile_parameters=profile_parameters(),  # forma da r1: todo builder de perfil com linhas
 )
 FINGERPRINT = DatasetContentFingerprint(value="e3" * 32)
 GRID_TRIMMED_PREFIX = 3
@@ -157,8 +174,24 @@ def _estimates(series: PairedLossSeries, backend: FakeMcsBackend) -> tuple[Block
 
 
 @cache
+def samples_of() -> tuple[HorizonSamples, ...]:
+    """As amostras por horizonte do cohort de `completed_inputs()` (para recalcular perfis)."""
+    return _assemble(_cohort()).horizons
+
+
+@cache
 def completed_inputs() -> GoldInputs:
-    """`GoldInputs` de um refresh `COMPLETED` (sem achado, pré-condições ok)."""
+    """`GoldInputs` de um refresh `COMPLETED` (sem achado, pré-condições ok), forma da r1."""
+    return _completed(PARAMETERS)
+
+
+@cache
+def completed_inputs_r0() -> GoldInputs:
+    """O mesmo refresh `COMPLETED` sem regras de perfil (forma do r0)."""
+    return _completed(dataclasses.replace(PARAMETERS, profile_parameters=None))
+
+
+def _completed(parameters: RefreshParameters) -> GoldInputs:
     cohort = _cohort()
     assembled = _assemble(cohort)
     assert assembled.alignment.findings == (), assembled.alignment.findings
@@ -211,14 +244,23 @@ def completed_inputs() -> GoldInputs:
             mcs.append(
                 ModelConfidenceSet.evaluate(series, bootstrap=indices, alpha=PARAMETERS.mcs_alpha)
             )
+    settings = profile_settings_from(parameters)
+    profiles = tuple(
+        ProfileReports.evaluate(
+            samples, horizon_report=report, paired=paired[samples.horizon], settings=settings
+        )
+        for samples, report in zip(assembled.horizons, reports, strict=True)
+    )
     return GoldInputs(
         partition=PARTITION,
-        parameters=PARAMETERS,
+        parameters=parameters,
         status=RefreshStatus.COMPLETED,
         check_results=results,
         horizon_reports=reports,
         mcs_reports=tuple(mcs),
         block_estimates=estimates,
+        profile_reports=profiles,
+        mcs_block_reports=mcs_block_runs(paired, parameters, backend),
     )
 
 
@@ -248,4 +290,6 @@ def blocked_inputs() -> GoldInputs:
         horizon_reports=(),
         mcs_reports=(),
         block_estimates={},
+        profile_reports=(),
+        mcs_block_reports=(),
     )

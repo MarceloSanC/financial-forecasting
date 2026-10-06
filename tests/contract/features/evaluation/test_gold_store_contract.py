@@ -71,6 +71,10 @@ _PARAMETERS = RefreshParameters(
     mcs_reps=1000,
     mcs_seed=7,
     mcs_schemes=(BootstrapScheme.STATIONARY,),
+    monte_carlo_draws=999,
+    monte_carlo_seed=128,
+    mcs_block_sensitivities=("h", "sqrt_T"),
+    profile_parameters=None,
 )
 _NOW = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
 

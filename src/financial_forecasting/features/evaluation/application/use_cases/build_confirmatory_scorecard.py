@@ -26,9 +26,8 @@ Concept 6.5 §4, I5, I6, I12, I13, C2-C5, C7, C10, C11; ADRs `6_5_0002` item 4,
 Os erros moram em `dtos/confirmatory_scorecard.py` (importados daqui, sem
 reexportação — technical 6.5 §7 `[deviation]` Task 08).
 
-Os `# type: ignore[arg-type]` deste módulo vêm das células do gold, tipadas `object`
-(`col`): o tipo é o do schema dono (`gold_schema`) e os valores são revalidados na
-construção dos VOs/DTOs de destino (evidência, perfil, `FailedCheck`).
+As células são lidas pelos acessores tipados de `refresh_gold` (F6): tipo divergente
+do schema é corrupção nomeada (`GoldGenerationCorruptError`).
 """
 
 from __future__ import annotations
@@ -52,6 +51,10 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     FailedCheck,
     GoldGeneration,
     RefreshStatus,
+    col_int,
+    col_int_or_none,
+    col_str,
+    col_str_or_none,
 )
 from financial_forecasting.features.evaluation.application.ports.out.gold_generation_reader import (
     GoldGenerationReader,
@@ -62,7 +65,6 @@ from financial_forecasting.features.evaluation.application.ports.out.preregistra
     PreregistrationSource,
 )
 from financial_forecasting.features.evaluation.application.use_cases.scorecard_evidence import (
-    col,
     evidence_from_generation,
 )
 from financial_forecasting.features.evaluation.application.use_cases.scorecard_profile import (
@@ -101,25 +103,25 @@ def _failed_checks(generation: GoldGeneration) -> tuple[FailedCheck, ...]:
     schema = GOLD_QUALITY_CHECKS
     return tuple(
         FailedCheck(
-            check=col(row, schema, "check"),  # type: ignore[arg-type]
-            kind=col(row, schema, "kind"),  # type: ignore[arg-type]
-            horizon=col(row, schema, "horizon"),  # type: ignore[arg-type]
-            model=col(row, schema, "model"),  # type: ignore[arg-type]
-            seed=col(row, schema, "seed"),  # type: ignore[arg-type]
-            occurrences=col(row, schema, "occurrences"),  # type: ignore[arg-type]
-            detail=col(row, schema, "detail"),  # type: ignore[arg-type]
+            check=col_str(row, schema, "check"),
+            kind=col_str(row, schema, "kind"),
+            horizon=col_int_or_none(row, schema, "horizon"),
+            model=col_str_or_none(row, schema, "model"),
+            seed=col_int_or_none(row, schema, "seed"),
+            occurrences=col_int(row, schema, "occurrences"),
+            detail=col_str(row, schema, "detail"),
         )
         for row in generation.table(schema).rows
-        if col(row, schema, "severity") == CheckSeverity.ERROR.value
-        and col(row, schema, "outcome") == CheckOutcome.FAIL.value
+        if col_str(row, schema, "severity") == CheckSeverity.ERROR.value
+        and col_str(row, schema, "outcome") == CheckOutcome.FAIL.value
     )
 
 
 def _required_check_skipped(generation: GoldGeneration) -> bool:
     schema = GOLD_QUALITY_CHECKS
     return any(
-        col(row, schema, "check") in REQUIRED_CHECKS
-        and col(row, schema, "outcome") == CheckOutcome.SKIPPED.value
+        col_str(row, schema, "check") in REQUIRED_CHECKS
+        and col_str(row, schema, "outcome") == CheckOutcome.SKIPPED.value
         for row in generation.table(schema).rows
     )
 

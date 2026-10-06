@@ -22,6 +22,7 @@ from financial_forecasting.features.evaluation.application.dtos.confirmatory_sco
     PreregistrationChainError,
     PreregistrationHashMismatchError,
     PreregistrationNotAnchoredError,
+    ProfileState,
     ReadinessReason,
     ScorecardProfile,
     ScorecardResult,
@@ -403,7 +404,11 @@ def test_chain_listed_in_result() -> None:
 def test_verdict_unchanged_by_profile(monkeypatch: pytest.MonkeyPatch) -> None:
     world, reference = _ready_world()
     baseline = world.run(0, reference)
-    other = ScorecardProfile(horizons=(), declared_not_built=("sharpness_diagram",))
+    other = ScorecardProfile(
+        horizons=(),
+        declared_not_built=("sharpness_diagram",),
+        profile_states=(("sharpness_diagram", ProfileState.NOT_BUILT_HERE),),
+    )
     monkeypatch.setattr(use_case_module, "build_profile", lambda **_: other)
 
     changed = world.run(0, reference)

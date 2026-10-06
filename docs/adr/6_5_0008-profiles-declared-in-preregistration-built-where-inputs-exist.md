@@ -5,7 +5,7 @@ when-use: Reference when asking which profile or sensitivity the 6.5 scorecard s
 keywords: [adr, evaluation, scorecard, profile, sensitivity, dm-per-fold, dm-per-seed, dm-per-tau, mcs-block, christoffersen-monte-carlo, partial-degeneracy, sharpness, persistence, last-mile]
 status: accepted
 created_at: 2026-09-29
-updated_at: 2026-09-30
+updated_at: 2026-10-06
 adr_id: 6.5.0008
 decision: The preregistration lists every profile of the domain doc with its parameters (MCS block sensitivities l = h and l = ⌈√T⌉, Monte Carlo Christoffersen draws and seed, DM per fold, per seed and per τ, stationarity diagnostic of d_t, partial degeneracy per pair, sharpness diagram), so all are protocol analyses; the 6.5 scorecard computes the gate sensitivities from seed-mean counts, the power, and the profile readable from the gold (both Wilson levels, both samples, with/without gaps, all comparators' calibration, per-seed LR_ind/LR_cc and the fraction of seeds rejecting, DM Bartlett, MCS moving-block, DM effect with CI, pinball/CRPS/IS/PICP/MPIW/VaR descriptors); the profiles that need new series (DM per fold/seed/τ, MCS block sensitivities, partial degeneracy per pair, stationarity diagnostic of d_t, Monte Carlo p-values) are a follow-up issue in evaluation to land before 8.1; the sharpness diagram stays in 8.3; the scorecard is a frozen result DTO with a single as_mapping serialization, and its persistence as the gold artifact gold_model_comparison_confirmatory_scorecard is done by 8.1.
 context_stage: 6.5-preregistration-and-scorecard
@@ -17,6 +17,20 @@ bounded_context: evaluation
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
 ## Status
+
+> **Note (2026-10-06, Stage 6.6, issue #129).** The follow-up of item 3 became Stage
+> 6.6 (`6.6-scorecard-profiles`), which builds the new-series profiles as eight gold
+> tables — seven read by the scorecard profile, the loss differentials feeding the 8.3
+> plots — none read by the verdict (ADR 6.6.0002). Two
+> statements of this ADR are corrected: "with its parameters" and "no amendment
+> needed". The r0 did freeze the degeneracy tolerance, the Monte Carlo draws and seed
+> and the MCS block lengths (l = h, l = ⌈√T⌉); it did **not** name the rules of the
+> stationarity diagnostic of d_t, the multiplicity across DM subsets, the pairs of the
+> partial-degeneracy diagnostic or the bootstrap scheme of the block sensitivity. Those
+> rules are frozen by the blinded amendment r1 (`[profile_parameters]`; ADR 6.6.0001),
+> and under the r0 the seven profiles that depend on them are reported as
+> `not_frozen_in_revision`. Only the sharpness diagram remains outside the scorecard
+> (Stage 8.3).
 
 `accepted` — revised on 2026-09-30 after Checkpoint A round 1 (B10 destination
 of the scorecard; profile items from C-BAIXA and P4)

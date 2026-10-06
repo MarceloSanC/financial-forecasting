@@ -32,10 +32,12 @@ from itertools import pairwise
 from types import MappingProxyType
 
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
+    CONFIRMATORY_TABLES,
     GOLD_SCHEMAS,
     GoldTableSchema,
 )
 from financial_forecasting.features.evaluation.domain.services.christoffersen_test import (
+    validate_draws_and_seed,
     validate_min_violations,
 )
 from financial_forecasting.features.evaluation.domain.services.count_input_validation import (
@@ -52,7 +54,13 @@ from financial_forecasting.features.evaluation.domain.services.inference_input_v
 )
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     McsReport,
+    validate_block_sensitivities,
     validate_mcs_reps,
+)
+from financial_forecasting.features.evaluation.domain.services.profile_reports import (
+    HorizonProfileReport,
+    ProfileSettings,
+    UnitStatus,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
@@ -66,6 +74,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.block_estima
 from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
     BootstrapScheme,
     validate_bootstrap_parameters,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.profile_parameters import (
+    ProfileParameters,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.quality_check_result import (
     QualityCheckResult,
@@ -145,6 +156,10 @@ class RefreshParameters:
     mcs_reps: int
     mcs_seed: int
     mcs_schemes: tuple[BootstrapScheme, ...]
+    monte_carlo_draws: int
+    monte_carlo_seed: int
+    mcs_block_sensitivities: tuple[str, ...]
+    profile_parameters: ProfileParameters | None
 
     def __post_init__(self) -> None:
         """Presença, estrutura e os validadores públicos donos (ADR `6_4_0006` item 2)."""
@@ -169,6 +184,16 @@ class RefreshParameters:
         for scheme in self.mcs_schemes:
             if not isinstance(scheme, BootstrapScheme):
                 raise ValueError(f"mcs_schemes must hold BootstrapScheme, got {scheme!r}")
+        # Stage 6.6 (F8a): os parâmetros dos perfis pelos donos (ADR 6.6.0002 item 5)
+        validate_draws_and_seed(self.monte_carlo_draws, self.monte_carlo_seed)
+        validate_block_sensitivities(self.mcs_block_sensitivities, field="mcs_block_sensitivities")
+        if self.profile_parameters is not None and not isinstance(
+            self.profile_parameters, ProfileParameters
+        ):
+            raise ValueError(
+                f"profile_parameters must be a ProfileParameters or None, got "
+                f"{self.profile_parameters!r}"
+            )
 
     def as_mapping(self) -> dict[str, object]:
         """Os parâmetros em forma JSON-safe (enums pelo valor, tuplas como listas)."""
@@ -184,6 +209,12 @@ class RefreshParameters:
             "mcs_reps": self.mcs_reps,
             "mcs_seed": self.mcs_seed,
             "mcs_schemes": [s.value for s in self.mcs_schemes],
+            "monte_carlo_draws": self.monte_carlo_draws,
+            "monte_carlo_seed": self.monte_carlo_seed,
+            "mcs_block_sensitivities": list(self.mcs_block_sensitivities),
+            "profile_parameters": (
+                None if self.profile_parameters is None else self.profile_parameters.as_payload()
+            ),
         }
 
     @classmethod
@@ -209,6 +240,19 @@ class RefreshParameters:
             mcs_reps=fields["mcs_reps"],  # type: ignore[arg-type]
             mcs_seed=fields["mcs_seed"],  # type: ignore[arg-type]
             mcs_schemes=tuple(BootstrapScheme(str(v)) for v in schemes),
+            monte_carlo_draws=fields["monte_carlo_draws"],  # type: ignore[arg-type]
+            monte_carlo_seed=fields["monte_carlo_seed"],  # type: ignore[arg-type]
+            mcs_block_sensitivities=tuple(
+                str(v)
+                for v in _as_list(
+                    fields["mcs_block_sensitivities"], field="mcs_block_sensitivities"
+                )
+            ),
+            profile_parameters=(
+                None
+                if fields["profile_parameters"] is None
+                else ProfileParameters.from_mapping(fields["profile_parameters"])
+            ),
         )
 
 
@@ -224,6 +268,10 @@ _PARAMETER_KEYS = (
     "mcs_reps",
     "mcs_seed",
     "mcs_schemes",
+    "monte_carlo_draws",
+    "monte_carlo_seed",
+    "mcs_block_sensitivities",
+    "profile_parameters",
 )
 
 
@@ -569,6 +617,78 @@ class GoldGenerationCorruptError(ApplicationError):
     """
 
 
+# --- leitura de células (F6, Stage 6.6; política de tipo: concept 6.6 D9) -------------
+
+
+def col(row: Row, schema: GoldTableSchema, column: str) -> object:
+    """A célula `column` da linha — só colunas do schema (`key` + `read_columns`).
+
+    Raises:
+        KeyError: coluna fora do schema da tabela (leitura por nome sem dono).
+    """
+    if column not in schema.key and column not in schema.read_columns:
+        raise KeyError(f"{column!r} is not a column of the {schema.name} schema")
+    return row[column]
+
+
+def _wrong_type(schema: GoldTableSchema, column: str, expected: str, value: object) -> Exception:
+    return GoldGenerationCorruptError(
+        f"{schema.name}.{column}: expected {expected}, got {type(value).__name__} {value!r}"
+    )
+
+
+def col_int(row: Row, schema: GoldTableSchema, column: str) -> int:
+    """A célula como `int` não-`bool`; outro tipo → `GoldGenerationCorruptError`."""
+    value = col(row, schema, column)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise _wrong_type(schema, column, "int", value)
+    return value
+
+
+def col_int_or_none(row: Row, schema: GoldTableSchema, column: str) -> int | None:
+    """Como `col_int`, aceitando `None`."""
+    return None if col(row, schema, column) is None else col_int(row, schema, column)
+
+
+def col_float(row: Row, schema: GoldTableSchema, column: str) -> float:
+    """A célula como `float` (aceita `int` não-`bool`, devolve `float`); senão corrupção."""
+    value = col(row, schema, column)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise _wrong_type(schema, column, "float", value)
+    return float(value)
+
+
+def col_float_or_none(row: Row, schema: GoldTableSchema, column: str) -> float | None:
+    """Como `col_float`, aceitando `None`."""
+    return None if col(row, schema, column) is None else col_float(row, schema, column)
+
+
+def col_bool(row: Row, schema: GoldTableSchema, column: str) -> bool:
+    """A célula como `bool`; outro tipo (inclusive `int`) → `GoldGenerationCorruptError`."""
+    value = col(row, schema, column)
+    if not isinstance(value, bool):
+        raise _wrong_type(schema, column, "bool", value)
+    return value
+
+
+def col_bool_or_none(row: Row, schema: GoldTableSchema, column: str) -> bool | None:
+    """Como `col_bool`, aceitando `None`."""
+    return None if col(row, schema, column) is None else col_bool(row, schema, column)
+
+
+def col_str(row: Row, schema: GoldTableSchema, column: str) -> str:
+    """A célula como `str`; outro tipo → `GoldGenerationCorruptError`."""
+    value = col(row, schema, column)
+    if not isinstance(value, str):
+        raise _wrong_type(schema, column, "str", value)
+    return value
+
+
+def col_str_or_none(row: Row, schema: GoldTableSchema, column: str) -> str | None:
+    """Como `col_str`, aceitando `None`."""
+    return None if col(row, schema, column) is None else col_str(row, schema, column)
+
+
 @dataclass(frozen=True)
 class GoldGeneration:
     """Uma geração lida: o manifesto e as tabelas pelo nome (ADR 6.5.0005 item 5)."""
@@ -610,7 +730,8 @@ class GoldGeneration:
             GoldGenerationCorruptError: manifesto inválido; tabela desconhecida,
                 ausente de `rows_by_table` ou a mais nele; contagem divergente; linha
                 inválida ou fora de ordem; geração incoerente (`check_generation`);
-                manifesto de outra partição que a pedida.
+                manifesto de outra partição que a pedida; geração `COMPLETED` sem alguma
+                tabela de `GOLD_SCHEMAS` ou `BLOCKED` com tabela confirmatória (6.6).
         """
         try:
             parsed = GoldManifest.from_mapping(manifest)
@@ -624,6 +745,9 @@ class GoldGeneration:
         extra = sorted(set(rows_by_table) - set(listed))
         if extra:
             raise GoldGenerationCorruptError(f"tables {extra} are not in the manifest")
+        defect = _table_set_defect(parsed.status, set(listed))
+        if defect is not None:
+            raise GoldGenerationCorruptError(defect)
         tables: list[GoldTable] = []
         for name, count in listed.items():
             schema = GOLD_SCHEMAS.get(name)
@@ -647,6 +771,67 @@ class GoldGeneration:
         return cls(manifest=parsed, tables={table.name: table for table in tables})
 
 
+def _table_set_defect(status: RefreshStatus, listed: set[str]) -> str | None:
+    """O conjunto de tabelas que o status exige (Stage 6.6, Task 17).
+
+    `COMPLETED` lista **toda** tabela de `GOLD_SCHEMAS` (tabela de perfil ausente é
+    corrupção, não "perfil não calculado" — concept A6); `BLOCKED` lista exatamente as
+    que rodam bloqueadas (`GOLD_SCHEMAS` menos `CONFIRMATORY_TABLES`), sem o DTO
+    conhecer builders.
+    """
+    if status is RefreshStatus.COMPLETED:
+        missing = sorted(set(GOLD_SCHEMAS) - listed)
+        return None if not missing else f"a COMPLETED generation lacks tables {missing}"
+    confirmatory = sorted(listed & set(CONFIRMATORY_TABLES))
+    if confirmatory:
+        return f"a BLOCKED generation lists {confirmatory}"
+    missing = sorted(set(GOLD_SCHEMAS) - set(CONFIRMATORY_TABLES) - listed)
+    return None if not missing else f"a BLOCKED generation lacks tables {missing}"
+
+
+def profile_settings_from(parameters: RefreshParameters) -> ProfileSettings:
+    """Os parâmetros que os perfis usam, tirados do `RefreshParameters` — escrita única.
+
+    O estimador dos perfis é o **primário** do plano (`dm_variance_estimators[0]`, a ordem
+    que `refresh_command_from` fixa); alpha dos recortes = `dm_alpha` (concept 6.6 D3).
+    """
+    return ProfileSettings(
+        candidate=parameters.candidate,
+        alpha=parameters.dm_alpha,
+        variance_estimator=parameters.dm_variance_estimators[0],
+        min_violations=parameters.min_violations,
+        tolerance=parameters.degeneracy_tolerance,
+        draws=parameters.monte_carlo_draws,
+        seed=parameters.monte_carlo_seed,
+        profile_parameters=parameters.profile_parameters,
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
+class McsBlockRun:
+    """Uma rodada do MCS com bloco de sensibilidade (Stage 6.6; ADR 6.6.0002 item 3).
+
+    `report` presente ⇔ `status` `computed`; numa falha do backend ou do MCS (`error`),
+    `detail` traz a mensagem e o relatório falta — os demais perfis seguem.
+    """
+
+    horizon: int
+    block_rule: str
+    block_size: int
+    scheme: BootstrapScheme
+    status: UnitStatus
+    detail: str
+    report: McsReport | None
+
+    def __post_init__(self) -> None:
+        """Relatório presente exatamente quando a rodada foi calculada."""
+        if (self.report is not None) != (self.status is UnitStatus.COMPUTED):
+            raise ValueError(
+                f"McsBlockRun report must be set exactly when status is computed, got "
+                f"status={self.status!r}"
+            )
+
+
 @dataclass(frozen=True, kw_only=True)
 class GoldInputs:
     """O que os builders mapeiam — resultados prontos, nenhum a recomputar.
@@ -657,6 +842,10 @@ class GoldInputs:
         horizon_reports: um `HorizonReport` por horizonte (vazio se `BLOCKED`).
         mcs_reports: os `McsReport`s (horizonte x esquema; vazio se `BLOCKED`).
         block_estimates: horizonte → as b̂_sb por par (as que foram ao MCS).
+        profile_reports: os perfis de séries novas por horizonte (Stage 6.6; vazio se
+            `BLOCKED`).
+        mcs_block_reports: as rodadas do MCS por bloco de sensibilidade (vazio se
+            `BLOCKED` ou sem regras de perfil na revisão).
 
     Raises:
         ValueError: `BLOCKED` com relatórios ou sem resultado bloqueante; `COMPLETED`
@@ -670,6 +859,8 @@ class GoldInputs:
     horizon_reports: tuple[HorizonReport, ...]
     mcs_reports: tuple[McsReport, ...]
     block_estimates: Mapping[int, tuple[BlockEstimate, ...]]
+    profile_reports: tuple[HorizonProfileReport, ...]
+    mcs_block_reports: tuple[McsBlockRun, ...]
 
     def __post_init__(self) -> None:
         """Coerência status x conteúdo; mapa como cópia somente-leitura."""
@@ -679,8 +870,13 @@ class GoldInputs:
             raise ValueError("block_estimates must be a Mapping")
         object.__setattr__(self, "block_estimates", MappingProxyType(dict(self.block_estimates)))
         blocking = any(result.is_blocking for result in self.check_results)
-        if self.status is RefreshStatus.BLOCKED and (self.horizon_reports or self.mcs_reports):
-            raise ValueError("a BLOCKED generation has no horizon or MCS reports")
+        if self.status is RefreshStatus.BLOCKED and (
+            self.horizon_reports
+            or self.mcs_reports
+            or self.profile_reports
+            or self.mcs_block_reports
+        ):
+            raise ValueError("a BLOCKED generation has no horizon, MCS or profile reports")
         if self.status is RefreshStatus.COMPLETED and blocking:
             raise ValueError("a COMPLETED generation cannot hold a blocking check result")
         if self.status is RefreshStatus.BLOCKED and not blocking:
@@ -729,3 +925,4 @@ class RefreshGoldResult:
     status: RefreshStatus
     rows_by_table: Mapping[str, int]
     failed_checks: tuple[FailedCheck, ...]
+    profile_error_units: int

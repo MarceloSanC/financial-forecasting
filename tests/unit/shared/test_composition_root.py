@@ -548,9 +548,17 @@ def test_wire_dependencies_wires_refresh_gold(tmp_path: Path) -> None:
     assert refresh.build_order == (
         "quality_checks",
         "calibration_table",
+        "christoffersen_monte_carlo",
+        "differential_acf",
+        "differential_breaks",
+        "dm_profiles",
         "dm_results",
+        "dm_seed_fraction",
+        "loss_differentials",
+        "mcs_block_sensitivity",
         "mcs_results",
         "metrics_by_run",
+        "partial_degeneracy",
     )
 
 

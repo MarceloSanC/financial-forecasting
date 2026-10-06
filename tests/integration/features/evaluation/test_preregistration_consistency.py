@@ -36,6 +36,10 @@ from financial_forecasting.features.evaluation.domain.value_objects.preregistrat
     Preregistration,
     ScenarioRole,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.profile_parameters import (
+    PROFILE_RULE_CATALOG,
+    ProfileParameters,
+)
 from financial_forecasting.features.modeling.application.use_cases import (
     train_gbm_quantile,
     train_tft,
@@ -86,11 +90,16 @@ def claims_about_past(text: str) -> list[str]:
     ]
 
 
-def _r0() -> tuple[Preregistration, PreregistrationHash]:
-    record = TomlPreregistrationSource(root=_PREREG_DIR).read(name="aapl_confirmatory", revision=0)
+def _revision(revision: int) -> tuple[Preregistration, PreregistrationHash]:
+    source = TomlPreregistrationSource(root=_PREREG_DIR)
+    record = source.read(name="aapl_confirmatory", revision=revision)
     prereg = Preregistration.from_mapping(record.payload)
     digest = PreregistrationHash.compute(hasher=CanonicalJsonHasher(), payload=prereg.as_payload())
     return prereg, digest
+
+
+def _r0() -> tuple[Preregistration, PreregistrationHash]:
+    return _revision(0)
 
 
 def test_r0_matches_cohort() -> None:
@@ -183,7 +192,7 @@ def test_every_revision_hash_quoted() -> None:
     mirror = _MIRROR.read_text(encoding="utf-8")
     revisions = [p for p in sorted(_PREREG_DIR.iterdir()) if _REVISION_FILE.match(p.name)]
 
-    assert [p.name for p in revisions] == ["aapl_confirmatory-r0.toml"]
+    assert [p.name for p in revisions] == ["aapl_confirmatory-r0.toml", "aapl_confirmatory-r1.toml"]
     for path in revisions:
         match = _REVISION_FILE.match(path.name)
         assert match is not None
@@ -214,7 +223,14 @@ def test_no_claim_about_r0_past() -> None:
     prereg, _ = _r0()
     assert prereg.blinding_statement is not None
     assert claims_about_past(prereg.blinding_statement) == []
-    for path in (_PREREG_DIR / "aapl_confirmatory-r0.toml", _MIRROR):
+    r1, _ = _revision(1)
+    assert r1.amendment is not None
+    assert claims_about_past(r1.amendment.justification) == []
+    for path in (
+        _PREREG_DIR / "aapl_confirmatory-r0.toml",
+        _PREREG_DIR / "aapl_confirmatory-r1.toml",
+        _MIRROR,
+    ):
         assert claims_about_past(path.read_text(encoding="utf-8")) == [], path.name
 
 
@@ -233,3 +249,73 @@ def test_anchor_record_matches_ref() -> None:
     mirror = _MIRROR.read_text(encoding="utf-8")
     assert record.anchor.comment_url in mirror
     assert record.anchor.commit in mirror
+
+
+# --- Stage 6.6 Task 19: emenda cega r1 ------------------------------------------------
+
+_R0_HASH = "4526c437c2964eb5d38f634c4614074388ed4ce37c6f843c1780faa2ac8081b1"
+_AMENDMENT_KEYS = {"revision", "amends", "justification", "blind_status", "profile_parameters"}
+
+
+def test_r0_hash_unchanged() -> None:
+    _, digest = _r0()
+    assert digest.value == _R0_HASH
+
+
+def test_r1_equals_r0_except_amendment() -> None:
+    """Todo campo do r1 é igual ao do r0, exceto a emenda e o bloco de regras de perfil."""
+    r0, r0_digest = _r0()
+    r1, _ = _revision(1)
+    p0, p1 = r0.as_payload(), r1.as_payload()
+    assert set(p1) - set(p0) <= _AMENDMENT_KEYS
+    for key in set(p0) | set(p1):
+        if key not in _AMENDMENT_KEYS:
+            assert p1.get(key) == p0.get(key), key
+    assert r1.revision == 1
+    assert r1.amendment is not None
+    assert r1.amendment.amends == r0.reference(r0_digest)
+    assert r1.amendment.blind_status == "blinded"
+    assert r1.profile_parameters == ProfileParameters.from_mapping(
+        {
+            "subset_multiplicity": PROFILE_RULE_CATALOG["subset_multiplicity"],
+            "partial_degeneracy_pairs": PROFILE_RULE_CATALOG["partial_degeneracy_pairs"],
+            "mcs_block_sensitivity_scheme": PROFILE_RULE_CATALOG["mcs_block_sensitivity_scheme"],
+            "stationarity": {
+                "acf_max_lag": PROFILE_RULE_CATALOG["stationarity.acf_max_lag"],
+                "break_test": PROFILE_RULE_CATALOG["stationarity.break_test"],
+                "break_alpha": 0.05,
+            },
+        }
+    )
+    assert r0.profile_parameters is None
+
+
+def test_r0_to_r1_chain_read_by_the_source() -> None:
+    """A cadeia r0 -> r1 pelo mesmo caminho do use case (`TomlPreregistrationSource`)."""
+    source = TomlPreregistrationSource(root=_PREREG_DIR)
+    chain = [source.read(name="aapl_confirmatory", revision=rev) for rev in (0, 1)]
+    plans = [Preregistration.from_mapping(record.payload) for record in chain]
+    digests = [
+        PreregistrationHash.compute(hasher=CanonicalJsonHasher(), payload=p.as_payload())
+        for p in plans
+    ]
+    assert plans[1].amendment is not None
+    assert plans[1].amendment.amends == plans[0].reference(digests[0])
+    assert plans[1].reference(digests[1]) == "aapl_confirmatory-r1-bfa8028498ca"
+
+
+def test_r1_anchor_after_r0() -> None:
+    """CA8 (Task 22): r0 e r1 ancorados — o insumo que o `BuildConfirmatoryScorecard`
+    confere — e a âncora da r1 posterior à do r0."""
+    source = TomlPreregistrationSource(root=_PREREG_DIR)
+    r0 = source.read(name="aapl_confirmatory", revision=0)
+    r1 = source.read(name="aapl_confirmatory", revision=1)
+    plan, digest = _revision(1)
+    assert r0.anchor is not None
+    assert r1.anchor is not None
+    assert r1.anchor.tag == f"preregistration/{plan.reference(digest)}"
+    assert r1.anchor.anchored_at > r0.anchor.anchored_at
+    assert "/issues/129#issuecomment-" in r1.anchor.comment_url
+    mirror = _MIRROR.read_text(encoding="utf-8")
+    assert r1.anchor.comment_url in mirror
+    assert r1.anchor.commit in mirror

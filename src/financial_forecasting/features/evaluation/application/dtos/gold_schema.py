@@ -9,7 +9,7 @@ itens 2-3). Antes cada builder da 6.4 tinha a sua chave privada (`_KEY`) e o nom
 - `read_columns` — as colunas fora da chave que o scorecard e o perfil leem por
   nome; nenhuma outra coluna é lida por nome fora deste schema.
 
-Consumidores: os cinco builders (`build` devolve a tabela com `name`/`key` daqui) e
+Consumidores: os treze builders (`build` devolve a tabela com `name`/`key` daqui) e
 `GoldGeneration.from_stored` (monta cada tabela lida com a chave daqui).
 """
 
@@ -92,6 +92,112 @@ GOLD_MCS_RESULTS: Final = GoldTableSchema(
     ),
 )
 
+# --- Stage 6.6: perfis de séries novas (ADR 6.6.0002) ----------------------------------
+
+GOLD_DM_PROFILES: Final = GoldTableSchema(
+    name="gold_dm_profiles",
+    key=("horizon", "dimension", "fold", "seed", "level", "comparator"),
+    read_columns=(
+        "status",
+        "undefined_reason",
+        "detail",
+        "n_points",
+        "first_target_timestamp",
+        "last_target_timestamp",
+        "variance_estimator",
+        "mean_differential",
+        "statistic",
+        "p_value",
+        "rejected",
+        "fallback_applied",
+        "horizon_used",
+        "alpha",
+    ),
+)
+GOLD_DM_SEED_FRACTION: Final = GoldTableSchema(
+    name="gold_dm_seed_fraction",
+    key=("horizon", "comparator"),
+    read_columns=("n_seeds", "n_rejecting", "n_undefined", "fraction_rejecting", "alpha"),
+)
+
+GOLD_MCS_BLOCK_SENSITIVITY: Final = GoldTableSchema(
+    name="gold_mcs_block_sensitivity",
+    key=("horizon", "block_rule", "model"),
+    read_columns=(
+        "status",
+        "undefined_reason",
+        "detail",
+        "scheme",
+        "block_size",
+        "elimination_rank",
+        "step_p_value",
+        "mcs_p_value",
+        "included",
+        "alpha",
+        "reps",
+        "seed",
+        "n_points",
+    ),
+)
+GOLD_CHRISTOFFERSEN_MONTE_CARLO: Final = GoldTableSchema(
+    name="gold_christoffersen_monte_carlo",
+    key=(
+        "model",
+        "seed",
+        "horizon",
+        "sample",
+        "kind",
+        "level_low",
+        "level_high",
+        "includes_degenerate",
+    ),
+    read_columns=(
+        "status",
+        "detail",
+        "uc_status",
+        "ind_status",
+        "mc_p_uc",
+        "mc_p_ind",
+        "mc_p_cc",
+        "draws",
+        "mc_seed",
+        "attempts",
+    ),
+)
+
+GOLD_PARTIAL_DEGENERACY: Final = GoldTableSchema(
+    name="gold_partial_degeneracy",
+    key=("model", "seed", "horizon", "sample", "pair_kind", "level_low", "level_high"),
+    read_columns=("status", "detail", "collapse_rate", "tolerance"),
+)
+GOLD_DIFFERENTIAL_ACF: Final = GoldTableSchema(
+    name="gold_differential_acf",
+    key=("horizon", "model_a", "model_b", "lag"),
+    read_columns=("acf", "n_points", "max_lag"),
+)
+GOLD_DIFFERENTIAL_BREAKS: Final = GoldTableSchema(
+    name="gold_differential_breaks",
+    key=("horizon", "model_a", "model_b"),
+    read_columns=(
+        "status",
+        "undefined_reason",
+        "detail",
+        "statistic",
+        "p_value",
+        "rejected",
+        "alpha",
+        "horizon_used",
+        "break_target_timestamp",
+        "n_points",
+        "max_lag",
+    ),
+)
+GOLD_LOSS_DIFFERENTIALS: Final = GoldTableSchema(
+    name="gold_loss_differentials",
+    key=("horizon", "model_a", "model_b", "target_timestamp"),
+    read_columns=("fold", "differential"),
+)
+
 GOLD_SCHEMAS: Final[Mapping[str, GoldTableSchema]] = MappingProxyType(
     {
         schema.name: schema
@@ -101,15 +207,31 @@ GOLD_SCHEMAS: Final[Mapping[str, GoldTableSchema]] = MappingProxyType(
             GOLD_CALIBRATION_TABLE,
             GOLD_DM_RESULTS,
             GOLD_MCS_RESULTS,
+            GOLD_DM_PROFILES,
+            GOLD_DM_SEED_FRACTION,
+            GOLD_MCS_BLOCK_SENSITIVITY,
+            GOLD_CHRISTOFFERSEN_MONTE_CARLO,
+            GOLD_PARTIAL_DEGENERACY,
+            GOLD_DIFFERENTIAL_ACF,
+            GOLD_DIFFERENTIAL_BREAKS,
+            GOLD_LOSS_DIFFERENTIALS,
         )
     }
 )
-"""As cinco tabelas pelo nome."""
+"""As tabelas pelo nome (as cinco da 6.4 e as de perfil da 6.6)."""
 
 CONFIRMATORY_TABLES: Final[tuple[str, ...]] = (
     GOLD_METRICS_BY_RUN.name,
     GOLD_CALIBRATION_TABLE.name,
     GOLD_DM_RESULTS.name,
     GOLD_MCS_RESULTS.name,
+    GOLD_DM_PROFILES.name,
+    GOLD_DM_SEED_FRACTION.name,
+    GOLD_MCS_BLOCK_SENSITIVITY.name,
+    GOLD_CHRISTOFFERSEN_MONTE_CARLO.name,
+    GOLD_PARTIAL_DEGENERACY.name,
+    GOLD_DIFFERENTIAL_ACF.name,
+    GOLD_DIFFERENTIAL_BREAKS.name,
+    GOLD_LOSS_DIFFERENTIALS.name,
 )
 """As tabelas que carregam `preregistration_ref` (ADR 6.4.0006 item 4)."""
