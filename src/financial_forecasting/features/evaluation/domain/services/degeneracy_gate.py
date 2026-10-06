@@ -115,10 +115,7 @@ class DegeneracyGate:
             ValueError: `tolerance` negativa ou não-finita (C3).
         """
         validate_tolerance(tolerance, field="tolerance")
-        degenerate = tuple(
-            max(values) - min(values) <= tolerance
-            for values in (series.scored_values(i) for i in range(series.n_points))
-        )
+        degenerate = _degenerate_mask(series, tolerance)
         n_degenerate = sum(degenerate)
         return DegeneracyReport(
             horizon=series.horizon,
@@ -131,6 +128,46 @@ class DegeneracyGate:
             rate=n_degenerate / series.n_points,
             pair_collapse_rates=_pair_collapse_rates(series, degenerate, tolerance),
         )
+
+
+def adjacent_collapse_rates(
+    series: CoverageSeries, *, tolerance: float
+) -> tuple[tuple[float, float, float | None], ...]:
+    """Colapso parcial por par **adjacente** da grade ordenada (Stage 6.6; ADR `6_6_0002`).
+
+    Para cada (τ_k, τ_{k+1}), a fração das linhas NÃO-degeneradas (a mesma máscara do
+    gate) com `q_{k+1} - q_k ≤ tolerance`; `None` sem linha não-degenerada. Complementa
+    os pares simétricos do `DegeneracyReport`: empates entre níveis vizinhos (boosters
+    por nível, doc §5.1) não aparecem num par simétrico, e com tolerância > 0 gaps
+    internos ≤ tol podem somar > tol. Fora do caminho do veredito: só o perfil chama.
+
+    Raises:
+        ValueError: `tolerance` negativa ou não-finita.
+    """
+    validate_tolerance(tolerance, field="tolerance")
+    degenerate = _degenerate_mask(series, tolerance)
+    kept = [i for i, is_degenerate in enumerate(degenerate) if not is_degenerate]
+    rates: list[tuple[float, float, float | None]] = []
+    for k in range(len(series.levels) - 1):
+        lower_level, upper_level = series.levels[k], series.levels[k + 1]
+        if not kept:
+            rates.append((lower_level, upper_level, None))
+            continue
+        collapsed = sum(
+            1
+            for i in kept
+            if series.scored_values(i)[k + 1] - series.scored_values(i)[k] <= tolerance
+        )
+        rates.append((lower_level, upper_level, collapsed / len(kept)))
+    return tuple(rates)
+
+
+def _degenerate_mask(series: CoverageSeries, tolerance: float) -> tuple[bool, ...]:
+    """Linha degenerada ⇔ `max - min` do vetor pós-guardrail ≤ `tolerance` (regra única)."""
+    return tuple(
+        max(values) - min(values) <= tolerance
+        for values in (series.scored_values(i) for i in range(series.n_points))
+    )
 
 
 def _pair_collapse_rates(
