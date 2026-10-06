@@ -601,7 +601,11 @@ def _common_folds(
     end: int,
     realized: RealizedReturns,
 ) -> tuple[tuple[str | None, ...] | None, str | None]:
-    """O fold de cada alvo da amostra comum, se todas as séries (e níveis) concordam."""
+    """O fold de cada alvo da amostra comum, se todas as séries (e níveis) concordam.
+
+    Lê `ForecastRecord.fold`, que é o `fold` do run por construção (o `RefreshGold._record`
+    grava `fold=run.fold`) — o "fold do run que previu o ponto" do concept 6.6 I3.
+    """
     by_target: dict[str, set[str | None]] = defaultdict(set)
     for key in keys:
         for point in per_series[key]:

@@ -717,14 +717,16 @@ def test_common_folds_none_label() -> None:
 
 
 @pytest.mark.unit
-def test_diverging_fold_labels_are_not_a_finding() -> None:
-    """Um modelo com o fold trocado num alvo: `common_folds = None` + motivo, sem achado e
-    com as amostras montadas (o fold não bloqueia o veredito — ADR 6.6.0003)."""
+@pytest.mark.parametrize(("model", "seed"), [("gbm", None), ("tft", 1), ("tft", 2)])
+def test_diverging_fold_labels_are_not_a_finding(model: str, seed: int | None) -> None:
+    """Uma série com o fold trocado num alvo: `common_folds = None` + motivo, sem achado e
+    com as amostras montadas (o fold não bloqueia o veredito — ADR 6.6.0003). Toda série
+    conta, inclusive a última seed do mesmo modelo (Checkpoint C bloco 2, T2)."""
     cohort = make_cohort()
-    target = targets_of(cohort, "gbm", None, 1)[3]
+    target = targets_of(cohort, model, seed, 1)[3]
     cohort = replace_records(
         cohort,
-        at_point("gbm", None, 1, target),
+        at_point(model, seed, 1, target),
         lambda r: dataclasses.replace(r, fold="f9"),
     )
     result = _assemble(cohort)
@@ -735,3 +737,20 @@ def test_diverging_fold_labels_are_not_a_finding() -> None:
     assert target in first.fold_mismatch_detail
     assert "f9" in first.fold_mismatch_detail
     assert result.horizons[1].common_folds is not None
+
+
+@pytest.mark.unit
+def test_diverging_fold_in_a_single_level_is_seen() -> None:
+    """Checkpoint C bloco 2 (T3): o fold de **todos** os níveis do ponto conta — um nível só
+    com outro fold já torna o rótulo do alvo ambíguo."""
+    cohort = make_cohort()
+    target = targets_of(cohort, "tft", 1, 1)[2]
+    level = GOLD_LEVELS[3]
+    cohort = replace_records(
+        cohort,
+        lambda r: at_point("tft", 1, 1, target)(r) and r.quantile_level == level,
+        lambda r: dataclasses.replace(r, fold="f9"),
+    )
+    result = _assemble(cohort)
+    assert result.alignment.findings == ()
+    assert result.horizons[0].common_folds is None
