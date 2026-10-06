@@ -280,8 +280,9 @@ def _read_panel(
     Checa o vazio com o código deste use case (C1) e delega ordenação,
     validação e corte do prefixo sem valor ao `build_training_grid` (D11 da
     Stage 5.5; ADR 5.5.0004) — o mesmo grid dos outros modelos. Recebe as
-    colunas explícitas porque o `_load_dataset` (caracterizado com colunas
-    arbitrárias desde a 5.5) também delega para cá.
+    colunas explícitas porque a caracterização da leitura da 5.5
+    (`test_dataset_loading_characterization.py`) a exercita com colunas
+    arbitrárias; o use case e a inferência leem por `load_tft_panel`.
     """
     rows = store.read(layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": asset_id})
     if not rows:
@@ -595,26 +596,6 @@ class TrainTft:
             self._tracker.end_run()
         except Exception:
             logger.debug("could not close tracking run for run_id=%s", run_id)
-
-    # -- leitura do dataset (C1/C6) ---------------------------------------------
-
-    def _load_dataset(
-        self, scope: ScopeSpec, feature_names: tuple[str, ...]
-    ) -> tuple[tuple[str, ...], tuple[float, ...], tuple[date, ...], tuple[tuple[float, ...], ...]]:
-        """Lê o dataset TFT pelo grid único: (timestamps ISO, target_return, sessões, matriz).
-
-        Delega ao corpo único `_read_panel` (o mesmo de `load_tft_panel`). O fluxo do
-        use case lê por `load_tft_panel`; este método fica para a caracterização da
-        5.5 (`test_dataset_loading_characterization.py`), que o chama com colunas
-        arbitrárias.
-        """
-        panel = _read_panel(
-            store=self._store,
-            asset_id=scope.asset_id,
-            feature_names=feature_names,
-            known_names=(),
-        )
-        return panel.timestamps, panel.target, panel.sessions, panel.rows
 
     # -- treino de um fold (I4/I7) ---------------------------------------------
 
