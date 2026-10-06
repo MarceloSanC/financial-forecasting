@@ -12,17 +12,24 @@ import dataclasses
 
 import pytest
 
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.christoffersen_monte_carlo import (  # noqa: E501
+    ChristoffersenMonteCarloGoldBuilder,
+)
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_profiles import (  # noqa: E501
     DmProfilesGoldBuilder,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_seed_fraction import (  # noqa: E501
     DmSeedFractionGoldBuilder,
 )
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.mcs_block_sensitivity import (  # noqa: E501
+    McsBlockSensitivityGoldBuilder,
+)
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import GoldInputs
 from financial_forecasting.features.evaluation.domain.services.dm_profiles import (
     DmProfiles,
     SubsetStatus,
 )
+from financial_forecasting.features.evaluation.domain.services.profile_reports import UnitStatus
 from tests.contract.features.evaluation._gold_inputs import (
     completed_inputs,
     completed_inputs_r0,
@@ -146,3 +153,100 @@ def test_undefined_fold_rows_have_unique_keys(case: str) -> None:
         for r in table.rows
     ]
     assert len(keys) == len(set(keys))
+
+
+@pytest.mark.contract
+def test_mcs_block_sensitivity_cell_by_cell() -> None:
+    inputs = completed_inputs()
+    table = McsBlockSensitivityGoldBuilder().build(inputs)
+    assert table.rows
+    by_key = {(r["horizon"], r["block_rule"], r["model"]): r for r in table.rows}
+    for run in inputs.mcs_block_reports:
+        assert run.report is not None
+        for rank, elimination in enumerate(run.report.eliminations, start=1):
+            row = by_key[(run.horizon, run.block_rule, elimination.model)]
+            assert row["block_size"] == run.block_size == run.report.block_size
+            assert row["scheme"] == run.scheme.value
+            assert row["elimination_rank"] == rank
+            assert row["mcs_p_value"] == elimination.mcs_p_value
+            assert row["included"] == (elimination.model in run.report.included)
+            assert (row["status"], row["undefined_reason"]) == ("computed", None)
+
+
+@pytest.mark.contract
+def test_mcs_block_error_run_maps_to_one_row() -> None:
+    inputs = completed_inputs()
+    first = inputs.mcs_block_reports[0]
+    failed = dataclasses.replace(
+        first, status=UnitStatus.ERROR, detail="ValueError: x", report=None
+    )
+    table = McsBlockSensitivityGoldBuilder().build(
+        dataclasses.replace(inputs, mcs_block_reports=(failed,))
+    )
+    (row,) = table.rows
+    assert (row["model"], row["status"], row["undefined_reason"], row["detail"]) == (
+        None,
+        "error",
+        "error",
+        "ValueError: x",
+    )
+    assert row["mcs_p_value"] is None
+    assert row["block_size"] == first.block_size
+
+
+@pytest.mark.contract
+def test_christoffersen_monte_carlo_cell_by_cell() -> None:
+    inputs = completed_inputs()
+    table = ChristoffersenMonteCarloGoldBuilder().build(inputs)
+    expected = [row for profile in inputs.profile_reports for row in profile.monte_carlo]
+    assert table.rows
+    assert len(table.rows) == len(expected)
+    assert {r["horizon"] for r in table.rows} == {1}
+    by_key = {
+        (
+            r["model"],
+            r["seed"],
+            r["sample"],
+            r["kind"],
+            r["level_low"],
+            r["level_high"],
+            r["includes_degenerate"],
+        ): r
+        for r in table.rows
+    }
+    for unit in expected:
+        assert unit.values is not None
+        high = unit.levels[1] if len(unit.levels) == 2 else None  # noqa: PLR2004
+        row = by_key[
+            (
+                unit.model,
+                unit.seed,
+                unit.sample.value,
+                unit.kind.value,
+                unit.levels[0],
+                high,
+                unit.includes_degenerate,
+            )
+        ]
+        assert (row["mc_p_uc"], row["mc_p_ind"], row["mc_p_cc"]) == (
+            unit.values.p_uc,
+            unit.values.p_ind,
+            unit.values.p_cc,
+        )
+        assert (row["uc_status"], row["ind_status"]) == (
+            unit.values.uc_status.value,
+            unit.values.ind_status.value,
+        )
+        assert (row["draws"], row["mc_seed"], row["attempts"]) == (
+            inputs.parameters.monte_carlo_draws,
+            inputs.parameters.monte_carlo_seed,
+            unit.values.attempts,
+        )
+    assert any(r["uc_status"] == "not_applicable" for r in table.rows)  # baseline pontual
+
+
+@pytest.mark.contract
+def test_r0_builds_mc_but_no_block_rows() -> None:
+    inputs = completed_inputs_r0()
+    assert McsBlockSensitivityGoldBuilder().build(inputs).rows == ()
+    assert ChristoffersenMonteCarloGoldBuilder().build(inputs).rows

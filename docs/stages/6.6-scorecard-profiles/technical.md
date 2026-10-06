@@ -1003,4 +1003,10 @@ que só a r1 (emenda cega) o carrega, e o estado `not_frozen_in_revision` (I9) s
 **Razão:** âncora no ADR 6.6.0001 item 5 e no ADR 6.5.0002 (regra nova do plano só por
 revisão nova); reversível-barato.
 
+### 2026-10-06 — [deviation] Task 15: uma coluna `attempts` no Monte Carlo — Claude (Opus 5.5)
+O technical listava `uc_attempts` e `ind_attempts` em `gold_christoffersen_monte_carlo`;
+o `MonteCarloPValues` da 6.3 (ADR 6.3.0006) tem **um** contador `attempts` (o LR_uc usa
+os N primeiros sorteios do mesmo laço). A tabela grava `attempts` como o VO o define —
+nenhuma informação perdida; abaixo do limiar de pergunta (forma, não contrato).
+
 <!-- END: post-execution -->

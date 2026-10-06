@@ -120,6 +120,51 @@ GOLD_DM_SEED_FRACTION: Final = GoldTableSchema(
     read_columns=("n_seeds", "n_rejecting", "n_undefined", "fraction_rejecting", "alpha"),
 )
 
+GOLD_MCS_BLOCK_SENSITIVITY: Final = GoldTableSchema(
+    name="gold_mcs_block_sensitivity",
+    key=("horizon", "block_rule", "model"),
+    read_columns=(
+        "status",
+        "undefined_reason",
+        "detail",
+        "scheme",
+        "block_size",
+        "elimination_rank",
+        "step_p_value",
+        "mcs_p_value",
+        "included",
+        "alpha",
+        "reps",
+        "seed",
+        "n_points",
+    ),
+)
+GOLD_CHRISTOFFERSEN_MONTE_CARLO: Final = GoldTableSchema(
+    name="gold_christoffersen_monte_carlo",
+    key=(
+        "model",
+        "seed",
+        "horizon",
+        "sample",
+        "kind",
+        "level_low",
+        "level_high",
+        "includes_degenerate",
+    ),
+    read_columns=(
+        "status",
+        "detail",
+        "uc_status",
+        "ind_status",
+        "mc_p_uc",
+        "mc_p_ind",
+        "mc_p_cc",
+        "draws",
+        "mc_seed",
+        "attempts",
+    ),
+)
+
 GOLD_SCHEMAS: Final[Mapping[str, GoldTableSchema]] = MappingProxyType(
     {
         schema.name: schema
@@ -131,6 +176,8 @@ GOLD_SCHEMAS: Final[Mapping[str, GoldTableSchema]] = MappingProxyType(
             GOLD_MCS_RESULTS,
             GOLD_DM_PROFILES,
             GOLD_DM_SEED_FRACTION,
+            GOLD_MCS_BLOCK_SENSITIVITY,
+            GOLD_CHRISTOFFERSEN_MONTE_CARLO,
         )
     }
 )
@@ -143,5 +190,7 @@ CONFIRMATORY_TABLES: Final[tuple[str, ...]] = (
     GOLD_MCS_RESULTS.name,
     GOLD_DM_PROFILES.name,
     GOLD_DM_SEED_FRACTION.name,
+    GOLD_MCS_BLOCK_SENSITIVITY.name,
+    GOLD_CHRISTOFFERSEN_MONTE_CARLO.name,
 )
 """As tabelas que carregam `preregistration_ref` (ADR 6.4.0006 item 4)."""

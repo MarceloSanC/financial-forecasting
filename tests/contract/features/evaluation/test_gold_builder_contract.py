@@ -24,6 +24,9 @@ import pytest
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.calibration_table import (  # noqa: E501
     CalibrationTableGoldBuilder,
 )
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.christoffersen_monte_carlo import (  # noqa: E501
+    ChristoffersenMonteCarloGoldBuilder,
+)
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_profiles import (  # noqa: E501
     DmProfilesGoldBuilder,
 )
@@ -32,6 +35,9 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_seed_fraction import (  # noqa: E501
     DmSeedFractionGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.mcs_block_sensitivity import (  # noqa: E501
+    McsBlockSensitivityGoldBuilder,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.mcs_results import (  # noqa: E501
     McsResultsGoldBuilder,
@@ -77,6 +83,8 @@ BUILDERS: dict[str, Callable[[], GoldBuilder]] = {
     "mcs_results": McsResultsGoldBuilder,
     "dm_profiles": DmProfilesGoldBuilder,
     "dm_seed_fraction": DmSeedFractionGoldBuilder,
+    "mcs_block_sensitivity": McsBlockSensitivityGoldBuilder,
+    "christoffersen_monte_carlo": ChristoffersenMonteCarloGoldBuilder,
 }
 
 
