@@ -9,7 +9,8 @@ predictor do checkpoint, índice). O fake é configurado com o que o real devolv
 sobre o mesmo cohort (gravação), e as duas pernas passam pelas mesmas asserções:
 
 - o resolver devolve um item por fold, em ordem, com a identidade do treino;
-- cohort incompleto ergue `ApplicationError` (C14);
+- cohort incompleto ergue `ApplicationError` (C14) — na perna `fake` isto só testa o
+  fake (ele é configurado com o erro); a prova do comportamento é a perna `real`;
 - o predictor recusa run fora da lista permitida (C6);
 - devolve só as partições pedidas, com grade alinhada aos níveis do spec.
 """
