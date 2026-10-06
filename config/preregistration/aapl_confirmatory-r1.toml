@@ -1,0 +1,152 @@
+# Pré-registro confirmatório AAPL — revisão r1 (Stage 6.6; ADRs 6.6.0001-0003).
+# Emenda cega do r0: idêntica a ele exceto `revision`, os campos da emenda e o bloco
+# [profile_parameters] (as regras dos perfis de séries novas, que o r0 não nomeia).
+# Arquivo CANÔNICO e ancorado como o r0; o espelho docs/preregistration/aapl_confirmatory.md
+# cita o hash completo (ADR 6.5.0002).
+
+name = "aapl_confirmatory"
+revision = 1
+amends = "aapl_confirmatory-r0-4526c437c296"
+justification = "O r0 declara os perfis de séries novas (DM por fold, seed e quantil; MCS com bloco h e raiz de T; degeneração parcial por par; estacionariedade do diferencial de perdas) sem nomear as regras que os calculam (auditoria F7). Esta revisão congela essas regras antes de qualquer execução sobre o cohort: recortes descritivos com p bruto, pares simétricos e adjacentes, MCS por bloco no esquema primário, ACF com o default de lags do statsmodels e CUSUM da média escalado pela variância do DM primário (ADR 6.6.0001). Nada que julga H1, H2 ou H3 muda."
+blind_status = "blinded"
+asset = "AAPL"
+horizons = [1, 7]
+quantile_levels = [0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98]
+candidate = "tft_quantile"
+blinding_statement = "As tabelas confirmatórias do cohort r0 foram calculadas uma vez num teste de software da Stage 6.4 (Task 15), num container descartado. Nenhum valor resultante foi lido. Nenhuma escolha deste plano usou informação de desempenho."
+
+[cohort]
+cohort_id = "aapl_confirmatory-r0-665f45d9169a"
+cohort_hash = "665f45d9169aba576d194e73d45c0508f51f231f573c4de283c96fc5847365b1"
+
+[realized]
+source = "training_grid_target_return"
+dataset_fingerprint = "00e4406dcd96658d557f7d4d86face9874fac42385e3cb182d54c5d2286695bd"
+
+[comparators]
+naive = ["baseline_zero_return", "baseline_historical_mean"]
+strong_statistical = ["baseline_ar1", "baseline_ewma_vol", "baseline_historical_quantiles"]
+ml = ["gbm_quantile"]
+
+[seeds]
+tft_quantile = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+gbm_quantile = [0]
+baseline_zero_return = "seedless"
+baseline_historical_mean = "seedless"
+baseline_ar1 = "seedless"
+baseline_ewma_vol = "seedless"
+baseline_historical_quantiles = "seedless"
+
+[window_deficits]
+tft_quantile = 0
+gbm_quantile = 0
+baseline_zero_return = 0
+baseline_historical_mean = 0
+baseline_ar1 = 0
+baseline_ewma_vol = 0
+baseline_historical_quantiles = 0
+
+[rules]
+primary_metric = "mean_pinball_grid"
+secondary_roles = "profile_only"
+exclusions = "none"
+seed_aggregation = "mean_losses_mean_counts"
+success_criterion = "h1_not_rejected_in_at_least_one_horizon"
+
+[rules.dm]
+direction = "candidate_lower_loss_one_sided"
+kernel_lag = "rectangular_lag_h_minus_1"
+small_sample = "hln_student_t_T_minus_1"
+negative_variance_fallback = "recompute_with_h_1_and_record"
+
+[rules.mcs]
+statistic = "R"
+block_rule = "max_h_ceil_max_bsb"
+
+[rules.h1_gate]
+form = "per_tail_wilson_model_full_masked_seed_mean_v1"
+
+[rules.verdict]
+form = "h1_gate_then_h2_tree_v1"
+
+[dm]
+alpha = 0.05
+primary_estimator = "rectangular"
+sensitivity_estimators = ["bartlett"]
+
+[mcs]
+alpha = 0.1
+reps = 1000
+seed = 127
+primary_scheme = "stationary"
+sensitivity_schemes = ["moving_block"]
+block_sensitivities = ["h", "sqrt_T"]
+
+[h1_gate]
+lower_level = 0.1
+upper_level = 0.9
+gate_band_level = 0.975
+profile_band_level = 0.95
+degeneracy_threshold = 0.01
+degeneracy_tolerance = 1e-12
+sensitivity_alpha = 0.05
+
+[[h1_gate.power_scenarios]]
+label = "width_5pp_wide"
+role = "primary"
+lower_rate = 0.125
+upper_rate = 0.125
+
+[[h1_gate.power_scenarios]]
+label = "width_5pp_narrow"
+role = "primary"
+lower_rate = 0.075
+upper_rate = 0.075
+
+[[h1_gate.power_scenarios]]
+label = "location_0_2_sigma"
+role = "primary"
+lower_rate = 0.06922982732177752
+upper_rate = 0.1397259180118744
+
+[[h1_gate.power_scenarios]]
+label = "width_3pp_wide"
+role = "secondary"
+lower_rate = 0.115
+upper_rate = 0.115
+
+[[h1_gate.power_scenarios]]
+label = "width_3pp_narrow"
+role = "secondary"
+lower_rate = 0.085
+upper_rate = 0.085
+
+[[h1_gate.power_scenarios]]
+label = "location_0_1_sigma"
+role = "secondary"
+lower_rate = 0.08355471719060237
+upper_rate = 0.1186918406956069
+
+[backtests]
+min_violations = 2
+
+[backtests.monte_carlo]
+draws = 999
+seed = 128
+
+[profiles]
+declared = ["dm_bartlett", "mcs_moving_block", "mcs_block_h", "mcs_block_sqrt_t", "gate_common_sample", "gate_lr_uc_three_state", "gate_dgt", "band_95_isolated", "without_gaps_variant", "comparators_calibration", "dm_effect_ci", "dm_fallback_applied", "tier_outcomes", "lowest_mean_pinball", "metrics_descriptors", "christoffersen_monte_carlo_h1", "dm_per_fold", "dm_per_seed", "dm_per_tau", "dm_differential_stationarity", "partial_degeneracy_per_pair", "sharpness_diagram"]
+
+[[horizons_not_evaluated]]
+horizon = 30
+reason = "not in the cohort"
+
+[profile_parameters]
+subset_multiplicity = "none_raw_p_descriptive_v1"
+partial_degeneracy_pairs = "symmetric_and_adjacent_non_degenerate_rows_v1"
+mcs_block_sensitivity_scheme = "primary_scheme"
+
+[profile_parameters.stationarity]
+acf_max_lag = "min_floor_10_log10_T_T_minus_1"
+break_test = "cusum_mean_dm_primary_variance_kolmogorov_v1"
+break_alpha = 0.05

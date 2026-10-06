@@ -5,7 +5,7 @@ when-use: Ao ler o que o estudo confirmatório AAPL congelou (hipóteses, gate H
 keywords: [preregistration, pre-registro, aapl, confirmatory, h1-gate, h2, scorecard, anchor, blinding, espelho]
 status: accepted
 created_at: 2026-09-30
-updated_at: 2026-09-30
+updated_at: 2026-10-06
 ---
 
 # Pré-registro confirmatório AAPL — espelho
@@ -143,3 +143,42 @@ contagens — nenhum valor de desempenho (registro completo no technical da Stag
 - **Registro:** `config/preregistration/aapl_confirmatory-r0.anchor.toml` (fora do
   hash). A conferência é por conteúdo: o arquivo do plano na tag é byte-igual ao de
   HEAD.
+
+## Revisão r1 (emenda cega, Stage 6.6)
+
+- **Arquivo:** `config/preregistration/aapl_confirmatory-r1.toml`
+- **`preregistration_ref`:** `aapl_confirmatory-r1-d0d20b9ddbb7`
+- **Hash completo (sha256, floats codificados exatamente):**
+  `d0d20b9ddbb71edae3a3745b049633979d4c1b1d300fa5c8f45d8c79d4645417`
+- **Emenda de:** `aapl_confirmatory-r0-4526c437c296` (`blind_status = "blinded"`).
+
+### O que muda
+
+Só o bloco `[profile_parameters]`, que dá nome às regras dos perfis de séries novas
+que o r0 declara mas não especifica (auditoria F7; ADRs 6.6.0001-0003). Todo outro
+campo é igual ao do r0 (um teste confere campo a campo), então o que julga H1, H2 e
+H3 não muda: o veredito nunca lê as tabelas desses perfis (ADR 6.6.0002).
+
+- **Recortes do DM** (por fold, por seed do candidato e por quantil):
+  descritivos, com p bruto e sem correção de Holm entre recortes
+  (`none_raw_p_descriptive_v1`).
+- **Degeneração parcial por par:** pares simétricos e pares adjacentes da grade,
+  sobre as linhas não degeneradas, com a tolerância do gate
+  (`symmetric_and_adjacent_non_degenerate_rows_v1`).
+- **MCS com bloco l = h e l = ⌈√T⌉:** só no esquema primário (`primary_scheme`).
+- **Estacionariedade do diferencial de perdas d_t:** ACF até
+  L = min(⌊10·log10 T⌋, T − 1), o default do statsmodels
+  (`min_floor_10_log10_T_T_minus_1`); teste de quebra da média por CUSUM escalado
+  pela variância de longo prazo do DM primário, com p-valor de Kolmogorov
+  (`cusum_mean_dm_primary_variance_kolmogorov_v1`); nível 0,05.
+
+Sob o r0, esses sete perfis ficam como "regra não congelada na revisão" no scorecard
+e as suas tabelas saem vazias; o Monte Carlo de Christoffersen, cujos sorteios e
+semente já estão no r0, roda nas duas revisões.
+
+### Declaração de cegamento da emenda
+
+As regras acima foram escolhidas pela literatura e pelos defaults das bibliotecas
+de referência (registros `[decision]` da Stage 6.6), antes de qualquer execução do
+refresh sobre o cohort e sem nenhum valor de desempenho à vista. A emenda é
+ancorada antes da Stage 8.1, que julga pela r1.
