@@ -202,15 +202,17 @@ sob paralelismo + não-associatividade é tema conhecido de computação numéri
 (Ahrens, Demmel & Nguyen — abstract do relatório técnico UCB/EECS-2016-121;
 versão de periódico `[CITAÇÃO-NÃO-ACESSADA]`).
 
-**Convenção (A1 — decidida, §10.1).** A reprodução é **bit a bit só no mesmo
+**Decisão (A1 — evidência, e A1-TOL — convenção; §10.1).** A reprodução é **bit a bit só no mesmo
 ambiente pinado**: mesma build do torch, mesmo SO/CPU, **tamanho de lote de
 inferência fixo e registrado** (o lote muda a ordem das somas), carregamento sem
 paralelismo. **Entre ambientes**, a igualdade é **por tolerância declarada** —
 o mesmo regime da equivalência da 8.2 (overview ASSUM-4; roadmap ROADMAP-5) e
 o mesmo escopo do determinismo do treino (concept 5.4 I9: "no mesmo processo e
-ambiente"; reprodutibilidade entre plataformas "não é afirmada"). O padrão
-"tolerância declarada" não tem fonte primária própria `[SEM-FONTE-PRIMÁRIA]` —
-é a consequência prática das fontes acima. Isto **qualifica** o "bit a bit" sem
+ambiente"; reprodutibilidade entre plataformas "não é afirmada"). A parte
+"bit a bit só no mesmo ambiente" é **evidência** (A1: as fontes acima
+decidem). O padrão "tolerância declarada" entre ambientes não tem fonte
+primária própria `[SEM-FONTE-PRIMÁRIA]` — é **convenção** (A1-TOL, degrau 5),
+consequência prática das fontes acima. Isto **qualifica** o "bit a bit" sem
 escopo da DoD original da 7.1. Lacunas declaradas: a documentação não promete
 determinismo entre processos distintos na mesma máquina (só "same
 environment"), e o efeito do número de threads intra-op não foi verificado — o
@@ -218,10 +220,8 @@ environment"), e o efeito do número de threads intra-op não foi verificado —
 
 **Referência de reprodução da 7.1.** A referência é o **artefato**
 (checkpoint) de cada (fold, seed) **re-executado no mesmo ambiente**, com o
-lote de inferência igual ao `batch_size` do treinador — o treinador emite as
-predições de teste com o mesmo `batch_size` do treino (111 no cohort;
-`pf_tft_trainer.py` l. 258–266 e 311–317; `config/cohorts/aapl_confirmatory.toml`
-l. 119). Comparar a reprodução com as predições de teste **já persistidas no
+lote de inferência igual ao do treinador — o treinador emite as predições de
+teste com o mesmo tamanho de lote do treino (111 no cohort). Comparar a reprodução com as predições de teste **já persistidas no
 silver** é **teste de equivalência por tolerância**, não bit a bit — a menos
 que o lote e o ambiente coincidam com os da corrida que as gravou.
 
@@ -494,7 +494,7 @@ limite (concept 5.5 D6: "afeta o CQR da 7.2 nesses níveis"). O par é
 
 ### 4.9 Seeds
 
-**B6 (decidida, §10.1):** conformaliza-se **cada seed separadamente** (cada
+**B6 (convenção, degrau 1 — coerência com o ADR 0.0.0010; §10.1):** conformaliza-se **cada seed separadamente** (cada
 seed tem seu artefato e suas predições de calib) e reporta-se a **média das
 coberturas** entre seeds, com a dispersão no perfil — coerente com ADR 0.0.0010
 item 5 ("Coverage and degeneracy are seed means"), que rejeitou o ensemble de
@@ -603,9 +603,9 @@ s_f é calculada **só sobre as 4 famílias**. As interações cross-família
 por variáveis de outras famílias.
 
 **Premissa verificável antes da 7.3 (C6, P-H3-VSN).** Nenhuma feature de
-família é `known`: hoje a registry só tem specs `unknown` (observed), e o caso
-de uso do TFT incorpora **automaticamente** qualquer spec `known` às entradas
-do decoder (`train_tft.py` l. 23–26, 196–207). Se uma feature de família passar
+família é `known`: hoje a registry só tem specs `unknown` (observed), e hoje a
+modelagem incorpora **automaticamente** qualquer spec `known` às entradas do
+decoder. Se uma feature de família passar
 a `known`, a VSN do decoder ganha eixo de horizonte, o argumento de §5.3 deixa
 de valer e a decisão P-H3-VSN deve ser **reaberta**.
 
@@ -727,7 +727,7 @@ confirmatório. O modelo completo é **re-treinado dentro dele**, no **mesmo
 ambiente** das ablações: a comparação L^{−f} − L^{full} não pode misturar
 ambientes (§3.1). Cada configuração usa o mesmo procedimento de treino do
 candidato (hiperparâmetros congelados) — re-ajustar hiperparâmetros por
-configuração seria busca. O dispositivo (CPU ou GPU/ROCm) e a build do torch
+configuração seria busca. O dispositivo (CPU ou GPU) e a build do torch
 são decisão da Stage 7.3 e **entram no hash** do cohort de ablação; comparar o
 completo da ablação com o candidato confirmatório, se feito, é por tolerância.
 
@@ -735,22 +735,15 @@ completo da ablação com o candidato confirmatório, se feito, é por tolerânc
 5.5). O cohort confirmatório real de 10 seeds × 6 folds levou **~19 h em CPU**
 (~1,5–2,9 h por seed; `docs/stages/5.5-confirmatory-retrain/technical.md`,
 Task 35). A ablação são 5 configurações × 6 folds × 10 seeds ≈ **300 treinos ≈
-~95 h em CPU**. Decisão do humano: **10 seeds**, rodando em **GPU no Linux**
-(RX 7700 XT / ROCm), com um **piloto de 1 seed × 1 fold** antes; o número de
-seeds pode ser revisto na 7.3 à luz do piloto (ADR 0.0.0007, Consequences).
+~95 h em CPU**. Decisão do humano: **10 seeds**, rodando em **GPU**, com um
+**piloto de 1 seed × 1 fold** antes; o número de seeds pode ser revisto na 7.3
+à luz do piloto (ADR 0.0.0007, Consequences).
 
-**Código novo de modelagem exigido pela 7.3** (declarado aqui; o desenho é do
-concept/technical da Stage):
-
-- treinar o TFT com um **subconjunto** de famílias — hoje o caso de uso usa a
-  registry inteira (`train_tft.py` l. 286–288);
-- **identidade** de run / `feature_set_hash` por configuração — hoje o
-  `feature_set_hash` é o da registry (`train_tft.py` l. 562);
-- um **cohort spec de ablação** com as 5 configurações — hoje o executor de
-  cohort recusa `feature_set_hash` diferente do da registry
-  (`run_confirmatory_cohort.py` l. 346–357);
-- **dispositivo ≠ `cpu`** — hoje o composition root só aceita `cpu`
-  (`composition_root.py` l. 287–289).
+**O que a ablação exige da modelagem.** Hoje o treino usa a registry inteira,
+a identidade do run e o executor de cohort assumem o conjunto completo de
+features, e o treino roda em CPU; a ablação exige treino por subconjunto de
+famílias, identidade por configuração e outro dispositivo — detalhes no
+roadmap 7.3 e no ADR 0.0.0007.
 
 **Alternativa descartada: substituir sem re-treinar.** Zerar ou trocar pela
 média as features de f mantendo o modelo fixo é o precedente de Gu, Kelly & Xiu
@@ -767,7 +760,7 @@ persistidas; a leitura de H3 (§5.7) é reconstruível delas sem re-treino.
 
 ### 5.6 Incerteza
 
-**C3 (decidida, §10.1).** Três fontes, tratadas separadamente:
+**C3 (convenção, degrau 1 — coerência com o MCS; §10.1).** Três fontes, tratadas separadamente:
 
 1. **Monte Carlo da permutação** — repetir K_p permutações reduz o erro de
    Monte Carlo da permutação, não a incerteza de amostragem: "Variance
@@ -788,7 +781,8 @@ persistidas; a leitura de H3 (§5.7) é reconstruível delas sem re-treino.
    dependentes**, o bootstrap em bloco sobre d_t é **transposição declarada**
    do que a avaliação já usa para d_t — não há fonte primária de intervalo
    para importância por permutação sob dependência serial
-   `[SEM-FONTE-PRIMÁRIA para a combinação]`.
+   `[SEM-FONTE-PRIMÁRIA para a combinação]` — por isso C3 é convenção,
+   fechada pelo degrau 1 (a maquinaria já ratificada do MCS, ADR 0.0.0010).
    **Regra de bloco.** O bootstrap conjunto h+1/h+7 usa **um único
    comprimento de bloco**, com **piso ≥ max horizonte (7)**, por coerência com
    a regra do MCS (ADR 0.0.0010: bloco = max(h, ⌈max b̂_sb⌉) — o piso cobre a
@@ -967,7 +961,7 @@ em §10.1.
 
 | # | Convenção | Fonte / âncora | Status | Stage |
 |---|---|---|---|---|
-| 1 | Reprodução bit a bit só no mesmo ambiente pinado (build, SO/CPU, lote fixo e registrado, sem workers); entre ambientes, tolerância declarada | PyTorch notes v2.13.0; Goldberg 1991; concept 5.4 I9 | [E] A1 | 7.1 |
+| 1 | Reprodução bit a bit só no mesmo ambiente pinado (build, SO/CPU, lote fixo e registrado, sem workers); entre ambientes, tolerância declarada | PyTorch notes v2.13.0; Goldberg 1991; concept 5.4 I9 | [E] A1 (bit a bit); [C] A1-TOL, degrau 5 (tolerância) | 7.1 |
 | 2 | Seed irrelevante na inferência; dropout off; MC dropout fora | pytorch-forecasting 1.8.0; Lightning 2.6.5; Gal & Ghahramani 2016 §4; Kendall & Gal 2017 | [E] A2 | 7.1 |
 | 3 | Guardrail reusado (rearranjo do ADR 4.3.0002), sem serviço novo | modeling §2.4; ADR 4.3.0002 | [C] A3, degrau 1 | 7.1 |
 | 4 | A inferência emite predições da partição calib (requisito 7.1 → 7.2) | concept 5.2; ADR 5.1.0002 | [C] A4, degrau 1 | 7.1, 7.2 |
@@ -976,7 +970,7 @@ em §10.1.
 | 7 | ACI/EnbPI fora do confirmatório | Gibbs & Candès 2021; Xu & Xie 2021; Oliveira et al. 2024 §2 | [E] B3 | 7.2 |
 | 8 | Cobertura marginal por horizonte; conjunta Bonferroni rejeitada | Oliveira et al. 2024 Thms 1/4; Stankevičiūtė et al. 2021 §3.3 | [E] B4 | 7.2 |
 | 9 | 3 pares simétricos, caudas independentes; primário (0.10, 0.90); sem rearranjo da saída conformal; taxa de violação de aninhamento no perfil; par extremo reportado | Gupta et al. 2022 Tab. 1; CWZ 2021; ADR 6.5.0006 | [C] B5, degraus 4/5 | 7.2 |
-| 10 | CQR por seed, média das coberturas | ADR 0.0.0010 item 5 | [E] B6, degrau 1 | 7.2 |
+| 10 | CQR por seed, média das coberturas | ADR 0.0.0010 item 5 | [C] B6, degrau 1 | 7.2 |
 | 11 | Dispersão Beta(n+1−l, l) reportada como referência | Angelopoulos & Bates 2023 §3.2; Vovk 2012 Prop. 2 | [E] B7 | 7.2, 8.3 |
 | 12 | Comparação nativo × conformal descritiva, reusando evaluation §4; rótulo "cobertura empírica (não garantida)" | evaluation §4, §9.2 | [C] B8, degrau 1 | 7.2, 8.1, 8.3 |
 | 13 | Papel do MAPIE decidido na 7.2; fórmula do quantil registrada como oráculo | ADRs 0.0.0056, 6.1.0001; MAPIE 1.5.0 | [C] B9, degrau 1 | 7.2 |
@@ -984,10 +978,10 @@ em §10.1.
 | 15 | Ablação = LOCO com re-treino, 10 seeds, cohort de ablação próprio com referência no mesmo ambiente | Lei et al. 2018 §6; Hooker et al. 2021 §5; Covert et al. 2021 §8.2 | [P] P-ABLACAO | 7.3 |
 | 16 | Permutação da janela inteira da família, entre amostras, em conjunto | Fisher et al. 2019 §2; Gregorutti et al. 2015 §2.1; Hooker et al. 2021 | [E] C1 | 7.3 |
 | 17 | Medida = diferença de pinball média da grade, por horizonte; participação normalizada | Gu, Kelly & Xiu 2020 §1.9; evaluation §6 | [C] C2, degraus 1/5 | 7.3 |
-| 18 | Incerteza por bootstrap em bloco estacionário pareado (transposição declarada; bloco único com piso ≥ 7, regra do MCS); seeds pela média | Politis & Romano 1994; Politis & White 2004; Molnar et al. 2023 §5, §7; ADR 0.0.0010 | [E] C3 | 7.3 |
+| 18 | Incerteza por bootstrap em bloco estacionário pareado (transposição declarada; bloco único com piso ≥ 7, regra do MCS); seeds pela média | Politis & Romano 1994; Politis & White 2004; Molnar et al. 2023 §5, §7; ADR 0.0.0010 | [C] C3, degrau 1 | 7.3 |
 | 19 | "Heterogênea" = IC de Δ_f exclui 0 para ≥ 1 família | `[SEM-FONTE-PRIMÁRIA]` | [C] C4, degrau 4 | 7.3, 8.1 |
 | 20 | H3 sustentada = mesmo sinal de Δ_f e IC excluindo 0 nos dois métodos, mesma família | Krishna et al. 2024 §3.2 (métrica proposta pelo artigo) | [C] C5, degrau 4 | 7.3, 8.1 |
-| 21 | Features sem família ficam no modelo, fora da participação; interações seguem o registry; premissa: nenhuma feature de família é `known` | ADR 0.0.0016; registry; `train_tft.py` | [C] C6, degrau 1 | 7.3 |
+| 21 | Features sem família ficam no modelo, fora da participação; interações seguem o registry; premissa: nenhuma feature de família é `known` | ADR 0.0.0016; registry; treino do TFT | [C] C6, degrau 1 | 7.3 |
 | 22 | Linguagem descritiva; veredito H3 = regra de leitura mecânica separada de H1 → H2 | overview §3; ADR 0.0.0002; evaluation §8.6 | [C] C7, degrau 1 | 7.3, 8.1 |
 | 23 | Pré-registro de CQR e H3 pela maquinaria da 6.5, antes de qualquer métrica sobre o cohort real | ADRs 6.5.0001–3, 6.5.0008 item 6 | [C] E1, degrau 1 | 7.2, 7.3, 8.1 |
 | 24 | Vocabulário órfão abandonado ou definido (§9) | — | [C] E2, degrau 1 | 7.3, 7.4 |
@@ -1000,29 +994,44 @@ Triagem: todas as bifurcações são anteriores a qualquer dado confirmatório (
 8.1 não rodou). As duas P foram decididas pelo humano em 2026-10-06. A
 existência e os metadados de cada fonte foram conferidos mecanicamente
 (`scripts/verify_citations.py`); "verificado" = trecho conferido na fonte
-bruta por verificador de contexto zerado — feito nos dois itens da VSN; os
-demais localizadores e trechos são os das sessões de pesquisa (lotes A, B1,
-B2, C), lidos crus nas fontes indicadas.
+bruta por verificador de contexto zerado (`evidence-verifier`). Em
+2026-10-06, 14 itens foram verificados assim — os 2 da VSN (P-H3-VSN) e os
+de B1, B2, B3, B4, B7, B9, C1, C3, C5 e P-ABLACAO; o resultado está no campo
+`Verificado` de cada registro ("parcial→corrigido" = o verificador achou o
+trecho só parcialmente fiel e o texto foi corrigido para o que a fonte diz).
+Os localizadores e trechos dos demais registros com fonte externa (A1, A2,
+B5, B6, C2) são os das sessões de
+pesquisa (lotes A, B1, B2, C), lidos crus nas fontes indicadas, sem
+verificação adversarial.
 
 ```
 [decision:P] P-H3-VSN — papel da VSN em H3
 Escolha: VSN como descrição geral horizonte-invariante; heterogeneidade de H3 exige concordância de permutação e ablação · Alternativas: trocar a VSN por um 3º método resolvido por horizonte (gradientes integrados por saída); manter "≥ 2 de 3" · Decisor: humano (2026-10-06)
-Base: Lim et al. 2021 §4.2 Eq. (6) "Variable selection weights are generated by feeding both Ξt and an external context vector cs through a GRN, followed by a Softmax layer"; §7.1 Eq. (27); pytorch-forecasting v1.8.0 _tft.py l. 576–596, 811–827 (VSN do encoder só nas posições do encoder; interpretação = média sobre o encoder) [verificado: "sustenta" nos 2 itens]
+Base: Lim et al. 2021 §4.2 Eq. (6) "Variable selection weights are generated by feeding both Ξt and an external context vector cs through a GRN, followed by a Softmax layer"; §7.1 Eq. (27); pytorch-forecasting v1.8.0 _tft.py l. 576–596, 811–827 (VSN do encoder só nas posições do encoder; interpretação = média sobre o encoder)
+Verificado: sustenta (2 itens)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash do pré-registro de H3
 
 [decision:P] P-ABLACAO — desenho da ablação
-Escolha: LOCO com re-treino; 10 seeds; 4 famílias × 6 folds + modelo completo de referência (N+1 = 5 configurações) num cohort de ablação congelado e hasheado próprio, mesmo ambiente; GPU no Linux (RX 7700 XT / ROCm) com piloto 1 seed × 1 fold antes; dispositivo e build incluídos no hash; nº de seeds revisável na 7.3 à luz do piloto · Alternativas: substituição sem re-treino; sem ablação · Decisor: humano (2026-10-06)
+Escolha: LOCO com re-treino; 10 seeds; 4 famílias × 6 folds + modelo completo de referência (N+1 = 5 configurações) num cohort de ablação congelado e hasheado próprio, mesmo ambiente; GPU com piloto 1 seed × 1 fold antes; dispositivo e build incluídos no hash; nº de seeds revisável na 7.3 à luz do piloto · Alternativas: substituição sem re-treino; sem ablação · Decisor: humano (2026-10-06)
 Base: Lei et al. 2018 §6 (LOCO; localizador não relido nesta sessão); Hooker et al. 2021 §5 p. 12 "Dropped Variable Importance … learning a model f−j … This is equivalent to the LOCO methods"; Covert, Lundberg & Lee 2021 §8.2 "Training separate models should provide the best approximation"; custo medido: cohort confirmatório 10 seeds × 6 folds ≈ 19 h em CPU (technical 5.5, Task 35) → ablação ≈ 300 treinos ≈ 95 h em CPU (§5.5)
+Verificado: sustenta (Hooker §5 "Dropped Variable Importance … LOCO"; Covert §8.2, no sentido "can be interpreted as")
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash do cohort de ablação
 
 [decision:E] A1 — contrato de reprodução da inferência
-Escolha: bit a bit só no mesmo ambiente pinado (build do torch, SO/CPU, lote de inferência fixo e registrado, num_workers = 0); entre ambientes, igualdade por tolerância declarada; referência da 7.1 = artefato re-executado no mesmo ambiente com lote = batch_size do treinador (111 no cohort); contra as predições já no silver, equivalência por tolerância salvo lote e ambiente coincidentes · Alternativas: bit a bit em qualquer ambiente; só tolerância
+Escolha: bit a bit só no mesmo ambiente pinado (build do torch, SO/CPU, lote de inferência fixo e registrado, num_workers = 0); referência da 7.1 = artefato re-executado no mesmo ambiente com lote = o do treinador (111 no cohort) · Alternativas: bit a bit em qualquer ambiente
 Base: PyTorch notes/randomness.md (v2.13.0) "Completely reproducible results are not guaranteed across PyTorch releases, individual commits, or different platforms."; notes/numerical_accuracy.md §Batched computations "(A@B)[0] ... is not guaranteed to be bitwise identical to A[0]@B[0]"; docstring de torch.use_deterministic_algorithms "same software and hardware"; Goldberg 1991 (DOI 10.1145/103162.103163) "the associative laws of algebra do not necessarily hold for floating-point numbers"
-Sensibilidade pré-registrada: nenhuma · Reversível: sim (corrige a DoD da 7.1; coerente com concept 5.4 I9 e ROADMAP-5)
+Verificado: não verificado (§4.2)
+Sensibilidade pré-registrada: nenhuma · Reversível: sim (corrige a DoD da 7.1; coerente com concept 5.4 I9)
+
+[decision:C] A1-TOL — igualdade entre ambientes
+Escolha: entre ambientes, igualdade por tolerância declarada; contra as predições já no silver, equivalência por tolerância salvo lote e ambiente coincidentes · Alternativas: só tolerância também no mesmo ambiente · Degrau: 5
+Base: [SEM-FONTE-PRIMÁRIA] — consequência prática das fontes de A1; mesmo regime da equivalência da 8.2 (overview ASSUM-4; ROADMAP-5)
+Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:E] A2 — seed, dropout e MC dropout na inferência
 Escolha: seed irrelevante (nenhum consumidor de RNG); dropout off (modo eval); MC dropout fora · Alternativas: MC dropout
 Base: pytorch-forecasting 1.8.0 QuantileLoss.to_quantiles "return y_pred"; Lightning 2.6.5 core/hooks.py "The predict loop by default calls .eval()"; torch 2.13.0 nn/modules/dropout.py "during evaluation the module simply computes an identity function"; Gal & Ghahramani 2016 (arXiv:1506.02142) §4 Eq. (6) "We refer to this Monte Carlo estimate as MC dropout"; Kendall & Gal 2017 (arXiv:1703.04977) Abstract
+Verificado: não verificado (§4.2)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:C] A3 — guardrail na inferência
@@ -1038,36 +1047,43 @@ Sensibilidade pré-registrada: nenhuma · Reversível: sim
 [decision:E] B1 — mecânica do CQR
 Escolha: split-CQR, versão assimétrica (Thm 2), α por cauda = τ_lo e 1 − τ_hi, quantil inflado (1 − α)(1 + 1/n) · Alternativas: simétrico (Thm 1)
 Base: Romano, Patterson & Candès 2019 (arXiv:1905.03222) Eq. (9) "Ei := max{q̂lo(Xi) − Yi, Yi − q̂hi(Xi)}"; Eq. (11) "(1 − α)(1 + 1/|I2|)-th empirical quantile" (numeração de equação não conferida); Thm 1; §4 Thm 2 "control[s] the left and right tails independently"; §6.2 "increases from 1.40 to 1.58"; gate de H1 por cauda (evaluation §10 conv. 26)
+Verificado: sustenta (escore, limiar, Thm 1, Thm 2; numeração de equação não conferida)
 Sensibilidade pré-registrada: nenhuma (o simétrico daria intervalos mais estreitos com a mesma garantia só no PICP) · Reversível: sim, até o hash do pré-registro do CQR
 
 [decision:C] B2 — variante do CQR
 Escolha: split-CQR sem pesos como registro; NexCP com w_i = ρ^(n+1−i), ρ = 0,99, como sensibilidade pré-registrada (perfil) · Alternativas: NexCP como registro; não fazer (contraria overview §3/§11) · Degrau: 2 (default do oráculo MAPIE 1.5.0, sem pesos; recência já garantida pelo calib mais recente, ADR 5.1.0002)
 Base: Barber et al. 2023 (DOI 10.1214/23-AOS2276) Eqs. (10)–(11) pp. 10–11; §3.1 "We assume the weights wi are fixed"; §4.1 Thm 2 p. 15 "1 − α − Σ w̃i · dTV(R(Z), R(Zi))"; §4.4 pp. 18–19 "≤ ρ^k"; §5.1 p. 22 "wi = 0.99^(n+1−i)"; derivação deste doc: w̃_{n+1} = 0,0109 (ρ = 0,99) / 0,0201 (ρ = 0,98) > α_cauda 0,02 ⇒ limite infinito na cauda 0,02; contexto: Stocker et al. 2025 (arXiv:2511.13608, preprint) p. 17
+Verificado: sustenta (Eqs. (10)–(11); Thm 2 em §4.1)
 Sensibilidade pré-registrada: NexCP ρ = 0,99 · Reversível: sim, até o hash
 
 [decision:E] B3 — ACI e EnbPI
 Escolha: fora do confirmatório · Alternativas: incluir
 Base: Gibbs & Candès 2021 (arXiv:2106.00170) Eq. (2) p. 3, Prop. 4.1 p. 6 (garantia de frequência de longo prazo, com atualização online), §4.2 (cobertura marginal só aproximada, sob pequenos drifts num modelo específico), §7 p. 10 "delayed fashion or in large batches" (problema aberto); Xu & Xie 2021 (PMLR 139) §3.1 p. 4, §3 item (5) "When s=∞, no feedback is available", §4.1 Assumption 1; Oliveira et al. 2024 (arXiv:2203.15885) §2 p. 4 "have no marginal coverage guarantees"
+Verificado: parcial→corrigido (Gibbs & Candès: cobertura marginal só aproximada sob drift pequeno, §4.2)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:E] B4 — por horizonte
 Escolha: cobertura marginal por horizonte, cada horizonte calibrado à parte · Alternativas: conjunta (Bonferroni α/H)
 Base: Oliveira et al. 2024 Thm 1 p. 5, Thm 4 p. 8; Stankevičiūtė et al. 2021 §3.3 p. 5 e Fig. 1 p. 3 ("a set of independent time-series"); Chernozhukov, Wüthrich & Zhu 2018 (arXiv:1802.06300) §3.2 Thm 2 p. 7; overview §7; ADR 0.0.0010
+Verificado: sustenta (Oliveira Thm 1, Thm 4)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:C] B5 — pares, assimetria e aninhamento
 Escolha: CQR assimétrico nos 3 pares simétricos, caudas independentes; par primário de comparação (0.10, 0.90); saída conformal não rearranjada; taxa de violação de aninhamento no perfil; par extremo reportado sem exclusão · Alternativas: conformal da distribuição inteira (DCP/CPS); só um par · Degrau: 4 (DCP exigiria extrapolar além de [0.02, 0.98]) e 5 (mesmo par do gate H1)
 Base: Gupta, Kuchibhotla & Ramdas 2022 (DOI 10.1016/j.patcog.2021.108496) Tab. 1; Chernozhukov, Wüthrich & Zhu 2021 (DOI 10.1073/pnas.2107794118) Alg. 2; Vovk et al. 2019 (DOI 10.1007/s10994-018-5755-8) Def. 1; ADR 6.5.0006; concept 5.5 D6
+Verificado: não verificado (§4.2)
 Sensibilidade pré-registrada: taxa de violação de aninhamento (perfil) · Reversível: sim, até o hash
 
-[decision:E] B6 — seeds no CQR
+[decision:C] B6 — seeds no CQR
 Escolha: conformalizar cada seed e reportar a média das coberturas · Alternativas: conformalizar a média das seeds; voto entre seeds · Degrau: 1 (coerência)
 Base: ADR 0.0.0010 item 5 "Coverage and degeneracy are seed means"; Romano et al. 2019 §4; Fakoor et al. 2023 (arXiv:2103.00083) §5.3; Gasparin & Ramdas (arXiv:2401.09379, preprint) Thm 2.1 "coverage of at least 1 − 2α"
+Verificado: não verificado (§4.2)
 Sensibilidade pré-registrada: dispersão entre seeds (perfil) · Reversível: sim
 
 [decision:E] B7 — dispersão por tamanho de calibração
 Escolha: reportar a Beta(n + 1 − l, l), l = ⌊(n+1)α⌋, como referência por par e por cauda (n = 252) · Alternativas: não reportar
 Base: Angelopoulos & Bates 2023 (DOI 10.1561/2200000101) §3.2 "Beta(n + 1 − l, l)", App. D; Vovk 2012 (arXiv:1209.2673) Prop. 2; quantis calculados para este doc (derivação)
+Verificado: sustenta (Angelopoulos & Bates §3.2, Beta)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:C] B8 — comparação nativo × conformal
@@ -1078,21 +1094,25 @@ Sensibilidade pré-registrada: nenhuma · Reversível: sim
 [decision:C] B9 — MAPIE
 Escolha: papel (backend × oráculo) decidido no concept/technical da 7.2; o doc registra a fórmula q = (1 − α)(1 + 1/n), method="higher" · Alternativas: fixar aqui · Degrau: 1
 Base: ADRs 0.0.0056, 6.1.0001; MAPIE 1.5.0 regression/quantile_regression.py (não pinado no uv.lock)
+Verificado: sustenta (fórmula q e α/2 por cauda, sem pesos)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:E] C1 — esquema de permutação
 Escolha: permutar entre amostras do teste a janela inteira (todos os lags) das features da família, em conjunto · Alternativas: embaralhar dentro do tempo; blocos
 Base: Fisher, Rudin & Dominici 2019 (arXiv:1801.01489) §2 "the covariate subsets X1 ... may each be multivariate"; Gregorutti, Michel & Saint-Pierre 2015 (DOI 10.1016/j.csda.2015.04.002; arXiv:1411.4170 §2.1) "in general, the grouped variable importance is not comparable with the sum of the individual importances", com a exceção "If f is additive and if the variables of the group are independent, the grouped variable importance is nothing more than the sum of the individual importances"; Hooker, Mentch & Zhou 2021 (DOI 10.1007/s11222-021-10057-z) Abstract; Leung et al. 2023 (arXiv:2107.14317)
+Verificado: sustenta (Fisher: grupo multivariado, razão/diferença; Hooker: extrapolação); parcial→corrigido (Gregorutti: exceção aditivo + independente)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash de H3
 
 [decision:C] C2 — medida da permutação
 Escolha: diferença de pinball média da grade (L_perm − L_orig), por horizonte, média sobre K_p permutações; participação normalizada para comparar horizontes · Alternativas: razão (Breiman; Fisher MR) · Degrau: 1 (aditiva por observação → bootstrap em bloco como o d_t do DM) e 5
 Base: Breiman 2001 (DOI 10.1023/A:1010933404324) §10; Fisher et al. 2019 §3 Eq. (3.1) "could alternatively be defined as a difference"; Gu, Kelly & Xiu 2020 §1.9 "normalized to sum to one"
+Verificado: não verificado (§4.2)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash de H3
 
-[decision:E] C3 — incerteza da importância
-Escolha: bootstrap em bloco estacionário pareado (mesmos índices para h+1, h+7 e todas as famílias) sobre d_{f,t}, bloco único com piso ≥ 7 (regra do MCS, ADR 0.0.0010); chave de pareamento entre horizontes a fixar no pré-registro (recomendação: ponto de decisão, interseção); seeds pela média, dispersão no perfil · Alternativas: repetir permutações; bootstrap iid; IC t entre instâncias (Molnar)
+[decision:C] C3 — incerteza da importância
+Escolha: bootstrap em bloco estacionário pareado (mesmos índices para h+1, h+7 e todas as famílias) sobre d_{f,t}, bloco único com piso ≥ 7 (regra do MCS, ADR 0.0.0010); chave de pareamento entre horizontes a fixar no pré-registro (recomendação: ponto de decisão, interseção); seeds pela média, dispersão no perfil · Alternativas: repetir permutações; bootstrap iid; IC t entre instâncias (Molnar) · Degrau: 1 (coerência com o MCS, ADR 0.0.0010)
 Base: Molnar et al. 2023 (DOI 10.1007/978-3-031-44064-9_24; arXiv:2109.01433) §5 "Variance estimators for model-PD/PFI only account for variance due to Monte Carlo integration" — variância de MC calculada entre as n2 instâncias de teste, IC t justificado por amostras independentes; §7 "average the PD/PFI over m model fits" (variância do modelo exige refits; learner-PFI corrigido para dados compartilhados, Nadeau–Bengio); Williamson et al. 2023 (DOI 10.1080/01621459.2021.2003200) §2; Politis & Romano 1994; Politis & White 2004; Bouthillier et al. 2021; ADR 0.0.0010 (block = max(h, ⌈max b̂_sb⌉))
+Verificado: parcial→corrigido (Molnar §5/§7)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim · Lacuna: sem fonte de IC de PFI sob dependência — transposição declarada (instâncias de teste serialmente dependentes)
 
 [decision:C] C4 — "heterogênea entre horizontes"
@@ -1103,11 +1123,12 @@ Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash de H3
 [decision:C] C5 — concordância entre métodos
 Escolha: H3 sustentada se permutação e ablação concordam no sinal de Δ_f e ambas têm IC excluindo 0 para a mesma família; VSN reportada à parte (percentis 10/50/90; soma por família) · Alternativas: concordância de ranking (Spearman, top-k) · Degrau: 4
 Base: Krishna et al. 2024 (arXiv:2202.01602) §3.2 "we propose six different metrics" — "feature agreement, rank agreement, sign agreement, ..." (métricas propostas pelo artigo, não prática geral estabelecida); Jain & Wallace 2019; Wiegreffe & Pinter 2019
+Verificado: sustenta (Krishna §3.2, métricas propostas pelo artigo)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash de H3
 
 [decision:C] C6 — features sem família
 Escolha: calendário, alvo passado e índice relativo não são permutados nem ablacionados; participação só sobre as 4 famílias; interações seguem o registry; premissa verificável antes da 7.3: nenhuma feature de família é known (senão reabrir P-H3-VSN) · Alternativas: 5ª "família" residual · Degrau: 1
-Base: ADR 0.0.0016; registry de features; train_tft.py l. 23–26, 196–207 (spec known vai ao decoder automaticamente)
+Base: ADR 0.0.0016; registry de features; treino do TFT (spec known vai ao decoder automaticamente)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:C] C7 — linguagem e "veredito mecânico H3"
@@ -1126,7 +1147,7 @@ Base: ADR 0.0.0054 (precedente)
 Sensibilidade pré-registrada: — · Reversível: sim
 
 [decision:C] E3 — ADRs do gate
-Escolha: 0.0.0057 (recorte), 0.0.0007 (H3), 0.0.0008 (quantis nativos + CQR); 7_2_0001 continua da Stage · Degrau: 1
+Escolha: 0.0.0057 (recorte), 0.0.0007 (H3), 0.0.0008 (quantis nativos + CQR); 7_2_0001-cqr-preregistration-details (detalhes de implementação e pré-registro) continua da Stage · Degrau: 1
 Base: overview §11; issue #150
 Sensibilidade pré-registrada: — · Reversível: sim
 
