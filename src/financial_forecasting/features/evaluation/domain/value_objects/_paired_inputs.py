@@ -36,8 +36,16 @@ def check_horizon(horizon: object) -> None:
         raise ValueError(f"horizon must be an int >= 1, got {horizon!r}")
 
 
+def points_suffice(n_points: int, horizon: int) -> bool:
+    """T ≥ 2 e T > h — a regra única (o `check_points` ergue por ela; o `DmProfiles` a usa
+    para marcar um recorte `too_short`)."""
+    return n_points >= MIN_POINTS and n_points > horizon
+
+
 def check_points(n_points: int, horizon: int) -> None:
     """T ≥ 2 e T > h; senão `ValueError` (chamar depois de `check_horizon`)."""
+    if points_suffice(n_points, horizon):
+        return
     if n_points < MIN_POINTS:
         raise ValueError(f"paired losses need T >= {MIN_POINTS} points, got T={n_points}")
     if n_points <= horizon:

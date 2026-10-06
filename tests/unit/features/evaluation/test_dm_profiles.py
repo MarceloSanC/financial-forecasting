@@ -44,6 +44,9 @@ from financial_forecasting.features.evaluation.domain.services.series_assembly i
 from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
     HorizonSamples,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
+    PairedLossSeries,
+)
 from tests.unit.features.evaluation.gold._cohort_factory import make_cohort
 
 _CAND = "tft"
@@ -61,22 +64,30 @@ def _samples(
     folds: tuple[str, ...] = ("f0", "f1"),
     seeds: Mapping[str, tuple[int | None, ...]] | None = None,
     horizon_index: int = 0,
+    prefixes: Mapping[str, int] | None = None,
 ) -> HorizonSamples:
-    cohort = make_cohort(folds=folds) if seeds is None else make_cohort(folds=folds, seeds=seeds)
+    kwargs: dict[str, object] = {"folds": folds, "prefixes": prefixes}
+    if seeds is not None:
+        kwargs["seeds"] = seeds
+    cohort = make_cohort(**kwargs)  # type: ignore[arg-type]
     assembled = SeriesAssembly.assemble(
         cohort.records,
         cohort.runs,
         cohort.realized,
         horizons=(1, 2),
-        window_deficits={},
+        window_deficits=dict(prefixes or {}),
         required_models=frozenset({_CAND}),
     )
     assert assembled.alignment.findings == ()
     return assembled.horizons[horizon_index]
 
 
-def _evaluate(samples: HorizonSamples, alpha: float = _ALPHA) -> DmProfilesReport:
-    return DmProfiles.evaluate(samples, candidate=_CAND, alpha=alpha, variance_estimator=_RECT)
+def _evaluate(
+    samples: HorizonSamples,
+    alpha: float = _ALPHA,
+    estimator: DmVarianceEstimator = _RECT,
+) -> DmProfilesReport:
+    return DmProfiles.evaluate(samples, candidate=_CAND, alpha=alpha, variance_estimator=estimator)
 
 
 @pytest.mark.unit
@@ -245,3 +256,138 @@ def test_invalid_requests() -> None:
         DmProfiles.evaluate(samples, candidate="nope", alpha=_ALPHA, variance_estimator=_RECT)
     with pytest.raises(ValueError, match="alpha"):
         DmProfiles.evaluate(samples, candidate=_CAND, alpha=1.5, variance_estimator=_RECT)
+
+
+# --- Checkpoint C bloco 4 -------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_tau_rows_are_the_dm_of_that_level() -> None:
+    """F1: cada linha τ é o DM da perda daquele nível (não a série primária re-rotulada)."""
+    samples = _samples()
+    taus = [r for r in _evaluate(samples).rows if r.dimension is DmProfileDimension.TAU]
+    statistics = set()
+    for row in taus:
+        series = paired_pinball_losses(
+            {m: samples.common[m] for m in samples.models}, level=row.level
+        )
+        expected = DieboldMariano.compare(series, candidate=_CAND, comparator=row.comparator)
+        assert row.result is not None
+        assert (row.result.statistic, row.result.p_value) == (expected.statistic, expected.p_value)
+        statistics.add(row.result.statistic)
+    assert len(statistics) > 1
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("estimator", list(DmVarianceEstimator))
+def test_the_estimator_reaches_the_dm(estimator: DmVarianceEstimator) -> None:
+    """M-3, F4: o estimador recebido vai ao DM (o default do `compare` é o retangular)."""
+    samples = _samples(folds=("f0",), horizon_index=1)
+    report = _evaluate(samples, estimator=estimator)
+    assert report.variance_estimator is estimator
+    primary = paired_pinball_losses({m: samples.common[m] for m in samples.models})
+    fold = next(r for r in report.rows if r.dimension is DmProfileDimension.FOLD)
+    expected = DieboldMariano.compare(
+        primary, candidate=_CAND, comparator=fold.comparator, variance_estimator=estimator
+    )
+    assert fold.result is not None
+    assert fold.result.statistic == expected.statistic
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("p_value", "rejected"), [(0.2, True), (0.2000001, False), (0.1, True)])
+def test_rejection_boundary_at_a_non_default_alpha(
+    monkeypatch: pytest.MonkeyPatch, p_value: float, rejected: bool
+) -> None:
+    """F5: rejeita ⇔ p ≤ alpha, com o alpha recebido (0,2 aqui)."""
+    real = DieboldMariano.compare
+
+    def fixed(series: object, **kwargs: object) -> DieboldMarianoResult:
+        return dataclasses.replace(real(series, **kwargs), p_value=p_value)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(module.DieboldMariano, "compare", staticmethod(fixed))
+    report = _evaluate(_samples(), alpha=0.2)
+    computed = [r for r in report.rows if r.status is SubsetStatus.COMPUTED]
+    assert computed
+    assert all(r.rejected is rejected for r in computed)
+
+
+@pytest.mark.unit
+def test_seed_with_an_error_is_out_of_the_fraction_denominator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """F6: seed com unidade `error` conta como indefinida (fora do denominador)."""
+    samples = _samples()
+    second = paired_pinball_losses(
+        {"gbm": samples.common["gbm"], _CAND: (samples.common[_CAND][1],)}
+    ).losses_of(_CAND)
+    real = DieboldMariano.compare
+
+    def failing(series: PairedLossSeries, **kwargs: object) -> DieboldMarianoResult:
+        if series.losses_of(_CAND) == second:
+            raise ValueError("injected")
+        return real(series, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(module.DieboldMariano, "compare", staticmethod(failing))
+    report = _evaluate(samples, alpha=0.999)
+    (fraction,) = report.seed_fractions
+    assert (fraction.n_seeds, fraction.n_undefined) == (2, 1)
+    assert fraction.fraction_rejecting == float(fraction.n_rejecting)
+
+
+@pytest.mark.unit
+def test_seed_rows_use_the_common_sample() -> None:
+    """F2: com full != common (prefixo no gbm), a série por seed é a da amostra comum."""
+    samples = _samples(prefixes={"gbm": 2})
+    assert samples.full[_CAND][0].n_points > samples.n_common
+    seeds = [r for r in _evaluate(samples).rows if r.dimension is DmProfileDimension.SEED]
+    for index, row in enumerate(seeds):
+        series = paired_pinball_losses(
+            {"gbm": samples.common["gbm"], _CAND: (samples.common[_CAND][index],)}
+        )
+        expected = DieboldMariano.compare(series, candidate=_CAND, comparator="gbm")
+        assert row.n_points == samples.n_common
+        assert row.result is not None
+        assert row.result.statistic == expected.statistic
+
+
+@pytest.mark.unit
+def test_none_fold_label_is_a_legitimate_window() -> None:
+    samples = _samples()
+    rows = [
+        r
+        for r in _evaluate(
+            dataclasses.replace(samples, common_folds=(None,) * samples.n_common)
+        ).rows
+        if r.dimension is DmProfileDimension.FOLD
+    ]
+    assert [(r.fold, r.status) for r in rows] == [(None, SubsetStatus.COMPUTED)]
+    assert rows[0].n_points == samples.n_common
+
+
+@pytest.mark.unit
+def test_single_point_fold_is_too_short_at_h1() -> None:
+    samples = _samples()
+    pattern = ("x",) + ("f1",) * (samples.n_common - 1)
+    rows = [
+        r
+        for r in _evaluate(dataclasses.replace(samples, common_folds=pattern)).rows
+        if r.dimension is DmProfileDimension.FOLD
+    ]
+    assert (rows[0].fold, rows[0].undefined_reason, rows[0].n_points) == ("x", TOO_SHORT, None)
+
+
+@pytest.mark.unit
+def test_window_fields_follow_the_existence_of_the_series() -> None:
+    """L-2: `constant_differential` tem a série (n_points e janela); mismatch não tem."""
+    constant = _with_comparator_equal_to_seed(_samples(), 0)
+    seed_row = next(
+        r for r in _evaluate(constant).rows if r.undefined_reason == CONSTANT_DIFFERENTIAL
+    )
+    assert seed_row.n_points == constant.n_common
+    assert seed_row.first_target_timestamp is not None
+    mismatch = dataclasses.replace(constant, common_folds=None, fold_mismatch_detail="x")
+    fold_row = next(
+        r for r in _evaluate(mismatch).rows if r.undefined_reason == FOLD_LABEL_MISMATCH
+    )
+    assert (fold_row.n_points, fold_row.first_target_timestamp) == (None, None)

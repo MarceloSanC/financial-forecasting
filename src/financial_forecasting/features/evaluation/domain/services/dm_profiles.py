@@ -40,8 +40,8 @@ from financial_forecasting.features.evaluation.domain.services.paired_pinball_lo
     paired_pinball_losses,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
-    MIN_POINTS,
     is_constant,
+    points_suffice,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
     HorizonSamples,
@@ -80,8 +80,10 @@ class DmSubsetRow:
     """Um DM de perfil: o recorte, o comparador e o resultado (ou o motivo de não haver).
 
     `fold`/`seed`/`level` só preenchido na dimensão correspondente (o rótulo `None` de
-    fold é legítimo na dimensão `fold`); `result`, `rejected`, `n_points` e a janela
-    ficam vazios quando `status` é `undefined`.
+    fold é legítimo na dimensão `fold`); `result` e `rejected` ficam vazios quando
+    `status` é `undefined`. `n_points` e a janela descrevem a série do recorte: presentes
+    quando ela existe (`constant_differential`, `error`), vazios quando o recorte nem chega
+    a ter série (`too_short`, `fold_label_mismatch`, `fold_not_contiguous`).
     """
 
     dimension: DmProfileDimension
@@ -259,7 +261,7 @@ def _fold_rows(samples: HorizonSamples, base: PairedLossSeries, unit: _Unit) -> 
                 rows += unit.undefined(subset, FOLD_NOT_CONTIGUOUS, detail)
             continue
         n_points = stop - start
-        if n_points < MIN_POINTS or n_points <= samples.horizon:
+        if not points_suffice(n_points, samples.horizon):
             detail = f"T={n_points} with h={samples.horizon}"
             rows += unit.undefined(subset, TOO_SHORT, detail)
             continue
