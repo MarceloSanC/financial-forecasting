@@ -5,7 +5,7 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-10-05
+updated_at: 2026-10-06
 last_reviewed_at: 2026-10-05
 ---
 
@@ -54,7 +54,7 @@ graph LR
   S71-->S72[7.2-conformal-cqr]; S51-->S72; S61-->S72
   S71-->S73[7.3-explainability]; S61-->S73
   S72-->S74[7.4-inference-api]; S73-->S74
-  S65-->S81[8.1-confirmatory-run]; S66-->S81; S71-->S81; S72-->S81
+  S65-->S81[8.1-confirmatory-run]; S66-->S81; S71-->S81; S72-->S81; S73-->S81
   S81-->S82[8.2-equivalence-audit]-->S83[8.3-plots-report]
 ```
 
@@ -109,7 +109,7 @@ graph LR
 | `7.2-conformal-cqr` | inference | multi (domain + adapters/out) | vertical | draft | 7.1, 5.1 |
 | `7.3-explainability` | inference | multi (domain + adapters/out) | vertical | draft | 7.1, 6.1 |
 | `7.4-inference-api` | inference | adapters/in/http | vertical | draft | 7.2, 7.3 |
-| `8.1-confirmatory-run` | evaluation | application (orquestração) | vertical | draft | 6.5, 6.6, 7.1, 7.2 |
+| `8.1-confirmatory-run` | evaluation | application (orquestração) | vertical | draft | 6.5, 6.6, 7.1, 7.2, 7.3 |
 | `8.2-equivalence-audit` | evaluation | application + tests | vertical | draft | 8.1 |
 | `8.3-plots-and-final-report` | evaluation | adapters/out + docs | vertical | draft | 8.2 |
 
@@ -993,7 +993,7 @@ Motor de inferência, o benchmark **conformal CQR** (com a deliberação da vari
 
 #### Stage 7.1 — `7.1-inference-engine`
 
-**Descrição humana:** Motor de inferência: carrega artefato, reconstrói o dataset, prediz a grade densa de quantis multi-horizonte, aplica guardrail monotônico. Determinístico (seed fixa, dropout off).
+**Descrição humana:** Motor de inferência: carrega artefato, reconstrói o dataset, prediz a grade densa de quantis multi-horizonte — no teste e na partição `calib` (insumo do CQR da 7.2) — e aplica o guardrail monotônico já existente (rearranjo do ADR 4.3.0002, reusado, sem serviço novo). Determinístico: dropout off, sem MC dropout; reprodução bit a bit no mesmo ambiente pinado e por tolerância declarada entre ambientes ([doc de domínio inference](./domain/inference/conformal-benchmark-and-feature-attribution.md) §3).
 
 **Descrição para IA:**
 ```yaml
@@ -1004,12 +1004,10 @@ arquivos_a_criar:
   - src/financial_forecasting/features/inference/application/ports/out/inference_model_loader.py
   - src/financial_forecasting/features/inference/application/use_cases/run_inference.py
   - src/financial_forecasting/features/inference/adapters/out/pytorch_forecasting/pf_inference_engine.py
-  - src/financial_forecasting/features/inference/domain/services/quantile_guardrail.py
-  - tests/unit/features/inference/test_quantile_guardrail.py
   - tests/integration/features/inference/test_run_inference.py
-contratos_introduzidos: [InferenceModelLoader (port-out), RunInference (use case), QuantileGuardrail (domain-service)]
-contratos_consumidos: [TftTrainer artefato (5.4), MultiHorizonPredictionPersister (4.3)]
-definition_of_done: "Inferência reproduz bit-a-bit com seed fixa/dropout off; grade densa multi-horizonte; guardrail garante monotonicidade sem mascarar degeneração (gate separado)."
+contratos_introduzidos: [InferenceModelLoader (port-out), RunInference (use case)]
+contratos_consumidos: [TftTrainer artefato (5.4), MultiHorizonPredictionPersister (4.3), guardrail de QuantileForecast (4.3, ADR 4.3.0002), WalkForwardSplitter calib partition (5.1)]
+definition_of_done: "Inferência reproduz bit a bit no mesmo ambiente pinado (build do torch, SO/CPU, lote de inferência fixo e registrado, sem workers) e por tolerância declarada entre ambientes; dropout off, sem MC dropout; grade densa multi-horizonte emitida para o teste e para a partição calib do candidato (por fold/seed/horizonte); guardrail reusado garante monotonicidade sem mascarar degeneração (gate separado)."
 non_goals: [conformal (7.2), API (7.4)]
 complexidade_estimada: M
 gate_mode: strict
@@ -1018,7 +1016,7 @@ skills_hint: [hex-arch-python, dmls-ch06-deployment-and-inference-decisions]
 
 #### Stage 7.2 — `7.2-conformal-cqr`
 
-**Descrição humana:** Benchmark de calibração por **conformal (CQR)** via MAPIE, respeitando os 4 invariantes (calib set dedicado, por fold/horizonte, embargo, cobertura **empírica**). A Stage **delibera e pré-registra a variante** (split-CQR vs NexCP-ponderada vs não-fazer) no seu concept/ADR. ACI/EnbPI ficam fora do confirmatório.
+**Descrição humana:** Benchmark de calibração por **conformal (CQR assimétrico)**, com o MAPIE como referência, respeitando os 4 invariantes (calib set dedicado, por fold/horizonte, embargo, cobertura **empírica**). A variante de registro (split-CQR sem pesos) e a sensibilidade (NexCP, ρ = 0,99) estão fixadas no [doc de domínio inference](./domain/inference/conformal-benchmark-and-feature-attribution.md) §4 e no ADR `0_0_0008`; a Stage implementa e **pré-registra** os detalhes pela maquinaria da 6.5 antes da 8.1. ACI/EnbPI ficam fora do confirmatório.
 
 **Descrição para IA:**
 ```yaml
@@ -1029,14 +1027,13 @@ arquivos_a_criar:
   - src/financial_forecasting/features/inference/domain/services/conformal_calibrator.py
   - src/financial_forecasting/features/inference/application/ports/out/conformal_backend.py
   - src/financial_forecasting/features/inference/adapters/out/mapie/mapie_cqr_backend.py
-  - docs/adr/0_0_0008-native-quantiles-with-conformal-benchmark.md
   - docs/stages/7.2-conformal-cqr/adrs/7_2_0001-cqr-variant-selection.md
   - tests/unit/features/inference/test_conformal_calib_set_dedicated.py
   - tests/unit/features/inference/test_conformal_embargo.py
   - tests/integration/features/inference/test_cqr_empirical_coverage.py
 contratos_introduzidos: [ConformalCalibrator (domain-service), ConformalBackend (port-out)]
 contratos_consumidos: [WalkForwardSplitter calib partition (5.1), RunInference (7.1), CoverageMetrics (6.1)]
-definition_of_done: "CQR calibra no calib dedicado (não no early-stop), por fold/horizonte, com embargo; reporta cobertura EMPÍRICA (etiqueta não diz 'garantida'); variante escolhida pré-registrada em ADR antes do confirmatório; ACI/EnbPI ausentes do caminho confirmatório."
+definition_of_done: "CQR assimétrico calibra no calib dedicado (não no early-stop), por fold/horizonte/seed, com embargo, nos 3 pares simétricos; reporta cobertura EMPÍRICA (etiqueta não diz 'garantida'); variante de registro e sensibilidade NexCP (ADR 0_0_0008) pré-registradas pela maquinaria da 6.5 (TOML hasheado + âncora) antes de qualquer métrica sobre o cohort real; ACI/EnbPI ausentes do caminho confirmatório."
 non_goals: [ACI/EnbPI confirmatórios (travados), conformal como entrega primária]
 complexidade_estimada: M
 gate_mode: strict
@@ -1045,7 +1042,7 @@ skills_hint: [ddd-tactical-patterns, hex-arch-python, dmls-ch05-model-developmen
 
 #### Stage 7.3 — `7.3-explainability`
 
-**Descrição humana:** Explicabilidade para H3: pesos da VSN do TFT, importância por permutação por família (com CI bootstrap), ablação explanatória (N+1). Triangulação ≥2/3 métodos; estritamente descritivo (sem causalidade).
+**Descrição humana:** Explicabilidade para H3: importância por permutação por família (janela inteira, em conjunto) e ablação LOCO com re-treino (N+1 = 4 famílias + modelo completo de referência, 10 seeds, num cohort de ablação congelado e hasheado próprio), ambas com IC por bootstrap em bloco pareado; H3 sustentada se as duas **concordam** (ADR `0_0_0007`). Pesos da VSN reportados como descrição horizonte-invariante. Estritamente descritivo (sem causalidade); [doc de domínio inference](./domain/inference/conformal-benchmark-and-feature-attribution.md) §5.
 
 **Descrição para IA:**
 ```yaml
@@ -1053,13 +1050,13 @@ stage_id: 7.3-explainability
 bounded_context: inference
 camada_alvo: multi (domain + adapters/out)
 arquivos_a_criar:
-  - src/financial_forecasting/features/inference/domain/services/{permutation_importance.py, ablation_analysis.py, contribution_triangulation.py}
+  - src/financial_forecasting/features/inference/domain/services/{permutation_importance.py, ablation_analysis.py, contribution_agreement.py}
   - src/financial_forecasting/features/inference/adapters/out/pytorch_forecasting/vsn_weight_extractor.py
   - tests/unit/features/inference/test_permutation_importance.py
-  - tests/unit/features/inference/test_contribution_triangulation.py
-contratos_introduzidos: [PermutationImportance, AblationAnalysis, ContributionTriangulation (domain-services), VsnWeightExtractor (port-out)]
-contratos_consumidos: [RunInference (7.1), PinballScore (6.1), FeatureRegistry families (3.4)]
-definition_of_done: "VSN/permutação/ablação produzem contribuição por família e horizonte; triangulação marca consistência ≥2/3; permutação com CI bootstrap; saída rotulada como descritiva (sem causalidade)."
+  - tests/unit/features/inference/test_contribution_agreement.py
+contratos_introduzidos: [PermutationImportance, AblationAnalysis, ContributionAgreement (domain-services), VsnWeightExtractor (port-out)]
+contratos_consumidos: [RunInference (7.1), PinballScore (6.1), FeatureRegistry families (3.4), TftTrainer (5.4) para o cohort de ablação]
+definition_of_done: "Permutação e ablação LOCO produzem participação por família e horizonte com IC por bootstrap em bloco pareado; a regra de leitura (heterogeneidade + concordância de sinal, ADR 0_0_0007) é aplicada mecanicamente; VSN reportada como horizonte-invariante; cohort de ablação congelado e hasheado; pré-registro de H3 ancorado antes de qualquer métrica sobre o cohort real; saída rotulada como descritiva (sem causalidade)."
 non_goals: [SHAP local sofisticado (futuro), claim causal]
 complexidade_estimada: M
 gate_mode: strict
@@ -1068,7 +1065,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 
 #### Stage 7.4 — `7.4-inference-api`
 
-**Descrição humana:** API fina FastAPI (adapter de entrada) servindo previsão (quantis nativos + intervalo conformal) e payload de explicabilidade (contrato P2), mapeando exceções de domínio para HTTP. Sem lógica de negócio no router.
+**Descrição humana:** API fina FastAPI (adapter de entrada) servindo previsão (quantis nativos + intervalo conformal rotulado "cobertura empírica") e payload de explicabilidade (rotulado descritivo), com schema versionado definido no technical da Stage, mapeando exceções de domínio para HTTP. Sem lógica de negócio no router. O `app.py` já existe (ADR 1.1.0001) e só ganha o router.
 
 **Descrição para IA:**
 ```yaml
@@ -1078,12 +1075,13 @@ camada_alvo: adapters/in/http
 arquivos_a_criar:
   - src/financial_forecasting/features/inference/adapters/in/http/inference_router.py
   - src/financial_forecasting/features/inference/adapters/in/http/schemas/inference_schemas.py
-  - src/financial_forecasting/shared/infrastructure/http/app.py
   - tests/integration/features/inference/adapters/in/http/test_inference_router.py
   - tests/e2e/features/inference/test_inference_api_e2e.py
+arquivos_a_modificar:
+  - src/financial_forecasting/shared/infrastructure/http/app.py
 contratos_introduzidos: [RunInferencePort (port-in via FastAPI Depends)]
 contratos_consumidos: [RunInference (7.1), ConformalCalibrator (7.2), explainability (7.3)]
-definition_of_done: "`POST /inference/run` retorna quantis nativos + intervalo conformal + explicabilidade (contrato P2 versionado); router é fino (sem regra); exceções de domínio viram HTTP; e2e verde."
+definition_of_done: "`POST /inference/run` retorna quantis nativos + intervalo conformal + explicabilidade (payload com schema versionado; rótulos 'cobertura empírica' e 'descritiva'); router é fino (sem regra); exceções de domínio viram HTTP; e2e verde."
 non_goals: [autenticação, servir treino, streaming]
 complexidade_estimada: M
 gate_mode: batch
@@ -1192,6 +1190,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 |---|---|---|
 | 2026-06-22 | Criação inicial (8 Steps, 34 Stages) | Derivado do overview ratificado (8 blocos de deliberação crítica) |
 | 2026-10-05 | Stage `6.6-scorecard-profiles` criada; Step 6 volta a `in_progress`; a 8.1 depende da 6.6 | A issue #129 (perfis do scorecard com séries novas) toca schema persistido e tem decisões de concept em aberto — litmus de forma (PIPELINE §4.5) manda Stage; decisão do humano: Step 6, não 8.0 |
+| 2026-10-06 | Texto das Stages 7.1–7.4 corrigido (bit a bit qualificado; guardrail reusado; emissão do calib; `0_0_0008` sai da 7.2; pré-registro pela maquinaria da 6.5; H3 por concordância de permutação e ablação LOCO, VSN descritiva; "contrato P2" abandonado; `app.py` já existe); a 8.1 depende também da 7.3 (tabela + grafo) | Gate de domínio do Step 7 (issue #150; [doc de domínio inference](./domain/inference/conformal-benchmark-and-feature-attribution.md); ADRs 0.0.0057, 0.0.0007, 0.0.0008) |
 
 ## Próxima revisão de roadmap
 
