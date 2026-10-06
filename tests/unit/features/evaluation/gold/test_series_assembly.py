@@ -740,12 +740,13 @@ def test_diverging_fold_labels_are_not_a_finding(model: str, seed: int | None) -
 
 
 @pytest.mark.unit
-def test_diverging_fold_in_a_single_level_is_seen() -> None:
+@pytest.mark.parametrize("level_index", [0, 3, -1])
+def test_diverging_fold_in_a_single_level_is_seen(level_index: int) -> None:
     """Checkpoint C bloco 2 (T3): o fold de **todos** os níveis do ponto conta — um nível só
     com outro fold já torna o rótulo do alvo ambíguo."""
     cohort = make_cohort()
     target = targets_of(cohort, "tft", 1, 1)[2]
-    level = GOLD_LEVELS[3]
+    level = GOLD_LEVELS[level_index]
     cohort = replace_records(
         cohort,
         lambda r: at_point("tft", 1, 1, target)(r) and r.quantile_level == level,
