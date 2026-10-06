@@ -1027,7 +1027,7 @@ arquivos_a_criar:
   - src/financial_forecasting/features/inference/domain/services/conformal_calibrator.py
   - src/financial_forecasting/features/inference/application/ports/out/conformal_backend.py
   - src/financial_forecasting/features/inference/adapters/out/mapie/mapie_cqr_backend.py
-  - docs/stages/7.2-conformal-cqr/adrs/7_2_0001-cqr-variant-selection.md
+  - docs/stages/7.2-conformal-cqr/adrs/7_2_0001-cqr-preregistration-details.md
   - tests/unit/features/inference/test_conformal_calib_set_dedicated.py
   - tests/unit/features/inference/test_conformal_embargo.py
   - tests/integration/features/inference/test_cqr_empirical_coverage.py
@@ -1063,7 +1063,7 @@ arquivos_a_modificar:
   - src/financial_forecasting/composition_root.py (dispositivo ≠ cpu)
 contratos_introduzidos: [PermutationImportance, AblationAnalysis, ContributionAgreement (domain-services), VsnWeightExtractor (port-out), cohort de ablação (cohort spec congelado e hasheado)]
 contratos_consumidos: [RunInference (7.1), PinballScore (6.1), FeatureRegistry families (3.4), TrainTft / TftTrainer (5.4) e o executor de cohort (5.5) para o cohort de ablação]
-definition_of_done: "Permutação e ablação LOCO produzem participação por família e horizonte com IC por bootstrap em bloco pareado; a regra de leitura (heterogeneidade + concordância de sinal, ADR 0_0_0007) é aplicada mecanicamente; VSN reportada como horizonte-invariante; cohort de ablação congelado e hasheado; pré-registro de H3 ancorado antes de qualquer métrica sobre o cohort real; saída rotulada como descritiva (sem causalidade)."
+definition_of_done: "Permutação e ablação LOCO produzem participação por família e horizonte com IC por bootstrap em bloco pareado; a regra de leitura (heterogeneidade + concordância de sinal, ADR 0_0_0007) é aplicada mecanicamente; VSN reportada como horizonte-invariante; cohort de ablação congelado e hasheado; partição da volatilidade resolvida (#151) antes do pré-registro de H3; pré-registro de H3 ancorado antes de qualquer métrica sobre o cohort real; saída rotulada como descritiva (sem causalidade)."
 non_goals: [SHAP local sofisticado (futuro), claim causal]
 complexidade_estimada: L  # possivelmente — inclui código novo de modelagem; reavaliar no concept da Stage
 gate_mode: strict
@@ -1178,7 +1178,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 ## Lacunas conhecidas
 
 - **Variante do CQR (7.2):** decidida — split-CQR assimétrico sem pesos como registro + NexCP ρ = 0,99 como sensibilidade (ADR `0_0_0008`; doc de domínio inference §4.5); os detalhes do pré-registro (forma, papel do MAPIE) ficam na 7.2.
-- **Pré-registro de H3 (7.3):** nível do IC, multiplicidade para "≥ 1 de 4 famílias", importâncias negativas / Σ I_g ≈ 0, chave de pareamento entre horizontes e bloco do bootstrap conjunto a fixar na 7.3 (doc de domínio inference §5.7).
+- **Pré-registro de H3 (7.3):** nível do IC, multiplicidade para "≥ 1 de 4 famílias", importâncias negativas / Σ I_g ≈ 0, chave de pareamento entre horizontes e bloco do bootstrap conjunto a fixar na 7.3 (doc de domínio inference §5.7); partição da volatilidade resolvida (#151) como pré-condição do pré-registro.
 - **Parâmetros do MCS (6.2):** regra do bloco fixada no doc de domínio evaluation §6.5 (max(h, maior b̂_sb de Politis–White), sensibilidades l = h, √T e moving-block — ADR 0.0.0010); `B` de bootstrap e semente a fixar no concept de 6.2.
 - **Bandas e tolerâncias:** bandas de calibração pré-registradas (H1) e tolerância de equivalência (8.2) a fixar nos concepts de 6.5/8.2.
 - **Fallback de fundamentals (3.3):** janela exata do fallback de disponibilidade a declarar e pré-registrar no concept de 3.3.
