@@ -31,6 +31,7 @@ from financial_forecasting.features.evaluation.domain.services.diebold_mariano i
 )
 from financial_forecasting.features.evaluation.domain.services.differential_stationarity import (
     DifferentialStationarity,
+    StationarityStatus,
 )
 from financial_forecasting.features.evaluation.domain.services.dm_profiles import (
     ERROR,
@@ -436,6 +437,43 @@ def test_undefined_dm_rows_are_not_errors() -> None:
     )
     assert report.dm_profiles is not None
     assert any(r.undefined_reason == "constant_differential" for r in report.dm_profiles.rows)
+    assert report.error_units == 0
+
+
+@pytest.mark.unit
+def test_constant_stationarity_pair_is_undefined_not_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Relatório `undefined` (d_t constante) do serviço: a linha sai `computed` com o
+    relatório, e o par não conta em `error_units` (Auditoria de Testes, M26).
+
+    Um par de perdas idênticas não chega aqui pelo caminho real (o DM primário do gate
+    recusa variância zero antes); o serviço é trocado só neste módulo."""
+    real = module.DifferentialStationarity.evaluate
+
+    def undefined(*args: object, **kwargs: object) -> tuple[object, ...]:
+        return tuple(
+            dataclasses.replace(
+                report,
+                status=StationarityStatus.UNDEFINED,
+                undefined_reason="constant_differential",
+                acf=(),
+                statistic=None,
+                p_value=None,
+                rejected=None,
+                horizon_used=None,
+                break_target_timestamp=None,
+            )
+            for report in real(*args, **kwargs)  # type: ignore[arg-type]
+        )
+
+    monkeypatch.setattr(module.DifferentialStationarity, "evaluate", staticmethod(undefined))
+    report = _evaluate()
+    assert report.stationarity
+    for row in report.stationarity:
+        assert row.status is UnitStatus.COMPUTED
+        assert row.report is not None
+        assert row.report.undefined_reason == "constant_differential"
     assert report.error_units == 0
 
 

@@ -955,6 +955,21 @@ def test_block_sensitivities_reach_the_backend_on_the_primary_scheme() -> None:
 
 
 @pytest.mark.unit
+def test_block_runs_use_the_plan_reps_seed_and_alpha() -> None:
+    """I8 no MCS por bloco: reps, seed e alpha são os do plano (Auditoria de Testes, M18/M29)."""
+    harness = _harness()
+    inputs = _inputs_of(harness, parameters=_R1_PARAMETERS)
+    block_calls = harness.backend.index_calls[len(_HORIZONS) * len(_PARAMETERS.mcs_schemes) :]
+    assert len(block_calls) == len(inputs.mcs_block_reports)
+    for call in block_calls:
+        assert (call["reps"], call["seed"]) == (_PARAMETERS.mcs_reps, _PARAMETERS.mcs_seed)
+    for run in inputs.mcs_block_reports:
+        assert run.report is not None
+        assert run.report.alpha == _PARAMETERS.mcs_alpha
+        assert (run.report.reps, run.report.seed) == (_PARAMETERS.mcs_reps, _PARAMETERS.mcs_seed)
+
+
+@pytest.mark.unit
 def test_backend_failure_on_one_block_rule_is_isolated() -> None:
     cohort = make_cohort()
     n_common = _inputs_of(_harness(cohort), parameters=_R1_PARAMETERS).horizon_reports[0].n_common
