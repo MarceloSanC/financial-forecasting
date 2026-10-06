@@ -346,8 +346,14 @@ def test_gold_inputs_status_coherence() -> None:
         horizon_reports=(),
         mcs_reports=(),
         block_estimates={},
+        profile_reports=(),
+        mcs_block_reports=(),
     )
     assert blocked.preregistration_ref == _PREREG
+    with pytest.raises(ValueError, match="BLOCKED generation has no"):
+        dataclasses.replace(blocked, profile_reports=(object(),))  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="BLOCKED generation has no"):
+        dataclasses.replace(blocked, mcs_block_reports=(object(),))  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="BLOCKED generation has no"):
         dataclasses.replace(blocked, mcs_reports=(object(),))  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="COMPLETED generation cannot"):

@@ -39,6 +39,10 @@ from financial_forecasting.features.evaluation.application.use_cases.refresh_gol
     GridFingerprintMismatchError,
     RefreshGold,
 )
+from financial_forecasting.features.evaluation.domain.services import (
+    dm_profiles,
+    profile_reports,
+)
 from financial_forecasting.features.evaluation.domain.services.diebold_mariano import (
     DmVarianceEstimator,
 )
@@ -85,6 +89,7 @@ from tests.fakes.features.evaluation.fake_silver_table_reader import FakeSilverT
 from tests.fakes.features.evaluation.fake_training_grid_reader import FakeTrainingGridReader
 from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
 from tests.fakes.shared.in_memory_clock import FakeClock
+from tests.unit.features.evaluation._profile_parameters import profile_parameters
 from tests.unit.features.evaluation.gold._cohort_factory import (
     Cohort,
     at_point,
@@ -113,11 +118,12 @@ _PARAMETERS = RefreshParameters(
     mcs_reps=1500,  # ≠ MIN_MCS_REPS: o repasse de `reps` é distinguível do piso (A2)
     mcs_seed=20260929,
     mcs_schemes=(BootstrapScheme.STATIONARY, BootstrapScheme.MOVING_BLOCK),
-    monte_carlo_draws=999,
+    monte_carlo_draws=19,  # pequeno: o Monte Carlo roda em todo refresh de teste
     monte_carlo_seed=128,
     mcs_block_sensitivities=("h", "sqrt_T"),
     profile_parameters=None,
 )
+_R1_PARAMETERS = dataclasses.replace(_PARAMETERS, profile_parameters=profile_parameters())
 _WARMUP = 3  # linhas de aquecimento com NaN numa feature, aparadas pela grade
 _GRID_COLUMNS = ("feat_a", "target_return")
 _EXPECTED_STEPS = (
@@ -129,6 +135,8 @@ _EXPECTED_STEPS = (
     "checks",
     "reports",
     "mcs",
+    "profiles",
+    "mcs_blocks",
     "build",
     "publish",
 )
@@ -844,7 +852,8 @@ def test_blocked_logs_skip_reports_and_mcs(caplog: pytest.LogCaptureFixture) -> 
     steps = [line.split("step=")[1].split()[0] for line in lines if " step=" in line]
     assert "reports" not in steps
     assert "mcs" not in steps
-    assert steps == [s for s in _EXPECTED_STEPS if s not in ("reports", "mcs")]
+    skipped = ("reports", "mcs", "profiles", "mcs_blocks")
+    assert steps == [s for s in _EXPECTED_STEPS if s not in skipped]
     assert lines[-1].startswith("refresh_gold status=BLOCKED")
 
 
@@ -891,3 +900,149 @@ def test_shuffled_dataset_rows_same_result() -> None:
     baseline, harness = _harness(cohort), _harness(cohort, dataset=shuffled)
     assert harness() == baseline()
     assert _published(harness) == _published(baseline)
+
+
+# --- Stage 6.6 Task 13: perfis de séries novas e MCS por bloco ---------------------------
+
+
+class _BlockFailingBackend(_SpyBackend):
+    """Spy que ergue para um `block_size` escolhido (só nas rodadas por bloco)."""
+
+    def __init__(self, log: _Log, *, failing_block: int) -> None:
+        super().__init__(log)
+        self._failing_block = failing_block
+
+    def bootstrap_indices(self, **kwargs: object) -> BootstrapIndices:  # type: ignore[override]
+        if kwargs["block_size"] == self._failing_block:
+            self.index_calls.append(dict(kwargs))
+            raise ArithmeticError("injected block failure")
+        return super().bootstrap_indices(**kwargs)
+
+
+def _inputs_of(harness: _Harness, **changes: object) -> GoldInputs:
+    captured: list[GoldInputs] = []
+    real = harness.use_case._builders[0].build
+
+    def spy(inputs: GoldInputs) -> GoldTable:
+        captured.append(inputs)
+        return real(inputs)
+
+    harness.use_case._builders[0].build = spy  # type: ignore[method-assign]
+    harness(**changes)
+    return captured[0]
+
+
+@pytest.mark.unit
+def test_block_sensitivities_reach_the_backend_on_the_primary_scheme() -> None:
+    harness = _harness()
+    inputs = _inputs_of(harness, parameters=_R1_PARAMETERS)
+    runs = inputs.mcs_block_reports
+    assert [(r.horizon, r.block_rule) for r in runs] == [
+        (h, rule) for h in _HORIZONS for rule in ("h", "sqrt_T")
+    ]
+    for run in runs:
+        n_points = next(p.n_common for p in inputs.horizon_reports if p.horizon == run.horizon)
+        expected = run.horizon if run.block_rule == "h" else math.isqrt(n_points - 1) + 1
+        assert run.block_size == expected
+        assert run.scheme is _PARAMETERS.mcs_schemes[0]
+        assert run.report is not None
+        assert run.report.block_size == expected
+    sizes = [c["block_size"] for c in harness.backend.index_calls]
+    assert sizes[len(_HORIZONS) * len(_PARAMETERS.mcs_schemes) :] == [r.block_size for r in runs]
+
+
+@pytest.mark.unit
+def test_backend_failure_on_one_block_rule_is_isolated() -> None:
+    cohort = make_cohort()
+    n_common = _inputs_of(_harness(cohort), parameters=_R1_PARAMETERS).horizon_reports[0].n_common
+    failing = math.isqrt(n_common - 1) + 1  # o l = ceil(sqrt(T)) do primeiro horizonte
+    inputs = _inputs_of(_with_backend(cohort, failing), parameters=_R1_PARAMETERS)
+    errors = [r for r in inputs.mcs_block_reports if r.report is None]
+    assert errors and all(r.block_size == failing and "injected" in r.detail for r in errors)
+    assert all(r.report is not None for r in inputs.mcs_block_reports if r.block_size != failing)
+    assert len(inputs.mcs_reports) == len(_HORIZONS) * len(_PARAMETERS.mcs_schemes)
+    result = _with_backend(cohort, failing)(parameters=_R1_PARAMETERS)
+    assert result.status is RefreshStatus.COMPLETED
+    assert result.profile_error_units == len(errors)
+
+
+def _with_backend(cohort: Cohort, failing: int) -> _Harness:
+    harness = _harness(cohort)
+    harness.use_case._mcs_backend = _BlockFailingBackend(_Log(), failing_block=failing)
+    return harness
+
+
+@pytest.mark.unit
+def test_r0_has_no_block_runs_and_only_mc_and_differentials() -> None:
+    inputs = _inputs_of(_harness())
+    assert inputs.mcs_block_reports == ()
+    assert len(inputs.profile_reports) == len(_HORIZONS)
+    for report in inputs.profile_reports:
+        assert report.differentials
+        assert (report.dm_profiles, report.stationarity, report.partial_degeneracy) == (
+            None,
+            None,
+            None,
+        )
+    assert inputs.profile_reports[0].monte_carlo
+
+
+@pytest.mark.unit
+def test_blocked_refresh_has_no_profiles() -> None:
+    harness = _harness(_gap_cohort())
+    result = harness(parameters=_R1_PARAMETERS)
+    assert result.status is RefreshStatus.BLOCKED
+    assert result.profile_error_units == 0
+    assert harness.backend.index_calls == []
+
+
+def _verdict_inputs(inputs: GoldInputs) -> tuple[object, ...]:
+    return (
+        inputs.check_results,
+        inputs.horizon_reports,
+        inputs.mcs_reports,
+        inputs.block_estimates,
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("target", ["monte_carlo", "stationarity", "adjacent", "dm", "mcs_block"])
+def test_profile_failure_leaves_the_verdict_inputs_identical(
+    monkeypatch: pytest.MonkeyPatch, target: str
+) -> None:
+    """CA11, lado da escrita: uma falha injetada em cada tipo de unidade de perfil não muda
+    os relatórios do veredito e é contada em `profile_error_units`."""
+    cohort = make_cohort()
+    baseline = _inputs_of(_harness(cohort), parameters=_R1_PARAMETERS)
+
+    def boom(*_args: object, **_kwargs: object) -> object:
+        raise ValueError("injected")
+
+    if target == "monte_carlo":
+        monkeypatch.setattr(
+            profile_reports.ChristoffersenTest, "monte_carlo_p_values", staticmethod(boom)
+        )
+    elif target == "stationarity":
+        monkeypatch.setattr(
+            profile_reports.DifferentialStationarity, "evaluate", staticmethod(boom)
+        )
+    elif target == "adjacent":
+        monkeypatch.setattr(profile_reports, "adjacent_collapse_rates", boom)
+    elif target == "dm":
+        monkeypatch.setattr(dm_profiles, "DieboldMariano", _FailingDm)
+
+    def make() -> _Harness:
+        # MCS por bloco: falha só no l = h = 1 (o MCS primário usa l >= 3 com o fake)
+        return _with_backend(cohort, 1) if target == "mcs_block" else _harness(cohort)
+
+    inputs = _inputs_of(make(), parameters=_R1_PARAMETERS)
+    assert _verdict_inputs(inputs) == _verdict_inputs(baseline)
+    assert make()(parameters=_R1_PARAMETERS).profile_error_units > 0
+
+
+class _FailingDm:
+    """Substitui o `DieboldMariano` só dentro do `dm_profiles` (o gate usa o original)."""
+
+    @staticmethod
+    def compare(*_args: object, **_kwargs: object) -> object:
+        raise ValueError("injected")

@@ -23,7 +23,10 @@ de efeitos):
 6. `QualityCheckRegistry` com os quatro checks (ADR `6_4_0002`) → bloqueado?;
 7. se não bloqueado: `HorizonReports` por horizonte e o MCS por (horizonte, esquema)
    com o bloco da regra (`ModelConfidenceSet.block_length`) e `reps`/`seed` dos
-   parâmetros (ADR `6_4_0006`);
+   parâmetros (ADR `6_4_0006`); depois os perfis de séries novas (`ProfileReports`, Stage
+   6.6) e, com as regras de perfil da revisão, o MCS por bloco de sensibilidade
+   (`mcs_block_runs`) — falha de perfil vira unidade `error`, nunca aborta o refresh
+   (ADR `6_6_0002` item 3);
 8. builders na ordem validada (bloqueado → só os `runs_when_blocked`);
 9. `GoldManifest` (timestamps só do `Clock`, I16) e `GoldStore.publish` — o único
    efeito colateral, por último (nada é gravado antes; exceção antes dele não toca o
@@ -45,11 +48,13 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     GoldManifest,
     GoldPartition,
     GoldTable,
+    McsBlockRun,
     RefreshGoldCommand,
     RefreshGoldResult,
     RefreshParameters,
     RefreshStatus,
     failed_checks_of,
+    profile_settings_from,
 )
 from financial_forecasting.features.evaluation.application.ports.out.gold_builder import (
     GoldBuilder,
@@ -76,9 +81,15 @@ from financial_forecasting.features.evaluation.domain.services.horizon_reports i
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     McsReport,
     ModelConfidenceSet,
+    block_sensitivity_length,
 )
 from financial_forecasting.features.evaluation.domain.services.paired_pinball_losses import (
     paired_pinball_losses,
+)
+from financial_forecasting.features.evaluation.domain.services.profile_reports import (
+    HorizonProfileReport,
+    ProfileReports,
+    UnitStatus,
 )
 from financial_forecasting.features.evaluation.domain.services.quality_checks.alignment_check import (  # noqa: E501
     AlignmentCheck,
@@ -261,6 +272,8 @@ class RefreshGold:
         status = RefreshStatus.BLOCKED if blocked else RefreshStatus.COMPLETED
         reports: tuple[HorizonReport, ...] = ()
         mcs: tuple[McsReport, ...] = ()
+        profiles: tuple[HorizonProfileReport, ...] = ()
+        blocks: tuple[McsBlockRun, ...] = ()
         if not blocked:
             reports = _timed(
                 "reports",
@@ -269,6 +282,18 @@ class RefreshGold:
                 len,
             )
             mcs = _timed("mcs", len(paired), lambda: self._mcs(paired, estimates, parameters), len)
+            profiles = _timed(
+                "profiles",
+                len(reports),
+                lambda: self._profiles(assembled, reports, paired, parameters),
+                len,
+            )
+            blocks = _timed(
+                "mcs_blocks",
+                len(paired),
+                lambda: mcs_block_runs(paired, parameters, self._mcs_backend),
+                len,
+            )
         inputs = GoldInputs(
             partition=partition,
             parameters=parameters,
@@ -277,6 +302,8 @@ class RefreshGold:
             horizon_reports=reports,
             mcs_reports=mcs,
             block_estimates=estimates,
+            profile_reports=profiles,
+            mcs_block_reports=blocks,
         )
         builders = [b for b in self._builders if not blocked or b.runs_when_blocked]
         tables = _timed("build", len(builders), lambda: [b.build(inputs) for b in builders], len)
@@ -302,6 +329,8 @@ class RefreshGold:
             status=status,
             rows_by_table=rows_by_table,
             failed_checks=failed_checks_of(results),
+            profile_error_units=sum(p.error_units for p in profiles)
+            + sum(1 for b in blocks if b.status is UnitStatus.ERROR),
         )
 
     # -- leituras --------------------------------------------------------------------
@@ -456,6 +485,25 @@ class RefreshGold:
                 )
         return tuple(reports)
 
+    @staticmethod
+    def _profiles(
+        assembled: AssembledCohort,
+        reports: Sequence[HorizonReport],
+        paired: Mapping[int, PairedLossSeries],
+        parameters: RefreshParameters,
+    ) -> tuple[HorizonProfileReport, ...]:
+        settings = profile_settings_from(parameters)
+        by_horizon = {report.horizon: report for report in reports}
+        return tuple(
+            ProfileReports.evaluate(
+                samples,
+                horizon_report=by_horizon[samples.horizon],
+                paired=paired[samples.horizon],
+                settings=settings,
+            )
+            for samples in assembled.horizons
+        )
+
     # -- manifesto -------------------------------------------------------------------
 
     def _manifest(  # noqa: PLR0913 — o que o manifesto registra (ADR 6.4.0005 item 8)
@@ -488,6 +536,55 @@ class RefreshGold:
             started_at=started_at,
             finished_at=self._clock.now(),
         )
+
+
+def mcs_block_runs(
+    paired: Mapping[int, PairedLossSeries],
+    parameters: RefreshParameters,
+    backend: McsBackend,
+) -> tuple[McsBlockRun, ...]:
+    """MCS com bloco l = h e l = ⌈√T⌉ no esquema primário (Stage 6.6; ADR 6.6.0002, D10).
+
+    Só com as regras de perfil da revisão (`profile_parameters`; sem elas, nenhuma rodada
+    — I9). O bloco sai do dono (`block_sensitivity_length`) e é passado ao backend; o
+    esquema é o primário do plano (`mcs_schemes[0]`, regra `primary_scheme`). Só a
+    chamada ao backend e ao `ModelConfidenceSet.evaluate` fica na captura: `ValueError`/
+    `ArithmeticError` vira rodada `error` (I4) — a outra regra e o MCS primário seguem.
+    """
+    if parameters.profile_parameters is None:
+        return ()
+    scheme = parameters.mcs_schemes[0]
+    runs: list[McsBlockRun] = []
+    for horizon in sorted(paired):
+        series = paired[horizon]
+        for rule in parameters.mcs_block_sensitivities:
+            block = block_sensitivity_length(rule, horizon=horizon, n_points=series.n_points)
+            try:
+                indices = backend.bootstrap_indices(
+                    n_obs=series.n_points,
+                    block_size=block,
+                    reps=parameters.mcs_reps,
+                    seed=parameters.mcs_seed,
+                    scheme=scheme,
+                )
+                report: McsReport | None = ModelConfidenceSet.evaluate(
+                    series, bootstrap=indices, alpha=parameters.mcs_alpha
+                )
+                status, detail = UnitStatus.COMPUTED, ""
+            except (ValueError, ArithmeticError) as error:
+                report, status, detail = None, UnitStatus.ERROR, f"{type(error).__name__}: {error}"
+            runs.append(
+                McsBlockRun(
+                    horizon=horizon,
+                    block_rule=rule,
+                    block_size=block,
+                    scheme=scheme,
+                    status=status,
+                    detail=detail,
+                    report=report,
+                )
+            )
+    return tuple(runs)
 
 
 def _record(row: Mapping[str, object], run: CohortRun) -> ForecastRecord:

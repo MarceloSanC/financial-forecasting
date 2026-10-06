@@ -56,6 +56,11 @@ from financial_forecasting.features.evaluation.domain.services.model_confidence_
     validate_block_sensitivities,
     validate_mcs_reps,
 )
+from financial_forecasting.features.evaluation.domain.services.profile_reports import (
+    HorizonProfileReport,
+    ProfileSettings,
+    UnitStatus,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
 )
@@ -761,6 +766,49 @@ class GoldGeneration:
         return cls(manifest=parsed, tables={table.name: table for table in tables})
 
 
+def profile_settings_from(parameters: RefreshParameters) -> ProfileSettings:
+    """Os parâmetros que os perfis usam, tirados do `RefreshParameters` — escrita única.
+
+    O estimador dos perfis é o **primário** do plano (`dm_variance_estimators[0]`, a ordem
+    que `refresh_command_from` fixa); alpha dos recortes = `dm_alpha` (concept 6.6 D3).
+    """
+    return ProfileSettings(
+        candidate=parameters.candidate,
+        alpha=parameters.dm_alpha,
+        variance_estimator=parameters.dm_variance_estimators[0],
+        min_violations=parameters.min_violations,
+        tolerance=parameters.degeneracy_tolerance,
+        draws=parameters.monte_carlo_draws,
+        seed=parameters.monte_carlo_seed,
+        profile_parameters=parameters.profile_parameters,
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
+class McsBlockRun:
+    """Uma rodada do MCS com bloco de sensibilidade (Stage 6.6; ADR 6.6.0002 item 3).
+
+    `report` presente ⇔ `status` `computed`; numa falha do backend ou do MCS (`error`),
+    `detail` traz a mensagem e o relatório falta — os demais perfis seguem.
+    """
+
+    horizon: int
+    block_rule: str
+    block_size: int
+    scheme: BootstrapScheme
+    status: UnitStatus
+    detail: str
+    report: McsReport | None
+
+    def __post_init__(self) -> None:
+        """Relatório presente exatamente quando a rodada foi calculada."""
+        if (self.report is not None) != (self.status is UnitStatus.COMPUTED):
+            raise ValueError(
+                f"McsBlockRun report must be set exactly when status is computed, got "
+                f"status={self.status!r}"
+            )
+
+
 @dataclass(frozen=True, kw_only=True)
 class GoldInputs:
     """O que os builders mapeiam — resultados prontos, nenhum a recomputar.
@@ -771,6 +819,10 @@ class GoldInputs:
         horizon_reports: um `HorizonReport` por horizonte (vazio se `BLOCKED`).
         mcs_reports: os `McsReport`s (horizonte x esquema; vazio se `BLOCKED`).
         block_estimates: horizonte → as b̂_sb por par (as que foram ao MCS).
+        profile_reports: os perfis de séries novas por horizonte (Stage 6.6; vazio se
+            `BLOCKED`).
+        mcs_block_reports: as rodadas do MCS por bloco de sensibilidade (vazio se
+            `BLOCKED` ou sem regras de perfil na revisão).
 
     Raises:
         ValueError: `BLOCKED` com relatórios ou sem resultado bloqueante; `COMPLETED`
@@ -784,6 +836,8 @@ class GoldInputs:
     horizon_reports: tuple[HorizonReport, ...]
     mcs_reports: tuple[McsReport, ...]
     block_estimates: Mapping[int, tuple[BlockEstimate, ...]]
+    profile_reports: tuple[HorizonProfileReport, ...]
+    mcs_block_reports: tuple[McsBlockRun, ...]
 
     def __post_init__(self) -> None:
         """Coerência status x conteúdo; mapa como cópia somente-leitura."""
@@ -793,8 +847,13 @@ class GoldInputs:
             raise ValueError("block_estimates must be a Mapping")
         object.__setattr__(self, "block_estimates", MappingProxyType(dict(self.block_estimates)))
         blocking = any(result.is_blocking for result in self.check_results)
-        if self.status is RefreshStatus.BLOCKED and (self.horizon_reports or self.mcs_reports):
-            raise ValueError("a BLOCKED generation has no horizon or MCS reports")
+        if self.status is RefreshStatus.BLOCKED and (
+            self.horizon_reports
+            or self.mcs_reports
+            or self.profile_reports
+            or self.mcs_block_reports
+        ):
+            raise ValueError("a BLOCKED generation has no horizon, MCS or profile reports")
         if self.status is RefreshStatus.COMPLETED and blocking:
             raise ValueError("a COMPLETED generation cannot hold a blocking check result")
         if self.status is RefreshStatus.BLOCKED and not blocking:
@@ -843,3 +902,4 @@ class RefreshGoldResult:
     status: RefreshStatus
     rows_by_table: Mapping[str, int]
     failed_checks: tuple[FailedCheck, ...]
+    profile_error_units: int
