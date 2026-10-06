@@ -663,3 +663,15 @@ def test_manifest_without_the_new_keys_is_corrupt() -> None:
         GoldGeneration.from_stored(
             {**manifest, "parameters": parameters}, {}, partition=_manifest().partition
         )
+
+
+@pytest.mark.unit
+def test_manifest_with_a_rule_outside_the_catalog_is_corrupt() -> None:
+    """L-3: regra de perfil fora do catálogo no manifesto é corrupção (via `from_stored`)."""
+    block = profile_block()
+    block["subset_multiplicity"] = "holm_within_subset"
+    manifest = _manifest(parameters=_parameters(profile_parameters=profile_parameters()))
+    mapping = manifest.as_mapping()
+    mapping["parameters"]["profile_parameters"] = block  # type: ignore[index]
+    with pytest.raises(GoldGenerationCorruptError, match="subset_multiplicity"):
+        GoldGeneration.from_stored(mapping, {}, partition=manifest.partition)

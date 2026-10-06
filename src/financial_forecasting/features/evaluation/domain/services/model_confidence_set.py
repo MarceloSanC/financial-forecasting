@@ -104,6 +104,20 @@ Dono: este módulo (a regra `block_sensitivity_length`); o `Preregistration` imp
 """
 
 
+def validate_block_sensitivities(blocks: object, *, field: str) -> None:
+    """Dono da regra: tupla de regras de `BLOCK_SENSITIVITIES`, sem repetição (vazia vale).
+
+    Consumido pelo `McsSpec` do pré-registro e pelos `RefreshParameters` (Stage 6.6).
+
+    Raises:
+        ValueError: não-tupla, regra fora de `BLOCK_SENSITIVITIES` ou repetida.
+    """
+    if not isinstance(blocks, tuple) or any(b not in BLOCK_SENSITIVITIES for b in blocks):
+        raise ValueError(f"{field} must hold values of {list(BLOCK_SENSITIVITIES)}, got {blocks!r}")
+    if len(set(blocks)) != len(blocks):
+        raise ValueError(f"{field} must not repeat values, got {list(blocks)}")
+
+
 def block_sensitivity_length(rule: str, *, horizon: int, n_points: int) -> int:
     """Comprimento de bloco de uma sensibilidade: `"h"` → h; `"sqrt_T"` → ⌈√T⌉ (Stage 6.6).
 

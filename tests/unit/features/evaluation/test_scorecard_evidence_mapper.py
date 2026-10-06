@@ -44,6 +44,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.preregistrat
     Preregistration,
 )
 from tests.unit.features.evaluation._preregistration_payload import valid_payload
+from tests.unit.features.evaluation._profile_parameters import profile_block
 from tests.unit.features.evaluation._scorecard_factory import (
     REFERENCE,
     StoredGold,
@@ -530,3 +531,23 @@ def test_mismatch_on_each_profile_parameter(key: str, value: object) -> None:
     stored = make_stored(_PLAN)
     stored.manifest["parameters"][key] = value  # type: ignore[index]
     _mismatch(stored, MismatchField.PARAMETERS)
+
+
+@pytest.mark.unit
+def test_mismatch_on_a_divergent_break_alpha() -> None:
+    """L-3: a mesma regra com outro `break_alpha` diverge do plano (r1 sintética)."""
+    payload = {
+        **valid_payload(),
+        "revision": 1,
+        "amends": "test_plan-r0-0123456789ab",
+        "justification": "blinded profile rules",
+        "blind_status": "blinded",
+        "profile_parameters": profile_block(),
+    }
+    plan = Preregistration.from_mapping(payload)
+    command = refresh_command_from(plan, REFERENCE)
+    stored = make_stored(plan)
+    stored.manifest["parameters"]["profile_parameters"]["stationarity"]["break_alpha"] = 0.01  # type: ignore[index]
+    with pytest.raises(PreregistrationMismatchError) as raised:
+        evidence_from_generation(prereg=plan, command=command, generation=stored.generation())
+    assert raised.value.field == MismatchField.PARAMETERS

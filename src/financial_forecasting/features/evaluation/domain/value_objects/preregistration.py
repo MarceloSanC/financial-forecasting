@@ -59,8 +59,8 @@ from financial_forecasting.features.evaluation.domain.services.inference_input_v
     validate_alpha,
 )
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
-    BLOCK_SENSITIVITIES,
     MCS_STATISTIC,
+    validate_block_sensitivities,
     validate_mcs_reps,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
@@ -401,14 +401,7 @@ class McsSpec:
             BootstrapScheme,
             field="mcs.sensitivity_schemes",
         )
-        blocks = self.block_sensitivities
-        if not isinstance(blocks, tuple) or any(b not in BLOCK_SENSITIVITIES for b in blocks):
-            raise ValueError(
-                f"mcs.block_sensitivities must hold values of {list(BLOCK_SENSITIVITIES)}, "
-                f"got {blocks!r}"
-            )
-        if len(set(blocks)) != len(blocks):
-            raise ValueError(f"mcs.block_sensitivities must not repeat values, got {list(blocks)}")
+        validate_block_sensitivities(self.block_sensitivities, field="mcs.block_sensitivities")
 
 
 @dataclass(frozen=True)
