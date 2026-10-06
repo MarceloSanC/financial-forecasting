@@ -1029,4 +1029,20 @@ rodada por bloco só tem dois estados (`computed` ou `error` da chamada, I4): n�
 de indefinição além do erro. O DTO carrega `status` (`UnitStatus`) e `detail`; o builder
 grava `undefined_reason="error"` na linha de erro, coerente com a regra de leitura acima.
 
+### 2026-10-06 — [measurement] Task 20: custo dos perfis na forma do r0 (CA17) — Claude (Opus 5.5)
+`MEASURE_PROFILE_COST=1 pytest tests/integration/features/evaluation/test_profile_cost_measurement.py -s`
+no container de dev (CPU dividida com outra sessão): `ProfileReports` sobre amostras
+sintéticas com 6 folds de 252 sessões, 10 seeds do candidato, 7 modelos, h ∈ {1, 7},
+grade de 7 níveis e 999 sorteios — **total 275,5 s, Monte Carlo 264,3 s (576 unidades),
+zero unidades `error`**. Abaixo do limite de 30 min do technical: nenhuma pergunta.
+O MC domina (~96 %); custo linear em sorteios × sequências de hits de h = 1.
+
+### 2026-10-06 — [decision] Task 20: e2e com cadeia r0 → r1 e silver próprio — Claude (Opus 5.5)
+O e2e reusa realizado, quantis, dataset e plano do e2e da 6.5 por import, com um
+`_write_silver` próprio parametrizado pelos horizontes do plano (o da 6.5 fixa h ∈ {1, 2};
+o technical pede h ∈ {1, 7}). As duas revisões são gravadas e ancoradas no `tmp_path`
+para o `BuildConfirmatoryScorecard` percorrer a cadeia; o mesmo cohort é refrescado
+pelo r0 e depois pela r1. A Task 21 (nota no ADR) foi commitada antes da 20 — sem
+dependência entre elas.
+
 <!-- END: post-execution -->

@@ -460,3 +460,26 @@ def test_tolerance_must_be_the_gate_tolerance() -> None:
         ProfileReports.evaluate(
             samples, horizon_report=report, paired=paired, settings=_settings(tolerance=1e-6)
         )
+
+
+@pytest.mark.unit
+def test_smoke_of_the_cost_path_has_no_error_unit() -> None:
+    """Smoke do caminho da medição opt-in (Task 20), em escala pequena: 3 folds, h = 1 e 7,
+    sem nenhuma unidade `error` e com Monte Carlo só em h = 1."""
+    cohort = make_cohort(folds=("f0", "f1", "f2"), horizons=(1, 7), n_sessions=60)
+    assembled = SeriesAssembly.assemble(
+        cohort.records,
+        cohort.runs,
+        cohort.realized,
+        horizons=(1, 7),
+        window_deficits={},
+        required_models=frozenset({_CAND}),
+    )
+    assert assembled.alignment.findings == ()
+    reports = [
+        ProfileReports.evaluate(samples, horizon_report=report, paired=paired, settings=_settings())
+        for samples, report, paired in (_reports_of(s) for s in assembled.horizons)
+    ]
+    assert [r.error_units for r in reports] == [0, 0]
+    assert [bool(r.monte_carlo) for r in reports] == [True, False]
+    assert all(r.dm_profiles is not None and r.dm_profiles.rows for r in reports)
