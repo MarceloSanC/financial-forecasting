@@ -1292,4 +1292,17 @@ grep -n "Errata (2026-10-06)" docs/adr/5_4_0006-explicit-train-fitted-target-nor
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original; corpo
   diz o que mudou e por que ficou abaixo do threshold de perguntar.
 
+### 2026-10-06 — [deviation] task-04 — mutação obrigatória: dropout ativo na predição a partir do checkpoint — Claude (Opus 5.5)
+**Contexto:** a Task 04 exige registrar aqui a mutação "forçar o dropout ativo na predição". Não houve desvio de código. O registro só guarda a evidência que o plano pede, já que nenhuma das três tags descreve esse caso.
+**Mutação:** depois de `parameters = dict(model.dataset_parameters)` em `PfTftTrainer.predict_from_checkpoint`, entrou um hook temporário `model.register_forward_pre_hook(...)`. Ele chama `.train()` em todo `torch.nn.Dropout` antes de cada forward, ou seja, depois que o loop de predição já chamou `eval()`. Em seguida rodou `uv run --no-sync pytest tests/integration/features/modeling/test_pf_tft_checkpoint_prediction.py -k test_prediction_independent_of_global_rng`. A primeira versão do hook devolvia uma lista, que o torch tomou como novos argumentos do forward (`TypeError`). Esse erro não serve de evidência, e o hook foi refeito para devolver `None`.
+**Saída com a mutação (falha esperada):**
+```
+E       AssertionError: assert {40: {1: (0.0...026276)}, ...} == {40: {1: (0.0...358078)}, ...}
+E         Differing items:
+E         {40: {1: (0.01977621018886566, 0.01697353646159172, 0.020038358867168427), 2: (0.01784750446677208, 0.013174274936318398, 0.021491434425115585)}} != {40: {1: (0.020934753119945526, 0.016908634454011917, 0.020815810188651085), 2: (0.018182741478085518, 0.013605349697172642, 0.022123156115412712)}}
+1 failed, 11 deselected in 17.86s
+```
+**Revertido:** o arquivo foi restaurado da cópia anterior à mutação (`grep -c MUTATION` → 0) e o mesmo teste voltou a passar: `1 passed, 11 deselected in 18.26s`.
+**Razão:** sem o modo eval, a predição dependeria do RNG global. A mutação prova que `test_prediction_independent_of_global_rng` pega essa dependência (A2).
+
 <!-- END: post-execution -->

@@ -2,10 +2,10 @@
 
 A fixture devolve um `_Leg`: o predictor e um checkpoint já gravado — caminho,
 sha256 e as entradas com que foi treinado (reais, painel, `max_horizon`, níveis)
-mais uma faixa válida de decisões. Perna `fake` (Task 03): checkpoint registrado
-no `InMemoryTftCheckpointPredictor`. A perna `real` (`PfTftTrainer`, sobre um
-checkpoint treinado de verdade) entra na Task 04 — até lá o port está no baseline
-temporário do `check_port_coverage` (ADR 6.1.0005).
+mais uma faixa válida de decisões. Perna `fake`: checkpoint registrado no
+`InMemoryTftCheckpointPredictor`. Perna `real` (`slow`): `PfTftTrainer` sobre um
+checkpoint treinado de verdade uma vez por módulo (`_tft_checkpoint_fixture`),
+com a faixa de calib da geometria.
 
 Prova: sha256 esperado errado → `ArtifactChangedError` (C10); uma entrada por
 decisão pedida x horizonte; faixa não contígua → `ValueError`; entradas
@@ -19,11 +19,18 @@ from dataclasses import dataclass
 
 import pytest
 
+from financial_forecasting.features.modeling.adapters.out.pytorch_forecasting.pf_tft_trainer import (  # noqa: E501
+    PfTftTrainer,
+)
 from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (
     ArtifactChangedError,
     CheckpointMismatchError,
     TftCheckpointPrediction,
     TftCheckpointPredictor,
+)
+from tests.contract.features.modeling._tft_checkpoint_fixture import (
+    TrainedCheckpoint,
+    train_tiny_checkpoint,
 )
 from tests.fakes.features.modeling.in_memory_tft_checkpoint_predictor import (
     FakeCheckpoint,
@@ -97,10 +104,32 @@ def _fake_leg() -> _Leg:
     )
 
 
-@pytest.fixture(params=["fake"])
+def _real_leg(trained: TrainedCheckpoint) -> _Leg:
+    return _Leg(
+        predictor=PfTftTrainer(),
+        checkpoint_path=trained.path,
+        sha256=trained.sha256,
+        feature_names=trained.feature_names,
+        known_feature_names=trained.known_feature_names,
+        rows=trained.rows,
+        target=trained.target,
+        decisions=trained.calib_decisions,
+        max_horizon=trained.max_horizon,
+        horizons=trained.horizons,
+        quantile_levels=trained.quantile_levels,
+    )
+
+
+@pytest.fixture(scope="module")
+def trained_checkpoint(tmp_path_factory: pytest.TempPathFactory) -> TrainedCheckpoint:
+    return train_tiny_checkpoint(tmp_path_factory.mktemp("tft-checkpoint-contract"))
+
+
+@pytest.fixture(params=["fake", pytest.param("real", marks=pytest.mark.slow)])
 def leg(request: pytest.FixtureRequest) -> _Leg:
-    del request
-    return _fake_leg()
+    if request.param == "fake":
+        return _fake_leg()
+    return _real_leg(request.getfixturevalue("trained_checkpoint"))
 
 
 @pytest.mark.contract

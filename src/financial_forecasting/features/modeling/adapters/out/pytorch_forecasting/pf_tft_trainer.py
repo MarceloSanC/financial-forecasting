@@ -1,4 +1,4 @@
-"""Adapter `PfTftTrainer` — implementa o port `TftTrainer` com `pytorch-forecasting`.
+"""Adapter `PfTftTrainer` — implementa os ports `TftTrainer` e `TftCheckpointPredictor`.
 
 Única casa de `torch`/`lightning`/`pytorch_forecasting` no BC `modeling`
 (concept 5.4 §8, I13). A fronteira do port troca só primitivos; a montagem do
@@ -41,13 +41,29 @@ a população contra a qual o normalizador é verificado (A4c).
    histórico (contrato do port) vem de um callback próprio, que ignora a
    passagem de sanidade: uma entrada antes da época 0 deslocaria o índice e
    quebraria a identidade `best_epoch == argmin` (D11).
+
+**Predição a partir do checkpoint (Stage 7.1; port `TftCheckpointPredictor`).**
+`predict_from_checkpoint` usa a MESMA receita do dataset de predição
+(`_prediction_dataset`, que o `build_datasets` também usa) e o MESMO `_emit`
+(ADR 7.1.0001 item 3). Os bytes do checkpoint são lidos uma vez: o sha256 deles é
+conferido e o modelo é carregado deles (C10 — sem janela entre hash e unpickle);
+o dataset é reconstruído do `dataset_parameters` gravado no checkpoint, com o
+normalizador já ajustado (nada é reajustado — I3); as entradas declaradas são
+conferidas contra as passadas (C4). A predição roda com `num_threads` pedido e
+algoritmos determinísticos desligados — o estado em que o treino emitiu o teste
+(o `fit` restaura a flag antes do `_emit`) —, restaurando os dois depois.
 """
 
 from __future__ import annotations
 
+import io
 import math
+import platform
 from contextlib import contextmanager
 from dataclasses import dataclass
+from importlib import metadata
+from itertools import pairwise
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import lightning.pytorch as pl
@@ -58,6 +74,9 @@ from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from pytorch_forecasting import QuantileLoss, TemporalFusionTransformer, TimeSeriesDataSet
 from pytorch_forecasting.data.encoders import GroupNormalizer
 
+from financial_forecasting.features.modeling.application.ports.out.checkpoint_locator import (
+    sha256_of_stream,
+)
 from financial_forecasting.features.modeling.domain.exceptions.backend import (
     ModelTrainingError,
 )
@@ -68,6 +87,9 @@ from financial_forecasting.features.modeling.domain.services.tft_panel_geometry 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
 
+    from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (  # noqa: E501
+        TftCheckpointPrediction,
+    )
     from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
         TftTrainingParams,
         TftTrainingResult,
@@ -98,6 +120,7 @@ _GROUP_COLUMN = "series"
 # detalhe interno do adapter (ADR 5.4.0004).
 _SINGLE_GROUP = "asset"
 _AUTO_NORMALIZER_ENCODER_THRESHOLD = 20
+_SKLEARN_DISTRIBUTION = "scikit-learn"
 
 
 @dataclass(frozen=True)
@@ -194,6 +217,74 @@ def _assert_finite(values: Sequence[float], *, decision: int, horizon: int) -> N
         raise ValueError(msg)
 
 
+def _prediction_dataset(
+    parameters: dict[str, Any],
+    frame: Any,  # noqa: ANN401 — pandas.DataFrame não cruza a fronteira do port
+    *,
+    decision_indices: Sequence[int],
+    max_horizon: int,
+) -> Any:  # noqa: ANN401 — TimeSeriesDataSet não cruza a fronteira do port
+    """Receita ÚNICA do dataset de predição — treino (teste) e checkpoint (teste/calib).
+
+    `parameters` é o `get_parameters()` do dataset de treino (no treino) ou o
+    `dataset_parameters` gravado no checkpoint (na inferência): o normalizador
+    vem ajustado e nada é reajustado. TETO pelo recorte do quadro (a lib só
+    expressa piso; sem o teto o dataset geraria decisões depois do bloco
+    pedido — todo fold que não é o último tem painel adiante dele). O último par
+    legítimo precisa do índice `max(decisões) + max_horizon`. Cauda variável
+    (D2/I16): sem `min_prediction_length=1` o default herdado (`min == max`)
+    descartaria as decisões da ponta do painel.
+    """
+    return TimeSeriesDataSet.from_parameters(
+        parameters,
+        frame.iloc[: max(decision_indices) + max_horizon + 1],
+        min_prediction_idx=min(decision_indices) + 1,
+        min_prediction_length=1,
+        stop_randomization=True,
+    )
+
+
+def _require_contiguous(decisions: Sequence[int]) -> None:
+    """Faixa de decisões não vazia, contígua e crescente (contrato do port, D5)."""
+    if not decisions or any(b != a + 1 for a, b in pairwise(decisions)):
+        msg = f"decision indices must be a non-empty contiguous increasing range: {decisions!r}"
+        raise ValueError(msg)
+
+
+def _declared_mismatches(  # noqa: PLR0913 — uma entrada declarada por argumento
+    *,
+    parameters: dict[str, Any],
+    checkpoint_levels: Sequence[float],
+    feature_names: Sequence[str],
+    known_feature_names: Sequence[str],
+    max_horizon: int,
+    quantile_levels: Sequence[float],
+) -> list[str]:
+    """O que o checkpoint declara diferente do pedido (C4); lista vazia = confere."""
+    known = list(known_feature_names)
+    unknown = [name for name in feature_names if name not in set(known)]
+    mismatches = []
+    if list(parameters.get("time_varying_known_reals", [])) != known:
+        mismatches.append(
+            f"known reals {parameters.get('time_varying_known_reals')!r} != {known!r}"
+        )
+    expected_unknown = [*unknown, _TARGET_COLUMN]
+    if list(parameters.get("time_varying_unknown_reals", [])) != expected_unknown:
+        mismatches.append(
+            f"unknown reals {parameters.get('time_varying_unknown_reals')!r} "
+            f"!= {expected_unknown!r}"
+        )
+    if parameters.get("max_prediction_length") != max_horizon:
+        mismatches.append(
+            f"max_prediction_length {parameters.get('max_prediction_length')!r} != {max_horizon}"
+        )
+    if [float(level) for level in checkpoint_levels] != [float(q) for q in quantile_levels]:
+        mismatches.append(
+            f"quantile levels {list(checkpoint_levels)!r} != {list(quantile_levels)!r}"
+        )
+    return mismatches
+
+
 def _require_checkpoint(path: str | None) -> str:
     """C10 — caminho vazio significa que nada foi salvo; falhar aqui é o certo.
 
@@ -210,7 +301,11 @@ def _require_checkpoint(path: str | None) -> str:
 
 
 class PfTftTrainer:
-    """Treinador do TFT quantílico sobre `pytorch-forecasting` (satisfaz o port)."""
+    """TFT quantílico sobre `pytorch-forecasting`.
+
+    Satisfaz os ports `TftTrainer` (treino + teste) e `TftCheckpointPredictor`
+    (predição a partir do checkpoint gravado, Stage 7.1).
+    """
 
     def train_and_predict(  # noqa: PLR0913 — espelha a assinatura do port
         self,
@@ -277,6 +372,94 @@ class PfTftTrainer:
             normalizer_center=datasets.normalizer_center,
             normalizer_scale=datasets.normalizer_scale,
             artifact_path=fitted.artifact_path,
+        )
+
+    def predict_from_checkpoint(  # noqa: PLR0913 — espelha a assinatura do port
+        self,
+        *,
+        checkpoint_path: str,
+        expected_sha256: str,
+        feature_names: Sequence[str],
+        known_feature_names: Sequence[str],
+        rows: Sequence[Sequence[float]],
+        target: Sequence[float],
+        decision_indices: Sequence[int],
+        max_horizon: int,
+        horizons: Sequence[int],
+        quantile_levels: Sequence[float],
+        batch_size: int,
+        num_threads: int,
+    ) -> TftCheckpointPrediction:
+        """Implementa o contrato do port `TftCheckpointPredictor` (concept 7.1 §4)."""
+        from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (  # noqa: PLC0415, E501
+            ArtifactChangedError,
+            CheckpointMismatchError,
+            TftCheckpointPrediction,
+        )
+
+        data = Path(checkpoint_path).read_bytes()  # lidos UMA vez (C10)
+        observed = sha256_of_stream(io.BytesIO(data))
+        if observed != expected_sha256:
+            msg = (
+                f"checkpoint {checkpoint_path} sha256 {observed[:12]} != expected "
+                f"{expected_sha256[:12]} — not loaded (C10)"
+            )
+            raise ArtifactChangedError(msg)
+        with _translating_backend_errors():
+            model = TemporalFusionTransformer.load_from_checkpoint(io.BytesIO(data))
+        parameters = dict(model.dataset_parameters)
+        mismatches = _declared_mismatches(
+            parameters=parameters,
+            checkpoint_levels=list(model.loss.quantiles),
+            feature_names=feature_names,
+            known_feature_names=known_feature_names,
+            max_horizon=max_horizon,
+            quantile_levels=quantile_levels,
+        )
+        if mismatches:
+            msg = (
+                f"checkpoint {checkpoint_path} declares other inputs: {'; '.join(mismatches)} (C4)"
+            )
+            raise CheckpointMismatchError(msg)
+        decisions = tuple(decision_indices)
+        _require_contiguous(decisions)
+        frame = self._panel_frame(feature_names, rows, target)
+
+        threads_before = torch.get_num_threads()
+        deterministic_before = torch.are_deterministic_algorithms_enabled()
+        try:
+            torch.set_num_threads(num_threads)
+            torch.use_deterministic_algorithms(False)
+            with _translating_backend_errors():
+                dataset = _prediction_dataset(
+                    parameters, frame, decision_indices=decisions, max_horizon=max_horizon
+                )
+                center, scale = self._normalizer_parameters(dataset)
+            grids = self._emit(
+                model=model,
+                prediction_dataset=dataset,
+                requested_decisions=frozenset(decisions),
+                horizons=horizons,
+                quantile_levels=quantile_levels,
+                batch_size=batch_size,
+            )
+        finally:
+            torch.set_num_threads(threads_before)
+            torch.use_deterministic_algorithms(deterministic_before)
+        return TftCheckpointPrediction(
+            grids=grids,
+            normalizer_center=center,
+            normalizer_scale=scale,
+            settings={
+                "batch_size": str(batch_size),
+                "num_workers": "0",
+                "accelerator": "cpu",
+                "num_threads": str(num_threads),
+                "deterministic_algorithms": "false",
+                "cpu_capability": str(torch.backends.cpu.get_cpu_capability()),
+                "platform": platform.platform(),
+                _SKLEARN_DISTRIBUTION: metadata.version(_SKLEARN_DISTRIBUTION),
+            },
         )
 
     @staticmethod
@@ -438,19 +621,16 @@ class PfTftTrainer:
                 min_prediction_idx=min(monitored) + 1,
                 stop_randomization=True,
             )
+            # Predição pela receita única (`_prediction_dataset`), com os
+            # parâmetros do dataset de treino — `from_dataset` é exatamente
+            # `from_parameters(get_parameters(), ...)`; a predição a partir do
+            # checkpoint usa a mesma função com o `dataset_parameters` gravado.
             prediction = (
-                TimeSeriesDataSet.from_dataset(
-                    training,
-                    # TETO também aqui: a lib só expressa piso, então sem recortar o
-                    # quadro o dataset geraria decisões DEPOIS do bloco de teste —
-                    # e todo fold que não é o último tem painel adiante dele. O
-                    # último par legítimo precisa do índice `max(test) + max_horizon`.
-                    frame.iloc[: max(test_decision_indices) + max_horizon + 1],
-                    min_prediction_idx=min(test_decision_indices) + 1,
-                    # Cauda variável (D2/I16): sem isto o default herdado
-                    # (`min == max`) descartaria as decisões da ponta do painel.
-                    min_prediction_length=1,
-                    stop_randomization=True,
+                _prediction_dataset(
+                    training.get_parameters(),
+                    frame,
+                    decision_indices=test_decision_indices,
+                    max_horizon=max_horizon,
                 )
                 if test_decision_indices
                 else None
