@@ -17,6 +17,11 @@ Devolve `(model_version, seed) -> {run_id: (fold, linhas, {horizonte:
 frozenset(target_timestamp)})}`; run de `dim_run` sem predição (órfão de uma
 queda) aparece com 0 linhas — é o que a retomada do cohort usa para distinguir
 órfão, completo e parcial (ADR 5.5.0003).
+
+Só linhas **de teste** contam (ADR 7.1.0002 item 4, I10 da 7.1): as linhas
+`split = "calib"` que a inferência grava no mesmo fato são descartadas antes da
+contagem e da coleta de alvos — sem isso a retomada e o `verify` da 5.5 veriam
+um run completo como "parcial". Run com só linhas de calib conta como órfão.
 """
 
 from __future__ import annotations
@@ -32,6 +37,7 @@ if TYPE_CHECKING:
 _SILVER = "silver"
 _DIM_RUN = "dim_run"
 _FACT = "fact_oos_predictions"
+_TEST_SPLIT = "test"
 
 RunSummary = tuple[str, int, Mapping[int, frozenset[str]]]
 
@@ -63,7 +69,7 @@ class ParquetCohortRunIndex:
         )
         for fact in facts:
             run_id = str(fact["run_id"])
-            if run_id not in run_ids:
+            if run_id not in run_ids or fact.get("split") != _TEST_SPLIT:
                 continue
             rows_by_run[run_id] += 1
             # Linha do silver chega como Mapping[str, object]; o schema pandera
