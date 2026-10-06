@@ -15,14 +15,26 @@ import pytest
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.christoffersen_monte_carlo import (  # noqa: E501
     ChristoffersenMonteCarloGoldBuilder,
 )
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.differential_acf import (  # noqa: E501
+    DifferentialAcfGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.differential_breaks import (  # noqa: E501
+    DifferentialBreaksGoldBuilder,
+)
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_profiles import (  # noqa: E501
     DmProfilesGoldBuilder,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_seed_fraction import (  # noqa: E501
     DmSeedFractionGoldBuilder,
 )
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.loss_differentials import (  # noqa: E501
+    LossDifferentialsGoldBuilder,
+)
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.mcs_block_sensitivity import (  # noqa: E501
     McsBlockSensitivityGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.partial_degeneracy import (  # noqa: E501
+    PartialDegeneracyGoldBuilder,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import GoldInputs
 from financial_forecasting.features.evaluation.domain.services.dm_profiles import (
@@ -250,3 +262,112 @@ def test_r0_builds_mc_but_no_block_rows() -> None:
     inputs = completed_inputs_r0()
     assert McsBlockSensitivityGoldBuilder().build(inputs).rows == ()
     assert ChristoffersenMonteCarloGoldBuilder().build(inputs).rows
+
+
+@pytest.mark.contract
+def test_partial_degeneracy_symmetric_rows_are_the_gate_rates() -> None:
+    """CA6: linhas `symmetric` = `pair_collapse_rates` do gate, célula a célula."""
+    inputs = completed_inputs()
+    table = PartialDegeneracyGoldBuilder().build(inputs)
+    assert table.rows
+    for horizon_report in inputs.horizon_reports:
+        for series in horizon_report.series:
+            got = [
+                (r["level_low"], r["level_high"], r["collapse_rate"])
+                for r in table.rows
+                if (r["model"], r["seed"], r["horizon"], r["sample"], r["pair_kind"])
+                == (
+                    series.model,
+                    series.seed,
+                    horizon_report.horizon,
+                    series.sample.value,
+                    "symmetric",
+                )
+            ]
+            assert got == list(series.coverage.degeneracy.pair_collapse_rates)
+    assert all(r["tolerance"] == inputs.parameters.degeneracy_tolerance for r in table.rows)
+    assert any(r["pair_kind"] == "adjacent" for r in table.rows)
+
+
+@pytest.mark.contract
+def test_differential_acf_and_breaks_cell_by_cell() -> None:
+    inputs = completed_inputs()
+    acf = DifferentialAcfGoldBuilder().build(inputs)
+    breaks = DifferentialBreaksGoldBuilder().build(inputs)
+    reports = [
+        row.report
+        for profile in inputs.profile_reports
+        for row in profile.stationarity or ()
+        if row.report is not None
+    ]
+    assert reports
+    assert len(breaks.rows) == len(reports)
+    computed = [r for r in reports if r.statistic is not None]
+    assert len(acf.rows) == sum(len(r.acf) for r in computed)
+    by_pair = {(r["horizon"], r["model_a"], r["model_b"]): r for r in breaks.rows}
+    for report in reports:
+        row = by_pair[(report.horizon, *report.pair)]
+        assert (row["statistic"], row["p_value"], row["rejected"], row["status"]) == (
+            report.statistic,
+            report.p_value,
+            report.rejected,
+            report.status.value,
+        )
+        assert row["break_target_timestamp"] == report.break_target_timestamp
+    first = computed[0]
+    got = [
+        r["acf"]
+        for r in acf.rows
+        if (r["horizon"], r["model_a"], r["model_b"]) == (first.horizon, *first.pair)
+    ]
+    assert got == list(first.acf)
+
+
+@pytest.mark.contract
+def test_loss_differentials_cell_by_cell() -> None:
+    inputs = completed_inputs()
+    table = LossDifferentialsGoldBuilder().build(inputs)
+    expected = sum(
+        len(series.values) for profile in inputs.profile_reports for series in profile.differentials
+    )
+    assert len(table.rows) == expected
+    profile = inputs.profile_reports[0]
+    series = profile.differentials[0]
+    got = [
+        (r["target_timestamp"], r["differential"], r["fold"])
+        for r in table.rows
+        if (r["horizon"], r["model_a"], r["model_b"]) == (profile.horizon, *series.pair)
+    ]
+    folds = series.folds or (None,) * len(series.values)
+    assert got == list(zip(series.target_timestamps, series.values, folds, strict=True))
+
+
+@pytest.mark.contract
+def test_r0_writes_only_the_differentials() -> None:
+    """I9: sem regras, degeneração parcial, ACF e quebras vazias; d_t gravada sempre."""
+    inputs = completed_inputs_r0()
+    assert PartialDegeneracyGoldBuilder().build(inputs).rows == ()
+    assert DifferentialAcfGoldBuilder().build(inputs).rows == ()
+    assert DifferentialBreaksGoldBuilder().build(inputs).rows == ()
+    assert LossDifferentialsGoldBuilder().build(inputs).rows
+
+
+@pytest.mark.contract
+def test_stationarity_error_maps_to_an_error_row() -> None:
+    inputs = completed_inputs()
+    profile = inputs.profile_reports[0]
+    assert profile.stationarity is not None
+    failed = tuple(
+        dataclasses.replace(row, status=UnitStatus.ERROR, detail="ValueError: x", report=None)
+        for row in profile.stationarity
+    )
+    changed = dataclasses.replace(
+        inputs, profile_reports=(dataclasses.replace(profile, stationarity=failed),)
+    )
+    rows = DifferentialBreaksGoldBuilder().build(changed).rows
+    assert rows and all(
+        (r["status"], r["undefined_reason"], r["detail"], r["statistic"])
+        == ("error", "error", "ValueError: x", None)
+        for r in rows
+    )
+    assert DifferentialAcfGoldBuilder().build(changed).rows == ()

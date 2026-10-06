@@ -165,6 +165,39 @@ GOLD_CHRISTOFFERSEN_MONTE_CARLO: Final = GoldTableSchema(
     ),
 )
 
+GOLD_PARTIAL_DEGENERACY: Final = GoldTableSchema(
+    name="gold_partial_degeneracy",
+    key=("model", "seed", "horizon", "sample", "pair_kind", "level_low", "level_high"),
+    read_columns=("status", "detail", "collapse_rate", "tolerance"),
+)
+GOLD_DIFFERENTIAL_ACF: Final = GoldTableSchema(
+    name="gold_differential_acf",
+    key=("horizon", "model_a", "model_b", "lag"),
+    read_columns=("acf", "n_points", "max_lag"),
+)
+GOLD_DIFFERENTIAL_BREAKS: Final = GoldTableSchema(
+    name="gold_differential_breaks",
+    key=("horizon", "model_a", "model_b"),
+    read_columns=(
+        "status",
+        "undefined_reason",
+        "detail",
+        "statistic",
+        "p_value",
+        "rejected",
+        "alpha",
+        "horizon_used",
+        "break_target_timestamp",
+        "n_points",
+        "max_lag",
+    ),
+)
+GOLD_LOSS_DIFFERENTIALS: Final = GoldTableSchema(
+    name="gold_loss_differentials",
+    key=("horizon", "model_a", "model_b", "target_timestamp"),
+    read_columns=("fold", "differential"),
+)
+
 GOLD_SCHEMAS: Final[Mapping[str, GoldTableSchema]] = MappingProxyType(
     {
         schema.name: schema
@@ -178,6 +211,10 @@ GOLD_SCHEMAS: Final[Mapping[str, GoldTableSchema]] = MappingProxyType(
             GOLD_DM_SEED_FRACTION,
             GOLD_MCS_BLOCK_SENSITIVITY,
             GOLD_CHRISTOFFERSEN_MONTE_CARLO,
+            GOLD_PARTIAL_DEGENERACY,
+            GOLD_DIFFERENTIAL_ACF,
+            GOLD_DIFFERENTIAL_BREAKS,
+            GOLD_LOSS_DIFFERENTIALS,
         )
     }
 )
@@ -192,5 +229,9 @@ CONFIRMATORY_TABLES: Final[tuple[str, ...]] = (
     GOLD_DM_SEED_FRACTION.name,
     GOLD_MCS_BLOCK_SENSITIVITY.name,
     GOLD_CHRISTOFFERSEN_MONTE_CARLO.name,
+    GOLD_PARTIAL_DEGENERACY.name,
+    GOLD_DIFFERENTIAL_ACF.name,
+    GOLD_DIFFERENTIAL_BREAKS.name,
+    GOLD_LOSS_DIFFERENTIALS.name,
 )
 """As tabelas que carregam `preregistration_ref` (ADR 6.4.0006 item 4)."""

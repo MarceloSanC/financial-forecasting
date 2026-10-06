@@ -432,6 +432,10 @@ def test_schema_tables_complete() -> None:
         "gold_dm_seed_fraction",
         "gold_mcs_block_sensitivity",
         "gold_christoffersen_monte_carlo",
+        "gold_partial_degeneracy",
+        "gold_differential_acf",
+        "gold_differential_breaks",
+        "gold_loss_differentials",
     }
     assert set(CONFIRMATORY_TABLES) == set(GOLD_SCHEMAS) - {"gold_quality_checks"}
     for name, schema in GOLD_SCHEMAS.items():
