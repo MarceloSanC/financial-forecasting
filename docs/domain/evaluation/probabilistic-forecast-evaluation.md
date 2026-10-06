@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 6 (
 keywords: [domain, evaluation, pinball, crps, interval-score, winkler, picp, mpiw, reliability, sharpness, degeneracy-gate, diebold-mariano, hln, holm, mcs, christoffersen, kupiec, var, preregistration, scorecard, per-horizon]
 status: accepted
 created_at: 2026-09-12
-updated_at: 2026-10-03
+updated_at: 2026-10-06
 bounded_context: evaluation
 subdomain: probabilistic-forecast-evaluation
 references:
@@ -1763,8 +1763,9 @@ da 5.1 (folds expansivos — §6.8), o cohort seeds × folds e o congelar+hashea
   §8 R-CONFORMAL-1; ADR 5.1.0002). O CQR é **benchmark comparativo** de
   cobertura (overview §11, `0_0_0008`), não régua de H1 (§4.4) nem membro da
   família de H2 (§6.4). A teoria da cobertura conformal e sua comparação com
-  a calibração nativa pertencem ao doc de domínio do gate do Step 7; quando
-  esse doc existir, as métricas de §4 aplicadas aos intervalos conformais
+  a calibração nativa pertencem ao
+  [doc de domínio do Step 7](../inference/conformal-benchmark-and-feature-attribution.md)
+  (§4 daquele doc); as métricas do §4 deste doc aplicadas aos intervalos conformais
   reusam **estas** definições (PICP, MPIW, Wilson, hits) sem re-derivação.
 - **Calibração condicional no valor previsto** (T-calibration / CORP de
   Gneiting & Resin 2023) — extensão não adotada (§4.1).
