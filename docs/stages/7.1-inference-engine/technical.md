@@ -1326,4 +1326,8 @@ exit=0
 ```
 **Razão:** o slice nasce vazio, e `lint-imports` verde sobre pacotes vazios não prova nada. Esta prova manual, junto com os oito casos novos de `_REAL_VIOLATION_CASES`, um por contrato e por módulo proibido, mostra que o contrato reage.
 
+### 2026-10-06 — [deviation] task-01-fix — o fake do `CohortRunIndex` descarta `split != "test"` por inteiro (Checkpoint C, C1-1) — Claude (Opus 5.5)
+**Contexto:** na Task 01, o `record(..., split="calib")` do `InMemoryCohortRunIndex` criava um órfão quando o run ainda não existia. O ADR 7.1.0002 item 4 não prevê isso (diz "discards non-test entries"), e nenhum contrato exercitava o caso.
+**O que mudou:** agora o registro de calib é descartado sem efeito algum. Num run só com calib, o órfão vem do `record(..., rows=0)` de teste, como a perna fake do contrato já fazia. Os dois testes de calib continuam verdes nas duas pernas.
+
 <!-- END: post-execution -->
