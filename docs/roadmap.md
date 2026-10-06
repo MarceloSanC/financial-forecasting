@@ -6,7 +6,7 @@ keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stag
 status: in_progress
 created_at: 2026-06-22
 updated_at: 2026-10-06
-last_reviewed_at: 2026-10-05
+last_reviewed_at: 2026-10-06
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -67,7 +67,7 @@ graph LR
 | 3 | Feature engineering e dataset | Dataset TFT reconstruído com features causais (indicadores validados, sentimento, fundamentos as-of, derivadas) + contratos anti-leakage | done | 3.1–3.5 |
 | 4 | Analytics store (silver) | Silver modular (schema por tabela), repositório append-only, persister único de predições multi-horizonte | done | 4.1–4.3 |
 | 5 | Modelagem, baselines e treino | TFT re-treinado + GBM quantílico + baselines naive/estatísticos sobre walk-forward purgado/embargoado; cohort confirmatório AAPL | done | 5.1–5.5 |
-| 6 | Núcleo estatístico confirmatório | Pipeline gold confirmatória: pinball/CRPS/DM/MCS/Holm/PICP-Christoffersen + gates + scorecard pré-registrado, no domínio e validada por oráculo | in_progress | 6.1–6.6 |
+| 6 | Núcleo estatístico confirmatório | Pipeline gold confirmatória: pinball/CRPS/DM/MCS/Holm/PICP-Christoffersen + gates + scorecard pré-registrado, no domínio e validada por oráculo | done | 6.1–6.6 |
 | 7 | Inferência, conformal, explicabilidade e API | Motor de inferência + conformal CQR (benchmark) + explicabilidade (VSN/permutação/ablação) servidos por API fina | not_started | 7.1–7.4 |
 | 8 | Reprodução, equivalência e relatório | Protocolo completo em AAPL; equivalência vs evidência anterior auditada; plots e dossiê de rastreabilidade | not_started | 8.1–8.3 |
 
@@ -104,7 +104,7 @@ graph LR
 | `6.3-calibration-risk-backtests` | evaluation | domain | vertical | done | 6.1 |
 | `6.4-gold-builders-and-quality-gates` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.2, 6.3 |
 | `6.5-preregistration-and-scorecard` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.4, 5.5 |
-| `6.6-scorecard-profiles` | evaluation | multi (domain + application + adapters/out) | vertical | draft | 6.5 |
+| `6.6-scorecard-profiles` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.5 |
 | `7.1-inference-engine` | inference | multi (application + adapters/out) | vertical | draft | 5.4, 4.3 |
 | `7.2-conformal-cqr` | inference | multi (domain + adapters/out) | vertical | draft | 7.1, 5.1 |
 | `7.3-explainability` | inference | multi (domain + adapters/out; + modeling) | vertical | draft | 7.1, 6.1 |
@@ -975,7 +975,7 @@ arquivos_a_modificar:
   - docs/preregistration/aapl_confirmatory.md e tests/integration/features/evaluation/test_preregistration_consistency.py (só se houver r1, F8e)
 contratos_introduzidos: [tabelas gold de perfil (DM por fold/seed/τ, MCS por comprimento de bloco, estacionariedade de d_t, degeneração por par, p-valor Monte Carlo de Christoffersen), builders gold correspondentes, serviço de domínio do diagnóstico de estacionariedade de d_t (+ backend/oráculo se o concept exigir), cálculo de degeneração por par, extensão de RefreshParameters]
 contratos_consumidos: [SeriesAssembly e RefreshGold (6.4), DieboldMariano/HLN e ModelConfidenceSet (6.2), ChristoffersenTest.monte_carlo_p_values (6.3), degeneração (6.1), Preregistration.profiles + GoldGenerationReader + gold_schema + refresh_command_from + check_manifest (6.5)]
-definition_of_done: "DM, MCS e Christoffersen dos perfis reusam os serviços da 6.2/6.3 sobre séries montadas pelo SeriesAssembly, sem reimplementá-los; o diagnóstico de estacionariedade de d_t e a degeneração por par são serviços de domínio novos validados por oráculo; cada perfil gera uma tabela gold nova com schema no gold_schema, produzida pelo RefreshGold na mesma geração e coberta pelo manifesto e pelo check_generation; os parâmetros vêm do pré-registro ancorado (r0, ou r1 cega se o concept escolher) pela derivação única refresh_command_from, sem constante duplicada, e os perfis sem parâmetro congelado seguem o caminho fixado no concept (r1 cega antes da 8.1, valor citado do doc de domínio ou rótulo exploratório), com nota datada no ADR 6.5.0008; o ScorecardVerdict é idêntico com e sem essas tabelas (I12); integração e e2e só sobre silver sintético, sem nenhuma métrica sobre o parent_sweep_id do cohort real (cegamento; a primeira execução real é da 8.1)."
+definition_of_done: "DM, MCS e Christoffersen dos perfis reusam os serviços da 6.2/6.3 sobre séries montadas pelo SeriesAssembly, sem reimplementá-los; o diagnóstico de estacionariedade de d_t (ACF + CUSUM da média escalado pela variância do DM primário) é serviço de domínio novo validado por oráculo (statsmodels/scipy); a degeneração parcial copia os pares simétricos que o gate da 6.1 já calcula e acrescenta os adjacentes pela função do dono (`adjacent_collapse_rates`), com a mesma máscara de linhas não-degeneradas e a mesma tolerância do plano (D5), fora do caminho do veredito; cada perfil gera uma tabela gold nova com schema no gold_schema, produzida pelo RefreshGold na mesma geração e coberta pelo manifesto e pelo check_generation; os parâmetros vêm do pré-registro ancorado (r0, ou r1 cega se o concept escolher) pela derivação única refresh_command_from, sem constante duplicada, e as regras dos perfis que o r0 não nomeia ficam congeladas pela emenda cega r1 ancorada (`aapl_confirmatory-r1-bfa8028498ca`, ADR 6.6.0001) — sob o r0 esses sete perfis saem `not_frozen_in_revision` —, com nota datada no ADR 6.5.0008; o ScorecardVerdict é idêntico com e sem essas tabelas (I12); integração e e2e só sobre silver sintético, sem nenhuma métrica sobre o parent_sweep_id do cohort real (cegamento; a primeira execução real é da 8.1)."
 non_goals: [diagrama de sharpness, distribuição de largura e demais plots (8.3), perfis que já saem do gold da 6.4 (6.5), execução sobre o cohort AAPL real e gravação do scorecard (8.1), mudar regra do veredito ou parâmetros já congelados no r0]
 complexidade_estimada: M
 gate_mode: strict
@@ -1108,7 +1108,7 @@ Roda o protocolo confirmatório completo em AAPL, audita equivalência vs evidê
 
 **Descrição humana:** Orquestração ponta-a-ponta do confirmatório: do cohort treinado (5.5) → métricas/inferência (Step 6) → scorecard pré-registrado, gerando os artefatos gold confirmatórios e o veredito mecânico por H1/H2/H3.
 
-**Notas da 6.5:** depende também da Stage **6.6** (issue #129; perfis de séries novas — DM por fold/seed/τ, sensibilidades de bloco do MCS, estacionariedade de d_t, degeneração parcial por par, p-valor Monte Carlo — antes da 8.1) e dos pré-registros de H3 (7.3) e do CQR (7.2), todos ancorados antes da corrida. O refresh do gold é chamado com `refresh_command_from(plano, ref)` (derivação única do comando); o `ScorecardResult.as_mapping()` é gravado **fora** de `current/`, em `gold/asset=<a>/parent_sweep_id=<p>/scorecard/<preregistration_ref>/` (como `gold_model_comparison_confirmatory_scorecard`, registrando o manifesto lido); o primeiro refresh confirmatório posta um comentário na issue da Stage (fecho da ordem, ADR 6.5.0003 item 4).
+**Notas da 6.5/6.6:** a dependência da Stage **6.6** está satisfeita (issue #129; os perfis de séries novas saem em oito tabelas gold na mesma geração e no perfil do scorecard, nunca no veredito). A 8.1 **julga pela r1** (`aapl_confirmatory-r1-bfa8028498ca`, emenda cega ancorada na #129 em 2026-10-06): `refresh_command_from(r1, ref)` e `BuildConfirmatoryScorecard(revision=1)`. Depende também dos pré-registros de H3 (7.3) e do CQR (7.2), todos ancorados antes da corrida. O refresh do gold é chamado com `refresh_command_from(plano, ref)` (derivação única do comando); o `ScorecardResult.as_mapping()` é gravado **fora** de `current/`, em `gold/asset=<a>/parent_sweep_id=<p>/scorecard/<preregistration_ref>/` (como `gold_model_comparison_confirmatory_scorecard`, registrando o manifesto lido); o primeiro refresh confirmatório posta um comentário na issue da Stage (fecho da ordem, ADR 6.5.0003 item 4).
 
 **Descrição para IA:**
 ```yaml
@@ -1200,6 +1200,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 | 2026-10-05 | Stage `6.6-scorecard-profiles` criada; Step 6 volta a `in_progress`; a 8.1 depende da 6.6 | A issue #129 (perfis do scorecard com séries novas) toca schema persistido e tem decisões de concept em aberto — litmus de forma (PIPELINE §4.5) manda Stage; decisão do humano: Step 6, não 8.0 |
 | 2026-10-06 | Texto das Stages 7.1–7.4 corrigido (bit a bit qualificado; guardrail reusado; emissão do calib; `0_0_0008` sai da 7.2; pré-registro pela maquinaria da 6.5; H3 por concordância de permutação e ablação LOCO, VSN descritiva; "contrato P2" abandonado; `app.py` já existe); a 8.1 depende também da 7.3 (tabela + grafo) | Gate de domínio do Step 7 (issue #150; [doc de domínio inference](./domain/inference/conformal-benchmark-and-feature-attribution.md); ADRs 0.0.0057, 0.0.0007, 0.0.0008) |
 | 2026-10-06 | 7.3 declara o código novo de modelagem da ablação (subconjunto de famílias, identidade por configuração, cohort de ablação, dispositivo ≠ cpu), complexidade possivelmente L e custo medido; 8.1 consome os serviços e o cohort de ablação da 7.3; lacuna da variante do CQR fechada | Revisão do gate do Step 7 (issue #150) |
+| 2026-10-06 | Stage `6.6-scorecard-profiles` `done`; Step 6 `done`; DoD da 6.6 reescrito pelo D5 (pares adjacentes pela função do dono, não serviço novo) e pela r1 cega; a 8.1 julga pela r1 | Fechamento da Stage 6.6 (issue #129; ADRs 6.6.0001–0003; r1 ancorada) |
 
 ## Próxima revisão de roadmap
 

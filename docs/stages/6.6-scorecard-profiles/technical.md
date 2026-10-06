@@ -1045,4 +1045,37 @@ para o `BuildConfirmatoryScorecard` percorrer a cadeia; o mesmo cohort é refres
 pelo r0 e depois pela r1. A Task 21 (nota no ADR) foi commitada antes da 20 — sem
 dependência entre elas.
 
+### 2026-10-06 — [decision] Checkpoint C blocos 5–6 e Auditoria de Testes — disposições — Claude (Opus 5.5)
+- **Bloco 5** (aac2bec..05373d7; check-block 5836 passed): G-5 esquema do MCS por bloco
+  pela regra, G-6 contagem no log, T-1 contagem exata, T-2 erro de programação propaga,
+  T-3..T-8 linha inteira dos builders com casos de erro, G-2 adjacentes = dono —
+  corrigidos; G-3/G-4 registrados acima; G-7 (`type: ignore` em testes) sem ação.
+- **Bloco 6** (05373d7..760d002; check-block 5910 passed): **H-1 (alta)** a justificativa
+  da r1 e o espelho diziam "antes de qualquer execução sobre o cohort", contra o
+  `blinding_statement` (o refresh rodou uma vez num teste da 6.4, sem valor lido) —
+  corrigido antes da âncora; o hash da r1 mudou de `d0d20b9ddbb7` para
+  `bfa8028498ca`. H-2..H-7 corrigidos (H-3: `profile_states` obrigatório e conferido
+  contra `declared_not_built`; H-7: BLOCKED lista exatamente as tabelas que rodam
+  bloqueadas).
+- **Auditoria de Testes** (5 rodadas, mutação real em cópia `:ro`): r1 26/30 mortos —
+  M18/M29 (reps/seed/alpha do MCS por bloco) e M26 (par constante ≠ erro) cobertos; r2
+  N3/N4 (`ScorecardProfile.__post_init__`); r3 M4 (limites exatos da janela do DM);
+  r4 N5 (estimador primário em `profile_settings_from`); **r5: os seis itens "sim", 15/15
+  mortos**. Equivalentes reconhecidos: troca do limiar e trava `[0, 1]` do
+  `kolmogorov_sf`; filtro DGT em `_monte_carlo` (h = 1).
+- **Incidente de processo:** duas vezes, 34 arquivos fora do escopo apareceram
+  reformatados na worktree (nenhum gate do Makefile formata; atribuído a revisor);
+  restaurados com `git restore` antes de cada commit, prompts seguintes proibiram
+  formatador/`--fix` e montaram a worktree `:ro`.
+- **Gate de saída:** a 1ª passada do `make check` falhou no gate de pureza dos unit
+  tests de evaluation (as guardas do CA13/CA14 leem arquivos) — o T1 do slice não roda
+  esse gate; movidas para `tests/architecture/`.
+
+### 2026-10-06 — [decision] Task 22: rebase antes da âncora — Claude (Opus 5.5)
+A branch foi rebaseada em `origin/develop` (PR #152, só docs) **antes** da tag, para a
+tag apontar para o commit que entra no PR (merge commit preserva-o). Tag
+`preregistration/aapl_confirmatory-r1-bfa8028498ca` no commit `3b4285d` (última mudança
+do TOML da r1; arquivo byte-igual ao de HEAD), comentário na #129 criado pelo servidor
+em 2026-10-06T09:27:41Z, posterior à âncora do r0 (2026-09-30T19:53:47Z).
+
 <!-- END: post-execution -->
