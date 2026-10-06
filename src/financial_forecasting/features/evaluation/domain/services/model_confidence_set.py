@@ -112,13 +112,14 @@ def block_sensitivity_length(rule: str, *, horizon: int, n_points: int) -> int:
 
     Raises:
         ValueError: `rule` fora de `BLOCK_SENSITIVITIES`; `horizon` inválido; `n_points`
-            não-`int`, `bool` ou < 1.
+            não-`int` ou `bool`; T < 2 ou T ≤ h (o `check_points` da série pareada, dono).
     """
     if rule not in BLOCK_SENSITIVITIES:
         raise ValueError(f"rule must be one of {list(BLOCK_SENSITIVITIES)}, got {rule!r}")
-    validate_horizon(horizon, field="horizon")
-    if isinstance(n_points, bool) or not isinstance(n_points, int) or n_points < 1:
-        raise ValueError(f"n_points must be an int >= 1, got {n_points!r}")
+    check_horizon(horizon)
+    if isinstance(n_points, bool) or not isinstance(n_points, int):
+        raise ValueError(f"n_points must be an int, got {n_points!r}")
+    check_points(n_points, horizon)
     if rule == "h":
         return horizon
     root = math.isqrt(n_points)
