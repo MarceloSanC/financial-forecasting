@@ -115,7 +115,7 @@ A disciplina anti-p-hacking é estrutural: **pré-registro imutável hasheado** 
 | **R-CONFORMAL-1** | Conformal frágil em série temporal (permutabilidade violada) | Alta | médio | Reportar cobertura **empírica** (não "garantida") + 4 invariantes (calib set dedicado, por fold/horizonte, embargo, linguagem) |
 | **R-SUPPLY-1** | `pandas-ta` com fonte apagada / sem manutenção | Alta | alto | Migrar para `pandas-ta-classic`/TA-Lib + **validar cada indicador contra o paper** + teste de leakage |
 | **R-SCOPE-1** | Escopo inflar (multi-asset, cripto, intraday, trading) | Média | alto | Gates de escopo; multi-asset só **ready**; cripto/microestrutura como trabalho futuro |
-| **R-COST-1** | Custo de re-treino (GPU) | Baixa | médio | Cohort pequeno AAPL; sweeps exploratórios separados do confirmatório |
+| **R-COST-1** | Custo de re-treino (GPU) | Média | médio | Cohort pequeno AAPL; sweeps exploratórios separados do confirmatório. Medido: o cohort confirmatório (10 seeds × 6 folds) levou ~19 h em CPU; a ablação da 7.3 (5 configurações × 6 folds × 10 seeds ≈ 300 treinos) daria ~95 h em CPU → GPU (Linux/ROCm) com piloto 1 seed × 1 fold antes (ADR 0.0.0007) |
 | **R-METRIC-1** | Métrica reimplementada divergir do correto sem detecção | Média | alto | Contratos por unidade + oráculo + gate de degeneração separado do guardrail |
 
 ## 9. Glossário
