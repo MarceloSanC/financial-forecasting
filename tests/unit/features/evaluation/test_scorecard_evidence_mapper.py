@@ -463,3 +463,16 @@ def test_mcs_horizon_of_wrong_type_does_not_mask_a_later_mismatch() -> None:
     assert stored.set_cell(GOLD_MCS_RESULTS.name, first, "horizon", 1.0)
 
     _mismatch(stored, MismatchField.MCS_BLOCK_RULE)
+
+
+@pytest.mark.unit
+def test_mcs_horizon_of_wrong_type_alone_is_named_corruption() -> None:
+    """Checkpoint C bloco 1 r2 (N1): sem mismatch, o horizonte de tipo errado é corrupção
+    nomeando a coluna `horizon` (não a estimativa, que é válida)."""
+    stored = make_stored(_PLAN)
+    first = _is(horizon=1, scheme="moving_block", model="baseline_ar1")
+    assert stored.set_cell(GOLD_MCS_RESULTS.name, first, "horizon", 1.0)
+    with pytest.raises(
+        GoldGenerationCorruptError, match=r"gold_mcs_results\.horizon: expected int"
+    ):
+        _map(stored)

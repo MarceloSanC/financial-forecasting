@@ -60,6 +60,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     col_bool,
     col_float,
     col_int,
+    col_str,
 )
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     block_length_rule,
@@ -202,7 +203,7 @@ def check_mcs_rules(prereg: Preregistration, tables: _Tables) -> None:
     for row in tables.mcs:
         expected = _block_rule(row)
         if expected is None:
-            continue  # estimativa ausente ou inválida: corrupção, conferida depois de todo mismatch
+            continue  # estimativa/horizonte inválido: corrupção, conferida depois de todo mismatch
         if col(row, GOLD_MCS_RESULTS, "block_size") != expected:
             raise _mismatch(
                 MismatchField.MCS_BLOCK_RULE,
@@ -239,8 +240,12 @@ def _block_rule(row: Row) -> int | None:
 
 
 def check_completed(tables: _Tables) -> None:
-    """Estimativa de bloco ausente ou inválida e `ERROR` + `FAIL` num `COMPLETED` são corrupção."""
+    """Horizonte ou estimativa de bloco inválidos e `ERROR` + `FAIL` num `COMPLETED` são corrupção.
+
+    Já depois de todo mismatch: aqui os tipos são conferidos pelos acessores tipados.
+    """
     for row in tables.mcs:
+        col_int(row, GOLD_MCS_RESULTS, "horizon")  # tipo errado → corrupção nomeando a coluna
         estimate = col(row, GOLD_MCS_RESULTS, "max_block_estimate")
         if estimate is None:
             raise GoldGenerationCorruptError(
@@ -254,8 +259,8 @@ def check_completed(tables: _Tables) -> None:
             )
     for row in tables.checks:
         failed = (
-            col(row, GOLD_QUALITY_CHECKS, "severity") == CheckSeverity.ERROR.value
-            and col(row, GOLD_QUALITY_CHECKS, "outcome") == CheckOutcome.FAIL.value
+            col_str(row, GOLD_QUALITY_CHECKS, "severity") == CheckSeverity.ERROR.value
+            and col_str(row, GOLD_QUALITY_CHECKS, "outcome") == CheckOutcome.FAIL.value
         )
         if failed:
             raise GoldGenerationCorruptError(
