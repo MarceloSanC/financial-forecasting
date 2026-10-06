@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import subprocess
 import sys
 import textwrap
@@ -79,6 +80,7 @@ def test_locate_returns_the_single_ckpt_and_its_sha256(
 
     location = locator.locate(artifact_dir=directory)
 
+    assert Path(location.path).is_absolute()
     assert Path(location.path).name == "epoch=3-step=40.ckpt"
     assert Path(location.path).parent.as_posix().endswith(Path(directory).as_posix())
     assert location.sha256 == hashlib.sha256(_CHECKPOINT_BYTES).hexdigest()
@@ -103,6 +105,23 @@ def test_locate_missing_directory_raises_not_found(
 
     with pytest.raises(CheckpointNotFoundError):
         locator.locate(artifact_dir=str(tmp_path / "never-created"))
+
+
+@pytest.mark.contract
+def test_relative_directory_resolves_to_an_absolute_path(
+    leg: tuple[CheckpointLocator, _MakeDir], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    locator, make_dir = leg
+    directory = make_dir({"best.ckpt": _CHECKPOINT_BYTES})
+    monkeypatch.chdir(tmp_path)
+    relative = os.path.relpath(directory, tmp_path)
+    assert not Path(relative).is_absolute()
+
+    location = locator.locate(artifact_dir=relative)
+
+    assert Path(location.path).is_absolute()
+    assert Path(location.path).parent == Path(directory)
+    assert location.sha256 == hashlib.sha256(_CHECKPOINT_BYTES).hexdigest()
 
 
 @pytest.mark.contract
