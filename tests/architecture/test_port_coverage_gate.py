@@ -323,6 +323,14 @@ def test_real_repo_consumer_ports_resolve_to_the_supplier_use_cases(gate: Module
     ):
         assert ports[("modeling", name)].contract is not None
         assert _contract_satisfies(gate, persistence, fake, real)
+    # O RunRecordPersister não tem homônimo: o contrato escolhido é exatamente o dele.
+    assert ports[("modeling", "RunRecordPersister")].contract.name == persistence.name
+    # O PredictionPersister tem o espelho do inference: o gate (cego a slice) pode
+    # escolher qualquer uma das duas suítes que satisfazem o predicado.
+    assert ports[("modeling", "PredictionPersister")].contract.name in {
+        "test_persistence_ports_contract.py",
+        "test_consumer_mirror_ports_contract.py",
+    }
 
 
 def test_real_repo_inference_mirror_ports_have_their_own_contract(gate: ModuleType) -> None:
