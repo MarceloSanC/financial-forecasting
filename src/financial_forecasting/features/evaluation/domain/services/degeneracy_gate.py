@@ -145,21 +145,9 @@ def adjacent_collapse_rates(
         ValueError: `tolerance` negativa ou não-finita.
     """
     validate_tolerance(tolerance, field="tolerance")
-    degenerate = _degenerate_mask(series, tolerance)
-    kept = [i for i, is_degenerate in enumerate(degenerate) if not is_degenerate]
-    rates: list[tuple[float, float, float | None]] = []
-    for k in range(len(series.levels) - 1):
-        lower_level, upper_level = series.levels[k], series.levels[k + 1]
-        if not kept:
-            rates.append((lower_level, upper_level, None))
-            continue
-        collapsed = sum(
-            1
-            for i in kept
-            if series.scored_values(i)[k + 1] - series.scored_values(i)[k] <= tolerance
-        )
-        rates.append((lower_level, upper_level, collapsed / len(kept)))
-    return tuple(rates)
+    levels = series.levels
+    adjacent = tuple(((levels[k], levels[k + 1]), (k, k + 1)) for k in range(len(levels) - 1))
+    return _collapse_rates(series, _degenerate_mask(series, tolerance), adjacent, tolerance)
 
 
 def _degenerate_mask(series: CoverageSeries, tolerance: float) -> tuple[bool, ...]:
@@ -173,9 +161,23 @@ def _degenerate_mask(series: CoverageSeries, tolerance: float) -> tuple[bool, ..
 def _pair_collapse_rates(
     series: CoverageSeries, degenerate: tuple[bool, ...], tolerance: float
 ) -> tuple[tuple[float, float, float | None], ...]:
+    symmetric = tuple(zip(series.symmetric_pairs, series.symmetric_pair_indices, strict=True))
+    return _collapse_rates(series, degenerate, symmetric, tolerance)
+
+
+_Pair = tuple[tuple[float, float], tuple[int, int]]
+
+
+def _collapse_rates(
+    series: CoverageSeries,
+    degenerate: tuple[bool, ...],
+    pairs: tuple[_Pair, ...],
+    tolerance: float,
+) -> tuple[tuple[float, float, float | None], ...]:
+    """Regra única do colapso parcial por par: `q_alto - q_baixo ≤ tolerance` entre as
+    linhas NÃO-degeneradas; `None` sem nenhuma (C6). Pares simétricos e adjacentes."""
     kept = [i for i, is_degenerate in enumerate(degenerate) if not is_degenerate]
     rates: list[tuple[float, float, float | None]] = []
-    pairs = zip(series.symmetric_pairs, series.symmetric_pair_indices, strict=True)
     for (lower_level, upper_level), (k_low, k_high) in pairs:
         if not kept:
             rates.append((lower_level, upper_level, None))
