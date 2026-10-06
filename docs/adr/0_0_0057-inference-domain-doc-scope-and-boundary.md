@@ -109,7 +109,8 @@ on 2026-10-06. The load-bearing ones are recorded in
 - Five items are flagged in the doc (§5.7) as still open for Stage 7.3's
   preregistration (interval level; multiplicity; negative importances;
   pairing key between horizons; joint bootstrap block), and one as an
-  out-of-scope issue to be opened (the volatility features' family).
+  out-of-scope issue, [#151](https://github.com/MarceloSanC/financial-forecasting/issues/151)
+  (the volatility features' family).
 
 ### Neutral / trade-offs accepted
 - The doc was ratified (`accepted`) on 2026-10-06 by delegation of the human;

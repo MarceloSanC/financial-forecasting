@@ -87,7 +87,7 @@ conformal coverage.
    Tab. 1); the conformal output is **not rearranged** (that would void the
    per-tail guarantee) and the nesting-violation rate is profile. The extreme
    pair (τ·n ≈ 5 in calib) is reported, not excluded.
-9. **Seeds (E, coherence).** Conformalize each seed separately; report the
+9. **Seeds (C, rung 1: coherence with ADR 0.0.0010).** Conformalize each seed separately; report the
    mean coverage across seeds, dispersion in the profile (ADR 0.0.0010 item 5).
 10. **Dispersion (E).** Report the conditional-coverage reference
     Beta(n+1−l, l), l = ⌊(n+1)α⌋ (Angelopoulos & Bates 2023 §3.2), for n = 252,

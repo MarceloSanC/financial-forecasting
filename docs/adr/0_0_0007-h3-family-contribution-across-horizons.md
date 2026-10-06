@@ -78,7 +78,7 @@ the ablation, and the gate's research found a structural problem:
    confirmatory one; each configuration uses the candidate's frozen training
    procedure. Device and torch build are a Stage 7.3 decision and enter the
    hash. Ablation share uses L_{−f} − L_full, with the same bootstrap.
-5. **Uncertainty (E).** Stationary block bootstrap (Politis & Romano 1994;
+5. **Uncertainty (C, rung 1: coherence with the MCS of ADR 0.0.0010).** Stationary block bootstrap (Politis & Romano 1994;
    block per Politis & White 2004, the MCS machinery of evaluation §6.5),
    paired: the same resampled indices for h+1, h+7 and all families, with a
    **single block length** for the joint h+1/h+7 resampling, floored at the
@@ -93,7 +93,8 @@ the ablation, and the gate's research found a structural problem:
    learner-PFI they correct the shared-data case (Nadeau–Bengio). Our test
    instances are serially dependent, so the block bootstrap over d_t is a
    transposition, declared as such — no primary source gives a
-   permutation-importance interval under serial dependence.
+   permutation-importance interval under serial dependence, which is why
+   this item is a convention closed by rung 1, not evidence.
    **Pairing key between horizons (open, fixed in Stage 7.3's
    preregistration).** Evaluation aligns per horizon by `target_timestamp`
    (evaluation §2.1, §6.7): the same t at h+1 and h+7 comes from different
