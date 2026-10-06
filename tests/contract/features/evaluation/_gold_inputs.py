@@ -71,6 +71,7 @@ from financial_forecasting.features.evaluation.domain.services.series_assembly i
 )
 from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
     AssembledCohort,
+    HorizonSamples,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.block_estimate import (
     BlockEstimate,
@@ -170,6 +171,12 @@ def _estimates(series: PairedLossSeries, backend: FakeMcsBackend) -> tuple[Block
                 BlockEstimate(pair=(first, second), value=None, reason=reason, detail=reason.value)
             )
     return tuple(estimates)
+
+
+@cache
+def samples_of() -> tuple[HorizonSamples, ...]:
+    """As amostras por horizonte do cohort de `completed_inputs()` (para recalcular perfis)."""
+    return _assemble(_cohort()).horizons
 
 
 @cache

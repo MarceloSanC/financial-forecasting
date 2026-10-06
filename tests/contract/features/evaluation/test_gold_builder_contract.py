@@ -24,8 +24,14 @@ import pytest
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.calibration_table import (  # noqa: E501
     CalibrationTableGoldBuilder,
 )
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_profiles import (  # noqa: E501
+    DmProfilesGoldBuilder,
+)
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_results import (
     DmResultsGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_seed_fraction import (  # noqa: E501
+    DmSeedFractionGoldBuilder,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.mcs_results import (  # noqa: E501
     McsResultsGoldBuilder,
@@ -69,6 +75,8 @@ BUILDERS: dict[str, Callable[[], GoldBuilder]] = {
     "calibration_table": CalibrationTableGoldBuilder,
     "dm_results": DmResultsGoldBuilder,
     "mcs_results": McsResultsGoldBuilder,
+    "dm_profiles": DmProfilesGoldBuilder,
+    "dm_seed_fraction": DmSeedFractionGoldBuilder,
 }
 
 

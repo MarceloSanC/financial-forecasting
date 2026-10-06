@@ -92,6 +92,34 @@ GOLD_MCS_RESULTS: Final = GoldTableSchema(
     ),
 )
 
+# --- Stage 6.6: perfis de séries novas (ADR 6.6.0002) ----------------------------------
+
+GOLD_DM_PROFILES: Final = GoldTableSchema(
+    name="gold_dm_profiles",
+    key=("horizon", "dimension", "fold", "seed", "level", "comparator"),
+    read_columns=(
+        "status",
+        "undefined_reason",
+        "detail",
+        "n_points",
+        "first_target_timestamp",
+        "last_target_timestamp",
+        "variance_estimator",
+        "mean_differential",
+        "statistic",
+        "p_value",
+        "rejected",
+        "fallback_applied",
+        "horizon_used",
+        "alpha",
+    ),
+)
+GOLD_DM_SEED_FRACTION: Final = GoldTableSchema(
+    name="gold_dm_seed_fraction",
+    key=("horizon", "comparator"),
+    read_columns=("n_seeds", "n_rejecting", "n_undefined", "fraction_rejecting", "alpha"),
+)
+
 GOLD_SCHEMAS: Final[Mapping[str, GoldTableSchema]] = MappingProxyType(
     {
         schema.name: schema
@@ -101,15 +129,19 @@ GOLD_SCHEMAS: Final[Mapping[str, GoldTableSchema]] = MappingProxyType(
             GOLD_CALIBRATION_TABLE,
             GOLD_DM_RESULTS,
             GOLD_MCS_RESULTS,
+            GOLD_DM_PROFILES,
+            GOLD_DM_SEED_FRACTION,
         )
     }
 )
-"""As cinco tabelas pelo nome."""
+"""As tabelas pelo nome (as cinco da 6.4 e as de perfil da 6.6)."""
 
 CONFIRMATORY_TABLES: Final[tuple[str, ...]] = (
     GOLD_METRICS_BY_RUN.name,
     GOLD_CALIBRATION_TABLE.name,
     GOLD_DM_RESULTS.name,
     GOLD_MCS_RESULTS.name,
+    GOLD_DM_PROFILES.name,
+    GOLD_DM_SEED_FRACTION.name,
 )
 """As tabelas que carregam `preregistration_ref` (ADR 6.4.0006 item 4)."""

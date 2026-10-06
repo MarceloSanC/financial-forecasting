@@ -420,13 +420,16 @@ def test_manifest_content_fingerprint() -> None:
 
 @pytest.mark.unit
 def test_schema_tables_complete() -> None:
-    """Cinco tabelas pelo nome; as quatro confirmatórias; chave e colunas lidas disjuntas."""
+    """As tabelas pelo nome; todas confirmatórias menos a de checks; chave e colunas lidas
+    disjuntas (Stage 6.6: as tabelas de perfil entram aqui, uma por Task 14-16)."""
     assert set(GOLD_SCHEMAS) == {
         "gold_quality_checks",
         "gold_metrics_by_run",
         "gold_calibration_table",
         "gold_dm_results",
         "gold_mcs_results",
+        "gold_dm_profiles",
+        "gold_dm_seed_fraction",
     }
     assert set(CONFIRMATORY_TABLES) == set(GOLD_SCHEMAS) - {"gold_quality_checks"}
     for name, schema in GOLD_SCHEMAS.items():
