@@ -87,6 +87,7 @@ doc de domínio) neste formato — é por ele que o humano audita, sem ser inter
 [decision:E|C] <id> — <pergunta em 1 linha>
 Escolha: <opção> · Alternativas: <…> · Degrau (C): <1–5>
 Base: <Autor Ano, §/Eq./p.> "<trecho ≤2 frases>" [doi ok] · <pkg@versão função: default=…>
+Verificado: sustenta | parcial→corrigido | não verificado (§4.2)
 Sensibilidade pré-registrada: <alternativa> | nenhuma · Reversível: sim | não (motivo)
 ```
 
