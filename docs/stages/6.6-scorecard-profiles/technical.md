@@ -981,4 +981,26 @@ nenhum refutado nem escalado.
 além da extensão da r1 às demais regras de perfil, que segue o mesmo princípio
 de B1 (congelar antes do cego) e foi registrada na issue.
 
+### 2026-10-06 — [decision] Task 11: parâmetros do `ProfileReports` num DTO e unidade da estacionariedade — Claude (Opus 5.5)
+**Contexto:** a Task 11 previa `ProfileReports.evaluate` com dez argumentos keyword
+(candidato, α, estimador, mínimo de violações, tolerância, draws, seed, regras...), e
+isolamento de falha "por par" do diagnóstico de d_t.
+**Decisão:** (a) os parâmetros do plano viajam num DTO de domínio frozen
+`ProfileSettings` (montado pelo use case a partir do `RefreshParameters` na Task 13) —
+reversível-barato, mesma informação, evita `noqa: PLR0913`; (b) a unidade isolada da
+estacionariedade é a **chamada do horizonte** (`DifferentialStationarity.evaluate`): uma
+falha vira linha `error` para cada par, sem tocar o módulo da Task 09 fora do escopo da
+Task 11. O motivo `error` continua por par na tabela, como o concept I4 pede.
+**Razão:** sem âncora de princípio específica (escolhas locais de forma); registradas
+aqui como suposição de alinhamento, auditável.
+
+### 2026-10-06 — [decision] Checkpoint C bloco 3 (L5): `profile_parameters` proibido na revisão 0 — Claude (Opus 5.5)
+**Contexto:** o VO aceitava o bloco num plano r0 sem emenda; o ADR 6.6.0001 item 5 diz
+que só a r1 (emenda cega) o carrega, e o estado `not_frozen_in_revision` (I9) sai de
+`profile_parameters is None`.
+**Decisão:** `Preregistration.__post_init__` recusa `profile_parameters` com
+`revision == 0` (commit 6b1c175), como já recusa os campos de emenda.
+**Razão:** âncora no ADR 6.6.0001 item 5 e no ADR 6.5.0002 (regra nova do plano só por
+revisão nova); reversível-barato.
+
 <!-- END: post-execution -->

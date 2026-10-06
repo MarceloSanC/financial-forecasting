@@ -248,15 +248,19 @@ def _series_reports(  # noqa: PLR0913 — uma série e o seu escopo, keyword-onl
                 ),
                 var_level=var_level,
             )
-            for sequence, var_level in _hit_sequences(series, tolerance)
+            for sequence, var_level in hit_sequences(series, tolerance)
         ),
     )
 
 
-def _hit_sequences(
+def hit_sequences(
     series: CoverageSeries, tolerance: float
 ) -> Iterator[tuple[HitSequence, float | None]]:
-    """Sequências de hits na ordem: intervalos, caudas; sem/com degeneradas; + DGT."""
+    """Sequências de hits na ordem: intervalos, caudas; sem/com degeneradas; + DGT.
+
+    Pública (Stage 6.6): o `ProfileReports` reusa a mesma lista de sequências testadas
+    para o Monte Carlo de h = 1 — uma escrita só.
+    """
     for include in _INCLUDE_DEGENERATE:
         for pair in series.symmetric_pairs:
             sequence = HitSequences.interval(
