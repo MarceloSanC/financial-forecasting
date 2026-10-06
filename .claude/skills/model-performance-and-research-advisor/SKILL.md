@@ -71,8 +71,10 @@ and are validated against an **oracle** (R `dm.test`/`rugarch`, analytic fixture
 6. **Conformal benchmark** — conformal CQR coverage as a comparative reference for calibration, not
    as the primary calibration object.
 7. **Interpretability (H3, descriptive)** — feature-family contribution (price / technical /
-   sentiment / fundamentals) is heterogeneous across horizons, consistent in **≥2 of 3** methods
-   (VSN, permutation, ablation). No causal claim. If a local-contribution view is empty, treat it as
+   sentiment / fundamentals) is heterogeneous between h+1 and h+7, read as **agreement of grouped
+   permutation importance and LOCO ablation** (same sign of the share change, paired block-bootstrap
+   interval excluding 0 in both, same family). VSN weights are descriptive and horizon-invariant —
+   they do not vote (ADR 0.0.0007). No causal claim. If a local-contribution view is empty, treat it as
    a data-availability/scope issue, **not** as "no feature effect".
 
 ## Output contract
