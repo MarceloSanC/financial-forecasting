@@ -1334,4 +1334,8 @@ exit=0
 **Contexto:** o contrato do predictor não fixava as chaves de `settings`, e o fake devolvia só cinco das oito que o adapter real produz.
 **O que mudou:** o port ganhou `SETTINGS_KEYS` (`batch_size`, `num_workers`, `accelerator`, `num_threads`, `deterministic_algorithms`, `cpu_capability`, `platform`, `scikit-learn`), documentados conforme o concept §4 e o ADR 7.1.0004 item 4. O fake passou a devolver as oito, e o contrato confere, nas duas pernas, o conjunto exato e os valores fixos.
 
+### 2026-10-06 — [deviation] task-03-fix — fake do `CheckpointLocator` normaliza o diretório para absoluto (Checkpoint C, C1-5) — Claude (Opus 5.5)
+**Contexto:** o contrato do locator não conferia que o caminho devolvido é absoluto. O adapter real o torna absoluto por `resolve()`, mas o fake devolvia o diretório como recebido.
+**O que mudou:** o fake normaliza os diretórios (`os.path.abspath`) no registro e na consulta, de modo que um diretório relativo e o seu absoluto são o mesmo. O contrato agora assere `Path(location.path).is_absolute()` e ganhou o caso `test_relative_directory_resolves_to_an_absolute_path` nas duas pernas.
+
 <!-- END: post-execution -->
