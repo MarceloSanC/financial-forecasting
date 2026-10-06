@@ -58,6 +58,7 @@ from financial_forecasting.features.evaluation.domain.services.inference_input_v
     validate_alpha,
 )
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
+    BLOCK_SENSITIVITIES,
     MCS_STATISTIC,
     validate_mcs_reps,
 )
@@ -133,9 +134,6 @@ REALIZED_SOURCES: Final[tuple[str, ...]] = ("training_grid_target_return",)
 
 SEEDLESS: Final = "seedless"
 """Grafia, no TOML, de um modelo sem seed (baselines; gravados com `None`)."""
-
-BLOCK_SENSITIVITIES: Final[tuple[str, ...]] = ("h", "sqrt_T")
-"""Sensibilidades de bloco do MCS declaráveis: l = h e l = ⌈√T⌉ (ADR 6.5.0009)."""
 
 _SHA256_HEX: Final = re.compile(r"[0-9a-f]{64}")
 _CENTRAL_LEVEL: Final = 0.5
