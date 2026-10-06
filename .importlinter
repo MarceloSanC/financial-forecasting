@@ -518,7 +518,7 @@ allow_indirect_imports = False
 #     `TrainingGridReader` de `evaluation` (Stage 6.4, ADR 6.4.0009; o real é o
 #     use case `ReadTrainingGrid` da `modeling`).
 #
-# Os cinco slices estão no perímetro: `market_data` entrou na #95 com as suas 8
+# Os seis slices estão no perímetro: `market_data` entrou na #95 com as suas 8
 # arestas de runtime declaradas e `evaluation` na Stage 6.1 com 1 (o VO
 # `QuantileForecast` lido pela `CoverageSeries` — ADR 6.1.0002 item 3), que a
 # Stage 6.4 levou a 2 (o mesmo VO construído pelo `SeriesAssembly` — ADR 6.4.0004
@@ -527,7 +527,7 @@ allow_indirect_imports = False
 # 7.1.0001). Cada aresta de runtime existente entra como exceção NOMEADA abaixo
 # (27 hoje). Elas
 # não são "ok": são o débito medido, e a lista encolhe conforme as issues de
-# fronteira fecham. Aresta nova entre estes cinco slices reprova o build — que é
+# fronteira fecham. Aresta nova entre estes seis slices reprova o build — que é
 # o ponto.
 # -----------------------------------------------------------------------------
 [importlinter:contract:bc-independence]
