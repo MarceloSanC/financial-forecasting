@@ -657,6 +657,14 @@ def test_from_stored_blocked_with_a_confirmatory_table_is_corrupt(name: str) -> 
 
 
 @pytest.mark.unit
+def test_from_stored_blocked_without_quality_checks_is_corrupt() -> None:
+    """Checkpoint C bloco 6, H-7: `BLOCKED` lista exatamente as tabelas que rodam bloqueadas."""
+    manifest, _ = _stored(status=RefreshStatus.BLOCKED, rows_by_table={})
+    with pytest.raises(GoldGenerationCorruptError, match="lacks tables"):
+        GoldGeneration.from_stored(manifest, {}, partition=_READ_PARTITION)
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("changes", "message"),
     [

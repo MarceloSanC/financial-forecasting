@@ -329,7 +329,7 @@ class SeedFractionProfileRow:
 class McsBlockProfileRow:
     """Uma linha do MCS com bloco l = h ou l = ceil(sqrt(T)) (`gold_mcs_block_sensitivity`).
 
-    Rodada com erro: uma linha com `model` e as colunas do MCS nulas.
+    Rodada com erro: uma linha com `model` nulo e as colunas do MCS nulas.
     """
 
     block_rule: str
@@ -439,7 +439,16 @@ class ScorecardProfile:
 
     horizons: tuple[HorizonProfile, ...]
     declared_not_built: tuple[str, ...]
-    profile_states: tuple[tuple[str, ProfileState], ...] = ()
+    profile_states: tuple[tuple[str, ProfileState], ...]
+
+    def __post_init__(self) -> None:
+        """`declared_not_built` é derivado de `profile_states` (os `not_built_here`)."""
+        derived = tuple(p for p, s in self.profile_states if s is ProfileState.NOT_BUILT_HERE)
+        if self.declared_not_built != derived:
+            raise ValueError(
+                f"declared_not_built {self.declared_not_built} != the not_built_here "
+                f"profiles {derived}"
+            )
 
     def as_mapping(self) -> dict[str, object]:
         """Serialização JSON-safe única."""

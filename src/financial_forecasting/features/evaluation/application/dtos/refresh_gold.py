@@ -775,14 +775,18 @@ def _table_set_defect(status: RefreshStatus, listed: set[str]) -> str | None:
     """O conjunto de tabelas que o status exige (Stage 6.6, Task 17).
 
     `COMPLETED` lista **toda** tabela de `GOLD_SCHEMAS` (tabela de perfil ausente é
-    corrupção, não "perfil não calculado" — concept A6); `BLOCKED` só as que rodam
-    bloqueadas (`GOLD_SCHEMAS` menos `CONFIRMATORY_TABLES`), sem o DTO conhecer builders.
+    corrupção, não "perfil não calculado" — concept A6); `BLOCKED` lista exatamente as
+    que rodam bloqueadas (`GOLD_SCHEMAS` menos `CONFIRMATORY_TABLES`), sem o DTO
+    conhecer builders.
     """
     if status is RefreshStatus.COMPLETED:
         missing = sorted(set(GOLD_SCHEMAS) - listed)
         return None if not missing else f"a COMPLETED generation lacks tables {missing}"
     confirmatory = sorted(listed & set(CONFIRMATORY_TABLES))
-    return None if not confirmatory else f"a BLOCKED generation lists {confirmatory}"
+    if confirmatory:
+        return f"a BLOCKED generation lists {confirmatory}"
+    missing = sorted(set(GOLD_SCHEMAS) - set(CONFIRMATORY_TABLES) - listed)
+    return None if not missing else f"a BLOCKED generation lacks tables {missing}"
 
 
 def profile_settings_from(parameters: RefreshParameters) -> ProfileSettings:
