@@ -1347,4 +1347,8 @@ exit=0
 **Contexto:** no `predict_from_checkpoint`, a faixa contígua era conferida depois da carga, e o `finally` restaurava a flag de algoritmos determinísticos sem o `warn_only`.
 **O que mudou:** `_require_contiguous` passou a rodar antes da leitura dos bytes. Uma faixa inválida é erro do pedido e ergue `ValueError` sem tocar o arquivo; a ordem sha256 → carga → C4 entre as demais conferências fica igual. O `finally` agora restaura a flag junto com o `warn_only` anterior. No mesmo commit, sem mudança de comportamento: a docstring cita `assert_emission_within_request` (C2-1); o C4 ganhou casos que mudam só as reais desconhecidas (C2-3); o teste de subprocesso também roda sobre o bloco de teste e compara com a grade gravada pelo treino (C2-4).
 
+### 2026-10-06 — [deviation] task-03-fix — o fake do predictor recusa faixa de decisões vazia (Checkpoint C, C2-2) — Claude (Opus 5.5)
+**Contexto:** o `InMemoryTftCheckpointPredictor` aceitava `decision_indices=()` e devolvia uma grade vazia, enquanto o adapter real ergue `ValueError`. A divergência não aparecia em nenhum contrato.
+**O que mudou:** o fake confere a faixa (não vazia, contígua e crescente) antes de qualquer outra conferência, na mesma ordem que o real usa desde a task-04-fix. O contrato ganhou `test_empty_decisions_raise_value_error` nas duas pernas.
+
 <!-- END: post-execution -->

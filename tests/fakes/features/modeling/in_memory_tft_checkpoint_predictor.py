@@ -4,8 +4,9 @@ Cada checkpoint é registrado por caminho com o sha256 esperado dos seus bytes e
 as entradas que ele declara (reais conhecidas/desconhecidas, `max_horizon`,
 níveis); as grades podem ser configuradas por decisão (`grids`) — as demais
 saem de uma regra sintética determinística da decisão, do horizonte e do nível.
-A ordem das conferências é a do adapter real: sha256 (C10) antes de "carregar",
-depois entradas declaradas (C4), depois a faixa de decisões contígua e crescente;
+A ordem das conferências é a do adapter real: a faixa de decisões (não vazia,
+contígua e crescente) antes de ler qualquer coisa, sha256 (C10) antes de
+"carregar", depois as entradas declaradas (C4);
 a emissão segue a regra I16 da cauda (`t + h <= len(target) - 1`) só nos pares
 pedidos. Registra cada chamada em `calls`. Paridade pelo contrato `[fake, real]`.
 """
@@ -84,6 +85,11 @@ class InMemoryTftCheckpointPredictor:
                 "num_threads": num_threads,
             }
         )
+        decisions = tuple(decision_indices)
+        if not decisions or any(b != a + 1 for a, b in pairwise(decisions)):
+            raise ValueError(
+                f"decision indices must be a non-empty contiguous increasing range: {decisions!r}"
+            )
         if checkpoint_path not in self._checkpoints:
             raise FileNotFoundError(checkpoint_path)
         checkpoint = self._checkpoints[checkpoint_path]
@@ -95,9 +101,6 @@ class InMemoryTftCheckpointPredictor:
         _check_declared(
             checkpoint, feature_names, known_feature_names, max_horizon, quantile_levels
         )
-        decisions = tuple(decision_indices)
-        if any(b != a + 1 for a, b in pairwise(decisions)):
-            raise ValueError(f"decision indices must be contiguous and increasing: {decisions!r}")
         last = len(target) - 1
         grids: dict[int, GridByHorizon] = {}
         for decision in decisions:
