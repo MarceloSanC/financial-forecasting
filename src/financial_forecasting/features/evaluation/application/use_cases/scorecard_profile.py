@@ -14,9 +14,9 @@ séries novas (issue #129: DM por fold/seed/τ, estacionariedade de d_t, degener
 parcial por par, sensibilidades de bloco do MCS, p-valor Monte Carlo) e o diagrama de
 nitidez (8.3).
 
-Os `# type: ignore[arg-type]` deste módulo vêm das células do gold, tipadas `object`
-(`col`): o tipo é o do schema dono (`gold_schema`) e os valores são revalidados na
-construção dos VOs/DTOs de destino (evidência, perfil, `FailedCheck`).
+As células são lidas pelos acessores tipados de `refresh_gold` (`col_int`,
+`col_float`, `col_str`, ...; F6): tipo divergente do schema é corrupção nomeada
+(`GoldGenerationCorruptError`).
 """
 
 from __future__ import annotations
@@ -44,11 +44,17 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldGeneration,
     Row,
+    col,
+    col_bool,
+    col_float,
+    col_float_or_none,
+    col_int,
+    col_int_or_none,
+    col_str,
 )
 from financial_forecasting.features.evaluation.application.use_cases.scorecard_evidence import (
     LOWER_TAIL,
     UPPER_TAIL,
-    col,
 )
 from financial_forecasting.features.evaluation.domain.services.confirmatory_scorecard import (
     ConfirmatoryScorecard,
@@ -182,30 +188,34 @@ def _fraction(flags: Sequence[bool]) -> float | None:
     return sum(flags) / len(flags) if flags else None
 
 
+_CalibrationKey = tuple[str, str, str, float, float | None, bool, int | None, int | None]
+
+
+def _calibration_key(row: Row) -> _CalibrationKey:
+    schema = GOLD_CALIBRATION_TABLE
+    return (
+        col_str(row, schema, "model"),
+        col_str(row, schema, "sample"),
+        col_str(row, schema, "kind"),
+        col_float(row, schema, "level_low"),
+        col_float_or_none(row, schema, "level_high"),
+        col_bool(row, schema, "includes_degenerate"),
+        col_int_or_none(row, schema, "dgt_offset"),
+        col_int_or_none(row, schema, "dgt_step"),
+    )
+
+
 def _calibration_series(
     prereg: Preregistration, rows: Sequence[Row], horizon: int
 ) -> tuple[CalibrationSeriesProfile, ...]:
     schema = GOLD_CALIBRATION_TABLE
-    groups: dict[tuple[object, ...], list[Row]] = defaultdict(list)
+    groups: dict[_CalibrationKey, list[Row]] = defaultdict(list)
     for row in rows:
         if col(row, schema, "horizon") != horizon:
             continue
         if col(row, schema, "band_level") != prereg.h1_gate.profile_band_level:
             continue
-        key = tuple(
-            col(row, schema, c)
-            for c in (
-                "model",
-                "sample",
-                "kind",
-                "level_low",
-                "level_high",
-                "includes_degenerate",
-                "dgt_offset",
-                "dgt_step",
-            )
-        )
-        groups[key].append(row)
+        groups[_calibration_key(row)].append(row)
     alpha = prereg.h1_gate.sensitivity_alpha
     series: list[CalibrationSeriesProfile] = []
     for key, members in groups.items():
@@ -215,23 +225,23 @@ def _calibration_series(
         ]
         series.append(
             CalibrationSeriesProfile(
-                model=key[0],  # type: ignore[arg-type]
-                sample=key[1],  # type: ignore[arg-type]
-                kind=key[2],  # type: ignore[arg-type]
-                level_low=key[3],  # type: ignore[arg-type]
-                level_high=key[4],  # type: ignore[arg-type]
-                includes_degenerate=key[5],  # type: ignore[arg-type]
-                dgt_offset=key[6],  # type: ignore[arg-type]
-                dgt_step=key[7],  # type: ignore[arg-type]
+                model=key[0],
+                sample=key[1],
+                kind=key[2],
+                level_low=key[3],
+                level_high=key[4],
+                includes_degenerate=key[5],
+                dgt_offset=key[6],
+                dgt_step=key[7],
                 n_seeds=len(members),
-                mean_violations=_mean([col(r, schema, "n_violations") for r in members]),  # type: ignore[misc]
-                mean_observed=_mean([col(r, schema, "n_observed") for r in members]),  # type: ignore[misc]
+                mean_violations=_mean([col_int(r, schema, "n_violations") for r in members]),
+                mean_observed=_mean([col_int(r, schema, "n_observed") for r in members]),
                 fraction_contains_nominal=_fraction([c is True for c in contains if c is not None]),
                 fraction_ind_rejected=_fraction(
-                    [col(r, schema, "p_ind") < alpha for r in applicable]  # type: ignore[operator]
+                    [col_float(r, schema, "p_ind") < alpha for r in applicable]
                 ),
                 fraction_cc_rejected=_fraction(
-                    [col(r, schema, "p_cc") < alpha for r in applicable]  # type: ignore[operator]
+                    [col_float(r, schema, "p_cc") < alpha for r in applicable]
                 ),
                 n_independence_not_applicable=len(members) - len(applicable),
             )
@@ -263,8 +273,8 @@ def _without_gaps(
                 TailSummaryProfile(
                     kind=kind,
                     level=level,
-                    mean_violations=_mean([col(r, schema, "n_violations") for r in members]),  # type: ignore[misc]
-                    mean_observed=_mean([col(r, schema, "n_observed") for r in members]),  # type: ignore[misc]
+                    mean_violations=_mean([col_int(r, schema, "n_violations") for r in members]),
+                    mean_observed=_mean([col_int(r, schema, "n_observed") for r in members]),
                 )
             )
     return tuple(summaries)
@@ -272,24 +282,28 @@ def _without_gaps(
 
 def _descriptors(rows: Sequence[Row], horizon: int) -> tuple[DescriptorProfile, ...]:
     schema = GOLD_METRICS_BY_RUN
-    groups: dict[tuple[object, ...], list[float]] = defaultdict(list)
+    groups: dict[tuple[str, str, str, float | None, float | None], list[float]] = defaultdict(list)
     for row in rows:
         if col(row, schema, "horizon") != horizon:
             continue
-        key = tuple(
-            col(row, schema, c) for c in ("model", "sample", "metric", "level_low", "level_high")
+        key = (
+            col_str(row, schema, "model"),
+            col_str(row, schema, "sample"),
+            col_str(row, schema, "metric"),
+            col_float_or_none(row, schema, "level_low"),
+            col_float_or_none(row, schema, "level_high"),
         )
-        groups[key].append(col(row, schema, "value"))  # type: ignore[arg-type]
+        groups[key].append(col_float(row, schema, "value"))
     descriptors: list[DescriptorProfile] = []
     for key, values in groups.items():
         spread = SeedSpread.of(values)
         descriptors.append(
             DescriptorProfile(
-                model=key[0],  # type: ignore[arg-type]
-                sample=key[1],  # type: ignore[arg-type]
-                metric=key[2],  # type: ignore[arg-type]
-                level_low=key[3],  # type: ignore[arg-type]
-                level_high=key[4],  # type: ignore[arg-type]
+                model=key[0],
+                sample=key[1],
+                metric=key[2],
+                level_low=key[3],
+                level_high=key[4],
                 mean=spread.mean,
                 minimum=spread.minimum,
                 maximum=spread.maximum,

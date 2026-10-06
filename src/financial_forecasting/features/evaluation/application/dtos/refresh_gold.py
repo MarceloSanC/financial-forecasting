@@ -569,6 +569,73 @@ class GoldGenerationCorruptError(ApplicationError):
     """
 
 
+# --- leitura de células (F6, Stage 6.6; política de tipo: concept 6.6 D9) -------------
+
+
+def col(row: Row, schema: GoldTableSchema, column: str) -> object:
+    """A célula `column` da linha — só colunas do schema (`key` + `read_columns`).
+
+    Raises:
+        KeyError: coluna fora do schema da tabela (leitura por nome sem dono).
+    """
+    if column not in schema.key and column not in schema.read_columns:
+        raise KeyError(f"{column!r} is not a column of the {schema.name} schema")
+    return row[column]
+
+
+def _wrong_type(schema: GoldTableSchema, column: str, expected: str, value: object) -> Exception:
+    return GoldGenerationCorruptError(
+        f"{schema.name}.{column}: expected {expected}, got {type(value).__name__} {value!r}"
+    )
+
+
+def col_int(row: Row, schema: GoldTableSchema, column: str) -> int:
+    """A célula como `int` não-`bool`; outro tipo → `GoldGenerationCorruptError`."""
+    value = col(row, schema, column)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise _wrong_type(schema, column, "int", value)
+    return value
+
+
+def col_int_or_none(row: Row, schema: GoldTableSchema, column: str) -> int | None:
+    """Como `col_int`, aceitando `None`."""
+    return None if col(row, schema, column) is None else col_int(row, schema, column)
+
+
+def col_float(row: Row, schema: GoldTableSchema, column: str) -> float:
+    """A célula como `float` (aceita `int` não-`bool`, devolve `float`); senão corrupção."""
+    value = col(row, schema, column)
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise _wrong_type(schema, column, "float", value)
+    return float(value)
+
+
+def col_float_or_none(row: Row, schema: GoldTableSchema, column: str) -> float | None:
+    """Como `col_float`, aceitando `None`."""
+    return None if col(row, schema, column) is None else col_float(row, schema, column)
+
+
+def col_bool(row: Row, schema: GoldTableSchema, column: str) -> bool:
+    """A célula como `bool`; outro tipo (inclusive `int`) → `GoldGenerationCorruptError`."""
+    value = col(row, schema, column)
+    if not isinstance(value, bool):
+        raise _wrong_type(schema, column, "bool", value)
+    return value
+
+
+def col_str(row: Row, schema: GoldTableSchema, column: str) -> str:
+    """A célula como `str`; outro tipo → `GoldGenerationCorruptError`."""
+    value = col(row, schema, column)
+    if not isinstance(value, str):
+        raise _wrong_type(schema, column, "str", value)
+    return value
+
+
+def col_str_or_none(row: Row, schema: GoldTableSchema, column: str) -> str | None:
+    """Como `col_str`, aceitando `None`."""
+    return None if col(row, schema, column) is None else col_str(row, schema, column)
+
+
 @dataclass(frozen=True)
 class GoldGeneration:
     """Uma geração lida: o manifesto e as tabelas pelo nome (ADR 6.5.0005 item 5)."""

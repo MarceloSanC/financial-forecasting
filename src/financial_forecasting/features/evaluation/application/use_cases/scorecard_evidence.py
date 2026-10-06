@@ -26,9 +26,9 @@ As colunas são lidas **só** pelo schema (`gold_schema`): uma coluna fora de `k
 linhas com `band_level == gate_band_level` (a calibração tem uma linha por nível de
 banda, com as mesmas contagens por construção da 6.4).
 
-Os `# type: ignore[arg-type]` deste módulo vêm das células do gold, tipadas `object`
-(`col`): o tipo é o do schema dono (`gold_schema`) e os valores são revalidados na
-construção dos VOs/DTOs de destino (evidência, perfil, `FailedCheck`).
+As células são lidas pelos acessores tipados de `refresh_gold` (`col_int`,
+`col_float`, `col_bool`, ...; F6): tipo divergente do schema é corrupção nomeada
+(`GoldGenerationCorruptError`), não deriva silenciosa.
 """
 
 from __future__ import annotations
@@ -53,6 +53,10 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     GoldManifest,
     RefreshGoldCommand,
     Row,
+    col,
+    col_bool,
+    col_float,
+    col_int,
 )
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     block_length_rule,
@@ -87,17 +91,6 @@ LOWER_TAIL = "lower_tail"
 UPPER_TAIL = "upper_tail"
 
 Seed = int | None
-
-
-def col(row: Row, schema: GoldTableSchema, column: str) -> object:
-    """A célula `column` da linha — só colunas do schema (`key` + `read_columns`).
-
-    Raises:
-        KeyError: coluna fora do schema da tabela (leitura por nome sem dono).
-    """
-    if column not in schema.key and column not in schema.read_columns:
-        raise KeyError(f"{column!r} is not a column of the {schema.name} schema")
-    return row[column]
 
 
 def _mismatch(field: MismatchField, detail: str) -> PreregistrationMismatchError:
@@ -229,12 +222,13 @@ def _block_rule(row: Row) -> int | None:
     recusada por ele é corrupção, erguida por `check_completed`.
     """
     estimate = col(row, GOLD_MCS_RESULTS, "max_block_estimate")
-    if estimate is None:
+    # não-número também é estimativa recusada (corrupção depois de todo mismatch); a
+    # finitude e o sinal são do dono da regra
+    if isinstance(estimate, bool) or not isinstance(estimate, int | float):
         return None
     try:
         return block_length_rule(
-            horizon=col(row, GOLD_MCS_RESULTS, "horizon"),  # type: ignore[arg-type]
-            max_estimate=estimate,  # type: ignore[arg-type]
+            horizon=col_int(row, GOLD_MCS_RESULTS, "horizon"), max_estimate=estimate
         )
     except ValueError:
         return None
@@ -308,9 +302,9 @@ def _counts(
         counts.append(
             SeedTailCounts(
                 seed=seed,
-                n_violations=col(row, GOLD_CALIBRATION_TABLE, "n_violations"),  # type: ignore[arg-type]
-                n_observed=col(row, GOLD_CALIBRATION_TABLE, "n_observed"),  # type: ignore[arg-type]
-                degeneracy_rate=col(row, GOLD_CALIBRATION_TABLE, "degeneracy_rate"),  # type: ignore[arg-type]
+                n_violations=col_int(row, GOLD_CALIBRATION_TABLE, "n_violations"),
+                n_observed=col_int(row, GOLD_CALIBRATION_TABLE, "n_observed"),
+                degeneracy_rate=col_float(row, GOLD_CALIBRATION_TABLE, "degeneracy_rate"),
             )
         )
     return tuple(counts)
@@ -403,12 +397,12 @@ def _dm_rows(
                 DmEvidence(
                     comparator=comparator,
                     estimator=estimator,
-                    n_points=col(row, GOLD_DM_RESULTS, "n_points"),  # type: ignore[arg-type]
-                    mean_differential=col(row, GOLD_DM_RESULTS, "mean_differential"),  # type: ignore[arg-type]
-                    statistic=col(row, GOLD_DM_RESULTS, "statistic"),  # type: ignore[arg-type]
-                    adjusted_p_value=col(row, GOLD_DM_RESULTS, "adjusted_p_value"),  # type: ignore[arg-type]
-                    rejected=col(row, GOLD_DM_RESULTS, "rejected"),  # type: ignore[arg-type]
-                    fallback_applied=col(row, GOLD_DM_RESULTS, "fallback_applied"),  # type: ignore[arg-type]
+                    n_points=col_int(row, GOLD_DM_RESULTS, "n_points"),
+                    mean_differential=col_float(row, GOLD_DM_RESULTS, "mean_differential"),
+                    statistic=col_float(row, GOLD_DM_RESULTS, "statistic"),
+                    adjusted_p_value=col_float(row, GOLD_DM_RESULTS, "adjusted_p_value"),
+                    rejected=col_bool(row, GOLD_DM_RESULTS, "rejected"),
+                    fallback_applied=col_bool(row, GOLD_DM_RESULTS, "fallback_applied"),
                 )
             )
     if len(points) != 1:
@@ -426,7 +420,7 @@ def _mcs_rows(
         McsEvidence(
             scheme,
             model,
-            included=col(  # type: ignore[arg-type]
+            included=col_bool(
                 tables.row(GOLD_MCS_RESULTS, horizon=horizon, scheme=scheme.value, model=model),
                 GOLD_MCS_RESULTS,
                 "included",
@@ -452,8 +446,8 @@ def _mean_pinball(prereg: Preregistration, tables: _Tables, horizon: int) -> dic
                 level_low=None,
                 level_high=None,
             )
-            values.append(col(row, GOLD_METRICS_BY_RUN, "value"))
-        means[model] = SeedSpread.of(values).mean  # type: ignore[arg-type]
+            values.append(col_float(row, GOLD_METRICS_BY_RUN, "value"))
+        means[model] = SeedSpread.of(values).mean
     return means
 
 
