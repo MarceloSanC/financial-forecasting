@@ -105,6 +105,26 @@ class PairedLossSeries:
             raise ValueError(f"differential needs two distinct models, got {first!r} twice")
         return differential(self.losses_of(first), self.losses_of(second))
 
+    def window(self, start: int, stop: int) -> PairedLossSeries:
+        """A fatia contígua `[start, stop)` dos pontos (um fold — Stage 6.6, DM por fold).
+
+        Mesmos modelos e horizonte; o VO revalida T ≥ 2 e T > h na construção.
+
+        Raises:
+            ValueError: `start`/`stop` fora de `0 <= start < stop <= T`, ou a fatia viola
+                as invariantes do VO.
+        """
+        if not 0 <= start < stop <= self.n_points:
+            raise ValueError(
+                f"window needs 0 <= start < stop <= T={self.n_points}, got [{start}, {stop})"
+            )
+        return PairedLossSeries(
+            horizon=self.horizon,
+            models=self.models,
+            target_timestamps=self.target_timestamps[start:stop],
+            losses=tuple(column[start:stop] for column in self.losses),
+        )
+
     def model_pairs(self) -> tuple[tuple[str, str], ...]:
         """Pares não-ordenados `(models[i], models[j])`, i < j, na ordem de `models`."""
         return tuple(
