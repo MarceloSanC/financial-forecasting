@@ -29,6 +29,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     RefreshParameters,
     RefreshStatus,
     failed_checks_of,
+    profile_settings_from,
 )
 from financial_forecasting.features.evaluation.domain.services.diebold_mariano import (
     DmVarianceEstimator,
@@ -740,3 +741,29 @@ def test_manifest_with_a_rule_outside_the_catalog_is_corrupt() -> None:
     mapping["parameters"]["profile_parameters"] = block  # type: ignore[index]
     with pytest.raises(GoldGenerationCorruptError, match="subset_multiplicity"):
         GoldGeneration.from_stored(mapping, {}, partition=manifest.partition)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "estimators",
+    [
+        (DmVarianceEstimator.RECTANGULAR, DmVarianceEstimator.BARTLETT),
+        (DmVarianceEstimator.BARTLETT, DmVarianceEstimator.RECTANGULAR),
+    ],
+)
+def test_profile_settings_use_the_primary_estimator(
+    estimators: tuple[DmVarianceEstimator, ...],
+) -> None:
+    """Concept 6.6 D3: os perfis usam o estimador **primário** (o 1º), nunca a
+    sensibilidade (Auditoria de Testes r4, N5)."""
+    parameters = _parameters(dm_variance_estimators=estimators)
+    settings = profile_settings_from(parameters)
+    assert settings.variance_estimator is estimators[0]
+    assert (settings.alpha, settings.candidate) == (parameters.dm_alpha, parameters.candidate)
+    assert (settings.draws, settings.seed) == (
+        parameters.monte_carlo_draws,
+        parameters.monte_carlo_seed,
+    )
+    assert settings.tolerance == parameters.degeneracy_tolerance
+    assert settings.min_violations == parameters.min_violations
+    assert settings.profile_parameters is parameters.profile_parameters
