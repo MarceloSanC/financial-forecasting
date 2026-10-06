@@ -34,7 +34,9 @@ LIBRARY_KEYS = (
     "exchange-calendars",
 )
 CODE_KEYS = ("code.src", "code.uv_lock", "code.cohort_file")
-REQUIRED_KEYS = (*LIBRARY_KEYS, "device", "torch_threads", "cpu", *CODE_KEYS, "code_dirty")
+THREADS_KEY = "torch_threads"
+"""Threads do torch na corrida — a inferência (7.1) prediz com o valor gravado aqui."""
+REQUIRED_KEYS = (*LIBRARY_KEYS, "device", THREADS_KEY, "cpu", *CODE_KEYS, "code_dirty")
 DIRTY_KEY = "code_dirty"
 
 

@@ -30,6 +30,7 @@ from pathlib import Path
 from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
     DIRTY_KEY,
     LIBRARY_KEYS,
+    THREADS_KEY,
 )
 
 _PYTHON = "python"
@@ -69,7 +70,7 @@ class GitRuntimeEnvironmentProbe:
         }
         snapshot = {key: self._version(key) for key in LIBRARY_KEYS}
         snapshot["device"] = self._device
-        snapshot["torch_threads"] = self._torch_threads()
+        snapshot[THREADS_KEY] = self._torch_threads()
         snapshot["cpu"] = f"{platform.machine()}/{os.cpu_count()}"
         for key, path in tracked.items():
             snapshot[key] = self._git("rev-parse", f"HEAD:{path}")
