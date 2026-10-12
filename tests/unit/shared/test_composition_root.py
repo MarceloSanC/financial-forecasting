@@ -10,6 +10,9 @@ de `wire_dependencies` — necessário para a cobertura ≥90% (composition_root
 do omit).
 """
 
+import subprocess
+import sys
+import textwrap
 from datetime import date
 from pathlib import Path
 
@@ -73,6 +76,12 @@ from financial_forecasting.features.feature_engineering.domain.services.dataset_
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
     feature_set_hash,
 )
+from financial_forecasting.features.inference.adapters.out.filesystem.json_inference_manifest import (  # noqa: E501
+    JsonInferenceManifest,
+)
+from financial_forecasting.features.inference.application.use_cases.run_inference import (
+    RunInference,
+)
 from financial_forecasting.features.market_data.adapters.out.parquet.parquet_fundamental_fetcher import (  # noqa: E501
     ParquetFundamentalFetcher,
 )
@@ -91,6 +100,9 @@ from financial_forecasting.features.market_data.application.use_cases.ingest_fun
 from financial_forecasting.features.market_data.application.use_cases.ingest_news import (
     IngestNews,
 )
+from financial_forecasting.features.modeling.adapters.out.filesystem.checkpoint_locator import (
+    FilesystemCheckpointLocator,
+)
 from financial_forecasting.features.modeling.adapters.out.filesystem.json_cohort_progress_ledger import (  # noqa: E501
     JsonCohortProgressLedger,
 )
@@ -101,11 +113,20 @@ from financial_forecasting.features.modeling.application.pipeline_version import
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
     HyperparameterSearch,
 )
+from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (
+    TftCheckpointPredictor,
+)
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
     TftTrainer,
 )
+from financial_forecasting.features.modeling.application.use_cases.predict_tft_from_checkpoints import (  # noqa: E501
+    PredictTftFromCheckpoints,
+)
 from financial_forecasting.features.modeling.application.use_cases.read_training_grid import (
     ReadTrainingGrid,
+)
+from financial_forecasting.features.modeling.application.use_cases.resolve_tft_checkpoints import (
+    ResolveTftCheckpoints,
 )
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
@@ -603,3 +624,150 @@ def test_scorecard_shares_gold_store(tmp_path: Path) -> None:
     reader = deps.build_confirmatory_scorecard._reader
     assert isinstance(reader, ParquetGoldStore)
     assert reader is deps.refresh_gold._gold_store
+
+
+def _inference_settings(tmp_path: Path) -> Settings:
+    return Settings(
+        _env_file=None,
+        data_root=tmp_path / "d",
+        artifacts_root=tmp_path / "a",
+        repo_root=tmp_path,
+        mlflow_tracking_uri=f"sqlite:///{tmp_path / 'mlruns.db'}",
+    )
+
+
+@pytest.mark.unit
+def test_wires_run_inference_for_with_the_real_collaborators(tmp_path: Path) -> None:
+    """Stage 7.1 Task 11: os fornecedores reais, com as MESMAS declarações do cohort."""
+    deps = wire_dependencies(settings=_inference_settings(tmp_path))
+
+    use_case = deps.run_inference_for(tmp_path / "c.toml", "cpu")
+
+    assert isinstance(use_case, RunInference)
+    resolver = use_case._resolver
+    predictor = use_case._predictor
+    assert isinstance(resolver, ResolveTftCheckpoints)
+    assert isinstance(predictor, PredictTftFromCheckpoints)
+    assert isinstance(use_case._persister, PersistPredictions)
+    assert use_case._persister._repository is deps.analytics_repository
+    assert use_case._silver is deps.analytics_repository
+    assert use_case._ledger is deps.cohort_ledger
+    assert use_case._hasher is deps.hasher
+    assert isinstance(use_case._clock, SystemClock)
+    manifest = use_case._manifest
+    assert isinstance(manifest, JsonInferenceManifest)
+    assert manifest.path("x") == tmp_path / "d" / "inference" / "x" / "manifest.json"
+    assert isinstance(use_case._probe, GitRuntimeEnvironmentProbe)
+    # Resolução e predição: o mesmo store, hasher, splitter, raiz, colunas e declarações
+    # que o cohort usou para treinar (senão o run_id derivado não seria o gravado).
+    for supplier in (resolver, predictor):
+        assert supplier._store is deps.store
+        assert supplier._hasher is deps.hasher
+        assert supplier._splitter is deps.train_tft._splitter
+        assert supplier._artifacts_root == tmp_path / "a"
+        assert supplier._modeling_columns == deps.modeling_columns
+        assert supplier._observed_feature_set_hash == feature_set_hash()
+        assert supplier._pipeline_version == PIPELINE_VERSION
+        assert supplier._supported_device == "cpu"
+    assert resolver._run_index is deps.cohort_run_index
+    assert resolver._locator is predictor._locator
+    trainer: object = deps.train_tft._trainer
+    assert predictor._predictor is trainer
+
+
+@pytest.mark.unit
+def test_checkpoint_locator_is_wired_outside_the_lazy_proxy(tmp_path: Path) -> None:
+    """O locator stdlib entra direto: montar a inferência não importa a pilha de DL."""
+    script = textwrap.dedent(
+        f"""
+        import sys
+        from pathlib import Path
+        from financial_forecasting.composition_root import wire_dependencies
+        from financial_forecasting.shared.infrastructure.config.settings import Settings
+        root = Path({str(tmp_path)!r})
+        deps = wire_dependencies(
+            settings=Settings(
+                _env_file=None,
+                data_root=root / "d",
+                artifacts_root=root / "a",
+                repo_root=root,
+                mlflow_tracking_uri="sqlite:///" + str(root / "mlruns.db"),
+            )
+        )
+        use_case = deps.run_inference_for(root / "c.toml", "cpu")
+        print(type(use_case._resolver._locator).__name__)
+        print(sorted({{"torch", "lightning", "pytorch_forecasting"}} & set(sys.modules)))
+        """
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=True
+    )
+
+    locator_name, leaked = completed.stdout.strip().splitlines()[-2:]
+    assert locator_name == FilesystemCheckpointLocator.__name__
+    assert leaked == "[]"
+
+
+@pytest.mark.unit
+def test_lazy_tft_proxy_exposes_predict_from_checkpoint_without_building() -> None:
+    """O proxy satisfaz também o port do checkpoint, sem construir o adapter real."""
+    proxy = _LazyPfTftTrainer()
+    predictor: TftCheckpointPredictor = proxy
+
+    assert callable(predictor.predict_from_checkpoint)
+    assert proxy._delegate is None
+
+
+@pytest.mark.unit
+def test_injected_probe_factory_reaches_run_inference(tmp_path: Path) -> None:
+    calls: list[tuple[Path, str]] = []
+    fake_probe = InMemoryRuntimeEnvironmentProbe()
+
+    def factory(cohort_path: Path, device: str) -> InMemoryRuntimeEnvironmentProbe:
+        calls.append((cohort_path, device))
+        return fake_probe
+
+    deps = wire_dependencies(settings=_inference_settings(tmp_path), runtime_probe_factory=factory)
+
+    use_case = deps.run_inference_for(tmp_path / "c.toml", "cpu")
+
+    assert use_case._probe is fake_probe
+    assert calls == [(tmp_path / "c.toml", "cpu")]
+
+
+def _wired_objects(root: object) -> list[object]:
+    """Todo objeto do pacote alcançável pelos atributos de instância a partir de `root`."""
+    seen: dict[int, object] = {}
+    pending = [root]
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        values: list[object]
+        if isinstance(current, dict):
+            values = list(current.values())
+        elif isinstance(current, list | tuple | set | frozenset):
+            values = list(current)
+        elif type(current).__module__.startswith("financial_forecasting."):
+            seen[id(current)] = current
+            values = list(getattr(current, "__dict__", {}).values())
+        else:
+            continue
+        pending.extend(values)
+    return list(seen.values())
+
+
+@pytest.mark.unit
+def test_run_inference_for_wires_no_evaluation_use_case(tmp_path: Path) -> None:
+    """Evidência do CA-10: nada do `evaluation` no grafo montado pela fábrica."""
+    deps = wire_dependencies(settings=_inference_settings(tmp_path))
+
+    graph = _wired_objects(deps.run_inference_for(tmp_path / "c.toml", "cpu"))
+
+    modules = {type(obj).__module__ for obj in graph}
+    assert (
+        "financial_forecasting.features.modeling.application.use_cases.resolve_tft_checkpoints"
+        in (modules)
+    )  # o percurso entra nos use cases fornecedores
+    assert not [m for m in modules if m.startswith("financial_forecasting.features.evaluation")]
