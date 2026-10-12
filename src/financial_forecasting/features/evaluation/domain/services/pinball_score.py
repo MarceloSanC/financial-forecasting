@@ -8,6 +8,8 @@ primária), stdlib-only. Convenções (concept 6.1 I4/I6):
 - P̄_τ = média de rho_τ sobre os T pontos; P̄_G = média **simples** dos P̄_τ (pesos
   iguais sobre os K níveis);
 - L_t = média dos K rho_τ do ponto t (insumo da 6.2) — a média dos L_t é P̄_G;
+- rho_τ(y_t - q_τ,t) por ponto num nível só (`per_point_losses_at`, insumo do DM por τ da
+  6.6) — a média dos K desses vetores, ponto a ponto, é L_t;
 - empates são irrelevantes (rho_τ(0) = 0 dos dois lados).
 
 Toda série é pontuada sobre `series.scored_values(i)` — o vetor pós-guardrail (I3).
@@ -90,6 +92,21 @@ class PinballScore:
                 for level, q in zip(series.levels, series.scored_values(index), strict=True)
             )
             / size
+            for index, y in enumerate(series.realized)
+        )
+
+    @staticmethod
+    def per_point_losses_at(series: CoverageSeries, level: float) -> tuple[float, ...]:
+        """rho_τ(y_t - q_τ,t), t = 1..T, num nível τ da grade (insumo do DM por τ, 6.6).
+
+        Raises:
+            ValueError: `level` fora da grade da série.
+        """
+        if level not in series.levels:
+            raise ValueError(f"level {level!r} is not in the grid {series.levels}")
+        k = series.levels.index(level)
+        return tuple(
+            pinball_loss(realized=y, quantile=series.scored_values(index)[k], level=level)
             for index, y in enumerate(series.realized)
         )
 

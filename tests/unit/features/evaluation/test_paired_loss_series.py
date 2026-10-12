@@ -184,3 +184,30 @@ def test_pls_min_models_public() -> None:
     assert not hasattr(paired_loss_series_module, "_MIN_MODELS")
     with pytest.raises(ValueError, match="k >= 2"):
         _series(models=("a",), losses=(_LOSSES_A,))
+
+
+# --- Stage 6.6 Task 04: janela contígua (DM por fold) ---------------------------------
+
+
+def test_pls_window_keeps_models_horizon_and_the_slice() -> None:
+    window = _series().window(1, 3)
+    assert window.models == ("a", "b", "c")
+    assert window.horizon == 1
+    assert window.target_timestamps == _TIMESTAMPS[1:3]
+    assert window.losses == (_LOSSES_A[1:3], _LOSSES_B[1:3], _LOSSES_C[1:3])
+
+
+def test_pls_window_whole_series_is_equal() -> None:
+    series = _series()
+    assert series.window(0, series.n_points) == series
+
+
+@pytest.mark.parametrize(("start", "stop"), [(-1, 2), (2, 2), (3, 2), (0, 5)])
+def test_pls_window_out_of_range_raises(start: int, stop: int) -> None:
+    with pytest.raises(ValueError, match="window needs 0 <= start < stop <= T"):
+        _series().window(start, stop)
+
+
+def test_pls_window_too_short_for_the_horizon_raises() -> None:
+    with pytest.raises(ValueError, match="T > h"):
+        _series(horizon=2).window(0, 2)

@@ -115,10 +115,7 @@ class DegeneracyGate:
             ValueError: `tolerance` negativa ou não-finita (C3).
         """
         validate_tolerance(tolerance, field="tolerance")
-        degenerate = tuple(
-            max(values) - min(values) <= tolerance
-            for values in (series.scored_values(i) for i in range(series.n_points))
-        )
+        degenerate = _degenerate_mask(series, tolerance)
         n_degenerate = sum(degenerate)
         return DegeneracyReport(
             horizon=series.horizon,
@@ -133,12 +130,54 @@ class DegeneracyGate:
         )
 
 
+def adjacent_collapse_rates(
+    series: CoverageSeries, *, tolerance: float
+) -> tuple[tuple[float, float, float | None], ...]:
+    """Colapso parcial por par **adjacente** da grade ordenada (Stage 6.6; ADR `6_6_0002`).
+
+    Para cada (τ_k, τ_{k+1}), a fração das linhas NÃO-degeneradas (a mesma máscara do
+    gate) com `q_{k+1} - q_k ≤ tolerance`; `None` sem linha não-degenerada. Complementa
+    os pares simétricos do `DegeneracyReport`: empates entre níveis vizinhos (boosters
+    por nível, doc §5.1) não aparecem num par simétrico, e com tolerância > 0 gaps
+    internos ≤ tol podem somar > tol. Fora do caminho do veredito: só o perfil chama.
+
+    Raises:
+        ValueError: `tolerance` negativa ou não-finita.
+    """
+    validate_tolerance(tolerance, field="tolerance")
+    levels = series.levels
+    adjacent = tuple(((levels[k], levels[k + 1]), (k, k + 1)) for k in range(len(levels) - 1))
+    return _collapse_rates(series, _degenerate_mask(series, tolerance), adjacent, tolerance)
+
+
+def _degenerate_mask(series: CoverageSeries, tolerance: float) -> tuple[bool, ...]:
+    """Linha degenerada ⇔ `max - min` do vetor pós-guardrail ≤ `tolerance` (regra única)."""
+    return tuple(
+        max(values) - min(values) <= tolerance
+        for values in (series.scored_values(i) for i in range(series.n_points))
+    )
+
+
 def _pair_collapse_rates(
     series: CoverageSeries, degenerate: tuple[bool, ...], tolerance: float
 ) -> tuple[tuple[float, float, float | None], ...]:
+    symmetric = tuple(zip(series.symmetric_pairs, series.symmetric_pair_indices, strict=True))
+    return _collapse_rates(series, degenerate, symmetric, tolerance)
+
+
+_Pair = tuple[tuple[float, float], tuple[int, int]]
+
+
+def _collapse_rates(
+    series: CoverageSeries,
+    degenerate: tuple[bool, ...],
+    pairs: tuple[_Pair, ...],
+    tolerance: float,
+) -> tuple[tuple[float, float, float | None], ...]:
+    """Regra única do colapso parcial por par: `q_alto - q_baixo ≤ tolerance` entre as
+    linhas NÃO-degeneradas; `None` sem nenhuma (C6). Pares simétricos e adjacentes."""
     kept = [i for i, is_degenerate in enumerate(degenerate) if not is_degenerate]
     rates: list[tuple[float, float, float | None]] = []
-    pairs = zip(series.symmetric_pairs, series.symmetric_pair_indices, strict=True)
     for (lower_level, upper_level), (k_low, k_high) in pairs:
         if not kept:
             rates.append((lower_level, upper_level, None))

@@ -26,6 +26,7 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
     GOLD_DM_RESULTS,
     GOLD_MCS_RESULTS,
     GOLD_METRICS_BY_RUN,
+    GOLD_QUALITY_CHECKS,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldGenerationCorruptError,
@@ -43,6 +44,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.preregistrat
     Preregistration,
 )
 from tests.unit.features.evaluation._preregistration_payload import valid_payload
+from tests.unit.features.evaluation._profile_parameters import profile_block
 from tests.unit.features.evaluation._scorecard_factory import (
     REFERENCE,
     StoredGold,
@@ -450,3 +452,102 @@ def test_evidence_pinball_seed_mean() -> None:
     assert evidence[0].mean_pinball[_CAND] == pytest.approx(0.25)  # type: ignore[index]
     verdict = ConfirmatoryScorecard.decide(_PLAN, evidence)  # type: ignore[arg-type]
     assert verdict.horizons[0].candidate_has_lowest_mean_pinball is False
+
+
+@pytest.mark.unit
+def test_mcs_horizon_of_wrong_type_does_not_mask_a_later_mismatch() -> None:
+    """Checkpoint C bloco 1 (C1): horizonte de tipo errado numa linha do MCS é corrupção,
+    conferida **depois** de todo mismatch — o mismatch de bloco numa linha posterior vence."""
+    stored = make_stored(_PLAN)
+    first = _is(horizon=1, scheme="moving_block", model="baseline_ar1")
+    later = _is(horizon=7, scheme="stationary", model=_CAND)
+    assert stored.set_cell(GOLD_MCS_RESULTS.name, later, "block_size", 99)
+    assert stored.set_cell(GOLD_MCS_RESULTS.name, first, "horizon", 1.0)
+
+    _mismatch(stored, MismatchField.MCS_BLOCK_RULE)
+
+
+@pytest.mark.unit
+def test_mcs_horizon_of_wrong_type_alone_is_named_corruption() -> None:
+    """Checkpoint C bloco 1 r2 (N1): sem mismatch, o horizonte de tipo errado é corrupção
+    nomeando a coluna `horizon` (não a estimativa, que é válida)."""
+    stored = make_stored(_PLAN)
+    first = _is(horizon=1, scheme="moving_block", model="baseline_ar1")
+    assert stored.set_cell(GOLD_MCS_RESULTS.name, first, "horizon", 1.0)
+    with pytest.raises(
+        GoldGenerationCorruptError, match=r"gold_mcs_results\.horizon: expected int"
+    ):
+        _map(stored)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("column", ["severity", "outcome"])
+def test_quality_check_cell_of_wrong_type_is_named_corruption(column: str) -> None:
+    """Checkpoint C bloco 2 (T4): `severity`/`outcome` de tipo errado num `COMPLETED` é
+    corrupção nomeada (com `col` cru, `1 != "ERROR"` passaria calado)."""
+    stored = make_stored(_PLAN)
+    assert stored.set_cell(GOLD_QUALITY_CHECKS.name, lambda _row: True, column, 1)
+    with pytest.raises(
+        GoldGenerationCorruptError, match=rf"gold_quality_checks\.{column}: expected str"
+    ):
+        _map(stored)
+
+
+@pytest.mark.unit
+def test_outcome_of_wrong_type_on_a_non_error_row_is_corruption() -> None:
+    """Checkpoint C bloco 2 (B1): o tipo do `outcome` é conferido em toda linha, não só nas
+    de severidade ERROR (sem curto-circuito)."""
+    stored = make_stored(_PLAN)
+    assert stored.set_cell(GOLD_QUALITY_CHECKS.name, lambda _row: True, "severity", "warn")
+    assert stored.set_cell(GOLD_QUALITY_CHECKS.name, lambda _row: True, "outcome", 123)
+    with pytest.raises(GoldGenerationCorruptError, match=r"gold_quality_checks\.outcome"):
+        _map(stored)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("monte_carlo_draws", 499),
+        ("monte_carlo_seed", 7),
+        ("mcs_block_sensitivities", ["h"]),
+        (
+            "profile_parameters",
+            {
+                "subset_multiplicity": "none_raw_p_descriptive_v1",
+                "partial_degeneracy_pairs": "symmetric_and_adjacent_non_degenerate_rows_v1",
+                "mcs_block_sensitivity_scheme": "primary_scheme",
+                "stationarity": {
+                    "acf_max_lag": "min_floor_10_log10_T_T_minus_1",
+                    "break_test": "cusum_mean_dm_primary_variance_kolmogorov_v1",
+                    "break_alpha": 0.05,
+                },
+            },
+        ),
+    ],
+)
+def test_mismatch_on_each_profile_parameter(key: str, value: object) -> None:
+    """Stage 6.6 (CA9): `check_manifest` recusa divergência em cada campo novo."""
+    stored = make_stored(_PLAN)
+    stored.manifest["parameters"][key] = value  # type: ignore[index]
+    _mismatch(stored, MismatchField.PARAMETERS)
+
+
+@pytest.mark.unit
+def test_mismatch_on_a_divergent_break_alpha() -> None:
+    """L-3: a mesma regra com outro `break_alpha` diverge do plano (r1 sintética)."""
+    payload = {
+        **valid_payload(),
+        "revision": 1,
+        "amends": "test_plan-r0-0123456789ab",
+        "justification": "blinded profile rules",
+        "blind_status": "blinded",
+        "profile_parameters": profile_block(),
+    }
+    plan = Preregistration.from_mapping(payload)
+    command = refresh_command_from(plan, REFERENCE)
+    stored = make_stored(plan)
+    stored.manifest["parameters"]["profile_parameters"]["stationarity"]["break_alpha"] = 0.01  # type: ignore[index]
+    with pytest.raises(PreregistrationMismatchError) as raised:
+        evidence_from_generation(prereg=plan, command=command, generation=stored.generation())
+    assert raised.value.field == MismatchField.PARAMETERS

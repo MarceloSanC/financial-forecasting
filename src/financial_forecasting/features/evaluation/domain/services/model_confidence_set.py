@@ -97,6 +97,49 @@ def block_length_rule(*, horizon: int, max_estimate: float) -> int:
     return max(horizon, math.ceil(max_estimate))
 
 
+BLOCK_SENSITIVITIES: Final[tuple[str, ...]] = ("h", "sqrt_T")
+"""Sensibilidades de bloco do MCS declaráveis: l = h e l = ⌈√T⌉ (ADR 6.5.0009, 6.6.0002).
+
+Dono: este módulo (a regra `block_sensitivity_length`); o `Preregistration` importa daqui.
+"""
+
+
+def validate_block_sensitivities(blocks: object, *, field: str) -> None:
+    """Dono da regra: tupla de regras de `BLOCK_SENSITIVITIES`, sem repetição (vazia vale).
+
+    Consumido pelo `McsSpec` do pré-registro e pelos `RefreshParameters` (Stage 6.6).
+
+    Raises:
+        ValueError: não-tupla, regra fora de `BLOCK_SENSITIVITIES` ou repetida.
+    """
+    if not isinstance(blocks, tuple) or any(b not in BLOCK_SENSITIVITIES for b in blocks):
+        raise ValueError(f"{field} must hold values of {list(BLOCK_SENSITIVITIES)}, got {blocks!r}")
+    if len(set(blocks)) != len(blocks):
+        raise ValueError(f"{field} must not repeat values, got {list(blocks)}")
+
+
+def block_sensitivity_length(rule: str, *, horizon: int, n_points: int) -> int:
+    """Comprimento de bloco de uma sensibilidade: `"h"` → h; `"sqrt_T"` → ⌈√T⌉ (Stage 6.6).
+
+    ⌈√T⌉ em inteiro exato (`math.isqrt`), sem float — o default da `arch` trunca √T, por
+    isso o bloco é sempre passado ao backend (concept 6.6 D8, I6).
+
+    Raises:
+        ValueError: `rule` fora de `BLOCK_SENSITIVITIES`; `horizon` inválido; `n_points`
+            não-`int` ou `bool`; T < 2 ou T ≤ h (o `check_points` da série pareada, dono).
+    """
+    if rule not in BLOCK_SENSITIVITIES:
+        raise ValueError(f"rule must be one of {list(BLOCK_SENSITIVITIES)}, got {rule!r}")
+    check_horizon(horizon)
+    if isinstance(n_points, bool) or not isinstance(n_points, int):
+        raise ValueError(f"n_points must be an int, got {n_points!r}")
+    check_points(n_points, horizon)
+    if rule == "h":
+        return horizon
+    root = math.isqrt(n_points)
+    return root if root * root == n_points else root + 1
+
+
 @dataclass(frozen=True)
 class McsElimination:
     """Um passo do MCS: o modelo eliminado (ou o sobrevivente), p do passo e p MCS."""

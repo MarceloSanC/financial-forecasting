@@ -1,4 +1,6 @@
-"""Os cinco gold builders da Stage 6.4 (satisfazem o port `GoldBuilder`; ADR 6.4.0001).
+"""Os gold builders: os cinco da Stage 6.4 e os oito de perfil da 6.6.
+
+Satisfazem o port `GoldBuilder` (ADR 6.4.0001).
 
 Mapeamento puro em Python (sem `pyarrow`/`duckdb`/`pandas`): cada `build` só copia
 campos dos relatórios dos `GoldInputs` para as colunas da sua tabela (technical 6.4 §1

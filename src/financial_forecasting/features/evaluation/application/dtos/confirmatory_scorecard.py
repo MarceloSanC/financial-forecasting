@@ -46,7 +46,9 @@ def refresh_command_from(prereg: Preregistration, reference: str) -> RefreshGold
     `asset` e `horizons` do plano; `parent_sweep_id` = o `cohort_id` referenciado;
     `window_deficits` e `dataset_fingerprint` (do realizado) do plano; os
     `RefreshParameters` com `preregistration_ref = reference`, as bandas do gate e do
-    perfil ordenadas, e o primário seguido das sensibilidades no DM e no MCS.
+    perfil ordenadas, e o primário seguido das sensibilidades no DM e no MCS; e, da
+    Stage 6.6 (F8a), o `draws`/`seed` do Monte Carlo, as sensibilidades de bloco do MCS e
+    o bloco de regras de perfil da revisão (`None` no r0).
     """
     gate = prereg.h1_gate
     parameters = RefreshParameters(
@@ -61,6 +63,10 @@ def refresh_command_from(prereg: Preregistration, reference: str) -> RefreshGold
         mcs_reps=prereg.mcs.reps,
         mcs_seed=prereg.mcs.seed,
         mcs_schemes=(prereg.mcs.primary_scheme, *prereg.mcs.sensitivity_schemes),
+        monte_carlo_draws=prereg.monte_carlo.draws,
+        monte_carlo_seed=prereg.monte_carlo.seed,
+        mcs_block_sensitivities=prereg.mcs.block_sensitivities,
+        profile_parameters=prereg.profile_parameters,
     )
     return RefreshGoldCommand(
         asset=prereg.asset,
@@ -271,6 +277,137 @@ class DescriptorProfile:
     n_seeds: int
 
 
+# --- perfis de séries novas (Stage 6.6; ADR 6.6.0002 — nunca lidos pelo veredito) -------
+
+
+class ProfileState(StrEnum):
+    """Estado de um perfil declarado no scorecard (concept 6.6 §4, I9)."""
+
+    BUILT = "built"
+    NOT_FROZEN_IN_REVISION = "not_frozen_in_revision"  # a revisão não congela a regra
+    NOT_BUILT_HERE = "not_built_here"  # construído fora do scorecard (8.3)
+
+
+@dataclass(frozen=True)
+class DmSubsetProfileRow:
+    """Um recorte do DM (fold, seed ou τ) de `gold_dm_profiles` — descritivo, p bruto."""
+
+    dimension: str
+    fold: str | None
+    seed: int | None
+    level: float | None
+    comparator: str
+    status: str
+    undefined_reason: str | None
+    detail: str
+    n_points: int | None
+    first_target_timestamp: str | None
+    last_target_timestamp: str | None
+    variance_estimator: str
+    mean_differential: float | None
+    statistic: float | None
+    p_value: float | None
+    rejected: bool | None
+    fallback_applied: bool | None
+    horizon_used: int | None
+    alpha: float
+
+
+@dataclass(frozen=True)
+class SeedFractionProfileRow:
+    """Fração de seeds do candidato que rejeitam contra um comparador (`gold_dm_seed_fraction`)."""
+
+    comparator: str
+    n_seeds: int
+    n_rejecting: int
+    n_undefined: int
+    fraction_rejecting: float | None
+    alpha: float
+
+
+@dataclass(frozen=True)
+class McsBlockProfileRow:
+    """Uma linha do MCS com bloco l = h ou l = ceil(sqrt(T)) (`gold_mcs_block_sensitivity`).
+
+    Rodada com erro: uma linha com `model` nulo e as colunas do MCS nulas.
+    """
+
+    block_rule: str
+    model: str | None
+    status: str
+    undefined_reason: str | None
+    detail: str
+    scheme: str
+    block_size: int
+    elimination_rank: int | None
+    step_p_value: float | None
+    mcs_p_value: float | None
+    included: bool | None
+    alpha: float | None
+    reps: int | None
+    seed: int | None
+    n_points: int | None
+
+
+@dataclass(frozen=True)
+class MonteCarloProfileRow:
+    """p-valores Monte Carlo de Christoffersen de uma sequência de hits (h = 1)."""
+
+    model: str
+    seed: int | None
+    sample: str
+    kind: str
+    level_low: float
+    level_high: float | None
+    includes_degenerate: bool
+    status: str
+    detail: str
+    uc_status: str | None
+    ind_status: str | None
+    mc_p_uc: float | None
+    mc_p_ind: float | None
+    mc_p_cc: float | None
+    draws: int
+    mc_seed: int
+    attempts: int | None
+
+
+@dataclass(frozen=True)
+class PartialDegeneracyProfileRow:
+    """Colapso parcial de um par de níveis (simétrico ou adjacente) de uma série."""
+
+    model: str
+    seed: int | None
+    sample: str
+    pair_kind: str
+    level_low: float | None
+    level_high: float | None
+    status: str
+    detail: str
+    collapse_rate: float | None
+    tolerance: float
+
+
+@dataclass(frozen=True)
+class StationarityProfileRow:
+    """Diagnóstico de d_t de um par: CUSUM (`gold_differential_breaks`) e ACF por lag."""
+
+    model_a: str
+    model_b: str
+    status: str
+    undefined_reason: str | None
+    detail: str
+    statistic: float | None
+    p_value: float | None
+    rejected: bool | None
+    alpha: float
+    horizon_used: int | None
+    break_target_timestamp: str | None
+    n_points: int | None
+    max_lag: int | None
+    acf: tuple[float, ...]
+
+
 @dataclass(frozen=True, kw_only=True)
 class HorizonProfile:
     """O perfil de um horizonte (ADR 6.5.0008 item 2) — nunca lido pelo veredito (I12)."""
@@ -287,14 +424,31 @@ class HorizonProfile:
     without_gaps: tuple[TailSummaryProfile, ...]
     descriptors: tuple[DescriptorProfile, ...]
     lowest_mean_pinball: bool
+    dm_subsets: tuple[DmSubsetProfileRow, ...]
+    dm_seed_fractions: tuple[SeedFractionProfileRow, ...]
+    mcs_block_sensitivity: tuple[McsBlockProfileRow, ...]
+    monte_carlo: tuple[MonteCarloProfileRow, ...]
+    partial_degeneracy: tuple[PartialDegeneracyProfileRow, ...]
+    stationarity: tuple[StationarityProfileRow, ...]
 
 
 @dataclass(frozen=True)
 class ScorecardProfile:
-    """O perfil do scorecard: por horizonte, e os perfis declarados e não construídos."""
+    """O perfil do scorecard: por horizonte, o estado de cada perfil declarado e os não
+    construídos aqui (`declared_not_built` = os `not_built_here`)."""
 
     horizons: tuple[HorizonProfile, ...]
     declared_not_built: tuple[str, ...]
+    profile_states: tuple[tuple[str, ProfileState], ...]
+
+    def __post_init__(self) -> None:
+        """`declared_not_built` é derivado de `profile_states` (os `not_built_here`)."""
+        derived = tuple(p for p, s in self.profile_states if s is ProfileState.NOT_BUILT_HERE)
+        if self.declared_not_built != derived:
+            raise ValueError(
+                f"declared_not_built {self.declared_not_built} != the not_built_here "
+                f"profiles {derived}"
+            )
 
     def as_mapping(self) -> dict[str, object]:
         """Serialização JSON-safe única."""

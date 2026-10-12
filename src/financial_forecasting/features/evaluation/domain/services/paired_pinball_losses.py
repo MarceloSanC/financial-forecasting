@@ -15,7 +15,10 @@ Serviço de domínio stdlib-only (concept 6.2 §4, I1/I3, C1; ADR `6_2_0001` ite
   `CoverageSeries` não carrega id de seed; a fábrica valida, nunca alinha). O pareamento
   exige o mesmo y_t em todas as colunas: com alvos diferentes o diferencial d_t mediria o
   alvo, não o modelo (regra aditiva de C1, technical 6.2 §7);
-- a ordem dos modelos é a do mapping.
+- a ordem dos modelos é a do mapping;
+- `level` (Stage 6.6, DM por τ): com um nível da grade, a coluna é rho_τ por ponto
+  (`PinballScore.per_point_losses_at`) em vez de L_t, com a mesma média entre seeds;
+  `None` (default) mantém L_t.
 
 Não importa nada de `modeling` e não altera a `CoverageSeries` (6.1).
 """
@@ -39,13 +42,16 @@ from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_
 
 def paired_pinball_losses(
     series_by_model: Mapping[str, Sequence[CoverageSeries]],
+    *,
+    level: float | None = None,
 ) -> PairedLossSeries:
-    """Monta a `PairedLossSeries` de L_t a partir das séries de cada modelo.
+    """Monta a `PairedLossSeries` de L_t (ou de rho_τ, com `level`) das séries de cada modelo.
 
     Args:
         series_by_model: modelo → S ≥ 1 `CoverageSeries` (uma por seed), todas do mesmo
             horizonte, timestamps, grade e realizados. A ordem das chaves é a ordem dos
             modelos.
+        level: `None` → L_t (média da grade); um nível da grade → rho_τ por ponto.
 
     Returns:
         A série pareada do horizonte, uma coluna L_t (média entre seeds) por modelo.
@@ -70,7 +76,7 @@ def paired_pinball_losses(
         horizon=reference.horizon,
         models=tuple(series_by_model),
         target_timestamps=reference.target_timestamps,
-        losses=tuple(_seed_mean(seeds) for seeds in series_by_model.values()),
+        losses=tuple(_seed_mean(seeds, level) for seeds in series_by_model.values()),
     )
 
 
@@ -89,8 +95,13 @@ def _check_same_axes(
         raise ValueError(f"{where}: realized values differ from the first series")
 
 
-def _seed_mean(seeds: Sequence[CoverageSeries]) -> tuple[float, ...]:
-    """Média ponto a ponto das L_t das S seeds (`math.fsum` / S)."""
-    per_seed = [PinballScore.per_point_losses(series) for series in seeds]
+def _seed_mean(seeds: Sequence[CoverageSeries], level: float | None) -> tuple[float, ...]:
+    """Média ponto a ponto das perdas das S seeds (`math.fsum` / S): L_t ou rho_τ."""
+    per_seed = [
+        PinballScore.per_point_losses(series)
+        if level is None
+        else PinballScore.per_point_losses_at(series, level)
+        for series in seeds
+    ]
     count = len(per_seed)
     return tuple(math.fsum(point) / count for point in zip(*per_seed, strict=True))

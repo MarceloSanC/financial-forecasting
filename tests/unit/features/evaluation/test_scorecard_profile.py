@@ -9,18 +9,31 @@ menor P̄_G, valores copiados sem cálculo e os perfis declarados fora desta Sta
 
 from __future__ import annotations
 
+import dataclasses
 import json
 
 import pytest
 
 from financial_forecasting.features.evaluation.application.dtos.confirmatory_scorecard import (
+    ProfileState,
     ScorecardProfile,
     refresh_command_from,
 )
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
     GOLD_CALIBRATION_TABLE,
+    GOLD_CHRISTOFFERSEN_MONTE_CARLO,
+    GOLD_DIFFERENTIAL_ACF,
+    GOLD_DIFFERENTIAL_BREAKS,
+    GOLD_DM_PROFILES,
     GOLD_DM_RESULTS,
+    GOLD_DM_SEED_FRACTION,
+    GOLD_MCS_BLOCK_SENSITIVITY,
     GOLD_MCS_RESULTS,
+    GOLD_PARTIAL_DEGENERACY,
+    GoldTableSchema,
+)
+from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    GoldGenerationCorruptError,
 )
 from financial_forecasting.features.evaluation.application.use_cases.scorecard_evidence import (
     evidence_from_generation,
@@ -37,8 +50,9 @@ from financial_forecasting.features.evaluation.domain.services.student_t import 
 from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
     Preregistration,
 )
-from tests.unit.features.evaluation._preregistration_payload import valid_payload
+from tests.unit.features.evaluation._preregistration_payload import r1_payload, valid_payload
 from tests.unit.features.evaluation._scorecard_factory import (
+    PROFILE_PAIR_ACF,
     REFERENCE,
     T_POINTS,
     StoredGold,
@@ -46,6 +60,7 @@ from tests.unit.features.evaluation._scorecard_factory import (
 )
 
 _PLAN = Preregistration.from_mapping(valid_payload())
+_R1 = Preregistration.from_mapping(r1_payload())
 _COMMAND = refresh_command_from(_PLAN, REFERENCE)
 _CAND = _PLAN.candidate
 _EFFECT_TOL = 1e-12
@@ -296,17 +311,98 @@ def test_profile_copies_gold_values() -> None:
 
 @pytest.mark.unit
 def test_profile_declared_not_built() -> None:
-    assert _profile(make_stored(_PLAN)).declared_not_built == (
-        "mcs_block_h",
-        "mcs_block_sqrt_t",
-        "christoffersen_monte_carlo_h1",
-        "dm_per_fold",
-        "dm_per_seed",
-        "dm_per_tau",
-        "dm_differential_stationarity",
-        "partial_degeneracy_per_pair",
-        "sharpness_diagram",
-    )
+    """Stage 6.6: só o diagrama de nitidez (8.3) fica fora do scorecard."""
+    assert _profile(make_stored(_PLAN)).declared_not_built == ("sharpness_diagram",)
+
+
+_SEVEN = (
+    "mcs_block_h",
+    "mcs_block_sqrt_t",
+    "dm_per_fold",
+    "dm_per_seed",
+    "dm_per_tau",
+    "dm_differential_stationarity",
+    "partial_degeneracy_per_pair",
+)
+
+
+@pytest.mark.unit
+def test_r0_states_seven_not_frozen_and_monte_carlo_built() -> None:
+    """CA12 / I9: sem `[profile_parameters]`, os sete perfis ficam `not_frozen_in_revision`."""
+    profile = _profile(make_stored(_PLAN))
+    states = dict(profile.profile_states)
+    assert [p for p, _ in profile.profile_states] == list(_PLAN.profiles.declared)
+    assert {p for p, s in states.items() if s is ProfileState.NOT_FROZEN_IN_REVISION} == set(_SEVEN)
+    assert states["christoffersen_monte_carlo_h1"] is ProfileState.BUILT
+    assert states["sharpness_diagram"] is ProfileState.NOT_BUILT_HERE
+    assert profile.horizons[0].monte_carlo  # o MC roda no r0
+    assert all(not h.dm_subsets and not h.stationarity for h in profile.horizons)
+
+
+@pytest.mark.unit
+def test_r1_states_built_even_with_an_empty_table() -> None:
+    """CA12: com as regras congeladas, tudo `built` — inclusive com tabela vazia legítima."""
+    stored = make_stored(_R1)
+    stored.drop_rows(GOLD_DM_PROFILES.name, lambda _row: True)
+    profile = _profile_for(_R1, stored)
+    states = dict(profile.profile_states)
+    assert {p for p, s in states.items() if s is not ProfileState.BUILT} == {"sharpness_diagram"}
+    assert profile.declared_not_built == ("sharpness_diagram",)
+    assert all(not h.dm_subsets for h in profile.horizons)
+
+
+@pytest.mark.unit
+def test_r1_profile_rows_are_copied_from_the_gold() -> None:
+    """Cada tabela de perfil copiada por horizonte, coluna a coluna (nada recalculado)."""
+    stored = make_stored(_R1)
+    profile = _profile_for(_R1, stored)
+    for horizon in profile.horizons:
+        h = horizon.horizon
+        for table, copied in (
+            (GOLD_DM_PROFILES, horizon.dm_subsets),
+            (GOLD_DM_SEED_FRACTION, horizon.dm_seed_fractions),
+            (GOLD_MCS_BLOCK_SENSITIVITY, horizon.mcs_block_sensitivity),
+            (GOLD_CHRISTOFFERSEN_MONTE_CARLO, horizon.monte_carlo),
+            (GOLD_PARTIAL_DEGENERACY, horizon.partial_degeneracy),
+        ):
+            gold = sorted(
+                (_without(r, table) for r in stored.rows[table.name] if r["horizon"] == h),
+                key=repr,
+            )
+            assert sorted((dataclasses.asdict(row) for row in copied), key=repr) == gold, table
+        (stationarity,) = horizon.stationarity
+        (gold_break,) = [r for r in stored.rows[GOLD_DIFFERENTIAL_BREAKS.name] if r["horizon"] == h]
+        assert {k: v for k, v in dataclasses.asdict(stationarity).items() if k != "acf"} == (
+            _without(gold_break, GOLD_DIFFERENTIAL_BREAKS)
+        )
+        assert stationarity.acf == PROFILE_PAIR_ACF  # em ordem de lag
+    json.dumps(profile.as_mapping())
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("table", "column", "value"),
+    [
+        (GOLD_DM_PROFILES, "p_value", "0.01"),
+        (GOLD_MCS_BLOCK_SENSITIVITY, "block_size", 2.5),
+        (GOLD_CHRISTOFFERSEN_MONTE_CARLO, "mc_p_cc", "x"),
+        (GOLD_DIFFERENTIAL_ACF, "acf", None),
+    ],
+)
+def test_profile_cell_of_wrong_type_is_named_corruption(
+    table: GoldTableSchema, column: str, value: object
+) -> None:
+    """D9: tipo divergente numa tabela de perfil é corrupção nomeada (nunca coerção)."""
+    stored = make_stored(_R1)
+    assert stored.set_cell(table.name, lambda _row: True, column, value)
+    with pytest.raises(GoldGenerationCorruptError, match=column):
+        _profile_for(_R1, stored)
+
+
+def _without(row: dict[str, object], table: GoldTableSchema) -> dict[str, object]:
+    """A linha gold sem partição, horizonte e as colunas constantes que o DTO não copia."""
+    dropped = {"asset", "parent_sweep_id", "preregistration_ref", "horizon", "candidate"}
+    return {k: v for k, v in row.items() if k not in dropped}
 
 
 def _profile_for(plan: Preregistration, stored: StoredGold) -> ScorecardProfile:
@@ -376,3 +472,35 @@ def test_profile_moving_block_divergence_without_scheme() -> None:
     profile = _profile_for(plan, make_stored(plan))
 
     assert profile.horizons[0].mcs_moving_block_divergence is False
+
+
+@pytest.mark.unit
+def test_profile_p_ind_of_wrong_type_is_named_corruption() -> None:
+    """Checkpoint C bloco 1 (T2, F6): célula `p_ind` nula numa linha "applicable" é
+    corrupção nomeada (antes: `TypeError` cru na comparação com alpha)."""
+    stored = make_stored(_PLAN)
+    hits = stored.set_cell(
+        GOLD_CALIBRATION_TABLE.name,
+        _is(independence_status="applicable", band_level=_PLAN.h1_gate.profile_band_level),
+        "p_ind",
+        None,
+    )
+    assert hits
+    with pytest.raises(
+        GoldGenerationCorruptError, match=r"gold_calibration_table\.p_ind: expected float"
+    ):
+        _profile(stored)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("declared", [(), ("b", "a"), ("a", "b", "c")])
+def test_declared_not_built_must_be_the_not_built_here_states(declared: tuple[str, ...]) -> None:
+    """Checkpoint C bloco 6, H-3: `declared_not_built` = os `not_built_here`, na ordem."""
+    states = (
+        ("a", ProfileState.NOT_BUILT_HERE),
+        ("x", ProfileState.BUILT),
+        ("b", ProfileState.NOT_BUILT_HERE),
+    )
+    with pytest.raises(ValueError, match="not_built_here"):
+        ScorecardProfile(horizons=(), declared_not_built=declared, profile_states=states)
+    ScorecardProfile(horizons=(), declared_not_built=("a", "b"), profile_states=states)

@@ -5,7 +5,7 @@ when-use: Ao ler o que o estudo confirmatório AAPL congelou (hipóteses, gate H
 keywords: [preregistration, pre-registro, aapl, confirmatory, h1-gate, h2, scorecard, anchor, blinding, espelho]
 status: accepted
 created_at: 2026-09-30
-updated_at: 2026-09-30
+updated_at: 2026-10-06
 ---
 
 # Pré-registro confirmatório AAPL — espelho
@@ -141,5 +141,57 @@ contagens — nenhum valor de desempenho (registro completo no technical da Stag
   criado pelo servidor em **2026-09-30T19:53:47Z** — posterior à âncora do cohort
   referenciado na #102 (2026-09-28T20:27:09Z).
 - **Registro:** `config/preregistration/aapl_confirmatory-r0.anchor.toml` (fora do
+  hash). A conferência é por conteúdo: o arquivo do plano na tag é byte-igual ao de
+  HEAD.
+
+## Revisão r1 (emenda cega, Stage 6.6)
+
+- **Arquivo:** `config/preregistration/aapl_confirmatory-r1.toml`
+- **`preregistration_ref`:** `aapl_confirmatory-r1-bfa8028498ca`
+- **Hash completo (sha256, floats codificados exatamente):**
+  `bfa8028498ca0768bce8d9a5ae24af1d0ff7fb143216fd09639fa4de29a674bb`
+- **Emenda de:** `aapl_confirmatory-r0-4526c437c296` (`blind_status = "blinded"`).
+
+### O que muda
+
+Só o bloco `[profile_parameters]`, que dá nome às regras dos perfis de séries novas
+que o r0 declara mas não especifica (auditoria F7; ADRs 6.6.0001-0003). Todo outro
+campo é igual ao do r0 (um teste confere campo a campo), então o que julga H1, H2 e
+H3 não muda: o veredito nunca lê as tabelas desses perfis (ADR 6.6.0002).
+
+- **Recortes do DM** (por fold, por seed do candidato e por quantil):
+  descritivos, com p bruto e sem correção de Holm entre recortes
+  (`none_raw_p_descriptive_v1`).
+- **Degeneração parcial por par:** pares simétricos e pares adjacentes da grade,
+  sobre as linhas não degeneradas, com a tolerância do gate
+  (`symmetric_and_adjacent_non_degenerate_rows_v1`).
+- **MCS com bloco l = h e l = ⌈√T⌉:** só no esquema primário (`primary_scheme`).
+- **Estacionariedade do diferencial de perdas d_t:** ACF até
+  L = min(⌊10·log10 T⌋, T − 1), o default do statsmodels
+  (`min_floor_10_log10_T_T_minus_1`); teste de quebra da média por CUSUM escalado
+  pela variância de longo prazo do DM primário, com p-valor de Kolmogorov
+  (`cusum_mean_dm_primary_variance_kolmogorov_v1`); nível 0,05.
+
+Sob o r0, esses sete perfis ficam como "regra não congelada na revisão" no scorecard
+e as suas tabelas saem vazias; o Monte Carlo de Christoffersen, cujos sorteios e
+semente já estão no r0, roda nas duas revisões.
+
+### Declaração de cegamento da emenda
+
+As regras acima foram escolhidas pela literatura e pelos defaults das bibliotecas
+de referência (registros `[decision]` da Stage 6.6), sem nenhum valor de desempenho
+à vista. A única execução do refresh sobre o cohort é a do teste da Stage 6.4 descrita
+na declaração de cegamento do r0, da qual nenhum valor de desempenho foi lido. A
+emenda é ancorada antes da Stage 8.1, que julga pela r1.
+
+### Âncora r1 (ADR 6.5.0003)
+
+- **Tag:** `preregistration/aapl_confirmatory-r1-bfa8028498ca` (commit
+  `3b4285dec00c8f7b8f4bb8d14d767211e76eed21`).
+- **Comentário na #129:**
+  <https://github.com/MarceloSanC/financial-forecasting/issues/129#issuecomment-6013351867>,
+  criado pelo servidor em **2026-10-06T09:27:41Z** — posterior à âncora do r0
+  (2026-09-30T19:53:47Z).
+- **Registro:** `config/preregistration/aapl_confirmatory-r1.anchor.toml` (fora do
   hash). A conferência é por conteúdo: o arquivo do plano na tag é byte-igual ao de
   HEAD.

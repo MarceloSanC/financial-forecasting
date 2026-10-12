@@ -18,7 +18,11 @@ do cohort (`CohortRun`) e o realizado do dataset (`RealizedReturns`) e devolve u
   `guardrail_applied`) — nunca por `from_raw` (I6) — e `realized` lido do
   `RealizedReturns` (I7);
 - a duplicata (mesmo modelo, seed, horizonte, alvo e nível) é achado, sem escolha
-  entre as linhas (D2; ADR `6_4_0003`).
+  entre as linhas (D2; ADR `6_4_0003`);
+- o fold de cada ponto da amostra comum (o `fold` do run que o previu) vai em
+  `common_folds` quando todas as séries concordam alvo a alvo; senão `None` e o motivo —
+  **nunca achado**: o pareamento é por alvo e não depende do fold, que só serve ao perfil
+  "DM por fold" (Stage 6.6, ADR `6_6_0003`; um perfil não bloqueia o veredito).
 
 `ValueError` só para erro de CHAMADA (entradas estruturais: `horizons`,
 `window_deficits`, `required_models`, run duplicado, fato fora dos runs — a leitura já
@@ -558,6 +562,7 @@ def _build_samples(
     seeds: dict[str, tuple[int | None, ...]] = {
         model: tuple(seed for m, seed in keys if m == model) for model in models
     }
+    common_folds, fold_mismatch = _common_folds(per_series, keys, start, end, realized)
     full: dict[str, tuple[CoverageSeries, ...]] = {}
     common: dict[str, tuple[CoverageSeries, ...]] = {}
     for model in models:
@@ -584,7 +589,36 @@ def _build_samples(
         n_common=end - start + 1,
         common_first_target_timestamp=realized.timestamps[start],
         common_last_target_timestamp=realized.timestamps[end],
+        common_folds=common_folds,
+        fold_mismatch_detail=fold_mismatch,
     )
+
+
+def _common_folds(
+    per_series: Mapping[SeriesKey, Sequence[_Point]],
+    keys: Sequence[SeriesKey],
+    start: int,
+    end: int,
+    realized: RealizedReturns,
+) -> tuple[tuple[str | None, ...] | None, str | None]:
+    """O fold de cada alvo da amostra comum, se todas as séries (e níveis) concordam.
+
+    Lê `ForecastRecord.fold`, que é o `fold` do run por construção (o `RefreshGold._record`
+    grava `fold=run.fold`) — o "fold do run que previu o ponto" do concept 6.6 I3.
+    """
+    by_target: dict[str, set[str | None]] = defaultdict(set)
+    for key in keys:
+        for point in per_series[key]:
+            if start <= _index(realized, point.target_timestamp) <= end:
+                by_target[point.target_timestamp].update(row.fold for row in _all_rows(point))
+    labels: list[str | None] = []
+    for target in sorted(by_target):
+        folds = by_target[target]
+        if len(folds) > 1:
+            shown = sorted("None" if fold is None else fold for fold in folds)
+            return None, f"target {target!r}: folds {shown} differ between series"
+        labels.append(next(iter(folds)))
+    return tuple(labels), None
 
 
 def _index(realized: RealizedReturns, timestamp: str) -> int:

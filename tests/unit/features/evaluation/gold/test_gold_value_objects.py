@@ -304,6 +304,8 @@ def _samples_fields(make_series: SeriesFactory, **changes: object) -> dict[str, 
         "n_common": 3,
         "common_first_target_timestamp": _TS[1],
         "common_last_target_timestamp": _TS[3],
+        "common_folds": ("f0", "f0", "f1"),
+        "fold_mismatch_detail": None,
     }
     fields.update(changes)
     return fields
@@ -343,6 +345,29 @@ def _incoherent_cases() -> list[object]:
             lambda ms: {"full": (full(ms), full(ms))}, "full must be a Mapping", id="full-tuple"
         ),
         pytest.param(lambda ms: {"common": None}, "common must be a Mapping", id="common-none"),
+        pytest.param(
+            lambda ms: {"common_folds": ("f0", "f1")},
+            "one fold per common point",
+            id="folds-length",
+        ),
+        pytest.param(
+            lambda ms: {"common_folds": ["f0", "f0", "f1"]},
+            "common_folds must be a tuple",
+            id="folds-list",
+        ),
+        pytest.param(
+            lambda ms: {"common_folds": ("f0", "", "f1")}, "common_folds", id="folds-empty-label"
+        ),
+        pytest.param(
+            lambda ms: {"common_folds": None, "fold_mismatch_detail": None},
+            "fold_mismatch_detail",
+            id="neither-folds-nor-detail",
+        ),
+        pytest.param(
+            lambda ms: {"fold_mismatch_detail": "x"},
+            "must be None when common_folds is set",
+            id="both-folds-and-detail",
+        ),
         pytest.param(
             lambda ms: {"seeds": {"gbm": (None,)}}, "seeds keys must be the models", id="seed-keys"
         ),
@@ -505,3 +530,11 @@ def test_findings_xor_horizons_structure_raises(
     alignment, horizons = build(_samples(make_series))
     with pytest.raises(ValueError, match=message):
         AssembledCohort(alignment=alignment, horizons=horizons)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_samples_accept_none_folds_and_a_mismatch(make_series: SeriesFactory) -> None:
+    """Stage 6.6 Task 05: `None` é rótulo (cohort sem folds); divergência é `None` + motivo."""
+    assert _samples(make_series, common_folds=(None, None, None)).common_folds == (None,) * 3
+    mismatch = _samples(make_series, common_folds=None, fold_mismatch_detail="target x")
+    assert mismatch.common_folds is None

@@ -5,9 +5,10 @@ D4, D9, I1-I4, I14, C1; ADRs `6_5_0001` item 2, `6_5_0002` item 1, `6_5_0004`
 itens 1-2, `6_5_0009`, `6_5_0010`). Um arquivo TOML por revisão é lido pelo
 adapter e entregue aqui como mapeamento; `Preregistration.from_mapping`:
 
-1. recusa chave desconhecida e chave ausente, nomeando o caminho pontuado (a
-   única chave opcional é `blinding_statement`; os três campos de emenda são
-   proibidos em r0 e obrigatórios em r ≥ 1 — ADR 6.5.0002);
+1. recusa chave desconhecida e chave ausente, nomeando o caminho pontuado (as
+   chaves opcionais são `blinding_statement` e o bloco `profile_parameters` —
+   Stage 6.6, conferido pelo seu VO, ADR 6.6.0001 item 5; os três campos de emenda
+   são proibidos em r0 e obrigatórios em r ≥ 1 — ADR 6.5.0002);
 2. coage cada número ao tipo declarado — `float` aceita `int`/`float` não-`bool`
    e guarda `float` (`0` e `0.0` são o mesmo plano); `int` aceita só `int`
    não-`bool` (float, mesmo integral, é erro);
@@ -59,10 +60,15 @@ from financial_forecasting.features.evaluation.domain.services.inference_input_v
 )
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     MCS_STATISTIC,
+    validate_block_sensitivities,
     validate_mcs_reps,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     validate_horizon,
+)
+from financial_forecasting.features.evaluation.domain.value_objects._mapping_keys import (
+    missing_key_error,
+    unknown_key_error,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._tolerance import (
     validate_tolerance,
@@ -73,6 +79,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     is_symmetric_pair,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.profile_parameters import (
+    ProfileParameters,
 )
 from financial_forecasting.shared.domain.services.path_identifier import (
     validate_path_identifier,
@@ -133,9 +142,6 @@ REALIZED_SOURCES: Final[tuple[str, ...]] = ("training_grid_target_return",)
 
 SEEDLESS: Final = "seedless"
 """Grafia, no TOML, de um modelo sem seed (baselines; gravados com `None`)."""
-
-BLOCK_SENSITIVITIES: Final[tuple[str, ...]] = ("h", "sqrt_T")
-"""Sensibilidades de bloco do MCS declaráveis: l = h e l = ⌈√T⌉ (ADR 6.5.0009)."""
 
 _SHA256_HEX: Final = re.compile(r"[0-9a-f]{64}")
 _CENTRAL_LEVEL: Final = 0.5
@@ -395,14 +401,7 @@ class McsSpec:
             BootstrapScheme,
             field="mcs.sensitivity_schemes",
         )
-        blocks = self.block_sensitivities
-        if not isinstance(blocks, tuple) or any(b not in BLOCK_SENSITIVITIES for b in blocks):
-            raise ValueError(
-                f"mcs.block_sensitivities must hold values of {list(BLOCK_SENSITIVITIES)}, "
-                f"got {blocks!r}"
-            )
-        if len(set(blocks)) != len(blocks):
-            raise ValueError(f"mcs.block_sensitivities must not repeat values, got {list(blocks)}")
+        validate_block_sensitivities(self.block_sensitivities, field="mcs.block_sensitivities")
 
 
 @dataclass(frozen=True)
@@ -585,7 +584,7 @@ _SCHEMA: Final[Mapping[str, object]] = {
     "backtests": {"min_violations": _LEAF, "monte_carlo": {"draws": _LEAF, "seed": _LEAF}},
     "profiles": {"declared": _LEAF},
 }
-_OPTIONAL_KEYS: Final = frozenset({"blinding_statement"})
+_OPTIONAL_KEYS: Final = frozenset({"blinding_statement", "profile_parameters"})
 _AMENDMENT_KEYS: Final = ("amends", "justification", "blind_status")
 
 
@@ -597,10 +596,10 @@ def _check_keys(mapping: object, schema: Mapping[str, object], *, path: str) -> 
     allowed = set(schema) | (_OPTIONAL_KEYS | set(_AMENDMENT_KEYS) if not path else set())
     unknown = sorted(str(key) for key in mapping if key not in allowed)
     if unknown:
-        raise ValueError(f"preregistration has unknown key '{path}{unknown[0]}'")
+        raise unknown_key_error(f"{path}{unknown[0]}")
     for key, sub in schema.items():
         if key not in mapping:
-            raise ValueError(f"preregistration misses the key '{path}{key}'")
+            raise missing_key_error(f"{path}{key}")
         value = mapping[key]
         if isinstance(sub, Mapping):
             _check_keys(value, sub, path=f"{path}{key}.")
@@ -730,6 +729,7 @@ class Preregistration:
     profiles: ProfileSpec
     blinding_statement: str | None
     amendment: Amendment | None
+    profile_parameters: ProfileParameters | None
 
     def __post_init__(self) -> None:
         """Forma dos campos de topo pelos donos e as regras cruzadas (C1)."""
@@ -740,6 +740,12 @@ class Preregistration:
         _check_text(self.candidate, field="candidate")
         if self.blinding_statement is not None:
             _check_text(self.blinding_statement, field="blinding_statement")
+        if self.profile_parameters is not None and not isinstance(
+            self.profile_parameters, ProfileParameters
+        ):
+            raise ValueError(
+                f"profile_parameters must be a ProfileParameters, got {self.profile_parameters!r}"
+            )
         validate_min_violations(self.min_violations)
         if self.candidate in self.comparator_tiers.all:
             raise ValueError(f"candidate {self.candidate!r} must not be a comparator tier member")
@@ -808,6 +814,11 @@ class Preregistration:
         if self.revision == 0 and self.amendment is not None:
             raise ValueError(
                 "amendment fields (amends, justification, blind_status) are forbidden in revision 0"
+            )
+        if self.revision == 0 and self.profile_parameters is not None:
+            raise ValueError(
+                "profile_parameters is forbidden in revision 0 (profile rules the anchored r0 "
+                "does not name enter by a blinded amendment, ADR 6.6.0001)"
             )
         if self.revision >= 1 and self.amendment is None:
             raise ValueError(
@@ -883,6 +894,11 @@ class Preregistration:
                 else None
             ),
             amendment=_amendment_from(mapping),
+            profile_parameters=(
+                ProfileParameters.from_mapping(mapping["profile_parameters"])
+                if "profile_parameters" in mapping
+                else None
+            ),
         )
 
     def as_payload(self) -> dict[str, object]:
@@ -942,6 +958,8 @@ class Preregistration:
             },
             "profiles": {"declared": list(self.profiles.declared)},
         }
+        if self.profile_parameters is not None:
+            payload["profile_parameters"] = self.profile_parameters.as_payload()
         return payload
 
     def _rules_payload(self) -> dict[str, object]:

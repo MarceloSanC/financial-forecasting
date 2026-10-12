@@ -9,14 +9,18 @@ com S = 1), `dm_effect_interval` (IC do efeito a 95 %) e `SeedSpread` (descritor
 entre seeds). Nada é recomputado (I8); os comparadores mal calibrados ficam nas
 leituras (I10, doc §6.4); o veredito é construído antes e sem o perfil (I12).
 
-`declared_not_built`: os perfis que o plano declara e esta Stage não constrói — os de
-séries novas (issue #129: DM por fold/seed/τ, estacionariedade de d_t, degeneração
-parcial por par, sensibilidades de bloco do MCS, p-valor Monte Carlo) e o diagrama de
-nitidez (8.3).
+Perfis de séries novas (Stage 6.6; ADR 6.6.0002): DM por fold/seed/τ e fração de seeds,
+MCS por bloco, Monte Carlo de Christoffersen, degeneração parcial por par e o
+diagnóstico de d_t (CUSUM + ACF) são **copiados** linha a linha das suas tabelas gold,
+por horizonte (`gold_loss_differentials` não: é insumo de plot da 8.3). O veredito
+nunca as lê (I12). `profile_states`: cada perfil declarado é `built`, ou
+`not_frozen_in_revision` (um dos sete do I9 numa revisão sem `[profile_parameters]` —
+estado tirado **do plano**, nunca de tabela vazia), ou `not_built_here` (o diagrama de
+nitidez, 8.3); `declared_not_built` = os `not_built_here`.
 
-Os `# type: ignore[arg-type]` deste módulo vêm das células do gold, tipadas `object`
-(`col`): o tipo é o do schema dono (`gold_schema`) e os valores são revalidados na
-construção dos VOs/DTOs de destino (evidência, perfil, `FailedCheck`).
+As células são lidas pelos acessores tipados de `refresh_gold` (`col_int`,
+`col_float`, `col_str`, ...; F6): tipo divergente do schema é corrupção nomeada
+(`GoldGenerationCorruptError`).
 """
 
 from __future__ import annotations
@@ -30,25 +34,47 @@ from financial_forecasting.features.evaluation.application.dtos.confirmatory_sco
     ComparatorCalibrationProfile,
     DescriptorProfile,
     DmProfileRow,
+    DmSubsetProfileRow,
     GateSensitivitiesProfile,
     HorizonProfile,
+    McsBlockProfileRow,
+    MonteCarloProfileRow,
+    PartialDegeneracyProfileRow,
     PowerProfile,
+    ProfileState,
     ScorecardProfile,
+    SeedFractionProfileRow,
+    StationarityProfileRow,
     TailSummaryProfile,
     TierProfile,
 )
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
     GOLD_CALIBRATION_TABLE,
+    GOLD_CHRISTOFFERSEN_MONTE_CARLO,
+    GOLD_DIFFERENTIAL_ACF,
+    GOLD_DIFFERENTIAL_BREAKS,
+    GOLD_DM_PROFILES,
+    GOLD_DM_SEED_FRACTION,
+    GOLD_MCS_BLOCK_SENSITIVITY,
     GOLD_METRICS_BY_RUN,
+    GOLD_PARTIAL_DEGENERACY,
+    GoldTableSchema,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldGeneration,
     Row,
+    col_bool,
+    col_bool_or_none,
+    col_float,
+    col_float_or_none,
+    col_int,
+    col_int_or_none,
+    col_str,
+    col_str_or_none,
 )
 from financial_forecasting.features.evaluation.application.use_cases.scorecard_evidence import (
     LOWER_TAIL,
     UPPER_TAIL,
-    col,
 )
 from financial_forecasting.features.evaluation.domain.services.confirmatory_scorecard import (
     ConfirmatoryScorecard,
@@ -75,20 +101,21 @@ from financial_forecasting.features.evaluation.domain.value_objects.scorecard_ev
 EFFECT_LEVEL: Final = 0.95
 """Nível do IC do efeito do DM (doc §6.8: "efeito + IC", t_{T-1, 0,975})."""
 
-NOT_BUILT_HERE: Final = frozenset(
+NOT_BUILT_HERE: Final = frozenset({"sharpness_diagram"})
+"""Perfis declaráveis construídos fora do scorecard (o diagrama de nitidez: Stage 8.3)."""
+
+FROZEN_RULE_PROFILES: Final = frozenset(
     {
-        "mcs_block_h",
-        "mcs_block_sqrt_t",
-        "christoffersen_monte_carlo_h1",
         "dm_per_fold",
         "dm_per_seed",
         "dm_per_tau",
-        "dm_differential_stationarity",
+        "mcs_block_h",
+        "mcs_block_sqrt_t",
         "partial_degeneracy_per_pair",
-        "sharpness_diagram",
+        "dm_differential_stationarity",
     }
 )
-"""Perfis declaráveis fora da 6.5 (ADR 6.5.0008 itens 3-4: issue #129 e Stage 8.3)."""
+"""Os sete perfis que só rodam com `[profile_parameters]` na revisão (concept 6.6 I9)."""
 
 _INDEPENDENCE_APPLICABLE = "applicable"
 
@@ -182,56 +209,62 @@ def _fraction(flags: Sequence[bool]) -> float | None:
     return sum(flags) / len(flags) if flags else None
 
 
+_CalibrationKey = tuple[str, str, str, float, float | None, bool, int | None, int | None]
+
+
+def _calibration_key(row: Row) -> _CalibrationKey:
+    schema = GOLD_CALIBRATION_TABLE
+    return (
+        col_str(row, schema, "model"),
+        col_str(row, schema, "sample"),
+        col_str(row, schema, "kind"),
+        col_float(row, schema, "level_low"),
+        col_float_or_none(row, schema, "level_high"),
+        col_bool(row, schema, "includes_degenerate"),
+        col_int_or_none(row, schema, "dgt_offset"),
+        col_int_or_none(row, schema, "dgt_step"),
+    )
+
+
 def _calibration_series(
     prereg: Preregistration, rows: Sequence[Row], horizon: int
 ) -> tuple[CalibrationSeriesProfile, ...]:
     schema = GOLD_CALIBRATION_TABLE
-    groups: dict[tuple[object, ...], list[Row]] = defaultdict(list)
+    groups: dict[_CalibrationKey, list[Row]] = defaultdict(list)
     for row in rows:
-        if col(row, schema, "horizon") != horizon:
+        if col_int(row, schema, "horizon") != horizon:
             continue
-        if col(row, schema, "band_level") != prereg.h1_gate.profile_band_level:
+        if col_float(row, schema, "band_level") != prereg.h1_gate.profile_band_level:
             continue
-        key = tuple(
-            col(row, schema, c)
-            for c in (
-                "model",
-                "sample",
-                "kind",
-                "level_low",
-                "level_high",
-                "includes_degenerate",
-                "dgt_offset",
-                "dgt_step",
-            )
-        )
-        groups[key].append(row)
+        groups[_calibration_key(row)].append(row)
     alpha = prereg.h1_gate.sensitivity_alpha
     series: list[CalibrationSeriesProfile] = []
     for key, members in groups.items():
-        contains = [col(r, schema, "wilson_contains_nominal") for r in members]
+        contains = [col_bool_or_none(r, schema, "wilson_contains_nominal") for r in members]
         applicable = [
-            r for r in members if col(r, schema, "independence_status") == _INDEPENDENCE_APPLICABLE
+            r
+            for r in members
+            if col_str(r, schema, "independence_status") == _INDEPENDENCE_APPLICABLE
         ]
         series.append(
             CalibrationSeriesProfile(
-                model=key[0],  # type: ignore[arg-type]
-                sample=key[1],  # type: ignore[arg-type]
-                kind=key[2],  # type: ignore[arg-type]
-                level_low=key[3],  # type: ignore[arg-type]
-                level_high=key[4],  # type: ignore[arg-type]
-                includes_degenerate=key[5],  # type: ignore[arg-type]
-                dgt_offset=key[6],  # type: ignore[arg-type]
-                dgt_step=key[7],  # type: ignore[arg-type]
+                model=key[0],
+                sample=key[1],
+                kind=key[2],
+                level_low=key[3],
+                level_high=key[4],
+                includes_degenerate=key[5],
+                dgt_offset=key[6],
+                dgt_step=key[7],
                 n_seeds=len(members),
-                mean_violations=_mean([col(r, schema, "n_violations") for r in members]),  # type: ignore[misc]
-                mean_observed=_mean([col(r, schema, "n_observed") for r in members]),  # type: ignore[misc]
+                mean_violations=_mean([col_int(r, schema, "n_violations") for r in members]),
+                mean_observed=_mean([col_int(r, schema, "n_observed") for r in members]),
                 fraction_contains_nominal=_fraction([c is True for c in contains if c is not None]),
                 fraction_ind_rejected=_fraction(
-                    [col(r, schema, "p_ind") < alpha for r in applicable]  # type: ignore[operator]
+                    [col_float(r, schema, "p_ind") < alpha for r in applicable]
                 ),
                 fraction_cc_rejected=_fraction(
-                    [col(r, schema, "p_cc") < alpha for r in applicable]  # type: ignore[operator]
+                    [col_float(r, schema, "p_cc") < alpha for r in applicable]
                 ),
                 n_independence_not_applicable=len(members) - len(applicable),
             )
@@ -249,22 +282,22 @@ def _without_gaps(
         members = [
             r
             for r in rows
-            if col(r, schema, "model") == prereg.candidate
-            and col(r, schema, "horizon") == horizon
-            and col(r, schema, "sample") == GATE_SAMPLE
-            and col(r, schema, "kind") == kind
-            and col(r, schema, "level_low") == level
-            and col(r, schema, "includes_degenerate") is True
-            and col(r, schema, "dgt_offset") is None
-            and col(r, schema, "band_level") == gate.gate_band_level
+            if col_str(r, schema, "model") == prereg.candidate
+            and col_int(r, schema, "horizon") == horizon
+            and col_str(r, schema, "sample") == GATE_SAMPLE
+            and col_str(r, schema, "kind") == kind
+            and col_float(r, schema, "level_low") == level
+            and col_bool(r, schema, "includes_degenerate")
+            and col_int_or_none(r, schema, "dgt_offset") is None
+            and col_float(r, schema, "band_level") == gate.gate_band_level
         ]
         if members:
             summaries.append(
                 TailSummaryProfile(
                     kind=kind,
                     level=level,
-                    mean_violations=_mean([col(r, schema, "n_violations") for r in members]),  # type: ignore[misc]
-                    mean_observed=_mean([col(r, schema, "n_observed") for r in members]),  # type: ignore[misc]
+                    mean_violations=_mean([col_int(r, schema, "n_violations") for r in members]),
+                    mean_observed=_mean([col_int(r, schema, "n_observed") for r in members]),
                 )
             )
     return tuple(summaries)
@@ -272,24 +305,28 @@ def _without_gaps(
 
 def _descriptors(rows: Sequence[Row], horizon: int) -> tuple[DescriptorProfile, ...]:
     schema = GOLD_METRICS_BY_RUN
-    groups: dict[tuple[object, ...], list[float]] = defaultdict(list)
+    groups: dict[tuple[str, str, str, float | None, float | None], list[float]] = defaultdict(list)
     for row in rows:
-        if col(row, schema, "horizon") != horizon:
+        if col_int(row, schema, "horizon") != horizon:
             continue
-        key = tuple(
-            col(row, schema, c) for c in ("model", "sample", "metric", "level_low", "level_high")
+        key = (
+            col_str(row, schema, "model"),
+            col_str(row, schema, "sample"),
+            col_str(row, schema, "metric"),
+            col_float_or_none(row, schema, "level_low"),
+            col_float_or_none(row, schema, "level_high"),
         )
-        groups[key].append(col(row, schema, "value"))  # type: ignore[arg-type]
+        groups[key].append(col_float(row, schema, "value"))
     descriptors: list[DescriptorProfile] = []
     for key, values in groups.items():
         spread = SeedSpread.of(values)
         descriptors.append(
             DescriptorProfile(
-                model=key[0],  # type: ignore[arg-type]
-                sample=key[1],  # type: ignore[arg-type]
-                metric=key[2],  # type: ignore[arg-type]
-                level_low=key[3],  # type: ignore[arg-type]
-                level_high=key[4],  # type: ignore[arg-type]
+                model=key[0],
+                sample=key[1],
+                metric=key[2],
+                level_low=key[3],
+                level_high=key[4],
                 mean=spread.mean,
                 minimum=spread.minimum,
                 maximum=spread.maximum,
@@ -297,6 +334,169 @@ def _descriptors(rows: Sequence[Row], horizon: int) -> tuple[DescriptorProfile, 
             )
         )
     return tuple(descriptors)
+
+
+def _at(rows: Sequence[Row], schema: GoldTableSchema, horizon: int) -> list[Row]:
+    return [row for row in rows if col_int(row, schema, "horizon") == horizon]
+
+
+def _dm_subsets(rows: Sequence[Row], horizon: int) -> tuple[DmSubsetProfileRow, ...]:
+    s = GOLD_DM_PROFILES
+    return tuple(
+        DmSubsetProfileRow(
+            dimension=col_str(r, s, "dimension"),
+            fold=col_str_or_none(r, s, "fold"),
+            seed=col_int_or_none(r, s, "seed"),
+            level=col_float_or_none(r, s, "level"),
+            comparator=col_str(r, s, "comparator"),
+            status=col_str(r, s, "status"),
+            undefined_reason=col_str_or_none(r, s, "undefined_reason"),
+            detail=col_str(r, s, "detail"),
+            n_points=col_int_or_none(r, s, "n_points"),
+            first_target_timestamp=col_str_or_none(r, s, "first_target_timestamp"),
+            last_target_timestamp=col_str_or_none(r, s, "last_target_timestamp"),
+            variance_estimator=col_str(r, s, "variance_estimator"),
+            mean_differential=col_float_or_none(r, s, "mean_differential"),
+            statistic=col_float_or_none(r, s, "statistic"),
+            p_value=col_float_or_none(r, s, "p_value"),
+            rejected=col_bool_or_none(r, s, "rejected"),
+            fallback_applied=col_bool_or_none(r, s, "fallback_applied"),
+            horizon_used=col_int_or_none(r, s, "horizon_used"),
+            alpha=col_float(r, s, "alpha"),
+        )
+        for r in _at(rows, s, horizon)
+    )
+
+
+def _seed_fractions(rows: Sequence[Row], horizon: int) -> tuple[SeedFractionProfileRow, ...]:
+    s = GOLD_DM_SEED_FRACTION
+    return tuple(
+        SeedFractionProfileRow(
+            comparator=col_str(r, s, "comparator"),
+            n_seeds=col_int(r, s, "n_seeds"),
+            n_rejecting=col_int(r, s, "n_rejecting"),
+            n_undefined=col_int(r, s, "n_undefined"),
+            fraction_rejecting=col_float_or_none(r, s, "fraction_rejecting"),
+            alpha=col_float(r, s, "alpha"),
+        )
+        for r in _at(rows, s, horizon)
+    )
+
+
+def _mcs_blocks(rows: Sequence[Row], horizon: int) -> tuple[McsBlockProfileRow, ...]:
+    s = GOLD_MCS_BLOCK_SENSITIVITY
+    return tuple(
+        McsBlockProfileRow(
+            block_rule=col_str(r, s, "block_rule"),
+            model=col_str_or_none(r, s, "model"),
+            status=col_str(r, s, "status"),
+            undefined_reason=col_str_or_none(r, s, "undefined_reason"),
+            detail=col_str(r, s, "detail"),
+            scheme=col_str(r, s, "scheme"),
+            block_size=col_int(r, s, "block_size"),
+            elimination_rank=col_int_or_none(r, s, "elimination_rank"),
+            step_p_value=col_float_or_none(r, s, "step_p_value"),
+            mcs_p_value=col_float_or_none(r, s, "mcs_p_value"),
+            included=col_bool_or_none(r, s, "included"),
+            alpha=col_float_or_none(r, s, "alpha"),
+            reps=col_int_or_none(r, s, "reps"),
+            seed=col_int_or_none(r, s, "seed"),
+            n_points=col_int_or_none(r, s, "n_points"),
+        )
+        for r in _at(rows, s, horizon)
+    )
+
+
+def _monte_carlo(rows: Sequence[Row], horizon: int) -> tuple[MonteCarloProfileRow, ...]:
+    s = GOLD_CHRISTOFFERSEN_MONTE_CARLO
+    return tuple(
+        MonteCarloProfileRow(
+            model=col_str(r, s, "model"),
+            seed=col_int_or_none(r, s, "seed"),
+            sample=col_str(r, s, "sample"),
+            kind=col_str(r, s, "kind"),
+            level_low=col_float(r, s, "level_low"),
+            level_high=col_float_or_none(r, s, "level_high"),
+            includes_degenerate=col_bool(r, s, "includes_degenerate"),
+            status=col_str(r, s, "status"),
+            detail=col_str(r, s, "detail"),
+            uc_status=col_str_or_none(r, s, "uc_status"),
+            ind_status=col_str_or_none(r, s, "ind_status"),
+            mc_p_uc=col_float_or_none(r, s, "mc_p_uc"),
+            mc_p_ind=col_float_or_none(r, s, "mc_p_ind"),
+            mc_p_cc=col_float_or_none(r, s, "mc_p_cc"),
+            draws=col_int(r, s, "draws"),
+            mc_seed=col_int(r, s, "mc_seed"),
+            attempts=col_int_or_none(r, s, "attempts"),
+        )
+        for r in _at(rows, s, horizon)
+    )
+
+
+def _partial_degeneracy(
+    rows: Sequence[Row], horizon: int
+) -> tuple[PartialDegeneracyProfileRow, ...]:
+    s = GOLD_PARTIAL_DEGENERACY
+    return tuple(
+        PartialDegeneracyProfileRow(
+            model=col_str(r, s, "model"),
+            seed=col_int_or_none(r, s, "seed"),
+            sample=col_str(r, s, "sample"),
+            pair_kind=col_str(r, s, "pair_kind"),
+            level_low=col_float_or_none(r, s, "level_low"),
+            level_high=col_float_or_none(r, s, "level_high"),
+            status=col_str(r, s, "status"),
+            detail=col_str(r, s, "detail"),
+            collapse_rate=col_float_or_none(r, s, "collapse_rate"),
+            tolerance=col_float(r, s, "tolerance"),
+        )
+        for r in _at(rows, s, horizon)
+    )
+
+
+def _stationarity(
+    breaks: Sequence[Row], acf_rows: Sequence[Row], horizon: int
+) -> tuple[StationarityProfileRow, ...]:
+    s, a = GOLD_DIFFERENTIAL_BREAKS, GOLD_DIFFERENTIAL_ACF
+    # o `GoldTable` está em ordem estrita da chave (horizon, model_a, model_b, lag): a ACF
+    # de cada par sai em ordem de lag sem reordenar
+    acf: dict[tuple[str, str], list[float]] = defaultdict(list)
+    for r in _at(acf_rows, a, horizon):
+        pair = (col_str(r, a, "model_a"), col_str(r, a, "model_b"))
+        acf[pair].append(col_float(r, a, "acf"))
+    profile: list[StationarityProfileRow] = []
+    for r in _at(breaks, s, horizon):
+        pair = (col_str(r, s, "model_a"), col_str(r, s, "model_b"))
+        profile.append(
+            StationarityProfileRow(
+                model_a=pair[0],
+                model_b=pair[1],
+                status=col_str(r, s, "status"),
+                undefined_reason=col_str_or_none(r, s, "undefined_reason"),
+                detail=col_str(r, s, "detail"),
+                statistic=col_float_or_none(r, s, "statistic"),
+                p_value=col_float_or_none(r, s, "p_value"),
+                rejected=col_bool_or_none(r, s, "rejected"),
+                alpha=col_float(r, s, "alpha"),
+                horizon_used=col_int_or_none(r, s, "horizon_used"),
+                break_target_timestamp=col_str_or_none(r, s, "break_target_timestamp"),
+                n_points=col_int_or_none(r, s, "n_points"),
+                max_lag=col_int_or_none(r, s, "max_lag"),
+                acf=tuple(acf[pair]),
+            )
+        )
+    return tuple(profile)
+
+
+def _profile_states(prereg: Preregistration) -> tuple[tuple[str, ProfileState], ...]:
+    def state(profile: str) -> ProfileState:
+        if profile in NOT_BUILT_HERE:
+            return ProfileState.NOT_BUILT_HERE
+        if prereg.profile_parameters is None and profile in FROZEN_RULE_PROFILES:
+            return ProfileState.NOT_FROZEN_IN_REVISION
+        return ProfileState.BUILT
+
+    return tuple((profile, state(profile)) for profile in prereg.profiles.declared)
 
 
 def build_profile(
@@ -309,6 +509,13 @@ def build_profile(
     """O perfil por horizonte (ver docstring do módulo); nunca lido por `decide`."""
     calibration_rows = generation.table(GOLD_CALIBRATION_TABLE).rows
     metric_rows = generation.table(GOLD_METRICS_BY_RUN).rows
+    dm_rows = generation.table(GOLD_DM_PROFILES).rows
+    fraction_rows = generation.table(GOLD_DM_SEED_FRACTION).rows
+    block_rows = generation.table(GOLD_MCS_BLOCK_SENSITIVITY).rows
+    monte_carlo_rows = generation.table(GOLD_CHRISTOFFERSEN_MONTE_CARLO).rows
+    partial_rows = generation.table(GOLD_PARTIAL_DEGENERACY).rows
+    break_rows = generation.table(GOLD_DIFFERENTIAL_BREAKS).rows
+    acf_rows = generation.table(GOLD_DIFFERENTIAL_ACF).rows
     tiers = ConfirmatoryScorecard.tier_readings(prereg, evidence)
     by_horizon = {item.horizon: item for item in evidence}
     horizons: list[HorizonProfile] = []
@@ -350,9 +557,17 @@ def build_profile(
                 without_gaps=_without_gaps(prereg, calibration_rows, h),
                 descriptors=_descriptors(metric_rows, h),
                 lowest_mean_pinball=horizon_verdict.candidate_has_lowest_mean_pinball,
+                dm_subsets=_dm_subsets(dm_rows, h),
+                dm_seed_fractions=_seed_fractions(fraction_rows, h),
+                mcs_block_sensitivity=_mcs_blocks(block_rows, h),
+                monte_carlo=_monte_carlo(monte_carlo_rows, h),
+                partial_degeneracy=_partial_degeneracy(partial_rows, h),
+                stationarity=_stationarity(break_rows, acf_rows, h),
             )
         )
+    states = _profile_states(prereg)
     return ScorecardProfile(
         horizons=tuple(horizons),
-        declared_not_built=tuple(p for p in prereg.profiles.declared if p in NOT_BUILT_HERE),
+        declared_not_built=tuple(p for p, s in states if s is ProfileState.NOT_BUILT_HERE),
+        profile_states=states,
     )

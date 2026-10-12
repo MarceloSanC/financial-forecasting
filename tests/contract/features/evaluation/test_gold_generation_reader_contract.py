@@ -35,6 +35,7 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
     GOLD_DM_RESULTS,
     GOLD_MCS_RESULTS,
     GOLD_QUALITY_CHECKS,
+    GOLD_SCHEMAS,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldGeneration,
@@ -77,6 +78,10 @@ _PARAMETERS = RefreshParameters(
     mcs_reps=1000,
     mcs_seed=127,
     mcs_schemes=(BootstrapScheme.STATIONARY, BootstrapScheme.MOVING_BLOCK),
+    monte_carlo_draws=999,
+    monte_carlo_seed=128,
+    mcs_block_sensitivities=("h", "sqrt_T"),
+    profile_parameters=None,
 )
 _NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 
@@ -137,6 +142,12 @@ def _generation(
         tables += [
             GoldTable.sorted_by_key(GOLD_DM_RESULTS.name, GOLD_DM_RESULTS.key, _dm_rows()),
             GoldTable(GOLD_MCS_RESULTS.name, GOLD_MCS_RESULTS.key, ()),
+        ]
+        given = {table.name for table in tables}
+        tables += [  # COMPLETED lista toda tabela (Stage 6.6): as demais, vazias
+            GoldTable(name, schema.key, ())
+            for name, schema in GOLD_SCHEMAS.items()
+            if name not in given
         ]
     manifest = GoldManifest(
         status=status,
@@ -340,9 +351,7 @@ def test_real_single_assembly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 
     store.read_generation(partition=_PARTITION)
 
-    assert calls == [
-        (GOLD_DM_RESULTS.name, GOLD_MCS_RESULTS.name, GOLD_QUALITY_CHECKS.name),
-    ]
+    assert calls == [tuple(sorted(GOLD_SCHEMAS))]  # uma montagem, com toda tabela listada
 
 
 @pytest.mark.contract

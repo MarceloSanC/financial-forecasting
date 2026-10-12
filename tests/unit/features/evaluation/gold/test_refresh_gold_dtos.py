@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+import re
 from datetime import UTC, datetime
 
 import pytest
@@ -28,6 +29,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     RefreshParameters,
     RefreshStatus,
     failed_checks_of,
+    profile_settings_from,
 )
 from financial_forecasting.features.evaluation.domain.services.diebold_mariano import (
     DmVarianceEstimator,
@@ -43,6 +45,10 @@ from financial_forecasting.features.evaluation.domain.value_objects.quality_chec
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
     DatasetContentFingerprint,
 )
+from tests.unit.features.evaluation._profile_parameters import (
+    profile_block,
+    profile_parameters,
+)
 
 _PREREG = "prereg-test-0001"  # literal declarado até a 6.5 fornecer o hash congelado
 _VALID: dict[str, object] = {
@@ -57,6 +63,10 @@ _VALID: dict[str, object] = {
     "mcs_reps": 1000,
     "mcs_seed": 20260929,
     "mcs_schemes": (BootstrapScheme.STATIONARY, BootstrapScheme.MOVING_BLOCK),
+    "monte_carlo_draws": 999,
+    "monte_carlo_seed": 128,
+    "mcs_block_sensitivities": ("h", "sqrt_T"),
+    "profile_parameters": None,
 }
 _PARAMETERS = RefreshParameters(**_VALID)  # type: ignore[arg-type]
 _NOW = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
@@ -99,6 +109,19 @@ def test_parameters_no_default(missing: str) -> None:
             {"dm_variance_estimators": ("rectangular",)}, "DmVarianceEstimator", id="estimator"
         ),
         pytest.param({"mcs_schemes": ("stationary",)}, "BootstrapScheme", id="scheme"),
+        pytest.param({"monte_carlo_draws": 0}, "draws", id="mc-draws"),
+        pytest.param({"monte_carlo_draws": True}, "draws", id="mc-draws-bool"),
+        pytest.param({"monte_carlo_seed": True}, "seed must be an int (not bool)", id="mc-seed"),
+        pytest.param(
+            {"mcs_block_sensitivities": ("sqrt_t",)}, "mcs_block_sensitivities", id="block-rule"
+        ),
+        pytest.param(
+            {"mcs_block_sensitivities": ["h"]}, "mcs_block_sensitivities", id="block-list"
+        ),
+        pytest.param({"mcs_block_sensitivities": ("h", "h")}, "must not repeat", id="block-repeat"),
+        pytest.param(
+            {"profile_parameters": {"subset_multiplicity": "x"}}, "ProfileParameters", id="rules"
+        ),
     ],
 )
 def test_parameters_owner_messages(changes: dict[str, object], message: str) -> None:
@@ -325,8 +348,14 @@ def test_gold_inputs_status_coherence() -> None:
         horizon_reports=(),
         mcs_reports=(),
         block_estimates={},
+        profile_reports=(),
+        mcs_block_reports=(),
     )
     assert blocked.preregistration_ref == _PREREG
+    with pytest.raises(ValueError, match="BLOCKED generation has no"):
+        dataclasses.replace(blocked, profile_reports=(object(),))  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="BLOCKED generation has no"):
+        dataclasses.replace(blocked, mcs_block_reports=(object(),))  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="BLOCKED generation has no"):
         dataclasses.replace(blocked, mcs_reports=(object(),))  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="COMPLETED generation cannot"):
@@ -393,13 +422,22 @@ def test_manifest_content_fingerprint() -> None:
 
 @pytest.mark.unit
 def test_schema_tables_complete() -> None:
-    """Cinco tabelas pelo nome; as quatro confirmatórias; chave e colunas lidas disjuntas."""
+    """As tabelas pelo nome; todas confirmatórias menos a de checks; chave e colunas lidas
+    disjuntas (Stage 6.6: as tabelas de perfil entram aqui, uma por Task 14-16)."""
     assert set(GOLD_SCHEMAS) == {
         "gold_quality_checks",
         "gold_metrics_by_run",
         "gold_calibration_table",
         "gold_dm_results",
         "gold_mcs_results",
+        "gold_dm_profiles",
+        "gold_dm_seed_fraction",
+        "gold_mcs_block_sensitivity",
+        "gold_christoffersen_monte_carlo",
+        "gold_partial_degeneracy",
+        "gold_differential_acf",
+        "gold_differential_breaks",
+        "gold_loss_differentials",
     }
     assert set(CONFIRMATORY_TABLES) == set(GOLD_SCHEMAS) - {"gold_quality_checks"}
     for name, schema in GOLD_SCHEMAS.items():
@@ -487,12 +525,24 @@ def _dm_row(comparator: str) -> dict[str, object]:
     }
 
 
+_LISTING = {"gold_quality_checks": 4, "gold_dm_results": 2}
+
+
+def _listing(rows_by_table: object) -> dict[str, int]:
+    """Listagem `COMPLETED`: toda tabela de `GOLD_SCHEMAS` (6.6), as não dadas com 0 linhas."""
+    return {**dict.fromkeys(GOLD_SCHEMAS, 0), **rows_by_table}  # type: ignore[dict-item]
+
+
 def _stored(**changes: object) -> tuple[dict[str, object], dict[str, list[dict[str, object]]]]:
-    manifest = _manifest(**changes)
-    rows = {
+    base = {
         "gold_quality_checks": [_quality_row(i) for i in range(4)],
         "gold_dm_results": [_dm_row("a"), _dm_row("b")],
     }
+    if changes.get("status", RefreshStatus.COMPLETED) is not RefreshStatus.COMPLETED:
+        return _manifest(**changes).as_mapping(), base
+    listing = _listing(changes.pop("rows_by_table", _LISTING))
+    manifest = _manifest(rows_by_table=listing, **changes)
+    rows = {name: base[name] if count and name in base else [] for name, count in listing.items()}
     return manifest.as_mapping(), rows
 
 
@@ -517,11 +567,11 @@ def test_from_stored_missing_table_corrupt() -> None:
         GoldGeneration.from_stored(manifest, rows, partition=_READ_PARTITION)
     with pytest.raises(GoldGenerationCorruptError, match="not in the manifest"):
         GoldGeneration.from_stored(
-            manifest, {**_stored()[1], "gold_mcs_results": []}, partition=_READ_PARTITION
+            manifest, {**_stored()[1], "gold_extra": []}, partition=_READ_PARTITION
         )
-    unknown, _ = _stored(rows_by_table={"gold_quality_checks": 4, "gold_other": 0})
+    unknown, unknown_rows = _stored(rows_by_table={"gold_quality_checks": 4, "gold_other": 0})
     with pytest.raises(GoldGenerationCorruptError, match="unknown gold table"):
-        GoldGeneration.from_stored(unknown, {**rows, "gold_other": []}, partition=_READ_PARTITION)
+        GoldGeneration.from_stored(unknown, unknown_rows, partition=_READ_PARTITION)
 
 
 @pytest.mark.unit
@@ -573,9 +623,46 @@ def test_from_stored_uses_schema_keys() -> None:
 
     for name, table in generation.tables.items():
         assert table.key == GOLD_SCHEMAS[name].key
-    assert generation.manifest == _manifest()
+    assert generation.manifest == _manifest(rows_by_table=_listing(_LISTING))
+    blocked, rows = _stored(status=RefreshStatus.BLOCKED, rows_by_table={"gold_quality_checks": 4})
+    only_checks = GoldGeneration.from_stored(
+        blocked, {"gold_quality_checks": rows["gold_quality_checks"]}, partition=_READ_PARTITION
+    )
     with pytest.raises(GoldGenerationCorruptError, match="has no table 'gold_mcs_results'"):
-        generation.table(GOLD_MCS_RESULTS)
+        only_checks.table(GOLD_MCS_RESULTS)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", sorted(GOLD_SCHEMAS))
+def test_from_stored_completed_needs_every_table(name: str) -> None:
+    """Stage 6.6 Task 17: geração `COMPLETED` sem uma tabela de `GOLD_SCHEMAS` é corrupta."""
+    manifest, rows = _stored()
+    listed = manifest["rows_by_table"]
+    assert isinstance(listed, dict)
+    manifest["rows_by_table"] = {k: v for k, v in listed.items() if k != name}
+    rows.pop(name)
+    with pytest.raises(GoldGenerationCorruptError, match=re.escape(f"lacks tables ['{name}']")):
+        GoldGeneration.from_stored(manifest, rows, partition=_READ_PARTITION)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("name", CONFIRMATORY_TABLES)
+def test_from_stored_blocked_with_a_confirmatory_table_is_corrupt(name: str) -> None:
+    """Stage 6.6 Task 17: geração `BLOCKED` só lista as tabelas que rodam bloqueadas."""
+    manifest, rows = _stored(
+        status=RefreshStatus.BLOCKED, rows_by_table={"gold_quality_checks": 4, name: 0}
+    )
+    stored = {"gold_quality_checks": rows["gold_quality_checks"], name: []}
+    with pytest.raises(GoldGenerationCorruptError, match=re.escape(f"lists ['{name}']")):
+        GoldGeneration.from_stored(manifest, stored, partition=_READ_PARTITION)
+
+
+@pytest.mark.unit
+def test_from_stored_blocked_without_quality_checks_is_corrupt() -> None:
+    """Checkpoint C bloco 6, H-7: `BLOCKED` lista exatamente as tabelas que rodam bloqueadas."""
+    manifest, _ = _stored(status=RefreshStatus.BLOCKED, rows_by_table={})
+    with pytest.raises(GoldGenerationCorruptError, match="lacks tables"):
+        GoldGeneration.from_stored(manifest, {}, partition=_READ_PARTITION)
 
 
 @pytest.mark.unit
@@ -607,3 +694,76 @@ def test_from_stored_other_partition_corrupt() -> None:
 
     with pytest.raises(GoldGenerationCorruptError, match="read as"):
         GoldGeneration.from_stored(manifest, rows, partition=GoldPartition("AAPL", "sweep-02"))
+
+
+# --- Stage 6.6 Task 12: parâmetros de perfil (F8a) ------------------------------------
+
+
+@pytest.mark.unit
+def test_parameters_with_profile_rules_round_trip() -> None:
+    parameters = _parameters(profile_parameters=profile_parameters(), mcs_block_sensitivities=())
+    mapping = parameters.as_mapping()
+    assert mapping["profile_parameters"] == profile_block()
+    assert mapping["mcs_block_sensitivities"] == []
+    assert RefreshParameters.from_mapping(mapping) == parameters
+    assert RefreshParameters.from_mapping(json.loads(json.dumps(mapping))) == parameters
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "key",
+    ["monte_carlo_draws", "monte_carlo_seed", "mcs_block_sensitivities", "profile_parameters"],
+)
+def test_new_parameter_keys_are_required(key: str) -> None:
+    mapping = {k: v for k, v in _PARAMETERS.as_mapping().items() if k != key}
+    with pytest.raises(ValueError, match=key):
+        RefreshParameters.from_mapping(mapping)
+
+
+@pytest.mark.unit
+def test_manifest_without_the_new_keys_is_corrupt() -> None:
+    """Geração anterior à 6.6 (manifesto sem as chaves de perfil) não lê (D6)."""
+    manifest = _manifest().as_mapping()
+    parameters = {k: v for k, v in manifest["parameters"].items() if k != "profile_parameters"}  # type: ignore[union-attr]
+    with pytest.raises(GoldGenerationCorruptError, match="profile_parameters"):
+        GoldGeneration.from_stored(
+            {**manifest, "parameters": parameters}, {}, partition=_manifest().partition
+        )
+
+
+@pytest.mark.unit
+def test_manifest_with_a_rule_outside_the_catalog_is_corrupt() -> None:
+    """L-3: regra de perfil fora do catálogo no manifesto é corrupção (via `from_stored`)."""
+    block = profile_block()
+    block["subset_multiplicity"] = "holm_within_subset"
+    manifest = _manifest(parameters=_parameters(profile_parameters=profile_parameters()))
+    mapping = manifest.as_mapping()
+    mapping["parameters"]["profile_parameters"] = block  # type: ignore[index]
+    with pytest.raises(GoldGenerationCorruptError, match="subset_multiplicity"):
+        GoldGeneration.from_stored(mapping, {}, partition=manifest.partition)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "estimators",
+    [
+        (DmVarianceEstimator.RECTANGULAR, DmVarianceEstimator.BARTLETT),
+        (DmVarianceEstimator.BARTLETT, DmVarianceEstimator.RECTANGULAR),
+    ],
+)
+def test_profile_settings_use_the_primary_estimator(
+    estimators: tuple[DmVarianceEstimator, ...],
+) -> None:
+    """Concept 6.6 D3: os perfis usam o estimador **primário** (o 1º), nunca a
+    sensibilidade (Auditoria de Testes r4, N5)."""
+    parameters = _parameters(dm_variance_estimators=estimators)
+    settings = profile_settings_from(parameters)
+    assert settings.variance_estimator is estimators[0]
+    assert (settings.alpha, settings.candidate) == (parameters.dm_alpha, parameters.candidate)
+    assert (settings.draws, settings.seed) == (
+        parameters.monte_carlo_draws,
+        parameters.monte_carlo_seed,
+    )
+    assert settings.tolerance == parameters.degeneracy_tolerance
+    assert settings.min_violations == parameters.min_violations
+    assert settings.profile_parameters is parameters.profile_parameters

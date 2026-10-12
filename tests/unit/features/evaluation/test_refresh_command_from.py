@@ -31,6 +31,10 @@ from tests.unit.features.evaluation._preregistration_payload import (
     TEST_FINGERPRINT,
     valid_payload,
 )
+from tests.unit.features.evaluation._profile_parameters import (
+    profile_block,
+    profile_parameters,
+)
 
 _PLAN = Preregistration.from_mapping(valid_payload())
 _REF = "test_plan-r0-0123456789ab"
@@ -85,6 +89,10 @@ def test_command_parameters_from_plan() -> None:
         "mcs_reps": 1000,
         "mcs_seed": 127,
         "mcs_schemes": ["stationary", "moving_block"],
+        "monte_carlo_draws": 999,
+        "monte_carlo_seed": 128,
+        "mcs_block_sensitivities": ["h", "sqrt_T"],
+        "profile_parameters": None,
     }
 
 
@@ -122,3 +130,28 @@ def test_scorecard_command_without_partition() -> None:
     ):
         with pytest.raises(ValueError, match=message):
             dataclasses.replace(command, **bad)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_profile_parameters_from_the_plan() -> None:
+    """Stage 6.6 (F8a): MC, blocos e regras de perfil saem do plano; r0 -> sem regras."""
+    parameters = _COMMAND.parameters
+    assert (parameters.monte_carlo_draws, parameters.monte_carlo_seed) == (
+        _PLAN.monte_carlo.draws,
+        _PLAN.monte_carlo.seed,
+    )
+    assert parameters.mcs_block_sensitivities == _PLAN.mcs.block_sensitivities
+    assert parameters.profile_parameters is None
+    amended = Preregistration.from_mapping(
+        {
+            **valid_payload(),
+            "revision": 1,
+            "amends": _REF,
+            "justification": "blinded profile rules",
+            "blind_status": "blinded",
+            "profile_parameters": profile_block(),
+        }
+    )
+    assert refresh_command_from(
+        amended, "test_plan-r1-0123456789ab"
+    ).parameters.profile_parameters == (profile_parameters())
