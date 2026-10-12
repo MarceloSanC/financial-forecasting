@@ -961,7 +961,7 @@ python scripts/check_technical_postexec.py docs/stages/6.6-scorecard-profiles/te
 **Contexto:** revisão por subagentes independentes do concept (A, 3 rodadas, 2
 revisores na 1ª) e deste technical (B, 3 rodadas, 2 revisores na 1ª, escalada
 por Stage pesada). Todos os achados foram **corrigidos** antes dos commits
-`stage 6.6: conceptual approved` (5be02b8) e `stage 6.6: technical approved`;
+`stage 6.6: conceptual approved` (62ac7c3) e `stage 6.6: technical approved`;
 nenhum refutado nem escalado.
 **Decisão:** registrar as correções materiais (detalhe no relatório final):
 - A/D1: variância do CUSUM = a do DM primário (retangular h−1 + fallback);
@@ -999,7 +999,7 @@ aqui como suposição de alinhamento, auditável.
 que só a r1 (emenda cega) o carrega, e o estado `not_frozen_in_revision` (I9) sai de
 `profile_parameters is None`.
 **Decisão:** `Preregistration.__post_init__` recusa `profile_parameters` com
-`revision == 0` (commit 6b1c175), como já recusa os campos de emenda.
+`revision == 0` (commit 555ecf8), como já recusa os campos de emenda.
 **Razão:** âncora no ADR 6.6.0001 item 5 e no ADR 6.5.0002 (regra nova do plano só por
 revisão nova); reversível-barato.
 
@@ -1046,11 +1046,11 @@ pelo r0 e depois pela r1. A Task 21 (nota no ADR) foi commitada antes da 20 — 
 dependência entre elas.
 
 ### 2026-10-06 — [decision] Checkpoint C blocos 5–6 e Auditoria de Testes — disposições — Claude (Opus 5.5)
-- **Bloco 5** (aac2bec..05373d7; check-block 5836 passed): G-5 esquema do MCS por bloco
+- **Bloco 5** (321b84e..7fde8ec; check-block 5836 passed): G-5 esquema do MCS por bloco
   pela regra, G-6 contagem no log, T-1 contagem exata, T-2 erro de programação propaga,
   T-3..T-8 linha inteira dos builders com casos de erro, G-2 adjacentes = dono —
   corrigidos; G-3/G-4 registrados acima; G-7 (`type: ignore` em testes) sem ação.
-- **Bloco 6** (05373d7..760d002; check-block 5910 passed): **H-1 (alta)** a justificativa
+- **Bloco 6** (7fde8ec..4bdbcd6; check-block 5910 passed): **H-1 (alta)** a justificativa
   da r1 e o espelho diziam "antes de qualquer execução sobre o cohort", contra o
   `blinding_statement` (o refresh rodou uma vez num teste da 6.4, sem valor lido) —
   corrigido antes da âncora; o hash da r1 mudou de `d0d20b9ddbb7` para
@@ -1077,5 +1077,23 @@ tag apontar para o commit que entra no PR (merge commit preserva-o). Tag
 `preregistration/aapl_confirmatory-r1-bfa8028498ca` no commit `3b4285d` (última mudança
 do TOML da r1; arquivo byte-igual ao de HEAD), comentário na #129 criado pelo servidor
 em 2026-10-06T09:27:41Z, posterior à âncora do r0 (2026-09-30T19:53:47Z).
+
+### 2026-10-12 — [deviation] Concept §4: `DmProfiles.evaluate` sem o parâmetro `rules` — Claude (Opus 5.5)
+O concept §4 dá `DmProfiles.evaluate(samples, *, candidate, alpha, variance_estimator,
+rules)`. O código não recebe `rules`: o gate "perfil sem regra congelada não roda" (I9)
+fica num lugar só, no `ProfileReports` (`settings.profile_parameters is None` → DM por
+recorte não é chamado), e o catálogo admite um único identificador por regra
+(`subset_multiplicity="none_raw_p_descriptive_v1"`), então não há variante a passar ao
+serviço. Uma regra nova exigiria identificador novo no catálogo e, aí sim, o parâmetro.
+
+### 2026-10-12 — [decision] Auditoria da Stage (PR #154) — disposições — Claude (Opus 5.5)
+Passada de julgamento por subagente independente (`stage-audit`, worktree `:ro`):
+⚠️ aprovada com findings, nenhum bloqueante. F1 hashes pré-rebase no §7 — corrigidos
+(mapeados pelo subject); F2 prontidão (`academic_decision_ready`) sem teste de
+isolamento — `test_readiness_reads_no_profile_table_and_is_identical`; F3 recusa do
+`McsBlockRun.__post_init__` sem teste — `test_mcs_block_run_report_exactly_when_computed`;
+F5 assinatura do concept §4 — `[deviation]` acima. F4 (convenção posicional do
+esquema/estimador primário) e F6 (perfil declarado sem regra de bloco) são observações
+sem ação: o catálogo e a r1 os tornam inalcançáveis hoje.
 
 <!-- END: post-execution -->
