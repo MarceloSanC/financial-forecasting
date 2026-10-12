@@ -1373,4 +1373,9 @@ exit=0
 **Contexto:** depois da task-02-fix anterior, `TrainTft._load_dataset` existia só para `test_dataset_loading_characterization.py`, que fica fora da lista fechada da Task 02. O revisor pediu para apontar a caracterização ao caminho único.
 **O que mudou:** o método saiu. A caracterização chama `train_tft._read_panel`, o corpo único que `load_tft_panel` usa, porque precisa das colunas arbitrárias da 5.5, e `load_tft_panel` lê as colunas da registry. As asserções da caracterização não mudaram.
 
+### 2026-10-12 — [deviation] task-12 — tempo do ponta a ponta sintético do `infer` (concept §11 "Integração ponta a ponta") — Claude (Opus 5.5)
+**Contexto:** o critério de aceite da Task 12 pede o tempo do ponta a ponta medido e colado aqui. Não houve desvio de código. O registro só guarda a evidência que o plano pede, já que nenhuma das três tags descreve esse caso.
+**Medição:** no container de dev, `uv run --no-sync pytest tests/unit/test_cli.py tests/integration/features/inference/test_run_inference.py -q --durations=3`. A fixture do módulo (`materialize` → `run` com uma seed, dois folds e TFT de uma época → `infer` → `verify` → segundo `infer`) levou `31.20s setup`. Os cinco testes do ponta a ponta e os da CLI passaram juntos: `32 passed, 66 warnings in 40.61s`.
+**Razão:** o teste é marcado `integration` + `slow` e fica fora do T1. Com ~30 s, ele cabe no T2/T3 sem reduzir mais a geometria.
+
 <!-- END: post-execution -->

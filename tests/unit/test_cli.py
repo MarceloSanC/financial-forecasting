@@ -347,3 +347,77 @@ def test_cohort_errors_exit_2_naming_the_error(
 
     assert code == _EXIT_ERROR
     assert f"error: {name}" in err.getvalue()
+
+
+# -- Stage 7.1, Task 12: subcomando `infer` ----------------------------------------
+
+_INFERENCE_COMMANDS = "financial_forecasting.features.inference.adapters.in.cli.inference_commands"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("missing", ["--data-root", "--cohort"])
+def test_infer_requires_data_root_and_cohort(
+    missing: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    given = {"--data-root": str(tmp_path / "d"), "--cohort": str(tmp_path / "c.toml")}
+    argv = ["infer"]
+    for flag, value in given.items():
+        if flag != missing:
+            argv += [flag, value]
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(argv, wiring=_wiring(tmp_path))
+
+    assert exc.value.code == _EXIT_ERROR  # erro de uso do argparse
+    assert missing in capsys.readouterr().err
+
+
+@pytest.mark.unit
+def test_infer_dispatches_break_stale_lock_and_cross_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commands: Any = cli.importlib.import_module(_INFERENCE_COMMANDS)
+    seen: dict[str, Any] = {}
+
+    def fake_infer(run_inference_for: object, spec: object, path: Path, **kwargs: object) -> int:
+        seen.update(run_inference_for=run_inference_for, spec=spec, path=path, **kwargs)
+        return 0
+
+    monkeypatch.setattr(commands, "infer", fake_infer)
+    cohort = _cohort(tmp_path, frozen=True)
+    out = io.StringIO()
+    argv = ["infer", "--data-root", str(tmp_path / "d"), "--cohort", str(cohort)]
+
+    code = cli.main(
+        [*argv, "--break-stale-lock", "--cross-environment", "kernel upgrade, see finding"],
+        wiring=_wiring(tmp_path),
+        out=out,
+    )
+
+    assert code == 0
+    assert seen["spec"] == _frozen()  # o TOML lido pelo `cohort_file.load` da 5.5
+    assert seen["path"] == cohort
+    assert seen["out"] is out
+    assert seen["break_stale_lock"] is True
+    assert seen["cross_environment"] == "kernel upgrade, see finding"
+    assert callable(seen["run_inference_for"])
+    assert cli.main(argv, wiring=_wiring(tmp_path)) == 0
+    assert seen["break_stale_lock"] is False
+    assert seen["cross_environment"] is None
+
+
+@pytest.mark.unit
+def test_infer_application_error_exits_2(tmp_path: Path) -> None:
+    """Cohort em rascunho: o `RunInference` real ergue C1 e o `main` sai com 2."""
+    err = io.StringIO()
+
+    code = cli.main(
+        ["infer", "--data-root", str(tmp_path / "d"), "--cohort", str(_cohort(tmp_path))],
+        wiring=_wiring(tmp_path),
+        out=io.StringIO(),
+        err=err,
+    )
+
+    assert code == _EXIT_ERROR
+    assert "error: CohortNotFrozenError" in err.getvalue()
+    assert not (tmp_path / "d" / ".writer.lock").exists()  # C1 antes do lock
