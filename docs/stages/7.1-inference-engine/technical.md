@@ -1386,4 +1386,37 @@ exit=0
 **Contexto:** `JsonInferenceManifest.recorded()` devolvia `dict(loaded)`, e com isso um arquivo `[]` virava manifesto vazio. Linhas de calib já presentes perderiam a entrada e cairiam em C15, sem que a causa (arquivo adulterado) aparecesse.
 **O que mudou:** um topo que não seja objeto ergue o mesmo `ValueError` "unreadable" do arquivo vazio ou corrompido. O contrato parametriza esse caso com vazio, JSON inválido, lista, string, `null` e número.
 
+### 2026-10-12 — [deviation] etapa-e — execução real do `infer` sobre o cohort `aapl_confirmatory` r0 (CA-10) — Claude (Opus 5.5)
+**Contexto:** registro da evidência da Etapa E (§2). Não houve desvio de código. A tag `[measurement]` que a Etapa E cita não existe no formato desta seção, então o registro usa `[deviation]`, como as outras evidências. Só predição contra predição: nenhuma métrica foi calculada (cegamento confirmatório).
+**Código e ambiente:** HEAD `9e6c212` (`make check` verde, `5693 passed, 23 skipped`), container `financial_forecasting-app:dev` com o venv `financial-forecasting_app-venv` e os mounts de E2 (`artifacts/` somente leitura). Durante a corrida E4, um rebase sobre `origin/develop` foi iniciado na worktree montada por outra sessão e ficou parado num conflito. Ele não foi tocado até o fim de E4 e foi abortado em seguida (`git rebase --abort` → `9e6c212`, árvore limpa). E5 rodou já sobre `9e6c212` limpo. As duas inferências produziram o resultado esperado bit a bit, e o segundo `infer` re-prediz e reconfere tudo sobre o código limpo.
+**E0:** `git status --short` vazio; `docker ps` sem containers; `data/cohorts/aapl` com `bronze processed raw silver`, sem `.writer.lock`, `gold/` ou `inference/`.
+**E1 (backup):** `data/backups/aapl-pre-7.1-20261012-175139` no checkout principal, com `aapl-pre-7.1-20261012-175139.src.sha` e `.bak.sha` ao lado (60 arquivos). `diff` vazio → `BACKUP_OK`.
+**E3 (pré-voo):**
+```
+dirty false
+non-code diff []
+code diff ['code.src', 'code.uv_lock']
+```
+A diferença nas chaves de código é esperada (o código mudou desde a corrida da 5.5) e não muda o modo (ADR 7.1.0003).
+**E4 (`infer`, 2026-10-12 20:52:22Z → 22:13:20Z, ~81 min, `EXIT=0`):** 60 linhas `strict`, todas com `max|d| 0.000e+00 max|d|/s 0.000e+00 calib written 3528 verified 0`. A soma de `compared` dá 211120: 3528 por run, salvo o fold 5 de cada seed, com 3472. Linhas de exemplo e resumo:
+```
+run d58a4cfe09ddd867f0ee0c089693d55383f4744768f8d82d9256802573764887 fold 0 seed 1: strict compared 3528 max|d| 0.000e+00 max|d|/s 0.000e+00 calib written 3528 verified 0
+run af912477dda2f0166460c832cb1d316d6dc23f0c9188b75bc6bb4d4a3e6ba450 fold 5 seed 10: strict compared 3472 max|d| 0.000e+00 max|d|/s 0.000e+00 calib written 3528 verified 0
+inference aapl_confirmatory-r0-665f45d9169a: 60 runs (60 strict, 0 tolerance); calib rows written 211680, verified 0
+```
+**E5 (`verify`, `VERIFY_EXIT=0`):**
+```
+cohort aapl_confirmatory-r0-665f45d9169a: 16 models x 6 folds; rows expected 337792, observed 337792
+OK
+```
+**E5 (segundo `infer`, 22:14:21Z → 22:34:42Z, ~20 min, `EXIT=0`):** 60 linhas `strict` com `max|d| 0.000e+00`, todas terminando em `calib written 0 verified 3528`:
+```
+run d58a4cfe09ddd867f0ee0c089693d55383f4744768f8d82d9256802573764887 fold 0 seed 1: strict compared 3528 max|d| 0.000e+00 max|d|/s 0.000e+00 calib written 0 verified 3528
+inference aapl_confirmatory-r0-665f45d9169a: 60 runs (60 strict, 0 tolerance); calib rows written 0, verified 211680
+```
+**Manifesto e `data_root`:** `ls -a data/cohorts/aapl` → `bronze inference processed raw silver` (sem `gold/`). `inference/aapl_confirmatory-r0-665f45d9169a/` contém só `manifest.json`, com 60 entradas, todas `completed` e `strict`, e max `max_abs_diff` 0.0.
+**Sem `evaluation` (CA-10):** `bc-independence` sem aresta `inference → evaluation` (`lint-imports`: `16 kept, 0 broken`); `test_run_inference_for_wires_no_evaluation_use_case` verde; nenhum `gold/` depois de E4/E5.
+**Logs** (fora do repo, scratchpad da sessão): `infer-1.log`, `infer-2.log`, `verify.log`.
+**Razão:** o critério da Etapa E fecha inteiro: 60 runs `strict` com |Δ| = 0, 211.680 linhas de calib, `verify` verde com o índice contando só teste, segunda execução com 0 escritas e 211.680 verificadas, manifesto com 60 `completed` e nenhum `gold/`.
+
 <!-- END: post-execution -->
