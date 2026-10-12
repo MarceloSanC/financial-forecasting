@@ -1382,4 +1382,8 @@ exit=0
 **Contexto:** `_reproduce_test` aceitava `compared = 0`. Se a referência de teste do silver e a grade re-predita viessem vazias, os conjuntos de chaves eram iguais (ambos vazios) e o run passava "reproduzido" sem ter comparado nada.
 **O que mudou:** referência ou grade de teste vazia ergue `ReproductionError` (C7, "nothing to compare") antes da conferência das chaves e de qualquer escrita. O teste `test_empty_test_comparison_fails_closed` cobre os três casos (os dois vazios, só o silver, só a predição) e confere que nenhuma linha de calib foi gravada.
 
+### 2026-10-12 — [deviation] task-10-fix — manifesto cujo JSON não é objeto é ilegível (Checkpoint C, C4-4) — Claude (Opus 5.5)
+**Contexto:** `JsonInferenceManifest.recorded()` devolvia `dict(loaded)`, e com isso um arquivo `[]` virava manifesto vazio. Linhas de calib já presentes perderiam a entrada e cairiam em C15, sem que a causa (arquivo adulterado) aparecesse.
+**O que mudou:** um topo que não seja objeto ergue o mesmo `ValueError` "unreadable" do arquivo vazio ou corrompido. O contrato parametriza esse caso com vazio, JSON inválido, lista, string, `null` e número.
+
 <!-- END: post-execution -->

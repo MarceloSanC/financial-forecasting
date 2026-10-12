@@ -48,7 +48,12 @@ class JsonInferenceManifest:
                 f"inference manifest {path} is unreadable (empty or corrupted) — inspect it "
                 "before running inference again"
             ) from exc
-        return dict(loaded)
+        if not isinstance(loaded, dict):
+            raise ValueError(
+                f"inference manifest {path} is unreadable (top-level {type(loaded).__name__}, "
+                "expected an object) — inspect it before running inference again"
+            )
+        return loaded
 
     def record_run(self, cohort_id: str, run_id: str, entry: Mapping[str, object]) -> None:
         document = apply_run_entry(

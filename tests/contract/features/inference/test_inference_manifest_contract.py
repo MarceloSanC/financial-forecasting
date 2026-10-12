@@ -146,10 +146,14 @@ def test_failed_replace_keeps_the_previous_file(
     assert sorted(p.name for p in manifest.path(_COHORT).parent.iterdir()) == ["manifest.json"]
 
 
-def test_corrupted_manifest_raises_instead_of_reading_as_absent(tmp_path: Path) -> None:
+@pytest.mark.parametrize("content", ["", "{not json", "[]", '"text"', "null", "3"])
+def test_corrupted_manifest_raises_instead_of_reading_as_absent(
+    tmp_path: Path, content: str
+) -> None:
+    """Vazio, JSON inválido ou JSON que não é objeto: nunca lido como manifesto vazio."""
     manifest = JsonInferenceManifest(data_root=tmp_path)
     manifest.path(_COHORT).parent.mkdir(parents=True)
-    manifest.path(_COHORT).write_text("", encoding="utf-8")
+    manifest.path(_COHORT).write_text(content, encoding="utf-8")
 
     with pytest.raises(ValueError, match="unreadable"):
         manifest.recorded(_COHORT)
