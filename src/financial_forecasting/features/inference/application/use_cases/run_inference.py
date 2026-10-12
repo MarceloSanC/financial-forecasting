@@ -711,6 +711,11 @@ def _reproduce_test(  # noqa: PLR0913 — o run, as linhas de referência e o cr
         for horizon, grid in by_horizon.items()
         for level, value in zip(spec.quantile_levels, grid, strict=True)
     }
+    if not reference or not predicted:  # fail-closed: nada comparado não prova nada
+        raise ReproductionError(
+            f"run {run.run_id} ({mode.name}): {len(reference)} silver test values and "
+            f"{len(predicted)} re-predicted — nothing to compare (C7)"
+        )
     if set(reference) != set(predicted):
         missing = len(set(reference) - set(predicted))
         extra = len(set(predicted) - set(reference))

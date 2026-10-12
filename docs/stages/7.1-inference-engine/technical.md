@@ -1378,4 +1378,8 @@ exit=0
 **Medição:** no container de dev, `uv run --no-sync pytest tests/unit/test_cli.py tests/integration/features/inference/test_run_inference.py -q --durations=3`. A fixture do módulo (`materialize` → `run` com uma seed, dois folds e TFT de uma época → `infer` → `verify` → segundo `infer`) levou `31.20s setup`. Os cinco testes do ponta a ponta e os da CLI passaram juntos: `32 passed, 66 warnings in 40.61s`.
 **Razão:** o teste é marcado `integration` + `slow` e fica fora do T1. Com ~30 s, ele cabe no T2/T3 sem reduzir mais a geometria.
 
+### 2026-10-12 — [deviation] task-09-fix — reprodução com zero valores comparados ergue C7 (Checkpoint C, C4-1b) — Claude (Opus 5.5)
+**Contexto:** `_reproduce_test` aceitava `compared = 0`. Se a referência de teste do silver e a grade re-predita viessem vazias, os conjuntos de chaves eram iguais (ambos vazios) e o run passava "reproduzido" sem ter comparado nada.
+**O que mudou:** referência ou grade de teste vazia ergue `ReproductionError` (C7, "nothing to compare") antes da conferência das chaves e de qualquer escrita. O teste `test_empty_test_comparison_fails_closed` cobre os três casos (os dois vazios, só o silver, só a predição) e confere que nenhuma linha de calib foi gravada.
+
 <!-- END: post-execution -->

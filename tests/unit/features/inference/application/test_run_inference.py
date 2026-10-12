@@ -674,6 +674,29 @@ def test_test_key_set_mismatch_fails() -> None:
         world.run()
 
 
+@pytest.mark.parametrize(
+    ("silver_empty", "predicted_empty"),
+    [(True, True), (True, False), (False, True)],
+    ids=["both-empty", "silver-empty", "prediction-empty"],
+)
+def test_empty_test_comparison_fails_closed(silver_empty: bool, predicted_empty: bool) -> None:
+    """C7 fail-closed: zero valores comparados não provam a reprodução."""
+
+    def hide_test_rows(row: Mapping[str, object]) -> Mapping[str, object]:
+        if row.get("run_id") == "run-f0" and row.get("split") == "test":
+            return {**row, "split": "hidden"}
+        return row
+
+    world = _World(silver_patch=hide_test_rows if silver_empty else None)
+    if predicted_empty:
+        world.grids["run-f0"]["test"] = {}
+
+    with pytest.raises(ReproductionError, match="nothing to compare"):
+        world.run()
+
+    assert world.facts("calib") == []
+
+
 def test_reproduction_failure_writes_no_calib() -> None:
     world = _World()
     _perturb_test_reference(world, _one_ulp)
