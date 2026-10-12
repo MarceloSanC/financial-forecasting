@@ -50,12 +50,21 @@ modelagem (como `TrainingGridReader`, ADR 6.4.0009), o `CanonicalJsonHasher`, o
 `SystemClock`, o `ArchMcs` atrás do proxy lazy `_LazyArchMcs` (`import arch` ~8 s a
 frio, medido no technical 6.4 §1 — só carrega na primeira chamada), o
 `ParquetGoldStore(data_root)` e os cinco gold builders.
+
+Stage 7.1 (Task 11): a fábrica `run_inference_for(cohort_path, device)` monta o
+`RunInference` do slice `inference` com os fornecedores reais — `ResolveTftCheckpoints`
+e `PredictTftFromCheckpoints` do `modeling` (mesmo splitter, store, hasher,
+`artifacts_root`, colunas e declarações do cohort), o `FilesystemCheckpointLocator`
+direto (stdlib, fora do proxy lazy do TFT), o `PersistPredictions` e o repositório
+silver, o ledger do cohort e o `JsonInferenceManifest` sob `data_root`. O probe vem
+de `runtime_probe_for`, como no `confirmatory_cohort_for`.
 """
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
     ParquetAnalyticsRepository,
@@ -139,6 +148,12 @@ from financial_forecasting.features.feature_engineering.domain.services.dataset_
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
     feature_set_hash,
 )
+from financial_forecasting.features.inference.adapters.out.filesystem.json_inference_manifest import (  # noqa: E501
+    JsonInferenceManifest,
+)
+from financial_forecasting.features.inference.application.use_cases.run_inference import (
+    RunInference,
+)
 from financial_forecasting.features.market_data.adapters.out.parquet.parquet_fundamental_fetcher import (  # noqa: E501
     ParquetFundamentalFetcher,
 )
@@ -159,6 +174,9 @@ from financial_forecasting.features.market_data.application.use_cases.ingest_new
 )
 from financial_forecasting.features.market_data.domain.entities.news_article import (
     NewsArticle,
+)
+from financial_forecasting.features.modeling.adapters.out.filesystem.checkpoint_locator import (
+    FilesystemCheckpointLocator,
 )
 from financial_forecasting.features.modeling.adapters.out.filesystem.json_cohort_progress_ledger import (  # noqa: E501
     JsonCohortProgressLedger,
@@ -190,13 +208,21 @@ from financial_forecasting.features.modeling.application.ports.out.quantile_mode
 from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
     RuntimeEnvironmentProbe,
 )
+from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (
+    TftCheckpointPrediction,
+)
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
-    TftTrainer,
     TftTrainingParams,
     TftTrainingResult,
 )
+from financial_forecasting.features.modeling.application.use_cases.predict_tft_from_checkpoints import (  # noqa: E501
+    PredictTftFromCheckpoints,
+)
 from financial_forecasting.features.modeling.application.use_cases.read_training_grid import (
     ReadTrainingGrid,
+)
+from financial_forecasting.features.modeling.application.use_cases.resolve_tft_checkpoints import (
+    ResolveTftCheckpoints,
 )
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
@@ -246,6 +272,11 @@ from financial_forecasting.shared.application.ports.out.medallion_store import (
 from financial_forecasting.shared.domain.services.trading_calendar import TradingCalendar
 from financial_forecasting.shared.infrastructure.clock.system_clock import SystemClock
 from financial_forecasting.shared.infrastructure.config.settings import Settings, get_settings
+
+if TYPE_CHECKING:
+    from financial_forecasting.features.modeling.adapters.out.pytorch_forecasting.pf_tft_trainer import (  # noqa: E501
+        PfTftTrainer,
+    )
 
 # Revisão pinada do FinBERT (espelha o default do adapter; ADR 0.0.0017).
 _FINBERT_PINNED_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
@@ -369,19 +400,20 @@ class _LazyStatsforecastBaselineForecaster:
 
 
 class _LazyPfTftTrainer:
-    """Proxy lazy do `PfTftTrainer` (satisfaz o port `TftTrainer`).
+    """Proxy lazy do `PfTftTrainer` (satisfaz `TftTrainer` e `TftCheckpointPredictor`).
 
     Adia o import de `torch`/`lightning`/`pytorch_forecasting` até o PRIMEIRO
     treino. Aqui a razão NÃO é opcionalidade — desde a Stage 5.4 a pilha é
     dependência principal (ADR 5.4.0003) — e sim custo de carga: importar torch
     leva segundos, e `wire_dependencies` é chamado por qualquer entrypoint,
-    inclusive os que não treinam nada.
+    inclusive os que não treinam nada. A predição a partir do checkpoint (Stage
+    7.1) passa pelo mesmo proxy: a mesma instância do adapter treina e prediz.
     """
 
     def __init__(self) -> None:
-        self._delegate: TftTrainer | None = None
+        self._delegate: PfTftTrainer | None = None
 
-    def _ensure(self) -> TftTrainer:
+    def _ensure(self) -> "PfTftTrainer":
         if self._delegate is None:
             # Import LAZY proposital (PLC0415 ignorado no pyproject p/ este arquivo).
             from financial_forecasting.features.modeling.adapters.out.pytorch_forecasting.pf_tft_trainer import (  # noqa: E501
@@ -426,6 +458,38 @@ class _LazyPfTftTrainer:
             horizons=horizons,
             quantile_levels=quantile_levels,
             artifact_dir=artifact_dir,
+        )
+
+    def predict_from_checkpoint(  # noqa: PLR0913 — assinatura do port (parâmetros coesos)
+        self,
+        *,
+        checkpoint_path: str,
+        expected_sha256: str,
+        feature_names: Sequence[str],
+        known_feature_names: Sequence[str],
+        rows: Sequence[Sequence[float]],
+        target: Sequence[float],
+        decision_indices: Sequence[int],
+        max_horizon: int,
+        horizons: Sequence[int],
+        quantile_levels: Sequence[float],
+        batch_size: int,
+        num_threads: int,
+    ) -> TftCheckpointPrediction:
+        """Delega ao adapter real, com a assinatura do port campo a campo."""
+        return self._ensure().predict_from_checkpoint(
+            checkpoint_path=checkpoint_path,
+            expected_sha256=expected_sha256,
+            feature_names=feature_names,
+            known_feature_names=known_feature_names,
+            rows=rows,
+            target=target,
+            decision_indices=decision_indices,
+            max_horizon=max_horizon,
+            horizons=horizons,
+            quantile_levels=quantile_levels,
+            batch_size=batch_size,
+            num_threads=num_threads,
         )
 
 
@@ -602,6 +666,9 @@ class ApplicationDependencies:
     refresh_gold: RefreshGold
     # BC evaluation (Stage 6.5, Task 11): o scorecard confirmatório de uma revisão.
     build_confirmatory_scorecard: BuildConfirmatoryScorecard
+    # BC inference (Stage 7.1, Task 11): a inferência de um cohort, por arquivo e device
+    # (o probe depende do caminho do cohort, como em `confirmatory_cohort_for`).
+    run_inference_for: Callable[[Path, str], RunInference]
 
 
 def wire_dependencies(
@@ -789,6 +856,51 @@ def wire_dependencies(
             supported_device=_TRAINERS_DEVICE,
         )
 
+    # BC inference (Stage 7.1, Task 11): resolução e predição a partir do checkpoint com
+    # o MESMO splitter, store, hasher, `artifacts_root`, colunas e declarações do cohort
+    # (o `run_id` derivado tem de ser o que o treino gravou). O locator é stdlib e entra
+    # direto, fora do proxy lazy: resolver não importa torch (ADR 7.1.0004 item 1). O
+    # preditor é o MESMO proxy do treino. Nada de `evaluation` entra aqui (CA-10).
+    checkpoint_locator = FilesystemCheckpointLocator()
+    resolve_tft_checkpoints = ResolveTftCheckpoints(
+        store=store,
+        hasher=hasher,
+        splitter=splitter,
+        run_index=cohort_run_index,
+        locator=checkpoint_locator,
+        artifacts_root=cfg.artifacts_root,
+        modeling_columns=columns,
+        observed_feature_set_hash=observed_feature_set_hash,
+        pipeline_version=PIPELINE_VERSION,
+        supported_device=_TRAINERS_DEVICE,
+    )
+    predict_tft_from_checkpoints = PredictTftFromCheckpoints(
+        store=store,
+        hasher=hasher,
+        splitter=splitter,
+        locator=checkpoint_locator,
+        predictor=tft_trainer,
+        artifacts_root=cfg.artifacts_root,
+        modeling_columns=columns,
+        observed_feature_set_hash=observed_feature_set_hash,
+        pipeline_version=PIPELINE_VERSION,
+        supported_device=_TRAINERS_DEVICE,
+    )
+    inference_manifest = JsonInferenceManifest(data_root=cfg.data_root)
+
+    def run_inference_for(cohort_path: Path, device: str) -> RunInference:
+        return RunInference(
+            resolver=resolve_tft_checkpoints,
+            predictor=predict_tft_from_checkpoints,
+            probe=runtime_probe_for(cohort_path, device),
+            persister=PersistPredictions(repository=analytics_repository),
+            silver=analytics_repository,
+            ledger=cohort_ledger,
+            manifest=inference_manifest,
+            hasher=hasher,
+            clock=SystemClock(),
+        )
+
     # BC evaluation (Stage 6.4, Tasks 12/15): `RefreshGold` sobre o MESMO repositório
     # silver (como `SilverTableReader`, ADR 0.0.0053/6.4.0004); o
     # realizado vem da grade de treino da 5.5 — `ReadTrainingGrid` (real do port
@@ -849,4 +961,5 @@ def wire_dependencies(
         modeling_columns=columns,
         refresh_gold=refresh_gold,
         build_confirmatory_scorecard=build_confirmatory_scorecard,
+        run_inference_for=run_inference_for,
     )
