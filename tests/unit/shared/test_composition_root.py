@@ -15,6 +15,7 @@ import sys
 import textwrap
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -717,6 +718,45 @@ def test_lazy_tft_proxy_exposes_predict_from_checkpoint_without_building() -> No
 
     assert callable(predictor.predict_from_checkpoint)
     assert proxy._delegate is None
+
+
+class _RecordingDelegate:
+    """Delegate gravador: guarda os kwargs e devolve um sentinela."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+        self.result = object()
+
+    def predict_from_checkpoint(self, **kwargs: object) -> object:
+        self.calls.append(kwargs)
+        return self.result
+
+
+@pytest.mark.unit
+def test_lazy_tft_proxy_delegates_predict_from_checkpoint_field_by_field() -> None:
+    """Cada argumento chega ao adapter com o próprio nome (nenhum trocado), e o retorno volta."""
+    proxy = _LazyPfTftTrainer()
+    recorder = _RecordingDelegate()
+    proxy._delegate = recorder  # type: ignore[assignment]
+    kwargs: dict[str, Any] = {
+        "checkpoint_path": "/a/tft/r/epoch=0-step=1.ckpt",
+        "expected_sha256": "f" * 64,
+        "feature_names": ("x1", "x2"),
+        "known_feature_names": ("x2",),
+        "rows": ((1.0, 2.0), (3.0, 4.0)),
+        "target": (0.1, 0.2),
+        "decision_indices": (5, 6),
+        "max_horizon": 7,
+        "horizons": (1, 7),
+        "quantile_levels": (0.1, 0.5, 0.9),
+        "batch_size": 64,
+        "num_threads": 3,
+    }
+
+    result = proxy.predict_from_checkpoint(**kwargs)
+
+    assert result is recorder.result
+    assert recorder.calls == [kwargs]
 
 
 @pytest.mark.unit
