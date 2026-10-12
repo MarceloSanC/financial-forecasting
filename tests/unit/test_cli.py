@@ -389,7 +389,12 @@ def test_infer_dispatches_break_stale_lock_and_cross_environment(
     argv = ["infer", "--data-root", str(tmp_path / "d"), "--cohort", str(cohort)]
 
     code = cli.main(
-        [*argv, "--break-stale-lock", "--cross-environment", "kernel upgrade, see finding"],
+        [
+            *argv,
+            "--break-stale-lock",
+            "--cross-environment",
+            "kernel upgrade, see [finding] in technical 7.1 §7",
+        ],
         wiring=_wiring(tmp_path),
         out=out,
     )
@@ -399,7 +404,7 @@ def test_infer_dispatches_break_stale_lock_and_cross_environment(
     assert seen["path"] == cohort
     assert seen["out"] is out
     assert seen["break_stale_lock"] is True
-    assert seen["cross_environment"] == "kernel upgrade, see finding"
+    assert seen["cross_environment"] == "kernel upgrade, see [finding] in technical 7.1 §7"
     assert callable(seen["run_inference_for"])
     assert cli.main(argv, wiring=_wiring(tmp_path)) == 0
     assert seen["break_stale_lock"] is False
@@ -421,3 +426,30 @@ def test_infer_application_error_exits_2(tmp_path: Path) -> None:
     assert code == _EXIT_ERROR
     assert "error: CohortNotFrozenError" in err.getvalue()
     assert not (tmp_path / "d" / ".writer.lock").exists()  # C1 antes do lock
+
+
+@pytest.mark.unit
+def test_infer_cross_environment_without_finding_exits_2(tmp_path: Path) -> None:
+    """C13 pela CLI: justificativa sem `[finding]` sai com 2, antes de tomar o lock."""
+    err = io.StringIO()
+    cohort = _cohort(tmp_path, frozen=True)
+
+    code = cli.main(
+        [
+            "infer",
+            "--data-root",
+            str(tmp_path / "d"),
+            "--cohort",
+            str(cohort),
+            "--cross-environment",
+            "x",
+        ],
+        wiring=_wiring(tmp_path),
+        out=io.StringIO(),
+        err=err,
+    )
+
+    assert code == _EXIT_ERROR
+    assert "error: ValueError" in err.getvalue()
+    assert "[finding]" in err.getvalue()
+    assert not (tmp_path / "d" / ".writer.lock").exists()

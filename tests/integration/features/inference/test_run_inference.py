@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import json
+from collections import Counter
 from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
@@ -252,18 +253,55 @@ def _expected_calib_rows(spec: CohortSpec) -> int:
     return int(spec.geometry.calib_size) * len(spec.horizons) * len(spec.quantile_levels)
 
 
+def _test_rows_by_run(outcome: _Outcome) -> dict[str, int]:
+    """Valores de teste de cada run TFT no silver: o que o `infer` tem de comparar.
+
+    Não é `test_size x |horizontes| x |níveis|` em todo fold: o último bloco de teste
+    perde as decisões cujo alvo cai além do fim da série (na geometria daqui, 96 em
+    vez de 120). A contagem vem da referência gravada pelo treino.
+    """
+    counts = Counter(
+        str(f["run_id"])
+        for f in outcome.facts_after_first
+        if f["split"] == "test" and str(f["run_id"]) in outcome.tft_runs
+    )
+    return dict(counts)
+
+
+def _compared(line: str) -> tuple[str, int]:
+    words = line.split()
+    return words[1], int(words[words.index("compared") + 1])
+
+
+def _expected_runs(spec: CohortSpec) -> int:
+    return int(spec.geometry.n_folds) * len(spec.seeds)
+
+
+def _multiset(facts: Sequence[Mapping[str, object]]) -> Counter[tuple[tuple[str, object], ...]]:
+    """As linhas inteiras (PK, valores e identidade), com repetição."""
+    return Counter(tuple(sorted(fact.items())) for fact in facts)
+
+
 def test_infer_reproduces_every_run_strict_with_zero_diff(outcome: _Outcome) -> None:
     lines = _run_lines(outcome.first_infer)
 
-    assert len(lines) == outcome.spec.geometry.n_folds * len(outcome.spec.seeds)
+    assert len(lines) == _expected_runs(outcome.spec)
     assert {line.split()[1] for line in lines} == outcome.tft_runs
+    calib = _expected_calib_rows(outcome.spec)
+    reference = _test_rows_by_run(outcome)
+    assert set(reference) == outcome.tft_runs
+    assert min(reference.values()) > 0
+    assert dict(_compared(line) for line in lines) == reference  # cada valor de teste
     for line in lines:
         assert ": strict compared " in line, line
-        assert "max|d| 0.000e+00 max|d|/s 0.000e+00" in line, line
+        assert " max|d| 0.000e+00 max|d|/s 0.000e+00 " in line, line
+        assert line.endswith(f"calib written {calib} verified 0"), line
     summary = outcome.first_infer.strip().splitlines()[-1]
     total = len(lines)
-    assert f"{total} runs ({total} strict, 0 tolerance)" in summary
-    assert f"calib rows written {total * _expected_calib_rows(outcome.spec)}" in summary
+    assert summary == (
+        f"inference {outcome.cohort_id}: {total} runs ({total} strict, 0 tolerance); "
+        f"calib rows written {total * calib}, verified 0"
+    )
 
 
 def test_calib_rows_expected_per_run_with_training_identity(outcome: _Outcome) -> None:
@@ -304,12 +342,17 @@ def test_second_infer_writes_zero_rows(outcome: _Outcome) -> None:
     lines = _run_lines(outcome.second_infer)
     expected = _expected_calib_rows(outcome.spec)
 
+    assert len(lines) == _expected_runs(outcome.spec)
+    assert {line.split()[1] for line in lines} == outcome.tft_runs
+    assert dict(_compared(line) for line in lines) == _test_rows_by_run(outcome)
     for line in lines:
-        assert ": strict " in line, line
+        assert ": strict compared " in line, line
+        assert " max|d| 0.000e+00 max|d|/s 0.000e+00 " in line, line
         assert line.endswith(f"calib written 0 verified {expected}"), line
     summary = outcome.second_infer.strip().splitlines()[-1]
-    assert f"calib rows written 0, verified {len(lines) * expected}" in summary
-    assert len(outcome.facts_after_second) == len(outcome.facts_after_first)
+    assert summary.endswith(f"calib rows written 0, verified {len(lines) * expected}")
+    # nada reescrito nem duplicado: o silver é o MESMO multiconjunto de linhas inteiras
+    assert _multiset(outcome.facts_after_second) == _multiset(outcome.facts_after_first)
 
 
 def test_manifest_is_complete(outcome: _Outcome) -> None:
