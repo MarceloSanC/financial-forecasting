@@ -21,8 +21,3 @@ allow = []
 key = "Hasher"
 motivo = "Implementação única por desenho (issue #70): o FakeHasher era cópia byte a byte do CanonicalJsonHasher e foi removido; o contrato roda só no adapter real + golden, e os testes de domínio/use case injetam o adapter real (stdlib, determinístico). Um fake aqui seria uma segunda definição de identidade — o oposto do que reprodutibilidade exige."
 issue = 70
-
-[[port_coverage.allow]]
-key = "InferenceManifest"
-motivo = "Transitória (ADR 6.1.0005): o port nasce na Task 09 da Stage 7.1 com fake e o use case RunInference; o adapter real (JsonInferenceManifest) e o contrato [fake, real] chegam na Task 10, que remove esta entrada."
-issue = 153

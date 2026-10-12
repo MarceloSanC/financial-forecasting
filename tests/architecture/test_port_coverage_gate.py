@@ -285,9 +285,7 @@ def test_real_repo_violations_are_exactly_the_declared_baseline(gate: ModuleType
     ports = gate.inventory()
     violating = sorted(port.name for port in ports if port.violation is not None)
 
-    # Transitório (ADR 6.1.0005): `InferenceManifest` nasce na Task 09 da Stage 7.1
-    # sem adapter real; a Task 10 traz o real e devolve a lista a ["Hasher"].
-    assert violating == ["Hasher", "InferenceManifest"]
+    assert violating == ["Hasher"]
     # piso do inventário: 28 ports-out hoje (a Stage 6.4 somou quatro ports do gold e a
     # 6.5 somou PreregistrationSource e GoldGenerationReader)
     assert len(ports) >= 28  # noqa: PLR2004
