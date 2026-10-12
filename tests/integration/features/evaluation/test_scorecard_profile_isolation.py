@@ -10,10 +10,12 @@ por recorte rejeitando, quebra em toda d_t) e sem elas (geração montada direto
 from __future__ import annotations
 
 import dataclasses
+from datetime import UTC, datetime
 
 import pytest
 
 from financial_forecasting.features.evaluation.application.dtos.confirmatory_scorecard import (
+    ReadinessReason,
     refresh_command_from,
 )
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
@@ -30,6 +32,12 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldGeneration,
     GoldTable,
+)
+from financial_forecasting.features.evaluation.application.ports.out.preregistration_source import (
+    PreregistrationAnchor,
+)
+from financial_forecasting.features.evaluation.application.use_cases.build_confirmatory_scorecard import (  # noqa: E501
+    BuildConfirmatoryScorecard,
 )
 from financial_forecasting.features.evaluation.application.use_cases.scorecard_evidence import (
     evidence_from_generation,
@@ -148,3 +156,41 @@ def test_verdict_identical_without_the_profile_tables() -> None:
     )
     assert _PROFILE_TABLES.isdisjoint(without.tables)
     assert _verdict(without) == _verdict(full)
+
+
+_ANCHOR = PreregistrationAnchor(
+    tag=f"preregistration/{REFERENCE}",
+    commit="0123456789abcdef0123456789abcdef01234567",
+    comment_url="https://github.com/example/repo/issues/1#issuecomment-1",
+    anchored_at=datetime(2020, 1, 1, tzinfo=UTC),
+)
+
+
+def _readiness(generation: GoldGeneration) -> tuple[ReadinessReason, ...]:
+    return BuildConfirmatoryScorecard._readiness(generation, _ANCHOR, [_PLAN])
+
+
+@pytest.mark.integration
+def test_readiness_reads_no_profile_table_and_is_identical() -> None:
+    """CA11 (auditoria da Stage, F2): a prontidão (`academic_decision_ready`) não lê
+    tabela de perfil e é a mesma com elas vazias, adversariais ou ausentes."""
+    baseline = _readiness(_baseline().generation())
+    spy = _spy(_baseline().generation())
+    assert _readiness(spy) == baseline
+    assert spy.reads
+    assert not set(spy.reads) & _PROFILE_TABLES
+    empty = _baseline()
+    for name in _PROFILE_TABLES:
+        empty.drop_rows(name, lambda _row: True)
+    assert _readiness(empty.generation()) == baseline
+    adversarial = _baseline()
+    assert adversarial.set_cell(
+        GOLD_DIFFERENTIAL_BREAKS.name, lambda _r: True, "detail", "required_check skipped"
+    )
+    assert _readiness(adversarial.generation()) == baseline
+    full = _baseline().generation()
+    without = GoldGeneration(
+        manifest=full.manifest,
+        tables={name: t for name, t in full.tables.items() if name not in _PROFILE_TABLES},
+    )
+    assert _readiness(without) == baseline

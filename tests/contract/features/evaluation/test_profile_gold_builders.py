@@ -765,3 +765,16 @@ def test_adjacent_rows_are_the_adjacent_collapse_rates() -> None:
                     assert got == list(want)
                     checked += 1
     assert checked
+
+
+@pytest.mark.contract
+def test_mcs_block_run_report_exactly_when_computed() -> None:
+    """Auditoria da Stage, F3: `McsBlockRun` recusa relatório sem `computed` e vice-versa."""
+    run = completed_inputs().mcs_block_reports[0]
+    assert run.report is not None
+    with pytest.raises(ValueError, match="exactly when status is computed"):
+        dataclasses.replace(run, report=None)
+    with pytest.raises(ValueError, match="exactly when status is computed"):
+        dataclasses.replace(run, status=UnitStatus.ERROR)
+    failed = dataclasses.replace(run, status=UnitStatus.ERROR, detail="ValueError: x", report=None)
+    assert failed.report is None
