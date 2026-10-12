@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from financial_forecasting.features.inference.application.use_cases.run_inference import (
+    STRICT,
     RunInferenceCommand,
 )
 
@@ -29,8 +30,6 @@ if TYPE_CHECKING:
     from financial_forecasting.features.modeling.application.dtos.cohort_spec import (
         CohortSpec,
     )
-
-_STRICT = "strict"
 
 
 def infer(  # noqa: PLR0913 — opções coesas do subcomando
@@ -58,7 +57,7 @@ def infer(  # noqa: PLR0913 — opções coesas do subcomando
             f"max|d| {outcome.max_abs_diff:.3e} max|d|/s {outcome.max_normalized_diff:.3e} "
             f"calib written {outcome.calib_rows_written} verified {outcome.calib_rows_verified}\n"
         )
-    strict = sum(1 for outcome in result.outcomes if outcome.reproduction_mode == _STRICT)
+    strict = sum(1 for outcome in result.outcomes if outcome.reproduction_mode == STRICT)
     written = sum(outcome.calib_rows_written for outcome in result.outcomes)
     verified = sum(outcome.calib_rows_verified for outcome in result.outcomes)
     total = len(result.outcomes)
