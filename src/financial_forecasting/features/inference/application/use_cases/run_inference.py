@@ -228,6 +228,7 @@ def _recorded_threads(environment: Mapping[str, str], cohort_id: str) -> int:
 
 
 def _float(value: object) -> float:
+    # célula numérica do silver; `float(str(v))` mudaria um np.float32 e o |Δ| = 0 bit a bit
     return float(value)  # type: ignore[arg-type]
 
 
