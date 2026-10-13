@@ -1496,4 +1496,13 @@ Nada no slice `inference`, no `modeling` ou nos adapters que o `infer` usa mudou
 **O que mudou:** o port ganhou `runs_shape_problem(document)`, a regra única de forma (`runs`, quando presente, é objeto `run_id → objeto`). `JsonInferenceManifest.recorded()` a usa e ergue o mesmo `ValueError` "unreadable". `apply_run_entry` troca o `assert` por `ValueError` "malformed", e a recusa vale também no fake. O contrato parametriza seis casos (`runs` lista, string ou `null`; entrada lista, string ou `null`) na leitura e no `record_run` das duas pernas.
 **Razão:** é o mesmo defeito do C4-4 um nível abaixo, e o mesmo erro mantém a mensagem que o operador já conhece.
 
+### 2026-10-12 — [decision] arquitetura — política de reprodução fica no use case até a 7.2 criar o domain do `inference` (auditoria da Stage, F3) — Claude (Opus 5.5)
+**Contexto:** a auditoria (stage-audit D-bis #10, regra fora do lugar) apontou que `reproduction_mode`, `within_mode`, as tolerâncias `TOLERANCE_ATOL`/`TOLERANCE_RTOL` e `_verify_decision` em `run_inference.py` são política pura, sem I/O: decidem o modo de reprodução e se um valor re-predito reproduz o gravado. O lugar delas é `inference/domain`, que ainda não existe. A 7.1 só tem `application` e `adapters`.
+**Pergunta:** mover a política agora, criando o domain do `inference` na 7.1, ou adiar?
+**Opções:**
+- A — criar `inference/domain` na 7.1 só para essas funções. Isso abre camada nova (contratos do import-linter, layout, testes de pureza) no fim de uma Stage já auditada.
+- B — adiar para a 7.2 (`7.2-conformal-cqr`, multi-layer domain + adapters/out), que já cria o domain do `inference`, e mover a política junto ✅ recomendada
+**Decisão:** B
+**Razão:** o código é puro e testado, e o import-linter não acusa violação. A dívida é de lugar, não de comportamento. A 7.2 abre a camada de qualquer forma, e isso evita criar uma camada para quatro símbolos. O technical da 7.2 deve trazer a mudança como Task de refactor.
+
 <!-- END: post-execution -->
