@@ -268,6 +268,23 @@ def test_threads_and_deterministic_flag_restored(
     assert torch.are_deterministic_algorithms_enabled() is True
 
 
+def test_threads_and_flag_restored_when_prediction_fails(
+    trained: TrainedCheckpoint, monkeypatch: pytest.MonkeyPatch, deterministic_on: int
+) -> None:
+    """A restauração vale também na falha: o processo não sai com o estado da predição."""
+
+    def failing(**kwargs: Any) -> Any:  # noqa: ANN401
+        raise RuntimeError("emit failed mid-prediction")
+
+    monkeypatch.setattr(PfTftTrainer, "_emit", staticmethod(failing))
+
+    with pytest.raises(RuntimeError, match="emit failed mid-prediction"):
+        _predict(trained, decisions=trained.calib_decisions, num_threads=2)
+
+    assert torch.get_num_threads() == deterministic_on
+    assert torch.are_deterministic_algorithms_enabled() is True
+
+
 @pytest.mark.parametrize("damage", ["garbage", "truncated", "empty"])
 def test_corrupted_checkpoint_with_matching_sha_raises_model_training_error(
     trained: TrainedCheckpoint, tmp_path: Path, damage: str
