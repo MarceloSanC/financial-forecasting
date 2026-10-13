@@ -1423,4 +1423,29 @@ inference aapl_confirmatory-r0-665f45d9169a: 60 runs (60 strict, 0 tolerance); c
 **Contexto:** o teste novo `test_corrupted_checkpoint_with_matching_sha_raises_model_training_error` grava bytes que não são checkpoint e passa o sha256 verdadeiro deles. Assim o C10 passa e a falha só aparece na carga. Antes do fix, o caso "lixo" falhou com `_pickle.UnpicklingError: invalid load key, 'n'.` cru. Sondado no container, o `TemporalFusionTransformer.load_from_checkpoint(io.BytesIO(...))` ergue `EOFError` para bytes vazios, `UnpicklingError` para lixo ou zip inválido e `RuntimeError` para pickle sem checkpoint. Os dois primeiros ficavam fora do vocabulário enumerado `_BACKEND_ERRORS`.
 **O que mudou:** `_BACKEND_ERRORS` ganhou `pickle.UnpicklingError` e `EOFError`, com o comentário da verificação. Continua enumerado, nunca `except Exception`. Os três casos do teste (lixo, checkpoint truncado, vazio) erguem `ModelTrainingError` com a original em `__cause__`. Isso vale também para o treino, que usa a mesma tradução, mas nenhum caminho do treino carrega bytes de pickle.
 
+### 2026-10-12 — [deviation] auditoria — auditoria de testes da Stage (3 rodadas, mutação real) — Claude (Opus 5.5)
+**Contexto:** registro da Auditoria de Testes exigida pelos gates de saída. Não houve desvio de plano. O formato desta seção só oferece `[decision]`, `[finding]` e `[deviation]`. A auditoria não decidiu nada novo nem deixou achado para outra Stage, e o que mudou foi código de teste (mais um fix). Por isso o registro usa `[deviation]`, como as outras evidências.
+**Método:** um auditor independente aplicou cada mutação numa cópia do repositório, nunca na worktree, e rodou os testes do slice sobre ela. Os logs estão no scratchpad da sessão (`audit71/`).
+**Rodada 1 (NÃO nos itens 2 e 3):** 8 mutações sobreviventes. Cada uma ganhou um teste que a mata, conferido "falhou com a mutação / passou sem":
+- RI1, threads fixas em 1: `test_predictor_receives_the_recorded_threads_and_both_partitions` e a asserção de `settings.num_threads` no `test_manifest_is_complete` do ponta a ponta.
+- RI2, `break_stale` forçado a falso: `test_break_stale_lock_reaches_the_ledger` e `test_break_stale_lock_takes_over_an_orphan_lock`.
+- C12, lock ocupado: `test_held_lock_raises_locked_before_probe_and_resolver`, e o `infer` entrou no teste de lock ocupado do `test_cli`.
+- RI3, `value_guardrail` sem conferência: `test_present_row_with_divergent_value_guardrail_raises`.
+- RI4, cohort/seed da predição: casos `other-cohort` e `other-seed` de `test_prediction_must_match_the_allowed_runs`.
+- RI5, `feature_set_name` do `dim_run`: caso `feature-set` das guardas.
+- C5, checkpoint corrompido: `test_corrupted_checkpoint_with_matching_sha_raises_model_training_error`.
+- PF2, restauração só no sucesso: `test_threads_and_flag_restored_when_prediction_fails`.
+
+Commits: `5ee8f09` (fix, ver abaixo), `5014866` (task-04-extra), `ccb7c85` (task-09-extra) e `818c6e5` (task-12-extra).
+**Bug real achado (C5):** o teste de C5 revelou que `UnpicklingError`/`EOFError` escapavam crus da carga do checkpoint. A correção está em `5ee8f09` (`fix(modeling)`, task-04-fix), com a entrada própria logo acima.
+**Rodada 2:** as 8 morreram, e sobraram 4:
+- PF7, `warn_only` não restaurado: `test_warn_only_flag_restored_after_prediction`.
+- RI18, seed do resolver: caso `other-seed` em `test_resolution_of_another_cohort_raises`.
+- RI19, run duplicado na predição: caso `duplicated-run`.
+- RI20, escala do normalizador sem checagem: `test_unusable_normalizer_scale_raises_before_writing` com 0, negativa, nan e inf.
+
+Commits: `1fcf2ca` (task-04-extra) e `9813754` (task-09-extra).
+**Rodada 3 (todos os itens "sim"):** com as mutações RI18, RI19 e RI20, os testes do inference passaram de `192 passed` a `1 failed`, `1 failed` e `4 failed`, respectivamente. Com a PF7, o arquivo do adapter passou de `42 passed` a `1 failed`.
+**Razão:** o gate "Auditoria de Testes com todos os itens sim" fecha, e cada teste extra tem a sua mutação comprovadamente morta.
+
 <!-- END: post-execution -->
