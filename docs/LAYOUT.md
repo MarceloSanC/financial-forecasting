@@ -282,17 +282,23 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 
   **Perímetro do gate hoje** — dito aqui porque doutrina mais larga que o gate é
   falso verde de segunda ordem, o defeito que a issue #60 existe para matar: o
-  contrato `bc-independence` do `.importlinter` cobre os **cinco** slices
+  contrato `bc-independence` do `.importlinter` cobre os **seis** slices
   (`modeling`, `analytics_store`, `feature_engineering`, `market_data`,
-  `evaluation` — este desde a Stage 6.1). As 22 arestas de runtime existentes
+  `evaluation` — este desde a Stage 6.1 —, e `inference` — desde a Stage 7.1: seus
+  ports do consumidor só têm imports de tipo; o contrato `inference-no-torch-leak`
+  mantém `torch`/`lightning`/`pytorch_forecasting` fora da application/domain do
+  slice, ADR 7.1.0001 item 4). As 27 arestas de runtime existentes
   estão declaradas UMA A UMA como exceção comentada (débito medido, não
   permissão) — as 8 `feature_engineering → market_data.domain.entities`
   (`Candle`, `NewsArticle`, `FundamentalReport`, #95) e as duas
   `evaluation.domain → analytics_store.domain.value_objects.quantile_forecast`
   (o VO `QuantileForecast` guardado pela `coverage_series`, Stage 6.1 / ADR
   6.1.0002, e construído com os valores persistidos pelo `series_assembly`,
-  Stage 6.4 / ADR 6.4.0004) são dados, pela regra da ADR 0.0.0053 — e **uma aresta nova reprova
-  o build**. O que o gate não vê:
+  Stage 6.4 / ADR 6.4.0004) e as cinco do `inference.application.use_cases.run_inference`
+  (Stage 7.1: os DTOs de comando de `ResolveTftCheckpoints`/`PredictTftFromCheckpoints`,
+  as chaves `CODE_KEYS`/`DIRTY_KEY`/`THREADS_KEY` do port do probe do `modeling`, o
+  `PersistPredictionsCommand` e o VO `QuantileForecast`) são dados, pela regra da ADR
+  0.0.0053 — e **uma aresta nova reprova o build**. O que o gate não vê:
 
   - **Arestas sob `if TYPE_CHECKING:` são invisíveis ao contrato**
     (`exclude_type_checking_imports = True`, ver §3). Hoje as únicas type-only

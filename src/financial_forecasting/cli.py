@@ -3,7 +3,10 @@
     python -m financial_forecasting.cli <subcomando> --data-root <dir> [...]
 
 Subcomandos: `materialize` (brutos → bronze → dataset), `sweep`, `freeze`,
-`run` e `verify` (comandos do cohort, em `features/modeling/adapters/in/cli`).
+`run` e `verify` (comandos do cohort, em `features/modeling/adapters/in/cli`) e
+`infer` (Stage 7.1: reproduz o teste a partir dos checkpoints e completa a partição
+`calib`; `--break-stale-lock`, `--cross-environment "<justificativa>"`; comando em
+`features/inference/adapters/in/cli`).
 `--data-root` é obrigatório em todos, sem default: o dado de um cohort vive
 isolado em `data/cohorts/<nome>/` (concept D10) e um default silencioso poderia
 misturá-lo com o `data/` de desenvolvimento.
@@ -61,6 +64,7 @@ if TYPE_CHECKING:
     )
 
 _CLI_PACKAGE = "financial_forecasting.features.modeling.adapters.in.cli"
+_INFERENCE_COMMANDS = "financial_forecasting.features.inference.adapters.in.cli.inference_commands"
 # Janela da materialização: a mesma janela ampla fixa do calendário do composition
 # root. O que entra no dataset é decidido pelos brutos em `data_root`, não por ela.
 _MATERIALIZE_START = datetime(1990, 1, 1, tzinfo=UTC)
@@ -119,6 +123,13 @@ def _parser() -> argparse.ArgumentParser:
     add("freeze", "congela o cohort com os resultados gravados dos sweeps")
     add("run", "corre o cohort congelado (retomável)")
     add("verify", "confere a corrida pela contagem no silver", lock=False)
+    infer = add("infer", "reproduz o teste dos checkpoints e completa a partição calib")
+    infer.add_argument(
+        "--cross-environment",
+        default=None,
+        metavar="JUSTIFICATIVA",
+        help="força o modo tolerance com a justificativa gravada no manifesto",
+    )
     return parser
 
 
@@ -154,6 +165,17 @@ def main(
                 dataset_start=args.start,
                 out=stdout,
             )
+        if args.command == "infer":
+            inference_commands = importlib.import_module(_INFERENCE_COMMANDS)
+            exit_code: int = inference_commands.infer(
+                deps.run_inference_for,
+                cohort_file.load(args.cohort),
+                args.cohort,
+                out=stdout,
+                break_stale_lock=args.break_stale_lock,
+                cross_environment=args.cross_environment,
+            )
+            return exit_code
         return _dispatch_cohort_command(args, deps, cohort_file, stdout)
     except (ApplicationError, DomainError, ValueError, RuntimeError, OSError, TypeError) as exc:
         # Erro de execução sai com 2; divergência do `verify` sai com 1

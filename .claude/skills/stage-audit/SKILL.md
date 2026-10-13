@@ -122,6 +122,8 @@ develop está verde, a causa provável é env drift do worktree (`.venv`
 dessincronizado; deps novas em develop). `uv sync --extra dev` e
 re-rodar **antes** de registrar finding.
 
+**Hashes citados:** para cada hash da §7 e de artefato de proveniência, `git merge-base --is-ancestor <hash> HEAD`; falso é "Rastro perdido".
+
 **Nota — pré-requisito de Stage anterior.** Stage atual pode declarar
 a anterior como pré-requisito. Pré-requisito real é "mergeada em
 `develop`", não "status `done` no roadmap local". Conferir com
@@ -659,6 +661,9 @@ parcialmente atualizado) sem registro onde o reviewer iria procurar.
   `last_reviewed_at`) esquecido — ou inverso.
 - Branch com commit de outro escopo (`fix:` solto, `chore: bump`)
   pegando carona no PR da Stage.
+- Hash citado na §7 ou gravado em artefato de proveniência (manifesto,
+  ledger) que não é ancestral do HEAD (`git merge-base --is-ancestor`),
+  típico depois de rebase: exige errata com o mapeamento e uma tag que preserve a árvore.
 
 **Pergunta:** "se o reviewer abrir só este arquivo/commit, ele
 entende por que esta linha/commit está aqui?"

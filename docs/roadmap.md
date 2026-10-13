@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-10-06
-last_reviewed_at: 2026-10-06
+updated_at: 2026-10-12
+last_reviewed_at: 2026-10-12
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -68,7 +68,7 @@ graph LR
 | 4 | Analytics store (silver) | Silver modular (schema por tabela), repositório append-only, persister único de predições multi-horizonte | done | 4.1–4.3 |
 | 5 | Modelagem, baselines e treino | TFT re-treinado + GBM quantílico + baselines naive/estatísticos sobre walk-forward purgado/embargoado; cohort confirmatório AAPL | done | 5.1–5.5 |
 | 6 | Núcleo estatístico confirmatório | Pipeline gold confirmatória: pinball/CRPS/DM/MCS/Holm/PICP-Christoffersen + gates + scorecard pré-registrado, no domínio e validada por oráculo | done | 6.1–6.6 |
-| 7 | Inferência, conformal, explicabilidade e API | Motor de inferência + conformal CQR (benchmark) + explicabilidade (VSN/permutação/ablação) servidos por API fina | not_started | 7.1–7.4 |
+| 7 | Inferência, conformal, explicabilidade e API | Motor de inferência + conformal CQR (benchmark) + explicabilidade (VSN/permutação/ablação) servidos por API fina | in_progress | 7.1–7.4 |
 | 8 | Reprodução, equivalência e relatório | Protocolo completo em AAPL; equivalência vs evidência anterior auditada; plots e dossiê de rastreabilidade | not_started | 8.1–8.3 |
 
 **Legenda de status (Step):** `not_started`, `in_progress`, `blocked`, `done`, `deprecated`.
@@ -105,7 +105,7 @@ graph LR
 | `6.4-gold-builders-and-quality-gates` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.2, 6.3 |
 | `6.5-preregistration-and-scorecard` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.4, 5.5 |
 | `6.6-scorecard-profiles` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.5 |
-| `7.1-inference-engine` | inference | multi (application + adapters/out) | vertical | draft | 5.4, 4.3 |
+| `7.1-inference-engine` | inference | multi (application + adapters/out) | vertical | done | 5.4, 4.3 |
 | `7.2-conformal-cqr` | inference | multi (domain + adapters/out) | vertical | draft | 7.1, 5.1 |
 | `7.3-explainability` | inference | multi (domain + adapters/out; + modeling) | vertical | draft | 7.1, 6.1 |
 | `7.4-inference-api` | inference | adapters/in/http | vertical | draft | 7.2, 7.3 |
@@ -999,14 +999,29 @@ Motor de inferência, o benchmark **conformal CQR** (com a deliberação da vari
 ```yaml
 stage_id: 7.1-inference-engine
 bounded_context: inference
-camada_alvo: multi (application + adapters/out)
+camada_alvo: multi (application + adapters/in + adapters/out; + modeling application/adapters/out e analytics_store adapters/out)
+# Caminhos refinados no concept 7.1 (ADR 7.1.0001): o torch fica no modeling; o
+# inference declara os ports do consumidor e o modeling os satisfaz, reusando a receita
+# de dataset e a regra de emissão do treinador (sem `pf_inference_engine.py`).
 arquivos_a_criar:
-  - src/financial_forecasting/features/inference/application/ports/out/inference_model_loader.py
+  - src/financial_forecasting/features/inference/application/ports/out/{checkpoint_resolver.py, checkpoint_grid_predictor.py, runtime_environment_probe.py, prediction_persister.py, silver_table_reader.py, cohort_ledger.py, inference_manifest.py}
   - src/financial_forecasting/features/inference/application/use_cases/run_inference.py
-  - src/financial_forecasting/features/inference/adapters/out/pytorch_forecasting/pf_inference_engine.py
+  - src/financial_forecasting/features/inference/adapters/out/filesystem/json_inference_manifest.py
+  - src/financial_forecasting/features/inference/adapters/in/cli/inference_commands.py
+  - src/financial_forecasting/features/modeling/application/ports/out/{tft_checkpoint_predictor.py, checkpoint_locator.py}
+  - src/financial_forecasting/features/modeling/adapters/out/filesystem/checkpoint_locator.py (stdlib, sem pilha de DL)
+  - src/financial_forecasting/features/modeling/application/use_cases/{resolve_tft_checkpoints.py, predict_tft_from_checkpoints.py}
   - tests/integration/features/inference/test_run_inference.py
-contratos_introduzidos: [InferenceModelLoader (port-out), RunInference (use case)]
-contratos_consumidos: [TftTrainer artefato (5.4), MultiHorizonPredictionPersister (4.3), guardrail de QuantileForecast (4.3, ADR 4.3.0002), WalkForwardSplitter calib partition (5.1)]
+arquivos_a_modificar:
+  - src/financial_forecasting/features/modeling/adapters/out/pytorch_forecasting/pf_tft_trainer.py (predição a partir do checkpoint, com os bytes lidos uma vez, mesma receita e mesmo `_emit`; a localização sem carga é do `FilesystemCheckpointLocator`)
+  - src/financial_forecasting/features/modeling/application/use_cases/train_tft.py (identidade do run e diretório do artefato extraídos, não copiados)
+  - src/financial_forecasting/features/modeling/application/use_cases/run_confirmatory_cohort.py (conferência de declarações e construção CohortSpec → TrainTftCommand extraídas)
+  - src/financial_forecasting/features/modeling/application/ports/out/runtime_environment_probe.py (constante `THREADS_KEY`, importada pelo inference com `CODE_KEYS`/`DIRTY_KEY`)
+  - src/financial_forecasting/features/modeling/application/ports/out/cohort_run_index.py (docstring: linhas de teste) e tests/fakes/features/modeling/in_memory_cohort_run_index.py (split; descarta não-teste)
+  - src/financial_forecasting/features/analytics_store/adapters/out/parquet/parquet_cohort_run_index.py (conta só `split = "test"`, ADR 7.1.0002)
+  - src/financial_forecasting/composition_root.py, src/financial_forecasting/cli.py (subcomando `infer`), .importlinter, docs/LAYOUT.md §7
+contratos_introduzidos: [CheckpointResolver e CheckpointGridPredictor (ports-out do inference), RunInference (use case), TftCheckpointPredictor e CheckpointLocator (ports-out do modeling), ResolveTftCheckpoints e PredictTftFromCheckpoints (use cases do modeling), InferenceManifest (port-out)]
+contratos_consumidos: [artefato do TftTrainer (5.4) e cohort congelado (5.5), PersistPredictions / MultiHorizonPredictionPersister (4.3), guardrail de QuantileForecast (4.3, ADR 4.3.0002), WalkForwardSplitter calib partition (5.1), JsonCohortProgressLedger (lock e ambiente) e GitRuntimeEnvironmentProbe (5.5)]
 definition_of_done: "Inferência reproduz bit a bit no mesmo ambiente pinado (build do torch, SO/CPU, lote de inferência fixo e registrado, sem workers) e por tolerância declarada entre ambientes; dropout off, sem MC dropout; grade densa multi-horizonte emitida para o teste e para a partição calib do candidato (por fold/seed/horizonte); guardrail reusado garante monotonicidade sem mascarar degeneração (gate separado)."
 non_goals: [conformal (7.2), API (7.4)]
 complexidade_estimada: M
@@ -1032,7 +1047,7 @@ arquivos_a_criar:
   - tests/unit/features/inference/test_conformal_embargo.py
   - tests/integration/features/inference/test_cqr_empirical_coverage.py
 contratos_introduzidos: [ConformalCalibrator (domain-service), ConformalBackend (port-out)]
-contratos_consumidos: [WalkForwardSplitter calib partition (5.1), RunInference (7.1), CoverageMetrics (6.1)]
+contratos_consumidos: [WalkForwardSplitter calib partition (5.1), linhas split="calib" de fact_oos_predictions + manifesto de inferência (7.1), CoverageMetrics (6.1)]
 definition_of_done: "CQR assimétrico calibra no calib dedicado (não no early-stop), por fold/horizonte/seed, com embargo, nos 3 pares simétricos; reporta cobertura EMPÍRICA (etiqueta não diz 'garantida'); variante de registro e sensibilidade NexCP (ADR 0_0_0008) pré-registradas pela maquinaria da 6.5 (TOML hasheado + âncora) antes de qualquer métrica sobre o cohort real; ACI/EnbPI ausentes do caminho confirmatório."
 non_goals: [ACI/EnbPI confirmatórios (travados), conformal como entrega primária]
 complexidade_estimada: M
@@ -1062,7 +1077,7 @@ arquivos_a_modificar:
   - src/financial_forecasting/features/modeling/application/use_cases/run_confirmatory_cohort.py (cohort de ablação com 5 configurações)
   - src/financial_forecasting/composition_root.py (dispositivo ≠ cpu)
 contratos_introduzidos: [PermutationImportance, AblationAnalysis, ContributionAgreement (domain-services), VsnWeightExtractor (port-out), cohort de ablação (cohort spec congelado e hasheado)]
-contratos_consumidos: [RunInference (7.1), PinballScore (6.1), FeatureRegistry families (3.4), TrainTft / TftTrainer (5.4) e o executor de cohort (5.5) para o cohort de ablação]
+contratos_consumidos: [ports de resolução e predição a partir do checkpoint — CheckpointResolver/CheckpointGridPredictor, satisfeitos pelo modeling (7.1, ADR 7.1.0001), PinballScore (6.1), FeatureRegistry families (3.4), TrainTft / TftTrainer (5.4) e o executor de cohort (5.5) para o cohort de ablação]
 definition_of_done: "Permutação e ablação LOCO produzem participação por família e horizonte com IC por bootstrap em bloco pareado; a regra de leitura (heterogeneidade + concordância de sinal, ADR 0_0_0007) é aplicada mecanicamente; VSN reportada como horizonte-invariante; cohort de ablação congelado e hasheado; partição da volatilidade resolvida (#151) antes do pré-registro de H3; pré-registro de H3 ancorado antes de qualquer métrica sobre o cohort real; saída rotulada como descritiva (sem causalidade)."
 non_goals: [SHAP local sofisticado (futuro), claim causal]
 complexidade_estimada: L  # possivelmente — inclui código novo de modelagem; reavaliar no concept da Stage
@@ -1087,7 +1102,7 @@ arquivos_a_criar:
 arquivos_a_modificar:
   - src/financial_forecasting/shared/infrastructure/http/app.py
 contratos_introduzidos: [RunInferencePort (port-in via FastAPI Depends)]
-contratos_consumidos: [RunInference (7.1), ConformalCalibrator (7.2), explainability (7.3)]
+contratos_consumidos: [ports de predição a partir do checkpoint e predições persistidas test/calib (7.1), ConformalCalibrator (7.2), explainability (7.3)]
 definition_of_done: "`POST /inference/run` retorna quantis nativos + intervalo conformal + explicabilidade (payload com schema versionado; rótulos 'cobertura empírica' e 'descritiva'); router é fino (sem regra); exceções de domínio viram HTTP; e2e verde."
 non_goals: [autenticação, servir treino, streaming]
 complexidade_estimada: M
@@ -1119,7 +1134,7 @@ arquivos_a_criar:
   - src/financial_forecasting/features/evaluation/application/use_cases/run_confirmatory_evaluation.py
   - tests/integration/features/evaluation/test_run_confirmatory_evaluation.py
 contratos_introduzidos: [RunConfirmatoryEvaluation (use case)]
-contratos_consumidos: [BuildConfirmatoryScorecard e refresh_command_from (6.5), RefreshGold (6.4), RunInference (7.1), ConformalCalibrator (7.2), PermutationImportance, AblationAnalysis e ContributionAgreement (7.3), cohort de ablação (7.3), tabelas de perfil (6.6)]
+contratos_consumidos: [BuildConfirmatoryScorecard e refresh_command_from (6.5), RefreshGold (6.4), RunInference / subcomando `infer` idempotente (7.1), ConformalCalibrator (7.2), PermutationImportance, AblationAnalysis e ContributionAgreement (7.3), cohort de ablação (7.3), tabelas de perfil (6.6)]
 definition_of_done: "Pipeline confirmatória roda do cohort persistido até o scorecard sem re-treino; veredito mecânico H1/H2/H3 produzido; conformal incluído como eixo comparativo; tudo rastreável por run_id + hash de pré-registro."
 non_goals: [equivalência (8.2), plots (8.3)]
 complexidade_estimada: M
@@ -1199,8 +1214,11 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 | 2026-06-22 | Criação inicial (8 Steps, 34 Stages) | Derivado do overview ratificado (8 blocos de deliberação crítica) |
 | 2026-10-05 | Stage `6.6-scorecard-profiles` criada; Step 6 volta a `in_progress`; a 8.1 depende da 6.6 | A issue #129 (perfis do scorecard com séries novas) toca schema persistido e tem decisões de concept em aberto — litmus de forma (PIPELINE §4.5) manda Stage; decisão do humano: Step 6, não 8.0 |
 | 2026-10-06 | Texto das Stages 7.1–7.4 corrigido (bit a bit qualificado; guardrail reusado; emissão do calib; `0_0_0008` sai da 7.2; pré-registro pela maquinaria da 6.5; H3 por concordância de permutação e ablação LOCO, VSN descritiva; "contrato P2" abandonado; `app.py` já existe); a 8.1 depende também da 7.3 (tabela + grafo) | Gate de domínio do Step 7 (issue #150; [doc de domínio inference](./domain/inference/conformal-benchmark-and-feature-attribution.md); ADRs 0.0.0057, 0.0.0007, 0.0.0008) |
+| 2026-10-06 | Arquivos e contratos da 7.1 refinados: port do consumidor `CheckpointGridPredictor` satisfeito pelo use case `PredictTftFromCheckpoints` do modeling (torch fica no modeling; sem `InferenceModelLoader`/`pf_inference_engine.py`); calib em `fact_oos_predictions` com `split = "calib"` e índice do cohort contando só teste; manifesto de inferência; subcomando `infer` | Concept 7.1 (issue #153; ADRs 7.1.0001–7.1.0004) |
+| 2026-10-06 | `contratos_consumidos` de 7.2/7.3/7.4/8.1 passam a nomear o que a 7.1 entrega (`RunInference` devolve contagens, não grades): 7.2 ← linhas `split = "calib"` + manifesto; 7.3/7.4 ← ports de resolução e predição a partir do checkpoint (satisfeitos pelo modeling); 8.1 ← `infer` idempotente; 7.1 com resolução sem carga separada da predição | Checkpoint A da 7.1, rodada 1 (achado A-C5; ADR 7.1.0001/7.1.0004) |
 | 2026-10-06 | 7.3 declara o código novo de modelagem da ablação (subconjunto de famílias, identidade por configuração, cohort de ablação, dispositivo ≠ cpu), complexidade possivelmente L e custo medido; 8.1 consome os serviços e o cohort de ablação da 7.3; lacuna da variante do CQR fechada | Revisão do gate do Step 7 (issue #150) |
 | 2026-10-06 | Stage `6.6-scorecard-profiles` `done`; Step 6 `done`; DoD da 6.6 reescrito pelo D5 (pares adjacentes pela função do dono, não serviço novo) e pela r1 cega; a 8.1 julga pela r1 | Fechamento da Stage 6.6 (issue #129; ADRs 6.6.0001–0003; r1 ancorada) |
+| 2026-10-12 | Stage `7.1-inference-engine` `done`; Step 7 `in_progress`. Execução real sobre o cohort `aapl_confirmatory` r0: 60 runs `strict` com max \|Δ\| = 0, 211.680 linhas `split = "calib"` em `fact_oos_predictions`, manifesto com 60 entradas `completed`, `verify` verde, sem `gold/` | Fechamento da Stage 7.1 (issue #153; ADRs 7.1.0001–7.1.0004; technical 7.1 §7) |
 
 ## Próxima revisão de roadmap
 

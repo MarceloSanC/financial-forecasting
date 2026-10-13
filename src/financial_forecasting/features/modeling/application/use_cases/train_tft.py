@@ -44,6 +44,13 @@ Invariantes materializadas aqui (concept §5):
 Casos de erro (concept §6): C1 (dataset vazio), C2 (comando inválido ANTES de
 qualquer I/O), C6 (coluna esperada ausente), C7 (`DuplicateKeyError` propaga no
 rerun idêntico); C3/C4/C5/C10 erguem no trainer (port).
+
+**Funções públicas para a inferência (Stage 7.1, ADR 7.1.0001 item 2):**
+`load_tft_panel`, `tft_run_identity`, `tft_artifact_dir` e
+`assert_emission_within_request` são o corpo que o treino já usava, extraído sem
+mudar valor persistido — os use cases que predizem a partir do checkpoint as
+chamam em vez de recopiar a leitura do painel, a identidade do run, a regra do
+diretório do artefato e a guarda de emissão.
 """
 
 from __future__ import annotations
@@ -141,6 +148,23 @@ _ALIGNMENT_KEY_WIDTH = 4
 
 
 @dataclass(frozen=True)
+class TftPanel:
+    """O painel do grid único como o treino o monta (`load_tft_panel`).
+
+    `rows` é a matriz na ordem de `feature_names` (desconhecidas + conhecidas);
+    `known_feature_names` é o subconjunto conhecido (I2) — o mesmo que entra na
+    identidade do run.
+    """
+
+    timestamps: tuple[str, ...]
+    target: tuple[float, ...]
+    sessions: tuple[date, ...]
+    rows: tuple[tuple[float, ...], ...]
+    feature_names: tuple[str, ...]
+    known_feature_names: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class TrainTftCommand:
     """DTO de entrada — cohort, params pré-registrados, grade e geometria."""
 
@@ -227,24 +251,130 @@ def _assert_zero_removal(*, before: int, after: int) -> None:
         )
 
 
-def _assert_emission_within_request(
+def load_tft_panel(*, store: MedallionStore, asset_id: str) -> TftPanel:
+    """O painel do ativo pelo grid único, com a tipagem da registry (I2) — C1/C6.
+
+    É a leitura que o `TrainTft` faz: as colunas são `unknown_feature_names()`
+    seguidas de `known_feature_names()`. Quem prediz a partir do checkpoint
+    (Stage 7.1) monta o painel por aqui, nunca por uma cópia.
+    """
+    unknown_names = unknown_feature_names()
+    known_names = known_feature_names()
+    return _read_panel(
+        store=store,
+        asset_id=asset_id,
+        feature_names=unknown_names + known_names,
+        known_names=known_names,
+    )
+
+
+def _read_panel(
+    *,
+    store: MedallionStore,
+    asset_id: str,
+    feature_names: tuple[str, ...],
+    known_names: tuple[str, ...],
+) -> TftPanel:
+    """Corpo único da leitura: (timestamps ISO, target_return, sessões, matriz).
+
+    Checa o vazio com o código deste use case (C1) e delega ordenação,
+    validação e corte do prefixo sem valor ao `build_training_grid` (D11 da
+    Stage 5.5; ADR 5.5.0004) — o mesmo grid dos outros modelos. Recebe as
+    colunas explícitas porque a caracterização da leitura da 5.5
+    (`test_dataset_loading_characterization.py`) a exercita com colunas
+    arbitrárias; o use case e a inferência leem por `load_tft_panel`.
+    """
+    rows = store.read(layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": asset_id})
+    if not rows:
+        raise ValueError(
+            f"dataset ({_DATASET_LAYER!r}, {_DATASET_TABLE!r}) is empty for "
+            f"asset {asset_id!r} — nothing to train (C1)"
+        )
+    grid = build_training_grid(rows, columns=(*feature_names, _TARGET_COLUMN))
+    return TftPanel(
+        timestamps=grid.timestamps_iso(),
+        target=grid.column(_TARGET_COLUMN),
+        sessions=grid.sessions(),
+        rows=grid.matrix(feature_names),
+        feature_names=feature_names,
+        known_feature_names=known_names,
+    )
+
+
+def tft_run_identity(
+    *,
+    command: TrainTftCommand,
+    feature_names: Sequence[str],
+    known_names: Sequence[str],
+    fold: FoldSplit,
+    hasher: Hasher,
+) -> tuple[str, str]:
+    """`(config_signature, run_id)` de um fold — caminho único da 1.4 (I10).
+
+    `config_signature` = configuração completa do run MENOS o que os outros
+    8 slots do `RunId` já carregam: `seed` sai de `asdict(params)` (tem
+    slot), `model_version` não entra (tem slot), `schema_version` não entra
+    em lugar nenhum (é coluna). A tipagem known/unknown entra aqui (I10).
+    `max_horizon` é, no TFT, o comprimento do decodificador (ADR 5.4.0002)
+    — mais um motivo para viver na config e não só na purga (ADR 5.2.0004).
+    """
+    params = {key: value for key, value in asdict(command.params).items() if key != "seed"}
+    config_signature = ConfigSignature.compute(
+        hasher=hasher,
+        config={
+            "scope": {
+                "feature_set_name": command.scope.feature_set_name,
+                "max_horizon": command.scope.max_horizon,
+                "cohort_id": command.scope.cohort_id,
+            },
+            "params": params,
+            "feature_names": list(feature_names),
+            "known_feature_names": list(known_names),
+            "horizons": list(command.horizons),
+            "quantile_levels": list(command.quantile_levels),
+        },
+    )
+    run_id = RunId.compute(
+        hasher=hasher,
+        asset=command.scope.asset_id,
+        feature_set_hash=feature_set_hash(),
+        trial_number=None,  # só o sweep tem trials, e ele não persiste runs
+        fold=str(fold.fold_index),
+        seed=command.params.seed,
+        model_version=MODEL_VERSION,
+        config_signature=config_signature.value,
+        split_signature=fold.fingerprint.value,
+        pipeline_version=PIPELINE_VERSION,
+    )
+    return config_signature.value, run_id.value
+
+
+def tft_artifact_dir(artifacts_root: Path, run_id: str) -> Path:
+    """Diretório do artefato de um run: `<artifacts_root>/tft/<run_id>` (D9)."""
+    return artifacts_root / _ARTIFACT_SUBDIR / run_id
+
+
+def assert_emission_within_request(
     *,
     grids: Mapping[int, Mapping[int, Sequence[float]]],
-    test_decision_indices: tuple[int, ...],
-    horizons: tuple[int, ...],
+    requested_decision_indices: Sequence[int],
+    horizons: Sequence[int],
+    partition: str,
 ) -> None:
-    """O port só pode devolver pares que o use case PEDIU (D5).
+    """O port só pode devolver pares que o use case PEDIU (D5; I12 da 7.1).
 
     Sem esta checagem, um índice de `train`/`calib` devolvido por engano pelo
     adapter (bug de piso de decisão — o risco que D5 cita para exigir faixas
     contíguas) viraria predição out-of-sample persistida e entraria na
     inferência do Step 6. O concept põe o controle do anti-vazamento no use
     case; confiar só no argumento de entrada deixaria metade do controle fora.
+    `partition` nomeia a faixa pedida na mensagem (`"test"` no treino,
+    `"test"`/`"calib"` na predição a partir do checkpoint).
     """
-    unexpected_decisions = sorted(set(grids) - set(test_decision_indices))
+    unexpected_decisions = sorted(set(grids) - set(requested_decision_indices))
     if unexpected_decisions:
         raise ValueError(
-            "trainer emitted decisions outside the requested test range: "
+            f"trainer emitted decisions outside the requested {partition} range: "
             f"{unexpected_decisions!r} (D5)"
         )
     emitted_horizons = {horizon for by_horizon in grids.values() for horizon in by_horizon}
@@ -283,13 +413,17 @@ class TrainTft:
         """Executa o fluxo por fold e devolve um summary por fold (ver módulo)."""
         _validate_command(command)  # C2 — antes de qualquer I/O
 
-        unknown_names = unknown_feature_names()
-        known_names = known_feature_names()
-        feature_names = unknown_names + known_names
-
-        dataset_timestamps, returns, sessions, feature_rows = self._load_dataset(
-            command.scope, feature_names
-        )  # C1/C6
+        # Painel e tipagem pela MESMA função que a predição a partir do checkpoint
+        # usa (Stage 7.1): a ordem desconhecidas + conhecidas tem uma definição só.
+        panel = load_tft_panel(store=self._store, asset_id=command.scope.asset_id)  # C1/C6
+        feature_names = panel.feature_names
+        known_names = panel.known_feature_names
+        dataset_timestamps, returns, sessions, feature_rows = (
+            panel.timestamps,
+            panel.target,
+            panel.sessions,
+            panel.rows,
+        )
         folds = self._splitter.split(
             sessions,
             command.scope,
@@ -323,10 +457,11 @@ class TrainTft:
                 known_names=known_names,
                 run_id=run_id,
             )
-            _assert_emission_within_request(
+            assert_emission_within_request(
                 grids=training.grids,
-                test_decision_indices=tuple(index_by_session[day] for day in fold.test),
+                requested_decision_indices=tuple(index_by_session[day] for day in fold.test),
                 horizons=command.horizons,
+                partition=_SPLIT,
             )
             forecasts_by_decision: dict[int, dict[int, QuantileForecast]] = {}
             for decision_idx, grids in training.grids.items():
@@ -462,33 +597,6 @@ class TrainTft:
         except Exception:
             logger.debug("could not close tracking run for run_id=%s", run_id)
 
-    # -- leitura do dataset (C1/C6) ---------------------------------------------
-
-    def _load_dataset(
-        self, scope: ScopeSpec, feature_names: tuple[str, ...]
-    ) -> tuple[tuple[str, ...], tuple[float, ...], tuple[date, ...], tuple[tuple[float, ...], ...]]:
-        """Lê o dataset TFT pelo grid único: (timestamps ISO, target_return, sessões, matriz).
-
-        Checa o vazio com o código deste use case (C1) e delega ordenação,
-        validação e corte do prefixo sem valor ao `build_training_grid` (D11 da
-        Stage 5.5; ADR 5.5.0004) — o mesmo grid dos outros modelos.
-        """
-        rows = self._store.read(
-            layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": scope.asset_id}
-        )
-        if not rows:
-            raise ValueError(
-                f"dataset ({_DATASET_LAYER!r}, {_DATASET_TABLE!r}) is empty for "
-                f"asset {scope.asset_id!r} — nothing to train (C1)"
-            )
-        grid = build_training_grid(rows, columns=(*feature_names, _TARGET_COLUMN))
-        return (
-            grid.timestamps_iso(),
-            grid.column(_TARGET_COLUMN),
-            grid.sessions(),
-            grid.matrix(feature_names),
-        )
-
     # -- treino de um fold (I4/I7) ---------------------------------------------
 
     def _train_fold(  # noqa: PLR0913 — estado coeso de um fold (concept §4)
@@ -508,7 +616,7 @@ class TrainTft:
         early_stop_indices = tuple(index_by_session[day] for day in fold.early_stop)
         test_indices = tuple(index_by_session[day] for day in fold.test)
 
-        artifact_dir = self._artifacts_root / _ARTIFACT_SUBDIR / run_id
+        artifact_dir = tft_artifact_dir(self._artifacts_root, run_id)
         return self._trainer.train_and_predict(
             params=command.params,
             feature_names=feature_names,
@@ -531,44 +639,14 @@ class TrainTft:
         known_names: tuple[str, ...],
         fold: FoldSplit,
     ) -> tuple[str, str]:
-        """`(config_signature, run_id)` de um fold — caminho único da 1.4 (I10).
-
-        `config_signature` = configuração completa do run MENOS o que os outros
-        8 slots do `RunId` já carregam: `seed` sai de `asdict(params)` (tem
-        slot), `model_version` não entra (tem slot), `schema_version` não entra
-        em lugar nenhum (é coluna). A tipagem known/unknown entra aqui (I10).
-        `max_horizon` é, no TFT, o comprimento do decodificador (ADR 5.4.0002)
-        — mais um motivo para viver na config e não só na purga (ADR 5.2.0004).
-        """
-        params = {key: value for key, value in asdict(command.params).items() if key != "seed"}
-        config_signature = ConfigSignature.compute(
+        """`(config_signature, run_id)` de um fold — delega a `tft_run_identity` (I10)."""
+        return tft_run_identity(
+            command=command,
+            feature_names=feature_names,
+            known_names=known_names,
+            fold=fold,
             hasher=self._hasher,
-            config={
-                "scope": {
-                    "feature_set_name": command.scope.feature_set_name,
-                    "max_horizon": command.scope.max_horizon,
-                    "cohort_id": command.scope.cohort_id,
-                },
-                "params": params,
-                "feature_names": list(feature_names),
-                "known_feature_names": list(known_names),
-                "horizons": list(command.horizons),
-                "quantile_levels": list(command.quantile_levels),
-            },
         )
-        run_id = RunId.compute(
-            hasher=self._hasher,
-            asset=command.scope.asset_id,
-            feature_set_hash=feature_set_hash(),
-            trial_number=None,  # só o sweep tem trials, e ele não persiste runs
-            fold=str(fold.fold_index),
-            seed=command.params.seed,
-            model_version=MODEL_VERSION,
-            config_signature=config_signature.value,
-            split_signature=fold.fingerprint.value,
-            pipeline_version=PIPELINE_VERSION,
-        )
-        return config_signature.value, run_id.value
 
     def _write_dim_run(
         self,

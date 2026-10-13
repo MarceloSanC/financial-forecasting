@@ -5,7 +5,7 @@ when-use: Reference before changing the target normalizer, before setting target
 keywords: [adr, target-normalizer, group-normalizer, encoder-normalizer, auto-selection, anti-leakage, train-only-fit, pytorch-forecasting, testability]
 status: accepted
 created_at: 2026-08-09
-updated_at: 2026-08-09
+updated_at: 2026-10-06
 adr_id: "5.4.0006"
 decision: Fix the TFT target normalizer explicitly as a single-group standardizer fitted on the training frame and expose its fitted center and scale through the port, instead of letting pytorch-forecasting's automatic selection pick a per-encoder-window normalizer
 context_stage: 5.4-tft-trainer
@@ -13,6 +13,22 @@ bounded_context: modeling
 ---
 
 # ADR 5.4.0006 — Explicit, train-fitted target normalizer
+
+> ⚠️ **Errata (2026-10-06):** "Context" says the target normalizer is *the*
+> fitted transformation of this Stage. It is not the only one: `TimeSeriesDataSet`
+> also fits one `StandardScaler` **per continuous covariate** (every real column
+> except the target and lagged variables — the registry features, the calendar
+> `day_of_week`/`month` and the reals the library derives, such as the relative
+> time index) on the frame it is constructed from (pytorch-forecasting 1.8.0
+> `data/timeseries/_timeseries.py` L1256–1268). Those scalers are fitted on the
+> same training frame, inherited without re-fitting by the monitor and prediction
+> datasets (the `check_is_fitted` guard), and travel inside the checkpoint's
+> `dataset_parameters` (`get_parameters()` returns them as `scalers`). So clause 2
+> of ADR 5.4.0001 holds for them by the same construction; what this ADR does not
+> do is expose them through the port — only the target normalizer is asserted
+> numerically. The decision and its verification are unchanged. Found in the
+> Stage 7.1 concept (issue #153; ADR 7.1.0001), which rebuilds the prediction
+> dataset from that stored state.
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 

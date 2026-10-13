@@ -22,6 +22,7 @@ from typing import Any
 
 import pytest
 
+from financial_forecasting.features.modeling.application.use_cases import train_tft
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
 )
@@ -40,7 +41,6 @@ from financial_forecasting.features.modeling.application.use_cases.train_gbm_qua
     modeling_columns,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
-    TrainTft,
     known_feature_names,
     unknown_feature_names,
 )
@@ -105,7 +105,20 @@ def _self(store: FakeMedallionStore) -> SimpleNamespace:
 _Loader = Callable[..., Any]
 _load_baselines: _Loader = RunBaselines._load_dataset
 _load_sweep: _Loader = RunTftSweep._load_dataset
-_TRAINER_LOADERS: list[_Loader] = [TrainGbmQuantile._load_dataset, TrainTft._load_dataset]
+
+
+def _load_tft(self: SimpleNamespace, scope: Any, feature_names: Any) -> Any:  # noqa: ANN401
+    """Leitura do TFT: o corpo único de `load_tft_panel` (Stage 7.1), com colunas dadas."""
+    panel = train_tft._read_panel(
+        store=self._store,
+        asset_id=scope.asset_id,
+        feature_names=tuple(feature_names),
+        known_names=(),
+    )
+    return panel.timestamps, panel.target, panel.sessions, panel.rows
+
+
+_TRAINER_LOADERS: list[_Loader] = [TrainGbmQuantile._load_dataset, _load_tft]
 _FEATURE_LOADERS: list[_Loader] = [*_TRAINER_LOADERS, RunTftSweep._load_dataset]
 
 _EXPECTED_TIMESTAMPS = (
@@ -196,7 +209,7 @@ def test_feature_readers_reject_non_numeric_target(load: _Loader) -> None:
 # -- comportamento que MUDA por desenho nas Tasks 07-10 (grid único, D11) --------
 
 
-_ON_GRID: list[_Loader] = [TrainGbmQuantile._load_dataset, TrainTft._load_dataset]
+_ON_GRID: list[_Loader] = [TrainGbmQuantile._load_dataset, _load_tft]
 
 
 @pytest.mark.parametrize("load", _ON_GRID, ids=["gbm", "tft"])

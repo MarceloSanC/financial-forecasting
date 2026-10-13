@@ -71,6 +71,12 @@ containers =
     # application (port-out ScoringBackend) e adapters/out/scoring — nesta Task ainda
     # vazios; `(adapters)` opcional + `exhaustive = False` toleram as camadas esparsas.
     financial_forecasting.features.evaluation
+    # Stage 7.1 (concept 7.1 I2/I13 / ADR 7.1.0001 item 4 / LAYOUT §3): novo slice
+    # inference entra como container layered. Nasce com domain/application/adapters
+    # vazios (pacotes); os ports do consumidor chegam nas Tasks 07–09 — `(adapters)`
+    # opcional + `exhaustive = False` toleram as camadas esparsas. Caso
+    # `hexagonal-layers:inference-domain-imports-application`.
+    financial_forecasting.features.inference
 exhaustive = False
 
 # -----------------------------------------------------------------------------
@@ -114,6 +120,10 @@ source_modules =
     # CoverageMetrics) é stdlib-only + o VO QuantileForecast do 4.3; `import pandas`/
     # `numpy` aqui REPROVA — caso `domain-purity:evaluation-domain-imports-pandas`.
     financial_forecasting.features.evaluation.domain
+    # Stage 7.1 (concept 7.1 I2 / ADR 7.1.0001 item 4): o domain de inference é
+    # stdlib-only (o slice nasce sem módulos de domínio; o contrato vale desde já);
+    # `import pandas` aqui REPROVA — caso `domain-purity:inference-domain-imports-pandas`.
+    financial_forecasting.features.inference.domain
 forbidden_modules =
     pandas
     pyarrow
@@ -157,6 +167,9 @@ source_modules =
     # Stage 6.1 (concept 6.1 A9): caso `inward-only:evaluation-application-imports-infrastructure`.
     financial_forecasting.features.evaluation.application
     financial_forecasting.features.evaluation.domain
+    # Stage 7.1 (ADR 7.1.0001 item 4): caso `inward-only:inference-application-imports-infrastructure`.
+    financial_forecasting.features.inference.application
+    financial_forecasting.features.inference.domain
 forbidden_modules =
     financial_forecasting.shared.infrastructure
 
@@ -254,6 +267,11 @@ source_modules =
     # `store-no-storage-leak:evaluation-application-imports-pandas`.
     financial_forecasting.features.evaluation.application
     financial_forecasting.features.evaluation.domain
+    # Stage 7.1 (ADR 7.1.0001 item 4): o `RunInference` lê o silver pelo port
+    # `SilverTableReader` e troca só primitivos; pandas/pyarrow/duckdb/pandera nunca na
+    # application/domain de inference. Caso `store-no-storage-leak:inference-application-imports-pandas`.
+    financial_forecasting.features.inference.application
+    financial_forecasting.features.inference.domain
 forbidden_modules =
     pandas
     pyarrow
@@ -383,6 +401,27 @@ forbidden_modules =
     pytorch_forecasting
 allow_indirect_imports = False
 
+# Contrato 11b — inference-no-torch-leak (type = forbidden) — Stage 7.1 (I2/I13)
+# Mesmo perímetro do `modeling-no-torch-leak` para o slice `inference` (ADR 7.1.0001
+# item 4): a predição a partir do checkpoint é fornecida pelo `modeling` através dos
+# ports do consumidor (`CheckpointResolver`/`CheckpointGridPredictor`), que trocam só
+# DTOs/primitivos — `torch`/`lightning`/`pytorch_forecasting` nunca na application/
+# domain de inference. Adapters do slice podem hospedar uma lib (o roadmap da 7.3
+# prevê pesos de VSN); nesta Stage nenhum hospeda. Um caso POR módulo proibido em
+# `_REAL_VIOLATION_CASES`, mais `lightning` no domain (matrícula de
+# `inference.domain`, que o `domain-purity` não cobre para `lightning`).
+[importlinter:contract:inference-no-torch-leak]
+name = Application/domain de inference não importam torch/lightning/pytorch_forecasting
+type = forbidden
+source_modules =
+    financial_forecasting.features.inference.application
+    financial_forecasting.features.inference.domain
+forbidden_modules =
+    torch
+    lightning
+    pytorch_forecasting
+allow_indirect_imports = False
+
 # Contrato 12 — modeling-no-optuna-leak (type = forbidden) — Stage 5.4 (A14)
 # Contrato SEPARADO do 11 de propósito (postura single-purpose do contrato 10):
 # `optuna` é outro concern — busca de hiperparâmetros, não a lib do modelo. O
@@ -479,18 +518,20 @@ allow_indirect_imports = False
 #     `TrainingGridReader` de `evaluation` (Stage 6.4, ADR 6.4.0009; o real é o
 #     use case `ReadTrainingGrid` da `modeling`).
 #
-# Os cinco slices estão no perímetro: `market_data` entrou na #95 com as suas 8
+# Os seis slices estão no perímetro: `market_data` entrou na #95 com as suas 8
 # arestas de runtime declaradas e `evaluation` na Stage 6.1 com 1 (o VO
 # `QuantileForecast` lido pela `CoverageSeries` — ADR 6.1.0002 item 3), que a
 # Stage 6.4 levou a 2 (o mesmo VO construído pelo `SeriesAssembly` — ADR 6.4.0004
-# item 5). Cada aresta de runtime existente entra como exceção NOMEADA abaixo
-# (22 hoje). Elas
+# item 5); `inference` entrou na Stage 7.1 e a Task 09 trouxe as suas 5 (DTOs de
+# comando, chaves do probe, `PersistPredictionsCommand` e `QuantileForecast` — ADR
+# 7.1.0001). Cada aresta de runtime existente entra como exceção NOMEADA abaixo
+# (27 hoje). Elas
 # não são "ok": são o débito medido, e a lista encolhe conforme as issues de
-# fronteira fecham. Aresta nova entre estes cinco slices reprova o build — que é
+# fronteira fecham. Aresta nova entre estes seis slices reprova o build — que é
 # o ponto.
 # -----------------------------------------------------------------------------
 [importlinter:contract:bc-independence]
-name = Bounded contexts independentes (modeling / analytics_store / feature_engineering / market_data / evaluation)
+name = Bounded contexts independentes (modeling / analytics_store / feature_engineering / market_data / evaluation / inference)
 type = independence
 modules =
     financial_forecasting.features.modeling
@@ -498,6 +539,10 @@ modules =
     financial_forecasting.features.feature_engineering
     financial_forecasting.features.market_data
     financial_forecasting.features.evaluation
+    # Stage 7.1 (ADR 7.1.0001 item 4): `inference` entra SEM aresta de runtime — os
+    # ports do consumidor anotam os DTOs do `modeling`/`analytics_store` só sob
+    # TYPE_CHECKING. Caso `bc-independence:inference-imports-new-evaluation-edge`.
+    financial_forecasting.features.inference
 ignore_imports =
     # -- modeling -> analytics_store (dono único do target_timestamp, ADR 4.3.0001)
     # O use case de modeling monta o `PersistPredictionsCommand` (DTO do port-in
@@ -577,6 +622,24 @@ ignore_imports =
     # `evaluation-new-module-imports-quantile-forecast`).
     # ADR 6.4.0003 item 3 / ADR 6.4.0004 item 5 / ADR 0.0.0053 item 3.
     financial_forecasting.features.evaluation.domain.services.series_assembly -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
+    # -- inference -> modeling / analytics_store (arestas de DADOS, Stage 7.1)
+    # O `RunInference` só se comunica com o `modeling` pelos ports do consumidor
+    # (`CheckpointResolver`/`CheckpointGridPredictor`, satisfeitos pelos use cases
+    # fornecedores); o que cruza em runtime são DADOS, nunca comportamento:
+    #   - os DTOs de COMANDO dos dois use cases fornecedores, que ele monta para
+    #     chamar os ports (os de resultado são só de tipo, sob TYPE_CHECKING);
+    #   - `CODE_KEYS`/`DIRTY_KEY`/`THREADS_KEY` do port do probe do `modeling`:
+    #     as chaves de ambiente são IMPORTADAS, nunca redeclaradas (concept 7.1 I6);
+    #   - o `PersistPredictionsCommand` do `analytics_store` (dono único da linha
+    #     LONG e do `target_timestamp`, ADR 4.3.0001) e o VO `QuantileForecast`
+    #     (guardrail do ADR 4.3.0002 aplicado ao calib, I9).
+    # Exceções do MÓDULO `run_inference`, não do slice. ADR 0.0.0053 item 3 /
+    # ADR 7.1.0001.
+    financial_forecasting.features.inference.application.use_cases.run_inference -> financial_forecasting.features.modeling.application.use_cases.resolve_tft_checkpoints
+    financial_forecasting.features.inference.application.use_cases.run_inference -> financial_forecasting.features.modeling.application.use_cases.predict_tft_from_checkpoints
+    financial_forecasting.features.inference.application.use_cases.run_inference -> financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe
+    financial_forecasting.features.inference.application.use_cases.run_inference -> financial_forecasting.features.analytics_store.application.use_cases.persist_predictions
+    financial_forecasting.features.inference.application.use_cases.run_inference -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
 # `error` é o detector de EXCEÇÃO MORTA: quando uma issue de fronteira remover
 # uma aresta, o ignore correspondente deixa de casar e o build cobra a remoção
 # da linha. É o que faz esta lista encolher sozinha em vez de virar sedimento.

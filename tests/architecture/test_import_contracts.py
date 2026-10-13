@@ -117,6 +117,9 @@ _EXPECTED_CONTRACTS = (
     # Stage 6.2 (A12/I11): arch/statsmodels confinados aos adapters
     # features/evaluation/adapters/out/inference/ (ADRs 6.2.0003 e 6.2.0004).
     "evaluation-no-inference-lib-leak",
+    # Stage 7.1 (I2/I13): o core do slice `inference` não importa a pilha de deep
+    # learning — mesmo perímetro do `modeling-no-torch-leak` (ADR 7.1.0001 item 4).
+    "inference-no-torch-leak",
     # Issue #60: independência entre bounded contexts. `hexagonal-layers` é
     # `type=layers` POR CONTAINER (só ordena camadas DENTRO de cada BC) e o
     # `check_layout.py` só barra adapter<->adapter — nenhum gate cobria import
@@ -806,6 +809,95 @@ _REAL_VIOLATION_CASES = (
             )
         },
         id="inward-only:evaluation-application-imports-infrastructure",
+    ),
+    # ---------------------------------------------------------------------
+    # Stage 7.1 (I2/I13; ADR 7.1.0001 item 4) — matrícula do slice `inference` em
+    # CADA contrato em que entra. O slice nasce vazio: sem estes casos, um
+    # `source_modules` esquecido passaria verde (contrato míope).
+    # ---------------------------------------------------------------------
+    # `inference-no-torch-leak`: um caso por módulo proibido; `lightning` no
+    # `domain` prova a matrícula de `inference.domain` (`domain-purity` não lista
+    # `lightning`).
+    pytest.param(
+        "inference-no-torch-leak",
+        {
+            "features/inference/application/_arch_audit_taint_torch.py": (
+                "import torch  # violação temporária\n"
+            )
+        },
+        id="inference-no-torch-leak:inference-application-imports-torch",
+    ),
+    pytest.param(
+        "inference-no-torch-leak",
+        {
+            "features/inference/domain/_arch_audit_taint_lightning.py": (
+                "import lightning  # violação temporária\n"
+            )
+        },
+        id="inference-no-torch-leak:inference-domain-imports-lightning",
+    ),
+    pytest.param(
+        "inference-no-torch-leak",
+        {
+            "features/inference/application/_arch_audit_taint_pf.py": (
+                "import pytorch_forecasting  # violação temporária\n"
+            )
+        },
+        id="inference-no-torch-leak:inference-application-imports-pytorch-forecasting",
+    ),
+    pytest.param(
+        "domain-purity",
+        {
+            "features/inference/domain/_arch_audit_taint.py": (
+                "import pandas  # violação temporária\n"
+            )
+        },
+        id="domain-purity:inference-domain-imports-pandas",
+    ),
+    pytest.param(
+        "hexagonal-layers",
+        {
+            "features/inference/domain/_arch_audit_taint_layers.py": (
+                "import financial_forecasting.features.inference.application\n"
+                "\n_use = financial_forecasting.features.inference.application\n"
+            )
+        },
+        id="hexagonal-layers:inference-domain-imports-application",
+    ),
+    pytest.param(
+        "inward-only",
+        {
+            "features/inference/application/_arch_audit_taint_inward.py": (
+                "from financial_forecasting.shared.infrastructure.config.settings import Settings\n"
+                "\n_use = Settings\n"
+            )
+        },
+        id="inward-only:inference-application-imports-infrastructure",
+    ),
+    # A `application` não é coberta por `domain-purity`: discrimina a matrícula de
+    # `inference.application` em `store-no-storage-leak`.
+    pytest.param(
+        "store-no-storage-leak",
+        {
+            "features/inference/application/_arch_audit_taint_pandas.py": (
+                "import pandas  # violação temporária\n"
+            )
+        },
+        id="store-no-storage-leak:inference-application-imports-pandas",
+    ),
+    # `inference` entra no perímetro SEM aresta declarada: os ports do consumidor
+    # só têm imports de tipo (sob TYPE_CHECKING). Uma aresta de runtime nova
+    # reprova — sem o slice em `modules`, este caso ficaria verde.
+    pytest.param(
+        "bc-independence",
+        {
+            "features/inference/application/_arch_audit_taint_bc.py": (
+                "from financial_forecasting.features.evaluation.domain"
+                ".value_objects.coverage_series import CoverageSeries\n"
+                "\n_use = CoverageSeries\n"
+            )
+        },
+        id="bc-independence:inference-imports-new-evaluation-edge",
     ),
 )
 
