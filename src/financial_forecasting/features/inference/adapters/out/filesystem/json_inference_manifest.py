@@ -21,6 +21,7 @@ from typing import Any
 
 from financial_forecasting.features.inference.application.ports.out.inference_manifest import (
     apply_run_entry,
+    runs_shape_problem,
 )
 
 _DIRECTORY = "inference"
@@ -52,6 +53,12 @@ class JsonInferenceManifest:
             raise ValueError(
                 f"inference manifest {path} is unreadable (top-level {type(loaded).__name__}, "
                 "expected an object) — inspect it before running inference again"
+            )
+        problem = runs_shape_problem(loaded)
+        if problem is not None:
+            raise ValueError(
+                f"inference manifest {path} is unreadable ({problem}) — inspect it before "
+                "running inference again"
             )
         return loaded
 

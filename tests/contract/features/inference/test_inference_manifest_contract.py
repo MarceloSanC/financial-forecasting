@@ -146,17 +146,60 @@ def test_failed_replace_keeps_the_previous_file(
     assert sorted(p.name for p in manifest.path(_COHORT).parent.iterdir()) == ["manifest.json"]
 
 
-@pytest.mark.parametrize("content", ["", "{not json", "[]", '"text"', "null", "3"])
+_MALFORMED_RUNS = [
+    pytest.param({"runs": []}, id="runs-list"),
+    pytest.param({"runs": "text"}, id="runs-string"),
+    pytest.param({"runs": None}, id="runs-null"),
+    pytest.param({"runs": {"run-1": []}}, id="entry-list"),
+    pytest.param({"runs": {"run-1": "text"}}, id="entry-string"),
+    pytest.param({"runs": {"run-1": None}}, id="entry-null"),
+]
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "",
+        "{not json",
+        "[]",
+        '"text"',
+        "null",
+        "3",
+        *(pytest.param(json.dumps(p.values[0]), id=p.id) for p in _MALFORMED_RUNS),
+    ],
+)
 def test_corrupted_manifest_raises_instead_of_reading_as_absent(
     tmp_path: Path, content: str
 ) -> None:
-    """Vazio, JSON inválido ou JSON que não é objeto: nunca lido como manifesto vazio."""
+    """Vazio, JSON inválido, topo que não é objeto ou `runs`/entrada que não é objeto:
+    nunca lido como manifesto vazio (a entrada do run sumiria e a C10 não conferiria)."""
     manifest = JsonInferenceManifest(data_root=tmp_path)
     manifest.path(_COHORT).parent.mkdir(parents=True)
     manifest.path(_COHORT).write_text(content, encoding="utf-8")
 
     with pytest.raises(ValueError, match="unreadable"):
         manifest.recorded(_COHORT)
+
+
+@pytest.mark.parametrize("document", _MALFORMED_RUNS)
+@pytest.mark.parametrize("leg", ["fake", "real"])
+def test_record_run_refuses_malformed_runs(
+    tmp_path: Path, leg: str, document: dict[str, object]
+) -> None:
+    """A mescla do port nunca reescreve um `runs` adulterado como se estivesse vazio."""
+    manifest: InferenceManifest
+    if leg == "fake":
+        manifest = InMemoryInferenceManifest({_COHORT: document})
+        expected = "malformed"  # recusa da `apply_run_entry` do port
+    else:
+        real = JsonInferenceManifest(data_root=tmp_path)
+        real.path(_COHORT).parent.mkdir(parents=True)
+        real.path(_COHORT).write_text(json.dumps(document), encoding="utf-8")
+        manifest = real
+        expected = "unreadable"  # a releitura do arquivo recusa antes da mescla
+
+    with pytest.raises(ValueError, match=expected):
+        manifest.record_run(_COHORT, "run-1", _first_entry())
 
 
 def test_file_lives_under_data_root_inference_cohort(tmp_path: Path) -> None:

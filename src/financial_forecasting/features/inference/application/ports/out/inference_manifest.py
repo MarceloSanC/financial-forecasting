@@ -38,6 +38,24 @@ COHORT_ENVIRONMENT = "cohort_environment"
 RUNS = "runs"
 
 
+def runs_shape_problem(document: Mapping[str, object]) -> str | None:
+    """O defeito de forma de `runs` no documento, ou `None` se a forma é válida.
+
+    `runs`, quando presente, é um objeto `run_id → objeto`. Outra forma é manifesto
+    adulterado: lida como ausente, a entrada do run sumiria e a C10 (sha256 do
+    checkpoint contra o manifesto) deixaria de ser conferida.
+    """
+    if RUNS not in document:
+        return None
+    runs = document[RUNS]
+    if not isinstance(runs, Mapping):
+        return f"'{RUNS}' is {type(runs).__name__}, expected an object"
+    for run_id, entry in runs.items():
+        if not isinstance(entry, Mapping):
+            return f"'{RUNS}.{run_id}' is {type(entry).__name__}, expected an object"
+    return None
+
+
 def merge_run_entry(
     previous: Mapping[str, object] | None, entry: Mapping[str, object]
 ) -> dict[str, object]:
@@ -61,13 +79,17 @@ def apply_run_entry(
 ) -> dict[str, object]:
     """O documento depois de `record_run(cohort_id, run_id, entry)` (função pura)."""
     updated: dict[str, object] = copy.deepcopy(dict(document)) if document else {}
+    problem = runs_shape_problem(updated)
+    if problem is not None:
+        raise ValueError(f"inference manifest of {cohort_id} is malformed ({problem})")
     updated.setdefault("cohort_id", cohort_id)
     if COHORT_ENVIRONMENT not in updated and COHORT_ENVIRONMENT in entry:
         updated[COHORT_ENVIRONMENT] = copy.deepcopy(entry[COHORT_ENVIRONMENT])
-    runs = updated.setdefault(RUNS, {})
-    assert isinstance(runs, dict)  # documento montado só por esta função
+    recorded_runs = updated.get(RUNS)
+    runs: dict[str, object] = dict(recorded_runs) if isinstance(recorded_runs, Mapping) else {}
     previous = runs.get(run_id)
     runs[run_id] = merge_run_entry(previous if isinstance(previous, Mapping) else None, entry)
+    updated[RUNS] = runs
     return updated
 
 

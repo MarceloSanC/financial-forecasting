@@ -1491,4 +1491,9 @@ Nada no slice `inference`, no `modeling` ou nos adapters que o `infer` usa mudou
 **Preservação:** a árvore fica na tag anotada `evidence/7.1-etapa-e-9e6c212` (aponta para `9e6c212`, publicada no `origin`), e assim o hash do manifesto continua resolvível depois que a branch for apagada.
 **Razão:** o hash gravado no artefato de proveniência precisa ser alcançável e o rebase precisa ser explicado. Os números da Etapa E não mudam.
 
+### 2026-10-12 — [deviation] task-10-fix — `runs` ou entrada de run que não é objeto também tornam o manifesto ilegível (auditoria da Stage, F2) — Claude (Opus 5.5)
+**Contexto:** o fix C4-4 cobriu só o topo do JSON. Um `{"runs": []}` passava por `recorded()`, e o `RunInference` o lia como `{}` (`runs if isinstance(runs, Mapping) else {}`): a entrada do run sumia e a C10 (sha256 do checkpoint contra o manifesto) deixava de ser conferida. Uma entrada que não fosse objeto (`{"runs": {"r": "x"}}`) chegava ao `entry.get(...)` da C10 e quebrava com `AttributeError` cru. Na escrita, `apply_run_entry` só tinha um `assert isinstance(runs, dict)`.
+**O que mudou:** o port ganhou `runs_shape_problem(document)`, a regra única de forma (`runs`, quando presente, é objeto `run_id → objeto`). `JsonInferenceManifest.recorded()` a usa e ergue o mesmo `ValueError` "unreadable". `apply_run_entry` troca o `assert` por `ValueError` "malformed", e a recusa vale também no fake. O contrato parametriza seis casos (`runs` lista, string ou `null`; entrada lista, string ou `null`) na leitura e no `record_run` das duas pernas.
+**Razão:** é o mesmo defeito do C4-4 um nível abaixo, e o mesmo erro mantém a mensagem que o operador já conhece.
+
 <!-- END: post-execution -->
