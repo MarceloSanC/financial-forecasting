@@ -1419,4 +1419,8 @@ inference aapl_confirmatory-r0-665f45d9169a: 60 runs (60 strict, 0 tolerance); c
 **Logs** (fora do repo, scratchpad da sessão): `infer-1.log`, `infer-2.log`, `verify.log`.
 **Razão:** o critério da Etapa E fecha inteiro: 60 runs `strict` com |Δ| = 0, 211.680 linhas de calib, `verify` verde com o índice contando só teste, segunda execução com 0 escritas e 211.680 verificadas, manifesto com 60 `completed` e nenhum `gold/`.
 
+### 2026-10-12 — [deviation] task-04-fix — checkpoint corrompido com sha256 certo vira `ModelTrainingError` (auditoria de testes, C5) — Claude (Opus 5.5)
+**Contexto:** o teste novo `test_corrupted_checkpoint_with_matching_sha_raises_model_training_error` grava bytes que não são checkpoint e passa o sha256 verdadeiro deles. Assim o C10 passa e a falha só aparece na carga. Antes do fix, o caso "lixo" falhou com `_pickle.UnpicklingError: invalid load key, 'n'.` cru. Sondado no container, o `TemporalFusionTransformer.load_from_checkpoint(io.BytesIO(...))` ergue `EOFError` para bytes vazios, `UnpicklingError` para lixo ou zip inválido e `RuntimeError` para pickle sem checkpoint. Os dois primeiros ficavam fora do vocabulário enumerado `_BACKEND_ERRORS`.
+**O que mudou:** `_BACKEND_ERRORS` ganhou `pickle.UnpicklingError` e `EOFError`, com o comentário da verificação. Continua enumerado, nunca `except Exception`. Os três casos do teste (lixo, checkpoint truncado, vazio) erguem `ModelTrainingError` com a original em `__cause__`. Isso vale também para o treino, que usa a mesma tradução, mas nenhum caminho do treino carrega bytes de pickle.
+
 <!-- END: post-execution -->

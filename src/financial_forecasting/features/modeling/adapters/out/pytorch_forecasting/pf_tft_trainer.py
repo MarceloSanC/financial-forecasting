@@ -58,6 +58,7 @@ from __future__ import annotations
 
 import io
 import math
+import pickle
 import platform
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -105,7 +106,9 @@ _TARGET_COLUMN = "target"
 # (`AssertionError`); o Lightning ergue `MisconfigurationException` (subclasse
 # direta de `Exception`, invisível a qualquer `except ValueError`). Os
 # `ValueError` da REGRA do port (C3/C4/C5/C10) são erguidos FORA das seções
-# traduzidas e continuam `ValueError`.
+# traduzidas e continuam `ValueError`. A carga do checkpoint (Stage 7.1) soma os dois
+# que o `torch.load` ergue sobre bytes que não são checkpoint, também verificados no
+# container: `pickle.UnpicklingError` (lixo, zip inválido) e `EOFError` (arquivo vazio).
 _BACKEND_ERRORS: tuple[type[BaseException], ...] = (
     ValueError,
     KeyError,
@@ -113,6 +116,8 @@ _BACKEND_ERRORS: tuple[type[BaseException], ...] = (
     TypeError,
     AssertionError,
     MisconfigurationException,
+    pickle.UnpicklingError,
+    EOFError,
 )
 _GROUP_COLUMN = "series"
 # Grupo constante: o painel que atravessa o port é de UM ativo (o do ScopeSpec).

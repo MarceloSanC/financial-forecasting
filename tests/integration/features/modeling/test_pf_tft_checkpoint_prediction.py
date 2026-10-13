@@ -17,6 +17,7 @@ contract test do trainer) e, sobre o checkpoint gravado:
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import platform
@@ -44,6 +45,7 @@ from financial_forecasting.features.modeling.application.ports.out.tft_checkpoin
     CheckpointMismatchError,
     TftCheckpointPrediction,
 )
+from financial_forecasting.features.modeling.domain.exceptions.backend import ModelTrainingError
 from tests.contract.features.modeling._tft_checkpoint_fixture import (
     TrainedCheckpoint,
     train_tiny_checkpoint,
@@ -264,6 +266,32 @@ def test_threads_and_deterministic_flag_restored(
     assert during == [(2, False)]
     assert torch.get_num_threads() == deterministic_on
     assert torch.are_deterministic_algorithms_enabled() is True
+
+
+@pytest.mark.parametrize("damage", ["garbage", "truncated", "empty"])
+def test_corrupted_checkpoint_with_matching_sha_raises_model_training_error(
+    trained: TrainedCheckpoint, tmp_path: Path, damage: str
+) -> None:
+    """sha256 confere (os bytes são os pedidos), mas não são um checkpoint: falha da pilha
+    traduzida em `ModelTrainingError`, com a original em `__cause__` (nunca crua)."""
+    original = Path(trained.path).read_bytes()
+    data = {
+        "garbage": b"not a lightning checkpoint",
+        "truncated": original[: len(original) // 2],
+        "empty": b"",
+    }[damage]
+    corrupted = tmp_path / "epoch=0-step=1.ckpt"
+    corrupted.write_bytes(data)
+
+    with pytest.raises(ModelTrainingError, match="pytorch-forecasting/lightning failed") as info:
+        _predict(
+            trained,
+            decisions=trained.calib_decisions,
+            checkpoint_path=str(corrupted),
+            expected_sha256=hashlib.sha256(data).hexdigest(),
+        )
+
+    assert info.value.__cause__ is not None
 
 
 def test_train_and_checkpoint_paths_share_dataset_helper_and_emit(
