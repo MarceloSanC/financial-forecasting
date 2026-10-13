@@ -371,3 +371,6 @@ def test_manifest_is_complete(outcome: _Outcome) -> None:
         assert entry["calib_rows_verified"] == _expected_calib_rows(outcome.spec)
         for field in ("first_write_environment", "first_write_settings", "first_written_at"):
             assert entry[field], (run_id, field)
+        # a predição rodou com as threads GRAVADAS pelo cohort (ADR 7.1.0003)
+        recorded_threads = int(manifest["cohort_environment"]["torch_threads"])
+        assert int(entry["settings"]["num_threads"]) == recorded_threads, run_id

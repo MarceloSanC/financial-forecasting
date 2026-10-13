@@ -82,7 +82,7 @@ def test_every_subcommand_requires_data_root(
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("command", ["materialize", "run"])
+@pytest.mark.parametrize("command", ["materialize", "run", "infer"])
 def test_a_held_lock_blocks_materialize_and_run_naming_the_owner(
     command: str, tmp_path: Path
 ) -> None:
