@@ -1448,4 +1448,47 @@ Commits: `1fcf2ca` (task-04-extra) e `9813754` (task-09-extra).
 **Rodada 3 (todos os itens "sim"):** com as mutações RI18, RI19 e RI20, os testes do inference passaram de `192 passed` a `1 failed`, `1 failed` e `4 failed`, respectivamente. Com a PF7, o arquivo do adapter passou de `42 passed` a `1 failed`.
 **Razão:** o gate "Auditoria de Testes com todos os itens sim" fecha, e cada teste extra tem a sua mutação comprovadamente morta.
 
+### 2026-10-12 — [deviation] etapa-e — errata: o HEAD `9e6c212` da Etapa E é anterior ao rebase sobre a 6.6 (auditoria da Stage, F1) — Claude (Opus 5.5)
+**Contexto:** a entrada da Etapa E cita o HEAD `9e6c212`, e o manifesto real grava `code.src = 16b4ad72eaa8…`, que é `git rev-parse 9e6c212:src`. Depois da corrida, a branch foi rebaseada sobre o `develop` com a 6.6, e `9e6c212` deixou de ser ancestral do HEAD (`git merge-base --is-ancestor 9e6c212 ce2b22b` → falso). Sem registro, o hash da evidência não aparece no histórico da branch.
+**Mapeamento:** `9e6c212` ≡ `502e9cd` (o mesmo commit `fix(inference): ponta a ponta confere contagens e o silver inteiro [7.1/task-12-fix]` reaplicado pelo rebase). O diff de `src` entre os dois só traz o que a 6.6 levou ao `develop`: `evaluation/**` e o wiring dos oito gold builders de perfil no `composition_root.py` (uma linha da docstring, oito imports e oito instâncias na tupla do `RefreshGold`). `git diff --quiet 9e6c212 502e9cd -- src ':!src/financial_forecasting/features/evaluation' ':!src/financial_forecasting/composition_root.py'` sai com 0. `git diff --stat 9e6c212 502e9cd -- src` (prefixo `src/financial_forecasting/` omitido):
+```
+ composition_root.py                                                                 |  35 +++++++-
+ features/evaluation/adapters/out/duckdb/gold_builders/__init__.py                   |   4 +-
+ features/evaluation/adapters/out/duckdb/gold_builders/christoffersen_monte_carlo.py |  69 ++++++++++++++++
+ features/evaluation/adapters/out/duckdb/gold_builders/differential_acf.py           |  49 +++++++++++
+ features/evaluation/adapters/out/duckdb/gold_builders/differential_breaks.py        |  65 +++++++++++++++
+ features/evaluation/adapters/out/duckdb/gold_builders/dm_profiles.py                |  68 ++++++++++++++++
+ features/evaluation/adapters/out/duckdb/gold_builders/dm_seed_fraction.py           |  49 +++++++++++
+ features/evaluation/adapters/out/duckdb/gold_builders/loss_differentials.py         |  51 ++++++++++++
+ features/evaluation/adapters/out/duckdb/gold_builders/mcs_block_sensitivity.py      |  85 ++++++++++++++++++++
+ features/evaluation/adapters/out/duckdb/gold_builders/partial_degeneracy.py         |  55 +++++++++++++
+ features/evaluation/application/dtos/confirmatory_scorecard.py                      | 158 +++++++++++++++++++++++++++++++++++-
+ features/evaluation/application/dtos/gold_schema.py                                 | 126 ++++++++++++++++++++++++++++-
+ features/evaluation/application/dtos/refresh_gold.py                                | 203 +++++++++++++++++++++++++++++++++++++++++++++-
+ features/evaluation/application/use_cases/build_confirmatory_scorecard.py           |  32 ++++----
+ features/evaluation/application/use_cases/refresh_gold.py                           | 117 ++++++++++++++++++++++++++-
+ features/evaluation/application/use_cases/scorecard_evidence.py                     |  77 +++++++++---------
+ features/evaluation/application/use_cases/scorecard_profile.py                      | 351 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++----------------
+ features/evaluation/domain/services/degeneracy_gate.py                              |  49 +++++++++--
+ features/evaluation/domain/services/diebold_mariano.py                              |  63 ++++++++++-----
+ features/evaluation/domain/services/differential_stationarity.py                    | 245 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ features/evaluation/domain/services/dm_profiles.py                                  | 329 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ features/evaluation/domain/services/horizon_reports.py                              |  20 +++--
+ features/evaluation/domain/services/model_confidence_set.py                         |  43 ++++++++++
+ features/evaluation/domain/services/paired_pinball_losses.py                        |  23 ++++--
+ features/evaluation/domain/services/pinball_score.py                                |  17 ++++
+ features/evaluation/domain/services/profile_reports.py                              | 362 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ features/evaluation/domain/services/series_assembly.py                              |  36 ++++++++-
+ features/evaluation/domain/value_objects/_mapping_keys.py                           |  17 ++++
+ features/evaluation/domain/value_objects/_paired_inputs.py                          |   8 ++
+ features/evaluation/domain/value_objects/assembled_cohort.py                        |  32 +++++++-
+ features/evaluation/domain/value_objects/paired_loss_series.py                      |  20 +++++
+ features/evaluation/domain/value_objects/preregistration.py                         |  52 ++++++++----
+ features/evaluation/domain/value_objects/profile_parameters.py                      | 173 +++++++++++++++++++++++++++++++++++++++
+ 33 files changed, 2898 insertions(+), 185 deletions(-)
+```
+Nada no slice `inference`, no `modeling` ou nos adapters que o `infer` usa mudou. Depois de `502e9cd`, o único commit que toca `src` é `5ee8f09` (`fix(modeling)`, task-04-fix), que só acrescenta `pickle.UnpicklingError` e `EOFError` a `_BACKEND_ERRORS`, um caminho de erro que a corrida não atravessou. O segundo `infer` da E5 re-prediz e reconfere as 60 runs (|Δ| = 0, 211.680 linhas verificadas) sobre a árvore limpa de `9e6c212`.
+**Preservação:** a árvore fica na tag anotada `evidence/7.1-etapa-e-9e6c212` (aponta para `9e6c212`, publicada no `origin`), e assim o hash do manifesto continua resolvível depois que a branch for apagada.
+**Razão:** o hash gravado no artefato de proveniência precisa ser alcançável e o rebase precisa ser explicado. Os números da Etapa E não mudam.
+
 <!-- END: post-execution -->
