@@ -563,6 +563,28 @@ def test_present_row_with_divergent_non_value_field_raises(field_name: str, valu
     assert world.entry("run-f0")["status"] == COMPLETED
 
 
+def test_present_row_with_divergent_value_guardrail_raises() -> None:
+    """1 ulp SÓ no `value_guardrail` (cru e `guardrail_applied` iguais), em strict."""
+    world = _World()
+    _complete_first_run(world)
+
+    def patch(row: Mapping[str, object]) -> Mapping[str, object]:
+        selected = (
+            row.get("run_id") == "run-f0"
+            and row.get("split") == "calib"
+            and row.get("decision_idx") == _F0_CALIB_SECOND
+            and row.get("horizon") == 1
+            and row.get("quantile_level") == _LEVELS[1]
+        )
+        return {**row, "value_guardrail": _one_ulp_up(row["value_guardrail"])} if selected else row
+
+    world.silver_patch = patch
+
+    with pytest.raises(ReproductionError, match=r"differs in \['value_guardrail'\] \(strict\)"):
+        world.run()
+    assert world.events == []
+
+
 def test_partially_present_decision_raises() -> None:
     world = _World()
     world.manifest.record_run(
@@ -720,6 +742,7 @@ def test_reproduction_failure_writes_no_calib() -> None:
         "fold",
         "seed",
         "model-version",
+        "feature-set",
         "sha",
     ],
 )
@@ -733,11 +756,12 @@ def test_guards_in_order_never_call_the_predictor(case: str) -> None:
     elif case == "incomplete-cohort":
         world.resolver_error = ApplicationError("cohort incomplete (C14)")
         error = ApplicationError
-    elif case in {"fold", "seed", "model-version"}:
+    elif case in {"fold", "seed", "model-version", "feature-set"}:
         column, value = {
             "fold": ("fold", "9"),
             "seed": ("seed", 99),
             "model-version": ("model_version", "gbm_quantile"),
+            "feature-set": ("feature_set_name", "fs_other"),
         }[case]
         rows = world.repository.read(
             layer="silver", table="dim_run", filters={"asset": cohort.ASSET}
@@ -903,6 +927,71 @@ def test_started_entry_has_no_verified_at() -> None:
     assert "verified_at" not in world.entry("run-f0")
 
 
+def test_predictor_receives_the_recorded_threads_and_both_partitions() -> None:
+    """As threads vêm do ambiente GRAVADO pelo cohort (3), não do atual (6)."""
+    world = _World(cohort_environment=_environment(**{THREADS_KEY: "3"}))
+
+    world.run()
+
+    [command] = world.last_predictor.calls
+    assert command.num_threads == 3  # noqa: PLR2004
+    assert tuple(command.partitions) == ("test", "calib")
+    assert command.seed == _SEED
+    assert dict(command.allowed) == {fold.run_id: world.sha(fold.run_id) for fold in _FOLDS}
+
+
+def test_held_lock_raises_locked_before_probe_and_resolver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    world = _World()
+    world.ledger.acquire_writer()  # outro escritor detém o lock
+    snapshots: list[object] = []
+    original = InMemoryRuntimeEnvironmentProbe.snapshot
+
+    def spy(self: InMemoryRuntimeEnvironmentProbe) -> Mapping[str, str]:
+        snapshots.append(self)
+        return original(self)
+
+    monkeypatch.setattr(InMemoryRuntimeEnvironmentProbe, "snapshot", spy)
+
+    with pytest.raises(CohortRunLockedError):
+        world.run()
+
+    assert snapshots == []
+    assert world.last_resolver.calls == []
+    assert world.last_predictor.calls == []
+    assert world.events == []
+
+
+class _StaleSpyLedger(InMemoryCohortLedger):
+    def __init__(self) -> None:
+        super().__init__()
+        self.break_stale: list[bool] = []
+
+    def acquire_writer(self, *, break_stale: bool = False) -> None:
+        self.break_stale.append(break_stale)
+        super().acquire_writer(break_stale=break_stale)
+
+
+@pytest.mark.parametrize("break_stale", [True, False])
+def test_break_stale_lock_reaches_the_ledger(break_stale: bool) -> None:
+    world = _World()
+    world.ledger = _StaleSpyLedger()
+
+    world.run(break_stale_lock=break_stale)
+
+    assert world.ledger.break_stale == [break_stale]
+
+
+def test_break_stale_lock_takes_over_an_orphan_lock() -> None:
+    world = _World()
+    world.ledger.acquire_writer()  # lock órfão (processo morto)
+
+    result = world.run(break_stale_lock=True)
+
+    assert [o.calib_rows_written for o in result.outcomes] == [_EXPECTED_CALIB] * 2
+
+
 def test_lock_released_on_error() -> None:
     world = _World()
     world.resolver_error = ApplicationError("boom")
@@ -1046,10 +1135,23 @@ def _swap_sha(result: PredictTftFromCheckpointsResult) -> PredictTftFromCheckpoi
     return replace(result, runs=(replace(first, checkpoint_sha256="f" * 64), *rest))
 
 
+def _other_cohort(result: PredictTftFromCheckpointsResult) -> PredictTftFromCheckpointsResult:
+    return replace(result, cohort_id="other")
+
+
+def _other_seed(result: PredictTftFromCheckpointsResult) -> PredictTftFromCheckpointsResult:
+    return replace(result, seed=99)
+
+
 @pytest.mark.parametrize(
     ("tamper", "error"),
-    [(_drop_last_run, UnknownRunError), (_swap_sha, ArtifactChangedError)],
-    ids=["missing-run", "other-checkpoint"],
+    [
+        (_drop_last_run, UnknownRunError),
+        (_swap_sha, ArtifactChangedError),
+        (_other_cohort, UnknownRunError),
+        (_other_seed, UnknownRunError),
+    ],
+    ids=["missing-run", "other-checkpoint", "other-cohort", "other-seed"],
 )
 def test_prediction_must_match_the_allowed_runs(
     tamper: Callable[[PredictTftFromCheckpointsResult], PredictTftFromCheckpointsResult],
