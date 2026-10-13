@@ -187,6 +187,7 @@ class _World:
         Callable[[PredictTftFromCheckpointsResult], PredictTftFromCheckpointsResult] | None
     ) = None
     resolved_cohort_id: str = _COHORT_ID
+    resolved_seed: int = _SEED
 
     def __post_init__(self) -> None:
         self.persister = _EventPersister(self.repository, self.events)
@@ -248,7 +249,7 @@ class _World:
             {
                 _SEED: ResolveTftCheckpointsResult(
                     cohort_id=self.resolved_cohort_id,
-                    seed=_SEED,
+                    seed=self.resolved_seed,
                     runs=tuple(
                         CheckpointResolution(
                             fold_index=fold.fold_index,
@@ -1117,8 +1118,14 @@ def test_duplicated_present_key_raises_before_writing() -> None:
 # -- consistência da resolução e da predição (C3-6) ------------------------------------------------
 
 
-def test_resolution_of_another_cohort_raises() -> None:
-    world = _World(resolved_cohort_id="other-cohort")
+@pytest.mark.parametrize(
+    "answered",
+    [{"resolved_cohort_id": "other-cohort"}, {"resolved_seed": 99}],
+    ids=["other-cohort", "other-seed"],
+)
+def test_resolution_of_another_cohort_raises(answered: dict[str, Any]) -> None:
+    """O resolver responde por outro cohort ou outra seed: C6 antes de predizer."""
+    world = _World(**answered)
 
     with pytest.raises(UnknownRunError, match="C6"):
         world.run()
@@ -1143,6 +1150,10 @@ def _other_seed(result: PredictTftFromCheckpointsResult) -> PredictTftFromCheckp
     return replace(result, seed=99)
 
 
+def _duplicated_run(result: PredictTftFromCheckpointsResult) -> PredictTftFromCheckpointsResult:
+    return replace(result, runs=(*result.runs, result.runs[0]))
+
+
 @pytest.mark.parametrize(
     ("tamper", "error"),
     [
@@ -1150,8 +1161,9 @@ def _other_seed(result: PredictTftFromCheckpointsResult) -> PredictTftFromCheckp
         (_swap_sha, ArtifactChangedError),
         (_other_cohort, UnknownRunError),
         (_other_seed, UnknownRunError),
+        (_duplicated_run, UnknownRunError),
     ],
-    ids=["missing-run", "other-checkpoint", "other-cohort", "other-seed"],
+    ids=["missing-run", "other-checkpoint", "other-cohort", "other-seed", "duplicated-run"],
 )
 def test_prediction_must_match_the_allowed_runs(
     tamper: Callable[[PredictTftFromCheckpointsResult], PredictTftFromCheckpointsResult],
@@ -1160,6 +1172,22 @@ def test_prediction_must_match_the_allowed_runs(
     world = _World(tamper_prediction=tamper)
 
     with pytest.raises(error):
+        world.run()
+
+    assert world.facts("calib") == []
+
+
+@pytest.mark.parametrize("scale", [0.0, -0.02, math.nan, math.inf], ids=str)
+def test_unusable_normalizer_scale_raises_before_writing(scale: float) -> None:
+    """Escala do normalizador nula, negativa ou não finita: C7 antes de qualquer calib."""
+
+    def bad_scale(result: PredictTftFromCheckpointsResult) -> PredictTftFromCheckpointsResult:
+        first, *rest = result.runs
+        return replace(result, runs=(replace(first, normalizer_scale=scale), *rest))
+
+    world = _World(tamper_prediction=bad_scale)
+
+    with pytest.raises(ReproductionError, match="normalizer scale"):
         world.run()
 
     assert world.facts("calib") == []
