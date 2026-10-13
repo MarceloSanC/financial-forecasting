@@ -268,6 +268,27 @@ def test_threads_and_deterministic_flag_restored(
     assert torch.are_deterministic_algorithms_enabled() is True
 
 
+@pytest.fixture
+def deterministic_warn_only() -> Iterator[None]:
+    """Estado "antes" com algoritmos determinísticos ligados em modo `warn_only`."""
+    flag = torch.are_deterministic_algorithms_enabled()
+    warn_only = torch.is_deterministic_algorithms_warn_only_enabled()
+    torch.use_deterministic_algorithms(True, warn_only=True)
+    try:
+        yield
+    finally:
+        torch.use_deterministic_algorithms(flag, warn_only=warn_only)
+
+
+@pytest.mark.usefixtures("deterministic_warn_only")
+def test_warn_only_flag_restored_after_prediction(trained: TrainedCheckpoint) -> None:
+    """A restauração devolve a flag E o `warn_only` (não só o liga/desliga)."""
+    _predict(trained, decisions=trained.calib_decisions)
+
+    assert torch.are_deterministic_algorithms_enabled() is True
+    assert torch.is_deterministic_algorithms_warn_only_enabled() is True
+
+
 def test_threads_and_flag_restored_when_prediction_fails(
     trained: TrainedCheckpoint, monkeypatch: pytest.MonkeyPatch, deterministic_on: int
 ) -> None:
