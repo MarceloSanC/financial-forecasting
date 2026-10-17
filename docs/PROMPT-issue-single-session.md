@@ -360,7 +360,8 @@ gh pr create --base develop --title "<tipo>(<escopo>): issue #<issue> — <title
 ```
 
 Depois do PR aberto, a sessão de auditoria valida e completa o checklist; o
-CI roda e **o usuário faz o merge** (salvo pedido explícito).
+CI roda e **a sessão de auditoria faz o merge** quando o escopo fecha sem
+pendência (`issue-audit`, Fase F — GIT-WORKFLOW §"Fechamento autônomo pela auditoria").
 
 # CONTRADIÇÕES
 
