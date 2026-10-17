@@ -422,6 +422,25 @@ forbidden_modules =
     pytorch_forecasting
 allow_indirect_imports = False
 
+# Contrato 11c — inference-no-mapie-leak (type = forbidden) — Stage 7.2 (I1)
+# O split-CQR assimétrico e o NexCP de registro vivem uma vez, stdlib-only, no
+# domain do `inference` (ADR 7.2.0002 item 1). O `mapie` é oráculo atrás do port
+# `ConformalBackend` e, com `numpy`/`sklearn`/`scipy` que ele puxa, só pode aparecer
+# em features/inference/adapters/out/mapie/. Um caso POR módulo proibido em
+# `_REAL_VIOLATION_CASES`, com as duas fontes matriculadas.
+[importlinter:contract:inference-no-mapie-leak]
+name = Application/domain de inference não importam mapie/numpy/sklearn/scipy
+type = forbidden
+source_modules =
+    financial_forecasting.features.inference.application
+    financial_forecasting.features.inference.domain
+forbidden_modules =
+    mapie
+    numpy
+    sklearn
+    scipy
+allow_indirect_imports = False
+
 # Contrato 12 — modeling-no-optuna-leak (type = forbidden) — Stage 5.4 (A14)
 # Contrato SEPARADO do 11 de propósito (postura single-purpose do contrato 10):
 # `optuna` é outro concern — busca de hiperparâmetros, não a lib do modelo. O

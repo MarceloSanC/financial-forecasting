@@ -130,6 +130,17 @@ dependencies = [
     # uv.lock trava o patch dos dois.
     "arch>=8,<9",
     "statsmodels>=0.15,<0.16",
+    # Oráculo do split-CQR — Stage 7.2 / ADR 7.2.0002 itens 4 e 7
+    # O CQR assimétrico e o NexCP são implementados UMA vez, stdlib-only, no domínio
+    # de `inference` (implementação de registro). `mapie` é o ORÁCULO da variante
+    # sem pesos atrás do port-out `ConformalBackend` e vive SÓ no adapter
+    # features/inference/adapters/out/mapie/ e na suíte de contrato; nenhum use case
+    # o chama (ADR 6.4.0008). O gate import-linter `inference-no-mapie-leak` reprova
+    # vazamento de mapie/numpy/sklearn/scipy para application/domain do slice. Entra
+    # em `dependencies` (NÃO num extra) pelo racional do scikit-learn/statsmodels
+    # acima: a perna real do contrato roda no CI, sem `skipif`. Pinado por minor; o
+    # uv.lock trava o patch.
+    "mapie>=1.5,<1.6",
 ]
 
 [project.optional-dependencies]
