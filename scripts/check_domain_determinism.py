@@ -167,8 +167,15 @@ def forbidden_uses(tree: ast.AST, module: str) -> dict[str, list[int]]:
         if head.id not in aliases and not builtin_open:
             continue  # cadeia que parte de variável local / parâmetro, não de nome importado
         name = _ast_lib.qualified_name(node, aliases)
-        if name is not None and is_forbidden(name):
-            found[name].append(node.lineno)
+        if name is None:
+            continue
+        # Cada prefixo da cadeia conta: `os.environ.get` é uso de `os.environ`.
+        parts = name.split(".")
+        for size in range(1, len(parts) + 1):
+            prefix = ".".join(parts[:size])
+            if is_forbidden(prefix):
+                found[prefix].append(node.lineno)
+                break
     return dict(found)
 
 
