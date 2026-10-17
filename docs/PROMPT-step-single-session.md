@@ -285,18 +285,17 @@ não de memória:
 
 Então executa o fechamento (invocar `git-versioning-pointer` antes das operações git):
 
-```bash
-gh pr merge <num> --merge --delete-branch          # merge + apaga a branch remota
-git checkout develop && git pull origin develop && git remote prune origin
-python scripts/worktree-rm.py <worktree>           # se a Stage rodou em worktree dedicada
-```
+Comandos, ordem e paradas: **fonte única em [GIT-WORKFLOW](./GIT-WORKFLOW.md) §"Fechamento
+autônomo pela auditoria"** (o mesmo procedimento da Fase F da `stage-audit`) — rebase → `complete`
+antes do push → CI → merge commit sem `--delete-branch` → `worktree-rm.py --no-docker
+--delete-remote` a partir do checkout principal → `develop` local com `--ff-only`.
 
 Depois: **inicia a próxima Stage** do Step (volta ao Princípio central, despachando os subagentes de
 fase). O ciclo se repete até a última Stage.
 
-> **Override consciente da skill e do PROMPT-stage.** A `stage-audit` e o PROMPT-stage dizem "o
-> merge é do usuário, salvo pedido explícito". **Invocar este prompt é o pedido explícito
-> permanente**, válido para todas as Stages do Step: o humano delegou a aprovação ao gate
+> **Quem fecha.** Fora do Step, a própria sessão de auditoria fecha o PR (Fase F da
+> `stage-audit`). Aqui o auditor é subagente read-only, então **a mestra fecha**, com o mesmo
+> procedimento, válido para todas as Stages do Step: o humano delegou a aprovação ao gate
 > auditoria `complete` (subagente auditor de contexto zerado) + CI verde
 > ([GIT-WORKFLOW §Gates](./GIT-WORKFLOW.md)). Se qualquer condição acima falha, **não há merge** —
 > volta a §3.2, ou para por §Autonomia.

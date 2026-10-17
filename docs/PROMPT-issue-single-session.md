@@ -289,8 +289,9 @@ como outra qualquer, com commit próprio.
 implementou é quem abre. Antes do push, **sincronize**: `git fetch` +
 `git rebase origin/develop` (o `roadmap.md` é o conflito recorrente das Stages e
 de issues cujo escopo o toca; ver
-GIT-WORKFLOW §Etapa 4). **Você NÃO faz merge** — o merge é do usuário, após
-auditoria, salvo pedido explícito. Não execute `gh pr merge`.
+GIT-WORKFLOW §Etapa 4). **Você NÃO faz merge** — quem mergeia é a sessão de
+auditoria (`issue-audit`, Fase F), sozinha, quando fecha todo o escopo sem
+pendência. Não execute `gh pr merge`.
 
 **O checklist do PR é um handoff.** Marque **apenas** as caixinhas que você
 **validou com certeza**; deixe as demais **desmarcadas**. O corpo do PR
@@ -387,7 +388,7 @@ fonte mais alta na hierarquia.**
 7. **Gate de saída:** todos os gates verdes (sem commit de fechamento no roadmap).
 8. **Abrir o PR** (`git fetch` + rebase + `git push` + `gh pr create`) + relatório final.
 
-**PARE no merge.** Você faz push e abre o PR; o **merge é do usuário** (salvo pedido explícito). Não execute `gh pr merge`.
+**PARE no merge.** Você faz push e abre o PR; o **merge é da sessão de auditoria** (`issue-audit`, Fase F — rebase, merge e limpeza de branch/worktree quando o escopo fecha). Não execute `gh pr merge`.
 ````
 
 ---
