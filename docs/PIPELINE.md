@@ -927,6 +927,9 @@ ADR para revisão de design, ou aborta a Task.
 Diretório `.claude/skills/<nome-kebab>/SKILL.md`. Cada skill é uma
 **pasta** com arquivo `SKILL.md` dentro (formato oficial Claude Code).
 
+Estrutura da pasta (`reference/`, `scripts/`), subagentes e hooks:
+[`HARNESS.md`](./HARNESS.md) (dono; ADR 0.0.0058).
+
 **Protocolo de carregamento (duas vias complementares):**
 
 1. **Discovery automática (oficial Claude Code):** o agente lê `name` +
@@ -962,11 +965,12 @@ categoria de doc.
 | `stage-audit` | Sessão de auditoria de Stage, pré-PR/merge (§11.1) | Julgamento read-only + fase de aplicação; conceitos de falso verde | accepted |
 | `issue-audit` | Sessão de auditoria de issue avulsa, pré-PR/merge | Irmã da stage-audit para issues (critério↔evidência; disciplina de escopo) | draft |
 | `skill-builder` | Criar/melhorar uma skill | Codificar de execução real (não de imaginação); loop recursivo de melhoria | draft |
+| `architecture-fitness` | Corrigir achado do hook `arch_feedback`/`make arch-ast`, criar port/use case/VO/adapter, revisar diff por arquitetura (pré-carregada pelo subagente `architecture-reviewer`) | Catálogo de regras com fonte + camada + correção; executor dos gates AST só nos arquivos alterados | draft |
 | `didatic-explanation` | Sempre que explicar conceito teórico/arquitetural/de domínio ao humano (alinhamento do Passo 1b, walkthrough de concept/ADR, veredito de auditoria) | Um assunto por vez (agrupar pelo objeto); termos técnicos carregados; sem metáfora/duplo sentido; decisão rica em blocos numerados | draft |
 
 > Além destas, o catálogo inclui as skills de conhecimento de domínio ML
 > (`dmls-ch01`…`dmls-ch06` — fundamentos de ML em produção), carregadas por
-> discovery quando o contexto casa. Total atual: 18 skills em
+> discovery quando o contexto casa. Total atual: 25 skills em
 > `.claude/skills/`.
 
 ### Formato de cada skill (formato β)
