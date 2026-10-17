@@ -1,5 +1,14 @@
 # DMLS Ch. 6 — Deployment and Inference Decisions (Task Reference)
 
+## Contents
+
+- [Task 1: Choose a Serving Paradigm](#task-1-choose-a-serving-paradigm)
+- [Task 2: Decide Where to Run Inference](#task-2-decide-where-to-run-inference)
+- [Task 3: Compress a Model for Fast/Small Inference](#task-3-compress-a-model-for-fastsmall-inference)
+- [Task 4: Compile and Optimize for Production Hardware](#task-4-compile-and-optimize-for-production-hardware)
+- [Appendix A: Background Context (not task-critical)](#appendix-a-background-context-not-task-critical)
+- [Appendix B: Cross-chapter connections](#appendix-b-cross-chapter-connections)
+
 Task-oriented notes from Chip Huyen's *Designing Machine Learning Systems*, Chapter 6. Organized around the decisions you make when taking a trained model to production users.
 
 <!--

@@ -1,5 +1,15 @@
 # DMLS Ch. 1 — Production ML Fundamentals (Task Reference)
 
+## Contents
+
+- [Task 1: ML Go/No-Go Gate](#task-1-ml-gono-go-gate)
+- [Task 2: Scoping a Production ML Project](#task-2-scoping-a-production-ml-project)
+- [Task 3: Planning for the Iterative Lifecycle](#task-3-planning-for-the-iterative-lifecycle)
+- [Task 4: Translating Research ML to Production ML](#task-4-translating-research-ml-to-production-ml)
+- [Task 5: Communicating ML Tradeoffs to Non-ML Stakeholders](#task-5-communicating-ml-tradeoffs-to-non-ml-stakeholders)
+- [Appendix A: Background Context (not task-critical)](#appendix-a-background-context-not-task-critical)
+- [Appendix B: Cross-chapter connections](#appendix-b-cross-chapter-connections)
+
 Task-oriented notes from Chip Huyen's *Designing Machine Learning Systems*, Chapter 1. Organized around the real work this chapter supports, not the book's narrative order.
 
 <!--

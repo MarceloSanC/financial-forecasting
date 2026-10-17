@@ -1,5 +1,15 @@
 # DMLS Ch. 3 — Training Data Strategy (Task Reference)
 
+## Contents
+
+- [Task 1: Choose a Sampling Strategy](#task-1-choose-a-sampling-strategy)
+- [Task 2: Design a Labeling Strategy When Hand Labels Are Limited](#task-2-design-a-labeling-strategy-when-hand-labels-are-limited)
+- [Task 3: Manage Labeling Quality and Multiplicity](#task-3-manage-labeling-quality-and-multiplicity)
+- [Task 4: Handle Class Imbalance](#task-4-handle-class-imbalance)
+- [Task 5: Apply Data Augmentation](#task-5-apply-data-augmentation)
+- [Appendix A: Background Context (not task-critical)](#appendix-a-background-context-not-task-critical)
+- [Appendix B: Cross-chapter connections](#appendix-b-cross-chapter-connections)
+
 Task-oriented notes from Chip Huyen's *Designing Machine Learning Systems*, Chapter 3. Organized around the decisions you make when building training data for a production ML model.
 
 <!--
