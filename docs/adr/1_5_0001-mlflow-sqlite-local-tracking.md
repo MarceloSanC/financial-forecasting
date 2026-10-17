@@ -5,7 +5,7 @@ when-use: Reference before changing the experiment-tracking backend, the trackin
 keywords: [adr, mlflow, tracking, experiment, sqlite, run-id, sweeps, observability]
 status: accepted
 created_at: 2026-06-29
-updated_at: 2026-06-29
+updated_at: 2026-10-17
 adr_id: "1.5.0001"
 decision: Adopt MLflow as the experiment tracker behind the ExperimentTracker port, with a local SQLite backend store (tracking_uri default sqlite:///mlruns.db from Settings), built fresh
 context_stage: 1.5-config-and-tracking
@@ -13,6 +13,8 @@ bounded_context: shared
 ---
 
 # ADR 1.5.0001 — Experiment tracking via MLflow with a local SQLite backend store
+
+> ⚠️ **Errata (2026-10-17, issue #49):** "Context", "Alternatives" and "References" cite the foundation decision `0_0_0023` (tracking = MLflow local SQLite) as an overview ADR. That ADR was never authored and the id is retired; the overview §11 line now points to this ADR as the record of the decision. The decision of this ADR is unchanged.
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 
