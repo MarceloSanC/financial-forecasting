@@ -64,6 +64,7 @@ from financial_forecasting.features.evaluation.domain.services.profile_reports i
 )
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
+    is_real_number,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._integer import (
     is_int,
@@ -654,7 +655,7 @@ def col_int_or_none(row: Row, schema: GoldTableSchema, column: str) -> int | Non
 def col_float(row: Row, schema: GoldTableSchema, column: str) -> float:
     """A célula como `float` (aceita `int` não-`bool`, devolve `float`); senão corrupção."""
     value = col(row, schema, column)
-    if isinstance(value, bool) or not isinstance(value, int | float):
+    if not is_real_number(value):
         raise _wrong_type(schema, column, "float", value)
     return float(value)
 

@@ -63,6 +63,9 @@ from financial_forecasting.features.evaluation.domain.services.model_confidence_
     validate_block_sensitivities,
     validate_mcs_reps,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
+    is_real_number,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     validate_horizon,
 )
@@ -615,7 +618,7 @@ def _check_keys(mapping: object, schema: Mapping[str, object], *, path: str) -> 
 
 
 def _as_float(value: object, *, field: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
+    if not is_real_number(value):
         raise ValueError(f"{field} must be a number, got {value!r}")
     return float(value)
 

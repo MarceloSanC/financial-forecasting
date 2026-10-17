@@ -25,6 +25,7 @@ from financial_forecasting.features.evaluation.domain.services.scoring_input_val
 )
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
+    is_real_number,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
@@ -62,6 +63,28 @@ def test_accepts_finite_int_and_float(value: object) -> None:
 )
 def test_rejects_non_finite_bool_and_non_float_numbers(value: object) -> None:
     assert is_finite_number(value) is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "value",
+    [0, -3, 1.5, math.nan, math.inf, -math.inf, 10**400, _FloatSubclass(0.25)],
+    ids=["zero-int", "negative-int", "float", "nan", "inf", "-inf", "huge-int", "float-subclass"],
+)
+def test_real_number_accepts_int_and_float_without_requiring_finiteness(value: object) -> None:
+    """A regra de tipo (#167) não exige finitude: `nan`/`inf` passam — a finitude é do
+    `is_finite_number`, que reusa este predicado."""
+    assert is_real_number(value) is True
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "value",
+    [True, False, None, "0.1", *_FORMERLY_DIVERGENT],
+    ids=["true", "false", "none", "str", *_FORMERLY_DIVERGENT_IDS],
+)
+def test_real_number_rejects_bool_and_non_float_numbers(value: object) -> None:
+    assert is_real_number(value) is False
 
 
 @pytest.mark.unit

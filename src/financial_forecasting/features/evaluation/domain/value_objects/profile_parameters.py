@@ -30,6 +30,9 @@ from typing import Final
 from financial_forecasting.features.evaluation.domain.services.inference_input_validation import (
     validate_alpha,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
+    is_real_number,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._mapping_keys import (
     missing_key_error,
     unknown_key_error,
@@ -82,7 +85,7 @@ def _check_keys(mapping: object, expected: tuple[str, ...], *, path: str) -> Map
 
 
 def _as_float(value: object, *, field: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
+    if not is_real_number(value):
         raise ValueError(f"{field} must be a number, got {value!r}")
     return float(value)
 

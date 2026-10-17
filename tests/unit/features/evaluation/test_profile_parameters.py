@@ -114,6 +114,15 @@ def test_invalid_alpha(alpha: object) -> None:
         ProfileParameters.from_mapping(payload)
 
 
+def test_bool_alpha_is_refused_by_the_number_coercion() -> None:
+    """`True` para na coerção ("must be a number", `is_real_number`, #167); sem ela,
+    `float(True) == 1.0` cairia no `validate_alpha` com outra mensagem."""
+    payload = _payload()
+    payload["stationarity"]["break_alpha"] = True  # type: ignore[index]
+    with pytest.raises(ValueError, match=r"stationarity\.break_alpha must be a number"):
+        ProfileParameters.from_mapping(payload)
+
+
 def test_root_must_be_a_table() -> None:
     with pytest.raises(ValueError, match="profile_parameters must be a table"):
         ProfileParameters.from_mapping(["x"])

@@ -1,4 +1,4 @@
-"""Dono único das regras de inteiro e de timestamps do slice `evaluation` (issue #118).
+"""Dono único das regras de inteiro, número e timestamps do slice `evaluation` (#118, #167).
 
 Os testes de mensagem comparam o erro, não a origem: uma cópia da regra com a mesma
 mensagem passaria por eles. Este teste prova a ORIGEM, pela AST (um nome em docstring
@@ -6,8 +6,10 @@ ou comentário não conta):
 
 - "int não-`bool`" — as duas escritas antigas (`isinstance(x, bool)` ao lado de
   `isinstance(x, int)` na mesma expressão, e `type(x) is [not] int`) só aparecem em
-  `domain/value_objects/_integer.py`. A regra de número (`int | float`) é outra e não
-  entra aqui;
+  `domain/value_objects/_integer.py`;
+- "número não-`bool`" (#167) — `isinstance(x, bool)` ao lado de
+  `isinstance(x, int | float)` (ou `(int, float)`) na mesma expressão só aparece em
+  `domain/value_objects/_finite_number.py`;
 - "timestamps estritamente crescentes" — a mensagem da regra só é montada em
   `domain/value_objects/_timestamps.py`.
 """
@@ -24,6 +26,7 @@ pytestmark = pytest.mark.unit
 _SRC = Path(__file__).resolve().parents[2] / "src" / "financial_forecasting"
 _SLICE = _SRC / "features" / "evaluation"
 _INT_OWNER = "domain/value_objects/_integer.py"
+_NUMBER_OWNER = "domain/value_objects/_finite_number.py"
 _TIMESTAMPS_OWNER = "domain/value_objects/_timestamps.py"
 _TIMESTAMPS_MESSAGE = "must be strictly increasing (unique and ordered)"
 
@@ -37,6 +40,42 @@ def _isinstance_of(node: ast.AST, type_name: str) -> bool:
         and isinstance(node.args[1], ast.Name)
         and node.args[1].id == type_name
     )
+
+
+def _is_int_float_union(node: ast.AST) -> bool:
+    """`int | float`, `float | int`, `(int, float)` ou `(float, int)`."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        parts: list[ast.expr] = [node.left, node.right]
+    elif isinstance(node, ast.Tuple):
+        parts = list(node.elts)
+    else:
+        return False
+    return sorted(p.id for p in parts if isinstance(p, ast.Name)) == ["float", "int"]
+
+
+def _isinstance_of_number(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "isinstance"
+        and len(node.args) == 2  # noqa: PLR2004
+        and _is_int_float_union(node.args[1])
+    )
+
+
+def _number_rule_lines(source: str) -> list[int]:
+    """Linhas com uma escrita da regra "número não-`bool`"."""
+    lines: list[int] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.BoolOp):
+            calls = [
+                part.operand if isinstance(part, ast.UnaryOp) else part for part in node.values
+            ]
+            if any(_isinstance_of(c, "bool") for c in calls) and any(
+                _isinstance_of_number(c) for c in calls
+            ):
+                lines.append(node.lineno)
+    return lines
 
 
 def _int_rule_lines(source: str) -> list[int]:
@@ -95,6 +134,19 @@ def test_int_detector_flags_both_old_forms() -> None:
     assert _int_rule_lines(source) == [1, 2, 3]
 
 
+def test_number_detector_flags_every_spelling() -> None:
+    """Sanidade: as grafias da regra de número contam; a de inteiro e `bool` sozinho não."""
+    source = (
+        "a = isinstance(x, bool) or not isinstance(x, int | float)\n"
+        "b = isinstance(y, float | int) and not isinstance(y, bool)\n"
+        "c = not isinstance(z, bool) and isinstance(z, (int, float))\n"
+        "d = isinstance(w, bool) or not isinstance(w, int)\n"
+        "e = isinstance(v, int | float)\n"
+        "f = isinstance(u, bool) or not isinstance(u, int | str)\n"
+    )
+    assert _number_rule_lines(source) == [1, 2, 3]
+
+
 def test_timestamps_detector_flags_the_message() -> None:
     source = 'raise ValueError("t must be strictly increasing (unique and ordered): p")\n'
     assert _timestamps_rule_lines(source) == [1]
@@ -105,6 +157,14 @@ def test_int_rule_has_a_single_owner() -> None:
     assert found == [_INT_OWNER], (
         f"'int não-bool' deve ser escrito só em {_INT_OWNER} (issue #118); achados: {found}. "
         "Use is_int / validate_int_at_least."
+    )
+
+
+def test_number_rule_has_a_single_owner() -> None:
+    found = _files_with(_number_rule_lines)
+    assert found == [_NUMBER_OWNER], (
+        f"'número não-bool' deve ser escrito só em {_NUMBER_OWNER} (issue #167); "
+        f"achados: {found}. Use is_real_number / is_finite_number."
     )
 
 
