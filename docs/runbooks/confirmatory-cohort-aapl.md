@@ -148,6 +148,11 @@ The run takes about 13–15 min on 12 threads; most of it is FinBERT over the ne
   `reported_date` of the first report, 2010-04-20, and that date is a fact of
   the data. The useful grid starts on the same session either way (2011-04-18).
   See §7, "[decision:E] Task 33 — R9".
+- **New revisions declare the start in the cohort file (#122):** a top-level
+  `dataset_start = 2010-04-20` (TOML date, no quotes) makes `--start`
+  unnecessary. Passing both with different dates fails with
+  `DatasetStartConflictError`, which names the two values. The frozen r0 has
+  no such field, so its hash is unchanged and it still needs `--start`.
 - **If it fails with `DuplicateKeyError … (bronze, …)`:** a previous attempt
   left a bronze behind, and ingestion appends. Delete **only the derived
   layers** (`data/cohorts/aapl/bronze/` and `data/cohorts/aapl/processed/dataset_tft/`)
@@ -267,7 +272,8 @@ recorded one.
 To reproduce the cohort:
 1. Check out the tag.
 2. Rebuild the image and a venv from that `uv.lock`.
-3. Materialize with the same `--start 2010-04-20`. The dataset fingerprint
+3. Materialize with the same `--start 2010-04-20` (r0 does not declare
+   `dataset_start` in its file). The dataset fingerprint
    must be `00e4406d…95bd`, otherwise `run` refuses with
    `DatasetMismatchError`.
 4. Run Steps 9–10 against a fresh `artifacts/` and silver.
