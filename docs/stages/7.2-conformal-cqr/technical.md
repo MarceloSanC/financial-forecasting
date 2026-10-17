@@ -1637,4 +1637,32 @@ of the score is too low". O ramo do `np.quantile` nunca é alcançado.
 O domínio continua cobrindo n pequeno pelo C2 e o contrato continua só em tamanhos
 que o MAPIE aceita. Por decisão do orquestrador, o concept não regride.
 
+### 2026-10-17 — [decision] Task 04 — forma da fixture NexCP e dos testes de orientação — Claude (Opus 5.5)
+**Contexto:** a Task 04 deixa abertos detalhes de forma da fixture e de dois testes.
+**O que foi decidido:**
+- O escore esperado de cada caso vai como `{"dec", "hex"}` (ou `"inf"`), e não como
+  número simples (a regra de saída do ADR 6.2.0006), porque a Task pede leitura
+  exata por `float.fromhex`. As chaves da proveniência são `source_url`,
+  `zip_sha256`, `notebook`, `cell_id`, `numpy_version` (2.5.0) e `seed`, mais
+  `transcribed_lines`, `margin` e `discarded_cases`.
+- O descarte pela margem de 1e-9 vale no índice escolhido **e** no anterior (ou na
+  massa total, no caso +∞). É mais estrito que o texto da Task e fecha o caso em
+  que o float fica logo abaixo de 1 − α e o exato o alcança. Foram 3 descartes de
+  48, entre eles a massa total n/(n+1) = 1 − α exata (ρ = 1, n = 49, α = 0,02).
+  Ficaram 45 casos, 14 deles +∞.
+- `test_most_recent_point_weighs_rho` usa ρ = 0,5 direto no
+  `weighted_conformal_threshold`. Pelo `calibrate`, ρ = 0,5 dá sempre +∞ para
+  α < 0,5, porque a massa total fica abaixo de 1/2. A orientação pelo `calibrate`
+  é conferida com ρ = 0,9.
+- `test_calibrate_passes_exact_geometric_weights` captura os pesos passados ao
+  `weighted_conformal_threshold` por `monkeypatch`. Sem um caso de empate exato,
+  não há como distinguir o resultado com `exact_level(ρ)` do resultado com o
+  binário de ρ, e uma busca por subconjuntos com n ≤ 10 não achou nenhum.
+- Mutantes equivalentes, registrados para a auditoria. O NexCP elemento a elemento,
+  sem agrupar empates, dá o mesmo escore (ADR 7.2.0002 item 3). Na Task 03, o
+  `float(alpha)` no posto e na Beta não muda nada para α ∈ {1/50, 1/10, 1/4} até
+  n = 2000, o que foi medido. O risco do float está em 1 − τ_hi, e esse mutante
+  morre.
+**Razão:** são escolhas reversíveis e baratas que o plano não fixa.
+
 <!-- END: post-execution -->

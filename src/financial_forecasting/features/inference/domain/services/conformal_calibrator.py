@@ -1,4 +1,4 @@
-"""`ConformalCalibrator` — split-CQR assimétrico de registro, stdlib (concept 7.2 §4; ADR 7.2.0002).
+"""`ConformalCalibrator` — split-CQR assimétrico e NexCP de registro (concept 7.2 §4; ADR 7.2.0002).
 
 Implementação de registro (I1): o MAPIE e o código dos autores são oráculos, nunca
 chamados daqui. Por cauda, sobre o calib dedicado de uma unidade (I6, I7):
@@ -8,6 +8,10 @@ chamados daqui. Por cauda, sobre o calib dedicado de uma unidade (I6, I7):
   mais curto de cada nível (`exact_level`);
 - posto (I3): k = ⌈(n+1)(1-alpha)⌉ inteiro exato; Q̂ = k-ésimo menor escore, empates
   com multiplicidade; k > n ⇒ Q̂ = +∞ (`infinite = True`), nunca cortado em n (C2);
+- NexCP (I4): w_i = rho^(n+1-i), i crescente no `target_timestamp` (1 = mais antigo;
+  o mais recente pesa rho), com rho exato (`exact_level`); w̃_i = w_i/(Σ_j w_j + 1);
+  Q̂ = menor escore R com Σ_{R_j ≤ R} w̃_j ≥ 1 - alpha (empates juntos); massa finita
+  < 1 - alpha ⇒ +∞. Com rho = 1 reproduz o posto sem pesos;
 - saída (I5): L = q̂_lo - Q̂_lo e U = q̂_hi + Q̂_hi, sem rearranjo, ±∞ permitido.
 
 A referência Beta(n+1-l, l), l = ⌊(n+1)alpha⌋, é só por cauda e só na variante sem
@@ -18,6 +22,7 @@ par com ela) e é reexportada aqui.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from fractions import Fraction
@@ -37,6 +42,7 @@ __all__ = [
     "beta_reference",
     "exact_level",
     "split_conformal_rank",
+    "weighted_conformal_threshold",
 ]
 
 
@@ -44,6 +50,7 @@ class ConformalVariant(StrEnum):
     """Variantes do pré-registro; os ids são os do catálogo `[conformal]` (I16, I17)."""
 
     SPLIT_CQR = "split_cqr_asymmetric_unweighted_v1"
+    NEXCP = "nexcp_fixed_geometric_weights_v1"
 
 
 @dataclass(frozen=True)
@@ -117,6 +124,50 @@ def beta_reference(n: int, alpha: Fraction) -> BetaReference | None:
     )
 
 
+def weighted_conformal_threshold(
+    scores: Sequence[float], weights: Sequence[Fraction], alpha: Fraction
+) -> float:
+    """Menor escore R com Σ_{R_j ≤ R} w_j / (Σ w + 1) ≥ 1 - alpha; senão +∞ (I4, C2).
+
+    O +1 é o peso do ponto de teste (o átomo em +∞ do `splitCP_LS`); escores
+    iguais entram juntos. A comparação é exata: Σ_{R_j ≤ R} w_j ≥ (1 - alpha)(Σ w + 1).
+    """
+    _check_alpha(alpha)
+    if not scores:
+        raise ValueError("scores: empty")
+    if len(weights) != len(scores):
+        raise ValueError(f"weights: {len(weights)} weights for {len(scores)} scores")
+    if any(not isinstance(w, Fraction) or w <= 0 for w in weights):
+        raise ValueError("weights: every weight must be a positive Fraction")
+    if any(not math.isfinite(score) for score in scores):
+        raise ValueError("scores: every score must be finite")
+    target = (1 - alpha) * (sum(weights, Fraction(0)) + 1)
+    order = sorted(range(len(scores)), key=scores.__getitem__)
+    cumulative = Fraction(0)
+    position = 0
+    while position < len(order):
+        value = scores[order[position]]
+        while position < len(order) and scores[order[position]] == value:
+            cumulative += weights[order[position]]
+            position += 1
+        if cumulative >= target:
+            return value
+    return math.inf
+
+
+def _exact_rho(rho: float | None) -> Fraction:
+    """rho ∈ (0, 1] tomado exato pelo decimal mais curto; ausente ou inválido → `ValueError`."""
+    if rho is None:
+        raise ValueError("rho: the nexcp variant needs rho in (0, 1]")
+    try:
+        exact = exact_level(rho)
+    except ValueError:
+        raise ValueError(f"rho: {rho!r} is not a finite number in (0, 1]") from None
+    if not 0 < exact <= 1:
+        raise ValueError(f"rho: {rho!r} is not in (0, 1]")
+    return exact
+
+
 def _kth_smallest(scores: list[float], rank: int) -> float:
     """k-ésimo menor com multiplicidade; k > n ⇒ +∞ (I3, nunca cortado)."""
     if rank > len(scores):
@@ -141,6 +192,25 @@ def _split_tail(
     )
 
 
+def _nexcp_tail(
+    tail: Literal["lower", "upper"],
+    level: float,
+    alpha: Fraction,
+    scores: list[float],
+    weights: list[Fraction],
+) -> TailCorrection:
+    correction = weighted_conformal_threshold(scores, weights, alpha)
+    return TailCorrection(
+        tail=tail,
+        level=level,
+        alpha=alpha,
+        n=len(scores),
+        rank=None,
+        correction=correction,
+        infinite=math.isinf(correction),
+    )
+
+
 class ConformalCalibrator:
     """Calibra as duas caudas de um `CalibrationSet` numa variante."""
 
@@ -151,12 +221,23 @@ class ConformalCalibrator:
         """Correções (Q̂_lo, Q̂_hi) da unidade; só o calib entra (I7)."""
         if not isinstance(variant, ConformalVariant):
             raise ValueError(f"variant: unknown conformal variant {variant!r}")
-        if rho is not None:
+        if variant is ConformalVariant.SPLIT_CQR and rho is not None:
             raise ValueError(f"rho: the {variant.value} variant takes no rho, got {rho!r}")
         alpha_lo = exact_level(calib.lower_level)
         alpha_hi = 1 - exact_level(calib.upper_level)
         lower_scores = [point.lower - point.realized for point in calib.points]
         upper_scores = [point.realized - point.upper for point in calib.points]
+        if variant is ConformalVariant.NEXCP:
+            exact = _exact_rho(rho)
+            n = len(calib.points)
+            # i = 1..n em ordem crescente de alvo (garantida pelo VO): o mais recente pesa rho
+            weights = [exact ** (n + 1 - i) for i in range(1, n + 1)]
+            return PairCorrection(
+                variant=variant,
+                rho=rho,
+                lower=_nexcp_tail("lower", calib.lower_level, alpha_lo, lower_scores, weights),
+                upper=_nexcp_tail("upper", calib.upper_level, alpha_hi, upper_scores, weights),
+            )
         return PairCorrection(
             variant=variant,
             rho=None,
