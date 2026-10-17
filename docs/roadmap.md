@@ -1127,6 +1127,8 @@ Roda o protocolo confirmatório completo em AAPL, audita equivalência vs evidê
 
 **Notas da 6.5/6.6:** a dependência da Stage **6.6** está satisfeita (issue #129; os perfis de séries novas saem em oito tabelas gold na mesma geração e no perfil do scorecard, nunca no veredito). A 8.1 **julga pela r1** (`aapl_confirmatory-r1-bfa8028498ca`, emenda cega ancorada na #129 em 2026-10-06): `refresh_command_from(r1, ref)` e `BuildConfirmatoryScorecard(revision=1)`. Depende também dos pré-registros de H3 (7.3) e do CQR (7.2), todos ancorados antes da corrida. O refresh do gold é chamado com `refresh_command_from(plano, ref)` (derivação única do comando); o `ScorecardResult.as_mapping()` é gravado **fora** de `current/`, em `gold/asset=<a>/parent_sweep_id=<p>/scorecard/<preregistration_ref>/` (como `gold_model_comparison_confirmatory_scorecard`, registrando o manifesto lido); o primeiro refresh confirmatório posta um comentário na issue da Stage (fecho da ordem, ADR 6.5.0003 item 4).
 
+**Issue bloqueada pela 8.1 — #58** (calendário na `FeatureRegistry` com `tft_typing=known`): só entra depois da 8.1. Incluir `day_of_week`/`month` em `FEATURE_SPECS` muda o `feature_set_hash` (`7df0e1b4…`) congelado no cohort ancorado (`cohort/aapl_confirmatory-r0-665f45d9169a`) e referenciado pelos pré-registros r0/r1; o executor do cohort e a inferência da 7.1 passariam a recusar o cohort já treinado, e voltar exigiria revisão nova do cohort, re-treino completo e emenda do pré-registro — por uma refatoração que não muda nenhuma predição. Em aberto para quando entrar: qual `family` o calendário recebe (fora das 4 do ADR 0.0.0016) e como isso conversa com a partição de famílias da ablação da 7.3.
+
 **Descrição para IA:**
 ```yaml
 stage_id: 8.1-confirmatory-run
