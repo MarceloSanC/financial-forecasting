@@ -1665,4 +1665,14 @@ que o MAPIE aceita. Por decisão do orquestrador, o concept não regride.
   morre.
 **Razão:** são escolhas reversíveis e baratas que o plano não fixa.
 
+### 2026-10-17 — [decision] ambiente — trava `ff-gate` na função `run()` — Claude (Opus 5.5)
+**Contexto:** por regra do usuário, a VM do WSL/Docker passou a ter 6 CPUs e 10 GB,
+então cabe um gate de 8 GB por vez. Um `make check` da Task 05 morreu no meio com
+"error waiting for container: unexpected EOF" quando o engine reiniciou.
+**O que foi decidido:** a função `run()` do §1 ganha `--name ff-gate` (o nome é a
+trava). Antes de rodar, espera-se `docker ps --filter name=ff-gate -q` vazio, e
+container alheio nunca é removido; um `ff-gate` parado (Exited) pode sair com
+`docker rm`. O `make check` da Task 05 rodou de novo, inteiro, sob a trava.
+**Razão:** é detalhe operacional e não muda nenhum contrato da Stage.
+
 <!-- END: post-execution -->

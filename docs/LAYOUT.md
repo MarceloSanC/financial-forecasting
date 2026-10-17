@@ -79,7 +79,8 @@ tests/
 │   └── features/<feature>/
 │       └── in_memory_<entity>_repository.py
 ├── fixtures/                       # Dados de teste versionados (lidos só por integration)
-│   └── r_oracle/                   # Oráculo R: <unidade>.{json,R,sessionInfo.txt} + Dockerfile (ADR 6.2.0006)
+│   ├── r_oracle/                   # Oráculo R: <unidade>.{json,R,sessionInfo.txt} + Dockerfile (ADR 6.2.0006)
+│   └── nexcp_oracle/               # Oráculo NexCP: gerador + JSON do `splitCP_LS` dos autores (ADR 7.2.0002)
 └── architecture/                   # Testes dos próprios gates (import-linter, layout, fake-parity, port-coverage)
 
 migrations/
@@ -287,7 +288,9 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   `evaluation` — este desde a Stage 6.1 —, e `inference` — desde a Stage 7.1: seus
   ports do consumidor só têm imports de tipo; o contrato `inference-no-torch-leak`
   mantém `torch`/`lightning`/`pytorch_forecasting` fora da application/domain do
-  slice, ADR 7.1.0001 item 4). As 27 arestas de runtime existentes
+  slice, ADR 7.1.0001 item 4; desde a Stage 7.2, o `inference-no-mapie-leak` mantém
+  `mapie`/`numpy`/`sklearn`/`scipy` fora dela — só o adapter
+  `inference/adapters/out/mapie/` os importa, ADR 7.2.0002 item 1). As 27 arestas de runtime existentes
   estão declaradas UMA A UMA como exceção comentada (débito medido, não
   permissão) — as 8 `feature_engineering → market_data.domain.entities`
   (`Candle`, `NewsArticle`, `FundamentalReport`, #95) e as duas

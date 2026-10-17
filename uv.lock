@@ -878,6 +878,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "lightgbm" },
     { name = "lightning" },
+    { name = "mapie" },
     { name = "mlflow" },
     { name = "optuna" },
     { name = "pandas" },
@@ -925,6 +926,7 @@ requires-dist = [
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.0" },
     { name = "lightgbm", specifier = ">=4.7,<5.0" },
     { name = "lightning", specifier = ">=2.5,<2.7" },
+    { name = "mapie", specifier = ">=1.5,<1.6" },
     { name = "mlflow", specifier = ">=2.14" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10" },
     { name = "optuna", specifier = ">=4.0,<5.0" },
@@ -1812,6 +1814,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/00/62/791b31e69ae182791ec67f04850f2f062716bbd205483d63a215f3e062d3/mako-1.3.12.tar.gz", hash = "sha256:9f778e93289bd410bb35daadeb4fc66d95a746f0b75777b942088b7fd7af550a", size = 400219, upload-time = "2026-04-28T19:01:08.512Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bc/b1/a0ec7a5a9db730a08daef1fdfb8090435b82465abbf758a596f0ea88727e/mako-1.3.12-py3-none-any.whl", hash = "sha256:8f61569480282dbf557145ce441e4ba888be453c30989f879f0d652e39f53ea9", size = 78521, upload-time = "2026-04-28T19:01:10.393Z" },
+]
+
+[[package]]
+name = "mapie"
+version = "1.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/1f/d5/4c800e1fbf6d24598662b30901bb928a61b23b06fd1ac86610f344448953/mapie-1.5.0.tar.gz", hash = "sha256:1b6a81797d549b0333d6f6865bd3bca4d26c41037f111fd84160ea87a70c6d72", size = 10162410, upload-time = "2026-08-05T13:28:18.639Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c8/65/c19e5f89552138eb2abc9ae4925822f4f1cea4cca4d17c61aa7a2b29a4f0/mapie-1.5.0-py3-none-any.whl", hash = "sha256:dfc74fc62d5276ec8ab9aa2d9e53cfeb9901fe1df27f8785e724939b6a512483", size = 555626, upload-time = "2026-08-05T13:28:16.446Z" },
 ]
 
 [[package]]
