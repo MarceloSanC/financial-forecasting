@@ -17,6 +17,8 @@ _HOOK = Path(__file__).resolve().parents[3] / ".claude" / "hooks" / "publish_gua
 MAIN = Path("/repo").resolve()
 WORKTREE = Path("/repo-worktrees/feat-1").resolve()
 BRANCHES = {MAIN: "develop", WORKTREE: "feat/1-x"}
+HEAD = "abc123"
+MERGE = f"gh pr merge 7 --merge --match-head-commit {HEAD}"
 COMPLETE_BODY = "Closes #1\n\n> **Auditoria:** `complete`\n>\n> Label de status.\n"
 
 
@@ -35,6 +37,7 @@ pg = _load()
 def _pr(**overrides: object) -> dict[str, Any]:
     pr: dict[str, Any] = {
         "number": 7,
+        "headRefOid": HEAD,
         "baseRefName": "develop",
         "isDraft": False,
         "body": COMPLETE_BODY,
@@ -81,6 +84,22 @@ def _reason(command: str, cwd: Path = WORKTREE, pr: dict[str, Any] | None = None
         "git push --mirror",
         "git status && git push --force",
         "GIT_TRACE=1 git push origin develop",
+        "git status\ngit push origin develop",
+        "echo x & git push origin develop",
+        "& git push origin develop",
+        "(git push origin develop)",
+        "{ git push origin develop; }",
+        "env git push origin develop",
+        "nohup git push origin develop",
+        "git push origin heads/develop",
+        "git push origin @:develop",
+        "git push origin 'refs/heads/*:refs/heads/*'",
+        "git push origin '*:*'",
+        "git push origin :",
+        "git push --prune origin feat/1-x",
+        "git push -fu origin feat/1-x",
+        "git -c push.default=matching push",
+        "git -c remote.origin.push=HEAD:develop push",
     ],
 )
 def test_blocks_unsafe_push_from_worktree(command: str) -> None:
@@ -97,6 +116,9 @@ def test_blocks_unsafe_push_from_worktree(command: str) -> None:
         "git push --force-with-lease",
         "git push --force-with-lease=feat/1-x origin feat/1-x",
         "git push origin --delete feat/1-x",
+        "git push --force-with-lease --force-if-includes origin feat/1-x",
+        "git push origin feat/1-x 2>&1",
+        "git -c core.quotepath=off push",
     ],
 )
 def test_allows_feature_branch_push_from_worktree(command: str) -> None:
@@ -139,8 +161,9 @@ def test_push_without_refspec_on_protected_branch_is_blocked() -> None:
 
 
 def test_allows_merge_when_every_condition_holds() -> None:
-    assert _reason("gh pr merge 7 --merge") is None
-    assert _reason("gh pr merge 7 -m --delete-branch") is None
+    assert _reason(MERGE) is None
+    assert _reason(f"gh pr merge 7 -m --delete-branch --match-head-commit={HEAD}") is None
+    assert _reason(f"gh pr merge --merge --match-head-commit {HEAD} 7") is None
 
 
 @pytest.mark.parametrize(
@@ -151,6 +174,8 @@ def test_allows_merge_when_every_condition_holds() -> None:
         "gh pr merge 7 --rebase",
         "gh pr merge 7 --merge --admin",
         "gh pr merge 7 --merge --auto",
+        "gh pr merge 7 --merge",
+        "gh pr merge 7 --merge --match-head-commit outro",
     ],
 )
 def test_blocks_merge_with_wrong_strategy(command: str) -> None:
@@ -176,17 +201,23 @@ def test_blocks_merge_with_wrong_strategy(command: str) -> None:
             "audit-status",
         ),
         ({"statusCheckRollup": [{"context": "ext", "state": "PENDING"}]}, "ext"),
+        ({"statusCheckRollup": []}, "lint-and-test"),
+        (
+            {"statusCheckRollup": [{"name": "lint-and-test", "conclusion": "SUCCESS"}]},
+            "audit-status",
+        ),
+        ({"body": "> **Auditoria:** `completeness`"}, "Auditoria"),
     ],
 )
 def test_blocks_merge_when_a_condition_fails(overrides: dict[str, Any], fragment: str) -> None:
-    found = _reason("gh pr merge 7 --merge", pr=_pr(**overrides))
+    found = _reason(MERGE, pr=_pr(**overrides))
     assert found is not None
     assert fragment in found
 
 
 def test_merge_fails_closed_when_github_query_fails() -> None:
     found = pg.reason(
-        "gh pr merge 7 --merge",
+        MERGE,
         WORKTREE,
         is_main=lambda _p: False,
         branch=lambda _p: "feat/1-x",
@@ -195,21 +226,36 @@ def test_merge_fails_closed_when_github_query_fails() -> None:
     assert found is not None
 
 
-def test_merge_passes_selector_and_repo_to_fetch() -> None:
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"gh pr merge 7 -R o/r --merge --match-head-commit {HEAD}",
+        f"gh -R o/r pr merge 7 --merge --match-head-commit {HEAD}",
+        f"gh --repo=o/r pr merge 7 --merge --match-head-commit {HEAD}",
+        f"gh pr --repo o/r merge 7 --merge --match-head-commit {HEAD}",
+        f"gh pr merge -Ro/r 7 --merge --match-head-commit {HEAD}",
+    ],
+)
+def test_merge_finds_repo_flag_in_any_position(command: str) -> None:
     seen: list[tuple[str | None, str | None]] = []
 
     def fetch(sel: str | None, _cwd: Path, repo: str | None) -> dict[str, Any]:
         seen.append((sel, repo))
-        return _pr()
+        return _pr(isDraft=True)
 
-    pg.reason(
-        "gh pr merge 7 -R owner/repo --merge",
+    found = pg.reason(
+        command,
         WORKTREE,
         is_main=lambda _p: False,
         branch=lambda _p: "feat/1-x",
         fetch=fetch,
     )
-    assert seen == [("7", "owner/repo")]
+    assert seen == [("7", "o/r")]
+    assert found is not None
+
+
+def test_merge_split_by_newline_is_still_checked() -> None:
+    assert _reason(f"git fetch\n{MERGE}", pr=_pr(isDraft=True)) is not None
 
 
 # --- gh edit / issue / api ---------------------------------------------------------------
@@ -224,6 +270,14 @@ def test_merge_passes_selector_and_repo_to_fetch() -> None:
         "gh issue edit 9 --add-assignee someone",
         "gh issue edit 9 --milestone v1",
         "gh issue edit 9 --remove-label bug",
+        "gh issue edit 9 --add-project Roadmap",
+        "gh pr edit 7 --remove-project Roadmap",
+        "gh pr edit 7 -Bmain",
+        "gh pr edit 7 -mv1",
+        "gh issue -R o/r close 9",
+        "gh api -XPUT repos/o/r/pulls/7/merge",
+        "gh api -X=PUT repos/o/r/pulls/7/merge",
+        "gh api repos/o/r/pulls/7/merge -fmerge_method=merge",
         "gh issue close 9",
         "gh issue reopen 9",
         "gh issue delete 9",

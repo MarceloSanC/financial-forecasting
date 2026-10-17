@@ -3,16 +3,25 @@
 As regras `permissions.allow` de `git push`/`gh pr`/`gh issue` (adicionadas pelo humano) tiram o
 classificador do modo automático do caminho; este hook põe no lugar uma trava determinística.
 Recusa:
-- `git push` para `develop`/`main` (refspec, `--delete`, ou branch atual quando sem refspec),
-  `--force`/`-f`/`+refspec` (só `--force-with-lease` passa), `--all`/`--mirror`, e push a partir
-  do checkout PRINCIPAL (que fica em `develop`; o trabalho sai das worktrees);
+- `git push` para `develop`/`main` (refspec, `--delete`, `HEAD`/`@`, ou branch atual quando
+  sem refspec), refspec com curinga ou matching (`:`), `--force`/`-f`/`+refspec` (só
+  `--force-with-lease` passa), `--all`/`--mirror`/`--prune`, `-c push.*`/`-c remote.*`, e push a
+  partir do checkout PRINCIPAL (que fica em `develop`; o trabalho sai das worktrees);
 - `gh pr merge` sem `--merge`, com `--admin`/`--auto`, ou quando o PR consultado no GitHub não
   cumpre TODAS as condições do fechamento autônomo: base `develop`, não draft, corpo com
-  `> **Auditoria:** complete`, todos os checks concluídos com sucesso, `mergeStateStatus` `CLEAN`
-  e nenhuma conversa de review sem resolver. Consulta que falha = recusa (fail-closed);
+  `> **Auditoria:** complete`, checks obrigatórios presentes e todos os checks com sucesso,
+  `mergeStateStatus` `CLEAN`, nenhuma conversa de review sem resolver e `--match-head-commit`
+  igual ao HEAD consultado (fecha a janela entre a checagem e o merge). Consulta que falha =
+  recusa (fail-closed);
 - `gh pr edit --base` e, em `gh pr edit`/`gh issue edit`, label, assignee, milestone e projeto;
 - `gh issue close|reopen|delete|transfer`;
-- `gh api` que escreve: `-X/--method` diferente de GET, ou `graphql` com `mutation`.
+- `gh api` que escreve: `-X/--method` diferente de GET, campo sem método, ou `graphql` com
+  `mutation`.
+
+Segmentos: `&&`, `||`, `;`, `|`, `&` (inclusive o operador de chamada do PowerShell) e quebra de
+linha — a permissão do Claude Code é avaliada por subcomando, então o hook precisa ver cada um.
+Fora do alcance do parsing (o classificador continua cobrindo, porque não casam com as regras
+allow): `bash -c`/`pwsh -c`/`cmd /c`, `eval`, alias do `gh`, scripts e curl.
 
 Passam: push da branch da worktree, edição de título/corpo, comentários, leituras.
 
@@ -36,15 +45,17 @@ from typing import Any
 PROTECTED = frozenset({"develop", "main"})
 BASE_BRANCH = "develop"
 _RULE = 'GIT-WORKFLOW §"Fechamento autônomo pela auditoria"'
-_SEGMENT_SPLIT = re.compile(r"&&|\|\||;|\|")
+_SEGMENT_SPLIT = re.compile(r"&&|\|\||[;|&\n]")
 _GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
 _ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-_AUDIT_COMPLETE = re.compile(r"^>\s*\*\*Auditoria:\*\*\s*`?complete`?", re.MULTILINE)
+_AUDIT_COMPLETE = re.compile(r"^>\s*\*\*Auditoria:\*\*\s*`?complete`?\s*$", re.MULTILINE)
 _CHECK_OK = {"SUCCESS", "SKIPPED", "NEUTRAL"}
-_PUSH_FORCE = {"--force", "-f", "--force-if-includes"}
-_PUSH_BROAD = {"--all", "--mirror", "--branches"}
+_REQUIRED_CHECKS = frozenset({"lint-and-test", "audit-status"})
+_PUSH_FORCE = {"--force", "-f"}
+_PUSH_BROAD = {"--all", "--mirror", "--branches", "--prune"}
+_PUSH_CONFIG = ("push.", "remote.")
+_WRAPPERS = {"env", "command", "time", "nohup", "sudo", "exec", "xargs"}
 _PUSH_OPTS_WITH_VALUE = {"--repo", "-o", "--push-option", "--receive-pack", "--exec"}
-_GH_OPTS_WITH_VALUE = {"-R", "--repo"}
 _EDIT_FORBIDDEN = {
     "--add-label",
     "--remove-label",
@@ -117,7 +128,7 @@ def fetch_pr(selector: str | None, cwd: Path, repo: str | None) -> dict[str, Any
     """Estado do PR no GitHub + `unresolvedThreads`; None se qualquer consulta falhar."""
     target = [selector] if selector else []
     repo_args = ["-R", repo] if repo else []
-    fields = "number,baseRefName,body,isDraft,mergeStateStatus,statusCheckRollup,url"
+    fields = "number,baseRefName,body,isDraft,mergeStateStatus,statusCheckRollup,url,headRefOid"
     pr = _gh_json(cwd, "pr", "view", *target, *repo_args, "--json", fields)
     if not isinstance(pr, dict):
         return None
@@ -129,11 +140,12 @@ def fetch_pr(selector: str | None, cwd: Path, repo: str | None) -> dict[str, Any
 
 
 def _flags(args: list[str]) -> set[str]:
-    return {a.split("=", 1)[0] for a in args if a.startswith("-")}
+    """Nomes das opções: `--x=v` → `--x`; `-Bmain`/`-X=PUT` → `-B`/`-X` (valor colado)."""
+    return {a.split("=", 1)[0] if a.startswith("--") else a[:2] for a in args if a.startswith("-")}
 
 
 def _strip_ref(ref: str) -> str:
-    return ref.removeprefix("refs/heads/")
+    return ref.removeprefix("refs/").removeprefix("heads/")
 
 
 def _push_positional(args: list[str]) -> list[str]:
@@ -152,9 +164,13 @@ def _push_positional(args: list[str]) -> list[str]:
 def _refspec_reason(spec: str, current: str | None) -> str | None:
     if spec.startswith("+"):
         return f"`git push {spec}`: refspec com `+` força o push; use `--force-with-lease`."
+    if "*" in spec or spec == ":":
+        return (
+            f"`git push {spec}`: curinga/matching empurra `develop`/`main` junto; nomeie a branch."
+        )
     src, _, dst = spec.partition(":")
     target = _strip_ref(dst or src)
-    if target == "HEAD":
+    if target in ("HEAD", "@"):
         target = current or "HEAD"
     if target in PROTECTED or target == "HEAD":
         return f"`git push` para `{target}`: só entra por PR com merge commit."
@@ -166,16 +182,20 @@ def _push_reason(
     cwd: Path,
     is_main: Callable[[Path], bool],
     branch: Callable[[Path], str | None],
+    config: list[str],
 ) -> str | None:
     flags = _flags(args)
+    clustered_force = any(a[:2] != "--" and a[:1] == "-" and "f" in a[1:] for a in args)
     refspecs = _push_positional(args)[1:]
     current = branch(cwd)
-    if is_main(cwd):
-        found: str | None = (
+    if any(c.startswith(_PUSH_CONFIG) for c in config):
+        found: str | None = "`git -c push.*/remote.* push` muda o destino do push; tire o `-c`."
+    elif is_main(cwd):
+        found = (
             "`git push` a partir do checkout principal: ele fica em `develop`; "
             "faça push de dentro da worktree da branch."
         )
-    elif flags & _PUSH_FORCE:
+    elif flags & _PUSH_FORCE or clustered_force:
         found = "`git push --force`: use `--force-with-lease` (não sobrescreve trabalho alheio)."
     elif flags & _PUSH_BROAD:
         found = "`git push --all/--mirror` empurra `develop`/`main` junto; nomeie a branch."
@@ -189,21 +209,44 @@ def _push_reason(
     return found
 
 
-def _merge_target(args: list[str]) -> tuple[str | None, str | None]:
-    selector: str | None = None
+def _split_repo(args: list[str]) -> tuple[str | None, list[str]]:
+    """Tira `-R X`, `-RX`, `--repo X` e `--repo=X` de qualquer posição (o gh aceita todas)."""
     repo: str | None = None
+    rest: list[str] = []
     i = 0
     while i < len(args):
-        if args[i] in _GH_OPTS_WITH_VALUE and i + 1 < len(args):
-            repo = args[i + 1]
-            i += 2
+        a = args[i]
+        if a in ("-R", "--repo") and i + 1 < len(args):
+            repo, i = args[i + 1], i + 2
             continue
-        if args[i].startswith("--repo="):
-            repo = args[i].split("=", 1)[1]
-        elif not args[i].startswith("-") and selector is None:
-            selector = args[i]
+        if a.startswith("--repo="):
+            repo = a.split("=", 1)[1]
+        elif a.startswith("-R") and len(a) > 2:  # noqa: PLR2004 — `-R` + valor colado
+            repo = a[2:].lstrip("=")
+        else:
+            rest.append(a)
         i += 1
-    return selector, repo
+    return repo, rest
+
+
+def _merge_options(args: list[str]) -> tuple[str | None, str | None]:
+    """(seletor do PR, valor de `--match-head-commit`)."""
+    selector: str | None = None
+    head: str | None = None
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--match-head-commit" and i + 1 < len(args):
+            head, i = args[i + 1], i + 2
+            continue
+        if a.startswith("--match-head-commit="):
+            head = a.split("=", 1)[1]
+        elif a in ("-b", "--body", "-F", "--body-file", "-t", "--subject", "-A", "--author-email"):
+            i += 1  # pula o valor da opção
+        elif not a.startswith("-") and selector is None:
+            selector = a
+        i += 1
+    return selector, head
 
 
 def _pr_problems(pr: dict[str, Any]) -> list[str]:
@@ -214,13 +257,19 @@ def _pr_problems(pr: dict[str, Any]) -> list[str]:
         problems.append("PR em draft")
     if not _AUDIT_COMPLETE.search(str(pr.get("body") or "")):
         problems.append("corpo sem `> **Auditoria:** complete`")
-    bad = [
-        str(c.get("name") or c.get("context") or "?")
-        for c in pr.get("statusCheckRollup") or []
-        if (c.get("conclusion") or c.get("state") or "").upper() not in _CHECK_OK
-    ]
+    checks = pr.get("statusCheckRollup") or []
+    status = {
+        str(c.get("name") or c.get("context") or "?"): (
+            c.get("conclusion") or c.get("state") or ""
+        ).upper()
+        for c in checks
+    }
+    bad = [name for name, conclusion in status.items() if conclusion not in _CHECK_OK]
     if bad:
         problems.append(f"checks não verdes: {', '.join(bad)}")
+    missing = sorted(n for n in _REQUIRED_CHECKS if status.get(n) != "SUCCESS")
+    if missing:
+        problems.append(f"checks obrigatórios sem sucesso no HEAD: {', '.join(missing)}")
     if pr.get("mergeStateStatus") != "CLEAN":
         problems.append(f"mergeStateStatus `{pr.get('mergeStateStatus')}` (esperado `CLEAN`)")
     if pr.get("unresolvedThreads", 1):
@@ -228,17 +277,21 @@ def _pr_problems(pr: dict[str, Any]) -> list[str]:
     return problems
 
 
-def _merge_reason(args: list[str], cwd: Path, fetch: PrFetcher) -> str | None:
+def _merge_reason(args: list[str], cwd: Path, fetch: PrFetcher, repo: str | None) -> str | None:
     flags = _flags(args)
     if flags & _MERGE_FORBIDDEN:
         return "`gh pr merge`: só merge commit (`--merge`), sem `--squash/--rebase/--admin/--auto`."
     if not flags & {"--merge", "-m"}:
         return "`gh pr merge` sem `--merge`: o merge commit é obrigatório (GIT-WORKFLOW §Gates)."
-    selector, repo = _merge_target(args)
+    selector, head = _merge_options(args)
     pr = fetch(selector, cwd, repo)
     if pr is None:
         return "`gh pr merge`: não consegui consultar o PR no GitHub — recuso por segurança."
     problems = _pr_problems(pr)
+    if head is None:
+        problems.append("sem `--match-head-commit <headRefOid>`")
+    elif head != pr.get("headRefOid"):
+        problems.append(f"`--match-head-commit` {head} ≠ HEAD do PR {pr.get('headRefOid')}")
     if not problems:
         return None
     return f"`gh pr merge` #{pr.get('number')}: " + "; ".join(problems) + "."
@@ -250,9 +303,13 @@ def _api_reason(rest: list[str]) -> str | None:
         return "`gh api graphql` com `mutation`: escrita direta na API." if mutation else None
     pairs = itertools.pairwise(rest)
     explicit = next((value for flag, value in pairs if flag in ("-X", "--method")), None)
-    inline = (a.split("=", 1)[1] for a in rest if a.startswith("--method="))
+    inline = (
+        a.split("=", 1)[1] if a.startswith("--") else a[2:].lstrip("=")
+        for a in rest
+        if a.startswith("--method=") or (a.startswith("-X") and len(a) > 2)  # noqa: PLR2004
+    )
     explicit = explicit or next(inline, None)
-    has_fields = any(a.split("=", 1)[0] in _API_FIELD_FLAGS for a in rest)
+    has_fields = bool(_flags(rest) & _API_FIELD_FLAGS)
     method = (explicit or ("POST" if has_fields else "GET")).upper()  # gh: campo ⇒ POST
     return None if method == "GET" else f"`gh api` com método {method}: escrita direta na API."
 
@@ -270,15 +327,14 @@ def _edit_reason(group: str, sub_args: list[str]) -> str | None:
 
 
 def _gh_reason(args: list[str], cwd: Path, fetch: PrFetcher) -> str | None:
-    while args and args[0] in _GH_OPTS_WITH_VALUE:
-        args = args[2:]
+    repo, args = _split_repo(args)
     group, rest = (args[0], args[1:]) if args else ("", [])
     sub, sub_args = (rest[0], rest[1:]) if rest else ("", [])
     found: str | None = None
     if group == "api":
         found = _api_reason(rest)
     elif group == "pr" and sub == "merge":
-        found = _merge_reason(sub_args, cwd, fetch)
+        found = _merge_reason(sub_args, cwd, fetch, repo)
     elif group in ("pr", "issue") and sub == "edit":
         found = _edit_reason(group, sub_args)
     elif group == "issue" and sub in _ISSUE_FORBIDDEN:
@@ -287,8 +343,8 @@ def _gh_reason(args: list[str], cwd: Path, fetch: PrFetcher) -> str | None:
 
 
 def _tokens(segment: str) -> list[str]:
-    try:  # posix=False preserva `\` de caminho Windows; aspas removidas à mão
-        return [t.strip("\"'") for t in shlex.split(segment, posix=False)]
+    try:  # posix=False preserva `\` de caminho Windows; aspas e `)`/`}` de grupo removidos à mão
+        return [t.rstrip(")}").strip("\"'") for t in shlex.split(segment, posix=False)]
     except ValueError:
         return segment.split()
 
@@ -303,23 +359,28 @@ def reason(
     here = cwd
     for segment in _SEGMENT_SPLIT.split(command):
         tokens = _tokens(segment)
-        while tokens and _ENV_ASSIGN.match(tokens[0]):
+        while tokens and (
+            _ENV_ASSIGN.match(tokens[0]) or tokens[0] in _WRAPPERS or not tokens[0].lstrip("({$")
+        ):
             tokens = tokens[1:]
         if not tokens:
             continue
+        tokens[0] = tokens[0].lstrip("({$")
         if tokens[0] in ("cd", "Set-Location", "pushd") and len(tokens) > 1:
             here = (here / tokens[1]).resolve()
             continue
         exe = Path(tokens[0]).stem.lower()
         found: str | None = None
         if exe == "git":
-            target, i = here, 1
+            target, i, config = here, 1, []
             while i < len(tokens) and tokens[i].startswith("-"):
                 if tokens[i] == "-C" and i + 1 < len(tokens):
                     target = (here / tokens[i + 1]).resolve()
+                if tokens[i] == "-c" and i + 1 < len(tokens):
+                    config.append(tokens[i + 1])
                 i += 2 if tokens[i] in _GIT_OPTS_WITH_VALUE else 1
             if tokens[i : i + 1] == ["push"]:
-                found = _push_reason(tokens[i + 1 :], target, is_main, branch)
+                found = _push_reason(tokens[i + 1 :], target, is_main, branch, config)
         elif exe == "gh":
             found = _gh_reason(tokens[1:], here, fetch)
         if found:
