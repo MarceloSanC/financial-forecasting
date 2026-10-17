@@ -20,9 +20,10 @@ Verifica:
 5. Cada feature tem os diretórios obrigatórios (`domain/`, `application/`, `adapters/`).
 6. Chamadas a `hash_mapping`/`hash_text` (port `Hasher`) só dentro de
    `shared/domain/value_objects/` — a identidade do projeto (`RunId`,
-   `ConfigSignature`, `SplitFingerprint`, `DatasetFingerprint`) é o ÚNICO caminho
-   de hash; um payload hand-rolled num use case é uma segunda definição de "o
-   mesmo run" (issue #65, ADR 5.2.0004). Sem allowlist: zero exceções.
+   `ConfigSignature`, `SplitFingerprint`, `DatasetContentFingerprint` e os demais
+   VOs de hash listados no LAYOUT §7) é o ÚNICO caminho de hash; um payload
+   hand-rolled num use case é uma segunda definição de "o mesmo run" (issue #65,
+   ADR 5.2.0004). Sem allowlist: zero exceções.
 
 Limitação conhecida: o script não valida que apenas `composition_root.py` faz
 wiring (instanciação direta de adapters concretos). Essa regra é verificada por
@@ -317,7 +318,7 @@ def check_hasher_call_sites(src_root: Path) -> list[str]:
                     f"VIOLAÇÃO: {rel}:{node.lineno} chama '{func.attr}' fora de "
                     f"'{HASHER_CALL_SITE_PREFIX}' — a identidade é o caminho único "
                     "dos VOs (RunId/ConfigSignature/SplitFingerprint/"
-                    "DatasetFingerprint; issue #65, ADR 5.2.0004)"
+                    "DatasetContentFingerprint/...; issue #65, ADR 5.2.0004)"
                 )
 
     return violations
