@@ -5,7 +5,7 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-10-12
+updated_at: 2026-10-17
 last_reviewed_at: 2026-10-12
 ---
 
@@ -121,7 +121,7 @@ graph LR
 
 ### Step 1 — Fundação e fitness arquitetural
 
-Entrega o esqueleto Python hexagonal com as fronteiras **verificadas por ferramenta** — exatamente o que faltava no projeto anterior e causou a degradação. Inclui a identidade determinística (`run_id`/fingerprints) e o tracking, e registra os ADRs de fundação (`0_0_0002`…`0_0_0026`). **Resultado de negócio:** "qualquer mudança que viole arquitetura/cobertura é barrada automaticamente antes do merge".
+Entrega o esqueleto Python hexagonal com as fronteiras **verificadas por ferramenta** — exatamente o que faltava no projeto anterior e causou a degradação. Inclui a identidade determinística (`run_id`/fingerprints) e o tracking, e registra os primeiros ADRs de fundação `0_0_*` (mapa de onde cada decisão-chave está registrada: overview §11). **Resultado de negócio:** "qualquer mudança que viole arquitetura/cobertura é barrada automaticamente antes do merge".
 
 - **Depende de:** —
 - **Tamanho estimado:** M

@@ -5,7 +5,7 @@ when-use: Reference whenever touching the fact_oos_predictions schema, the quant
 keywords: [adr, fact-oos-predictions, quantile, long-format, grid-agnostic, H-1, pandera]
 status: accepted
 created_at: 2026-06-29
-updated_at: 2026-06-29
+updated_at: 2026-10-17
 adr_id: 4.1.0002
 decision: fact_oos_predictions stores one row per quantile level (quantile_level in the PK, with value_raw/value_guardrail/guardrail_applied), forbidding hardcoded per-quantile columns.
 context_stage: 4.1-silver-schema-per-table
@@ -13,6 +13,8 @@ bounded_context: analytics_store
 ---
 
 # ADR 4.1.0002 — Store fact_oos_predictions in a long, grid-agnostic quantile format
+
+> ⚠️ **Errata (2026-10-17, issue #49):** "Context" cites the foundation decision `0_0_0012` (dense quantile grid) as an overview ADR. That ADR was never authored and the id is retired; the decision lives in overview §11 ("Grade densificada ~7–9 quantis") and its deliberation in the modeling domain doc §2.3 (`docs/domain/modeling/quantile-model-training.md`). The decision of this ADR is unchanged.
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 

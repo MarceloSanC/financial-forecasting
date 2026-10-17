@@ -5,7 +5,7 @@ when-use: Reference when questioning what the model is being judged on, when cho
 keywords: [adr, framing, calibration, probabilistic-forecasting, pinball, returns, scope]
 status: accepted
 created_at: 2026-06-29
-updated_at: 2026-06-29
+updated_at: 2026-10-17
 adr_id: "0.0.0002"
 decision: The scientific object is the predictive distribution (calibration and sharpness) plus feature-contribution, never point accuracy of the daily-return mean
 context_stage: 1.1-bootstrap
@@ -13,6 +13,8 @@ bounded_context: transversal
 ---
 
 # ADR 0.0.0002 — Frame the study as probabilistic calibration, not point accuracy
+
+> ⚠️ **Errata (2026-10-17, issue #49):** "References" links ADR 0.0.0005 ("H1 as gate — to be authored in later stages"). That ADR was never authored and the id is retired; H1 as gate is decided in [ADR 0.0.0011](./0_0_0011-preregistration-invariants-and-h1-gate.md) and applied in [ADR 6.5.0007](./6_5_0007-verdict-logical-form-and-decision-readiness.md) — see overview §11. The decision of this ADR is unchanged.
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 

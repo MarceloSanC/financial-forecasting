@@ -5,7 +5,7 @@ when-use: Consultar no início de qualquer nova sessão de detalhamento ou plane
 keywords: [overview, briefing, tft, calibracao, conformal, pinball, medalhao, clean-architecture, forecasting]
 status: draft
 created_at: 2026-06-22
-updated_at: 2026-10-06
+updated_at: 2026-10-17
 project_name: Previsão Probabilística de Retornos Financeiros (TFT)
 stakeholders:
   - Autor / Decisor / Pesquisador: Marcelo Santos (TCC, Eng. Mecatrônica — UFSC)
@@ -14,7 +14,7 @@ stakeholders:
 
 # Visão Geral — Previsão Probabilística de Retornos Financeiros (TFT)
 
-> **Este documento é o livro-verdade base do projeto.** Cada decisão registrada aqui foi tomada por análise própria dos trade-offs (não por herança). A deliberação completa (alternativas consideradas e por que descartadas) vive nos ADRs listados na §11. Mudanças estruturais (escopo, objetivos, hipóteses) exigem revisão consciente.
+> **Este documento é o livro-verdade base do projeto.** Cada decisão registrada aqui foi tomada por análise própria dos trade-offs (não por herança). A deliberação completa (alternativas consideradas e por que descartadas) vive nos ADRs e docs de domínio apontados na §11. Mudanças estruturais (escopo, objetivos, hipóteses) exigem revisão consciente.
 
 ## 1. Resumo executivo
 
@@ -138,47 +138,49 @@ A disciplina anti-p-hacking é estrutural: **pré-registro imutável hasheado** 
 - Bibliotecas: `arch`, `statsmodels`, `scikit-learn`, `scoringrules`, `statsforecast`, `LightGBM`, `MAPIE`, `pandas`, `duckdb`, `pyarrow`, `pandera`, `pandas-ta-classic`/TA-Lib, `pytorch-forecasting`, `PyTorch` (torch), `PyTorch Lightning`, `NumPy`, `R (stats)`, `pydantic-settings`, `mlflow`, FinBERT.
 - Pipeline/arquitetura do template: `boilerplate/layout-files/docs/{PIPELINE,LAYOUT,CONVENTIONS,GIT-WORKFLOW}.md`.
 
-## 11. Decisões-chave e ADRs a registrar
+## 11. Decisões-chave e onde estão registradas
 
-> Decisão + razão curta abaixo; a deliberação completa (alternativas e trade-offs) vira o ADR indicado (`docs/adr/0_0_NNNN-*`).
+> Decisão + razão curta abaixo; a coluna **Registro** aponta onde vive a deliberação completa (alternativas e trade-offs): o ADR global `0_0_NNNN` quando a decisão tem um, senão o doc de domínio e os ADRs de Stage que a concretizaram.
+>
+> **Ids aposentados (issue #49):** a versão original desta tabela reservou `0_0_0004`–`0_0_0006`, `0_0_0012`–`0_0_0015`, `0_0_0023`, `0_0_0025` e `0_0_0026`, além de `0_0_0003` para o candidato único — ADRs que nunca foram autorados porque a deliberação foi feita nos registros apontados abaixo (`0_0_0003` acabou usado para as categorias de doc). Esses ids ficam **aposentados**: nenhum ADR novo os reutiliza, e citações antigas a eles (em concepts de Stages encerradas) leem-se como "a linha correspondente desta tabela".
 
 ### Científicas
-| Decisão | Razão | ADR |
+| Decisão | Razão | Registro |
 |---|---|---|
-| Enquadramento = calibração probabilística + contribuição de features (não acurácia pontual) | Média de retorno diário é quase imprevisível; a distribuição preditiva tem sinal real e é defensável | `0_0_0002` |
-| Evidência por candidato único all-features + contribuição descritiva | Seleção de feature-set por OOS infla falsos-positivos (White; Romano-Wolf); design confirmatório mais limpo | `0_0_0003` |
-| TFT como objeto + baseline-modelo forte de quantis (GBM) | Eleva a barra de H2; se o simples calibrar tão bem, é resultado honesto | `0_0_0004` |
-| H1 = calibração como objeto primário caracterizado + gate de elegibilidade | É o objeto central do estudo; não faz sentido comparar skill de modelo mal-calibrado | `0_0_0005` |
-| H2 = hierarquia de baselines com alvo honesto (superar naive; empatar/superar fortes; MCS) | Mais informativo e defensável que "superior a todos"; não-dominância é achado válido | `0_0_0006` |
-| H3 = heterogeneidade entre h+1 e h+7 lida pela concordância de permutação e ablação LOCO (com re-treino); VSN descritiva, horizonte-invariante; descritiva | Específica, falseável; dois métodos que resolvem horizonte, com estimandos distintos (a VSN não tem eixo de horizonte neste modelo) | `0_0_0007` |
-| Horizontes h+1/h+7 primários + h+30 suplementar | Poder estatístico em curto prazo; h+30 tem poucas amostras; ≥2 horizontes viabilizam H3 | `0_0_0025` |
-| Veredito por scorecard pré-registrado mecânico | Defesa anti cherry-picking; separa vencedor primário de perfil comparativo | `0_0_0026` |
+| Enquadramento = calibração probabilística + contribuição de features (não acurácia pontual) | Média de retorno diário é quase imprevisível; a distribuição preditiva tem sinal real e é defensável | [ADR 0.0.0002](adr/0_0_0002-probabilistic-calibration-framing.md) |
+| Evidência por candidato único all-features + contribuição descritiva | Seleção de feature-set por OOS infla falsos-positivos (White; Romano-Wolf); design confirmatório mais limpo | [doc `modeling` §6.1](domain/modeling/quantile-model-training.md); [ADR 5.4.0005](adr/5_4_0005-ask-and-tell-sweep-port-and-isolation.md) |
+| TFT como objeto + baseline-modelo forte de quantis (GBM) | Eleva a barra de H2; se o simples calibrar tão bem, é resultado honesto | [doc `modeling` §3.1/§4](domain/modeling/quantile-model-training.md); [ADR 5.3.0001](adr/5_3_0001-direct-per-level-horizon-boosters.md) |
+| H1 = calibração como objeto primário caracterizado + gate de elegibilidade | É o objeto central do estudo; não faz sentido comparar skill de modelo mal-calibrado | [ADR 0.0.0011](adr/0_0_0011-preregistration-invariants-and-h1-gate.md); [ADR 6.5.0007](adr/6_5_0007-verdict-logical-form-and-decision-readiness.md) |
+| H2 = hierarquia de baselines com alvo honesto (superar naive; empatar/superar fortes; MCS) | Mais informativo e defensável que "superior a todos"; não-dominância é achado válido | [ADR 0.0.0010](adr/0_0_0010-paired-inference-dm-holm-mcs.md); [ADR 6.5.0007](adr/6_5_0007-verdict-logical-form-and-decision-readiness.md) |
+| H3 = heterogeneidade entre h+1 e h+7 lida pela concordância de permutação e ablação LOCO (com re-treino); VSN descritiva, horizonte-invariante; descritiva | Específica, falseável; dois métodos que resolvem horizonte, com estimandos distintos (a VSN não tem eixo de horizonte neste modelo) | [ADR 0.0.0007](adr/0_0_0007-h3-family-contribution-across-horizons.md) |
+| Horizontes h+1/h+7 primários + h+30 suplementar | Poder estatístico em curto prazo; h+30 tem poucas amostras; ≥2 horizontes viabilizam H3 | [doc `evaluation` §2.7](domain/evaluation/probabilistic-forecast-evaluation.md); [ADR 5.4.0002](adr/5_4_0002-single-multi-horizon-decoder.md); [ADR 6.5.0004](adr/6_5_0004-judging-values-in-preregistration-cohort-by-reference.md) (h+30 fora do cohort) |
+| Veredito por scorecard pré-registrado mecânico | Defesa anti cherry-picking; separa vencedor primário de perfil comparativo | [ADR 0.0.0011](adr/0_0_0011-preregistration-invariants-and-h1-gate.md); [ADR 6.5.0007](adr/6_5_0007-verdict-logical-form-and-decision-readiness.md) |
 
 ### Metodologia estatística
-| Decisão | Razão | ADR |
+| Decisão | Razão | Registro |
 |---|---|---|
-| Quantis nativos como objeto (H1) + CQR assimétrico como benchmark; 4 invariantes; variante de registro split-CQR sem pesos + sensibilidade NexCP (ρ = 0,99) | CQR é a pergunta óbvia em estudo de calibração; invariantes evitam vazamento/fragilidade; variante pré-registrada | `0_0_0008` |
-| Pinball primária + CRPS complementar | Pinball casa com o modelo quantílico e com DM; CRPS agrega o distributivo se a grade densificar | `0_0_0009` |
-| Inferência frequentista DM(HAC/HLN, one-sided) + Holm + MCS, lib + oráculo | Padrão da literatura, backed por `arch`/`statsmodels`, validável; família pequena → Holm FWER | `0_0_0010` |
-| Pré-registro imutável + invariantes (sem agregar horizontes, alinhamento OOS, dedup, gate de degeneração) | Espinha anti-p-hacking e de auditabilidade | `0_0_0011` |
+| Quantis nativos como objeto (H1) + CQR assimétrico como benchmark; 4 invariantes; variante de registro split-CQR sem pesos + sensibilidade NexCP (ρ = 0,99) | CQR é a pergunta óbvia em estudo de calibração; invariantes evitam vazamento/fragilidade; variante pré-registrada | [ADR 0.0.0008](adr/0_0_0008-native-quantiles-with-conformal-benchmark.md) |
+| Pinball primária + CRPS complementar | Pinball casa com o modelo quantílico e com DM; CRPS agrega o distributivo se a grade densificar | [ADR 0.0.0009](adr/0_0_0009-pinball-primary-crps-complementary.md) |
+| Inferência frequentista DM(HAC/HLN, one-sided) + Holm + MCS, lib + oráculo | Padrão da literatura, backed por `arch`/`statsmodels`, validável; família pequena → Holm FWER | [ADR 0.0.0010](adr/0_0_0010-paired-inference-dm-holm-mcs.md) |
+| Pré-registro imutável + invariantes (sem agregar horizontes, alinhamento OOS, dedup, gate de degeneração) | Espinha anti-p-hacking e de auditabilidade | [ADR 0.0.0011](adr/0_0_0011-preregistration-invariants-and-h1-gate.md) |
 
 ### Modelagem e dados
-| Decisão | Razão | ADR |
+| Decisão | Razão | Registro |
 |---|---|---|
-| Grade densificada ~7–9 quantis | Habilita CRPS/VaR/calibração mais ricos a custo baixo | `0_0_0012` |
-| Walk-forward com purga+embargo + calib set dedicado | Exigido pelo conformal; imita produção; evita vazamento | `0_0_0013` |
-| TFT asset-specific, multi-asset-ready | Fiel à identidade da pergunta; arquitetura preparada sem inflar o piloto | `0_0_0014` |
-| Medalhão bronze/silver/gold (terminologia limpa) | Espinha de rastreabilidade/reprodutibilidade | `0_0_0015` |
-| 4 famílias de features (preço, técnico, sentimento, fundamento) | Necessárias para H3 e diferencial; reusa bronze | `0_0_0016` |
-| FinBERT version-pinned | Padrão de sentimento financeiro; corrige a irreprodutibilidade (sem pin) | `0_0_0017` |
-| Anti-leakage não-negociável (causal + as-of backward + known/unknown + embargo); alvo = log-retorno | Validade temporal é pré-condição de qualquer claim | `0_0_0018` |
+| Grade densificada ~7–9 quantis | Habilita CRPS/VaR/calibração mais ricos a custo baixo | [doc `modeling` §2.3](domain/modeling/quantile-model-training.md); [ADR 4.3.0002](adr/4_3_0002-quantile-forecast-dense-grid-guardrail.md) |
+| Walk-forward com purga+embargo + calib set dedicado | Exigido pelo conformal; imita produção; evita vazamento | [ADR 5.1.0001](adr/5_1_0001-expanding-window-walk-forward.md); [ADR 5.1.0002](adr/5_1_0002-dedicated-calibration-partition.md) |
+| TFT asset-specific, multi-asset-ready | Fiel à identidade da pergunta; arquitetura preparada sem inflar o piloto | esta linha (sem ADR dedicado); layout multi-asset no [ADR 2.1.0001](adr/2_1_0001-medallion-partition-and-bronze-schemas.md) |
+| Medalhão bronze/silver/gold (terminologia limpa) | Espinha de rastreabilidade/reprodutibilidade | [ADR 2.1.0001](adr/2_1_0001-medallion-partition-and-bronze-schemas.md); [ADR 2.1.0002](adr/2_1_0002-medallion-store-port-shape.md) |
+| 4 famílias de features (preço, técnico, sentimento, fundamento) | Necessárias para H3 e diferencial; reusa bronze | [ADR 0.0.0016](adr/0_0_0016-four-feature-families.md) |
+| FinBERT version-pinned | Padrão de sentimento financeiro; corrige a irreprodutibilidade (sem pin) | [ADR 0.0.0017](adr/0_0_0017-finbert-version-pinned.md) |
+| Anti-leakage não-negociável (causal + as-of backward + known/unknown + embargo); alvo = log-retorno | Validade temporal é pré-condição de qualquer claim | [ADR 0.0.0018](adr/0_0_0018-anti-leakage-non-negotiable.md) |
 
 ### Arquitetura e ferramentas
-| Decisão | Razão | ADR |
+| Decisão | Razão | Registro |
 |---|---|---|
-| Hexagonal pleno enforçado por ferramenta | Cura a dor "mexer num ponto quebra vários"; impede regressão arquitetural | `0_0_0019` |
-| Estatística como serviços de domínio puros sobre value objects | Testável/auditável isoladamente; desacopla a ciência da camada de dados | `0_0_0020` |
-| Testes de regressão por unidade + oráculo (não snapshot global) | Barato de refatorar e diretamente auditável; evita entrincheirar o monólito | `0_0_0021` |
-| Engine de dados = pandas + duckdb | Compatível com libs de modelo + SQL rápido e as-of joins sobre Parquet | `0_0_0022` |
-| Tracking = MLflow local (SQLite) | Compara sweeps com UI, sem SaaS; complementa run_id/silver | `0_0_0023` |
-| Indicadores = pandas-ta-classic, validados contra o paper na implementação | Resolve supply-chain do pandas-ta; corretude conferida contra a fórmula canônica | `0_0_0024` |
+| Hexagonal pleno enforçado por ferramenta | Cura a dor "mexer num ponto quebra vários"; impede regressão arquitetural | [ADR 0.0.0019](adr/0_0_0019-hexagonal-enforced.md) |
+| Estatística como serviços de domínio puros sobre value objects | Testável/auditável isoladamente; desacopla a ciência da camada de dados | [ADR 0.0.0020](adr/0_0_0020-statistics-in-domain-over-value-objects.md) |
+| Testes de regressão por unidade + oráculo (não snapshot global) | Barato de refatorar e diretamente auditável; evita entrincheirar o monólito | [ADR 0.0.0021](adr/0_0_0021-per-unit-contract-tests-with-oracle.md) |
+| Engine de dados = pandas + duckdb | Compatível com libs de modelo + SQL rápido e as-of joins sobre Parquet | [ADR 0.0.0022](adr/0_0_0022-data-engine-pandas-duckdb.md) |
+| Tracking = MLflow local (SQLite) | Compara sweeps com UI, sem SaaS; complementa run_id/silver | [ADR 1.5.0001](adr/1_5_0001-mlflow-sqlite-local-tracking.md) |
+| Indicadores = pandas-ta-classic, validados contra o paper na implementação | Resolve supply-chain do pandas-ta; corretude conferida contra a fórmula canônica | [ADR 0.0.0024](adr/0_0_0024-pandas-ta-classic-over-pandas-ta.md) |
