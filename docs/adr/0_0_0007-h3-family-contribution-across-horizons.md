@@ -5,7 +5,7 @@ when-use: Reference when questioning how H3 is worded and read, why the VSN does
 keywords: [adr, h3, feature-attribution, feature-families, vsn, permutation-importance, grouped-importance, loco, ablation, block-bootstrap, per-horizon, descriptive, inference, step-7]
 status: accepted
 created_at: 2026-10-06
-updated_at: 2026-10-06
+updated_at: 2026-10-17
 adr_id: 0.0.0007
 decision: H3 holds when, for at least one feature family, the change of its normalized share between h+1 and h+7 has the same sign under grouped permutation importance and under LOCO ablation with retraining, with a paired block-bootstrap interval excluding zero in both; VSN weights are reported as horizon-invariant description only; the ablation is LOCO with 10 seeds in its own frozen, hashed cohort that also retrains the full reference model; the reading is a preregistered mechanical rule yielding a descriptive conclusion separate from the H1→H2 verdict.
 context_stage: 0.0-global
@@ -13,6 +13,8 @@ bounded_context: inference
 ---
 
 # ADR 0.0.0007 — H3: family contribution across horizons
+
+> ⚠️ **Errata (2026-10-17, issue #151):** the "Pending outside this ADR" note under "Decision" (volatility features in price per ADR 0.0.0016 vs technical in the registry) is **resolved**: the registry stands and ADR 0.0.0016 carries an errata. The H3 partition is the registry's — the six volatility features and the regimes are **technical** — and `feature_set_hash`, the frozen cohort `aapl_confirmatory-r0` and the 6.5 preregistration are unchanged. Item 9's preregistration list gains one entry: a **permutation-only sensitivity** with the six volatility features in price, reported as a profile, never a verdict. Decision record: inference domain doc §5.2 and §10.1 (C8).
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
