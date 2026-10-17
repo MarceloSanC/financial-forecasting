@@ -32,8 +32,6 @@ from financial_forecasting.features.analytics_store.domain.value_objects.quantil
 from financial_forecasting.features.inference.application.use_cases.run_inference import (
     COMPLETED,
     STARTED,
-    STRICT,
-    TOLERANCE,
     ArtifactChangedError,
     CalibProvenanceMissingError,
     CohortNotFrozenError,
@@ -44,6 +42,10 @@ from financial_forecasting.features.inference.application.use_cases.run_inferenc
     RunInferenceCommand,
     RunInferenceResult,
     UnknownRunError,
+)
+from financial_forecasting.features.inference.domain.services.reproduction_policy import (
+    STRICT,
+    TOLERANCE,
     within_mode,
 )
 from financial_forecasting.features.modeling.application.ports.out.cohort_progress_ledger import (
