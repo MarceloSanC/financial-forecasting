@@ -106,3 +106,35 @@ def test_main_exit_code_follows_the_tags(tmp_path: Path) -> None:
     assert ctp.main([str(good)]) == 0
     bad = _technical(tmp_path, _entry("nota"))
     assert ctp.main([str(bad)]) == 1
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ("sem marcadores\n", "encontrei 0 BEGIN e 0 END"),
+        (
+            "<!-- BEGIN: post-execution -->\n<!-- BEGIN: post-execution -->\n"
+            "<!-- END: post-execution -->\n",
+            "encontrei 2 BEGIN e 1 END",
+        ),
+        ("<!-- END: post-execution -->\n<!-- BEGIN: post-execution -->\n", "deve vir depois"),
+    ],
+)
+def test_invalid_markers_are_refused(tmp_path: Path, body: str, expected: str) -> None:
+    path = tmp_path / "technical.md"
+    path.write_text(f"---\nstatus: draft\n---\n\n{body}", encoding="utf-8")
+    errors = ctp.check_file(path)
+    assert len(errors) == 1
+    assert expected in errors[0]
+
+
+def test_file_without_frontmatter_is_not_done(tmp_path: Path) -> None:
+    assert not ctp._has_status_done("# Technical\nstatus: done\n")
+
+
+def test_main_reports_missing_file(tmp_path: Path) -> None:
+    assert ctp.main([str(tmp_path / "ausente.md")]) == 1
+
+
+def test_main_without_targets_passes(tmp_path: Path) -> None:
+    assert ctp.main(["--root", str(tmp_path)]) == 0
