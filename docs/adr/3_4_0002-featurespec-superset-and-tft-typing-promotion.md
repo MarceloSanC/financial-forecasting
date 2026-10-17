@@ -5,7 +5,7 @@ when-use: Reference before changing FeatureSpec fields, before deciding how much
 keywords: [adr, feature-spec, superset, indicator-spec, absorption, tft-typing, known-unknown, family, anti-leakage-tag, feature-registry, single-source-of-truth, value-object, domain, coexistence]
 status: accepted
 created_at: 2026-06-29
-updated_at: 2026-06-29
+updated_at: 2026-10-17
 adr_id: "3.4.0002"
 decision: FeatureSpec is the rich superset value-object (adds formula_desc, null_policy, enabled_by_default, a 4-value family, and a new validated tft_typing known/unknown field) that coexists with the minimal IndicatorSpec from 3.1 rather than physically replacing it now; the known/unknown TFT typing — hardcoded in the old training use case — is promoted into the spec as a required, validated field so the registry is the single source of truth
 context_stage: 3.4-feature-registry-and-derived
@@ -13,6 +13,8 @@ bounded_context: feature_engineering
 ---
 
 # ADR 3.4.0002 — FeatureSpec superset + tft_typing promotion
+
+> ⚠️ **Errata (2026-10-17, issue #151):** "collapses `baseline` + price-derived into `price`" does not cover volatility: the registry keeps the volatility features (`volatility_20d`, Parkinson, Garman–Klass, downside semivolatility, `vol_of_vol`) and the regimes (`volatility_regime`, `trend_regime`, `stress_tail_return_flag`) in **technical**; price-derived here means returns, momentum, reversal, drawdown and liquidity/volume. See the errata of ADR 0.0.0016 and the inference domain doc §5.2 (C8).
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 

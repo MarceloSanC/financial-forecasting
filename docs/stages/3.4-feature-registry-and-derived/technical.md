@@ -5,7 +5,7 @@ when-use: Consultar durante a Fase 4 (execução) desta Stage; cada Task tem cri
 keywords: [technical, plano de execução, feature-registry, feature-spec, derived-features, feature-engineering, pure-domain, stdlib-only, anti-leakage, causalidade, tft-typing, known-unknown, family, feature-set-hash, oracle, log-return, momentum, drawdown, amihud, volume-zscore, parkinson, garman-klass, downside-semivol, vol-of-vol, regime, sentiment-lag, sentiment-ema, yoy, pct-change, rolling, ewm, shift, ddof, clip]
 status: done
 created_at: 2026-06-29
-updated_at: 2026-06-29
+updated_at: 2026-10-17
 stage_id: 3.4-feature-registry-and-derived
 stage_title: Registro de features e derivadas causais
 step_id: 3
@@ -621,5 +621,20 @@ conhecidos contra a fórmula/threshold trailing: `test_volume_zscore_matches_kno
 (fronteira `<=`/`>` do deadband, spread 0), `test_stress_tail_return_flag_fires_on_tail_drop`.
 Nenhum código de produção novo; fortalece o oráculo causal e fecha os ramos que as mutações
 de "retornar default / pular branch" exploravam. Gates seguem verdes (100% cobertura mantida).
+
+### 2026-10-17 — [decision] família da volatilidade (pós-done, issue #151) — Claude
+**Contexto:** o concept I4 ("derivadas de preço → `price`") e a Task 03 deste technical
+("preço/volatilidade/regime → `price` (ou `technical` se deriva de indicador)") não batem
+com o registry implementado, que pôs **todas** as volatilidades (`volatility_parkinson`,
+`volatility_garman_klass`, `downside_semivolatility`, `vol_of_vol`, `volatility_regime`,
+além do indicador `volatility_20d`) e os regimes (`trend_regime`,
+`stress_tail_return_flag`) em `technical`. A divergência com o ADR 0.0.0016 mudava a
+partição de H3.
+**Razão:** vale o registry (errata nos ADRs 0.0.0016 e 3.4.0002): a família entra no
+`feature_set_hash`, que o cohort congelado `aapl_confirmatory-r0` (já treinado) e o
+pré-registro da 6.5 carregam; a medição sem alvo não discrimina price × technical para
+as volatilidades, e a regra por origem desta Task 03 parte o bloco de volatilidade
+(55 pares entre famílias com |ρ| ≥ 0,7 contra 52). Leia I4 e a Task 03 com esta
+ressalva. Registro completo: doc de domínio inference §5.2 e §10.1 (C8).
 
 <!-- END: post-execution -->
