@@ -5,7 +5,8 @@ Uso:
     python scripts/check_use_case_deps.py --list    # imprime cada violação com o tipo anotado
 
 O que reprova: parâmetro do `__init__` de uma classe definida em
-`features/<slice>/application/use_cases/*.py` cuja anotação cita
+`features/<slice>/application/use_cases/*.py` (numa `@dataclass` sem `__init__` explícito,
+os campos anotados — o `__init__` gerado os recebe) cuja anotação cita
 
 - um tipo definido em `application/use_cases/` de OUTRO slice — comportamento de outro
   slice entra por port definido no consumidor (LAYOUT §7, ADR 0.0.0053); o use case
@@ -124,22 +125,40 @@ def scan(*, src_root: Path = SRC_ROOT, root: Path = ROOT) -> dict[str, str]:
         aliases = _ast_lib.import_aliases(tree, _ast_lib.module_name(path, src_root))
         rel = path.relative_to(root).as_posix()
         for cls in (node for node in tree.body if isinstance(node, ast.ClassDef)):
-            for init in cls.body:
-                if not (isinstance(init, ast.FunctionDef) and init.name == "__init__"):
-                    continue
-                args = init.args
-                params = [*args.posonlyargs, *args.args, *args.kwonlyargs]
-                params += [arg for arg in (args.vararg, args.kwarg) if arg is not None]
-                for param in params:
-                    if param.annotation is None:
-                        continue
-                    for name in _annotation_names(param.annotation, aliases):
-                        reason = forbidden_reason(name, own_slice)
-                        if reason is not None:
-                            key = f"{rel}::{cls.name}.__init__({param.arg})"
-                            violations[key] = f"anota `{name}` ({reason}), L{param.lineno}"
-                            break
+            for param_name, annotation in _constructor_params(cls):
+                for name in _annotation_names(annotation, aliases):
+                    reason = forbidden_reason(name, own_slice)
+                    if reason is not None:
+                        key = f"{rel}::{cls.name}.__init__({param_name})"
+                        violations[key] = f"anota `{name}` ({reason}), L{annotation.lineno}"
+                        break
     return violations
+
+
+def _constructor_params(cls: ast.ClassDef) -> list[tuple[str, ast.expr]]:
+    """`(nome, anotação)` dos parâmetros do construtor: `__init__` explícito ou, numa
+    `@dataclass` sem ele, os campos anotados do corpo (o `__init__` gerado os recebe)."""
+    params: list[tuple[str, ast.expr]] = []
+    for init in cls.body:
+        if isinstance(init, ast.FunctionDef) and init.name == "__init__":
+            args = init.args
+            every = [*args.posonlyargs, *args.args, *args.kwonlyargs]
+            every += [arg for arg in (args.vararg, args.kwarg) if arg is not None]
+            params += [(arg.arg, arg.annotation) for arg in every if arg.annotation is not None]
+            return params
+    if any(_is_dataclass_decorator(d) for d in cls.decorator_list):
+        params += [
+            (stmt.target.id, stmt.annotation)
+            for stmt in cls.body
+            if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name)
+        ]
+    return params
+
+
+def _is_dataclass_decorator(decorator: ast.expr) -> bool:
+    target = decorator.func if isinstance(decorator, ast.Call) else decorator
+    name = target.attr if isinstance(target, ast.Attribute) else getattr(target, "id", None)
+    return name == "dataclass"
 
 
 def main() -> int:

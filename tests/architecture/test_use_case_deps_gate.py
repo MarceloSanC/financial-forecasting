@@ -200,6 +200,29 @@ def test_files_outside_use_cases_are_not_scanned(gate: ModuleType, tmp_path: Pat
     assert _scan(gate, tmp_path, body, rel=rel) == {}
 
 
+@pytest.mark.parametrize("decorator", ["@dataclass", "@dataclass(frozen=True)", "@dc.dataclass"])
+def test_dataclass_use_case_fields_are_constructor_params(
+    gate: ModuleType, tmp_path: Path, decorator: str
+) -> None:
+    body = (
+        "import dataclasses as dc\nfrom dataclasses import dataclass\n"
+        f"{_PERSIST} import PersistPredictions\n\n"
+        f"{decorator}\nclass TrainX:\n    persist: PersistPredictions\n    seed: int = 0\n"
+    )
+
+    assert list(_scan(gate, tmp_path, body)) == [f"{_UC}/train_x.py::TrainX.__init__(persist)"]
+
+
+def test_plain_class_attributes_are_not_constructor_params(
+    gate: ModuleType, tmp_path: Path
+) -> None:
+    body = (
+        f"{_PERSIST} import PersistPredictions\n\nclass TrainX:\n    persist: PersistPredictions\n"
+    )
+
+    assert _scan(gate, tmp_path, body) == {}
+
+
 def test_real_repo_passes_with_an_empty_baseline(gate: ModuleType) -> None:
     """Estado de hoje: todo colaborador de use case é port, domínio ou stdlib."""
     assert gate.scan() == {}
@@ -208,7 +231,7 @@ def test_real_repo_passes_with_an_empty_baseline(gate: ModuleType) -> None:
 def test_main_exit_code_follows_the_baseline_verdict(
     gate: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """`main()` (o que `make use-case-deps` roda): 0 no repo real; 1 com violação injetada."""
+    """`main()` (o que `make arch-ast` roda): 0 no repo real; 1 com violação injetada."""
     monkeypatch.setattr(sys, "argv", ["check_use_case_deps.py", "--list"])
     assert gate.main() == 0
     assert "[use_case_deps] PASSOU" in capsys.readouterr().out
