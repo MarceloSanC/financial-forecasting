@@ -4,8 +4,8 @@ Value object de domínio **frozen, stdlib-only** (concept 4.3 §4, I5/C3/C4; ADR
 `4_3_0002`). Carrega a **grade densa** de níveis de quantil (`levels` estritamente
 crescentes e únicos) com `raw_values` alinhados 1:1, e materializa o **guardrail de
 monotonicidade generalizado** — a extensão de `enforce_monotonic_triplet` do old
-(p10/p50/p90) para uma grade arbitrária de ~7-9 níveis (decisão humana H-1 / ADR de
-fundação `0_0_0012`).
+(p10/p50/p90) para uma grade arbitrária de ~7-9 níveis (decisão humana H-1; grade
+densa no overview §11 e no doc de domínio `modeling` §2.3).
 
 Regra do guardrail (ADR `4_3_0002`):
 
