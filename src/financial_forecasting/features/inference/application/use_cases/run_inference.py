@@ -46,6 +46,14 @@ from financial_forecasting.features.analytics_store.application.use_cases.persis
 from financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast import (
     QuantileForecast,
 )
+from financial_forecasting.features.inference.domain.services.reproduction_policy import (
+    STRICT,
+    ReproductionComparison,
+    ReproductionMode,
+    compare_reproduction,
+    reproduction_mode,
+    within_mode,
+)
 from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
     CODE_KEYS,
     DIRTY_KEY,
@@ -99,15 +107,12 @@ _FACT = "fact_oos_predictions"
 _TEST = "test"
 _CALIB = "calib"
 _PARTITIONS = (_TEST, _CALIB)
-STRICT = "strict"
-TOLERANCE = "tolerance"
 STARTED = "started"
 COMPLETED = "completed"
 FINDING_TAG = "[finding]"
-# Regra do `torch.testing.assert_close` para float32 aplicada a z = (y - c) / s
-# (ADR 7.1.0003): |Δz| <= ATOL + RTOL * |z_ref|.
-TOLERANCE_ATOL = 1e-5
-TOLERANCE_RTOL = 1.3e-6
+# Chaves de ambiente fora da comparação de modo (I6): as do código e a de sujeira,
+# do port do `modeling` (nunca redeclaradas); a política fica no domain (ADR 7.2.0005).
+_IGNORED_KEYS = frozenset({*CODE_KEYS, DIRTY_KEY})
 
 Row = Mapping[str, object]
 _Key = tuple[int, int, float]
@@ -173,32 +178,11 @@ class RunInferenceResult:
     outcomes: tuple[InferenceRunOutcome, ...]
 
 
-@dataclass(frozen=True)
-class _Mode:
-    name: str
-    reason: str
-    forced: bool
-
-
-def reproduction_mode(
+def _mode(
     reference: Mapping[str, str], current: Mapping[str, str], justification: str | None
-) -> _Mode:
-    """Modo de reprodução pelas chaves não-código (I6, ADR 7.1.0003 item 3)."""
-    ignored = {*CODE_KEYS, DIRTY_KEY}
-    keys = (set(reference) | set(current)) - ignored
-    differing = sorted(key for key in keys if reference.get(key) != current.get(key))
-    if differing:
-        return _Mode(TOLERANCE, f"non-code keys differ: {differing}", forced=False)
-    if justification is not None:
-        return _Mode(TOLERANCE, "forced: cross-environment", forced=True)
-    return _Mode(STRICT, "non-code keys equal", forced=False)
-
-
-def within_mode(*, new: float, ref: float, center: float, scale: float, mode: str) -> bool:
-    """`strict` = igualdade exata; `tolerance` = regra do `assert_close` em z (I5)."""
-    if mode == STRICT:
-        return new == ref
-    return abs(new - ref) / scale <= TOLERANCE_ATOL + TOLERANCE_RTOL * abs((ref - center) / scale)
+) -> ReproductionMode:
+    """Modo do domain com as chaves de código e de sujeira ignoradas (I6)."""
+    return reproduction_mode(reference, current, justification, ignored_keys=_IGNORED_KEYS)
 
 
 def _validate_justification(justification: str | None) -> str | None:
@@ -234,13 +218,6 @@ def _float(value: object) -> float:
 
 def _int(value: object) -> int:
     return int(str(value))
-
-
-@dataclass(frozen=True)
-class _Reproduction:
-    compared: int
-    max_abs_diff: float
-    max_normalized_diff: float
 
 
 @dataclass(frozen=True)
@@ -450,7 +427,7 @@ class RunInference:
         center, scale = run.normalizer_center, run.normalizer_scale
         if not (math.isfinite(scale) and scale > 0):
             raise ReproductionError(f"run {run.run_id}: normalizer scale {scale!r} unusable (C7)")
-        test_mode = reproduction_mode(
+        test_mode = _mode(
             context.cohort_environment, context.current_environment, context.justification
         )
         reproduction = _reproduce_test(
@@ -470,15 +447,13 @@ class RunInference:
             if isinstance(recorded_first, Mapping):
                 first_environment = {str(k): str(v) for k, v in recorded_first.items()}
             if entry.get("status") == STARTED:
-                differing = reproduction_mode(first_environment, context.current_environment, None)
+                differing = _mode(first_environment, context.current_environment, None)
                 if differing.name != STRICT:
                     raise InferenceEnvironmentError(
                         f"run {run.run_id} was started in another environment "
                         f"({differing.reason}) — resume it in the original environment (C11)"
                     )
-        calib_mode = reproduction_mode(
-            first_environment, context.current_environment, context.justification
-        )
+        calib_mode = _mode(first_environment, context.current_environment, context.justification)
         base_entry = self._entry(
             context,
             run=run,
@@ -551,9 +526,9 @@ class RunInference:
         *,
         run: CheckpointRunPrediction,
         resolution: CheckpointResolution,
-        mode: _Mode,
-        calib_mode: _Mode,
-        reproduction: _Reproduction,
+        mode: ReproductionMode,
+        calib_mode: ReproductionMode,
+        reproduction: ReproductionComparison,
     ) -> dict[str, object]:
         """Campos comuns de `started` e `completed` (sem `verified_at`, só do `completed`)."""
         return {
@@ -695,10 +670,10 @@ def _reproduce_test(  # noqa: PLR0913 — o run, as linhas de referência e o cr
     run: CheckpointRunPrediction,
     reference_rows: Sequence[Row],
     spec: CohortSpec,
-    mode: _Mode,
+    mode: ReproductionMode,
     center: float,
     scale: float,
-) -> _Reproduction:
+) -> ReproductionComparison:
     """C7: mesmas chaves `(decisão, horizonte, nível)` e valores dentro do modo (I5)."""
     reference: dict[_Key, float] = {
         (_int(r["decision_idx"]), _int(r["horizon"]), _float(r["quantile_level"])): _float(
@@ -712,31 +687,23 @@ def _reproduce_test(  # noqa: PLR0913 — o run, as linhas de referência e o cr
         for horizon, grid in by_horizon.items()
         for level, value in zip(spec.quantile_levels, grid, strict=True)
     }
+    reproduction = compare_reproduction(
+        reference, predicted, mode=mode.name, center=center, scale=scale
+    )
     if not reference or not predicted:  # fail-closed: nada comparado não prova nada
         raise ReproductionError(
             f"run {run.run_id} ({mode.name}): {len(reference)} silver test values and "
             f"{len(predicted)} re-predicted — nothing to compare (C7)"
         )
-    if set(reference) != set(predicted):
-        missing = len(set(reference) - set(predicted))
-        extra = len(set(predicted) - set(reference))
+    if reproduction.missing or reproduction.extra:
         raise ReproductionError(
             f"run {run.run_id} ({mode.name}): test keys differ from silver — "
-            f"{missing} missing, {extra} extra of {len(reference)} (C7)"
+            f"{reproduction.missing} missing, {reproduction.extra} extra of {len(reference)} (C7)"
         )
-    max_abs = 0.0
-    failures = 0
-    for key, ref in reference.items():
-        new = predicted[key]
-        max_abs = max(max_abs, abs(new - ref))
-        if not within_mode(new=new, ref=ref, center=center, scale=scale, mode=mode.name):
-            failures += 1
-    reproduction = _Reproduction(
-        compared=len(reference), max_abs_diff=max_abs, max_normalized_diff=max_abs / scale
-    )
-    if failures:
+    if reproduction.failures:
         raise ReproductionError(
-            f"run {run.run_id} ({mode.name}): {failures} of {reproduction.compared} test values "
+            f"run {run.run_id} ({mode.name}): {reproduction.failures} of "
+            f"{reproduction.compared} test values "
             f"outside the criterion — max|d| {reproduction.max_abs_diff:.3e}, "
             f"max|d|/s {reproduction.max_normalized_diff:.3e} (C7)"
         )
