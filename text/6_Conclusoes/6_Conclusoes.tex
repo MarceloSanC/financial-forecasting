@@ -20,7 +20,9 @@ A quarta é o protocolo temporal: validação \textit{walk-forward} de janela ex
 
 A quinta é a disciplina confirmatória: candidato único \textit{all-features} sem seleção por desempenho fora da amostra, pré-registro imutável \textit{hasheado} e um \textit{scorecard} aplicado mecanicamente, que separa o veredito do perfil comparativo e nunca agrega resultados entre horizontes.
 
-A sexta é a hierarquia de evidência para a contribuição de famílias de indicadores --- VSN, importância por permutação e ablação, com consistência em pelo menos dois de três métodos --- e a distinção formal entre contribuição preditiva condicional ao modelo e inferência causal.
+A sexta é a leitura da contribuição de famílias de indicadores entre horizontes por dois métodos com estimandos distintos --- importância por permutação de grupo e ablação com re-treino --- exigindo concordância de sinal e intervalos que excluem zero na mesma família, com a VSN restrita à descrição por não ter eixo de horizonte neste modelo, e a distinção formal entre contribuição preditiva condicional ao modelo e inferência causal.
+
+A sétima é o tratamento explícito do poder do \textit{gate} de calibração: a não rejeição da calibração é sempre enunciada com a probabilidade exata de o \textit{gate} detectar desvios mínimos pré-registrados, o que impede que uma não rejeição por falta de amostra seja lida como evidência de calibração.
 
 Por fim, a implementação, descrita no Apêndice D, valida cada métrica e teste estatístico contra implementações de referência e permite reconstruir todas as conclusões a partir das previsões persistidas, sem re-treino.
 
@@ -38,18 +40,20 @@ Em segundo lugar, as análises de contribuição relativa de famílias indicam c
 
 Em terceiro lugar, retornos diários de ativos líquidos têm previsibilidade muito baixa na média \cite{GU2020}, o que torna plausível a ausência de superioridade do candidato frente a comparadores fortes. A não-dominância em H2 é, nesse contexto, resultado científico válido sobre os limites do estimador, e não falha do método.
 
-Em quarto lugar, o horizonte \(h+30\) é tratado como suplementar, dada a amostra efetiva menor e a sobreposição temporal entre observações; as conclusões confirmatórias concentram-se em \(h+1\) e \(h+7\).
+Em quarto lugar, as conclusões confirmatórias limitam-se a \(h+1\) e \(h+7\); o horizonte \(h+30\), com amostra efetiva menor e maior sobreposição temporal entre alvos, ficou fora do cohort confirmatório. Mesmo em \(h+7\), a sobreposição de alvos entre decisões vizinhas torna a banda binomial do \textit{gate} e o poder declarado otimistas, o que é mitigado, mas não eliminado, pela análise das subséries sem sobreposição.
 
-Em quinto lugar, os resultados da rodada exploratória de hiperparâmetros não constituem evidência; as conclusões dependem exclusivamente da rodada confirmatória com hiperparâmetros congelados \cite{RASCHKA2018}.
+Em quinto lugar, o \textit{gate} de H1 abre a comparação de H2 apenas quando não rejeita a calibração. A probabilidade conjunta de declarar \textit{skill} e passar no \textit{gate} é limitada pelo nível do teste, mas o tamanho do teste de H2 condicional a ter passado em H1 não tem garantia estabelecida na literatura; essa leitura sequencial é declarada como limitação.
 
-Em sexto lugar, a garantia de cobertura da predição conformal pressupõe permutabilidade, que não vale em séries temporais; a cobertura dos intervalos conformais é, por isso, reportada como empírica \cite{BARBER2023}.
+Em sexto lugar, os resultados da rodada exploratória de hiperparâmetros não constituem evidência; as conclusões dependem exclusivamente da rodada confirmatória com hiperparâmetros congelados \cite{RASCHKA2018}.
 
-Por fim, as bandas de calibração e os limiares de qualidade não têm valor canônico na literatura; sua validade decorre da declaração antecipada no pré-registro, conforme discutido na Seção~\ref{sec:scorecard}.
+Em sétimo lugar, a garantia de cobertura da predição conformal pressupõe permutabilidade, que não vale em séries temporais; com uma calibração por \textit{fold}, uma quebra de regime dentro do bloco de teste não é coberta por nenhuma cota, e a cobertura dos intervalos conformais é, por isso, reportada como empírica \cite{BARBER2023}.
+
+Por fim, o limiar de degeneração e os desvios mínimos relevantes usados no cálculo do poder não têm valor canônico na literatura; sua validade decorre da declaração antecipada no pré-registro, conforme discutido na Seção~\ref{sec:scorecard}.
 
 \section{Trabalhos futuros}
 Como evoluções coerentes com as limitações observadas, propõem-se cinco direções.
 
-A primeira é ampliar a avaliação para outros ativos, mantendo o desenho \textit{single-asset} e definindo no pré-registro os critérios de inclusão de ativos, com declaração explícita de disponibilidade, qualidade e comparabilidade.
+A primeira é ampliar a avaliação para horizontes mais longos, como \(h+30\), e para outros ativos, mantendo o desenho \textit{single-asset} e definindo no pré-registro os critérios de inclusão de ativos, com declaração explícita de disponibilidade, qualidade e comparabilidade.
 
 A segunda é tratar a classificação ou detecção de regimes de mercado como estudo separado, com rotulagem e metodologia próprias; o presente trabalho registra regimes de alta volatilidade apenas como ameaça à validade, não como objeto de modelagem.
 
