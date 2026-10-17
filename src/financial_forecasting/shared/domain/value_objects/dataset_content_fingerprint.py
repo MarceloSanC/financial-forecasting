@@ -8,8 +8,9 @@ prefixo sem valor (valores finitos); o `Hasher` canônico arredonda floats a 10
 casas, então diferenças abaixo de 1e-10 não mudam a impressão digital (Stage
 5.5, concept §4; ADR 5.5.0004).
 
-Coexiste com `DatasetFingerprint` (1.4: somas de close/volume + hash do arquivo),
-que não se aplica ao dataset de treino (sem `close`/`volume`).
+É a única impressão digital de dado do projeto: substituiu o `DatasetFingerprint`
+da 1.4 (somas de close/volume + hash do arquivo), removido na issue #120 depois que
+o gold passou a usar este VO (ADR 6.4.0009).
 """
 
 from __future__ import annotations

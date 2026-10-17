@@ -1,7 +1,8 @@
 """Port compartilhado: Hasher.
 
 Abstrai o hashing canônico determinístico usado pela identidade do projeto
-(RunId, DatasetFingerprint, ConfigSignature, SplitFingerprint). Os value
+(RunId, ConfigSignature, SplitFingerprint, CohortHash, DatasetContentFingerprint,
+PreregistrationHash). Os value
 objects de domínio constroem o payload e delegam o hash a este port — nunca
 serializam/hasheiam inline — para que a semântica canônica viva num único
 lugar (o adapter), seja contract-testada e pinada por golden, e seja trocável
