@@ -1,6 +1,14 @@
-"""Predicado único de "número finito" do domínio de `evaluation` (privado do slice).
+"""Predicados únicos de "número" e "número finito" do slice `evaluation` (privado do slice).
 
-Uma só escrita da regra. Os três consumidores de origem (6.1): a `CoverageSeries` (C2:
+Duas regras, uma escrita de cada:
+
+- `is_real_number`: o tipo — `int`/`float` **não-bool**, sem exigir finitude. É a
+  coerção dos VOs que leem TOML (`Preregistration`, `ProfileParameters`), o acessor
+  tipado da célula do gold (`col_float`) e o filtro de tipo da estimativa de bloco do
+  scorecard (issue #167; antes eram quatro cópias da checagem de tipo);
+- `is_finite_number`: o tipo (via `is_real_number`) **e** a finitude.
+
+Uma só escrita da regra de finitude. Os três consumidores de origem (6.1): a `CoverageSeries` (C2:
 quantis pós-guardrail e realizados), o validador único dos kernels
 (`scoring_input_validation.validate_finite`, C7) e o `DegeneracyGate` (tolerância, C3 —
 hoje via a regra única `_tolerance.validate_tolerance`, que a 6.3 compartilha com a
@@ -24,6 +32,12 @@ abriria aresta nova no `bc-independence` (ADR 0.0.0053 item 3).
 from __future__ import annotations
 
 import math
+from typing import TypeGuard
+
+
+def is_real_number(value: object) -> TypeGuard[int | float]:
+    """`True` só para `int`/`float` não-`bool` (`nan` e `inf` passam; `Decimal` não)."""
+    return isinstance(value, int | float) and not isinstance(value, bool)
 
 
 def is_finite_number(value: object) -> bool:
@@ -32,7 +46,7 @@ def is_finite_number(value: object) -> bool:
     `int` além do alcance do float64 (ex.: `10**400`) também é `False`: `math.isfinite`
     ergueria `OverflowError` cru nos consumidores, em vez do `ValueError` nomeado.
     """
-    if isinstance(value, bool) or not isinstance(value, int | float):
+    if not is_real_number(value):
         return False
     try:
         return math.isfinite(value)
