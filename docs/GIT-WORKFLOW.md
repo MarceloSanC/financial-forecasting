@@ -537,9 +537,12 @@ gh pr view <num-pr> --json mergeable,mergeStateStatus   # MERGEABLE + CLEAN
 # 5. Salvar dado git-ignorado caro de refazer (o worktree-rm apaga a pasta inteira):
 #    data/cohorts/, artifacts/, mlruns* da worktree → mesmo caminho no checkout principal
 
-# 6. Merge commit (sem --delete-branch: com a worktree viva ele falha ao apagar a
-#    branch local e deixa a remota viva — o passo 7 apaga as duas)
-gh pr merge <num-pr> --merge
+# 6. Merge commit travado no HEAD verificado no passo 4 (sem --delete-branch: com a
+#    worktree viva ele falha ao apagar a branch local e deixa a remota viva — o passo 7
+#    apaga as duas). O hook publish_guard exige o --match-head-commit com o sha LITERAL
+#    (ele lê o texto do comando e não expande `$(...)` nem variável).
+gh pr view <num-pr> --json headRefOid -q .headRefOid    # o mesmo HEAD que passou no passo 4
+gh pr merge <num-pr> --merge --match-head-commit <sha>
 
 # 7. Limpeza, a partir do checkout principal (nunca de dentro da worktree)
 python scripts/worktree-rm.py <branch> --no-docker --delete-remote
@@ -564,25 +567,35 @@ humano** adiciona em `.claude/settings.local.json` → `permissions.allow`:
 ```json
 "Bash(git push *)", "Bash(git -C * push *)", "Bash(gh pr edit *)", "Bash(gh pr comment *)",
 "Bash(gh issue edit *)", "Bash(gh issue comment *)", "Bash(gh pr merge *)",
-"PowerShell(git push *)", "PowerShell(gh pr *)", "PowerShell(gh issue *)"
+"PowerShell(git push *)", "PowerShell(git -C * push *)", "PowerShell(gh pr edit *)",
+"PowerShell(gh pr comment *)", "PowerShell(gh issue edit *)", "PowerShell(gh issue comment *)",
+"PowerShell(gh pr merge *)"
 ```
 
 Essa regra tira o classificador do caminho; a trava passa a ser o hook
 `.claude/hooks/publish_guard.py` (PreToolUse, roda antes de qualquer comando Bash/PowerShell e
 recusa mesmo com a regra liberada):
 
-- `git push` para `develop`/`main` (refspec, `--delete`, `HEAD` ou branch atual), `--force`/`+`
-  sem `--force-with-lease`, `--all`/`--mirror`, e qualquer push a partir do checkout principal;
-- `gh pr merge` sem `--merge`, com `--admin`/`--auto`, ou se o PR — consultado no GitHub pelo
-  hook — não tiver base `develop`, estiver em draft, sem `> **Auditoria:** complete`, com check
-  não verde, `mergeStateStatus` ≠ `CLEAN` ou conversa de review sem resolver. Consulta que
-  falha = recusa;
+- `git push` para `develop`/`main` (refspec, `--delete`, `HEAD`/`@` ou branch atual), refspec
+  com curinga ou matching (`:`), `--force`/`+` sem `--force-with-lease`, `--all`/`--mirror`/
+  `--prune`, `-c push.*`/`-c remote.*`, e qualquer push a partir do checkout principal;
+- `gh pr merge` sem `--merge`, com `--admin`/`--auto`, sem `--match-head-commit` igual ao HEAD do
+  PR, ou se o PR — consultado no GitHub pelo hook — não tiver base `develop`, estiver em draft,
+  sem `> **Auditoria:** complete`, sem `lint-and-test` e `audit-status` com sucesso no HEAD (lista
+  vazia logo após o push não conta como verde), com check não verde, `mergeStateStatus` ≠
+  `CLEAN` ou conversa de review sem resolver. Consulta que falha = recusa;
 - `gh pr edit --base`; label/assignee/milestone/projeto em `gh pr|issue edit`;
   `gh issue close|reopen|delete|transfer`; `gh api` que escreve (método ≠ GET, campo sem `-X`,
   `graphql` com `mutation`).
 
-Passam: push da branch da worktree, edição de título e corpo, comentários e leituras. O hook
-cobre `git`/`gh`; escrita no GitHub por outro caminho (curl, script) fica fora dele.
+Passam: push da branch da worktree, edição de título e corpo, comentários e leituras.
+
+O hook separa o comando em `&&`, `||`, `;`, `|`, `&` e quebra de linha, porque a permissão é
+avaliada por subcomando: a regra libera cada pedaço, e o hook precisa ver cada um. Fora do
+alcance do parsing: `bash -c`/`pwsh -c`/`cmd /c`, `eval`, alias do `gh`, scripts e curl. Eles não
+casam com as regras acima, então o classificador continua cobrindo. Por isso as regras listam
+subcomandos exatos (`gh pr edit`, não `gh pr *`). Regra nova em `permissions.allow` só entra com
+o caso correspondente coberto pelo hook.
 
 **Saída:** uma linha de status — PR mergeado (hash do merge commit), issue fechada, worktree e
 branches (local e remota) removidas, `develop` local sincronizado.
