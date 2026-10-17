@@ -106,7 +106,7 @@ graph LR
 | `6.5-preregistration-and-scorecard` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.4, 5.5 |
 | `6.6-scorecard-profiles` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.5 |
 | `7.1-inference-engine` | inference | multi (application + adapters/out) | vertical | done | 5.4, 4.3 |
-| `7.2-conformal-cqr` | inference | multi (domain + adapters/out) | vertical | draft | 7.1, 5.1 |
+| `7.2-conformal-cqr` | inference | multi (domain + application + adapters/out; + evaluation) | vertical | draft | 7.1, 5.1 |
 | `7.3-explainability` | inference | multi (domain + adapters/out; + modeling) | vertical | draft | 7.1, 6.1 |
 | `7.4-inference-api` | inference | adapters/in/http | vertical | draft | 7.2, 7.3 |
 | `8.1-confirmatory-run` | evaluation | application (orquestração) | vertical | draft | 6.5, 6.6, 7.1, 7.2, 7.3 |
@@ -1037,19 +1037,37 @@ skills_hint: [hex-arch-python, dmls-ch06-deployment-and-inference-decisions]
 ```yaml
 stage_id: 7.2-conformal-cqr
 bounded_context: inference
-camada_alvo: multi (domain + adapters/out)
+camada_alvo: multi (inference domain + application + adapters/out; evaluation domain + application + adapters/out gold; composition root; config de pré-registro)
+# Caminhos refinados no concept 7.2 (ADRs 7.2.0001–7.2.0005): ADRs na pasta única
+# docs/adr/; cobertura conformal no domain do evaluation; integração no RefreshGold nesta Stage.
 arquivos_a_criar:
-  - src/financial_forecasting/features/inference/domain/services/conformal_calibrator.py
+  - src/financial_forecasting/features/inference/domain/services/{conformal_calibrator.py, reproduction_policy.py}
+  - src/financial_forecasting/features/inference/domain/value_objects/calibration_set.py
   - src/financial_forecasting/features/inference/application/ports/out/conformal_backend.py
+  - src/financial_forecasting/features/inference/application/use_cases/calibrate_conformal.py
   - src/financial_forecasting/features/inference/adapters/out/mapie/mapie_cqr_backend.py
-  - docs/stages/7.2-conformal-cqr/adrs/7_2_0001-cqr-preregistration-details.md
+  - src/financial_forecasting/features/evaluation/domain/value_objects/{conformal_coverage_series.py, conformal_parameters.py}
+  - src/financial_forecasting/features/evaluation/domain/services/{conformal_coverage.py, conformal_assembly.py}
+  - src/financial_forecasting/features/evaluation/application/ports/out/conformal_calibration.py (port do consumidor, satisfeito pelo CalibrateConformal)
+  - src/financial_forecasting/features/evaluation/adapters/out/duckdb/gold_builders/{conformal_corrections.py, conformal_coverage.py}
+  - config/preregistration/aapl_confirmatory-r2.toml (+ .anchor.toml)
+  - docs/adr/7_2_0001-cqr-preregistration-details.md (e 7_2_0002 a 7_2_0005)
   - tests/unit/features/inference/test_conformal_calib_set_dedicated.py
   - tests/unit/features/inference/test_conformal_embargo.py
   - tests/integration/features/inference/test_cqr_empirical_coverage.py
-contratos_introduzidos: [ConformalCalibrator (domain-service), ConformalBackend (port-out)]
-contratos_consumidos: [WalkForwardSplitter calib partition (5.1), linhas split="calib" de fact_oos_predictions + manifesto de inferência (7.1), CoverageMetrics (6.1)]
-definition_of_done: "CQR assimétrico calibra no calib dedicado (não no early-stop), por fold/horizonte/seed, com embargo, nos 3 pares simétricos; reporta cobertura EMPÍRICA (etiqueta não diz 'garantida'); variante de registro e sensibilidade NexCP (ADR 0_0_0008) pré-registradas pela maquinaria da 6.5 (TOML hasheado + âncora) antes de qualquer métrica sobre o cohort real; ACI/EnbPI ausentes do caminho confirmatório."
-non_goals: [ACI/EnbPI confirmatórios (travados), conformal como entrega primária]
+  - tests/integration/features/inference/test_conformal_geometry_real_cohort.py (ativado por ambiente; só geometria)
+  - tests/fixtures/nexcp_oracle/ (fixture do splitCP_LS dos autores)
+arquivos_a_modificar:
+  - src/financial_forecasting/features/inference/application/use_cases/run_inference.py (F3 da 7.1: política de reprodução para o domain) e inference/adapters/in/cli/inference_commands.py (importa `STRICT` do domain)
+  - src/financial_forecasting/features/evaluation/domain/value_objects/preregistration.py (bloco opcional [conformal])
+  - src/financial_forecasting/features/evaluation/domain/services/series_assembly.py (regras de alinhamento extraídas como funções públicas que devolvem a violação; o SeriesAssembly as converte em AlignmentFinding e o ConformalAssembly em unidade undefined)
+  - src/financial_forecasting/features/evaluation/application/use_cases/refresh_gold.py, application/dtos/{refresh_gold.py, gold_schema.py, confirmatory_scorecard.py} (RefreshParameters.conformal_parameters, conformal_error_units, duas tabelas gold, refresh_command_from)
+  - src/financial_forecasting/composition_root.py (port → CalibrateConformal)
+  - docs/preregistration/aapl_confirmatory.md, pyproject.toml (mapie), .importlinter (inference-no-mapie-leak; aresta de dados refresh_gold → calibrate_conformal), docs/LAYOUT.md §7
+contratos_introduzidos: [ConformalCalibrator (domain-service), CalibrationSet (value-object), ConformalBackend (port-out), CalibrateConformal (use case), ConformalCoverageSeries e ConformalParameters (value-objects do evaluation), ConformalCoverage e ConformalAssembly (domain-services do evaluation), ConformalCalibration (port-out do evaluation), tabelas gold_conformal_corrections e gold_conformal_coverage, RefreshParameters.conformal_parameters, reproduction_policy (domain-service), revisão r2 do aapl_confirmatory]
+contratos_consumidos: [WalkForwardSplitter calib partition e SplitFingerprint (5.1), linhas split="calib" de fact_oos_predictions (7.1; pelo RefreshGold, testado com silver sintético) + manifesto de inferência (7.1; na prova de geometria), RefreshGold, SeriesAssembly, GoldStore e TrainingGridReader (6.4), RefreshParameters e tabelas de perfil (6.6), CoverageSeries, predicados de cobertura, DegeneracyGate e WilsonBand (6.1), Preregistration e âncora (6.5), r1 (6.6)]
+definition_of_done: "CQR assimétrico calibra no calib dedicado (não no early-stop), por fold/horizonte/seed, com embargo, nos 3 pares simétricos; reporta cobertura EMPÍRICA (etiqueta não diz 'garantida') em tabelas gold do RefreshGold na mesma geração, testadas só com silver sintético; variante de registro e sensibilidade NexCP (ADR 0_0_0008) pré-registradas pela maquinaria da 6.5 (TOML hasheado + âncora) antes de qualquer métrica sobre o cohort real; ACI/EnbPI ausentes do caminho confirmatório."
+non_goals: [ACI/EnbPI confirmatórios (travados), conformal como entrega primária, refresh do gold sobre o cohort real (8.1), leitura das tabelas conformais pelo scorecard]
 complexidade_estimada: M
 gate_mode: strict
 skills_hint: [ddd-tactical-patterns, hex-arch-python, dmls-ch05-model-development-and-evaluation]
@@ -1103,8 +1121,11 @@ arquivos_a_criar:
   - tests/e2e/features/inference/test_inference_api_e2e.py
 arquivos_a_modificar:
   - src/financial_forecasting/shared/infrastructure/http/app.py
-contratos_introduzidos: [RunInferencePort (port-in via FastAPI Depends)]
-contratos_consumidos: [ports de predição a partir do checkpoint e predições persistidas test/calib (7.1), ConformalCalibrator (7.2), explainability (7.3)]
+# Da 7.2 (concept 7.2 D9): a 7.4 lê as correções conformais do gold por um port do
+# consumidor no inference (DTO/VO do inference), satisfeito por um leitor do evaluation
+# (gold_schema dono único); direção de produção só evaluation → inference.
+contratos_introduzidos: [RunInferencePort (port-in via FastAPI Depends), port-out do inference para ler gold_conformal_corrections + leitor no evaluation que o satisfaz]
+contratos_consumidos: [ports de predição a partir do checkpoint e predições persistidas test/calib (7.1), gold_conformal_corrections da geração current/ aplicada aos quantis nativos por PairCorrection.limits (7.2; a API não recalibra, doc de domínio inference §6), explainability (7.3)]
 definition_of_done: "`POST /inference/run` retorna quantis nativos + intervalo conformal + explicabilidade (payload com schema versionado; rótulos 'cobertura empírica' e 'descritiva'); router é fino (sem regra); exceções de domínio viram HTTP; e2e verde."
 non_goals: [autenticação, servir treino, streaming]
 complexidade_estimada: M
@@ -1125,7 +1146,7 @@ Roda o protocolo confirmatório completo em AAPL, audita equivalência vs evidê
 
 **Descrição humana:** Orquestração ponta-a-ponta do confirmatório: do cohort treinado (5.5) → métricas/inferência (Step 6) → scorecard pré-registrado, gerando os artefatos gold confirmatórios e o veredito mecânico por H1/H2/H3.
 
-**Notas da 6.5/6.6:** a dependência da Stage **6.6** está satisfeita (issue #129; os perfis de séries novas saem em oito tabelas gold na mesma geração e no perfil do scorecard, nunca no veredito). A 8.1 **julga pela r1** (`aapl_confirmatory-r1-bfa8028498ca`, emenda cega ancorada na #129 em 2026-10-06): `refresh_command_from(r1, ref)` e `BuildConfirmatoryScorecard(revision=1)`. Depende também dos pré-registros de H3 (7.3) e do CQR (7.2), todos ancorados antes da corrida. O refresh do gold é chamado com `refresh_command_from(plano, ref)` (derivação única do comando); o `ScorecardResult.as_mapping()` é gravado **fora** de `current/`, em `gold/asset=<a>/parent_sweep_id=<p>/scorecard/<preregistration_ref>/` (como `gold_model_comparison_confirmatory_scorecard`, registrando o manifesto lido); o primeiro refresh confirmatório posta um comentário na issue da Stage (fecho da ordem, ADR 6.5.0003 item 4).
+**Notas da 6.5/6.6:** a dependência da Stage **6.6** está satisfeita (issue #129; os perfis de séries novas saem em oito tabelas gold na mesma geração e no perfil do scorecard, nunca no veredito). A 8.1 **julga pela revisão ancorada mais recente da cadeia** do `aapl_confirmatory`: a r2 da 7.2 (bloco `[conformal]`, ancorada na #158; ADR 7.2.0001), ou a r3 se a 7.3 emendar para H3 — `refresh_command_from(rN, ref)` e `BuildConfirmatoryScorecard(revision=N)`. A r1 (`aapl_confirmatory-r1-bfa8028498ca`, #129) segue na cadeia. Depende também do pré-registro de H3 (7.3), ancorado antes da corrida. O conformal chega pronto da 7.2: o `RefreshGold` derivado da r2 já publica `gold_conformal_corrections` e `gold_conformal_coverage` na mesma geração (ADR 7.2.0003); a 8.1 só executa. O refresh do gold é chamado com `refresh_command_from(plano, ref)` (derivação única do comando); o `ScorecardResult.as_mapping()` é gravado **fora** de `current/`, em `gold/asset=<a>/parent_sweep_id=<p>/scorecard/<preregistration_ref>/` (como `gold_model_comparison_confirmatory_scorecard`, registrando o manifesto lido); o primeiro refresh confirmatório posta um comentário na issue da Stage (fecho da ordem, ADR 6.5.0003 item 4).
 
 **Issue bloqueada pela 8.1 — #58** (calendário na `FeatureRegistry` com `tft_typing=known`): só entra depois da 8.1. Incluir `day_of_week`/`month` em `FEATURE_SPECS` muda o `feature_set_hash` (`7df0e1b4…`) congelado no cohort ancorado (`cohort/aapl_confirmatory-r0-665f45d9169a`) e referenciado pelos pré-registros r0/r1; o executor do cohort e a inferência da 7.1 passariam a recusar o cohort já treinado, e voltar exigiria revisão nova do cohort, re-treino completo e emenda do pré-registro — por uma refatoração que não muda nenhuma predição. Em aberto para quando entrar: qual `family` o calendário recebe (fora das 4 do ADR 0.0.0016) e como isso conversa com a partição de famílias da ablação da 7.3.
 
@@ -1140,7 +1161,7 @@ arquivos_a_criar:
   - src/financial_forecasting/features/evaluation/application/use_cases/run_confirmatory_evaluation.py
   - tests/integration/features/evaluation/test_run_confirmatory_evaluation.py
 contratos_introduzidos: [RunConfirmatoryEvaluation (use case)]
-contratos_consumidos: [BuildConfirmatoryScorecard e refresh_command_from (6.5), RefreshGold (6.4), RunInference / subcomando `infer` idempotente (7.1), ConformalCalibrator (7.2), PermutationImportance, AblationAnalysis e ContributionAgreement (7.3), cohort de ablação (7.3), tabelas de perfil (6.6)]
+contratos_consumidos: [BuildConfirmatoryScorecard e refresh_command_from (6.5), RefreshGold (6.4), RunInference / subcomando `infer` idempotente (7.1), tabelas gold conformais do RefreshGold e revisão r2 (7.2), PermutationImportance, AblationAnalysis e ContributionAgreement (7.3), cohort de ablação (7.3), tabelas de perfil (6.6)]
 definition_of_done: "Pipeline confirmatória roda do cohort persistido até o scorecard sem re-treino; veredito mecânico H1/H2/H3 produzido; conformal incluído como eixo comparativo; tudo rastreável por run_id + hash de pré-registro."
 non_goals: [equivalência (8.2), plots (8.3)]
 complexidade_estimada: M
@@ -1198,7 +1219,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 
 ## Lacunas conhecidas
 
-- **Variante do CQR (7.2):** decidida — split-CQR assimétrico sem pesos como registro + NexCP ρ = 0,99 como sensibilidade (ADR `0_0_0008`; doc de domínio inference §4.5); os detalhes do pré-registro (forma, papel do MAPIE) ficam na 7.2.
+- **Variante do CQR (7.2):** decidida — split-CQR assimétrico sem pesos como registro + NexCP ρ = 0,99 como sensibilidade (ADR `0_0_0008`; doc de domínio inference §4.5); os detalhes do pré-registro (forma, papel do MAPIE) ficam na 7.2 (ADRs 7.2.0001 e 7.2.0002: emenda cega r2; MAPIE como oráculo).
 - **Pré-registro de H3 (7.3):** nível do IC, multiplicidade para "≥ 1 de 4 famílias", importâncias negativas / Σ I_g ≈ 0, chave de pareamento entre horizontes e bloco do bootstrap conjunto a fixar na 7.3 (doc de domínio inference §5.7); partição da volatilidade resolvida na #151 (vale o registry — volatilidade e regimes em technical; doc de domínio inference §5.2, C8); encaminhamento nas Notas da #151 no bloco da 7.3.
 - **Parâmetros do MCS (6.2):** regra do bloco fixada no doc de domínio evaluation §6.5 (max(h, maior b̂_sb de Politis–White), sensibilidades l = h, √T e moving-block — ADR 0.0.0010); `B` de bootstrap e semente a fixar no concept de 6.2.
 - **Bandas e tolerâncias:** bandas de calibração pré-registradas (H1) e tolerância de equivalência (8.2) a fixar nos concepts de 6.5/8.2.
@@ -1225,6 +1246,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 | 2026-10-06 | 7.3 declara o código novo de modelagem da ablação (subconjunto de famílias, identidade por configuração, cohort de ablação, dispositivo ≠ cpu), complexidade possivelmente L e custo medido; 8.1 consome os serviços e o cohort de ablação da 7.3; lacuna da variante do CQR fechada | Revisão do gate do Step 7 (issue #150) |
 | 2026-10-06 | Stage `6.6-scorecard-profiles` `done`; Step 6 `done`; DoD da 6.6 reescrito pelo D5 (pares adjacentes pela função do dono, não serviço novo) e pela r1 cega; a 8.1 julga pela r1 | Fechamento da Stage 6.6 (issue #129; ADRs 6.6.0001–0003; r1 ancorada) |
 | 2026-10-12 | Stage `7.1-inference-engine` `done`; Step 7 `in_progress`. Execução real sobre o cohort `aapl_confirmatory` r0: 60 runs `strict` com max \|Δ\| = 0, 211.680 linhas `split = "calib"` em `fact_oos_predictions`, manifesto com 60 entradas `completed`, `verify` verde, sem `gold/` | Fechamento da Stage 7.1 (issue #153; ADRs 7.1.0001–7.1.0004; technical 7.1 §7) |
+| 2026-10-17 | Stage 7.2 refinada: ADRs na pasta única `docs/adr/` (não `docs/stages/7.2-conformal-cqr/adrs/`); camada, arquivos e contratos (calibrador e política de reprodução no domain do inference, `CalibrateConformal`, cobertura conformal e bloco `[conformal]` no evaluation, revisão r2); integração do conformal no gold (port do consumidor, montagem no `RefreshGold`, duas tabelas gold) na própria 7.2, e a 8.1 só executa; a 8.1 julga pela revisão ancorada mais recente da cadeia (r2; r3 se a 7.3 emendar), não mais "pela r1"; a 7.4 lê `gold_conformal_corrections` (não recalibra) e a 8.1 consome as tabelas conformais do refresh | Concept 7.2 (issue #158; ADRs 7.2.0001–7.2.0005) |
 
 ## Próxima revisão de roadmap
 
