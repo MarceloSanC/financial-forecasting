@@ -15,9 +15,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from financial_forecasting.features.inference.application.use_cases.run_inference import (
-    STRICT,
     RunInferenceCommand,
 )
+from financial_forecasting.features.inference.domain.services.reproduction_policy import STRICT
 
 if TYPE_CHECKING:
     from collections.abc import Callable
