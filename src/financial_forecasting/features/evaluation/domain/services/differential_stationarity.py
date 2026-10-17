@@ -33,6 +33,10 @@ from financial_forecasting.features.evaluation.domain.services.diebold_mariano i
     check_variance_estimator,
     dm_long_run_variance,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    is_int,
+    validate_int_at_least,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
     check_points,
     is_constant,
@@ -65,8 +69,7 @@ def acf_max_lag(n_points: int) -> int:
     Raises:
         ValueError: T não-`int`, `bool` ou < 2.
     """
-    if isinstance(n_points, bool) or not isinstance(n_points, int) or n_points < 2:  # noqa: PLR2004
-        raise ValueError(f"n_points must be an int >= 2, got {n_points!r}")
+    validate_int_at_least(n_points, minimum=2, field="n_points")
     return min(int(10 * math.log10(n_points)), n_points - 1)
 
 
@@ -77,7 +80,7 @@ def sample_acf(values: Sequence[float], max_lag: int) -> tuple[float, ...]:
         ValueError: série constante (sem variância) ou `max_lag` fora de 1..T - 1.
     """
     n_points = len(values)
-    if isinstance(max_lag, bool) or not isinstance(max_lag, int) or not 1 <= max_lag < n_points:
+    if not is_int(max_lag) or not 1 <= max_lag < n_points:
         raise ValueError(f"max_lag must be an int in 1..{n_points - 1}, got {max_lag!r}")
     if is_constant(values):
         raise ValueError("the ACF of a constant series is undefined")

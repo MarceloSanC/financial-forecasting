@@ -22,6 +22,9 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     validate_horizon,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    validate_int_at_least,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.forecast_record import (
     check_non_empty_str,
     check_optional_seed,
@@ -88,9 +91,7 @@ class QualityCheckResult:
         if self.model is not None:
             check_non_empty_str(self.model, field="model")
         check_optional_seed(self.seed)
-        occurrences = self.occurrences
-        if isinstance(occurrences, bool) or not isinstance(occurrences, int) or occurrences < 1:
-            raise ValueError(f"occurrences must be an int >= 1, got {occurrences!r}")
+        validate_int_at_least(self.occurrences, minimum=1, field="occurrences")
         if self.value is not None and not is_finite_number(self.value):
             raise ValueError(f"value must be a finite number or None, got {self.value!r}")
 

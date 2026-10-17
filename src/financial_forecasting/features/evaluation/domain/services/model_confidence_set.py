@@ -41,6 +41,9 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     validate_horizon,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    is_int,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
     check_horizon,
     check_points,
@@ -131,7 +134,7 @@ def block_sensitivity_length(rule: str, *, horizon: int, n_points: int) -> int:
     if rule not in BLOCK_SENSITIVITIES:
         raise ValueError(f"rule must be one of {list(BLOCK_SENSITIVITIES)}, got {rule!r}")
     check_horizon(horizon)
-    if isinstance(n_points, bool) or not isinstance(n_points, int):
+    if not is_int(n_points):
         raise ValueError(f"n_points must be an int, got {n_points!r}")
     check_points(n_points, horizon)
     if rule == "h":

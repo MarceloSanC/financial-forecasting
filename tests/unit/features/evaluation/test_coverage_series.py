@@ -23,6 +23,9 @@ import pytest
 from financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast import (
     QuantileForecast,
 )
+from financial_forecasting.features.evaluation.domain.value_objects import (
+    coverage_series as coverage_series_module,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
     is_at_or_below,
@@ -272,11 +275,30 @@ def test_guardrail_values_misaligned_with_levels_raise(make_series: SeriesFactor
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("horizon", [0, -1])
-def test_horizon_below_one_raises(make_series: SeriesFactory, horizon: int) -> None:
-    """C1: `horizon < 1`."""
-    with pytest.raises(ValueError, match="horizon must be >= 1"):
+@pytest.mark.parametrize(
+    "horizon", [0, -1, True, False, 1.0], ids=["zero", "neg", "true", "false", "float"]
+)
+def test_horizon_not_a_positive_int_raises(make_series: SeriesFactory, horizon: object) -> None:
+    """C1: `horizon` é `int` não-`bool` ≥ 1 — `True` e `1.0` erguem (issue #118: antes a
+    série só checava `horizon < 1` e aceitava os dois)."""
+    with pytest.raises(ValueError, match="horizon must be an int >= 1"):
         make_series([_GRID], [0.0], horizon=horizon)
+
+
+def _reject(*_: object, **__: object) -> None:
+    raise ValueError("single rule called")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("rule", ["validate_horizon", "check_strictly_increasing"])
+def test_horizon_and_timestamps_use_the_single_rules(
+    make_series: SeriesFactory, monkeypatch: pytest.MonkeyPatch, rule: str
+) -> None:
+    """Issue #118: a série consome as regras únicas `_horizon` e `_timestamps` (sem cópia)."""
+    monkeypatch.setattr(coverage_series_module, rule, _reject)
+
+    with pytest.raises(ValueError, match="single rule called"):
+        make_series([_GRID], [0.0])
 
 
 # --- C2 — valor não-finito: ergue, nunca descarta --------------------------------

@@ -65,6 +65,10 @@ from financial_forecasting.features.evaluation.domain.services.profile_reports i
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    is_int,
+    validate_int_at_least,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._tolerance import (
     validate_tolerance,
 )
@@ -447,12 +451,9 @@ class GoldManifest:
 
     def _check_counts(self) -> None:
         for table, count in self.rows_by_table.items():
-            if isinstance(count, bool) or not isinstance(count, int) or count < 0:
-                raise ValueError(f"rows_by_table[{table!r}] must be an int >= 0, got {count!r}")
+            validate_int_at_least(count, minimum=0, field=f"rows_by_table[{table!r}]")
         for name in ("realized_sessions", "n_runs", "grid_trimmed_prefix"):
-            value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-                raise ValueError(f"{name} must be an int >= 0, got {value!r}")
+            validate_int_at_least(getattr(self, name), minimum=0, field=name)
         fsum = self.realized_returns_fsum
         if not is_finite_number(fsum):
             raise ValueError(f"realized_returns_fsum must be a finite number, got {fsum!r}")
@@ -640,7 +641,7 @@ def _wrong_type(schema: GoldTableSchema, column: str, expected: str, value: obje
 def col_int(row: Row, schema: GoldTableSchema, column: str) -> int:
     """A célula como `int` não-`bool`; outro tipo → `GoldGenerationCorruptError`."""
     value = col(row, schema, column)
-    if isinstance(value, bool) or not isinstance(value, int):
+    if not is_int(value):
         raise _wrong_type(schema, column, "int", value)
     return value
 

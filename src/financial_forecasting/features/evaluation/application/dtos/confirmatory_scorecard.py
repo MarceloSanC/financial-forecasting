@@ -34,6 +34,9 @@ from financial_forecasting.features.evaluation.application.ports.out.preregistra
 from financial_forecasting.features.evaluation.domain.services.confirmatory_scorecard import (
     ScorecardVerdict,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    validate_int_at_least,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
     Preregistration,
 )
@@ -97,9 +100,7 @@ class BuildConfirmatoryScorecardCommand:
             value = getattr(self, field)
             if not isinstance(value, str) or not value:
                 raise ValueError(f"{field} must be a non-empty str, got {value!r}")
-        revision = self.revision
-        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
-            raise ValueError(f"revision must be an int >= 0, got {revision!r}")
+        validate_int_at_least(self.revision, minimum=0, field="revision")
 
 
 class MismatchField(StrEnum):

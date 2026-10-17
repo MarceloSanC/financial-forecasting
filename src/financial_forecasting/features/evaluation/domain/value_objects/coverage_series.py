@@ -7,10 +7,12 @@ que toda métrica da 6.1 consome — a grade de quantis do fornecedor
 1:1 e com as invariantes da série verificadas **uma vez**, na construção (ADR
 `0_0_0020`):
 
-- um único rótulo `horizon` (≥ 1): não existe contêiner multi-horizonte, logo nenhum
-  serviço agrega entre horizontes (I1). Que cada ponto seja mesmo desse horizonte é
-  garantia do builder (6.4) — `QuantileForecast` não carrega horizonte;
-- `target_timestamps` estritamente crescentes (únicos e ordenados);
+- um único rótulo `horizon` (`int` não-`bool` ≥ 1, regra única `_horizon`): não existe
+  contêiner multi-horizonte, logo nenhum serviço agrega entre horizontes (I1). Que cada
+  ponto seja mesmo desse horizonte é garantia do builder (6.4) — `QuantileForecast` não
+  carrega horizonte;
+- `target_timestamps` estritamente crescentes (únicos e ordenados; regra única
+  `_timestamps`);
 - grade comum `levels` em (0, 1), estritamente crescente e **simétrica**
   (``|τ_k + τ_{K+1-k} - 1| ≤ 1e-12``), com ao menos um par (τ_1 < 0.5);
 - em todo ponto, `forecast.levels == levels` e `guardrail_values` finito e
@@ -42,6 +44,12 @@ from financial_forecasting.features.analytics_store.domain.value_objects.quantil
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
+    validate_horizon,
+)
+from financial_forecasting.features.evaluation.domain.value_objects._timestamps import (
+    check_strictly_increasing,
+)
 
 # Tolerância da simetria da grade: representação float64 (ADR 6.1.0002 item 2). Aceita
 # (0.02, …, 0.98) apesar de `1 - 0.98 != 0.02` em float.
@@ -55,7 +63,7 @@ class CoverageSeries:
     """Série alinhada de um modelo x horizonte sobre o `QuantileForecast` do 4.3.
 
     Campos:
-        horizon: rótulo do horizonte (≥ 1) — um só por série.
+        horizon: rótulo do horizonte (`int` não-`bool` ≥ 1) — um só por série.
         levels: grade comum de níveis, em (0, 1), estritamente crescente e simétrica.
         target_timestamps: timestamps ISO UTC do alvo, estritamente crescentes (formato
             único do silver; a comparação é de string).
@@ -76,9 +84,9 @@ class CoverageSeries:
     def __post_init__(self) -> None:
         """Valida as invariantes na ordem do technical 6.1 Task 02."""
         self._check_lengths()
-        self._check_horizon()
+        validate_horizon(self.horizon, field="horizon")
         self._check_levels()
-        self._check_timestamps()
+        check_strictly_increasing(self.target_timestamps)
         self._check_points()
 
     @property
@@ -129,10 +137,6 @@ class CoverageSeries:
         if sizes[0] == 0:
             raise ValueError("a CoverageSeries needs at least one point (T >= 1)")
 
-    def _check_horizon(self) -> None:
-        if self.horizon < 1:
-            raise ValueError(f"horizon must be >= 1, got {self.horizon}")
-
     def _check_levels(self) -> None:
         levels = self.levels
         if any(not 0.0 < level < 1.0 for level in levels):
@@ -151,14 +155,6 @@ class CoverageSeries:
             raise ValueError(
                 f"levels must hold at least one symmetric pair (tau_1 < 0.5), got {levels}"
             )
-
-    def _check_timestamps(self) -> None:
-        for index, (previous, current) in enumerate(pairwise(self.target_timestamps), 1):
-            if current <= previous:
-                raise ValueError(
-                    "target_timestamps must be strictly increasing (unique and ordered): "
-                    f"point {index} has {current!r} after {previous!r}"
-                )
 
     def _check_points(self) -> None:
         for index, (forecast, realized) in enumerate(
