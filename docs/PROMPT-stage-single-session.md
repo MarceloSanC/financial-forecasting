@@ -597,9 +597,10 @@ validação de gap real.
 **Você ABRE o PR ao final** (`git push` + `gh pr create`) — a sessão que
 implementou é quem abre. Antes do push, **sincronize**: `git fetch` +
 `git rebase origin/develop` (o `roadmap.md` é o conflito recorrente; ver
-GIT-WORKFLOW §Etapa 4). **Merge: por padrão é do usuário — mas mediante
-pedido explícito seu, a sessão pode e deve executá-lo, sem ficar bloqueada**
-(procedimento em "Merge sob pedido explícito" abaixo).
+GIT-WORKFLOW §Etapa 4). **Merge: por padrão é da sessão de auditoria**
+(`stage-audit`, Fase F — mergeia sozinha e limpa branch/worktree quando a Stage
+fecha sem pendência); **mediante pedido explícito do usuário, esta sessão também
+pode executá-lo** (procedimento em "Merge sob pedido explícito" abaixo).
 
 **O checklist do PR é um handoff.** Marque **apenas** as caixinhas que você
 **validou com certeza**; deixe as demais **desmarcadas**. O corpo do PR
@@ -694,7 +695,8 @@ gh pr create --base develop --title "feat(<escopo>): stage <N.M> — <title_huma
 ```
 
 Depois do PR aberto, a sessão de auditoria valida e completa o checklist; o
-CI roda e **o usuário faz o merge** (salvo pedido explícito).
+CI roda e **a sessão de auditoria faz o merge** quando a Stage fecha sem
+pendência (`stage-audit`, Fase F).
 
 **Merge sob pedido explícito.** O default é parar no PR aberto. Mas se o
 usuário **pedir o merge** (nesta sessão ou depois), você **não está
@@ -709,13 +711,12 @@ objetivo**.
   checklist nem edite o label à mão para destravar.
 - **Antes de qualquer operação git, invoque a skill `git-versioning-pointer`**
   (confirma a regra de merge/branch aplicável).
-- Comandos (merge + limpeza da branch):
-  ```powershell
-  gh pr merge <num> --merge --delete-branch
-  git checkout develop; git pull origin develop; git remote prune origin
-  ```
-- **Sem pedido explícito, não mergeie.** A irreversibilidade continua sendo
-  decisão do humano; a sessão só **executa** o merge que ele pediu.
+- Comandos (rebase, merge e limpeza de branch/worktree): **fonte única em
+  [GIT-WORKFLOW](./GIT-WORKFLOW.md) §"Fechamento autônomo pela auditoria"** —
+  seguir na ordem (merge sem `--delete-branch`; `worktree-rm.py` a partir do
+  checkout principal).
+- **Sem pedido explícito, esta sessão não mergeia** — o merge autônomo é da
+  sessão de auditoria, que julga sem a mão no código.
 
 # CONTRADIÇÕES
 
@@ -757,8 +758,9 @@ fonte mais alta na hierarquia.**
 8. **Abrir o PR** (`git fetch` + rebase + `git push` + `gh pr create`) +
    relatório final (com disposições dos checkpoints).
 
-**PARE no merge por padrão** — você abre o PR e o merge é do usuário. **Mas
-quando o usuário pedir o merge, execute-o** (`gh pr merge`, ver "Merge sob
+**PARE no merge por padrão** — você abre o PR e o merge é da sessão de
+auditoria (Fase F da `stage-audit`). **Mas quando o usuário pedir o merge,
+execute-o** (`gh pr merge`, ver "Merge sob
 pedido explícito"), desde que CI/auditoria/aprovações estejam verdes: pedido
 explícito **desbloqueia a ação**; não fique travado repetindo "o merge é do
 usuário".

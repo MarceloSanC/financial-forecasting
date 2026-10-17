@@ -93,13 +93,13 @@ seção correspondente. Cada uma traz três blocos:
 
 ## 🔀 `gh pr merge`
 
-- **LER:** `docs/GIT-WORKFLOW.md` §Gates de PR + §Etapa 6 + §Comportamento bloqueante
+- **LER:** `docs/GIT-WORKFLOW.md` §Gates de PR + §Etapa 6 + §"Fechamento autônomo pela auditoria" (merge pós-auditoria) + §Comportamento bloqueante
 - **CHECK:**
   ```bash
   gh pr view --json mergeable,statusCheckRollup,reviewDecision
   gh pr checks
   ```
-- **GOTCHA:** merge commit obrigatório. **NUNCA** `--squash`, **NUNCA** `--rebase`. Comando: `gh pr merge <num> --merge --delete-branch`.
+- **GOTCHA:** merge commit obrigatório. **NUNCA** `--squash`, **NUNCA** `--rebase`. Comando: `gh pr merge <num> --merge`. Com worktree (caso normal): **sem** `--delete-branch` (ele deixa a remota de pé); limpeza por `python scripts/worktree-rm.py <branch> --no-docker --delete-remote` a partir do checkout principal. `--delete-branch` só quando a branch não tem worktree.
 
 ## 🩹 hotfix
 

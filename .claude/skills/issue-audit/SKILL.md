@@ -1,6 +1,6 @@
 ---
 name: issue-audit
-description: "Auditoria de uma issue (ou grupo de issues) antes do PR/merge — julgamento read-only do que foi implementado × o CORPO da issue no GitHub (## Escopo + ## Critério de aceitação) + fase de aplicação SEPARADA que empurra fixes ao PR existente e registra o veredito; confere se os gates passam e classifica achados POR ESCOPO (dentro da própria issue, issue separada, ou não-issue). Invocar quando o usuário pedir \"auditar issue #N\", \"auditoria da issue\", \"valida issue\", \"issue X está pronta pra PR?\", \"tem gap na issue?\", \"essas issues entregaram o que prometeram?\", \"audita o épico\", \"confere se a #N fechou de verdade\", ou ao revisar uma issue de outra sessão/branch. Aceita uma issue ou uma lista. Skill de PROCEDIMENTO + GUARDRAIL — codifica o varredor mecânico (gh issue view, scripts de gate, cruzamento critério↔evidência) e protege contra dois falsos verdes específicos de issue: (a) marcar critério ✅ sem evidência, e (b) empurrar refino DENTRO do escopo para \"melhoria futura\" só porque a issue parece fechada. Lean toward triggering — custo de auditar é baixo, custo de fechar issue com gap silencioso (ou de fragmentar escopo em cards concorrentes) é alto. A SAÍDA não é só relatório de gate — sempre produz, em linguagem clara e com lente de valor + design escalável/responsabilidade: (1) conceitos principais, (2) tasks→arquivos (links)→o que entrega, (3) gates garantidos 100%, (4) decisões de arquitetura, (5) findings por escopo, (6) aprendizados→skills. Disparada por \"Audite issue #N\" / \"audita a #N\"."
+description: "Auditoria de uma issue (ou grupo de issues) antes do PR/merge — julgamento read-only do que foi implementado × o CORPO da issue no GitHub (## Escopo + ## Critério de aceitação) + fase de aplicação SEPARADA que empurra fixes ao PR existente e registra o veredito + fechamento autônomo (rebase → merge → apaga branch e worktree) se o escopo fecha sem pendência; confere se os gates passam e classifica achados POR ESCOPO (dentro da própria issue, issue separada, ou não-issue). Invocar quando o usuário pedir \"auditar issue #N\", \"auditoria da issue\", \"valida issue\", \"issue X está pronta pra PR?\", \"tem gap na issue?\", \"essas issues entregaram o que prometeram?\", \"audita o épico\", \"confere se a #N fechou de verdade\", ou ao revisar uma issue de outra sessão/branch. Aceita uma issue ou uma lista. Skill de PROCEDIMENTO + GUARDRAIL — codifica o varredor mecânico (gh issue view, scripts de gate, cruzamento critério↔evidência) e protege contra dois falsos verdes específicos de issue: (a) marcar critério ✅ sem evidência, e (b) empurrar refino DENTRO do escopo para \"melhoria futura\" só porque a issue parece fechada. Lean toward triggering — fechar issue com gap silencioso custa caro. A SAÍDA não é só relatório de gate — sempre produz, em linguagem clara e com lente de valor + design escalável/responsabilidade: (1) conceitos principais, (2) tasks→arquivos (links)→o que entrega, (3) gates garantidos 100%, (4) decisões de arquitetura, (5) findings por escopo, (6) aprendizados→skills. Disparada por \"Audite issue #N\" / \"audita a #N\"."
 metadata:
   status: draft
   applies_when:
@@ -42,9 +42,10 @@ Combina quatro coisas:
 > Essa troca é **mecânica, não cosmética**: o workflow `audit-gate` (CI)
 > falha enquanto o status não for `complete` — gravar `complete` é o que
 > **destrava o merge**. Auditoria sem marca no PR **não existe** para quem
-> decide o merge. **Nunca faz merge** — é do usuário, salvo
-> pedido explícito. Branch alheia: `git show` para ler; checkout + push para
-> aplicar.
+> decide o merge. **Fechou todo o escopo e não sobrou pendência → fecha o PR
+> sozinho** (Fase F: rebase → merge → apaga branch e worktree), sem pedir OK;
+> sobrou qualquer coisa → não mergeia e reporta o que falta. Branch alheia:
+> `git show` para ler; checkout + push para aplicar.
 
 ---
 
@@ -400,6 +401,24 @@ da issue vs futuro?>
 - **observação** — info que o reviewer deve saber sem ação obrigatória
   (ex.: GitHub `OPEN` com a branch já em PR — esperado pré-merge).
 
+### Fase F — Fechamento autônomo (rebase → merge → limpeza)
+
+Depois da fase de aplicação, **sem pedir OK ao humano**, fechar o PR quando a auditoria fechou
+**todo** o escopo: status ✅, ou ⚠️ só com observações e findings de outro escopo (já viraram
+issue, com link no veredito); todo `## Critério de aceitação` ✅ com evidência; nenhum finding
+"dentro desta issue" em aberto; gates verdes. Condições de entrada, ordem dos comandos e paradas:
+**fonte única em [GIT-WORKFLOW §"Fechamento autônomo pela auditoria"](../../../docs/GIT-WORKFLOW.md)**
+— invocar `git-versioning-pointer` antes e seguir na ordem (é a ordem que evita as armadilhas:
+`complete` gravado antes do push, merge sem `--delete-branch`, limpeza a partir do checkout
+principal).
+
+- **Para sem mergear** (e diz o que falta) quando qualquer condição falha: pendência no PR,
+  conflito no rebase, check vermelho que a fase de aplicação não resolve, `BLOCKED`, merge negado
+  pela permissão da sessão. Parar não é falha — mergear com pendência é.
+- **Grupo de issues:** cada PR fecha por si, na ordem de dependência (`### Depende de`).
+- Fecha com **uma linha de status** (PR mergeado + hash, issue `CLOSED`, worktree e branches
+  removidas) depois do relatório da Fase E.
+
 ---
 
 ## Conceitos de falso verde (anti-checklist)
@@ -547,7 +566,7 @@ Sobram só os anti-padrões de **procedimento** (não são conceito de falso
 verde — são regra de execução, já ancorada acima):
 - **Não editar código na passada de julgamento** — read-only (anti-viés); a
   correção vai para a **fase de aplicação** separada, que empurra os fixes
-  para o PR (ver callout no topo). Merge nunca — é do usuário.
+  para o PR (ver callout no topo). Merge só na Fase F, com o escopo fechado.
 - **Não auditar sem ler o corpo da issue inteiro** — é a única fonte do
   "porquê" e do contrato (Fase A #1). Sem ele vira inspeção sem âncora.
 
@@ -578,7 +597,7 @@ verde — são regra de execução, já ancorada acima):
   (com `concept.md`/`technical.md`/invariantes/ADRs). Muitos conceitos
   de falso verde são compartilhados.
 - `git-versioning-pointer` — antes de qualquer git/GitHub pós-auditoria
-  (push, PR, merge, abrir issue de follow-up).
+  (push, PR, merge da Fase F, abrir issue de follow-up).
 - `hex-arch-python`, `ddd-tactical-patterns`, `pytest-with-fakes`,
   `repository-pattern`, `fastapi-thin-adapter`, `composition-root` —
   para julgar o diff por camada na Fase D.

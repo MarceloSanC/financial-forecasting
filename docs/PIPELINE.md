@@ -805,7 +805,10 @@ para issue avulsa,
    - **registra a auditoria no PR** — comentário com o veredito + o label
      de auditoria gravado como `complete` (procedimento completo na skill
      de auditoria);
-   - **o merge é do usuário** (salvo pedido explícito).
+   - **fechou todo o escopo sem pendência → mergeia sozinha** e apaga branch
+     e worktree (Fase F da skill; procedimento em [GIT-WORKFLOW](./GIT-WORKFLOW.md)
+     §"Fechamento autônomo pela auditoria"); sobrou pendência → não mergeia e
+     reporta o que falta.
 
 O fluxo multi-sessão por fase (3A/3B/4 em sessões separadas, seguindo o
 RUNBOOK passo a passo com gate textual em cada transição) permanece o

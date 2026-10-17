@@ -873,15 +873,12 @@ gh pr create --base develop --title "feat($bc): stage $N.$M — $title_humano"
 # (Sessão headless: passar --body-file com o template preenchido.)
 ```
 
-**O merge é do usuário** (salvo pedido explícito) — após auditoria da Stage
-(skill `stage-audit`, que aplica fixes no PR se preciso e **registra o
-veredito no PR**: comentário + label de auditoria `review`→`complete`,
-CONVENTIONS §3.6) + CI verde e +1
-aprovação:
-
-```powershell
-gh pr merge <num-pr> --merge --delete-branch
-```
+**O merge é da sessão de auditoria** — a skill `stage-audit` aplica fixes no
+PR se preciso, **registra o veredito no PR** (comentário + label de auditoria
+`review`→`complete`, CONVENTIONS §3.6) e, com a Stage fechada sem pendência e o
+CI verde, faz sozinha rebase → merge commit → remoção de branch e worktree (Fase
+F da skill). Procedimento e paradas: **fonte única em
+[GIT-WORKFLOW](./GIT-WORKFLOW.md) §"Fechamento autônomo pela auditoria"**.
 
 ### Passo 12 — Cleanup
 
