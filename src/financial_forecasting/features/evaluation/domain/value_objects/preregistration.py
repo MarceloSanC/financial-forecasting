@@ -66,6 +66,10 @@ from financial_forecasting.features.evaluation.domain.services.model_confidence_
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     validate_horizon,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    is_int,
+    validate_int_at_least,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._mapping_keys import (
     missing_key_error,
     unknown_key_error,
@@ -190,11 +194,6 @@ def _check_sha256(value: object, *, field: str) -> None:
         raise ValueError(f"{field} must be a lowercase sha256 hex of 64 characters, got {value!r}")
 
 
-def _check_int_at_least(value: object, *, field: str, minimum: int) -> None:
-    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
-        raise ValueError(f"{field} must be an int >= {minimum}, got {value!r}")
-
-
 def _check_texts(values: object, *, field: str) -> None:
     if not isinstance(values, tuple) or not values:
         raise ValueError(f"{field} must be a non-empty list, got {values!r}")
@@ -315,7 +314,7 @@ class SeedSpec:
         if not isinstance(self.seeds, tuple) or not self.seeds:
             raise ValueError(f"seeds must be a non-empty list or {SEEDLESS!r}, got {self.seeds!r}")
         for seed in self.seeds:
-            _check_int_at_least(seed, field="seed", minimum=0)
+            validate_int_at_least(seed, field="seed", minimum=0)
         if len(set(self.seeds)) != len(self.seeds):
             raise ValueError(f"seeds must not repeat, got {list(self.seeds)}")
 
@@ -622,7 +621,7 @@ def _as_float(value: object, *, field: str) -> float:
 
 
 def _as_int(value: object, *, field: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
+    if not is_int(value):
         raise ValueError(f"{field} must be an int, got {value!r}")
     return value
 
@@ -691,7 +690,7 @@ def _as_seed_spec(value: object, *, field: str) -> SeedSpec:
     if len(set(seeds)) != len(seeds):
         raise ValueError(f"{field} must not repeat seeds, got {list(seeds)}")
     for index, seed in enumerate(seeds):
-        _check_int_at_least(seed, field=f"{field}[{index}]", minimum=0)
+        validate_int_at_least(seed, field=f"{field}[{index}]", minimum=0)
     if not seeds:
         raise ValueError(f"{field} must be a non-empty list or {SEEDLESS!r}, got {value!r}")
     return SeedSpec(seeds)
@@ -734,7 +733,7 @@ class Preregistration:
     def __post_init__(self) -> None:
         """Forma dos campos de topo pelos donos e as regras cruzadas (C1)."""
         validate_path_identifier(self.name, field="name")
-        _check_int_at_least(self.revision, field="revision", minimum=0)
+        validate_int_at_least(self.revision, field="revision", minimum=0)
         validate_path_identifier(self.asset, field="asset")
         self._check_grid()
         _check_text(self.candidate, field="candidate")
@@ -754,7 +753,7 @@ class Preregistration:
             self, "window_deficits", self._per_model(self.window_deficits, block="window_deficits")
         )
         for model, deficit in self.window_deficits.items():
-            _check_int_at_least(deficit, field=f"window_deficits.{model}", minimum=0)
+            validate_int_at_least(deficit, field=f"window_deficits.{model}", minimum=0)
         for model, spec in self.seeds.items():
             if not isinstance(spec, SeedSpec):
                 raise ValueError(f"seeds.{model} must be a SeedSpec, got {spec!r}")

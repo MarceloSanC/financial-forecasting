@@ -43,6 +43,9 @@ from financial_forecasting.features.evaluation.domain.value_objects._horizon imp
     validate_horizon,
     validate_positive_int,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    validate_int_at_least,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
     BootstrapScheme,
 )
@@ -61,11 +64,6 @@ def _mean(values: Sequence[float]) -> float:
 def _check_text(value: object, *, field: str) -> None:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field} must be a non-empty str, got {value!r}")
-
-
-def _check_count(value: object, *, field: str) -> None:
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError(f"{field} must be an int >= 0, got {value!r}")
 
 
 def _check_tuple_of(value: object, kind: type, *, field: str, allow_empty: bool) -> None:
@@ -95,9 +93,9 @@ class SeedTailCounts:
     def __post_init__(self) -> None:
         """Forma de cada campo e `n_violations ≤ n_observed`."""
         if self.seed is not None:
-            _check_count(self.seed, field="seed")
-        _check_count(self.n_violations, field="n_violations")
-        _check_count(self.n_observed, field="n_observed")
+            validate_int_at_least(self.seed, minimum=0, field="seed")
+        validate_int_at_least(self.n_violations, minimum=0, field="n_violations")
+        validate_int_at_least(self.n_observed, minimum=0, field="n_observed")
         if self.n_violations > self.n_observed:
             raise ValueError(
                 f"n_violations must be <= n_observed, got {self.n_violations} > {self.n_observed}"
@@ -192,7 +190,7 @@ class DgtTailEvidence:
         validate_positive_int(self.step, field="step")
         if not is_multi_step(self.step):
             raise ValueError(f"step must be >= 2 (a DGT sub-series), got {self.step}")
-        _check_count(self.offset, field="offset")
+        validate_int_at_least(self.offset, minimum=0, field="offset")
         if self.offset >= self.step:
             raise ValueError(f"offset must be < step={self.step}, got {self.offset}")
         _check_same_series(self.lower, self.upper, field=f"dgt offset {self.offset}")

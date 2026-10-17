@@ -24,6 +24,10 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     validate_horizon,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    is_int,
+    validate_int_at_least,
+)
 
 
 def check_non_empty_str(value: object, *, field: str) -> None:
@@ -34,7 +38,7 @@ def check_non_empty_str(value: object, *, field: str) -> None:
 
 def check_optional_seed(value: object) -> None:
     """`seed` do `dim_run`: `int` não-`bool` ou `None` (modelo determinístico)."""
-    if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+    if value is not None and not is_int(value):
         raise ValueError(f"seed must be an int or None, got {value!r}")
 
 
@@ -87,9 +91,7 @@ class ForecastRecord:
         check_optional_seed(self.seed)
         check_optional_fold(self.fold)
         validate_horizon(self.horizon, field="horizon")
-        idx = self.decision_idx
-        if isinstance(idx, bool) or not isinstance(idx, int) or idx < 0:
-            raise ValueError(f"decision_idx must be an int >= 0, got {idx!r}")
+        validate_int_at_least(self.decision_idx, minimum=0, field="decision_idx")
         level = self.quantile_level
         if not isinstance(level, float) or not is_finite_number(level):
             raise ValueError(f"quantile_level must be a finite float, got {level!r}")
