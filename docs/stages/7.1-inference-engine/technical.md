@@ -1292,8 +1292,8 @@ grep -n "Errata (2026-10-06)" docs/adr/5_4_0006-explicit-train-fitted-target-nor
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original; corpo
   diz o que mudou e por que ficou abaixo do threshold de perguntar.
 
-### 2026-10-06 — [deviation] task-04 — mutação obrigatória: dropout ativo na predição a partir do checkpoint — Claude (Opus 5.5)
-**Contexto:** a Task 04 exige registrar aqui a mutação "forçar o dropout ativo na predição". Não houve desvio de código. O registro só guarda a evidência que o plano pede, já que nenhuma das três tags descreve esse caso.
+### 2026-10-06 — [measurement] task-04 — mutação obrigatória: dropout ativo na predição a partir do checkpoint — Claude (Opus 5.5)
+**Contexto:** a Task 04 exige registrar aqui a mutação "forçar o dropout ativo na predição".
 **Mutação:** depois de `parameters = dict(model.dataset_parameters)` em `PfTftTrainer.predict_from_checkpoint`, entrou um hook temporário `model.register_forward_pre_hook(...)`. Ele chama `.train()` em todo `torch.nn.Dropout` antes de cada forward, ou seja, depois que o loop de predição já chamou `eval()`. Em seguida rodou `uv run --no-sync pytest tests/integration/features/modeling/test_pf_tft_checkpoint_prediction.py -k test_prediction_independent_of_global_rng`. A primeira versão do hook devolvia uma lista, que o torch tomou como novos argumentos do forward (`TypeError`). Esse erro não serve de evidência, e o hook foi refeito para devolver `None`.
 **Saída com a mutação (falha esperada):**
 ```
@@ -1310,8 +1310,8 @@ E         {40: {1: (0.01977621018886566, 0.01697353646159172, 0.0200383588671684
 **O que mudou:** o use case recebe `locator: CheckpointLocator` e obtém o caminho por `locator.locate(artifact_dir=tft_artifact_dir(artifacts_root, run_id)).path`, com a mesma regra de "exatamente um `*.ckpt`" (C3) da `ResolveTftCheckpoints`. O sha256 que o locator devolve não é usado. A conferência C10 continua no adapter, sobre os bytes efetivamente carregados, com `expected_sha256 = allowed[run_id]`. A guarda C6 (`UnknownRunError`) roda antes do primeiro `locate`. Ao contrário do "por fold" do texto, ela confere todos os folds antes de predizer qualquer um: nada é carregado se algum run estiver fora da lista. A Task 11 (wiring) passa o `FilesystemCheckpointLocator` também a este use case.
 **Razão:** é reversível e ancorado no ADR 7.1.0004 item 1 (resolução pelo locator stdlib, sem carga) e no LAYOUT §3. O port do concept fica como está, e a lista do construtor é detalhe de wiring dentro do mesmo slice. Ficou abaixo do limiar de pergunta.
 
-### 2026-10-06 — [deviation] task-06 — prova manual do `inference-no-torch-leak` (concept §11 "Gates") — Claude (Opus 5.5)
-**Contexto:** a Task 06 exige colar aqui as duas saídas da prova manual. Não houve desvio de código. O registro só guarda a evidência que o plano pede, já que nenhuma das três tags descreve esse caso.
+### 2026-10-06 — [measurement] task-06 — prova manual do `inference-no-torch-leak` (concept §11 "Gates") — Claude (Opus 5.5)
+**Contexto:** a Task 06 exige colar aqui as duas saídas da prova manual.
 **Com a violação:** criado `src/financial_forecasting/features/inference/application/_taint.py` contendo `import torch`, e rodado `uv run --no-sync lint-imports` (saída filtrada):
 ```
 Application/domain de inference não importam torch/lightning/pytorch_forecastingBROKEN
@@ -1373,8 +1373,8 @@ exit=0
 **Contexto:** depois da task-02-fix anterior, `TrainTft._load_dataset` existia só para `test_dataset_loading_characterization.py`, que fica fora da lista fechada da Task 02. O revisor pediu para apontar a caracterização ao caminho único.
 **O que mudou:** o método saiu. A caracterização chama `train_tft._read_panel`, o corpo único que `load_tft_panel` usa, porque precisa das colunas arbitrárias da 5.5, e `load_tft_panel` lê as colunas da registry. As asserções da caracterização não mudaram.
 
-### 2026-10-12 — [deviation] task-12 — tempo do ponta a ponta sintético do `infer` (concept §11 "Integração ponta a ponta") — Claude (Opus 5.5)
-**Contexto:** o critério de aceite da Task 12 pede o tempo do ponta a ponta medido e colado aqui. Não houve desvio de código. O registro só guarda a evidência que o plano pede, já que nenhuma das três tags descreve esse caso.
+### 2026-10-12 — [measurement] task-12 — tempo do ponta a ponta sintético do `infer` (concept §11 "Integração ponta a ponta") — Claude (Opus 5.5)
+**Contexto:** o critério de aceite da Task 12 pede o tempo do ponta a ponta medido e colado aqui.
 **Medição:** no container de dev, `uv run --no-sync pytest tests/unit/test_cli.py tests/integration/features/inference/test_run_inference.py -q --durations=3`. A fixture do módulo (`materialize` → `run` com uma seed, dois folds e TFT de uma época → `infer` → `verify` → segundo `infer`) levou `31.20s setup`. Os cinco testes do ponta a ponta e os da CLI passaram juntos: `32 passed, 66 warnings in 40.61s`.
 **Razão:** o teste é marcado `integration` + `slow` e fica fora do T1. Com ~30 s, ele cabe no T2/T3 sem reduzir mais a geometria.
 
@@ -1386,8 +1386,8 @@ exit=0
 **Contexto:** `JsonInferenceManifest.recorded()` devolvia `dict(loaded)`, e com isso um arquivo `[]` virava manifesto vazio. Linhas de calib já presentes perderiam a entrada e cairiam em C15, sem que a causa (arquivo adulterado) aparecesse.
 **O que mudou:** um topo que não seja objeto ergue o mesmo `ValueError` "unreadable" do arquivo vazio ou corrompido. O contrato parametriza esse caso com vazio, JSON inválido, lista, string, `null` e número.
 
-### 2026-10-12 — [deviation] etapa-e — execução real do `infer` sobre o cohort `aapl_confirmatory` r0 (CA-10) — Claude (Opus 5.5)
-**Contexto:** registro da evidência da Etapa E (§2). Não houve desvio de código. A tag `[measurement]` que a Etapa E cita não existe no formato desta seção, então o registro usa `[deviation]`, como as outras evidências. Só predição contra predição: nenhuma métrica foi calculada (cegamento confirmatório).
+### 2026-10-12 — [measurement] etapa-e — execução real do `infer` sobre o cohort `aapl_confirmatory` r0 (CA-10) — Claude (Opus 5.5)
+**Contexto:** registro da evidência da Etapa E (§2). Só predição contra predição: nenhuma métrica foi calculada (cegamento confirmatório).
 **Código e ambiente:** HEAD `9e6c212` (`make check` verde, `5693 passed, 23 skipped`), container `financial_forecasting-app:dev` com o venv `financial-forecasting_app-venv` e os mounts de E2 (`artifacts/` somente leitura). Durante a corrida E4, um rebase sobre `origin/develop` foi iniciado na worktree montada por outra sessão e ficou parado num conflito. Ele não foi tocado até o fim de E4 e foi abortado em seguida (`git rebase --abort` → `9e6c212`, árvore limpa). E5 rodou já sobre `9e6c212` limpo. As duas inferências produziram o resultado esperado bit a bit, e o segundo `infer` re-prediz e reconfere tudo sobre o código limpo.
 **E0:** `git status --short` vazio; `docker ps` sem containers; `data/cohorts/aapl` com `bronze processed raw silver`, sem `.writer.lock`, `gold/` ou `inference/`.
 **E1 (backup):** `data/backups/aapl-pre-7.1-20261012-175139` no checkout principal, com `aapl-pre-7.1-20261012-175139.src.sha` e `.bak.sha` ao lado (60 arquivos). `diff` vazio → `BACKUP_OK`.
@@ -1423,8 +1423,8 @@ inference aapl_confirmatory-r0-665f45d9169a: 60 runs (60 strict, 0 tolerance); c
 **Contexto:** o teste novo `test_corrupted_checkpoint_with_matching_sha_raises_model_training_error` grava bytes que não são checkpoint e passa o sha256 verdadeiro deles. Assim o C10 passa e a falha só aparece na carga. Antes do fix, o caso "lixo" falhou com `_pickle.UnpicklingError: invalid load key, 'n'.` cru. Sondado no container, o `TemporalFusionTransformer.load_from_checkpoint(io.BytesIO(...))` ergue `EOFError` para bytes vazios, `UnpicklingError` para lixo ou zip inválido e `RuntimeError` para pickle sem checkpoint. Os dois primeiros ficavam fora do vocabulário enumerado `_BACKEND_ERRORS`.
 **O que mudou:** `_BACKEND_ERRORS` ganhou `pickle.UnpicklingError` e `EOFError`, com o comentário da verificação. Continua enumerado, nunca `except Exception`. Os três casos do teste (lixo, checkpoint truncado, vazio) erguem `ModelTrainingError` com a original em `__cause__`. Isso vale também para o treino, que usa a mesma tradução, mas nenhum caminho do treino carrega bytes de pickle.
 
-### 2026-10-12 — [deviation] auditoria — auditoria de testes da Stage (3 rodadas, mutação real) — Claude (Opus 5.5)
-**Contexto:** registro da Auditoria de Testes exigida pelos gates de saída. Não houve desvio de plano. O formato desta seção só oferece `[decision]`, `[finding]` e `[deviation]`. A auditoria não decidiu nada novo nem deixou achado para outra Stage, e o que mudou foi código de teste (mais um fix). Por isso o registro usa `[deviation]`, como as outras evidências.
+### 2026-10-12 — [measurement] auditoria — auditoria de testes da Stage (3 rodadas, mutação real) — Claude (Opus 5.5)
+**Contexto:** registro da Auditoria de Testes exigida pelos gates de saída.
 **Método:** um auditor independente aplicou cada mutação numa cópia do repositório, nunca na worktree, e rodou os testes do slice sobre ela. Os logs estão no scratchpad da sessão (`audit71/`).
 **Rodada 1 (NÃO nos itens 2 e 3):** 8 mutações sobreviventes. Cada uma ganhou um teste que a mata, conferido "falhou com a mutação / passou sem":
 - RI1, threads fixas em 1: `test_predictor_receives_the_recorded_threads_and_both_partitions` e a asserção de `settings.num_threads` no `test_manifest_is_complete` do ponta a ponta.

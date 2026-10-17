@@ -873,7 +873,7 @@ das predições, então C8/C9 podem deixar um run registrado sem predições, e 
 rerun idêntico ergue `DuplicateKeyError` em vez de completar o run parcial.
 **Stage candidata: 5.5.**
 
-### 2026-07-18 — [nota] provas de quebra intencional da Task 08 (A9) — Claude (Fable 5)
+### 2026-07-18 — [measurement] provas de quebra intencional da Task 08 (A9) — Claude (Fable 5)
 **Contexto:** exigência do technical (Task 08): provas por quebra intencional
 revertida dos dois contratos.
 **Registro:** (i) `import statsforecast` em `run_baselines.py` → `uv run
@@ -883,7 +883,7 @@ lint-imports` vermelho (`modeling-no-statsforecast-leak` broken) → revertido;
 `lint-imports` verde com **9 contratos kept / 0 broken** (outputs literais no
 relatório de execução da Task 08).
 
-### 2026-07-18 — [nota] Task 11-extra: oráculos de emissão exata pós-auditoria de testes — Claude (Fable 5)
+### 2026-07-18 — [deviation] Task 11-extra: oráculos de emissão exata pós-auditoria de testes — Claude (Fable 5)
 **Contexto:** auditoria de testes independente da 5.2 identificou 2 mutantes
 mentais sobreviventes na suite de contrato do `BaselineForecaster`: o
 off-by-one que encurta o train do `historical_mean`
