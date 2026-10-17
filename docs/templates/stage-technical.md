@@ -220,6 +220,16 @@ Task 01 ─► Task 02 ─► Task 04
   inclui "direção sugerida" e Stage candidata.
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original; corpo
   diz o que mudou e por que ficou abaixo do threshold de perguntar.
+- `[measurement]` — evidência que o plano manda colar aqui (tempo do
+  ponta a ponta, saída de mutação obrigatória, prova manual, execução
+  real, auditoria de testes), sem decisão nem desvio. Corpo:
+  **Contexto:** que critério/Task pede a evidência; **Medição:** comando,
+  ambiente e saída bruta; **Razão:** o que a evidência prova.
+
+Vocabulário fechado (CONVENTIONS §3.4): `decision` (ou `decision:E` /
+`decision:C`, skill `evidence-resolution` §5), `finding`, `deviation`,
+`measurement`. Outra tag no cabeçalho de entrada é recusada por
+`scripts/check_technical_postexec.py`.
 
 ### YYYY-MM-DD — [tag] <Task NN ou escopo> — <Autor>
 <!-- preencher quando aplicável; remover este placeholder se vazio -->

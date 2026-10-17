@@ -291,11 +291,18 @@ original aprovado permanece no git. Regras durante a janela de execução:
   (concept/ADR/skill) é decidida pela IA **sem pergunta** e registrada
   como `[decision]` — o registro existe para a auditoria pegar um
   alinhamento errado barato, não para pedir aprovação.
-- Entradas seguem três categorias: `[decision]` (decisão tomada durante
-  a execução), `[finding]` (gap a tratar em próxima Stage), `[deviation]`
-  (ajuste pequeno aplicado em relação ao plano). **Tags sempre em inglês**
-  (são identificadores, como código — §1); o corpo da entrada é em PT.
-  Formato detalhado no template `stage-technical.md` §7.
+- Entradas seguem quatro categorias: `[decision]` (decisão tomada durante
+  a execução; `[decision:E]`/`[decision:C]` quando resolvida por evidência
+  ou convenção, formato da skill `evidence-resolution` §5), `[finding]`
+  (gap a tratar em próxima Stage), `[deviation]` (ajuste pequeno aplicado
+  em relação ao plano) e `[measurement]` (evidência que o plano manda
+  colar aqui — tempo medido, saída de mutação, prova manual, execução
+  real, auditoria de testes — sem decisão nem desvio). **Tags sempre em
+  inglês** (são identificadores, como código — §1); o corpo da entrada é
+  em PT. Tag fora desse vocabulário no cabeçalho de entrada
+  (`### AAAA-MM-DD — [tag] …`) é recusada por
+  `scripts/check_technical_postexec.py`, em qualquer Stage, mergeada ou
+  não. Formato detalhado no template `stage-technical.md` §7.
 - **Durante a execução** (Stage não mergeada), mudar algo em §1–§6 do
   `technical.md` após `done` exige regressão para `draft` (§3.2). Nunca
   editar §1–§6 silenciosamente nessa janela. Pós-merge a restrição não
