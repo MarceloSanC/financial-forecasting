@@ -628,8 +628,12 @@ bloco coeso (|ρ| médio 0,51 entre si) e fracamente ligado a price (0,18) e ao
 resto de technical (0,21). Decide o degrau 1: a partição do registry é a que o
 `feature_set_hash` do cohort congelado e já treinado `aapl_confirmatory-r0` e o
 pré-registro da 6.5 carregam (a família entra no hash, embora o modelo não a
-leia). A alternativa (as seis em price) entra como **sensibilidade da
-permutação**, perfil e nunca veredito, a fixar no pré-registro da 7.3.
+leia). Encaminhamento para a 7.3 (nota no bloco da 7.3 do roadmap): (i) o
+pré-registro de H3 congela a partição pela **lista de features** de cada
+família + `feature_set_hash`, não pelo nome da família; (ii) ressalva de
+leitura: a participação de technical inclui a volatilidade, que deve pesar na
+largura dos quantis; (iii) a decidir no concept da 7.3: perfil descritivo de
+permutação do subgrupo de volatilidade, fora do veredito e sem ablação.
 
 **Ressalva declarada — fronteira price/technical porosa.** A mesma medição
 mostra os níveis OHLC (price) e `ema_10`/`ema_50`/`ema_100` (technical) com
@@ -907,9 +911,9 @@ cohort confirmatório antes do pré-registro (§7).
 **O que se pré-registra (E1 — decidida, §10.1).** Antes da 8.1:
 
 - **CQR** — o listado em §4.13;
-- **H3** — a partição de famílias (a do registry, C8 em §5.2) e a sua
-  sensibilidade na permutação (as seis de volatilidade em price), o
-  esquema de permutação, K_p, a medida, bloco/B/semente do bootstrap, a regra
+- **H3** — a partição de famílias (a do registry, C8 em §5.2), congelada
+  pela lista de features de cada família + `feature_set_hash`, não pelo
+  nome da família, o esquema de permutação, K_p, a medida, bloco/B/semente do bootstrap, a regra
   C4/C5 com os 5 pontos abertos listados em §5.7 (nível do IC,
   multiplicidade, importâncias negativas, chave de pareamento, bloco), e o
   desenho da ablação (cohort de ablação hasheado).
@@ -1012,7 +1016,7 @@ em §10.1.
 | 24 | Vocabulário órfão abandonado ou definido (§9) | — | [C] E2, degrau 1 | 7.3, 7.4 |
 | 25 | ADRs do gate: 0.0.0057, 0.0.0007, 0.0.0008 | — | [C] E3, degrau 1 | — |
 | 26 | Correções de texto do roadmap (Step 7 e dependência 8.1 → 7.3) | — | [C] E4, degrau 1 | 7.1–7.4, 8.1 |
-| 27 | Partição da volatilidade: vale o registry (as 6 de volatilidade e os regimes em technical); errata no ADR 0.0.0016; as 6 em price como sensibilidade da permutação | ADR 0.0.0016 (notas de implementação); ADR 5.5.0001; Au et al. 2022 §1, §3.1; Gu, Kelly & Xiu 2020 §3.3; medição sem alvo 2026-10-17 | [C] C8, degrau 1 | 7.3, 8.1 |
+| 27 | Partição da volatilidade: vale o registry (as 6 de volatilidade e os regimes em technical); errata no ADR 0.0.0016; partição congelada por lista de features + `feature_set_hash`; perfil do subgrupo de volatilidade a decidir na 7.3 | ADR 0.0.0016 (notas de implementação); ADR 5.5.0001; Au et al. 2022 §1, §3.1; Gu, Kelly & Xiu 2020 §3.3; medição sem alvo 2026-10-17 | [C] C8, degrau 1 | 7.3, 8.1 |
 
 ### 10.1 Registro das decisões (triagem `evidence-resolution`, 2026-10-05/06)
 
@@ -1163,7 +1167,7 @@ Escolha: vale o registry — volatility_20d, volatility_parkinson, volatility_ga
 Base: ADR 0.0.0016 "Implementation notes" (indicators → technical) e "Neutral / trade-offs" (volatility como subfamília dentro de technical) — sustentam só as derivadas de indicador (volatility_20d, vol_of_vol, volatility_regime, trend_regime); para as de OHLC/close (Parkinson, GK, semivol, stress_tail_return_flag) as mesmas notas apontariam price, e o degrau 1 repousa no hash e no bloco medido; a família entra no feature_set_hash, que o cohort congelado e treinado aapl_confirmatory-r0 e o pré-registro da 6.5 carregam (ADR 5.5.0001); Au et al. 2022 (arXiv:2104.11688) §1 p. 2 "groups of features can either be defined in a data-driven or in a knowledge-driven way"; Gu, Kelly & Xiu 2020 §3.3 (NBER w25398 p. 31) "Risk measures constitute the third influential group, including total and idiosyncratic return volatility" (separado do grupo de price trends); Neely et al. 2014 (WP p. 10) "14 technical indicators based on three popular technical strategies" (MA, momentum, volume — nenhuma de volatilidade); TA-Lib/pandas-ta põem ATR/bandas em indicadores de volatilidade
 Medição (data-shape, sem alvo e sem modelo): Spearman |ρ| entre as 55 features do dataset TFT AAPL (data/cohorts/aapl/processed/dataset_tft), linhas < 2018-01-01 (antes do OOS), n = 1939; amostra inteira (n = 3950) como robustez. As 6 entre si: 0,51 (0,56); com price: 0,18 (0,12); com o resto de technical: 0,21 (0,18). Pares entre famílias com |ρ| ≥ 0,7: registry 52 (54), as 6 em price 52 (53), por origem 55 (56) — a regra por origem parte o bloco. Consulta: corpo do PR da #151
 Verificado: sustenta (Au §1, §3.1; Gu-Kelly-Xiu §3.3; Neely p. 10); Molnar et al. 2022 §8.1 parcial→corrigido ("especially useful when ... between-group dependencies are rather low" é condição de utilidade, não pressuposto)
-Sensibilidade pré-registrada: as 6 em price, só na permutação (sem re-treino), como perfil — a fixar no pré-registro da 7.3 · Reversível: não sem nova revisão do cohort (muda o feature_set_hash)
+Sensibilidade pré-registrada: nenhuma (a partição alternativa não entra); a decidir no concept da 7.3: perfil descritivo de permutação do subgrupo de volatilidade, fora do veredito e sem ablação · Reversível: não sem nova revisão do cohort (muda o feature_set_hash)
 
 [decision:C] C7 — linguagem e "veredito mecânico H3"
 Escolha: estritamente descritiva; regra de leitura pré-registrada e mecânica (C4 + C5), separada de H1 → H2 · Alternativas: H3 como teste confirmatório no veredito · Degrau: 1
