@@ -1,4 +1,4 @@
-# Baseline declarado dos gates de arquitetura (issue #62; mecanismo em
+# Baseline declarado dos gates de arquitetura (issues #62 e #61; mecanismo em
 # `scripts/arch_baseline_lib.py`). Cada entrada é uma violação CONHECIDA, com
 # `motivo` e `issue` obrigatórios; violação fora daqui reprova o build; entrada que
 # não ocorre mais também reprova ("baseline morto" — remover a linha). Não é
