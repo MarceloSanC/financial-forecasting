@@ -252,8 +252,9 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 ## 7. Regras de Ouro
 
 - **Domain tem zero I/O.** Nenhuma entidade ou value object chama banco, rede ou arquivo.
-  Nem lê relógio, ambiente ou acaso global: `datetime.now`, `time.time`, `uuid4`, `os.environ`,
-  `open` e `random.<função>` reprovam sob `*/domain/`; tempo entra pelo port `Clock`, e um
+  Nem lê relógio, ambiente ou acaso global: `datetime.now`, `time.time`, `uuid4`, `random.<função>`,
+  `open`, `pathlib.Path` e qualquer `os.*`/`shutil.*`/`subprocess.*` reprovam sob `*/domain/`;
+  tempo entra pelo port `Clock`, caminho como valor puro usa `PurePath`, e um
   gerador com semente explícita (`random.Random(seed)`) é permitido (gate:
   `scripts/check_domain_determinism.py`, issue #61).
 - **Value object valida na construção.** `@dataclass(frozen=True)` em `domain/value_objects/`
