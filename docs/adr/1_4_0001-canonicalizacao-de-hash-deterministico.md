@@ -5,7 +5,7 @@ when-use: Reference before changing the canonical JSON hashing scheme, the float
 keywords: [adr, hashing, sha256, canonical-json, determinism, float, rounding, ulp, nan, infinity, fingerprint, run-id]
 status: accepted
 created_at: 2026-06-29
-updated_at: 2026-09-12
+updated_at: 2026-10-17
 adr_id: "1.4.0001"
 decision: Replicate the old repo's canonical sha256-over-sorted-compact-JSON scheme, but harden it by rounding floats to a declared fixed precision before serialization and rejecting NaN/±inf with ValueError; strip volatile keys from config signatures
 context_stage: 1.4-identity-and-fingerprints
@@ -32,6 +32,13 @@ bounded_context: shared
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
 ## Status
+
+> **Note (2026-10-17, issue #120).** The `DatasetFingerprint` value object listed
+> below was removed. It never gained a production consumer: the only planned one,
+> the gold refresh of Stage 6.4, identifies its data by the `DatasetContentFingerprint`
+> of the training grid instead (ADR 6.4.0009, ADR 5.5.0004), which does not depend
+> on the Parquet file. The hashing scheme decided here is unchanged and still backs
+> every remaining identity value object.
 
 `accepted`
 
