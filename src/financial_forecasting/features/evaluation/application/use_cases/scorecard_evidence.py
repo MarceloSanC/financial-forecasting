@@ -65,6 +65,9 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     block_length_rule,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
+    is_real_number,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     is_multi_step,
 )
@@ -231,7 +234,7 @@ def _block_rule(row: Row) -> int | None:
     estimate = col(row, GOLD_MCS_RESULTS, "max_block_estimate")
     # não-número também é estimativa recusada (corrupção depois de todo mismatch); a
     # finitude e o sinal são do dono da regra
-    if isinstance(estimate, bool) or not isinstance(estimate, int | float):
+    if not is_real_number(estimate):
         return None
     horizon = col(row, GOLD_MCS_RESULTS, "horizon")
     if not is_int(horizon):
