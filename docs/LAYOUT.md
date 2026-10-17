@@ -305,10 +305,12 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   `evaluation` — este desde a Stage 6.1 —, e `inference` — desde a Stage 7.1: seus
   ports do consumidor só têm imports de tipo; o contrato `inference-no-torch-leak`
   mantém `torch`/`lightning`/`pytorch_forecasting` fora da application/domain do
-  slice, ADR 7.1.0001 item 4). As 27 arestas de runtime existentes
+  slice, ADR 7.1.0001 item 4). As 33 arestas de runtime existentes
   estão declaradas UMA A UMA como exceção comentada (débito medido, não
   permissão) — as 8 `feature_engineering → market_data.domain.entities`
-  (`Candle`, `NewsArticle`, `FundamentalReport`, #95) e as duas
+  (`Candle`, `NewsArticle`, `FundamentalReport`, #95), as seis
+  `modeling.application.use_cases → feature_engineering.domain.services.dataset_tft_contract`
+  (o par read-only do dataset TFT e a coluna-alvo, com dono no produtor, #159) e as duas
   `evaluation.domain → analytics_store.domain.value_objects.quantile_forecast`
   (o VO `QuantileForecast` guardado pela `coverage_series`, Stage 6.1 / ADR
   6.1.0002, e construído com os valores persistidos pelo `series_assembly`,
