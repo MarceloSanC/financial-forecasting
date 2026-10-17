@@ -26,6 +26,9 @@ from financial_forecasting.features.evaluation.application.ports.out.preregistra
     PreregistrationNotFoundError,
     PreregistrationRecord,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    validate_int_at_least,
+)
 from financial_forecasting.shared.domain.services.path_identifier import (
     validate_path_identifier,
 )
@@ -50,8 +53,7 @@ class TomlPreregistrationSource:
     def read(self, *, name: str, revision: int) -> PreregistrationRecord:
         """O plano cru e a âncora (ou `None`) da revisão (ver docstring do módulo)."""
         validate_path_identifier(name, field="name")
-        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
-            raise ValueError(f"revision must be an int >= 0, got {revision!r}")
+        validate_int_at_least(revision, minimum=0, field="revision")
         plan_path = self._root / f"{name}-r{revision}.toml"
         if not plan_path.is_file():
             raise PreregistrationNotFoundError(
