@@ -1,6 +1,6 @@
 ---
 name: stage-audit
-description: "Auditoria de uma Stage do pipeline antes do PR/merge — passada de julgamento read-only (confere se o que foi implementado bate com `concept.md`/`technical.md`, se os gates passam e se há gaps/findings bloqueantes) + fase de aplicação separada que empurra os fixes ao PR existente e registra o veredito. Invocar quando o usuário pedir \"auditar stage N.M\", \"auditoria da stage\", \"valida stage\", \"stage X está pronta para PR?\", \"tem gap na stage?\", \"tudo verde para abrir PR?\", \"confere se o stage X fechou\", ou ao revisar uma stage de outra sessão. Triggers em PT. Skill de PROCEDIMENTO + GUARDRAIL — codifica o varredor mecânico (quais scripts rodar, quais arquivos cruzar) e protege contra o falso verde do checklist (anti-viés: a auditoria que só marca caixinhas perde o achado que importa). Lean toward triggering — custo de auditar é baixo, custo de mergear stage com gap silencioso é alto. A SAÍDA não é só relatório de gate — sempre produz, em linguagem clara (jargão glosado entre parênteses) e com lente de valor + design escalável/responsabilidade: (1) overview e conceitos, (2) tasks→arquivos (links)→o que entrega, (3) gates garantidos 100%, (4) decisões de arquitetura, (5) findings por escopo, (6) aprendizados→skills. Disparada por \"Audite stage N.M\" / \"auditar stage N.M\"."
+description: "Auditoria de uma Stage do pipeline antes do PR/merge — passada de julgamento read-only (confere se o que foi implementado bate com `concept.md`/`technical.md`, se os gates passam e se há gaps/findings bloqueantes) + fase de aplicação separada que empurra os fixes ao PR existente e registra o veredito + fechamento autônomo (rebase → merge → apaga branch e worktree) quando a Stage fecha sem pendência. Invocar quando o usuário pedir \"auditar stage N.M\", \"auditoria da stage\", \"valida stage\", \"stage X está pronta para PR?\", \"tem gap na stage?\", \"tudo verde para abrir PR?\", \"confere se o stage X fechou\", ou ao revisar uma stage de outra sessão. Triggers em PT. Skill de PROCEDIMENTO + GUARDRAIL — codifica o varredor mecânico (quais scripts rodar, quais arquivos cruzar) e protege contra o falso verde do checklist (anti-viés: a auditoria que só marca caixinhas perde o achado que importa). Lean toward triggering — custo de auditar é baixo, custo de mergear stage com gap silencioso é alto. A SAÍDA não é só relatório de gate — sempre produz, em linguagem clara (jargão glosado entre parênteses) e com lente de valor + design escalável/responsabilidade: (1) overview e conceitos, (2) tasks→arquivos (links)→o que entrega, (3) gates garantidos 100%, (4) decisões de arquitetura, (5) findings por escopo, (6) aprendizados→skills. Disparada por \"Audite stage N.M\" / \"auditar stage N.M\"."
 metadata:
   status: accepted
   applies_when:
@@ -37,9 +37,11 @@ Procedimento para **auditar uma Stage** depois que ela é declarada
 > workflow `audit-gate` (CI) falha enquanto o status não for `complete` —
 > gravar `complete` é o que **destrava o merge**. Auditoria sem marca no
 > PR **não existe** para quem decide o merge.
-> **Nunca faz merge** — é do usuário, salvo pedido explícito (a sessão mestra
-> do [PROMPT-step](../../../docs/PROMPT-step-single-session.md) §3.5 **é**
-> pedido explícito permanente: mergeia sozinha com auditoria `complete`). O push da fase
+> **Fechou todo o escopo e não sobrou pendência → fecha o PR sozinho** (Fase F:
+> rebase → merge → apaga branch e worktree), sem pedir OK; sobrou qualquer
+> coisa → não mergeia e reporta o que falta. Sob a sessão mestra do
+> [PROMPT-step](../../../docs/PROMPT-step-single-session.md), quem fecha é a
+> mestra (§3.5), com o mesmo procedimento. O push da fase
 > de aplicação vai **apenas para a branch do PR sob auditoria** (nunca outra):
 > se for branch de outra sessão, `git show` para ler e `checkout` + `push`
 > **só nessa branch** para aplicar.
@@ -463,6 +465,29 @@ reprova em qualquer um NÃO entra:
 - **observação** — info que o reviewer humano deve saber mas não
   exige ação (ex.: coverage de arquivo de Stage anterior está em 0%).
 
+### Fase F — Fechamento autônomo (rebase → merge → limpeza)
+
+Depois da fase de aplicação, **sem pedir OK ao humano**, fechar o PR quando a auditoria fechou
+**todo** o escopo: status ✅, ou ⚠️ só com observações e findings de outro escopo (já viraram
+issue, com link no veredito); todo A*/I*/C* do concept ✅ com evidência; nenhum finding "dentro
+da Stage" em aberto; gates verdes. Condições de entrada, ordem dos comandos e paradas: **fonte
+única em [GIT-WORKFLOW §"Fechamento autônomo pela auditoria"](../../../docs/GIT-WORKFLOW.md)** —
+invocar `git-versioning-pointer` antes e seguir na ordem (é a ordem que evita as armadilhas:
+`complete` gravado antes do push, merge sem `--delete-branch`, limpeza a partir do checkout
+principal).
+
+- **Hash citado** na §7 do technical, em manifesto ou ledger: sincronizar com
+  `git merge origin/develop` em vez de rebase (o rebase deixaria o hash fora da ancestralidade —
+  ver "Rastro perdido").
+- **Dado git-ignorado** da Stage (`data/cohorts/`, `artifacts/`, `mlruns*`) vai para o checkout
+  principal **antes** do `worktree-rm.py`, que apaga a pasta inteira.
+- **Para sem mergear** (e diz o que falta) quando qualquer condição falha: pendência no PR,
+  conflito no rebase, check vermelho que a fase de aplicação não resolve, `BLOCKED`, merge negado
+  pela permissão da sessão, `depends_on` ainda não mergeado. Parar não é falha — mergear com
+  pendência é.
+- Fecha com **uma linha de status** (PR mergeado + hash, issue `CLOSED`, worktree e branches
+  removidas) depois do relatório da Fase E.
+
 ---
 
 ## Conceitos de falso verde (anti-checklist)
@@ -762,7 +787,7 @@ Sobram só os anti-padrões de **procedimento** (não são conceito de falso
 verde — são regra de execução, já ancorada acima):
 - **Não editar código na passada de julgamento** — ela é read-only (anti-viés);
   a correção vai para a **fase de aplicação** separada, que empurra os fixes
-  para o PR (ver callout no topo). Merge nunca — é do usuário.
+  para o PR (ver callout no topo). Merge só na Fase F, com o escopo fechado.
 - **Não usar o checklist da Fase D como única fonte** — ele é incompleto
   por definição (cada Stage tem shape novo); a Fase D-bis existe por isso.
 - **Não auditar sem ter lido `concept.md` inteiro** — é a única fonte que
@@ -799,7 +824,7 @@ verde — são regra de execução, já ancorada acima):
 ## Skills relacionadas (consultar quando o caso aparecer)
 
 - `git-versioning-pointer` — antes de qualquer operação git/GitHub
-  pós-auditoria (push, PR, merge).
+  pós-auditoria (push, PR, merge da Fase F).
 - `hex-arch-python` — para julgar imports/camadas no diff.
 - `ddd-tactical-patterns` — para julgar Entity vs VO, agregados.
 - `pytest-with-fakes` — para julgar se teste de application usa fake
