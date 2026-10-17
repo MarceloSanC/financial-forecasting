@@ -38,6 +38,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract import (  # noqa: E501
+    DATASET_TFT_LAYER,
+    DATASET_TFT_TABLE,
+)
 from financial_forecasting.shared.adapters.out.parquet.parquet_medallion_store import (
     ParquetMedallionStore,
 )
@@ -300,10 +304,12 @@ def test_fundamental_round_trip_no_phantom_partition(store: MedallionStore) -> N
 
 # -----------------------------------------------------------------------------
 # Par read-only ("processed", "dataset_tft") — Stage 5.2 Task 04 (concept D3).
+# O par vem do dono (`dataset_tft_contract` do produtor, #159): se o contrato mudar
+# sem o registry read-only do store real acompanhar, o lado `real` destes testes cai.
 # -----------------------------------------------------------------------------
 
-_PROCESSED_LAYER = "processed"
-_DATASET_TFT = "dataset_tft"
+_PROCESSED_LAYER = DATASET_TFT_LAYER
+_DATASET_TFT = DATASET_TFT_TABLE
 
 
 def _dataset_row(asset: str, ts: datetime, target_return: float, rsi: float | None) -> Row:
