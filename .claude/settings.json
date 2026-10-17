@@ -77,6 +77,13 @@
             "args": [
               "${CLAUDE_PROJECT_DIR}/.claude/hooks/issue_guard.py"
             ]
+          },
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/publish_guard.py"
+            ]
           }
         ]
       }
