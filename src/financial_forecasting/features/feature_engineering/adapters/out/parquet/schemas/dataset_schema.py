@@ -27,6 +27,9 @@ from __future__ import annotations
 
 import pandera.pandas as pa
 
+from financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract import (  # noqa: E501
+    TARGET_COLUMN,
+)
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
     list_feature_specs,
 )
@@ -76,7 +79,7 @@ def _build_schema() -> pa.DataFrameSchema:
     columns["fundamentals_effective_date"] = pa.Column(_UTC_DT, nullable=True, required=True)
     columns["day_of_week"] = pa.Column("int64", nullable=False, required=True)
     columns["month"] = pa.Column("int64", nullable=False, required=True)
-    columns["target_return"] = pa.Column("float64", nullable=False, required=True)
+    columns[TARGET_COLUMN] = pa.Column("float64", nullable=False, required=True)
     columns["time_idx"] = pa.Column("int64", nullable=False, required=True)
     return pa.DataFrameSchema(columns, strict=True, ordered=True, coerce=False)
 
