@@ -5,7 +5,7 @@
 # Requer: uv instalado (https://docs.astral.sh/uv/)
 
 .DEFAULT_GOAL := help
-.PHONY: help setup install run migrate check check-task check-block lint fmt typecheck layout-check lint-imports fake-parity port-coverage docs-check test test-fast test-cov clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
+.PHONY: help setup install run migrate check check-task check-block lint fmt typecheck layout-check lint-imports fake-parity port-coverage arch-ast docs-check test test-fast test-cov clean worktree docker-build docker-build-prod docker-up docker-down docker-run docker-shell
 
 # Tag das imagens Docker. Mesmo nome usado em docker-compose.yml `image:` para
 # reusar o cache de layer (`make docker-build` e `make docker-up` produzem a
@@ -40,6 +40,7 @@ help:
 	@printf "%b\n" "  $(GREEN)make lint-imports$(RESET) Valida contratos de arquitetura (import-linter / .importlinter)"
 	@printf "%b\n" "  $(GREEN)make fake-parity$(RESET)  Reprova lógica idêntica fake<->adapter (scripts/check_fake_parity.py)"
 	@printf "%b\n" "  $(GREEN)make port-coverage$(RESET) Exige fake + contract test [fake, real] por port-out (scripts/check_port_coverage.py)"
+	@printf "%b\n" "  $(GREEN)make arch-ast$(RESET)    Gates AST: colaborador de use case, determinismo do domínio, literais de schema e VOs (issue #61)"
 	@printf "%b\n" "  $(GREEN)make docs-check$(RESET)  Valida §7 post-exec dos technical.md (CONVENTIONS §3.4)"
 	@printf "%b\n" "  $(GREEN)make test$(RESET)       Roda todos os testes medindo cobertura (gate ≥ 90%)"
 	@printf "%b\n" "  $(GREEN)make test-fast$(RESET)  Roda testes sem cobertura, pulando os slow (loop local rápido)"
@@ -103,7 +104,7 @@ migrate:
 # que o CI roda (I7). `lint-imports` roda antes de `test` para falhar cedo e
 # barato (Stage 1.3): viola a fronteira hexagonal => build vermelho.
 # ---------------------------------------------------------------------------
-check: lint typecheck layout-check lint-imports fake-parity port-coverage docs-check test
+check: lint typecheck layout-check lint-imports fake-parity port-coverage arch-ast docs-check test
 
 # ---------------------------------------------------------------------------
 # Gates em camadas (ADR 0.0.0055 / issue #110). `check` acima segue sendo o
@@ -115,7 +116,7 @@ check: lint typecheck layout-check lint-imports fake-parity port-coverage docs-c
 # e tests/architecture/ inteiro num worker só (injetam módulos na árvore real).
 # ---------------------------------------------------------------------------
 PYTEST_PAR := -n auto --dist loadgroup
-STATIC_GATES := lint typecheck layout-check lint-imports fake-parity port-coverage
+STATIC_GATES := lint typecheck layout-check lint-imports fake-parity port-coverage arch-ast
 
 # check-task (T1, commit da Task) — gates estáticos + testes SÓ dos slices
 # tocados, sem cobertura e sem `slow`. Uso:
@@ -196,6 +197,22 @@ fake-parity:
 
 port-coverage:
 	uv run python scripts/check_port_coverage.py
+
+# ---------------------------------------------------------------------------
+# arch-ast — fitness functions da onda 2 (issue #61): regras que o import-linter
+# não expressa, porque olham chamada, anotação, literal e construção, não import.
+# `check_use_case_deps` reprova colaborador de use case que seja use case de outro
+# slice ou adapter concreto; `check_domain_determinism` reprova relógio, acaso
+# global, ambiente e I/O sob */domain/; `check_schema_literals` reprova as
+# coordenadas do dataset TFT redeclaradas no modeling; `check_vo_invariants`
+# reprova VO congelado sem __post_init__. Mesmo baseline declarado
+# (scripts/arch_baseline.toml). Exit != 0 => `make check`/CI vermelhos.
+# ---------------------------------------------------------------------------
+arch-ast:
+	uv run python scripts/check_use_case_deps.py
+	uv run python scripts/check_domain_determinism.py
+	uv run python scripts/check_schema_literals.py
+	uv run python scripts/check_vo_invariants.py
 
 # ---------------------------------------------------------------------------
 # docs-check — valida (1) que technical.md `done` só mudou dentro da §7

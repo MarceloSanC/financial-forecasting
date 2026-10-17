@@ -1,8 +1,9 @@
 """Baseline declarado dos gates de arquitetura (`scripts/arch_baseline.toml`) — issue #62.
 
-Mecanismo compartilhado pelos scripts `check_fake_parity.py` e `check_port_coverage.py`
-(onda 3 do plano de fitness functions; a onda 2, #61, ainda não entrou — este módulo é
-o mínimo que os dois gates precisam, e nasce aqui para que #61 o reutilize):
+Mecanismo compartilhado pelos gates de arquitetura: `check_fake_parity.py` e
+`check_port_coverage.py` (onda 3, #62, onde este módulo nasceu) e `check_use_case_deps.py`,
+`check_domain_determinism.py`, `check_schema_literals.py` e `check_vo_invariants.py`
+(onda 2, #61 — a leitura AST que estes compartilham mora em `arch_ast_lib.py`):
 
 - Cada gate tem uma seção `[[<gate>.allow]]` no TOML; cada entrada é uma violação
   CONHECIDA, com `motivo` (texto) e `issue` (inteiro, card real no GitHub) obrigatórios.
@@ -15,7 +16,7 @@ o mínimo que os dois gates precisam, e nasce aqui para que #61 o reutilize):
 A chave de identidade de cada entrada é específica do gate (`key` no TOML); o script
 dono explica no seu docstring como a chave é montada.
 
-Stdlib-only (`tomllib` é stdlib desde o 3.11). `scripts/` não é pacote: os dois
+Stdlib-only (`tomllib` é stdlib desde o 3.11). `scripts/` não é pacote: os
 gates carregam este módulo por `importlib.util.spec_from_file_location` relativo ao
 próprio `__file__` (e registram-no em `sys.modules` antes de executar — dataclass com
 annotations adiadas precisa disso).
