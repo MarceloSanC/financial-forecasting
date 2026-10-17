@@ -168,6 +168,19 @@ def test_agent_skills_must_exist(tmp_path: Path) -> None:
     assert ch.check_agent_skills(agent, {"real"}) == ["`skills:` aponta skill inexistente: `ghost`"]
 
 
+def test_agent_skills_as_comma_string_and_broken_frontmatter(tmp_path: Path) -> None:
+    agent = tmp_path / "agent.md"
+    agent.write_text("---\nname: a\ndescription: b\nskills: real, ghost\n---\n", encoding="utf-8")
+    assert ch.check_agent_skills(agent, {"real"}) == ["`skills:` aponta skill inexistente: `ghost`"]
+
+    agent.write_text("sem frontmatter\n", encoding="utf-8")
+    assert ch.check_agent_skills(agent, {"real"}) == []  # o check_file já reporta
+
+
+def test_hook_scripts_without_settings(tmp_path: Path) -> None:
+    assert ch.check_hook_scripts(tmp_path / "settings.json", tmp_path) == []
+
+
 def test_hook_scripts_must_exist(tmp_path: Path) -> None:
     (tmp_path / ".claude" / "hooks").mkdir(parents=True)
     (tmp_path / ".claude" / "hooks" / "real.py").write_text("", encoding="utf-8")

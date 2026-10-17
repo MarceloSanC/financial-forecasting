@@ -9,6 +9,7 @@ subprocess.
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import shutil
 import subprocess
@@ -169,6 +170,26 @@ def test_malformed_baseline_fails_open(root: Path) -> None:
     # exit 0: o Claude Code não mostra ao agente o stderr (o aviso do gate) de hook que sai 0
     assert result.returncode == 0
     assert "arch_feedback:" not in result.stderr
+
+
+def _main(monkeypatch: pytest.MonkeyPatch, raw: bytes) -> int:
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(raw)))
+    return int(af.main())
+
+
+def test_main_in_process_follows_feedback(
+    root: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Mesmo contrato do processo, medido em processo (o subprocess não entra na cobertura)."""
+    dirty = _write(root, _DOMAIN_FILE, "import time\nx = time.time()\n")
+    assert _main(monkeypatch, json.dumps(_payload(str(dirty))).encode()) == af.EXIT_FEEDBACK
+    assert "time.time" in capsys.readouterr().err
+
+    dirty.write_text("x = 1\n", encoding="utf-8")
+    assert _main(monkeypatch, json.dumps(_payload(str(dirty))).encode()) == 0
+    assert _main(monkeypatch, b"not json") == 0
+    assert _main(monkeypatch, b"[1]") == 0
+    assert capsys.readouterr().err == ""
 
 
 def test_hook_is_registered_on_post_tool_use_for_edit_and_write() -> None:
