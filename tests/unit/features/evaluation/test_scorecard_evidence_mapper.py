@@ -405,6 +405,21 @@ def test_corrupt_block_estimate_missing_non_finite(estimate: float) -> None:
     mapper_module.check_mcs_rules(_PLAN, tables)  # type: ignore[arg-type]  # pulada, sem erro
 
 
+@pytest.mark.unit
+@pytest.mark.parametrize("estimate", [True, "0.5"], ids=["bool", "str"])
+def test_corrupt_block_estimate_not_a_number(estimate: object) -> None:
+    """Não-número (`bool` inclusive, via `is_real_number`, #167): corrupção nomeada."""
+    row = {
+        **make_stored(_PLAN).rows[GOLD_MCS_RESULTS.name][0],
+        "max_block_estimate": estimate,
+    }
+    tables = SimpleNamespace(mcs=(row,), checks=())
+
+    with pytest.raises(GoldGenerationCorruptError, match="has an invalid max_block_estimate"):
+        mapper_module.check_completed(tables)  # type: ignore[arg-type]
+    mapper_module.check_mcs_rules(_PLAN, tables)  # type: ignore[arg-type]  # pulada, sem erro
+
+
 # --- extras da auditoria de testes (rodada 1) -----------------------------------------
 
 
