@@ -5,7 +5,7 @@ when-use: Reference whenever revisiting the shape of QuantileForecast (dense lev
 keywords: [adr, quantile-forecast, dense-grid, monotonic-guardrail, enforce-monotonic, value-object, degeneration-gate, h-1]
 status: accepted
 created_at: 2026-06-29
-updated_at: 2026-06-29
+updated_at: 2026-10-17
 adr_id: 4.3.0002
 decision: QuantileForecast é um VO frozen com levels crescentes + raw_values alinhados, e o guardrail força monotonicidade ordenando os valores ao longo dos níveis (sorted), marcando guardrail_applied quando a ordem muda; valores não-finitos/None são preservados sem aplicar
 context_stage: 4.3-prediction-persister
@@ -13,6 +13,8 @@ bounded_context: analytics_store
 ---
 
 # ADR 4.3.0002 — QuantileForecast as a dense quantile grid with a generalized monotonic guardrail
+
+> ⚠️ **Errata (2026-10-17, issue #49):** "Context" item 1, "Alternatives" and "References" cite the foundation decision `0_0_0012` (dense quantile grid) as an ADR. That ADR was never authored and the id is retired; the decision lives in overview §11 ("Grade densificada ~7–9 quantis") and its deliberation in the modeling domain doc §2.3 (`docs/domain/modeling/quantile-model-training.md`). The decision of this ADR is unchanged.
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 
