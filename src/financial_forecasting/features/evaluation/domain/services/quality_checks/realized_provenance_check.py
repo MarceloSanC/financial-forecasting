@@ -1,9 +1,9 @@
 """Check `realized_provenance` (WARN) — proveniência do realizado consumido (6.4).
 
-Concept 6.4 I16; ADR `6_4_0002` item 6, ADR `6_4_0004` item 4. Um `REPORTED` com o
-`math.fsum` dos `target_return` em `value` e, no `detail`, o `DatasetFingerprint` do
-dataset lido, o número de sessões e a primeira e a última sessão — o resumo descritivo
-que o `RealizedReturns` computa uma vez.
+Concept 6.4 I16; ADR `6_4_0002` item 6, ADR `6_4_0009`. Um `REPORTED` com o
+`math.fsum` dos `target_return` em `value` e, no `detail`, o `DatasetContentFingerprint`
+da grade lida, o `grid_trimmed_prefix`, o número de sessões e a primeira e a última
+sessão — o resumo descritivo que o `RealizedReturns` computa uma vez.
 """
 
 from __future__ import annotations
