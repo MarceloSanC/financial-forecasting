@@ -439,7 +439,7 @@ gh pr view        # comentários e aprovações
 
 **Gates:**
 - [ ] CI verde (todos os checks passando)
-- [ ] ≥ 1 aprovação de outro dev
+- [ ] ≥ 1 aprovação de outro dev (exceção: PR auditado — §Gates de PR)
 - [ ] Sem comentários não-resolvidos
 
 ### Etapa 6: Merge
@@ -460,6 +460,9 @@ Fazer merge commit (NUNCA squash):
 ```bash
 gh pr merge <num> --merge --delete-branch
 ```
+
+PR com worktree viva (o normal): **sem** `--delete-branch` — seguir §"Fechamento autônomo pela
+auditoria" (Etapa 7).
 
 **Gate:** PR mergeado em develop, branch deletada.
 
@@ -516,7 +519,9 @@ git merge-base --is-ancestor origin/develop HEAD || git rebase origin/develop
 
 # 2. Registrar a auditoria ANTES do push: comentário do veredito citando os hashes JÁ
 #    rebaseados + linha `> **Auditoria:** complete` no corpo (o audit-gate lê o corpo
-#    do payload do evento — editar depois do push deixa o run do push em `review`)
+#    do payload do evento — editar depois do push deixa o run do push em `review`).
+#    Veredito e `complete` já gravados na fase de aplicação → só comentar
+#    `hashes pós-rebase: <old>→<new>`; o corpo já `complete` não precisa de reedição
 gh pr comment <num-pr> --body-file <veredito.md>
 gh pr edit <num-pr> --body-file <corpo-com-complete.md>
 
@@ -524,9 +529,10 @@ gh pr edit <num-pr> --body-file <corpo-com-complete.md>
 git push --force-with-lease
 
 # 4. Esperar o CI do HEAD novo (inclui audit-status) e conferir mergeabilidade
-gh pr checks <num-pr> --watch --fail-fast
+gh pr checks <num-pr> --watch --fail-fast   # "no checks reported" logo após o push → repetir
 gh pr view <num-pr> --json mergeable,mergeStateStatus   # MERGEABLE + CLEAN
-#    check vermelho → volta à fase de aplicação; BLOCKED/BEHIND → PARA e reporta
+#    check vermelho → volta à fase de aplicação; mergeStateStatus ≠ CLEAN → PARA e reporta
+#    (UNKNOWN logo após o push: reconsultar uma vez antes de parar)
 
 # 5. Salvar dado git-ignorado caro de refazer (o worktree-rm apaga a pasta inteira):
 #    data/cohorts/, artifacts/, mlruns* da worktree → mesmo caminho no checkout principal
@@ -864,7 +870,7 @@ gh pr create --base develop --title "..." --body "..."
 gh pr checks                    # status do CI
 gh pr view                      # detalhes
 gh pr review --approve          # aprovar
-gh pr merge <num> --merge --delete-branch  # merge commit + cleanup
+gh pr merge <num> --merge --delete-branch  # sem worktree; com worktree ver §Fechamento autônomo
 
 # Deploy
 git sync                                 # atualiza main local
