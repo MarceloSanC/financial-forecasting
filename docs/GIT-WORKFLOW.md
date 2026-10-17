@@ -557,6 +557,33 @@ gh issue view <num-issue> --json state                  # CLOSED (via Closes #N)
 Se `gh pr merge` for negado pela permissão da sessão, **parar** e pedir ao humano a regra de
 permissão — nunca editar a configuração de permissões nem tentar contornar.
 
+**Permissão e trava.** No modo automático, o classificador do Claude Code nega push, edição e
+merge feitos pelo próprio agente (autoaprovação). Para o fechamento rodar sem o humano, **o
+humano** adiciona em `.claude/settings.local.json` → `permissions.allow`:
+
+```json
+"Bash(git push *)", "Bash(git -C * push *)", "Bash(gh pr edit *)", "Bash(gh pr comment *)",
+"Bash(gh issue edit *)", "Bash(gh issue comment *)", "Bash(gh pr merge *)",
+"PowerShell(git push *)", "PowerShell(gh pr *)", "PowerShell(gh issue *)"
+```
+
+Essa regra tira o classificador do caminho; a trava passa a ser o hook
+`.claude/hooks/publish_guard.py` (PreToolUse, roda antes de qualquer comando Bash/PowerShell e
+recusa mesmo com a regra liberada):
+
+- `git push` para `develop`/`main` (refspec, `--delete`, `HEAD` ou branch atual), `--force`/`+`
+  sem `--force-with-lease`, `--all`/`--mirror`, e qualquer push a partir do checkout principal;
+- `gh pr merge` sem `--merge`, com `--admin`/`--auto`, ou se o PR — consultado no GitHub pelo
+  hook — não tiver base `develop`, estiver em draft, sem `> **Auditoria:** complete`, com check
+  não verde, `mergeStateStatus` ≠ `CLEAN` ou conversa de review sem resolver. Consulta que
+  falha = recusa;
+- `gh pr edit --base`; label/assignee/milestone/projeto em `gh pr|issue edit`;
+  `gh issue close|reopen|delete|transfer`; `gh api` que escreve (método ≠ GET, campo sem `-X`,
+  `graphql` com `mutation`).
+
+Passam: push da branch da worktree, edição de título e corpo, comentários e leituras. O hook
+cobre `git`/`gh`; escrita no GitHub por outro caminho (curl, script) fica fora dele.
+
 **Saída:** uma linha de status — PR mergeado (hash do merge commit), issue fechada, worktree e
 branches (local e remota) removidas, `develop` local sincronizado.
 
