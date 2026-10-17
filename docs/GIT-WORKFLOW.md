@@ -588,7 +588,8 @@ recusa mesmo com a regra liberada):
   `gh issue close|reopen|delete|transfer`; `gh api` que escreve (método ≠ GET, campo sem `-X`,
   `graphql` com `mutation`).
 
-Passam: push da branch da worktree, edição de título e corpo, comentários e leituras.
+Passam: push da branch da worktree, edição de título e corpo, comentários e leituras. Corpo
+multilinha vai por `--body-file`: inline, a linha que começa com `git`/`gh` é lida como comando.
 
 O hook separa o comando em `&&`, `||`, `;`, `|`, `&` e quebra de linha, porque a permissão é
 avaliada por subcomando: a regra libera cada pedaço, e o hook precisa ver cada um. Fora do
