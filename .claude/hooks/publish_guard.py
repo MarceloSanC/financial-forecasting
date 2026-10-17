@@ -55,6 +55,7 @@ _PUSH_FORCE = {"--force", "-f"}
 _PUSH_BROAD = {"--all", "--mirror", "--branches", "--prune"}
 _PUSH_CONFIG = ("push.", "remote.")
 _WRAPPERS = {"env", "command", "time", "nohup", "sudo", "exec", "xargs"}
+_WRAPPERS |= {"then", "do", "else", "elif", "if", "while", "until", "!"}  # palavra de shell
 _PUSH_OPTS_WITH_VALUE = {"--repo", "-o", "--push-option", "--receive-pack", "--exec"}
 _EDIT_FORBIDDEN = {
     "--add-label",
@@ -366,8 +367,9 @@ def reason(
         if not tokens:
             continue
         tokens[0] = tokens[0].lstrip("({$")
-        if tokens[0] in ("cd", "Set-Location", "pushd") and len(tokens) > 1:
-            here = (here / tokens[1]).resolve()
+        if tokens[0] in ("cd", "Set-Location", "pushd"):
+            dirs = [t for t in tokens[1:] if t not in ("-Path", "-LiteralPath")]
+            here = (here / dirs[0]).resolve() if dirs else here
             continue
         exe = Path(tokens[0]).stem.lower()
         found: str | None = None

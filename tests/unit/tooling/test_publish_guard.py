@@ -91,6 +91,8 @@ def _reason(command: str, cwd: Path = WORKTREE, pr: dict[str, Any] | None = None
         "{ git push origin develop; }",
         "env git push origin develop",
         "nohup git push origin develop",
+        "if true; then git push origin develop; fi",
+        "while true; do git push origin develop; done",
         "git push origin heads/develop",
         "git push origin @:develop",
         "git push origin 'refs/heads/*:refs/heads/*'",
@@ -143,6 +145,10 @@ def test_git_dash_c_redirects_to_worktree() -> None:
 
 def test_cd_into_worktree_redirects() -> None:
     assert _reason(f"cd {WORKTREE} && git push", cwd=MAIN) is None
+
+
+def test_set_location_path_redirects() -> None:
+    assert _reason(f"Set-Location -Path {WORKTREE}; git push", cwd=MAIN) is None
 
 
 def test_push_without_refspec_on_protected_branch_is_blocked() -> None:
