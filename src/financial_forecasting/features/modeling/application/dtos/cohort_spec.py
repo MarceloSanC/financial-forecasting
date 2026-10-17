@@ -18,6 +18,12 @@ fazer duas declarações iguais parecerem diferentes. O hash em si é calculado 
 shared); este DTO recebe o hash pronto para derivar `cohort_id` e o scope id
 dos sweeps.
 
+**Campo opcional sem efeito retroativo (#122):** `dataset_start` (primeira sessão
+do dataset materializado) só entra no payload quando declarado. Ausente, a chave
+nem aparece — o hash dos cohorts anteriores ao campo (o r0 congelado da 5.5)
+continua o mesmo. Não é campo de congelamento: o início do dado é decidido antes
+dos sweeps e entra também no `draft_payload`.
+
 **Rascunho e congelado:** o rascunho (antes dos sweeps e das decisões [P]) tem
 `n_trials` e `seeds` possivelmente vazios e nenhum campo de congelamento;
 `is_frozen()` exige todos. `draft_payload()` é o payload SEM os campos de
@@ -27,6 +33,7 @@ congelamento — é o que identifica os sweeps (`exploratory_scope_id`).
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import date, datetime
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
@@ -124,6 +131,7 @@ class CohortSpec:
     baseline_specs: tuple[BaselineSpec, ...]
     provenance: SweepProvenance | None
     dataset_fingerprint: str | None
+    dataset_start: date | None = None  # #122 — ausente: o `materialize` usa o `--start`
 
     def __post_init__(self) -> None:
         """Validações de forma; a coerência declarado/observado é do `run` (I4)."""
@@ -146,6 +154,11 @@ class CohortSpec:
             raise ValueError(f"CohortSpec.asset_id: {exc}") from exc
         if self.revision < 0:
             raise ValueError(f"CohortSpec.revision must be >= 0; got {self.revision}")
+        if isinstance(self.dataset_start, datetime):
+            # `datetime` é subclasse de `date`: com hora, o hash mudaria sem mudar o dado
+            raise ValueError(
+                f"CohortSpec.dataset_start must be a date, not a datetime; got {self.dataset_start}"
+            )
         if (
             not self.horizons
             or any(h < 1 for h in self.horizons)
@@ -201,6 +214,11 @@ class CohortSpec:
         tft = payload.get("tft_params")
         if isinstance(tft, dict):
             tft.pop("seed", None)
+        # opcional posterior ao r0: ausente não entra (o hash antigo se mantém, #122)
+        if self.dataset_start is None:
+            payload.pop("dataset_start")
+        else:
+            payload["dataset_start"] = self.dataset_start.isoformat()
         canonical: dict[str, object] = _numbers_by_value(payload)
         return canonical
 

@@ -3,7 +3,8 @@
 Prova: `parse(dump(spec)) == spec` para o rascunho e para o congelado (o
 `dump` sem dependência nova é validado pela ida e volta com `tomllib`); campo
 ausente, campo desconhecido, tipo errado, seed repetida e revisão negativa
-erguem `CohortFileError` nomeando o campo.
+erguem `CohortFileError` nomeando o campo. `dataset_start` (#122) faz a ida e
+volta como data local do TOML, presente ou ausente, e recusa texto e data-hora.
 
 O módulo vive sob `adapters/in/` (keyword `in`): carregado por `importlib`
 (LAYOUT §8); a pasta deste teste é `in_` pelo mesmo motivo.
@@ -15,6 +16,7 @@ import importlib
 import tomllib
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -105,8 +107,14 @@ def _frozen() -> CohortSpec:
     )
 
 
+def _frozen_with_start() -> CohortSpec:
+    return replace(_frozen(), dataset_start=date(2010, 4, 20))
+
+
 @pytest.mark.unit
-@pytest.mark.parametrize("make", [_draft, _frozen], ids=["draft", "frozen"])
+@pytest.mark.parametrize(
+    "make", [_draft, _frozen, _frozen_with_start], ids=["draft", "frozen", "frozen-with-start"]
+)
 def test_parse_of_dump_is_the_identity(make: Callable[[], CohortSpec]) -> None:
     spec = make()
 
@@ -120,10 +128,29 @@ def test_parse_of_dump_is_the_identity(make: Callable[[], CohortSpec]) -> None:
 def test_draft_dump_omits_the_freeze_fields() -> None:
     raw = tomllib.loads(cohort_file.dump(_draft()))
 
-    for key in ("tft_params", "gbm_params", "provenance", "dataset_fingerprint"):
+    for key in ("tft_params", "gbm_params", "provenance", "dataset_fingerprint", "dataset_start"):
         assert key not in raw
     assert "n_trials" not in raw["sweep"]
     assert raw["seeds"] == []
+
+
+@pytest.mark.unit
+def test_dataset_start_is_written_as_a_toml_local_date() -> None:
+    text = cohort_file.dump(_frozen_with_start())
+
+    assert "dataset_start = 2010-04-20\n" in text
+    assert tomllib.loads(text)["dataset_start"] == date(2010, 4, 20)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "literal", ['"2010-04-20"', "2010-04-20T00:00:00"], ids=["text", "datetime"]
+)
+def test_dataset_start_must_be_a_plain_date(literal: str) -> None:
+    text = cohort_file.dump(_frozen_with_start()).replace("2010-04-20", literal, 1)
+
+    with pytest.raises(CohortFileError, match="'dataset_start' must be date"):
+        cohort_file.parse(text)
 
 
 @pytest.mark.unit

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import fields, replace
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -108,6 +109,7 @@ _CHANGES: dict[str, object] = {
     "baseline_specs": BaselineSpec.canonical_five(historical_quantiles_window=126),
     "provenance": replace(_PROVENANCE, tft_best_trial=5),
     "dataset_fingerprint": "b" * 64,
+    "dataset_start": date(2010, 4, 20),
 }
 
 
@@ -137,6 +139,23 @@ def test_draft_payload_ignores_the_freeze_fields() -> None:
     )
 
     assert draft.draft_payload() == _spec().draft_payload()
+
+
+def test_absent_dataset_start_leaves_no_key_in_the_payload() -> None:
+    """#122: o campo novo ausente não toca o hash dos cohorts anteriores a ele."""
+    payload = _spec().hash_payload()
+
+    assert "dataset_start" not in payload
+    assert "dataset_start" not in _spec().draft_payload()
+
+
+def test_declared_dataset_start_enters_both_payloads_as_iso_text() -> None:
+    """Decidido antes dos sweeps: identifica o cohort e também o scope dos sweeps."""
+    spec = _spec(dataset_start=date(2010, 4, 20))
+
+    assert spec.hash_payload()["dataset_start"] == "2010-04-20"
+    assert spec.draft_payload()["dataset_start"] == "2010-04-20"
+    assert spec.draft_payload() != _spec().draft_payload()
 
 
 def test_n_trials_changes_the_draft_payload() -> None:
@@ -196,6 +215,7 @@ def test_spec_is_frozen_dataclass() -> None:
         ({"quantile_levels": (0.5, 0.1)}, "quantile_levels"),
         ({"quantile_levels": (0.0, 0.5)}, "quantile_levels"),
         ({"seeds": (1, 1)}, "seeds"),
+        ({"dataset_start": datetime(2010, 4, 20, tzinfo=UTC)}, "dataset_start"),
         ({"baseline_specs": ()}, "baseline_specs"),
         (
             {"baseline_specs": (*BaselineSpec.canonical_five(), BaselineSpec(family="ar1"))},

@@ -11,7 +11,9 @@ revisão negativa, …) erguem `CohortFileError` nomeando o campo pelo caminho
 pontuado (`geometry.n_folds`, `baselines[2].window`). TOML não tem nulo: campo
 opcional ausente é `None` — os campos de congelamento (`tft_params`,
 `gbm_params`, `provenance`, `dataset_fingerprint`) e `sweep.n_trials` só
-aparecem no arquivo depois de decididos.
+aparecem no arquivo depois de decididos. `dataset_start` (#122) é data local do
+TOML (`dataset_start = 2010-04-20`, sem aspas nem hora); ausente, o `materialize`
+segue usando o `--start`.
 
 `dump` escreve o mesmo schema (tabelas e escalares) sem dependência nova
 (technical §1: `tomli-w`/`tomlkit` descartados para um schema fechado); a ida e
@@ -25,6 +27,7 @@ import tomllib
 import types
 import typing
 from dataclasses import MISSING, fields
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from financial_forecasting.features.modeling.application.dtos.cohort_spec import (
@@ -66,6 +69,7 @@ _TOP_SCALARS = (
     "device",
     "seeds",
     "dataset_fingerprint",
+    "dataset_start",
 )
 _TOP_TABLES = ("geometry", "sweep", "baselines", "tft_params", "gbm_params", "provenance")
 _SWEEP_KEYS = (
@@ -141,6 +145,7 @@ def parse(text: str) -> CohortSpec:
             baseline_specs=baseline_specs,
             provenance=provenance,
             dataset_fingerprint=_optional(raw, "dataset_fingerprint", str, ""),
+            dataset_start=_optional(raw, "dataset_start", date, ""),
         ),
     )
 
@@ -165,7 +170,12 @@ def _reject_unknown(table: Mapping[str, object], allowed: Iterable[str], *, path
 
 
 def _coerce[T](value: object, expected: type[T], field: str) -> T:
-    """Aceita o tipo pedido; `bool` nunca passa por inteiro e inteiro passa por float."""
+    """Aceita o tipo pedido; `bool` nunca passa por inteiro e inteiro passa por float.
+
+    `datetime` nunca passa por `date` (é subclasse): a data do arquivo não tem hora.
+    """
+    if expected is date and isinstance(value, datetime):
+        raise CohortFileError(f"field {field!r} must be date (no time); got datetime {value!r}")
     if expected is float and isinstance(value, int) and not isinstance(value, bool):
         return cast("T", float(value))
     if isinstance(value, expected) and not (expected is int and isinstance(value, bool)):
@@ -272,6 +282,7 @@ def dump(spec: CohortSpec) -> str:
         "device": spec.device,
         "seeds": list(spec.seeds),
         "dataset_fingerprint": spec.dataset_fingerprint,
+        "dataset_start": spec.dataset_start,
     }
     _emit_pairs(lines, top)
     _emit_table(lines, "geometry", _scalars(spec.geometry))
@@ -349,6 +360,8 @@ def _literal(value: object) -> str:
         return repr(value)
     if isinstance(value, str):
         return _basic_string(value)
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value.isoformat()  # data local do TOML, sem aspas
     if isinstance(value, list):
         return "[" + ", ".join(_literal(item) for item in value) + "]"
     raise CohortFileError(f"cannot write {type(value).__name__} to the cohort file")
