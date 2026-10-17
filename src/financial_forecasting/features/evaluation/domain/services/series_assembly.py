@@ -44,6 +44,9 @@ from financial_forecasting.features.analytics_store.domain.value_objects.quantil
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     validate_horizon,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    validate_int_at_least,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
     check_points,
 )
@@ -196,8 +199,7 @@ def _check_call(
     if not isinstance(window_deficits, Mapping):
         raise ValueError(f"window_deficits must be a Mapping, got {window_deficits!r}")
     for model, deficit in window_deficits.items():
-        if isinstance(deficit, bool) or not isinstance(deficit, int) or deficit < 0:
-            raise ValueError(f"window_deficits[{model!r}] must be an int >= 0, got {deficit!r}")
+        validate_int_at_least(deficit, minimum=0, field=f"window_deficits[{model!r}]")
     if not isinstance(required_models, frozenset):
         raise ValueError(f"required_models must be a frozenset, got {required_models!r}")
     run_ids = [run.run_id for run in runs]

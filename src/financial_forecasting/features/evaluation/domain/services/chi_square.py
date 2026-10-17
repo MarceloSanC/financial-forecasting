@@ -28,6 +28,9 @@ from typing import Final
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    is_int,
+)
 
 # I13 / ADR 6.3.0001 item 8: limite inferior do ruído de arredondamento tolerado.
 LR_NEGATIVE_FLOOR: Final = -1e-9
@@ -72,7 +75,7 @@ def chi_square_sf(statistic: float, *, df: int) -> float:
         ValueError: `df` fora de {1, 2} ou não-`int` (inclusive `bool`); estatística
             não-finita, `bool` ou negativa além do piso (C3).
     """
-    if isinstance(df, bool) or not isinstance(df, int) or df not in _SUPPORTED_DF:
+    if not is_int(df) or df not in _SUPPORTED_DF:
         raise ValueError(f"df must be an int in {_SUPPORTED_DF}, got {df!r}")
     x = floor_lr_statistic(statistic)
     if df == 1:
