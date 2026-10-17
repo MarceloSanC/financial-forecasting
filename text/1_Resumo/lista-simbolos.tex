@@ -7,7 +7,7 @@
     \item[$r_t$] Retorno logarítmico de um dia na sessão $t$, $\log(P_t/P_{t-1})$
     \item[$\tau$] Nível de quantil (\textit{quantile level}), $\tau \in (0,1)$
     \item[$\mathcal{T}$] Grade de níveis de quantil $\{\tau_1 < \dots < \tau_K\}$ emitida por todos os modelos
-    \item[$K$] Número de níveis da grade de quantis
+    \item[$K$] Número de níveis da grade de quantis ($K = 7$)
     \item[$\hat{q}_\tau$] Quantil condicional estimado pelo modelo no nível $\tau$
     \item[$(\tau_l, \tau_h)$] Par de níveis que delimita um intervalo de predição, com cobertura nominal $\tau_h - \tau_l$
     \item[$L_\tau(y, \hat{q})$] \textit{Pinball loss} no nível $\tau$ avaliada no par $(y, \hat{q})$
@@ -18,14 +18,16 @@
     \item[$t$] Índice temporal (sessão de pregão da decisão)
     \item[$h$] Horizonte de previsão, em sessões de pregão
     \item[$h_{\max}$] Maior horizonte do cohort; define a largura da purga
-    \item[$h+1$, $h+7$] Horizontes principais de um e sete passos à frente
-    \item[$h+30$] Horizonte suplementar de trinta passos à frente
+    \item[$h+1$, $h+7$] Horizontes avaliados, de uma e sete sessões à frente
     \item[$L_t^{(k)}$] Perda do modelo $k$ na observação alinhada $t$
     \item[$d_t$] Diferencial de perdas entre dois modelos na observação $t$
     \item[$\bar{d}$] Média amostral do diferencial de perdas $d_t$
     \item[$\widehat{\mathrm{Var}}(\cdot)$] Estimador de variância de longo prazo (HAC)
     \item[$\alpha$] Nível de significância estatística
     \item[$\lambda$] Fator de decaimento do EWMA
+    \item[$\rho$] Fator de decaimento dos pesos da variante conformal ponderada (NexCP)
+    \item[$s_f(h)$] Participação normalizada da família $f$ na importância total no horizonte $h$
+    \item[$\Delta_f$] Variação da participação da família $f$ entre horizontes, $s_f(h+7) - s_f(h+1)$
     \item[$R^2$] Coeficiente de determinação fora da amostra (\textit{out-of-sample})
     \item[$H_0$] Hipótese nula em teste estatístico
     \item[$H_1$, $H_2$, $H_3$] Hipóteses de pesquisa (calibração, \textit{skill} relativo e contribuição de famílias)
