@@ -35,6 +35,10 @@ from typing import Final
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    is_int,
+    validate_int_at_least,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
     is_constant,
 )
@@ -51,11 +55,6 @@ class BootstrapScheme(StrEnum):
     MOVING_BLOCK = "moving_block"  # sensibilidade (esquema de HLN 2011)
 
 
-def _check_int(name: str, value: object, minimum: int) -> None:
-    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
-        raise ValueError(f"{name} must be an int >= {minimum}, got {value!r}")
-
-
 def validate_bootstrap_parameters(*, reps: int, seed: int) -> None:
     """Validador único de `reps` e `seed` de um bootstrap (C6; dono dos dois parâmetros).
 
@@ -65,8 +64,8 @@ def validate_bootstrap_parameters(*, reps: int, seed: int) -> None:
     Raises:
         ValueError: `reps` não-int, `bool` ou < 1; `seed` não-int, `bool` ou < 0.
     """
-    _check_int("reps", reps, 1)
-    _check_int("seed", seed, 0)
+    validate_int_at_least(reps, minimum=1, field="reps")
+    validate_int_at_least(seed, minimum=0, field="seed")
 
 
 def validate_bootstrap_request(
@@ -79,8 +78,8 @@ def validate_bootstrap_request(
             (2, 1, 1, 0); esquema fora de `BootstrapScheme` (string crua inclusive);
             moving-block com `block_size >= n_obs`.
     """
-    _check_int("n_obs", n_obs, _MIN_OBS)
-    _check_int("block_size", block_size, 1)
+    validate_int_at_least(n_obs, minimum=_MIN_OBS, field="n_obs")
+    validate_int_at_least(block_size, minimum=1, field="block_size")
     validate_bootstrap_parameters(reps=reps, seed=seed)
     if not isinstance(scheme, BootstrapScheme):
         raise ValueError(f"scheme must be a BootstrapScheme, got {scheme!r}")
@@ -157,7 +156,7 @@ class BootstrapIndices:
             if len(row) != n_obs:
                 raise ValueError(f"row {rep}: {len(row)} indices for n_obs={n_obs}")
             for position in row:
-                if isinstance(position, bool) or not isinstance(position, int):
+                if not is_int(position):
                     raise ValueError(f"row {rep}: index {position!r} is not an int")
                 if not 0 <= position < n_obs:
                     raise ValueError(f"row {rep}: index {position} outside [0, {n_obs})")

@@ -1,11 +1,13 @@
 """Predicado único de "número finito" do domínio de `evaluation` (privado do slice).
 
-Uma só escrita da regra, consumida pelos três lugares que a checam: a
-`CoverageSeries` (C2: quantis pós-guardrail e realizados), o validador único dos
-kernels (`scoring_input_validation.validate_finite`, C7) e o `DegeneracyGate`
-(tolerância, C3 — hoje via a regra única `_tolerance.validate_tolerance`, que a 6.3
-compartilha com a `HitSequence`). Antes eram três cópias com semânticas diferentes — a do validador
-(`math.isfinite` sob `try`) aceitava `Decimal`, `Fraction` e escalares numpy fora da
+Uma só escrita da regra. Os três consumidores de origem (6.1): a `CoverageSeries` (C2:
+quantis pós-guardrail e realizados), o validador único dos kernels
+(`scoring_input_validation.validate_finite`, C7) e o `DegeneracyGate` (tolerância, C3 —
+hoje via a regra única `_tolerance.validate_tolerance`, que a 6.3 compartilha com a
+`HitSequence`). A `PairedLossSeries` (6.2) a consome pela perda
+(`_paired_inputs.check_loss`), e os serviços e VOs das Stages 6.2-6.6 a importam direto.
+Antes eram três cópias com semânticas diferentes — a do validador (`math.isfinite` sob
+`try`) aceitava `Decimal`, `Fraction` e escalares numpy fora da
 hierarquia de `float` que a `CoverageSeries` recusava.
 
 Semântica: só `int`/`float` **não-bool** e finitos. `bool` é subclasse de `int` e

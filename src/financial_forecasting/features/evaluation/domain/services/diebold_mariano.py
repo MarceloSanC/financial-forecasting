@@ -37,6 +37,9 @@ from financial_forecasting.features.evaluation.domain.services.student_t import 
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    validate_int_at_least,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
     check_horizon,
     check_loss,
@@ -219,8 +222,7 @@ def dm_effect_interval(
     for name, value in (("mean_differential", mean_differential), ("statistic", statistic)):
         if not is_finite_number(value):
             raise ValueError(f"{name} must be a finite number, got {value!r}")
-    if isinstance(n_points, bool) or not isinstance(n_points, int) or n_points < _MIN_EFFECT_POINTS:
-        raise ValueError(f"n_points must be an int >= {_MIN_EFFECT_POINTS}, got {n_points!r}")
+    validate_int_at_least(n_points, minimum=_MIN_EFFECT_POINTS, field="n_points")
     if not is_finite_number(level) or not 0.0 < level < 1.0:
         raise ValueError(f"level must be a finite number in (0, 1), got {level!r}")
     if statistic == 0.0:

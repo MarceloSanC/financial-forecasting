@@ -58,6 +58,10 @@ from financial_forecasting.features.evaluation.domain.value_objects._horizon imp
     validate_horizon,
     validate_positive_int,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    is_int,
+    validate_int_at_least,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._tolerance import (
     validate_tolerance,
 )
@@ -110,8 +114,7 @@ def monte_carlo_defined_for(horizon: int) -> bool:
 
 def validate_min_violations(min_violations: int) -> None:
     """C4: `min_violations` é `int` (não `bool`) ≥ 0 — obrigatório, sem default."""
-    if type(min_violations) is not int or min_violations < 0:
-        raise ValueError(f"min_violations must be an int >= 0 (not bool), got {min_violations!r}")
+    validate_int_at_least(min_violations, minimum=0, field="min_violations")
 
 
 def independence_status_for(
@@ -187,7 +190,7 @@ class ChristoffersenStatistics:
     def _check_counts(self) -> None:
         counts = (self.n_observed, self.n_violations, *self.transitions)
         if len(self.transitions) != _N_TRANSITIONS or any(
-            type(value) is not int or value < 0 for value in counts
+            not is_int(value) or value < 0 for value in counts
         ):
             raise ValueError(
                 "n_observed, n_violations and the four transitions must be ints >= 0, got "
@@ -601,7 +604,7 @@ class MonteCarloPValues:
 
     def _check_attempts(self, *, uc_applicable: bool) -> None:
         cap = MC_ATTEMPTS_CAP_FACTOR * self.draws
-        if type(self.attempts) is not int:
+        if not is_int(self.attempts):
             raise ValueError(f"attempts must be an int, got {self.attempts!r}")
         if not uc_applicable:
             if self.attempts != 0 or self.ind_status is not MonteCarloStatus.NOT_APPLICABLE:
@@ -635,7 +638,7 @@ def validate_draws_and_seed(draws: int, seed: int) -> None:
     `MonteCarloSpec` do pré-registro (mesmas mensagens).
     """
     validate_positive_int(draws, field="draws")
-    if type(seed) is not int:
+    if not is_int(seed):
         raise ValueError(f"seed must be an int (not bool), got {seed!r}")
 
 

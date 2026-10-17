@@ -68,6 +68,9 @@ from financial_forecasting.features.evaluation.domain.services.model_confidence_
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     is_multi_step,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    is_int,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
     Preregistration,
 )
@@ -231,7 +234,7 @@ def _block_rule(row: Row) -> int | None:
     if isinstance(estimate, bool) or not isinstance(estimate, int | float):
         return None
     horizon = col(row, GOLD_MCS_RESULTS, "horizon")
-    if isinstance(horizon, bool) or not isinstance(horizon, int):
+    if not is_int(horizon):
         return None  # horizonte de tipo errado: corrupção, depois de todo mismatch
     try:
         return block_length_rule(horizon=horizon, max_estimate=estimate)

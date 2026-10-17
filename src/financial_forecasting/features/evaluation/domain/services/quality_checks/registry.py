@@ -17,6 +17,9 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Protocol
 
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    validate_int_at_least,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._tolerance import (
     validate_tolerance,
 )
@@ -79,9 +82,7 @@ class QualityCheckContext:
                 raise ValueError(f"{name} must be a Mapping, got {type(value).__name__}")
             object.__setattr__(self, name, MappingProxyType(dict(value)))
         validate_tolerance(self.tolerance, field="tolerance")
-        prefix = self.grid_trimmed_prefix
-        if isinstance(prefix, bool) or not isinstance(prefix, int) or prefix < 0:
-            raise ValueError(f"grid_trimmed_prefix must be an int >= 0, got {prefix!r}")
+        validate_int_at_least(self.grid_trimmed_prefix, minimum=0, field="grid_trimmed_prefix")
         self._check_horizon_keys()
         for horizon, estimates in self.block_estimates.items():
             series = self.paired.get(horizon)

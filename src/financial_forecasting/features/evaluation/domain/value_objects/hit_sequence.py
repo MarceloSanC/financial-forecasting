@@ -35,6 +35,9 @@ from financial_forecasting.features.evaluation.domain.value_objects._horizon imp
     is_multi_step,
     validate_horizon,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    is_int,
+)
 from financial_forecasting.features.evaluation.domain.value_objects._timestamps import (
     check_strictly_increasing,
 )
@@ -132,7 +135,7 @@ def validate_dgt_fields(*, dgt_offset: int | None, dgt_step: int | None, horizon
     if dgt_offset is None or dgt_step is None:
         return
     for name, value in (("dgt_offset", dgt_offset), ("dgt_step", dgt_step)):
-        if type(value) is not int:
+        if not is_int(value):
             raise ValueError(f"{name} must be an int (not bool), got {value!r}")
     if dgt_step != horizon:
         raise ValueError(f"dgt_step must equal horizon={horizon}, got {dgt_step}")

@@ -4,10 +4,8 @@ Uma observação por ponto, na ordem do tempo (antigo "gate F"; doc §6.7): cada
 `target_timestamp` é estritamente maior que o anterior, pela comparação de string ISO
 UTC — o formato único do silver, em que a ordem lexicográfica é a cronológica.
 
-Consumidores hoje: a `PairedLossSeries` (6.2), a `HitSequence` (6.3) e o
-`RealizedReturns` (6.4, com `field="timestamps"`). A `CoverageSeries` (6.1) ainda carrega a
-cópia byte a byte desta regra; adotar o helper lá fica para depois do merge das Stages
-6.2 e 6.3 (a 6.3 edita `coverage_series.py`) — `[finding]` no technical 6.2 §7.
+Consumidores: a `CoverageSeries` (6.1), a `PairedLossSeries` (6.2), a `HitSequence` (6.3)
+e o `RealizedReturns` (6.4, com `field="timestamps"`).
 """
 
 from __future__ import annotations

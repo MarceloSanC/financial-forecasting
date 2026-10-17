@@ -30,6 +30,9 @@ from types import MappingProxyType
 from financial_forecasting.features.evaluation.domain.value_objects._horizon import (
     validate_horizon,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    validate_int_at_least,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
 )
@@ -136,8 +139,7 @@ class AlignmentReport:
                 raise ValueError(
                     f"common_points horizons must be strictly increasing, got {self.common_points}"
                 )
-            if isinstance(n_points, bool) or not isinstance(n_points, int) or n_points < 1:
-                raise ValueError(f"common_points T must be an int >= 1, got {n_points!r}")
+            validate_int_at_least(n_points, minimum=1, field="common_points T")
             previous = horizon
 
 
@@ -183,9 +185,7 @@ class HorizonSamples:
         """Modelos, chaves, seeds, séries, amostra comum e folds coerentes."""
         validate_horizon(self.horizon, field="horizon")
         self._check_models()
-        n_common = self.n_common
-        if isinstance(n_common, bool) or not isinstance(n_common, int) or n_common < 1:
-            raise ValueError(f"n_common must be an int >= 1, got {n_common!r}")
+        validate_int_at_least(self.n_common, minimum=1, field="n_common")
         check_non_empty_str(
             self.common_first_target_timestamp, field="common_first_target_timestamp"
         )
