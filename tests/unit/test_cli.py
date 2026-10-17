@@ -4,13 +4,15 @@ Prova: `--data-root` é obrigatório em todos os subcomandos (erro de uso);
 `materialize` e `run` se excluem pelo lock do `data_root` (a mensagem nomeia o
 dono); sem modelo de sentimento injetado e sem o extra, `materialize` erra com a
 instrução; com modelo injetado, não checa; o despacho chega aos comandos do
-cohort com as dependências do composition root.
+cohort com as dependências do composition root; o início do dataset vem do
+`--start` ou do `dataset_start` do arquivo, e os dois divergentes são erro (#122).
 """
 
 from __future__ import annotations
 
 import io
 import json
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -237,6 +239,58 @@ def test_materialize_start_reaches_only_the_dataset_request(
     assert seen["dataset_start"] == date(2010, 4, 20)
     assert cli.main(argv, wiring=_wiring(tmp_path)) == 0
     assert seen["dataset_start"] is None
+
+
+@pytest.mark.unit
+def test_materialize_reads_the_start_declared_in_the_cohort_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#122: `dataset_start` do arquivo vale sem `--start`; igual a ele, também."""
+    seen: dict[str, object] = {}
+
+    def fake_materialize(deps: object, **kwargs: object) -> int:
+        seen.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(cli, "_materialize", fake_materialize)
+    path = tmp_path / "cohort.toml"
+    path.write_text(
+        cohort_file.dump(replace(_draft(), dataset_start=date(2010, 4, 20))), encoding="utf-8"
+    )
+    argv = ["materialize", "--data-root", str(tmp_path / "d"), "--cohort", str(path)]
+
+    assert cli.main(argv, wiring=_wiring(tmp_path)) == 0
+    assert seen["dataset_start"] == date(2010, 4, 20)
+    seen.clear()
+    assert cli.main([*argv, "--start", "2010-04-20"], wiring=_wiring(tmp_path)) == 0
+    assert seen["dataset_start"] == date(2010, 4, 20)
+
+
+@pytest.mark.unit
+def test_a_start_that_differs_from_the_cohort_file_is_an_error_naming_both(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    called: list[object] = []
+
+    def fake_materialize(deps: object, **kwargs: object) -> int:
+        called.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(cli, "_materialize", fake_materialize)
+    path = tmp_path / "cohort.toml"
+    path.write_text(
+        cohort_file.dump(replace(_draft(), dataset_start=date(2010, 4, 20))), encoding="utf-8"
+    )
+    err = io.StringIO()
+    argv = ["materialize", "--data-root", str(tmp_path / "d"), "--cohort", str(path)]
+
+    code = cli.main([*argv, "--start", "2011-01-03"], wiring=_wiring(tmp_path), err=err)
+
+    assert code == _EXIT_ERROR
+    assert "DatasetStartConflictError" in err.getvalue()
+    assert "2011-01-03" in err.getvalue()
+    assert "2010-04-20" in err.getvalue()
+    assert not called  # nada é ingerido nem materializado
 
 
 @pytest.mark.unit

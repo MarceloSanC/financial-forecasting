@@ -77,6 +77,10 @@ class MissingSentimentExtraError(ApplicationError):
     """O FinBERT real precisa do extra `sentiment` instalado no ambiente."""
 
 
+class DatasetStartConflictError(ApplicationError):
+    """`--start` e o `dataset_start` do arquivo do cohort declaram datas diferentes."""
+
+
 @dataclass(frozen=True)
 class CliWiring:
     """Injeções do ponta a ponta; vazio em produção."""
@@ -115,7 +119,8 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "primeira sessão do dataset (AAAA-MM-DD); os brutos são ingeridos inteiros. "
-            "Usado quando o gate de qualidade recusa o começo da série (R9 da 5.5)."
+            "Usado quando o gate de qualidade recusa o começo da série (R9 da 5.5). "
+            "Sem ele, vale o dataset_start do arquivo do cohort; os dois diferentes é erro."
         ),
     )
     sweep = add("sweep", "roda os dois sweeps exploratórios e grava os resultados")
@@ -162,7 +167,7 @@ def main(
                 asset_id=spec.asset_id,
                 sentiment_injected=injected.sentiment_model is not None,
                 break_stale_lock=args.break_stale_lock,
-                dataset_start=args.start,
+                dataset_start=_dataset_start(args.start, spec.dataset_start),
                 out=stdout,
             )
         if args.command == "infer":
@@ -225,6 +230,20 @@ def _dispatch_cohort_command(
     else:
         exit_code = commands.verify(command_deps, args.cohort, out=out)
     return exit_code
+
+
+def _dataset_start(cli_start: date | None, declared: date | None) -> date | None:
+    """O início do dataset: o do arquivo do cohort, ou o `--start` (#122).
+
+    Os dois presentes precisam concordar — divergência é erro que nomeia os dois,
+    nunca uma precedência silenciosa que materializaria outro dado que o declarado.
+    """
+    if cli_start is not None and declared is not None and cli_start != declared:
+        raise DatasetStartConflictError(
+            f"--start {cli_start.isoformat()} differs from the cohort file's "
+            f"dataset_start {declared.isoformat()}; drop --start or fix the file"
+        )
+    return declared or cli_start
 
 
 def _materialize(  # noqa: PLR0913 — opções coesas do subcomando
