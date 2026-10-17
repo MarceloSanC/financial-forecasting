@@ -774,7 +774,7 @@ no ciclo de uma Task, e a quebra que só ele pega aparece no T2 no máximo
 | Camada | Quando | Comando | O que cobre |
 |---|---|---|---|
 | **T0** — ciclo TDD | cada vermelho→verde | `pytest <arquivo>::<teste> -x --no-cov` | o comportamento em construção |
-| **T1** — commit da Task | antes de **todo** commit de Task | `make check-task SLICE=<slice>` (vários: `SLICE="modeling shared"`) | ruff, mypy, check_layout, import-linter, fake-parity, port-coverage + testes dos slices tocados, sem `slow` e sem cobertura |
+| **T1** — commit da Task | antes de **todo** commit de Task | `make check-task SLICE=<slice>` (vários: `SLICE="modeling shared"`) | ruff, mypy, check_layout, import-linter, fake-parity, port-coverage, arch-ast + testes dos slices tocados, sem `slow` e sem cobertura |
 | **T2** — bloco | no Checkpoint C (a cada 2–3 Tasks) e antes de retomar sessão interrompida | `make check-block` | T1 inteiro + docs-check + suíte **inteira** (inclui `slow`) em paralelo, sem cobertura |
 | **T3** — saída | Passo 10 (fim da Stage/issue) e antes do `git push` que abre o PR | `make check` | gate completo com cobertura ≥ 90% — **idêntico ao CI** |
 | **T4** — CI | todo PR | `make check` (workflow `ci`) | o veredito bloqueante do merge |

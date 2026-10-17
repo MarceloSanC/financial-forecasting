@@ -80,7 +80,7 @@ tests/
 │       └── in_memory_<entity>_repository.py
 ├── fixtures/                       # Dados de teste versionados (lidos só por integration)
 │   └── r_oracle/                   # Oráculo R: <unidade>.{json,R,sessionInfo.txt} + Dockerfile (ADR 6.2.0006)
-└── architecture/                   # Testes dos próprios gates (import-linter, layout, fake-parity, port-coverage)
+└── architecture/                   # Testes dos próprios gates (import-linter, layout, fake-parity, port-coverage, arch-ast)
 
 migrations/
 ├── alembic.ini
@@ -252,9 +252,20 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 ## 7. Regras de Ouro
 
 - **Domain tem zero I/O.** Nenhuma entidade ou value object chama banco, rede ou arquivo.
+  Nem lê relógio, ambiente ou acaso global: `datetime.now`, `time.time`, `uuid4`, `os.environ`,
+  `open` e `random.<função>` reprovam sob `*/domain/`; tempo entra pelo port `Clock`, e um
+  gerador com semente explícita (`random.Random(seed)`) é permitido (gate:
+  `scripts/check_domain_determinism.py`, issue #61).
+- **Value object valida na construção.** `@dataclass(frozen=True)` em `domain/value_objects/`
+  tem `__post_init__` — factory validadora não basta, o construtor da dataclass segue chamável;
+  VO sem invariante por desenho declara `# vo-invariant: none — <motivo>` (gate:
+  `scripts/check_vo_invariants.py`, issue #61; dívida de hoje no baseline → #160).
 - **Use cases retornam DTOs, não entidades.** Entidades de domínio (com identidade, mutáveis) não vazam para fora da camada application. **Value objects** imutáveis de domínio (ex: `Money`) **podem** trafegar em DTOs — são valores puros sem identidade, indistinguíveis de tipos primitivos do ponto de vista do consumidor.
 - **Um use case por arquivo.** `create_order.py`, não `order_use_cases.py`.
 - **Adapters implementam ports.** `PostgresPaymentRepository` satisfaz `PaymentRepository` Protocol.
+  O `__init__` do use case anota o **port**, nunca a classe do adapter (nem de
+  `shared/infrastructure/`) nem o use case de outro slice; serviço de domínio concreto é
+  permitido (gate: `scripts/check_use_case_deps.py`, issue #61).
 - **Fakes implementam os mesmos ports.** `InMemoryPaymentRepository` satisfaz `PaymentRepository` Protocol.
   Todo port-out tem fake em `tests/fakes/` **e** suíte de contrato `[fake, real]` — gate:
   `scripts/check_port_coverage.py` (issue #62; baseline em `scripts/arch_baseline.toml`). O real pode ser
@@ -265,6 +276,10 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   A fake não pode **ser** a implementação: bloco de lógica idêntico ≥ 15 linhas entre `tests/fakes/**` e
   `src/**/adapters/**` reprova — a regra compartilhada sobe para `domain/services/` (gate:
   `scripts/check_fake_parity.py`, issue #62).
+- **Conhecimento de schema tem dono único.** As coordenadas do dataset TFT (`"processed"`,
+  `"dataset_tft"`) e a coluna-alvo (`"target_return"`) não se redeclaram como literal em
+  `features/modeling/application/` (gate: `scripts/check_schema_literals.py`, issue #61;
+  dívida de hoje no baseline → #159).
 - **Imports sempre absolutos.** Nunca `from ..domain import` — use o caminho completo.
 - **Nenhum import circular.** Se você precisar, é sinal de que a camada está errada.
 - **Shared não importa de features.** O fluxo é sempre: features → shared, nunca o contrário.

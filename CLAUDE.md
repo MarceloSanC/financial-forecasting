@@ -56,7 +56,7 @@ Detalhes operacionais (setup inicial, branch protection, release, hotfix, code r
 
 ## Comandos Úteis
 
-Alvos do `Makefile` (`make help` lista todos). `make check` é o gate bloqueante completo (lint, typecheck, layout, import-linter, fake-parity, port-coverage, docs e testes).
+Alvos do `Makefile` (`make help` lista todos). `make check` é o gate bloqueante completo (lint, typecheck, layout, import-linter, fake-parity, port-coverage, arch-ast, docs e testes).
 
 ### Docker / devcontainer
 
