@@ -98,10 +98,11 @@ referenciam esta seção em vez de duplicar a lista:
   `[tool.coverage.report] fail_under = 90`; o pytest falha sozinho se a
   cobertura cair abaixo.
 - **+1 aprovação:** code review obrigatório (`Require approvals: 1`).
-  **Exceção — Step orquestrado:** PR de Stage conduzido pela sessão mestra do
-  [`PROMPT-step-single-session.md`](./PROMPT-step-single-session.md) tem a aprovação
-  **delegada pelo humano** ao gate auditoria `complete` (subagente auditor de contexto
-  zerado, workflow `audit-gate`) + CI verde; a mestra mergeia sozinha (§3.5 do prompt).
+  **Exceção — PR auditado:** PR de issue ou Stage cuja auditoria (`issue-audit`/`stage-audit`)
+  fechou todo o escopo tem a aprovação **delegada pelo humano** ao gate auditoria `complete`
+  (workflow `audit-gate`) + CI verde; quem roda a fase de aplicação da auditoria (ou a sessão
+  mestra do [`PROMPT-step-single-session.md`](./PROMPT-step-single-session.md), §3.5) mergeia
+  sozinho e limpa branch/worktree — §"Fechamento autônomo pela auditoria" (Etapa 7).
   Os demais gates desta lista continuam valendo.
 - **Branch atualizada:** PR precisa estar à frente da base (`Require
   branches to be up to date`).
@@ -431,7 +432,8 @@ gh pr view        # comentários e aprovações
 
 **Se CI falhou:** voltar para Etapa 3, corrigir e fazer novo commit.
 
-**Se faltam aprovações:** aguardar review de outro dev. Não mergear sem aprovação.
+**Se faltam aprovações:** aguardar review de outro dev. Não mergear sem aprovação
+(exceção: PR auditado — §Gates de PR).
 
 **Se há comentários:** responder e fazer commits adicionais se necessário.
 
@@ -473,6 +475,84 @@ Verificar:
 - [ ] Issue fechada automaticamente
 - [ ] Deploy em dev disparado (quando o workflow de deploy existir)
 - [ ] Linha da Stage no `docs/roadmap.md` coerente com o merge (issue avulsa não tem linha no roadmap — n/a)
+
+### Fechamento autônomo pela auditoria (rebase → merge → limpeza)
+
+Quem roda a **fase de aplicação** da `issue-audit`/`stage-audit` (Fase F das skills) fecha o PR
+sozinho — sem pedir OK — quando a auditoria fechou **todo** o escopo e não sobrou pendência. É a
+mesma rotina das Etapas 4→7, na ordem que evita as armadilhas conhecidas. A aprovação humana é
+delegada ao gate auditoria `complete` + CI verde (§Gates de PR).
+
+**Condições de entrada — todas verificadas por comando, nunca de memória:**
+
+1. Veredito sem blocker **e** sem finding de escopo "dentro desta issue/Stage" em aberto; todo
+   critério de aceitação (`## Critério de aceitação` da issue, A* do concept) ✅ com evidência;
+   finding de outro escopo já virou issue (link no comentário do veredito).
+2. Worktree limpa e tudo enviado: `git status --porcelain` vazio e
+   `git log --oneline origin/<branch>..HEAD` vazio.
+3. Sem carona: `git log --oneline origin/develop..HEAD` só traz commits do escopo (Etapa 4).
+4. Nada pendente no PR: não é draft; checklist do corpo todo marcado (ou `n/a` justificado);
+   nenhuma conversa de review sem resolver (consulta abaixo); `### Depende de` da issue já
+   mergeado em `develop`; nenhum fork `P:` sem resposta nem HALT.
+
+```bash
+# conversas de review sem resolver (deve imprimir 0)
+gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:100){nodes{isResolved}}}}}' \
+  -F o=MarceloSanC -F r=financial-forecasting -F n=<num-pr> \
+  --jq '[.data.repository.pullRequest.reviewThreads.nodes[]|select(.isResolved|not)]|length'
+```
+
+Qualquer condição falsa ⇒ **não mergeia**: volta à fase de aplicação, ou para e reporta o que falta.
+
+**Sequência** (rodar dentro da worktree até o passo 4; do checkout principal a partir do 6):
+
+```bash
+# 1. Rebase na base atualizada (pula se origin/develop já é ancestral do HEAD)
+git fetch --prune origin
+git merge-base --is-ancestor origin/develop HEAD || git rebase origin/develop
+#    conflito → git rebase --abort, PARA e reporta (não resolve conflito às cegas)
+#    Stage cujo technical §7 / manifesto / ledger cita hash da branch → usar
+#    `git merge origin/develop` no lugar do rebase (rebase quebra a ancestralidade dos hashes)
+
+# 2. Registrar a auditoria ANTES do push: comentário do veredito citando os hashes JÁ
+#    rebaseados + linha `> **Auditoria:** complete` no corpo (o audit-gate lê o corpo
+#    do payload do evento — editar depois do push deixa o run do push em `review`)
+gh pr comment <num-pr> --body-file <veredito.md>
+gh pr edit <num-pr> --body-file <corpo-com-complete.md>
+
+# 3. Push do rebase (rebase no-op com veredito já gravado → pular 2 e 3)
+git push --force-with-lease
+
+# 4. Esperar o CI do HEAD novo (inclui audit-status) e conferir mergeabilidade
+gh pr checks <num-pr> --watch --fail-fast
+gh pr view <num-pr> --json mergeable,mergeStateStatus   # MERGEABLE + CLEAN
+#    check vermelho → volta à fase de aplicação; BLOCKED/BEHIND → PARA e reporta
+
+# 5. Salvar dado git-ignorado caro de refazer (o worktree-rm apaga a pasta inteira):
+#    data/cohorts/, artifacts/, mlruns* da worktree → mesmo caminho no checkout principal
+
+# 6. Merge commit (sem --delete-branch: com a worktree viva ele falha ao apagar a
+#    branch local e deixa a remota viva — o passo 7 apaga as duas)
+gh pr merge <num-pr> --merge
+
+# 7. Limpeza, a partir do checkout principal (nunca de dentro da worktree)
+python scripts/worktree-rm.py <branch> --no-docker --delete-remote
+git ls-remote --heads origin <branch>                   # vazio; senão: git push origin --delete <branch>
+
+# 8. Sincronizar o develop local sem criar merge commit
+git fetch --prune origin && git merge --ff-only origin/develop
+#    falha do ff-only = develop local com commit não enviado → NÃO usar pull; reportar
+
+# 9. Conferir o fechamento
+gh issue view <num-issue> --json state                  # CLOSED (via Closes #N)
+```
+
+`--no-docker` evita o prompt interativo do `worktree-rm.py` sobre a imagem de dev compartilhada.
+Se `gh pr merge` for negado pela permissão da sessão, **parar** e pedir ao humano a regra de
+permissão — nunca editar a configuração de permissões nem tentar contornar.
+
+**Saída:** uma linha de status — PR mergeado (hash do merge commit), issue fechada, worktree e
+branches (local e remota) removidas, `develop` local sincronizado.
 
 ---
 
