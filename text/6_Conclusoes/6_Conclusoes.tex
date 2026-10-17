@@ -48,6 +48,8 @@ Em sexto lugar, os resultados da rodada exploratória de hiperparâmetros não c
 
 Em sétimo lugar, a garantia de cobertura da predição conformal pressupõe permutabilidade, que não vale em séries temporais; com uma calibração por \textit{fold}, uma quebra de regime dentro do bloco de teste não é coberta por nenhuma cota, e a cobertura dos intervalos conformais é, por isso, reportada como empírica \cite{BARBER2023}.
 
+Em oitavo lugar, a construção das \textit{features} tem duas simplificações temporais declaradas: o corte de publicação das notícias é fixo em UTC e, no horário de verão, atribui à própria sessão as notícias da primeira hora após o fechamento; e um fundamento passa a ser visível na própria sessão da sua data efetiva de divulgação. Nenhuma das duas usa informação posterior à data da notícia ou do documento, mas ambas podem antecipar em algumas horas a informação disponível no fechamento.
+
 Por fim, o limiar de degeneração e os desvios mínimos relevantes usados no cálculo do poder não têm valor canônico na literatura; sua validade decorre da declaração antecipada no pré-registro, conforme discutido na Seção~\ref{sec:scorecard}.
 
 \section{Trabalhos futuros}
