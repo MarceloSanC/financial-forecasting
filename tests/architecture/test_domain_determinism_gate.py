@@ -11,6 +11,8 @@ Cobre:
   `random.Random` passam (decisão do gate: semente explícita é pura);
 - falsos positivos que o gate NÃO pode ter: campo `open: float` de dataclass, parâmetro
   `open`, método `.open()` de objeto local, variável local chamada `time`;
+- o sombreamento de `open` é léxico: religado numa função, não esconde o builtin lido em
+  outra;
 - módulos fora de `domain/` não são varridos;
 - o repo real passa com baseline vazio; `main()` devolve 0 / 1.
 """
@@ -102,6 +104,42 @@ def test_nondeterministic_source_is_a_violation(
     ],
 )
 def test_deterministic_code_passes(gate: ModuleType, source: str) -> None:
+    assert _uses(gate, source) == {}
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param(
+            "def body(open: float, close: float) -> float:\n    return close - open\n\n"
+            "def load() -> str:\n    return open('cfg.json').read()\n",
+            id="parametro-open-em-outra-funcao",
+        ),
+        pytest.param(
+            "from dataclasses import dataclass\n@dataclass\nclass C:\n    open: float\n\n"
+            "x = open('f')\n",
+            id="campo-open-nao-sombreia-o-modulo",
+        ),
+        pytest.param(
+            "f = lambda open: open\nx = open('f')\n",
+            id="lambda-open-sombreia-so-a-lambda",
+        ),
+    ],
+)
+def test_open_shadowing_is_lexical_not_module_wide(gate: ModuleType, source: str) -> None:
+    """Um `open` religado num escopo não esconde o builtin lido em outro."""
+    assert list(_uses(gate, source)) == ["open"]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("open = print\nopen('x')\n", id="religado-no-modulo"),
+        pytest.param("def f(open):\n    return [open(1) for _ in ()]\n", id="dentro-da-funcao"),
+        pytest.param("from io import StringIO as open\nx = open('s')\n", id="import-como-open"),
+    ],
+)
+def test_open_rebound_in_the_same_scope_is_not_the_builtin(gate: ModuleType, source: str) -> None:
     assert _uses(gate, source) == {}
 
 

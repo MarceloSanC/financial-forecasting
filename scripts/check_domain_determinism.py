@@ -103,41 +103,67 @@ def is_forbidden(name: str) -> bool:
     return head == "random" and bool(attr) and "." not in attr and name != _SEEDED_RNG
 
 
-def _binds_open(tree: ast.AST) -> bool:
-    """O módulo liga o nome `open` (parâmetro, `def`, atribuição a nome solto)?"""
-    for node in ast.walk(tree):
-        if isinstance(node, ast.arg) and node.arg == "open":
-            return True
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "open":
-            return True
-        if (
-            isinstance(node, ast.Name)
-            and node.id == "open"
-            and isinstance(node.ctx, ast.Store)
-            and not _is_class_field(tree, node)
-        ):
-            return True
-    return False
+_FUNCTION_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
 
 
-def _is_class_field(tree: ast.AST, name: ast.Name) -> bool:
-    """`name` é alvo de uma atribuição direta no corpo de uma classe (campo/atributo)?"""
-    for cls in (node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)):
-        for stmt in cls.body:
-            targets: list[ast.expr] = []
-            if isinstance(stmt, ast.AnnAssign):
-                targets = [stmt.target]
-            elif isinstance(stmt, ast.Assign):
-                targets = stmt.targets
-            if any(target is name for target in targets):
+def _binds_open(scope: ast.AST) -> bool:
+    """O escopo (módulo ou função) liga o nome `open` — parâmetro, `def`/`class`,
+    import ou atribuição? O corpo de classe e as funções aninhadas são escopos próprios:
+    o campo `open: float` de uma dataclass não sombreia o builtin para o resto do módulo."""
+    body: list[ast.AST] = []
+    if isinstance(scope, _FUNCTION_SCOPES):
+        args = scope.args
+        params = [*args.posonlyargs, *args.args, *args.kwonlyargs]
+        params += [arg for arg in (args.vararg, args.kwarg) if arg is not None]
+        if any(param.arg == "open" for param in params):
+            return True
+        body = [scope.body] if isinstance(scope, ast.Lambda) else list(scope.body)
+    elif isinstance(scope, ast.Module):
+        body = list(scope.body)
+    stack = body
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if node.name == "open":
                 return True
+            continue
+        if isinstance(node, ast.Lambda):
+            continue
+        if isinstance(node, ast.Name) and node.id == "open" and isinstance(node.ctx, ast.Store):
+            return True
+        if isinstance(node, ast.alias) and (node.asname or node.name) == "open":
+            return True
+        stack.extend(ast.iter_child_nodes(node))
     return False
+
+
+def _builtin_open_loads(tree: ast.AST) -> set[int]:
+    """`id()` dos `Name("open")` lidos que resolvem ao builtin, pelo escopo léxico: um
+    parâmetro `open` numa função sombreia só dentro dela, não no módulo inteiro."""
+    found: set[int] = set()
+
+    def visit(node: ast.AST, shadowed: bool) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, _FUNCTION_SCOPES):
+                visit(child, shadowed or _binds_open(child))
+            elif (
+                isinstance(child, ast.Name)
+                and child.id == "open"
+                and isinstance(child.ctx, ast.Load)
+                and not shadowed
+            ):
+                found.add(id(child))
+            else:
+                visit(child, shadowed)
+
+    visit(tree, _binds_open(tree))
+    return found
 
 
 def forbidden_uses(tree: ast.AST, module: str) -> dict[str, list[int]]:
     """`{nome qualificado proibido: linhas}` encontrados em `tree`."""
     aliases = _ast_lib.import_aliases(tree, module)
-    open_shadowed = _binds_open(tree)
+    open_loads = _builtin_open_loads(tree)
     found: dict[str, list[int]] = defaultdict(list)
     chain_members: set[int] = set()  # elos internos de `a.b.c` já avaliados pela cadeia
     for node in ast.walk(tree):
@@ -156,14 +182,9 @@ def forbidden_uses(tree: ast.AST, module: str) -> dict[str, list[int]]:
             chain_members.add(id(head))
         if not isinstance(head, ast.Name):
             continue
-        # `open` sem import é o builtin — se lido (Load) e não religado no módulo
-        # (`open: float` de dataclass é Store; `def body(open, close)` sombreia).
-        builtin_open = (
-            head is node
-            and node.id == "open"
-            and isinstance(node.ctx, ast.Load)
-            and not open_shadowed
-        )
+        # `open` sem import é o builtin — se lido (Load) num escopo que não o religa
+        # (`open: float` de dataclass é Store; `def body(open, close)` sombreia só ali).
+        builtin_open = head is node and id(node) in open_loads
         if head.id not in aliases and not builtin_open:
             continue  # cadeia que parte de variável local / parâmetro, não de nome importado
         name = _ast_lib.qualified_name(node, aliases)
