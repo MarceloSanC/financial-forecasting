@@ -40,6 +40,11 @@ from dataclasses import dataclass, replace
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
+from financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract import (  # noqa: E501
+    DATASET_TFT_LAYER,
+    DATASET_TFT_TABLE,
+    TARGET_COLUMN,
+)
 from financial_forecasting.features.modeling.application.ports.out.hyperparameter_search import (
     stable_objective,
     validate_dimension_names,
@@ -89,12 +94,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_DATASET_LAYER = "processed"
-_DATASET_TABLE = "dataset_tft"
 _ARTIFACT_SUBDIR = "tft-sweep"
 _EXPLORATORY_PHASE = "exploratory"
 _INT_KIND = "int"
-_TARGET_COLUMN = "target_return"
 
 
 @dataclass(frozen=True)
@@ -335,16 +337,16 @@ class RunTftSweep:
         congelamento do cohort copia esse valor para a proveniência (I4).
         """
         rows = self._store.read(
-            layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": scope.asset_id}
+            layer=DATASET_TFT_LAYER, table=DATASET_TFT_TABLE, filters={"asset": scope.asset_id}
         )
         if not rows:
             raise ValueError(
-                f"dataset ({_DATASET_LAYER!r}, {_DATASET_TABLE!r}) is empty for "
+                f"dataset ({DATASET_TFT_LAYER!r}, {DATASET_TFT_TABLE!r}) is empty for "
                 f"asset {scope.asset_id!r} — nothing to sweep (C1)"
             )
-        grid = build_training_grid(rows, columns=(*feature_names, _TARGET_COLUMN))
+        grid = build_training_grid(rows, columns=(*feature_names, TARGET_COLUMN))
         return (
-            grid.column(_TARGET_COLUMN),
+            grid.column(TARGET_COLUMN),
             grid.sessions(),
             grid.matrix(feature_names),
             grid_fingerprint(grid, hasher=self._hasher, asset_id=scope.asset_id),
