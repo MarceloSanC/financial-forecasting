@@ -5,7 +5,8 @@ reprova é a violação injetada (disciplina de `_REAL_VIOLATION_CASES`).
 
 Cobre:
 
-- cada família proibida (relógio, id aleatório, acaso global, ambiente, arquivo), por
+- cada família proibida (relógio, id aleatório, acaso global, sistema operacional,
+  arquivo — inclusive `pathlib.Path`, o vizinho moderno de `open`), por
   import direto, com alias e por `from x import y`;
 - `random.Random()` sem semente reprova; `random.Random(seed)` e a anotação
   `random.Random` passam (decisão do gate: semente explícita é pura);
@@ -77,6 +78,17 @@ def _uses(gate: ModuleType, source: str) -> dict[str, list[int]]:
         pytest.param("import os\nx = os.urandom(8)", "os.urandom"),
         pytest.param("x = open('f').read()", "open"),
         pytest.param("import io\nx = io.open('f')", "io.open"),
+        pytest.param("from pathlib import Path\nx = Path('a').read_text()", "pathlib.Path"),
+        pytest.param("import pathlib\nwith pathlib.Path('a').open() as f: ...", "pathlib.Path"),
+        pytest.param("import os\nx = os.listdir('.')", "os.listdir"),
+        pytest.param("import os.path\nx = os.path.exists('a')", "os.path"),
+        pytest.param("import shutil\nshutil.copy('a', 'b')", "shutil.copy"),
+        pytest.param("import subprocess\nsubprocess.run(['ls'])", "subprocess.run"),
+        pytest.param(
+            "from socket import create_connection as c\nc(('h', 1))", "socket.create_connection"
+        ),
+        pytest.param("import tempfile\nx = tempfile.mkdtemp()", "tempfile.mkdtemp"),
+        pytest.param("from glob import glob\nx = glob('*')", "glob.glob"),
         pytest.param("import datetime\nagora = datetime.datetime.now\n", "datetime.datetime.now"),
     ],
 )
@@ -101,6 +113,9 @@ def test_nondeterministic_source_is_a_violation(
         pytest.param("def f(handle) -> None:\n    handle.open()\n", id="metodo-open"),
         pytest.param("def f(time) -> int:\n    return time.time\n", id="local-time"),
         pytest.param("from datetime import timedelta\nx = timedelta(days=1)", id="timedelta"),
+        pytest.param(
+            "from pathlib import PurePosixPath\nx = PurePosixPath('a') / 'b'", id="pure-path"
+        ),
     ],
 )
 def test_deterministic_code_passes(gate: ModuleType, source: str) -> None:

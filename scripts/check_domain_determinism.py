@@ -8,11 +8,15 @@ O que reprova, em qualquer módulo sob `*/domain/` (features e `shared/domain`):
 
 - relógio: `datetime.now/utcnow/today`, `date.today`, `time.time/time_ns/monotonic/
   perf_counter`;
-- identificador aleatório: `uuid.uuid1/uuid4`, `os.urandom`, qualquer `secrets.*`;
+- identificador aleatório: `uuid.uuid1/uuid4`, qualquer `secrets.*`;
 - acaso com estado GLOBAL: qualquer `random.<função>` do módulo (`random.random`,
   `random.choice`, `random.seed`…), `random.SystemRandom` e `random.Random()` SEM semente;
-- ambiente: `os.environ`, `os.getenv`;
-- I/O de arquivo: `open`, `io.open`.
+- sistema operacional: qualquer `os.*` (`os.environ`, `os.getenv`, `os.urandom`,
+  `os.listdir`, `os.path.*`…), `shutil.*`, `subprocess.*`, `socket.*`, `tempfile.*`,
+  `glob.*`;
+- I/O de arquivo: `open`, `io.open` e `pathlib.Path` (a classe concreta lê e escreve:
+  `Path(...).read_text()` é o `open` moderno). Caminho como valor puro usa
+  `pathlib.PurePath`/`PurePosixPath`, que passam.
 
 Por quê: o domínio é o núcleo puro — "eliminate any dependency on infrastructure" (Evans,
 *DDD Reference*, 2015, LAYERED ARCHITECTURE, p.17) e "functions, operations that return
@@ -66,15 +70,23 @@ FORBIDDEN: frozenset[str] = frozenset(
         "time.perf_counter",
         "uuid.uuid1",
         "uuid.uuid4",
-        "os.urandom",
-        "os.environ",
-        "os.getenv",
         "open",
         "io.open",
+        "pathlib.Path",
         "random.SystemRandom",
     }
 )
-FORBIDDEN_MODULES: tuple[str, ...] = ("secrets",)
+# Módulo inteiro: todo membro é acaso criptográfico (`secrets`) ou toca o sistema
+# operacional — ambiente, `urandom`, sistema de arquivos, processo, rede.
+FORBIDDEN_MODULES: tuple[str, ...] = (
+    "secrets",
+    "os",
+    "shutil",
+    "subprocess",
+    "socket",
+    "tempfile",
+    "glob",
+)
 _SEEDED_RNG = "random.Random"
 
 
