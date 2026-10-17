@@ -17,9 +17,15 @@ Mapeamento `group` (old, 5 valores) → `family` (4 valores, I4 / ADR 0.0.0016):
 | sentiment    | sentiment                                     |
 | fundamental  | fundamental                                   |
 | derived      | herda da natureza da fonte:                   |
-|              |   preço/retorno/vol/regime → price/technical  |
+|              |   retorno/momentum/reversão/                  |
+|              |   drawdown/liquidez         → price           |
+|              |   volatilidade/regime       → technical       |
 |              |   sentimento dinâmico       → sentiment       |
 |              |   fundamento derivado/YoY   → fundamental     |
+
+Volatilidade (`volatility_20d` e as derivadas Parkinson/Garman-Klass/semivol/
+vol-of-vol/regime) é `technical`, não `price` — errata do ADR 0.0.0016 (#151): a
+família entra no `feature_set_hash`, que o cohort congelado carrega.
 
 Regra única de `tft_typing` (I3/D4): calendário (`day_of_week`/`month`/`time_idx`,
 se vierem a ser registrados como features) = `known`; preço/indicador/sentimento/
@@ -304,10 +310,11 @@ def _derived_specs() -> dict[str, FeatureSpec]:
     Replica `formula_desc`/`warmup_count`/`anti_leakage_tag`/`dtype` verbatim do
     `FEATURE_REGISTRY` do old, com a taxonomia desta Stage (concept 3.4 §5):
 
-    Família da derivada (I4): preço/retorno/liquidez/volatilidade/regime →
-    `price`/`technical` (derivada de indicador como `vol_of_vol`/`volatility_regime`
-    de `volatility_20d`, `trend_regime` de `ema_*` → `technical`); sentimento
-    dinâmico → `sentiment`; fundamento derivado/YoY → `fundamental`.
+    Família da derivada (I4): retorno/momentum/reversão/drawdown/liquidez →
+    `price`; volatilidade (Parkinson, Garman-Klass, semivol, `vol_of_vol`) e
+    regimes (`volatility_regime`, `trend_regime`, `stress_tail_return_flag`) →
+    `technical` (errata do ADR 0.0.0016, #151); sentimento dinâmico → `sentiment`;
+    fundamento derivado/YoY → `fundamental`.
 
     Tags: derivadas de OHLCV/preço → `trailing_window_causal`; `sentiment_lag_*`
     (puro `shift`) → `lagged_causal` (promovido vs o old, que usava

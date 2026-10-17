@@ -1061,6 +1061,8 @@ skills_hint: [ddd-tactical-patterns, hex-arch-python, dmls-ch05-model-developmen
 
 **Código novo de modelagem (doc de domínio §5.5):** a ablação exige treinar o TFT com um **subconjunto** de famílias (hoje o `TrainTft` usa a registry inteira), identidade de run / `feature_set_hash` por configuração, um cohort spec de ablação com 5 configurações (o executor de cohort hoje recusa `feature_set_hash` diferente da registry) e dispositivo ≠ `cpu` (o composition root hoje só aceita `cpu`). Custo medido de referência: ~300 treinos ≈ ~95 h em CPU; decisão do humano: 10 seeds em GPU (Linux, ROCm), com piloto 1 seed × 1 fold antes. O desenho fica no concept/technical da Stage.
 
+**Notas da #151:** a partição da volatilidade está resolvida (vale o registry: as 6 de volatilidade e os regimes em technical; errata no ADR 0.0.0016; doc de domínio inference §5.2, C8). (i) O pré-registro de H3 congela a partição pela **lista de features** de cada família + `feature_set_hash`, não pelo nome da família. (ii) Ressalva de leitura: a participação de technical inclui a volatilidade, que deve pesar na largura dos quantis. (iii) A decidir no concept da 7.3: perfil descritivo de permutação do subgrupo de volatilidade, fora do veredito e sem ablação.
+
 **Descrição para IA:**
 ```yaml
 stage_id: 7.3-explainability
@@ -1193,7 +1195,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 ## Lacunas conhecidas
 
 - **Variante do CQR (7.2):** decidida — split-CQR assimétrico sem pesos como registro + NexCP ρ = 0,99 como sensibilidade (ADR `0_0_0008`; doc de domínio inference §4.5); os detalhes do pré-registro (forma, papel do MAPIE) ficam na 7.2.
-- **Pré-registro de H3 (7.3):** nível do IC, multiplicidade para "≥ 1 de 4 famílias", importâncias negativas / Σ I_g ≈ 0, chave de pareamento entre horizontes e bloco do bootstrap conjunto a fixar na 7.3 (doc de domínio inference §5.7); partição da volatilidade resolvida (#151) como pré-condição do pré-registro.
+- **Pré-registro de H3 (7.3):** nível do IC, multiplicidade para "≥ 1 de 4 famílias", importâncias negativas / Σ I_g ≈ 0, chave de pareamento entre horizontes e bloco do bootstrap conjunto a fixar na 7.3 (doc de domínio inference §5.7); partição da volatilidade resolvida na #151 (vale o registry — volatilidade e regimes em technical; doc de domínio inference §5.2, C8); encaminhamento nas Notas da #151 no bloco da 7.3.
 - **Parâmetros do MCS (6.2):** regra do bloco fixada no doc de domínio evaluation §6.5 (max(h, maior b̂_sb de Politis–White), sensibilidades l = h, √T e moving-block — ADR 0.0.0010); `B` de bootstrap e semente a fixar no concept de 6.2.
 - **Bandas e tolerâncias:** bandas de calibração pré-registradas (H1) e tolerância de equivalência (8.2) a fixar nos concepts de 6.5/8.2.
 - **Fallback de fundamentals (3.3):** janela exata do fallback de disponibilidade a declarar e pré-registrar no concept de 3.3.

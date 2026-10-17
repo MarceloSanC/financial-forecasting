@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 7 (
 keywords: [domain, inference, determinism, reproducibility, dropout, mc-dropout, guardrail, conformal, split-conformal, cqr, asymmetric-cqr, nexcp, aci, enbpi, exchangeability, beta-coverage, empirical-coverage, h3, feature-attribution, vsn, permutation-importance, grouped-importance, loco, ablation, block-bootstrap, per-horizon, preregistration, api]
 status: accepted
 created_at: 2026-10-06
-updated_at: 2026-10-06
+updated_at: 2026-10-17
 bounded_context: inference
 subdomain: conformal-benchmark-and-feature-attribution
 references:
@@ -609,15 +609,43 @@ decoder. Se uma feature de família passar
 a `known`, a VSN do decoder ganha eixo de horizonte, o argumento de §5.3 deixa
 de valer e a decisão P-H3-VSN deve ser **reaberta**.
 
-**Ressalva pendente — partição da volatilidade.** O ADR 0.0.0016 diz que
+**Partição da volatilidade (C8 — decidida, §10.1; issue
+[#151](https://github.com/MarceloSanC/financial-forecasting/issues/151)).** O ADR 0.0.0016 diz que
 features derivadas de preço "(returns, momentum, drawdown, volatility) all
 belong to the **price** family", mas o registry classifica seis features de
 volatilidade (`volatility_20d`, `volatility_parkinson`,
 `volatility_garman_klass`, `downside_semivolatility`, `vol_of_vol`,
-`volatility_regime`) como **technical**. A divergência muda a partição de H3 e
-fica **fora do escopo deste doc** (issue separada, [#151](https://github.com/MarceloSanC/financial-forecasting/issues/151)): ela **precisa estar
-resolvida antes do pré-registro de H3**, porque a partição é parte do que se
-pré-registra (§7).
+`volatility_regime`) como **technical**. Vale o **registry** (errata no ADR
+0.0.0016): **price** = OHLCV cru, retornos, momentum, reversão, drawdown e
+liquidez/volume (17 features); **technical** = indicadores, forma do candle,
+estimadores de volatilidade e regimes (17). A escolha é convenção (C): a
+literatura aceita grupos definidos por conhecimento de domínio ou por dados
+(Au et al. 2022, §1) e não tem taxonomia única para volatilidade — Gu, Kelly
+& Xiu (2020, §3.3) a põem em "risk measures", fora de price trends; as
+bibliotecas de análise técnica a põem nos indicadores. A medição sem alvo
+(2026-10-17, §10.1 C8) não discrimina as duas atribuições: as seis formam um
+bloco coeso (|ρ| médio 0,51 entre si) e fracamente ligado a price (0,18) e ao
+resto de technical (0,21). Decide o degrau 1: a partição do registry é a que o
+`feature_set_hash` do cohort congelado e já treinado `aapl_confirmatory-r0` e o
+pré-registro da 6.5 carregam (a família entra no hash, embora o modelo não a
+leia). Encaminhamento para a 7.3 (nota no bloco da 7.3 do roadmap): (i) o
+pré-registro de H3 congela a partição pela **lista de features** de cada
+família + `feature_set_hash`, não pelo nome da família; (ii) ressalva de
+leitura: a participação de technical inclui a volatilidade, que deve pesar na
+largura dos quantis; (iii) a decidir no concept da 7.3: perfil descritivo de
+permutação do subgrupo de volatilidade, fora do veredito e sem ablação.
+
+**Ressalva declarada — fronteira price/technical porosa.** A mesma medição
+mostra os níveis OHLC (price) e `ema_10`/`ema_50`/`ema_100` (technical) com
+|ρ| de 0,97 a 0,998 (os pares mais fortes dos 52 entre famílias com |ρ| ≥ 0,7),
+independentemente da volatilidade. Com grupos correlacionados entre si, a
+permutação de grupo quebra essa associação e extrapola, e a recomendação é
+preferir o re-treino ("refitting methods might be preferable as they are not
+misleading in correlated settings", Au et al. 2022, §3.1); a permutação de
+grupo é especialmente útil quando "between-group dependencies are rather low"
+(Molnar et al. 2022, §8.1). É mais uma razão para a concordância com o LOCO
+(§5.5, §5.7); no LOCO, por sua vez, a outra família compensa parte da removida
+(Hooker et al. 2021, p. 13). Tratamento além de declarar: `[finding]` na #151.
 
 ### 5.3 VSN: descrição geral, horizonte-invariante
 
@@ -883,8 +911,9 @@ cohort confirmatório antes do pré-registro (§7).
 **O que se pré-registra (E1 — decidida, §10.1).** Antes da 8.1:
 
 - **CQR** — o listado em §4.13;
-- **H3** — a partição de famílias (com a ressalva de §5.2 resolvida), o
-  esquema de permutação, K_p, a medida, bloco/B/semente do bootstrap, a regra
+- **H3** — a partição de famílias (a do registry, C8 em §5.2), congelada
+  pela lista de features de cada família + `feature_set_hash`, não pelo
+  nome da família, o esquema de permutação, K_p, a medida, bloco/B/semente do bootstrap, a regra
   C4/C5 com os 5 pontos abertos listados em §5.7 (nível do IC,
   multiplicidade, importâncias negativas, chave de pareamento, bloco), e o
   desenho da ablação (cohort de ablação hasheado).
@@ -934,7 +963,7 @@ ablação; schema e versionamento do payload da API.
 
 ### 8.3 O que este doc não decide
 
-A partição da volatilidade (§5.2 — issue [#151](https://github.com/MarceloSanC/financial-forecasting/issues/151)); os 5 pontos
+Os 5 pontos
 abertos de H3 listados em §5.7 (nível do IC, multiplicidade, importâncias
 negativas, chave de pareamento, bloco — pré-registro da 7.3); qualquer teste de
 hipótese sobre o CQR.
@@ -987,6 +1016,7 @@ em §10.1.
 | 24 | Vocabulário órfão abandonado ou definido (§9) | — | [C] E2, degrau 1 | 7.3, 7.4 |
 | 25 | ADRs do gate: 0.0.0057, 0.0.0007, 0.0.0008 | — | [C] E3, degrau 1 | — |
 | 26 | Correções de texto do roadmap (Step 7 e dependência 8.1 → 7.3) | — | [C] E4, degrau 1 | 7.1–7.4, 8.1 |
+| 27 | Partição da volatilidade: vale o registry (as 6 de volatilidade e os regimes em technical); errata no ADR 0.0.0016; partição congelada por lista de features + `feature_set_hash`; perfil do subgrupo de volatilidade a decidir na 7.3 | ADR 0.0.0016 (notas de implementação); ADR 5.5.0001; Au et al. 2022 §1, §3.1; Gu, Kelly & Xiu 2020 §3.3; medição sem alvo 2026-10-17 | [C] C8, degrau 1 | 7.3, 8.1 |
 
 ### 10.1 Registro das decisões (triagem `evidence-resolution`, 2026-10-05/06)
 
@@ -1002,7 +1032,8 @@ trecho só parcialmente fiel e o texto foi corrigido para o que a fonte diz).
 Os localizadores e trechos dos demais registros com fonte externa (A1, A2,
 B5, B6, C2) são os das sessões de
 pesquisa (lotes A, B1, B2, C), lidos crus nas fontes indicadas, sem
-verificação adversarial.
+verificação adversarial. C8 foi acrescentado em 2026-10-17 (issue #151), com 5
+itens verificados da mesma forma.
 
 ```
 [decision:P] P-H3-VSN — papel da VSN em H3
@@ -1131,6 +1162,13 @@ Escolha: calendário, alvo passado e índice relativo não são permutados nem a
 Base: ADR 0.0.0016; registry de features; treino do TFT (spec known vai ao decoder automaticamente)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
+[decision:C] C8 — família das 6 features de volatilidade (issue #151, 2026-10-17)
+Escolha: vale o registry — volatility_20d, volatility_parkinson, volatility_garman_klass, downside_semivolatility, vol_of_vol, volatility_regime (e os regimes trend_regime, stress_tail_return_flag) em technical; errata no ADR 0.0.0016 · Alternativas: as 6 em price (texto da Decision do ADR 0.0.0016); por origem (Parkinson/GK/semivol em price, o resto em technical — technical 3.4 Task 03) · Degrau: 1
+Base: ADR 0.0.0016 "Implementation notes" (indicators → technical) e "Neutral / trade-offs" (volatility como subfamília dentro de technical) — sustentam só as derivadas de indicador (volatility_20d, vol_of_vol, volatility_regime, trend_regime); para as de OHLC/close (Parkinson, GK, semivol, stress_tail_return_flag) as mesmas notas apontariam price, e o degrau 1 repousa no hash e no bloco medido; a família entra no feature_set_hash, que o cohort congelado e treinado aapl_confirmatory-r0 e o pré-registro da 6.5 carregam (ADR 5.5.0001); Au et al. 2022 (arXiv:2104.11688) §1 p. 2 "groups of features can either be defined in a data-driven or in a knowledge-driven way"; Gu, Kelly & Xiu 2020 §3.3 (NBER w25398 p. 31) "Risk measures constitute the third influential group, including total and idiosyncratic return volatility" (separado do grupo de price trends); Neely et al. 2014 (WP p. 10) "14 technical indicators based on three popular technical strategies" (MA, momentum, volume — nenhuma de volatilidade); TA-Lib/pandas-ta põem ATR/bandas em indicadores de volatilidade
+Medição (data-shape, sem alvo e sem modelo): Spearman |ρ| entre as 55 features do dataset TFT AAPL (data/cohorts/aapl/processed/dataset_tft), linhas < 2018-01-01 (antes do OOS), n = 1939; amostra inteira (n = 3950) como robustez. As 6 entre si: 0,51 (0,56); com price: 0,18 (0,12); com o resto de technical: 0,21 (0,18). Pares entre famílias com |ρ| ≥ 0,7: registry 52 (54), as 6 em price 52 (53), por origem 55 (56) — a regra por origem parte o bloco. Consulta: corpo do PR da #151
+Verificado: sustenta (Au §1, §3.1; Gu-Kelly-Xiu §3.3; Neely p. 10); Molnar et al. 2022 §8.1 parcial→corrigido ("especially useful when ... between-group dependencies are rather low" é condição de utilidade, não pressuposto)
+Sensibilidade pré-registrada: nenhuma (a partição alternativa não entra); a decidir no concept da 7.3: perfil descritivo de permutação do subgrupo de volatilidade, fora do veredito e sem ablação · Reversível: não sem nova revisão do cohort (muda o feature_set_hash)
+
 [decision:C] C7 — linguagem e "veredito mecânico H3"
 Escolha: estritamente descritiva; regra de leitura pré-registrada e mecânica (C4 + C5), separada de H1 → H2 · Alternativas: H3 como teste confirmatório no veredito · Degrau: 1
 Base: overview §3; ADR 0.0.0002; evaluation §8.6
@@ -1171,7 +1209,7 @@ foi lida em primária durante o gate.
 - Barber, R. F.; Candès, E. J.; Ramdas, A.; Tibshirani, R. J. (2023). "Conformal prediction beyond exchangeability". *Annals of Statistics*, 51(2), 816–845. DOI: 10.1214/23-AOS2276. arXiv:2202.13415v5 (versão lida; paginação do arXiv). (§3, §3.1 p. 10; Eqs. (10)–(11) pp. 10–11; §4.1 Theorem 2 p. 15; §4.3 p. 18; §4.4 pp. 18–19; §5.1 p. 22; Appendix A.)
 - Lei, J.; G'Sell, M.; Rinaldo, A.; Tibshirani, R. J.; Wasserman, L. (2018). "Distribution-Free Predictive Inference for Regression". *Journal of the American Statistical Association*, 113(523), 1094–1111. DOI: 10.1080/01621459.2017.1307116. (Split conformal; §6 LOCO — localizador da sessão de pesquisa, não relido.)
 - Lim, B.; Arık, S. Ö.; Loeff, N.; Pfister, T. (2021). "Temporal Fusion Transformers for interpretable multi-horizon time series forecasting". *International Journal of Forecasting*, 37(4), 1748–1764. DOI: 10.1016/j.ijforecast.2021.03.012. (Lido em arXiv:1912.09363v3; paginação do periódico não conferida: §4.2 Eqs. (6) e (8); §7.1 Eq. (27); §7.2.)
-- Gu, S.; Kelly, B.; Xiu, D. (2020). "Empirical Asset Pricing via Machine Learning". *The Review of Financial Studies*, 33(5), 2223–2273. DOI: 10.1093/rfs/hhaa009. (§1.9 pp. 2246–2247.)
+- Gu, S.; Kelly, B.; Xiu, D. (2020). "Empirical Asset Pricing via Machine Learning". *The Review of Financial Studies*, 33(5), 2223–2273. DOI: 10.1093/rfs/hhaa009. (§1.9 pp. 2246–2247; §3.3 — lido na NBER w25398, p. 31.)
 - Politis, D. N.; Romano, J. P. (1994). "The Stationary Bootstrap". *JASA*, 89(428), 1303–1313. DOI: 10.1080/01621459.1994.10476870. `[CITAÇÃO-NÃO-ACESSADA]` (como em evaluation §11.2.)
 - Politis, D. N.; White, H. (2004). "Automatic Block-Length Selection for the Dependent Bootstrap". *Econometric Reviews*, 23(1), 53–70. DOI: 10.1081/ETC-120028836.
 - Bouthillier, X.; Delaunay, P.; Bronzi, M.; et al. (2021). "Accounting for Variance in Machine Learning Benchmarks". *Proceedings of MLSys*, 3, 747–769. arXiv:2103.03098.
@@ -1216,6 +1254,9 @@ Atribuição de features:
 - Williamson, B. D.; Gilbert, P. B.; Simon, N. R.; Carone, M. (2023). "A General Framework for Inference on Algorithm-Agnostic Variable Importance". *Journal of the American Statistical Association*, 118(543), 1645–1658. DOI: 10.1080/01621459.2021.2003200. (§2.)
 - Covert, I.; Lundberg, S.; Lee, S.-I. (2021). "Explaining by Removing: A Unified Framework for Model Explanation". *Journal of Machine Learning Research*, 22(209), 1–90. arXiv:2011.14878. (§8.2.)
 - Krishna, S.; Han, T.; Gu, A.; Wu, S.; Jabbari, S.; Lakkaraju, H. (2024). "The Disagreement Problem in Explainable Machine Learning: A Practitioner's Perspective". *Transactions on Machine Learning Research*. arXiv:2202.01602. (§3.2.)
+- Au, Q.; Herbinger, J.; Stachl, C.; Bischl, B.; Casalicchio, G. (2022). "Grouped feature importance and combined features effect plot". *Data Mining and Knowledge Discovery*, 36(4), 1401–1450. DOI: 10.1007/s10618-022-00840-5. arXiv:2104.11688. (§1 p. 2; §2.5 p. 13; §3.1 pp. 16–17.)
+- Molnar, C.; König, G.; Herbinger, J.; Freiesleben, T.; Dandl, S.; Scholbeck, C. A.; Casalicchio, G.; Grosse-Wentrup, M.; Bischl, B. (2022). "General Pitfalls of Model-Agnostic Interpretation Methods for Machine Learning Models". In *xxAI — Beyond Explainable AI*, Lecture Notes in Computer Science, Springer, 39–68. DOI: 10.1007/978-3-031-04083-2_4. arXiv:2007.04131. (§5.1 p. 9; §8.1 pp. 17–18.)
+- Neely, C. J.; Rapach, D. E.; Tu, J.; Zhou, G. (2014). "Forecasting the Equity Risk Premium: The Role of Technical Indicators". *Management Science*, 60(7), 1772–1791. DOI: 10.1287/mnsc.2013.1838. (Lido no Federal Reserve Bank of St. Louis WP 2010-008H, p. 10 do PDF.)
 - Jain, S.; Wallace, B. C. (2019). "Attention is not Explanation". *Proceedings of NAACL-HLT 2019*, 3543–3556. DOI: 10.18653/v1/N19-1357. (Abstract.)
 - Wiegreffe, S.; Pinter, Y. (2019). "Attention is not not Explanation". *Proceedings of EMNLP-IJCNLP 2019*, 11–20. DOI: 10.18653/v1/D19-1002. (Conclusão.)
 

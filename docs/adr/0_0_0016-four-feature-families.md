@@ -5,7 +5,7 @@ when-use: Reference whenever assigning a feature to a family, before adding a fi
 keywords: [adr, feature-families, taxonomy, price, technical, sentiment, fundamental, h3, family-contribution, ablation, vsn, permutation, bronze, foundational, feature-engineering]
 status: accepted
 created_at: 2026-06-29
-updated_at: 2026-06-29
+updated_at: 2026-10-17
 adr_id: "0.0.0016"
 decision: Features are organized into exactly four families — price, technical, sentiment, fundamental — which is the canonical taxonomy required by the H3 relative-contribution hypothesis and reused from the bronze sources; the FeatureSpec.family field is constrained to this four-value set
 context_stage: 3.4-feature-registry-and-derived
@@ -13,6 +13,8 @@ bounded_context: transversal
 ---
 
 # ADR 0.0.0016 — Four feature families
+
+> ⚠️ **Errata (2026-10-17, issue #151):** "Decision" lists volatility among the price-derived features that "all belong to the **price** family". The registry has always labelled the six volatility features (`volatility_20d`, `volatility_parkinson`, `volatility_garman_klass`, `downside_semivolatility`, `vol_of_vol`, `volatility_regime`) and the regimes (`trend_regime`, `stress_tail_return_flag`) **technical**. This ADR's own "Implementation notes" ("indicators → `technical`"; `volatility_20d` is one of the ten 3.1 indicators) and "Neutral / trade-offs accepted" (volatility as a sub-family *within* technical, carried by `IndicatorSpec.family`) already put the indicator-based ones there (`volatility_20d`, `vol_of_vol`, `volatility_regime`, `trend_regime`); for the OHLC/close-based ones (`volatility_parkinson`, `volatility_garman_klass`, `downside_semivolatility`, `stress_tail_return_flag`) the same notes' "price-derived → `price`" would point the other way, and the registry keeps them with the rest of the volatility block for the reasons below. The registry's reading is the canonical one: **price** = raw OHLCV, returns, momentum, reversal, drawdown and liquidity/volume; **technical** = indicators, candle shape, volatility estimators and regimes. The four-family decision is unchanged; only the example list in "Decision" and the "price-derived" note are read this way (an errata rather than a superseding ADR because the ADR was internally inconsistent and the registry has implemented this reading since Stage 3.4). Why the registry and not the sentence: (1) `family` enters `feature_set_hash`, which the frozen, already-trained cohort `aapl_confirmatory-r0` and the 6.5 preregistration carry — moving the six would invalidate both for a label the model never reads; (2) target-free measurement (2026-10-17, Spearman on the AAPL TFT dataset, rows before the OOS start 2018-01-01, n = 1939): the six correlate weakly with price (mean |ρ| 0.18) and with the other technical features (0.21) and strongly among themselves (0.51); cross-family pairs with |ρ| ≥ 0.7 are 52 under either assignment and 55 under the by-origin rule that would split them; (3) the literature does not settle it — Gu, Kelly & Xiu (2020, §3.3) treat return volatility as "risk measures", apart from price trends, while TA libraries file range volatility under technical indicators. Full `[decision:C]` record: inference domain doc §5.2.
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
