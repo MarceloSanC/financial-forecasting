@@ -51,7 +51,8 @@ def refresh_command_from(prereg: Preregistration, reference: str) -> RefreshGold
     `RefreshParameters` com `preregistration_ref = reference`, as bandas do gate e do
     perfil ordenadas, e o primário seguido das sensibilidades no DM e no MCS; e, da
     Stage 6.6 (F8a), o `draws`/`seed` do Monte Carlo, as sensibilidades de bloco do MCS e
-    o bloco de regras de perfil da revisão (`None` no r0).
+    o bloco de regras de perfil da revisão (`None` no r0); e, da Stage 7.2, o bloco
+    `[conformal]` da revisão (`None` sem ele).
     """
     gate = prereg.h1_gate
     parameters = RefreshParameters(
@@ -70,6 +71,7 @@ def refresh_command_from(prereg: Preregistration, reference: str) -> RefreshGold
         monte_carlo_seed=prereg.monte_carlo.seed,
         mcs_block_sensitivities=prereg.mcs.block_sensitivities,
         profile_parameters=prereg.profile_parameters,
+        conformal_parameters=prereg.conformal,
     )
     return RefreshGoldCommand(
         asset=prereg.asset,

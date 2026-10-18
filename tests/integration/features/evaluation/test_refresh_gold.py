@@ -144,6 +144,7 @@ _PARAMETERS = RefreshParameters(
     monte_carlo_seed=128,
     mcs_block_sensitivities=("h", "sqrt_T"),
     profile_parameters=profile_parameters(),
+    conformal_parameters=None,
 )
 
 Rows = list[tuple[object, ...]]
