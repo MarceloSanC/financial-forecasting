@@ -61,3 +61,23 @@ def test_publish_guard_process_denies_push_on_a_later_line(main_checkout: Path) 
 @pytest.mark.parametrize("hook", ["git_guard", "publish_guard"])
 def test_guard_processes_stay_silent_on_safe_commands(main_checkout: Path, hook: str) -> None:
     assert _run(hook, "git status\ngit log -1", main_checkout) == ""
+
+
+def test_git_guard_reads_worktree_and_branches_from_real_git(
+    main_checkout: Path, tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for key in [k for k in os.environ if k.startswith("GIT_")]:
+        monkeypatch.delenv(key)
+    git = ["git", "-C", str(main_checkout), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "x"], check=True)
+    worktree = tmp_path_factory.mktemp("wt") / "feat"
+    subprocess.run([*git, "worktree", "add", "-q", "-b", "feat/1-x", str(worktree)], check=True)
+    if str(_HOOKS) not in sys.path:
+        sys.path.insert(0, str(_HOOKS))
+    import git_guard  # noqa: PLC0415 — hook carregado do diretório dele, como no processo
+
+    assert git_guard.is_main_worktree(main_checkout)
+    assert not git_guard.is_main_worktree(worktree)
+    assert not git_guard.is_main_worktree(tmp_path_factory.mktemp("not-a-repo"))
+    assert git_guard.branch_exists(main_checkout, "feat/1-x")
+    assert not git_guard.branch_exists(main_checkout, "feat/2-y")

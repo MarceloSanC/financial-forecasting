@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -138,3 +139,42 @@ def test_allows_branch_work_inside_a_worktree() -> None:
     assert not _blocked("git checkout -b feat/99-x", cwd=WORKTREE)
     assert not _blocked(f"git -C {WORKTREE} switch -c feat/99-x")
     assert not _blocked(f"cd {WORKTREE} && git switch -c feat/99-x")
+
+
+# --- main --------------------------------------------------------------------------------
+
+
+class _Bytes:
+    def __init__(self, text: str) -> None:
+        self._data = text.encode("utf-8")
+
+    def read(self) -> bytes:
+        return self._data
+
+
+def _stdin(monkeypatch: pytest.MonkeyPatch, text: str) -> None:
+    monkeypatch.setattr(sys, "stdin", type("S", (), {"buffer": _Bytes(text)})())
+
+
+def test_main_emits_deny_json(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(gg, "blocked", lambda _cmd, _cwd: True)
+    _stdin(monkeypatch, json.dumps({"tool_input": {"command": "git switch -c x"}, "cwd": "."}))
+    assert gg.main() == 0
+    out = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny"
+    assert out["permissionDecisionReason"] == gg.REASON
+
+
+@pytest.mark.parametrize(
+    "stdin",
+    [json.dumps({"tool_input": {"command": "git status"}, "cwd": "."}), "{nao json", "{}"],
+)
+def test_main_is_silent_when_allowed_or_unreadable(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], stdin: str
+) -> None:
+    monkeypatch.setattr(gg, "blocked", lambda _cmd, _cwd: False)
+    _stdin(monkeypatch, stdin)
+    assert gg.main() == 0
+    assert capsys.readouterr().out == ""
