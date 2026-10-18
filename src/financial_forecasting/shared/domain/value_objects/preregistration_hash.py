@@ -30,6 +30,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from financial_forecasting.shared.domain.services.sha256_hex import validate_sha256_hex
+
 if TYPE_CHECKING:
     from financial_forecasting.shared.application.ports.out.hasher import Hasher
 
@@ -70,6 +72,10 @@ class PreregistrationHash:
     """
 
     value: str
+
+    def __post_init__(self) -> None:
+        # o construtor cru também passa por aqui, não só a factory `compute` (#160)
+        validate_sha256_hex(self.value, field="PreregistrationHash.value")
 
     @classmethod
     def compute(cls, *, hasher: Hasher, payload: Mapping[str, object]) -> PreregistrationHash:

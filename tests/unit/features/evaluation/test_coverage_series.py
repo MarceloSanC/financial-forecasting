@@ -162,32 +162,46 @@ def test_out_of_order_timestamp_raises(make_series: SeriesFactory) -> None:
         make_series([_GRID, _GRID], [0.0, 0.0], timestamps=stamps)
 
 
+def _series_with_levels(levels: tuple[float, ...]) -> CoverageSeries:
+    """Série com `levels` sob teste e um ponto de grade VÁLIDA.
+
+    Um `QuantileForecast` com essa grade inválida já não se constrói (#160); o ponto
+    válido deixa a checagem de `levels` da própria série — que roda antes da
+    comparação ponto a ponto — ser a que ergue.
+    """
+    return CoverageSeries(
+        horizon=1,
+        levels=levels,
+        target_timestamps=("2024-01-02T00:00:00+00:00",),
+        forecasts=(QuantileForecast.from_raw(levels=_LEVELS, raw_values=_GRID),),
+        realized=(0.0,),
+    )
+
+
 @pytest.mark.unit
 @pytest.mark.parametrize(
     "levels",
     [(0.0, 0.5, 1.0), (-0.1, 0.5, 1.1), (math.nan, 0.5, 0.5)],
     ids=["closed-bounds", "outside", "nan"],
 )
-def test_level_outside_open_unit_interval_raises(
-    make_series: SeriesFactory, levels: tuple[float, ...]
-) -> None:
-    """C1: nível fora de (0, 1)."""
+def test_level_outside_open_unit_interval_raises(levels: tuple[float, ...]) -> None:
+    """C1: nível da série fora de (0, 1)."""
     with pytest.raises(ValueError, match=r"in \(0, 1\)"):
-        make_series([(0.0, 0.0, 0.0)], [0.0], levels=levels, direct=True)
+        _series_with_levels(levels)
 
 
 @pytest.mark.unit
-def test_levels_not_strictly_increasing_raise(make_series: SeriesFactory) -> None:
-    """C1: `levels` fora de ordem ergue."""
+def test_levels_not_strictly_increasing_raise() -> None:
+    """C1: `levels` da série fora de ordem ergue."""
     with pytest.raises(ValueError, match="strictly increasing"):
-        make_series([(0.0, 0.0, 0.0)], [0.0], levels=(0.9, 0.5, 0.1), direct=True)
+        _series_with_levels((0.9, 0.5, 0.1))
 
 
 @pytest.mark.unit
-def test_duplicated_levels_raise(make_series: SeriesFactory) -> None:
+def test_duplicated_levels_raise() -> None:
     """C1: nível repetido não é estritamente crescente."""
     with pytest.raises(ValueError, match="strictly increasing"):
-        make_series([(0.0, 0.0, 0.0)], [0.0], levels=(0.1, 0.1, 0.9), direct=True)
+        _series_with_levels((0.1, 0.1, 0.9))
 
 
 @pytest.mark.unit
@@ -254,10 +268,10 @@ def test_grid_without_symmetric_pair_raises(make_series: SeriesFactory) -> None:
 
 
 @pytest.mark.unit
-def test_empty_grid_raises(make_series: SeriesFactory) -> None:
-    """C1: grade vazia não tem par simétrico."""
+def test_empty_grid_raises() -> None:
+    """C1: grade vazia da série não tem par simétrico."""
     with pytest.raises(ValueError, match="symmetric pair"):
-        make_series([()], [0.0], levels=(), direct=True)
+        _series_with_levels(())
 
 
 @pytest.mark.unit
@@ -269,8 +283,9 @@ def test_decreasing_guardrail_values_raise(make_series: SeriesFactory) -> None:
 
 @pytest.mark.unit
 def test_guardrail_values_misaligned_with_levels_raise(make_series: SeriesFactory) -> None:
-    """C1 (alinhamento valor↔nível): VO direto com menos valores que níveis."""
-    with pytest.raises(ValueError, match="6 guardrail values for 7 levels"):
+    """C1 (alinhamento valor↔nível): o VO direto com menos valores que níveis já não se
+    constrói — a garantia subiu para o `__post_init__` do `QuantileForecast` (#160)."""
+    with pytest.raises(ValueError, match="levels and guardrail_values must align"):
         make_series([_GRID], [0.0], direct=True, guardrail_grids=[_GRID[:-1]])
 
 

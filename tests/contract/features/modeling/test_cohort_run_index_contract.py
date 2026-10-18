@@ -12,6 +12,7 @@ no mesmo arquivo anual não contamina; cohort inexistente → vazio.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -63,6 +64,11 @@ def _decisions(horizon: int, days: Sequence[int]) -> list[_Decision]:
     ]
 
 
+def _rid(label: str) -> str:
+    """`run_id` legível no teste: sha256 hex do rótulo (o `RunRecord` exige hex, #160)."""
+    return sha256(label.encode("utf-8")).hexdigest()
+
+
 def _fake_leg() -> tuple[CohortRunIndex, _SeedRun]:
     index = InMemoryCohortRunIndex()
 
@@ -111,8 +117,8 @@ def _real_leg(tmp_path: Path) -> tuple[CohortRunIndex, _SeedRun]:
             asset=_ASSET,
             parent_sweep_id=cohort_id,
             feature_set_name=_FEATURE_SET,
-            config_signature="cfg",
-            split_fingerprint="split",
+            config_signature=_rid("cfg"),
+            split_fingerprint=_rid("split"),
             fold=fold,
             seed=seed,
             model_version=model_version,
@@ -168,14 +174,14 @@ def test_counts_folds_and_targets_per_run(leg: tuple[CohortRunIndex, _SeedRun]) 
         cohort_id=_COHORT,
         model_version="tft_quantile",
         seed=11,
-        run_id="run-f0",
+        run_id=_rid("run-f0"),
         fold="fold-0",
         decisions=_decisions(1, [2, 3]) + _decisions(7, [2, 3]),
     )
 
     runs = _read(index)
 
-    fold, rows, targets = runs[("tft_quantile", 11)]["run-f0"]
+    fold, rows, targets = runs[("tft_quantile", 11)][_rid("run-f0")]
     assert fold == "fold-0"
     assert rows == 4 * len(_LEVELS)
     assert targets == {
@@ -191,12 +197,12 @@ def test_orphan_run_has_zero_rows(leg: tuple[CohortRunIndex, _SeedRun]) -> None:
         cohort_id=_COHORT,
         model_version="gbm_quantile",
         seed=7,
-        run_id="run-orphan",
+        run_id=_rid("run-orphan"),
         fold="fold-1",
         decisions=[],
     )
 
-    fold, rows, targets = _read(index)[("gbm_quantile", 7)]["run-orphan"]
+    fold, rows, targets = _read(index)[("gbm_quantile", 7)][_rid("run-orphan")]
 
     assert (fold, rows) == ("fold-1", 0)
     assert all(not ts for ts in targets.values())
@@ -209,7 +215,7 @@ def test_baselines_are_keyed_with_null_seed(leg: tuple[CohortRunIndex, _SeedRun]
         cohort_id=_COHORT,
         model_version="baseline_zero_return",
         seed=None,
-        run_id="run-b",
+        run_id=_rid("run-b"),
         fold="fold-0",
         decisions=_decisions(1, [2]),
     )
@@ -224,7 +230,7 @@ def test_other_cohort_does_not_contaminate(leg: tuple[CohortRunIndex, _SeedRun])
         cohort_id=_COHORT,
         model_version="tft_quantile",
         seed=11,
-        run_id="run-mine",
+        run_id=_rid("run-mine"),
         fold="fold-0",
         decisions=_decisions(1, [2]),
     )
@@ -232,15 +238,15 @@ def test_other_cohort_does_not_contaminate(leg: tuple[CohortRunIndex, _SeedRun])
         cohort_id=_OTHER_COHORT,
         model_version="tft_quantile",
         seed=11,
-        run_id="run-theirs",
+        run_id=_rid("run-theirs"),
         fold="fold-0",
         decisions=_decisions(1, [3, 4]),
     )
 
     mine = _read(index)[("tft_quantile", 11)]
 
-    assert set(mine) == {"run-mine"}
-    assert mine["run-mine"][1] == len(_LEVELS)
+    assert set(mine) == {_rid("run-mine")}
+    assert mine[_rid("run-mine")][1] == len(_LEVELS)
 
 
 @pytest.mark.contract
@@ -258,11 +264,11 @@ def test_tft_seeds_and_null_seed_baselines_coexist_in_one_cohort(
     for seed in (11, 22, 2**40):
         seed_run(
             cohort_id=_COHORT, model_version="tft_quantile", seed=seed,
-            run_id=f"run-tft-{seed}", fold="0", decisions=_decisions(1, [2]),
+            run_id=_rid(f"run-tft-{seed}"), fold="0", decisions=_decisions(1, [2]),
         )
     seed_run(
         cohort_id=_COHORT, model_version="baseline_ar1", seed=None,
-        run_id="run-ar1", fold="0", decisions=_decisions(1, [2]),
+        run_id=_rid("run-ar1"), fold="0", decisions=_decisions(1, [2]),
     )
 
     runs = _read(index)
@@ -348,19 +354,19 @@ def test_calib_rows_do_not_change_counts_or_targets(
     index, seed_run, seed_calib = calib_leg
     seed_run(
         cohort_id=_COHORT, model_version="tft_quantile", seed=11,
-        run_id="run-f0", fold="0", decisions=_decisions(1, [2, 3]) + _decisions(7, [2, 3]),
+        run_id=_rid("run-f0"), fold="0", decisions=_decisions(1, [2, 3]) + _decisions(7, [2, 3]),
     )
     seed_run(
         cohort_id=_COHORT, model_version="baseline_ar1", seed=None,
-        run_id="run-ar1", fold="0", decisions=_decisions(1, [2]),
+        run_id=_rid("run-ar1"), fold="0", decisions=_decisions(1, [2]),
     )
     without_calib = _read(index)
 
-    seed_calib(model_version="tft_quantile", seed=11, run_id="run-f0", fold="0")
+    seed_calib(model_version="tft_quantile", seed=11, run_id=_rid("run-f0"), fold="0")
 
     with_calib = _read(index)
     assert with_calib == without_calib
-    assert with_calib[("tft_quantile", 11)]["run-f0"][1] == 4 * len(_LEVELS)
+    assert with_calib[("tft_quantile", 11)][_rid("run-f0")][1] == 4 * len(_LEVELS)
 
 
 @pytest.mark.contract
@@ -370,11 +376,11 @@ def test_calib_only_run_counts_as_orphan(
     index, seed_run, seed_calib = calib_leg
     seed_run(
         cohort_id=_COHORT, model_version="tft_quantile", seed=11,
-        run_id="run-calib-only", fold="1", decisions=[],
+        run_id=_rid("run-calib-only"), fold="1", decisions=[],
     )
-    seed_calib(model_version="tft_quantile", seed=11, run_id="run-calib-only", fold="1")
+    seed_calib(model_version="tft_quantile", seed=11, run_id=_rid("run-calib-only"), fold="1")
 
-    fold, rows, targets = _read(index)[("tft_quantile", 11)]["run-calib-only"]
+    fold, rows, targets = _read(index)[("tft_quantile", 11)][_rid("run-calib-only")]
 
     assert (fold, rows) == ("1", 0)
     assert all(not ts for ts in targets.values())

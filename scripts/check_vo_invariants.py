@@ -28,7 +28,8 @@ marcador.
 
 Baseline: `scripts/arch_baseline.toml`, seção `[vo_invariants]`, entradas
 `[[vo_invariants.allow]]` com `key = "<arquivo rel>::<Classe>"`, `motivo` e `issue`
-(mecanismo em `scripts/arch_baseline_lib.py`). A dívida de hoje aponta para a #160.
+(mecanismo em `scripts/arch_baseline_lib.py`). A dívida medida na #61 (10 VOs) foi
+zerada pela #160: o baseline está vazio.
 
 Exit codes: 0 sem violação nova; 1 violação nova ou baseline morto; 2 baseline malformado.
 """

@@ -110,9 +110,14 @@ class _Fold:
     test: tuple[int, ...]
 
 
+# `run_id` é sha256 hex (o `PredictionRow` recusa rótulo, #160); o último caractere
+# continua distinguindo os folds em `_grid`.
+_RUN_F0 = "f0" * 32
+_RUN_F1 = "f1" * 32
+
 _FOLDS = (
-    _Fold("run-f0", 0, tuple(range(50, 55)), tuple(range(56, 59))),
-    _Fold("run-f1", 1, tuple(range(60, 65)), tuple(range(66, 69))),
+    _Fold(_RUN_F0, 0, tuple(range(50, 55)), tuple(range(56, 59))),
+    _Fold(_RUN_F1, 1, tuple(range(60, 65)), tuple(range(66, 69))),
 )
 
 
@@ -240,7 +245,7 @@ class _World:
         )
 
     def sha(self, run_id: str) -> str:
-        return run_id.replace("-", "") * 8
+        return run_id[::-1]
 
     def resolver(self) -> InMemoryCheckpointResolver:
         if self.resolver_error is not None:
@@ -391,7 +396,7 @@ def test_strict_when_non_code_keys_equal() -> None:
 
     assert {o.reproduction_mode for o in result.outcomes} == {STRICT}
     assert [o.max_abs_diff for o in result.outcomes] == [0.0, 0.0]
-    assert world.entry("run-f0")["mode_reason"] == "non-code keys equal"
+    assert world.entry(_RUN_F0)["mode_reason"] == "non-code keys equal"
 
 
 def test_tolerance_when_a_library_key_differs() -> None:
@@ -400,7 +405,7 @@ def test_tolerance_when_a_library_key_differs() -> None:
     result = world.run()
 
     assert {o.reproduction_mode for o in result.outcomes} == {TOLERANCE}
-    entry = world.entry("run-f0")
+    entry = world.entry(_RUN_F0)
     assert entry["forced"] is False
     assert entry["mode_reason"] == "non-code keys differ: ['torch']"
 
@@ -411,7 +416,7 @@ def test_cross_environment_with_equal_keys_forces_tolerance_and_records_forced()
     result = world.run(cross_environment_justification=_JUSTIFICATION)
 
     assert {o.reproduction_mode for o in result.outcomes} == {TOLERANCE}
-    entry = world.entry("run-f1")
+    entry = world.entry(_RUN_F1)
     assert entry["forced"] is True
     assert entry["justification"] == _JUSTIFICATION
     assert entry["mode_reason"] == "forced: cross-environment"
@@ -465,7 +470,7 @@ def _started_entry_after_crash(world: _World) -> None:
     with pytest.raises(RuntimeError, match="simulated crash"):
         world.run()
     world.persister.fail_after = None
-    assert world.entry("run-f0")["status"] == STARTED
+    assert world.entry(_RUN_F0)["status"] == STARTED
 
 
 def test_started_entry_resumed_in_other_environment_raises_without_writing() -> None:
@@ -486,8 +491,8 @@ def test_started_entry_resumed_in_same_environment_completes() -> None:
 
     world.run()
 
-    assert world.entry("run-f0")["status"] == COMPLETED
-    assert len(world.facts("calib", "run-f0")) == _EXPECTED_CALIB
+    assert world.entry(_RUN_F0)["status"] == COMPLETED
+    assert len(world.facts("calib", _RUN_F0)) == _EXPECTED_CALIB
 
 
 # -- conferência do calib presente (C8) ----------------------------------------------------
@@ -502,15 +507,15 @@ def _near_tie_present(world: _World) -> None:
     `guardrail_applied` muda e o `value_guardrail` difere dentro da tolerância."""
     crossed = (0.0100001, 0.0100000, 0.03)
     uncrossed = (0.0099999, 0.0100000, 0.03)
-    world.grids["run-f0"]["calib"][_TIE_DECISION] = {h: crossed for h in _HORIZONS}
+    world.grids[_RUN_F0]["calib"][_TIE_DECISION] = {h: crossed for h in _HORIZONS}
     _complete_first_run(world)
     applied = {
         r["guardrail_applied"]
-        for r in world.facts("calib", "run-f0")
+        for r in world.facts("calib", _RUN_F0)
         if r["decision_idx"] == _TIE_DECISION
     }
     assert applied == {1}
-    world.grids["run-f0"]["calib"][_TIE_DECISION] = {h: uncrossed for h in _HORIZONS}
+    world.grids[_RUN_F0]["calib"][_TIE_DECISION] = {h: uncrossed for h in _HORIZONS}
 
 
 def test_tolerance_accepts_flipped_guardrail_applied_within_tolerance() -> None:
@@ -522,7 +527,7 @@ def test_tolerance_accepts_flipped_guardrail_applied_within_tolerance() -> None:
 
     assert result.outcomes[0].calib_rows_written == 0
     assert result.outcomes[0].calib_rows_verified == _EXPECTED_CALIB
-    assert world.entry("run-f0")["calib_reproduction_mode"] == TOLERANCE
+    assert world.entry(_RUN_F0)["calib_reproduction_mode"] == TOLERANCE
 
 
 def test_strict_rejects_flipped_guardrail_applied() -> None:
@@ -550,7 +555,7 @@ def test_present_row_with_divergent_non_value_field_raises(field_name: str, valu
 
     def patch(row: Mapping[str, object]) -> Mapping[str, object]:
         selected = (
-            row.get("run_id") == "run-f0"
+            row.get("run_id") == _RUN_F0
             and row.get("split") == "calib"
             and row.get("decision_idx") == 52  # noqa: PLR2004
         )
@@ -561,7 +566,7 @@ def test_present_row_with_divergent_non_value_field_raises(field_name: str, valu
     with pytest.raises(ReproductionError, match=field_name):
         world.run()
     assert world.events == []
-    assert world.entry("run-f0")["status"] == COMPLETED
+    assert world.entry(_RUN_F0)["status"] == COMPLETED
 
 
 def test_present_row_with_divergent_value_guardrail_raises() -> None:
@@ -571,7 +576,7 @@ def test_present_row_with_divergent_value_guardrail_raises() -> None:
 
     def patch(row: Mapping[str, object]) -> Mapping[str, object]:
         selected = (
-            row.get("run_id") == "run-f0"
+            row.get("run_id") == _RUN_F0
             and row.get("split") == "calib"
             and row.get("decision_idx") == _F0_CALIB_SECOND
             and row.get("horizon") == 1
@@ -590,9 +595,9 @@ def test_partially_present_decision_raises() -> None:
     world = _World()
     world.manifest.record_run(
         _COHORT_ID,
-        "run-f0",
+        _RUN_F0,
         {
-            "checkpoint_sha256": world.sha("run-f0"),
+            "checkpoint_sha256": world.sha(_RUN_F0),
             "first_write_environment": world.current_environment,
             "status": COMPLETED,
         },
@@ -613,9 +618,9 @@ def test_present_calib_verified_under_first_write_environment_mode() -> None:
     # 1ª escrita num ambiente com outra versão de numpy (tolerance contra o cohort).
     world = _World(current_environment=_environment(numpy="9.9.9"))
     _complete_first_run(world)
-    assert world.entry("run-f0")["first_write_environment"]["numpy"] == "9.9.9"
+    assert world.entry(_RUN_F0)["first_write_environment"]["numpy"] == "9.9.9"
     # Calib presente com 1 ulp de diferença numa linha: aceitável só em tolerance.
-    rows = [r for r in world.facts("calib", "run-f0") if r["decision_idx"] == _F0_CALIB_SECOND]
+    rows = [r for r in world.facts("calib", _RUN_F0) if r["decision_idx"] == _F0_CALIB_SECOND]
     world.repository.write(
         layer="silver",
         table="fact_oos_predictions",
@@ -634,7 +639,7 @@ def test_present_calib_verified_under_first_write_environment_mode() -> None:
     strict_world = _World()
     _complete_first_run(strict_world)
     rows = [
-        r for r in strict_world.facts("calib", "run-f0") if r["decision_idx"] == _F0_CALIB_SECOND
+        r for r in strict_world.facts("calib", _RUN_F0) if r["decision_idx"] == _F0_CALIB_SECOND
     ]
     strict_world.repository.write(
         layer="silver",
@@ -652,7 +657,7 @@ def test_present_calib_verified_under_first_write_environment_mode() -> None:
 def _perturb_test_reference(world: _World, change: Callable[[float], float]) -> None:
     rows = [
         r
-        for r in world.facts("test", "run-f1")
+        for r in world.facts("test", _RUN_F1)
         if r["decision_idx"] == _F1_TEST_FIRST and r["horizon"] == 1
     ]
     world.repository.write(
@@ -676,7 +681,7 @@ def test_one_float32_ulp_fails_strict_and_passes_tolerance() -> None:
     tolerant = _World(current_environment=_environment(torch="2.14.0+cpu"))
     _perturb_test_reference(tolerant, _one_ulp)
     result = tolerant.run()
-    outcome = next(o for o in result.outcomes if o.run_id == "run-f1")
+    outcome = next(o for o in result.outcomes if o.run_id == _RUN_F1)
     assert outcome.max_abs_diff > 0
     assert outcome.max_normalized_diff == pytest.approx(outcome.max_abs_diff / _SCALE)
 
@@ -691,7 +696,7 @@ def test_normalized_diff_above_tolerance_fails() -> None:
 
 def test_test_key_set_mismatch_fails() -> None:
     world = _World()
-    del world.grids["run-f0"]["test"][58]
+    del world.grids[_RUN_F0]["test"][58]
 
     with pytest.raises(ReproductionError, match="keys differ"):
         world.run()
@@ -706,13 +711,13 @@ def test_empty_test_comparison_fails_closed(silver_empty: bool, predicted_empty:
     """C7 fail-closed: zero valores comparados não provam a reprodução."""
 
     def hide_test_rows(row: Mapping[str, object]) -> Mapping[str, object]:
-        if row.get("run_id") == "run-f0" and row.get("split") == "test":
+        if row.get("run_id") == _RUN_F0 and row.get("split") == "test":
             return {**row, "split": "hidden"}
         return row
 
     world = _World(silver_patch=hide_test_rows if silver_empty else None)
     if predicted_empty:
-        world.grids["run-f0"]["test"] = {}
+        world.grids[_RUN_F0]["test"] = {}
 
     with pytest.raises(ReproductionError, match="nothing to compare"):
         world.run()
@@ -727,8 +732,8 @@ def test_reproduction_failure_writes_no_calib() -> None:
     with pytest.raises(ReproductionError):
         world.run()
 
-    assert world.facts("calib", "run-f1") == []
-    assert not any(e.startswith("manifest:run-f1") for e in world.events)
+    assert world.facts("calib", _RUN_F1) == []
+    assert not any(e.startswith(f"manifest:{_RUN_F1}") for e in world.events)
 
 
 # -- guardas (I4) ---------------------------------------------------------------------------
@@ -770,13 +775,13 @@ def test_guards_in_order_never_call_the_predictor(case: str) -> None:
         world.repository.write(
             layer="silver",
             table="dim_run",
-            rows=[{**r, column: value} for r in rows if r["run_id"] == "run-f1"],
+            rows=[{**r, column: value} for r in rows if r["run_id"] == _RUN_F1],
             allow_upsert=True,
         )
         error = UnknownRunError
     elif case == "sha":
         world.manifest.record_run(
-            _COHORT_ID, "run-f1", {"checkpoint_sha256": "0" * 64, "status": COMPLETED}
+            _COHORT_ID, _RUN_F1, {"checkpoint_sha256": "0" * 64, "status": COMPLETED}
         )
         error = ArtifactChangedError
 
@@ -829,7 +834,7 @@ def test_started_entry_written_before_first_calib_write() -> None:
 def test_crash_between_decisions_rerun_completes_only_missing_and_keeps_first_write() -> None:
     world = _World()
     _started_entry_after_crash(world)
-    first = dict(world.entry("run-f0"))
+    first = dict(world.entry(_RUN_F0))
     world.events.clear()
     # Retomada permitida: só uma chave de CÓDIGO mudou; o relógio andou.
     world.current_environment = _environment(**{"code.src": "tree-after-crash"})
@@ -837,11 +842,11 @@ def test_crash_between_decisions_rerun_completes_only_missing_and_keeps_first_wr
 
     result = world.run()
 
-    writes_f0 = [e for e in world.events if e.startswith("persist:run-f0:")]
+    writes_f0 = [e for e in world.events if e.startswith(f"persist:{_RUN_F0}:")]
     assert len(writes_f0) == _SPEC.geometry.calib_size - 2
-    outcome = next(o for o in result.outcomes if o.run_id == "run-f0")
+    outcome = next(o for o in result.outcomes if o.run_id == _RUN_F0)
     assert outcome.calib_rows_verified == 2 * len(_HORIZONS) * len(_LEVELS)
-    entry = world.entry("run-f0")
+    entry = world.entry(_RUN_F0)
     assert entry["first_write_environment"]["code.src"] == first["environment"]["code.src"]
     assert entry["environment"]["code.src"] == "tree-after-crash"
     assert entry["first_written_at"] == first["first_written_at"]
@@ -852,7 +857,7 @@ def test_crash_between_decisions_rerun_completes_only_missing_and_keeps_first_wr
 
 def test_calib_without_manifest_entry_raises_provenance_missing() -> None:
     world = _World()
-    _write_calib_directly(world, "run-f0", 50)
+    _write_calib_directly(world, _RUN_F0, 50)
 
     with pytest.raises(CalibProvenanceMissingError, match="C15"):
         world.run()
@@ -864,14 +869,14 @@ def test_calib_without_manifest_entry_raises_provenance_missing() -> None:
 def test_crossed_raw_grid_written_raw_with_monotone_guardrail() -> None:
     world = _World()
     crossed = (0.03, 0.01, 0.02)
-    world.grids["run-f0"]["calib"][50] = {h: crossed for h in _HORIZONS}
+    world.grids[_RUN_F0]["calib"][50] = {h: crossed for h in _HORIZONS}
 
     world.run()
 
     rows = sorted(
         (
             r
-            for r in world.facts("calib", "run-f0")
+            for r in world.facts("calib", _RUN_F0)
             if r["decision_idx"] == _F0_CALIB_FIRST and r["horizon"] == 1
         ),
         key=lambda r: float(r["quantile_level"]),  # type: ignore[arg-type]
@@ -898,12 +903,12 @@ def test_reread_count_completes_the_run() -> None:
 
 def test_incomplete_reread_raises_and_keeps_started() -> None:
     world = _World()
-    del world.grids["run-f0"]["calib"][54]
+    del world.grids[_RUN_F0]["calib"][54]
 
     with pytest.raises(IncompleteCalibError, match="C9"):
         world.run()
 
-    assert world.entry("run-f0")["status"] == STARTED
+    assert world.entry(_RUN_F0)["status"] == STARTED
 
 
 def test_second_run_writes_zero_and_verifies_all() -> None:
@@ -924,8 +929,8 @@ def test_started_entry_has_no_verified_at() -> None:
     with pytest.raises(RuntimeError):
         world.run()
 
-    assert world.entry("run-f0")["status"] == STARTED
-    assert "verified_at" not in world.entry("run-f0")
+    assert world.entry(_RUN_F0)["status"] == STARTED
+    assert "verified_at" not in world.entry(_RUN_F0)
 
 
 def test_predictor_receives_the_recorded_threads_and_both_partitions() -> None:
@@ -1010,7 +1015,7 @@ def test_manifest_entry_has_all_fields() -> None:
 
     world.run()
 
-    entry = world.entry("run-f0")
+    entry = world.entry(_RUN_F0)
     assert set(entry) == {
         "checkpoint_sha256",
         "first_write_environment",
@@ -1037,7 +1042,7 @@ def test_manifest_entry_has_all_fields() -> None:
         "calib_rows_verified",
         "verified_at",
     }
-    assert entry["checkpoint_sha256"] == world.sha("run-f0")
+    assert entry["checkpoint_sha256"] == world.sha(_RUN_F0)
     assert entry["settings"]["cpu_capability"] == "AVX2"
     assert (entry["normalizer_center"], entry["normalizer_scale"]) == (_CENTER, _SCALE)
     assert entry["test_values_compared"] == 3 * len(_HORIZONS) * len(_LEVELS)
@@ -1078,7 +1083,7 @@ def _manifest_entry_for(world: _World, run_id: str) -> None:
 
 def test_present_decision_outside_the_prediction_raises_before_writing() -> None:
     world = _World()
-    _manifest_entry_for(world, "run-f0")
+    _manifest_entry_for(world, _RUN_F0)
     fold = _FOLDS[0]
     extra = 49  # antes do calib do fold: não é re-predita
     PersistPredictions(repository=world.repository)(
@@ -1097,7 +1102,7 @@ def test_duplicated_present_key_raises_before_writing() -> None:
     _complete_first_run(world)
     [row] = [
         r
-        for r in world.facts("calib", "run-f0")
+        for r in world.facts("calib", _RUN_F0)
         if r["decision_idx"] == _F0_CALIB_FIRST
         and r["horizon"] == 1
         and r["quantile_level"] == _LEVELS[1]

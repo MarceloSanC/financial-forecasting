@@ -21,6 +21,15 @@ colapsada) — este NÃO é implementado aqui; é concern de avaliação do Step
 fundação `0_0_0011`). O guardrail nunca iguala nem rejeita quantis colapsados:
 `q_low == q_high` passa intacto.
 
+**Construção (issue #160).** A FORMA da grade é checada no `__post_init__`, então vale
+também para o construtor cru — que é caminho legítimo: o `SeriesAssembly` (6.4, I6)
+remonta o VO com os valores PERSISTIDOS, nunca por `from_raw`. Checa-se: `levels`,
+`raw_values` e `guardrail_values` alinhados 1:1; `levels` não vazio, em (0, 1),
+estritamente crescente; `guardrail_applied` `bool`. O guardrail em si NÃO é
+recomputado na construção — reordenar valores persistidos violaria o I6 — e por isso
+`guardrail_values` não é exigido monotônico aqui (o não-finito preservado também não o
+é); a `CoverageSeries` (6.1) segue revalidando finitude e ordem do vetor pontuado.
+
 PUREZA (concept 4.3 I8 / D3): importa só `dataclasses` + `math`; valores `float`, sem
 `pandas`/`numpy`. Gates domain-purity (import-linter) + `scripts/check_layout.py`.
 """
@@ -51,6 +60,20 @@ class QuantileForecast:
     guardrail_values: tuple[float, ...]
     guardrail_applied: bool
 
+    def __post_init__(self) -> None:
+        _check_aligned(self.levels, self.raw_values, name="raw_values")
+        _check_aligned(self.levels, self.guardrail_values, name="guardrail_values")
+        if not self.levels:
+            raise ValueError("levels must be non-empty")
+        # Defesa em profundidade: `quantile_level` entra na PK lógica de
+        # `fact_oos_predictions`; a faixa já é validada a montante (#64).
+        if any(not 0.0 < level < 1.0 for level in self.levels):
+            raise ValueError(f"levels must all be in (0, 1), got {self.levels}")
+        if any(b <= a for a, b in pairwise(self.levels)):
+            raise ValueError(f"levels must be strictly increasing and unique, got {self.levels}")
+        if type(self.guardrail_applied) is not bool:
+            raise ValueError(f"guardrail_applied must be a bool, got {self.guardrail_applied!r}")
+
     @classmethod
     def from_raw(
         cls,
@@ -70,22 +93,8 @@ class QuantileForecast:
         Raises:
             ValueError: `len(levels) != len(raw_values)`, `levels` fora de `(0, 1)`
                 (inclui `nan`), ou `levels` não estritamente crescente / com
-                duplicatas (C3).
+                duplicatas (C3) — checados no `__post_init__`.
         """
-        if len(levels) != len(raw_values):
-            raise ValueError(
-                f"levels and raw_values must align: len(levels)={len(levels)} "
-                f"!= len(raw_values)={len(raw_values)}"
-            )
-        if not levels:
-            raise ValueError("levels must be non-empty")
-        # Defesa em profundidade: `quantile_level` entra na PK lógica de
-        # `fact_oos_predictions`; a faixa já é validada a montante (#64).
-        if any(not 0.0 < level < 1.0 for level in levels):
-            raise ValueError(f"levels must all be in (0, 1), got {levels}")
-        if any(b <= a for a, b in pairwise(levels)):
-            raise ValueError(f"levels must be strictly increasing and unique, got {levels}")
-
         guardrail_values, guardrail_applied = cls._enforce_monotonic(raw_values)
         return cls(
             levels=levels,
@@ -107,6 +116,14 @@ class QuantileForecast:
             return raw_values, False
         ordered = tuple(sorted(raw_values))
         return ordered, ordered != raw_values
+
+
+def _check_aligned(levels: tuple[float, ...], values: tuple[float, ...], *, name: str) -> None:
+    """`values` alinhados 1:1 a `levels` (mensagem nomeia o vetor)."""
+    if len(levels) != len(values):
+        raise ValueError(
+            f"levels and {name} must align: len(levels)={len(levels)} != len({name})={len(values)}"
+        )
 
 
 def _is_finite_number(value: object) -> bool:

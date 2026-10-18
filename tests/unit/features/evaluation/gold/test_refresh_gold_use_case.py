@@ -20,6 +20,7 @@ import logging
 import math
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 
 import pytest
 
@@ -143,13 +144,16 @@ _EXPECTED_STEPS = (
 
 
 class _StubHasher:
-    """Dublê mínimo do `Hasher` (sem fake por desenho, #70): `repr` ordenado."""
+    """Dublê mínimo do `Hasher` (sem fake por desenho, #70): sha256 do `repr` ordenado.
+
+    Devolve sha256 hex porque o `DatasetContentFingerprint` recusa outra forma (#160).
+    """
 
     def hash_mapping(self, payload: Mapping[str, object]) -> str:
-        return repr(sorted(payload.items()))
+        return sha256(repr(sorted(payload.items())).encode("utf-8")).hexdigest()
 
     def hash_text(self, text: str) -> str:
-        return text
+        return sha256(text.encode("utf-8")).hexdigest()
 
 
 class _TickClock:

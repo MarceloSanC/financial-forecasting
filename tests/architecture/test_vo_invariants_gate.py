@@ -1,6 +1,7 @@
 """Regressão do gate `scripts/check_vo_invariants.py` (issue #61).
 
-O gate nasce com baseline cheio (10 VOs → #160); o teste prova que um VO NOVO sem
+O gate nasceu com baseline cheio (10 VOs → #160), zerado pela #160; o teste prova que
+o repo não tem VO congelado sem invariante e que um VO NOVO sem
 invariante reprova e que a regra é a estrita decidida na sessão: só `__post_init__` conta —
 factory validadora não fecha o construtor cru da dataclass.
 
@@ -144,13 +145,11 @@ def test_scan_reads_only_domain_value_objects(gate: ModuleType, tmp_path: Path) 
 def test_real_repo_matches_the_declared_baseline(
     gate: ModuleType, baseline_lib: ModuleType
 ) -> None:
-    """A dívida medida é exatamente a declarada (#160): nada novo, nada morto."""
+    """Dívida zerada pela #160: nenhum VO congelado sem invariante, baseline vazio."""
     baseline = baseline_lib.load_baseline(gate.GATE)
 
-    new, dead = baseline_lib.reconcile(gate.scan(), baseline)
-
-    assert (new, dead) == ([], [])
-    assert {entry.issue for entry in baseline.values()} == {160}
+    assert gate.scan() == {}
+    assert baseline == {}
 
 
 def test_main_exit_code_follows_the_baseline_verdict(

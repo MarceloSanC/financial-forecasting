@@ -672,6 +672,11 @@ def test_from_stored_blocked_without_quality_checks_is_corrupt() -> None:
         pytest.param({"status": "RUNNING"}, "is not a valid RefreshStatus", id="status"),
         pytest.param({"parameters": "x"}, "parameters must be a Mapping", id="parameters"),
         pytest.param({"dataset_fingerprint": 7}, "dataset_fingerprint must be a str", id="fp"),
+        pytest.param(  # #160: o VO recusa o texto que nunca saiu do hasher
+            {"dataset_fingerprint": "e3" * 31},
+            r"DatasetContentFingerprint\.value must be a lowercase sha256",
+            id="fp-not-hex",
+        ),
         pytest.param({"started_at": 7}, "started_at must be an ISO-8601 str", id="timestamp"),
         pytest.param({"finished_at": "yesterday"}, "Invalid isoformat", id="not-iso"),
         pytest.param({"horizons": 1}, "horizons must be a list", id="horizons"),

@@ -3,16 +3,22 @@
 Value object de domínio **frozen, stdlib-only** (concept 4.1 §4 / I1). Identidade
 pela PK lógica de `dim_run` (`run_id`); a igualdade do dataclass frozen é por valor
 (I9). Os campos `config_signature`/`split_fingerprint` guardam o hash hex (`str`)
-produzido pela Stage 1.4 — NUNCA recomputados aqui (I10).
+produzido pela Stage 1.4 — NUNCA recomputados aqui (I10), mas a FORMA é checada na
+construção: `run_id`, `config_signature` e `split_fingerprint` são sha256 hex (regra
+única `validate_sha256_hex`) e `schema_version` é inteiro >= 1 (issue #160).
 
 O mapeamento para `DataFrame` vive no adapter (`adapters/out/parquet/schemas`),
-nunca no domínio: este módulo importa SÓ stdlib (`dataclasses`). O gate
+nunca no domínio: este módulo importa só stdlib e o domínio de `shared`. O gate
 `store-no-storage-leak`/`domain-purity` reprova qualquer import de pandas/pandera.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from financial_forecasting.shared.domain.services.sha256_hex import validate_sha256_hex
+
+_HASH_FIELDS = ("run_id", "config_signature", "split_fingerprint")
 
 
 @dataclass(frozen=True)
@@ -42,3 +48,9 @@ class RunRecord:
     seed: int | None
     model_version: str
     schema_version: int
+
+    def __post_init__(self) -> None:
+        for field in _HASH_FIELDS:
+            validate_sha256_hex(getattr(self, field), field=field)
+        if type(self.schema_version) is not int or self.schema_version < 1:
+            raise ValueError(f"schema_version must be an int >= 1, got {self.schema_version!r}")

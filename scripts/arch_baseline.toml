@@ -115,50 +115,5 @@ issue = 159
 
 # ---------------------------------------------------------------------------
 # check_vo_invariants.py — @dataclass(frozen=True) em domain/value_objects/ sem __post_init__.
-# Chave = "<arquivo rel>::<Classe>". Débito medido na #61; correção na #160.
+# Chave = "<arquivo rel>::<Classe>". Débito medido na #61 e zerado na #160.
 [vo_invariants]
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/features/analytics_store/domain/value_objects/prediction_row.py::PredictionRow"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/features/analytics_store/domain/value_objects/quantile_forecast.py::QuantileForecast"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/features/analytics_store/domain/value_objects/run_record.py::RunRecord"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/shared/domain/value_objects/cohort_hash.py::CohortHash"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/shared/domain/value_objects/config_signature.py::ConfigSignature"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/shared/domain/value_objects/dataset_content_fingerprint.py::DatasetContentFingerprint"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/shared/domain/value_objects/preregistration_hash.py::PreregistrationHash"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/shared/domain/value_objects/run_id.py::RunId"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/shared/domain/value_objects/split_fingerprint.py::SplitFingerprint"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
