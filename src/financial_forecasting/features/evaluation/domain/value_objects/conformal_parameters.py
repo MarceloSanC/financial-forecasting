@@ -20,7 +20,6 @@ Os pares são simétricos **exatamente** pelo decimal mais curto de cada nível
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from fractions import Fraction
@@ -28,7 +27,7 @@ from types import MappingProxyType
 from typing import Final
 
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
-    is_real_number,
+    is_finite_number,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._mapping_keys import (
     missing_key_error,
@@ -86,7 +85,7 @@ def _pair(value: object, *, path: str) -> tuple[float, float]:
         isinstance(value, str)
         or not isinstance(value, Sequence)
         or len(value) != _PAIR_SIZE
-        or not all(is_real_number(level) and math.isfinite(level) for level in value)
+        or not all(is_finite_number(level) for level in value)
     ):
         raise ValueError(f"{path} must be a pair of two finite numbers, got {value!r}")
     low, high = float(value[0]), float(value[1])
@@ -119,7 +118,7 @@ class ConformalParameters:
         for key in CONFORMAL_RULE_CATALOG:
             _require_rule(key, getattr(self, key))
         rho = self.nexcp_rho
-        if not is_real_number(rho) or not math.isfinite(rho) or not 0 < _exact(rho) <= 1:
+        if not is_finite_number(rho) or not 0 < _exact(rho) <= 1:
             raise ValueError(f"{_ROOT}.nexcp_rho must be a number in (0, 1], got {rho!r}")
         if isinstance(self.pairs, str) or not isinstance(self.pairs, Sequence) or not self.pairs:
             raise ValueError(f"{_ROOT}.pairs must be a non-empty list of pairs, got {self.pairs!r}")

@@ -100,3 +100,12 @@ def test_primary_pair_must_be_a_pair() -> None:
         ConformalParameters.from_mapping(_with(pairs=[[0.1, 0.9]], primary_pair=[0.25, 0.75]))
     with pytest.raises(ValueError, match=r"conformal\.primary_pair must be a pair"):
         ConformalParameters.from_mapping(_with(primary_pair=0.1))
+
+
+@pytest.mark.parametrize("huge", [10**400, -(10**400)])
+def test_huge_int_refused_with_value_error(huge: int) -> None:
+    # int além do float64: ValueError nomeado, nunca o OverflowError cru (Checkpoint C, C3-3)
+    with pytest.raises(ValueError, match=r"conformal\.nexcp_rho"):
+        ConformalParameters.from_mapping(_with(nexcp_rho=huge))
+    with pytest.raises(ValueError, match=r"conformal\.pairs\[0\]"):
+        ConformalParameters.from_mapping(_with(pairs=[[huge, 0.9]], primary_pair=[0.1, 0.9]))
