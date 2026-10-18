@@ -5,7 +5,7 @@ when-use: Reference before changing the AnalyticsRepository signature, adding pe
 keywords: [adr, analytics-repository, port, protocol, parquet, silver, partition, append-only, upsert, medallion-store, dedicated-adapter, contract-test]
 status: accepted
 created_at: 2026-06-29
-updated_at: 2026-06-29
+updated_at: 2026-10-18
 adr_id: "4.2.0001"
 decision: Define AnalyticsRepository as a generic write/read Protocol dispatching on SILVER_REGISTRY, implemented by a dedicated ParquetAnalyticsRepository that partitions by literal SilverTable.partition_by columns (1..3 levels) rather than reusing ParquetMedallionStore's anchor-derived asset/year partitioning
 context_stage: 4.2-silver-repository
@@ -17,6 +17,14 @@ bounded_context: analytics_store
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 
 ## Status
+
+> **Note (2026-10-18, issue #164).** `fact_config`, `fact_split_metrics` and
+> `fact_failures` left `SILVER_REGISTRY` (ADR 4.1.0001, note of the same date).
+> With `fact_failures` gone, no table partitions by `(asset,)` alone: the
+> registry now has 2 levels (`dim_run`) and 3 levels (`fact_oos_predictions`).
+> The adapter still partitions by whatever `SilverTable.partition_by` declares,
+> so the "1..3 levels" below describes the capability, not the current tables.
+> The port shape decided here is unchanged.
 
 `accepted`
 
