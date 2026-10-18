@@ -28,7 +28,7 @@ ADR 0.0.0055 removed the full `make check` from every commit, but it still put a
 - **T2 at every Checkpoint C.** `make check-block` runs the whole suite every 2–3 Tasks.
 - **Escalations.** Any Task that touched `shared/`, the composition root, a dependency, tool config or a shared `conftest.py` escalated to T2 or T3.
 
-Stage 6.6 shows the cost. Its technical.md runs `check-task` at the end of ~25 Tasks and `check-block` at the end of 6+ blocks, plus the exit `make check`. Locally (Docker Desktop on Windows, NTFS bind mount) each of these runs takes many minutes, so execution time went mostly to repeating checks that had not found anything new.
+Stage 6.6 shows the cost. Its technical.md runs `check-task` at the end of all 22 Tasks and `check-block` at the end of each of its 6 Checkpoint C blocks, plus the exit `make check`. Locally (Docker Desktop on Windows, NTFS bind mount) each of these runs takes many minutes, so execution time went mostly to repeating checks that had not found anything new.
 
 A fixed rule (gate on every Task, every N Tasks, every Task of kind X) cannot tell a risky Task from a routine one. The executor can, when it writes the plan: it knows which Tasks change contracts read by other slices, which ones edit gate config, and which ones only add a pure function and its unit tests.
 
