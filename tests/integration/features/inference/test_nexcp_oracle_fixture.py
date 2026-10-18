@@ -112,6 +112,11 @@ def test_provenance_block_complete(document: dict[str, Any]) -> None:
     assert provenance["seed"] == 20261017  # noqa: PLR2004 — a semente do technical
     assert provenance["margin"] == 1e-9  # noqa: PLR2004 — a margem do ADR 7.2.0002 item 5
     assert provenance["transcribed_lines"]
+    weight_lines = {entry["line"]: entry["cell_ids"] for entry in provenance["weight_lines"]}
+    assert weight_lines == {
+        "weights=rho**(np.arange(n,0,-1))": ["24b14d78"],
+        "weights = np.r_[weights,1]": [provenance["cell_id"]],
+    }
     generator = Path(__file__).resolve().parents[4] / provenance["generator"]
     assert generator.is_file()
 
