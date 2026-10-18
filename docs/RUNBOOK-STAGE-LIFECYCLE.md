@@ -792,6 +792,9 @@ isso ele **não** roda por Task nem por bloco, e sim nos poucos pontos que o
 | **T3** — saída | Passo 10 (fim da Stage/issue), antes do `git push` que abre o PR — é sempre um dos pontos do plano | `make check` | idem |
 | **T4** — CI | todo PR | `make check` (workflow `ci`) | o veredito bloqueante do merge |
 
+Não há mais T2: o `check-block` por Checkpoint C saiu com a ADR 0.0.0058
+(a numeração das demais camadas foi mantida para não quebrar referências).
+
 **Plano de gates** (escrito na Fase 3B, em §1 do `technical.md`; revisado no
 Passo 7 / Checkpoint B):
 
@@ -814,8 +817,9 @@ Passo 7 / Checkpoint B):
 - **Mais de 3 pontos** só com justificativa explícita por ponto extra no
   plano: qual risco concreto ele pega que o próximo ponto pegaria tarde
   demais. "Por segurança" não é justificativa. Se a necessidade surgir na
-  execução, o ponto extra entra como `[deviation]` em §7 com essa mesma
-  justificativa.
+  execução, o ponto extra entra como `[deviation]` com essa mesma
+  justificativa — em §7 do `technical.md` (Stage) ou no corpo do PR (issue
+  avulsa, que não tem `technical.md`).
 
 Regras:
 
