@@ -30,6 +30,7 @@ from datetime import datetime
 from enum import StrEnum
 from itertools import pairwise
 from types import MappingProxyType
+from typing import Final
 
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
     CONFIRMATORY_TABLES,
@@ -39,6 +40,10 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
 from financial_forecasting.features.evaluation.domain.services.christoffersen_test import (
     validate_draws_and_seed,
     validate_min_violations,
+)
+from financial_forecasting.features.evaluation.domain.services.conformal_coverage import (
+    ConformalCoverageReport,
+    ConformalSeedMeanCoverage,
 )
 from financial_forecasting.features.evaluation.domain.services.count_input_validation import (
     validate_rate,
@@ -856,6 +861,119 @@ class McsBlockRun:
             )
 
 
+CONFORMAL_STATUSES: Final = ("ok", "undefined", "error")
+_TAILS: Final = ("lower", "upper")
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConformalTailRecord:
+    """Uma cauda de uma unidade conformal, em primitivos do `evaluation` (Stage 7.2).
+
+    Fora de `ok`, toda medida é `None`. Em `ok`, `correction` pode ser `math.inf`
+    (`infinite = True`); o builder mapeia para nulo + flag (o `GoldTable` recusa
+    não finito). `rank` só na variante sem pesos; Beta só nela e só com l >= 1.
+    """
+
+    tail: str  # "lower" | "upper"
+    level: float  # tau da cauda
+    n: int | None
+    rank: int | None
+    correction: float | None
+    infinite: bool | None
+    beta_a: int | None
+    beta_b: int | None
+    beta_mean: float | None
+    beta_sd: float | None
+
+    def __post_init__(self) -> None:
+        if self.tail not in _TAILS:
+            raise ValueError(f"tail must be one of {_TAILS}, got {self.tail!r}")
+        beta = (self.beta_a, self.beta_b, self.beta_mean, self.beta_sd)
+        if any(value is None for value in beta) and any(value is not None for value in beta):
+            raise ValueError(f"the Beta reference is all set or all None, got {beta}")
+
+    @property
+    def has_measures(self) -> bool:
+        """Alguma medida presente (n, posto, correção, flag ou Beta)."""
+        values = (self.n, self.rank, self.correction, self.infinite, self.beta_a)
+        return any(value is not None for value in values)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConformalUnitRecord:
+    """Uma (unidade, par, variante) conformal já mapeada para tipos do `evaluation`.
+
+    Vem do port (`CalibrateConformal`) ou de uma unidade `undefined` da montagem; o
+    mapeamento do resultado do port fica no `refresh_gold.py` (use case), o único
+    módulo com a aresta para o `inference` (ADR 7.2.0003 item 5).
+    """
+
+    fold_index: int | None
+    fold_raw: str
+    seed: int | None
+    horizon: int
+    lower_level: float
+    upper_level: float
+    variant: str
+    rho: float | None
+    status: str  # "ok" | "undefined" | "error"
+    reason: str | None
+    tails: tuple[ConformalTailRecord, ...]  # (lower, upper)
+
+    def __post_init__(self) -> None:
+        if self.status not in CONFORMAL_STATUSES:
+            raise ValueError(f"status must be one of {CONFORMAL_STATUSES}, got {self.status!r}")
+        if (self.status == "ok") != (self.reason is None):
+            raise ValueError(
+                f"reason is required exactly when status is not ok, got status={self.status!r} "
+                f"reason={self.reason!r}"
+            )
+        if tuple(tail.tail for tail in self.tails) != _TAILS:
+            raise ValueError(f"tails must be (lower, upper), got {[t.tail for t in self.tails]}")
+        if self.status != "ok" and any(tail.has_measures for tail in self.tails):
+            raise ValueError("a non-ok conformal unit has no measures")
+        if self.status == "ok" and any(
+            tail.n is None or tail.correction is None or tail.infinite is None
+            for tail in self.tails
+        ):
+            raise ValueError("an ok conformal unit needs n, correction and infinite per tail")
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConformalUndefinedCoverage:
+    """Uma (seed, horizonte, variante) sem cobertura: alguma unidade não-`ok`."""
+
+    seed: int
+    horizon: int
+    variant: str
+    reason: str
+    n_points: int  # da série nativa daquela seed e horizonte
+
+    def __post_init__(self) -> None:
+        _check_text(self.reason, field="reason")
+        validate_int_at_least(self.n_points, minimum=1, field="n_points")
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConformalReports:
+    """O que os builders conformais mapeiam — só tipos do `evaluation`."""
+
+    units: tuple[ConformalUnitRecord, ...]
+    coverage: tuple[ConformalCoverageReport, ...]  # por seed completa
+    undefined_coverage: tuple[ConformalUndefinedCoverage, ...]
+    seed_means: tuple[ConformalSeedMeanCoverage, ...]
+
+    @property
+    def is_empty(self) -> bool:
+        """Nenhuma unidade, cobertura nem média."""
+        return not (self.units or self.coverage or self.undefined_coverage or self.seed_means)
+
+
+EMPTY_CONFORMAL_REPORTS: Final = ConformalReports(
+    units=(), coverage=(), undefined_coverage=(), seed_means=()
+)
+
+
 @dataclass(frozen=True, kw_only=True)
 class GoldInputs:
     """O que os builders mapeiam — resultados prontos, nenhum a recomputar.
@@ -870,6 +988,8 @@ class GoldInputs:
             `BLOCKED`).
         mcs_block_reports: as rodadas do MCS por bloco de sensibilidade (vazio se
             `BLOCKED` ou sem regras de perfil na revisão).
+        conformal_reports: unidades, coberturas e médias conformais (Stage 7.2;
+            `EMPTY_CONFORMAL_REPORTS` se `BLOCKED` ou sem bloco `[conformal]`).
 
     Raises:
         ValueError: `BLOCKED` com relatórios ou sem resultado bloqueante; `COMPLETED`
@@ -885,6 +1005,7 @@ class GoldInputs:
     block_estimates: Mapping[int, tuple[BlockEstimate, ...]]
     profile_reports: tuple[HorizonProfileReport, ...]
     mcs_block_reports: tuple[McsBlockRun, ...]
+    conformal_reports: ConformalReports
 
     def __post_init__(self) -> None:
         """Coerência status x conteúdo; mapa como cópia somente-leitura."""
@@ -905,6 +1026,17 @@ class GoldInputs:
             raise ValueError("a COMPLETED generation cannot hold a blocking check result")
         if self.status is RefreshStatus.BLOCKED and not blocking:
             raise ValueError("a BLOCKED generation needs a blocking (ERROR + FAIL) check result")
+        if not isinstance(self.conformal_reports, ConformalReports):
+            raise ValueError(
+                f"conformal_reports must be a ConformalReports, got {self.conformal_reports!r}"
+            )
+        if not self.conformal_reports.is_empty and (
+            self.status is RefreshStatus.BLOCKED or self.parameters.conformal_parameters is None
+        ):
+            raise ValueError(
+                "conformal_reports must be empty in a BLOCKED generation or without a "
+                "[conformal] block"
+            )
 
     @property
     def preregistration_ref(self) -> str:
@@ -950,3 +1082,4 @@ class RefreshGoldResult:
     rows_by_table: Mapping[str, int]
     failed_checks: tuple[FailedCheck, ...]
     profile_error_units: int
+    conformal_error_units: int  # Stage 7.2: unidades conformais com status error

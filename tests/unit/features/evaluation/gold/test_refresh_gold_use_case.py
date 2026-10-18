@@ -1016,6 +1016,7 @@ def test_blocked_refresh_has_no_profiles() -> None:
     result = harness(parameters=_R1_PARAMETERS)
     assert result.status is RefreshStatus.BLOCKED
     assert result.profile_error_units == 0
+    assert result.conformal_error_units == 0  # Stage 7.2 Task 17: o port entra na Task 19
     assert harness.backend.index_calls == []
 
 

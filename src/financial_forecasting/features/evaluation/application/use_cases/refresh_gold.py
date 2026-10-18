@@ -46,6 +46,7 @@ from types import MappingProxyType
 from typing import Final
 
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    EMPTY_CONFORMAL_REPORTS,
     GoldInputs,
     GoldManifest,
     GoldPartition,
@@ -306,6 +307,7 @@ class RefreshGold:
             block_estimates=estimates,
             profile_reports=profiles,
             mcs_block_reports=blocks,
+            conformal_reports=EMPTY_CONFORMAL_REPORTS,  # o port entra na Task 19
         )
         builders = [b for b in self._builders if not blocked or b.runs_when_blocked]
         tables = _timed("build", len(builders), lambda: [b.build(inputs) for b in builders], len)
@@ -340,6 +342,7 @@ class RefreshGold:
             rows_by_table=rows_by_table,
             failed_checks=failed_checks_of(results),
             profile_error_units=error_units,
+            conformal_error_units=0,
         )
 
     # -- leituras --------------------------------------------------------------------
