@@ -83,10 +83,27 @@ def test_blocks_branch_changes_in_main_checkout(command: str) -> None:
         "FOO=1 git switch -c feat/99-x",
         "if true; then git switch -c feat/99-x; fi",
         "git status\n(git switch feat/77-6-1-scoring)",
+        # checkout de branch existente casa pelo nome exato: `)` colado ou solto não pode vazar
+        "(git checkout feat/77-6-1-scoring)",
+        "( git checkout feat/77-6-1-scoring )",
+        "{ git checkout feat/77-6-1-scoring;}",
     ],
 )
 def test_blocks_branch_change_after_any_separator(command: str) -> None:
     assert _blocked(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "(git checkout develop)",
+        "( git switch develop )",
+        "git status\ngit log -1 & git diff",
+        "{ git checkout -- src/app.py; }",
+    ],
+)
+def test_groups_and_new_separators_do_not_create_false_positives(command: str) -> None:
+    assert not _blocked(command)
 
 
 def test_cd_to_worktree_on_a_previous_line_is_honored() -> None:
