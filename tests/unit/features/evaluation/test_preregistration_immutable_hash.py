@@ -23,6 +23,8 @@ from tests.unit.features.evaluation._preregistration_payload import (
     FloatRefusingHasher,
     leaf_paths,
     leaf_value,
+    r1_payload,
+    r2_payload,
     valid_payload,
     with_leaf,
 )
@@ -154,3 +156,36 @@ def test_the_block_changes_the_hash_and_its_absence_keeps_r0() -> None:
     without_block = {k: v for k, v in _BLOCK_PAYLOAD.items() if k != "profile_parameters"}
     assert _digest(_BLOCK_PAYLOAD) != _digest(without_block)
     assert "profile_parameters" not in _BASE_PAYLOAD
+
+
+# --- Stage 7.2 Task 12: bloco `conformal` --------------------------------------------
+
+# Digests dos sintéticos sem bloco, medidos antes da Task 12 com o `FloatRefusingHasher`.
+_R0_DIGEST = "f3addcdf389544f2924fc06c3675a0c5fac89e3b64117aadda75ce5e014289a5"
+_R1_DIGEST = "5bb23a419850f0d5438138b86cafbc92b69b88754fab311a2bcefa1758831e81"
+_R2_PAYLOAD = Preregistration.from_mapping(r2_payload()).as_payload()
+
+
+@pytest.mark.unit
+def test_r0_and_r1_payload_hashes_unchanged() -> None:
+    assert _plan_digest(valid_payload()).value == _R0_DIGEST
+    assert _plan_digest(r1_payload()).value == _R1_DIGEST
+
+
+@pytest.mark.unit
+def test_block_changes_the_hash() -> None:
+    without_block = {k: v for k, v in _R2_PAYLOAD.items() if k != "conformal"}
+    assert _digest(_R2_PAYLOAD) != _digest(without_block)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("path", [p for p in leaf_paths(_R2_PAYLOAD) if p.startswith("conformal")])
+def test_any_block_field_changes_the_hash(path: str) -> None:
+    changed = with_leaf(_R2_PAYLOAD, path, _alternative(leaf_value(_R2_PAYLOAD, path)))
+    assert _digest(changed) != _digest(_R2_PAYLOAD)
+
+
+@pytest.mark.unit
+def test_block_leaves_cover_every_key() -> None:
+    leaves = {p.split("[")[0] for p in leaf_paths(_R2_PAYLOAD) if p.startswith("conformal")}
+    assert len(leaves) == 12  # noqa: PLR2004 — as doze chaves do bloco
