@@ -1993,4 +1993,15 @@ como o xdist distribui os testes.
 `tests/architecture/**`. O fix está no commit `fix(tooling)` `[7.2/--]`; o ponto B
 foi rodado de novo depois dele.
 
+### 2026-10-18 — [decision] saída do ponto B (plano de gates da ADR 0.0.0059) — Claude (Opus 5.5)
+**Contexto:** o ponto B do plano é o `make check` completo depois da Task 19, com
+`uv lock --check` no venv ff72, `--cpus 6 --memory 8g` e `-n 4 --dist loadgroup`.
+**O que foi registrado:** na primeira rodada, `7013 passed, 1 failed` (o flake do
+`[finding]` acima). Depois do fix, a segunda rodada (HEAD `2d79bba`) terminou com
+`7014 passed, 24 skipped`, cobertura 99,10 % (mínimo 90 %) e `EXIT=0`. Os gates de
+lint, mypy, layout, import-linter (com a aresta 28), fake-parity, port-coverage e
+docs passaram nas duas rodadas.
+**Razão:** o plano pede o resultado de cada ponto no §7. O ponto C é o `make check`
+de saída da Stage.
+
 <!-- END: post-execution -->
