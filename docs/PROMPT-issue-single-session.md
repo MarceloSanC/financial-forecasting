@@ -171,7 +171,10 @@ exatos a modificar. Sua responsabilidade é ler o código e identificar o que pr
 3. Listar as sub-tasks em texto antes de codar. Se você se pegar redigindo um mini-concept
    (definindo modelo/contrato/regra) ou o escopo não couber no corpo (litmus
    [`PIPELINE.md`](./PIPELINE.md) §4.5), declare que é Stage e PARE — propor abertura de Stage.
-4. Identificar **bifurcações materiais**: decisões ausentes na issue, no roadmap e no
+4. **Plano de gates:** listar junto das sub-tasks depois de quais roda o `make check`
+   completo e por quê — 1 a 3 por issue, o de saída incluído; mais de 3 só com
+   justificativa por ponto extra ([RUNBOOK §Gates em camadas](RUNBOOK-STAGE-LIFECYCLE.md#gates-em-camadas)).
+5. Identificar **bifurcações materiais**: decisões ausentes na issue, no roadmap e no
    código existente que afetam contrato, fronteira ou critério de aceite.
    - Se houver: usar `AskUserQuestion` antes de codar.
    - Se não houver: declare "Não identifiquei bifurcações materiais" e siga.
@@ -189,9 +192,10 @@ Para cada sub-task em ordem:
    - **Irreversível ou caro** (port shape, contrato externo, formato persistido) →
      PERGUNTA antes de codar.
 3. **Implementar** e dar resumo conciso do que foi feito antes de commitar.
-4. **Rodar checks da sub-task:** `make check-task SLICE=<slices tocados>`
-   (T1) antes do commit; `make check` completo só no gate de saída.
-   Camadas e exceções: [RUNBOOK §Gates em camadas](RUNBOOK-STAGE-LIFECYCLE.md#gates-em-camadas).
+4. **Rodar checks da sub-task:** só os testes que a sub-task escreveu ou alterou
+   (`pytest <arquivos> -q --no-cov`, T1) antes do commit; `make check` completo só
+   nos pontos do plano de gates (o de saída sempre entre eles).
+   Regras: [RUNBOOK §Gates em camadas](RUNBOOK-STAGE-LIFECYCLE.md#gates-em-camadas).
    Se falhar:
    - Ajuste menor (import faltando, type hint) → corrige.
    - Problema de design → PARA e reporta.

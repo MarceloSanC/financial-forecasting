@@ -58,10 +58,10 @@ produziu a fase anterior. Para uma Stage, a sequência de subagentes é:
 |---|---|---|
 | **3A — Concept** | autor de concept | escreve `concept.md` (+ ADRs de fork, §2) |
 | **Checkpoint A** | 2 revisores (lentes distintas) | conformidade · domínio/testabilidade |
-| **3B — Technical** | autor de technical | escreve `technical.md` (Tasks + rastreabilidade) |
-| **Checkpoint B** | revisor | matriz de rastreabilidade (critério → Task) |
-| **4 — Execução** | executor | roda as Tasks em ordem (`make check-task` por commit — [gates em camadas](RUNBOOK-STAGE-LIFECYCLE.md#gates-em-camadas)) |
-| **Checkpoint C** | revisor (por bloco de 2–3 Tasks) | diff × concept/technical/LAYOUT/skills + `make check-block` |
+| **3B — Technical** | autor de technical | escreve `technical.md` (Tasks + rastreabilidade + plano de gates: 1–3 `make check` por Stage) |
+| **Checkpoint B** | revisor | matriz de rastreabilidade (critério → Task) + plano de gates |
+| **4 — Execução** | executor | roda as Tasks em ordem (testes da Task por commit; `make check` só nos pontos do plano — [gates em camadas](RUNBOOK-STAGE-LIFECYCLE.md#gates-em-camadas)) |
+| **Checkpoint C** | revisor (por bloco de 2–3 Tasks) | diff × concept/technical/LAYOUT/skills (sem gate de suíte) |
 | **Auditoria de testes** | auditor de testes | loop até todos "sim" + mutação real |
 
 **Por que isso reduz viés.** O revisor **nunca** compartilha o contexto do autor — não "confia" na

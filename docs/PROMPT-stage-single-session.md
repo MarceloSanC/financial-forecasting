@@ -286,6 +286,10 @@ Independentes) valida mecanicamente:
   mapeia em ≥ 1 Task com check objetivo. Critério órfão = achado.
 - Caminhos de arquivo conformes a `LAYOUT.md`.
 - Cada Task contra os 5 critérios de Task Atômica (PIPELINE §4.3).
+- **Plano de gates** (§1 do technical): 1–3 pontos de `make check`, saída
+  incluída; ponto do meio sem razão concreta, ou ponto além do 3º sem
+  justificativa, é achado
+  ([RUNBOOK §Gates em camadas](RUNBOOK-STAGE-LIFECYCLE.md#gates-em-camadas)).
 
 Registrar a disposição de cada achado antes de commitar.
 
@@ -347,11 +351,13 @@ Para cada Task em ordem:
    commitar?" nem esperar aprovação de diff — a revisão vem dos Checkpoints
    A/B/C e da Auditoria de Testes, subagentes independentes). Só interrompa
    se cair num ponto de parada do §Princípio de Autonomia.
-5. **Rodar checks da Task.** Baseline inegociável: **T1 verde antes de
-   todo commit** — `make check-task SLICE=<slices tocados>` — além dos
-   checks específicos da Task. As camadas (qual gate roda quando, e quando
-   o T1 de uma Task sobe para `check-block` ou `make check`) têm fonte
-   única em [RUNBOOK §Gates em camadas](RUNBOOK-STAGE-LIFECYCLE.md#gates-em-camadas).
+5. **Rodar checks da Task.** Por padrão, **só os testes que a Task
+   escreveu ou alterou** (`pytest <arquivos> -q --no-cov`; os hooks de
+   pre-commit cobrem ruff/mypy no commit). `make check` completo **só** se
+   esta Task é um ponto do plano de gates do technical (1–3 por Stage,
+   saída incluída). Ponto extra fora do plano exige justificativa
+   registrada como `[deviation]` em §7. Fonte única:
+   [RUNBOOK §Gates em camadas](RUNBOOK-STAGE-LIFECYCLE.md#gates-em-camadas).
    Se falhar:
    - Ajuste menor (import faltando, type hint) → corrige.
    - Problema de design → PARA e reporta.
@@ -378,9 +384,9 @@ subagente revisa o diff acumulado do bloco
 technical + LAYOUT **+ as skills do `skills_hint` da Stage + a regra de
 idioma de código** (ver §Revisão → "Lente do Checkpoint C"; protocolo
 geral na mesma seção). Correções viram commit
-`fix(<scope>): <desc> [<N.M>/task-NN-fix]`. O checkpoint também roda
-**`make check-block`** (T2) sobre o HEAD do bloco — é ele que pega a
-quebra em slice não tocado, que o T1 não enxerga.
+`fix(<scope>): <desc> [<N.M>/task-NN-fix]`. O checkpoint é revisão, não
+gate de suíte: **não** roda `make check-block` nem `make check` (a quebra
+em slice não tocado fica para o próximo ponto do plano de gates).
 
 **Regressão mid-stage:** se uma Task revelar que Task anterior foi
 implementada errada:
@@ -746,10 +752,11 @@ fonte mais alta na hierarquia.**
    → **pausa antes da Fase 4 só se o usuário pediu no kickoff** (default:
    seguir direto).
 5. **Fase 4**: criar arquivo de estado; para cada Task: re-hidratar →
-   implementar → checks + `make check-task` (T1) → registrar §7 se
-   necessário → commit `<type>(<scope>): <desc> [<N.M>/task-NN]` →
-   atualizar estado. **Checkpoint C** + `make check-block` (T2) a cada
-   2–3 Tasks; `make check` (T3) no gate de saída.
+   implementar → testes da Task (T1; `make check` só nos 1–3 pontos do
+   plano de gates) → registrar §7 se necessário → commit
+   `<type>(<scope>): <desc> [<N.M>/task-NN]` → atualizar estado.
+   **Checkpoint C** (revisão, sem gate de suíte) a cada 2–3 Tasks;
+   `make check` (T3) no gate de saída.
 6. **Auditoria de testes** (subagente independente + mutação real):
    loop até todos os itens "sim". Testes faltantes viram Tasks extras
    com commit dedicado.
