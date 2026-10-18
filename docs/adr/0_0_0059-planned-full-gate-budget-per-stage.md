@@ -1,18 +1,18 @@
 ---
-title: ADR 0.0.0058 — A planned budget of 1–3 full gates per Stage instead of a gate on every Task
+title: ADR 0.0.0059 — A planned budget of 1–3 full gates per Stage instead of a gate on every Task
 description: Architecture Decision Record
 when-use: Reference when writing the gate plan of a technical.md (Fase 3B), deciding what to run before a Task commit, adding a fourth full-gate point to a Stage, or before re-introducing a mandatory per-Task or per-Checkpoint gate
 keywords: [adr, process, gates, make-check, check-task, check-block, gate-plan, budget, tdd]
 status: accepted
 created_at: 2026-10-17
 updated_at: 2026-10-17
-adr_id: 0.0.0058
+adr_id: 0.0.0059
 decision: Each Task runs only the tests it wrote or changed (plus the pre-commit hooks); the full `make check` runs only at the 1–3 points per Stage/issue that the technical.md gate plan names, the exit gate included, and any point beyond 3 needs an explicit written justification. `check-task` and `check-block` stop being mandatory.
 context_stage: 0.0-global
 bounded_context: transversal
 ---
 
-# ADR 0.0.0058 — A planned budget of 1–3 full gates per Stage instead of a gate on every Task
+# ADR 0.0.0059 — A planned budget of 1–3 full gates per Stage instead of a gate on every Task
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 

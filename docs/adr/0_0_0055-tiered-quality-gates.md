@@ -20,7 +20,7 @@ bounded_context: transversal
 
 `accepted` — issue #110.
 
-> Amended by [ADR 0.0.0058](./0_0_0058-planned-full-gate-budget-per-stage.md) (2026-10-17): Decision items 1 (T1 `check-task` on every commit, T2 `check-block` at every Checkpoint C) and 2 (escalation rules) are replaced by a planned budget of 1–3 full `make check` runs per Stage, with only the Task's own tests run on each commit. Items 3–7 still hold.
+> Amended by [ADR 0.0.0059](./0_0_0059-planned-full-gate-budget-per-stage.md) (2026-10-17): Decision items 1 (T1 `check-task` on every commit, T2 `check-block` at every Checkpoint C) and 2 (escalation rules) are replaced by a planned budget of 1–3 full `make check` runs per Stage, with only the Task's own tests run on each commit. Items 3–7 still hold.
 
 ## Context
 
