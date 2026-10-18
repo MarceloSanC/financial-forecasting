@@ -1832,4 +1832,23 @@ refresh, `arch_baseline*` e `pyproject.toml`.
 **Por que ficou abaixo do limiar de pergunta:** nenhuma assinatura de contrato da
 Stage muda. São regras de dono único e de VO que o develop passou a impor.
 
+### 2026-10-18 — [decision] gates — saída do ponto A (depois da Task 07) — Claude (Opus 5.5)
+**Contexto:** primeiro gate completo depois do rebase, sobre o HEAD `ee2a530` (Task
+07), com `--name ff-gate-158`, os limites de recurso, `PYTEST_PAR='-n 4 --dist
+loadgroup'` e o log em arquivo montado.
+**Saída:**
+- `uv lock --check` no ff72: `Resolved 182 packages`;
+- ruff `All checks passed!`; mypy `Success: no issues found in 349 source files`;
+  `check_layout` PASSOU; `Contracts: 17 kept, 0 broken`;
+- `[fake_parity]`, `[use_case_deps]`, `[domain_determinism]` e `[vo_invariants]`
+  PASSOU; `[port_coverage]` PASSOU com 1 no baseline (`Hasher`);
+  `[schema_literals]` PASSOU com 17 no baseline;
+- pytest: `6738 passed, 24 skipped, 577 warnings in 1145.48s (0:19:05)`, cobertura
+  `99.15%` (mínimo 90%); `EXIT=0`.
+
+O ponto A ficou verde e não pediu nenhum task-NN-fix. As duas falhas do `[finding]`
+da Task 06 passaram aqui (`test_two_seeds_produce_identical_grids[defaults-5.3]` e
+`test_cohort_runner_end_to_end`). Fica confirmada a instabilidade de ambiente, e o
+`[finding]` fecha sem ação.
+
 <!-- END: post-execution -->
