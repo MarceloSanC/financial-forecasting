@@ -211,3 +211,22 @@ def test_main_exit_codes(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(cc, "find_root", lambda start: None)
     assert cc.main([]) == 2  # noqa: PLR2004 — exit 2 = raiz não encontrada
+
+
+def test_main_resolves_relative_paths_against_the_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rodado de uma subpasta, o caminho relativo é do shell, não da raiz (sem falso limpo)."""
+    received: list[Path] = []
+
+    def spy(paths: list[Path], root: Path) -> list[Any]:
+        received.extend(paths)
+        return []
+
+    monkeypatch.setattr(cc, "find_root", lambda start: tmp_path)
+    monkeypatch.setattr(cc, "findings_for", spy)
+    monkeypatch.chdir(_write(tmp_path, _DOMAIN_FILE, _CLOCK).parent)
+
+    cc.main(["clocky.py"])
+
+    assert [p.resolve() for p in received] == [(tmp_path / _DOMAIN_FILE).resolve()]

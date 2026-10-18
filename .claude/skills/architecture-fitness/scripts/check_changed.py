@@ -156,7 +156,9 @@ def main(argv: list[str] | None = None) -> int:
     if root is None:
         print("check_changed: raiz do repo não encontrada", file=sys.stderr)
         return 2
-    paths = list(args.paths) or changed_files(root, args.base)
+    # relativo ao cwd, como no shell: o `findings_for` resolve relativo contra a raiz, e
+    # rodar de uma subpasta descartava o arquivo calado (0 achados = falso limpo)
+    paths = [Path.cwd() / p for p in args.paths] or changed_files(root, args.base)
     found = findings_for(paths, root=root)
     for finding in found:
         print(finding.render())
