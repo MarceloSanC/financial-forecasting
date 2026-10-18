@@ -22,6 +22,11 @@ key = "Hasher"
 motivo = "Implementação única por desenho (issue #70): o FakeHasher era cópia byte a byte do CanonicalJsonHasher e foi removido; o contrato roda só no adapter real + golden, e os testes de domínio/use case injetam o adapter real (stdlib, determinístico). Um fake aqui seria uma segunda definição de identidade — o oposto do que reprodutibilidade exige."
 issue = 70
 
+[[port_coverage.allow]]
+key = "ConformalBackend"
+motivo = "Transitória (ADR 6.1.0005): o port nasce na Task 06 da Stage 7.2 com fake e perna fake do contrato; o adapter real (MapieCqrBackend) e a perna mapie chegam na Task 07, que remove esta entrada."
+issue = 158
+
 # ---------------------------------------------------------------------------
 # check_schema_literals.py — literal "processed"/"dataset_tft"/"target_return" em código de
 # features/modeling/application/. Chave = '<arquivo rel>::"<literal>"'. Os seis use cases
