@@ -44,6 +44,10 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
+from financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract import (  # noqa: E501
+    DATASET_TFT_LAYER,
+    DATASET_TFT_TABLE,
+)
 from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
     DIRTY_KEY,
 )
@@ -93,8 +97,6 @@ if TYPE_CHECKING:
     )
 
 _LOG = logging.getLogger(__name__)
-_DATASET_LAYER = "processed"
-_DATASET_TABLE = "dataset_tft"
 # `model_version` que o GBM e o TFT gravam — o dono é o use case de cada um; o dos
 # baselines vem de `BaselineSpec.model_version`.
 GBM_MODEL_VERSION = GBM_USE_CASE_MODEL_VERSION
@@ -264,7 +266,7 @@ def load_training_grid(
     *, store: MedallionStore, asset_id: str, columns: Sequence[str]
 ) -> TrainingGrid:
     """O grid único do ativo, lido do dataset materializado (mesma leitura do treino)."""
-    rows = store.read(layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": asset_id})
+    rows = store.read(layer=DATASET_TFT_LAYER, table=DATASET_TFT_TABLE, filters={"asset": asset_id})
     return build_training_grid(rows, columns=columns)
 
 

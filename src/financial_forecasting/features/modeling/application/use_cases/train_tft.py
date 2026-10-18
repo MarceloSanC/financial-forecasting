@@ -70,6 +70,11 @@ from financial_forecasting.features.analytics_store.domain.value_objects.quantil
 from financial_forecasting.features.analytics_store.domain.value_objects.run_record import (
     RunRecord,
 )
+from financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract import (  # noqa: E501
+    DATASET_TFT_LAYER,
+    DATASET_TFT_TABLE,
+    TARGET_COLUMN,
+)
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
     feature_set_hash,
     list_feature_specs,
@@ -122,8 +127,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_DATASET_LAYER = "processed"
-_DATASET_TABLE = "dataset_tft"
 _SPLIT = "test"
 MODEL_VERSION = "tft_quantile"
 _ARTIFACT_SUBDIR = "tft"
@@ -133,7 +136,6 @@ _ARTIFACT_SUBDIR = "tft"
 # mudaria `feature_set_hash` e o conjunto que alimenta o dataset (3.5) e o GBM
 # (5.3). Piso declarado; o tratamento geral é a issue #58.
 _CALENDAR_KNOWN_FEATURES = ("day_of_week", "month")
-_TARGET_COLUMN = "target_return"
 # Rótulo de fase do run (I12). Distingue este fluxo da varredura exploratória,
 # que marca `phase='exploratory'` (ADR 5.4.0005) — a separação estrutural é o
 # grafo de dependências do `RunTftSweep`; o rótulo é a segunda camada.
@@ -284,16 +286,16 @@ def _read_panel(
     (`test_dataset_loading_characterization.py`) a exercita com colunas
     arbitrárias; o use case e a inferência leem por `load_tft_panel`.
     """
-    rows = store.read(layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": asset_id})
+    rows = store.read(layer=DATASET_TFT_LAYER, table=DATASET_TFT_TABLE, filters={"asset": asset_id})
     if not rows:
         raise ValueError(
-            f"dataset ({_DATASET_LAYER!r}, {_DATASET_TABLE!r}) is empty for "
+            f"dataset ({DATASET_TFT_LAYER!r}, {DATASET_TFT_TABLE!r}) is empty for "
             f"asset {asset_id!r} — nothing to train (C1)"
         )
-    grid = build_training_grid(rows, columns=(*feature_names, _TARGET_COLUMN))
+    grid = build_training_grid(rows, columns=(*feature_names, TARGET_COLUMN))
     return TftPanel(
         timestamps=grid.timestamps_iso(),
-        target=grid.column(_TARGET_COLUMN),
+        target=grid.column(TARGET_COLUMN),
         sessions=grid.sessions(),
         rows=grid.matrix(feature_names),
         feature_names=feature_names,

@@ -75,6 +75,9 @@ from financial_forecasting.features.feature_engineering.domain.services import (
 from financial_forecasting.features.feature_engineering.domain.services import (
     indicator_formulas as f_,
 )
+from financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract import (  # noqa: E501
+    TARGET_COLUMN,
+)
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
     list_feature_specs,
 )
@@ -106,7 +109,7 @@ _TAIL_COLUMNS = (
     "fundamentals_effective_date",
     "day_of_week",
     "month",
-    "target_return",
+    TARGET_COLUMN,
     "time_idx",
 )
 _FUNDAMENTAL_BASE = (
@@ -294,7 +297,7 @@ class DatasetAssembler:
 
         closes = [float(c) for c in frame["close"].tolist()]
         target = compute_target_return(closes)
-        frame["target_return"] = [(math.nan if value is None else value) for value in target]
+        frame[TARGET_COLUMN] = [(math.nan if value is None else value) for value in target]
 
     @staticmethod
     def _apply_target_and_drop(frame: pd.DataFrame) -> None:

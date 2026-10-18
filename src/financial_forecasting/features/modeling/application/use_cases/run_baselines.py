@@ -58,6 +58,11 @@ from financial_forecasting.features.analytics_store.domain.value_objects.quantil
 from financial_forecasting.features.analytics_store.domain.value_objects.run_record import (
     RunRecord,
 )
+from financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract import (  # noqa: E501
+    DATASET_TFT_LAYER,
+    DATASET_TFT_TABLE,
+    TARGET_COLUMN,
+)
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
     feature_set_hash,
 )
@@ -108,15 +113,12 @@ if TYPE_CHECKING:
         MedallionStore,
     )
 
-_DATASET_LAYER = "processed"
-_DATASET_TABLE = "dataset_tft"
 _SPLIT = "test"
 
 # Entrada estrutural do dedup (I6): (split, horizon, decision_idx + horizon,
 # quantile_level) é a chave de alinhamento; o último campo (decision_idx) é o rank.
 _StructuralEntry = tuple[str, int, int, float, int]
 _ALIGNMENT_KEY_WIDTH = 4
-_TARGET_COLUMN = "target_return"
 
 
 @dataclass(frozen=True)
@@ -249,15 +251,15 @@ class RunBaselines:
         mudança de comportamento declarada no concept §4).
         """
         rows = self._store.read(
-            layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": scope.asset_id}
+            layer=DATASET_TFT_LAYER, table=DATASET_TFT_TABLE, filters={"asset": scope.asset_id}
         )
         if not rows:
             raise ValueError(
-                f"dataset ({_DATASET_LAYER!r}, {_DATASET_TABLE!r}) is empty for "
+                f"dataset ({DATASET_TFT_LAYER!r}, {DATASET_TFT_TABLE!r}) is empty for "
                 f"asset {scope.asset_id!r} — nothing to forecast (C7)"
             )
         grid = build_training_grid(rows, columns=modeling_columns())
-        return grid.timestamps_iso(), grid.column(_TARGET_COLUMN), grid.sessions()
+        return grid.timestamps_iso(), grid.column(TARGET_COLUMN), grid.sessions()
 
     # -- fluxo por spec ---------------------------------------------------------
 

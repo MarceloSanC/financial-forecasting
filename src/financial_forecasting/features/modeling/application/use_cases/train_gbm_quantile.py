@@ -67,6 +67,11 @@ from financial_forecasting.features.analytics_store.domain.value_objects.quantil
 from financial_forecasting.features.analytics_store.domain.value_objects.run_record import (
     RunRecord,
 )
+from financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract import (  # noqa: E501
+    DATASET_TFT_LAYER,
+    DATASET_TFT_TABLE,
+    TARGET_COLUMN,
+)
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
     feature_set_hash,
     list_feature_specs,
@@ -118,17 +123,14 @@ if TYPE_CHECKING:
         MedallionStore,
     )
 
-_DATASET_LAYER = "processed"
-_DATASET_TABLE = "dataset_tft"
 _SPLIT = "test"
 MODEL_VERSION = "gbm_quantile"
 
 # Colunas de calendário incluídas como ordinais (ADR 5.3.0003 — paridade com o
 # TFT known covariates) e colunas do dataset que NUNCA viram feature (I10).
 _CALENDAR_FEATURES = ("day_of_week", "month")
-_TARGET_COLUMN = "target_return"
 _EXCLUDED_COLUMNS = frozenset(
-    {"timestamp", "asset_id", "fundamentals_effective_date", "target_return", "time_idx"}
+    {"timestamp", "asset_id", "fundamentals_effective_date", TARGET_COLUMN, "time_idx"}
 )
 
 # Entrada estrutural do dedup (I8): (split, horizon, decision_idx + horizon,
@@ -219,7 +221,7 @@ def modeling_columns() -> tuple[str, ...]:
     mesmo conjunto de features (fixado em teste), então o grid é um só. Quem não
     tem features próprias (baselines, sweep do GBM, cohort) usa esta função.
     """
-    return (*expected_feature_names(), _TARGET_COLUMN)
+    return (*expected_feature_names(), TARGET_COLUMN)
 
 
 def grid_fingerprint(grid: TrainingGrid, *, hasher: Hasher, asset_id: str) -> str:
@@ -372,17 +374,17 @@ class TrainGbmQuantile:
         Stage 5.5; ADR 5.5.0004) — o mesmo grid dos outros modelos.
         """
         rows = self._store.read(
-            layer=_DATASET_LAYER, table=_DATASET_TABLE, filters={"asset": scope.asset_id}
+            layer=DATASET_TFT_LAYER, table=DATASET_TFT_TABLE, filters={"asset": scope.asset_id}
         )
         if not rows:
             raise ValueError(
-                f"dataset ({_DATASET_LAYER!r}, {_DATASET_TABLE!r}) is empty for "
+                f"dataset ({DATASET_TFT_LAYER!r}, {DATASET_TFT_TABLE!r}) is empty for "
                 f"asset {scope.asset_id!r} — nothing to train (C1)"
             )
-        grid = build_training_grid(rows, columns=(*feature_names, _TARGET_COLUMN))
+        grid = build_training_grid(rows, columns=(*feature_names, TARGET_COLUMN))
         return (
             grid.timestamps_iso(),
-            grid.column(_TARGET_COLUMN),
+            grid.column(TARGET_COLUMN),
             grid.sessions(),
             grid.matrix(feature_names),
         )

@@ -24,94 +24,11 @@ issue = 70
 
 # ---------------------------------------------------------------------------
 # check_schema_literals.py — literal "processed"/"dataset_tft"/"target_return" em código de
-# features/modeling/application/. Chave = '<arquivo rel>::"<literal>"'. Os seis use cases
-# redeclaram as coordenadas do par read-only do dataset TFT e a coluna-alvo (#159).
+# features/modeling/application/. Chave = '<arquivo rel>::"<literal>"'. VAZIO desde a #159:
+# os seis use cases importam o par read-only do dataset TFT e a coluna-alvo do
+# `dataset_tft_contract` do produtor (feature_engineering) em vez de redeclará-los.
 [schema_literals]
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/run_baselines.py::"dataset_tft"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/run_baselines.py::"processed"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/run_baselines.py::"target_return"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/run_confirmatory_cohort.py::"dataset_tft"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/run_confirmatory_cohort.py::"processed"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/run_gbm_sweep.py::"dataset_tft"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/run_gbm_sweep.py::"processed"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/run_gbm_sweep.py::"target_return"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/run_tft_sweep.py::"dataset_tft"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/run_tft_sweep.py::"processed"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/run_tft_sweep.py::"target_return"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/train_gbm_quantile.py::"dataset_tft"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/train_gbm_quantile.py::"processed"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/train_gbm_quantile.py::"target_return"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/train_tft.py::"dataset_tft"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/train_tft.py::"processed"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
-
-[[schema_literals.allow]]
-key = 'src/financial_forecasting/features/modeling/application/use_cases/train_tft.py::"target_return"'
-motivo = "Coordenada do dataset TFT / coluna-alvo redeclarada como constante local em cada use case do modeling; dono único a definir na #159 (débito medido, não permissão)."
-issue = 159
+allow = []
 
 # ---------------------------------------------------------------------------
 # check_vo_invariants.py — @dataclass(frozen=True) em domain/value_objects/ sem __post_init__.

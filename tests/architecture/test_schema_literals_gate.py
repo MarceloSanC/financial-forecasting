@@ -1,7 +1,8 @@
 """Regressão do gate `scripts/check_schema_literals.py` (issue #61).
 
-O gate nasce com baseline cheio (17 ocorrências → #159); o teste prova que ele reprova
-uma ocorrência NOVA e que o perímetro é o estreito que a issue pediu.
+O gate nasceu com baseline cheio (17 ocorrências → #159), zerado pela #159; o teste
+prova que ele reprova uma ocorrência NOVA e que o perímetro é o estreito que a issue
+pediu.
 
 Cobre:
 
@@ -9,7 +10,7 @@ Cobre:
 - docstring (módulo/classe/função) não conta; substring/f-string/`"timestamp"`/`"time_idx"`
   não contam;
 - só `features/modeling/application/` é varrido;
-- o repo real casa exatamente com o baseline (nenhuma nova, nenhuma morta);
+- o repo real não tem ocorrência e o baseline está vazio (#159);
 - `main()` devolve 1 quando uma ocorrência nova aparece.
 """
 
@@ -108,13 +109,14 @@ def test_scan_is_scoped_to_modeling_application(gate: ModuleType, tmp_path: Path
 def test_real_repo_matches_the_declared_baseline(
     gate: ModuleType, baseline_lib: ModuleType
 ) -> None:
-    """A dívida medida é exatamente a declarada (#159): nada novo, nada morto."""
+    """Dívida zerada na #159: nenhuma ocorrência no repo e baseline vazio."""
     baseline = baseline_lib.load_baseline(gate.GATE)
 
     new, dead = baseline_lib.reconcile(gate.scan(), baseline)
 
     assert (new, dead) == ([], [])
-    assert {entry.issue for entry in baseline.values()} == {159}
+    assert gate.scan() == {}
+    assert baseline == {}
 
 
 def test_main_exit_code_follows_the_baseline_verdict(
