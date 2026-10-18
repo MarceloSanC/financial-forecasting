@@ -239,3 +239,44 @@ def replace_runs(
     return dataclasses.replace(
         cohort, runs=tuple(change(r) if predicate(r) else r for r in cohort.runs)
     )
+
+
+def with_calib(
+    cohort: Cohort, *, model: str, calib_decisions: Mapping[str, tuple[int, ...]]
+) -> Cohort:
+    """Acrescenta registros `split = "calib"` pelos mesmos runs (Stage 7.2, Task 14).
+
+    `calib_decisions[fold]` são os índices de decisão do calib de cada run daquele fold,
+    em todo horizonte e seed do `model`; alvo = decisão + h. Os valores vêm de um
+    `random.Random` semeado por (modelo, seed, fold, h), com `value_guardrail` igual a
+    `value_raw` (grade já monótona).
+    """
+    levels = sorted({r.quantile_level for r in cohort.records})
+    horizons = sorted({r.horizon for r in cohort.records if r.model == model})
+    extra: list[ForecastRecord] = []
+    for run in cohort.runs:
+        if run.model != model or run.fold not in calib_decisions:
+            continue
+        for horizon in horizons:
+            rng = random.Random(f"calib|{model}|{run.seed}|{run.fold}|{horizon}")
+            for decision in calib_decisions[run.fold]:
+                raw = _values(rng)
+                for level, value in zip(levels, raw, strict=False):
+                    extra.append(
+                        ForecastRecord(
+                            run_id=run.run_id,
+                            model=model,
+                            seed=run.seed,
+                            fold=run.fold,
+                            horizon=horizon,
+                            decision_idx=decision,
+                            decision_timestamp=session(decision),
+                            target_timestamp=session(decision + horizon),
+                            split="calib",
+                            quantile_level=level,
+                            value_raw=value,
+                            value_guardrail=value,
+                            guardrail_applied=False,
+                        )
+                    )
+    return add_records(cohort, *extra)
