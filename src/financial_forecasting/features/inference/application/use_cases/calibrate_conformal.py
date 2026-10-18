@@ -27,7 +27,6 @@ primeiro ponto de teste; os q usados são `grid[tau_lo]` e `grid[tau_hi]` (o
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -45,7 +44,7 @@ from financial_forecasting.features.inference.domain.value_objects.calibration_s
     CalibrationPoint,
     CalibrationSet,
     check_symmetric_pair,
-    is_number,
+    is_finite,
     parse_instant,
 )
 
@@ -173,7 +172,7 @@ def _check_test_points(unit: ConformalUnitInput, pair: tuple[float, float]) -> s
         parse_instant(point.target_timestamp, f"{name}.target_timestamp")
         for level in pair:
             value = point.grid[level]
-            if not is_number(value) or not math.isfinite(value):
+            if not is_finite(value):
                 raise ValueError(f"{name}.grid[{level!r}]: {value!r} is not a finite number")
         if previous is not None and decision <= previous:
             return (

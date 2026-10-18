@@ -29,11 +29,21 @@ def is_number(value: object) -> TypeGuard[int | float]:
     return isinstance(value, int | float) and not isinstance(value, bool)
 
 
+def is_finite(value: object) -> bool:
+    """Número finito; `int` além do float64 (ex.: `10**400`) é `False`, nunca `OverflowError`."""
+    if not is_number(value):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 def exact_level(level: float) -> Fraction:
     """Decimal mais curto do nível, exato: `Fraction(repr(level))`; recusa bool e não finito."""
     if not is_number(level):
         raise ValueError(f"level must be a finite number, got {level!r}")
-    if not math.isfinite(level):
+    if not is_finite(level):
         raise ValueError(f"level must be finite, got {level!r}")
     return Fraction(repr(level))
 
@@ -87,7 +97,7 @@ class CalibrationPoint:
             value = getattr(self, field)
             if not is_number(value):
                 raise ValueError(f"{field}: {value!r} is not a number")
-            if not math.isfinite(value):
+            if not is_finite(value):
                 raise ValueError(f"{field}: {value!r} is not finite")
 
 
