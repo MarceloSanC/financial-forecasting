@@ -31,9 +31,11 @@ from financial_forecasting.features.evaluation.domain.value_objects.preregistrat
     ScenarioRole,
     SeedSpec,
 )
+from tests.unit.features.evaluation._conformal_parameters import conformal_block
 from tests.unit.features.evaluation._preregistration_payload import (
     PAYLOAD_TOML,
     key_paths,
+    r2_payload,
     to_toml,
     valid_payload,
     with_leaf,
@@ -568,3 +570,66 @@ def test_prereg_profile_parameters_must_be_typed() -> None:
     plan = _plan({**valid_payload(), **_R1_AMENDMENT, "profile_parameters": _PROFILE_BLOCK})
     with pytest.raises(ValueError, match="must be a ProfileParameters"):
         dataclasses.replace(plan, profile_parameters=_PROFILE_BLOCK)
+
+
+# --- Stage 7.2 Task 12: bloco opcional `conformal` -----------------------------------
+
+
+@pytest.mark.unit
+def test_conformal_block_forbidden_in_revision_0() -> None:
+    _raises(
+        {**valid_payload(), "conformal": conformal_block()},
+        "conformal is forbidden in revision 0",
+    )
+
+
+@pytest.mark.unit
+def test_conformal_block_absent_by_default() -> None:
+    plan = _plan()
+    assert plan.conformal is None
+    assert "conformal" not in plan.as_payload()
+
+
+@pytest.mark.unit
+def test_conformal_pairs_must_be_in_quantile_levels() -> None:
+    payload = r2_payload()
+    payload["quantile_levels"] = [0.02, 0.1, 0.2, 0.5, 0.8, 0.9, 0.98]
+    _raises(payload, r"conformal\.pairs\[2\] level 0\.25 must be a level of quantile_levels")
+
+
+@pytest.mark.unit
+def test_primary_pair_must_be_the_h1_gate_pair() -> None:
+    block = {**conformal_block(), "primary_pair": [0.25, 0.75]}
+    _raises(
+        {**r2_payload(), "conformal": block},
+        r"conformal\.primary_pair \[0\.25, 0\.75\] must be the h1_gate pair \[0\.1, 0\.9\]",
+    )
+
+
+@pytest.mark.unit
+def test_conformal_block_errors_carry_the_dotted_path() -> None:
+    block = {**conformal_block(), "sensitivity": "aci"}
+    _raises({**r2_payload(), "conformal": block}, r"conformal\.sensitivity must be")
+    _raises(
+        {**r2_payload(), "conformal": {**conformal_block(), "x": 1}}, "unknown key 'conformal.x'"
+    )
+    with pytest.raises(ValueError, match="unknown key"):
+        Preregistration.from_mapping(with_leaf(valid_payload(), "mcs.conformal", "x"))
+
+
+@pytest.mark.unit
+def test_plan_with_block_round_trips() -> None:
+    plan = _plan(r2_payload())
+    assert plan.conformal is not None
+    assert plan.conformal.primary_pair == (0.1, 0.9)
+    payload = plan.as_payload()
+    assert payload["conformal"] == conformal_block()
+    assert Preregistration.from_mapping(payload) == plan
+    assert Preregistration.from_mapping(tomllib.loads(to_toml(payload))) == plan
+
+
+@pytest.mark.unit
+def test_conformal_block_must_be_typed() -> None:
+    plan = _plan(r2_payload())
+    with pytest.raises(ValueError, match="must be a ConformalParameters"):
+        dataclasses.replace(plan, conformal=conformal_block())
