@@ -119,11 +119,6 @@ issue = 159
 [vo_invariants]
 
 [[vo_invariants.allow]]
-key = "src/financial_forecasting/features/analytics_store/domain/value_objects/prediction_row.py::PredictionRow"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
 key = "src/financial_forecasting/features/analytics_store/domain/value_objects/quantile_forecast.py::QuantileForecast"
 motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
 issue = 160

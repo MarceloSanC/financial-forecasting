@@ -137,7 +137,7 @@ def test_probe_snapshot_has_code_dirty_and_threads_keys(probe: RuntimeEnvironmen
 
 def _calib_command(decision_idx: int) -> PersistPredictionsCommand:
     return PersistPredictionsCommand(
-        run_id="r" * 64,
+        run_id="e" * 64,  # sha256 hex: o `PredictionRow` recusa outra forma (#160)
         split="calib",
         model_version="tft_quantile",
         asset="AAPL",
