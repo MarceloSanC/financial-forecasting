@@ -27,7 +27,13 @@ from mapie.regression import ConformalizedQuantileRegressor
 
 
 class _PrefitPredictions:
-    """Estimador já "ajustado" que devolve predições fixas pelo índice da linha."""
+    """Estimador já "ajustado" que devolve predições fixas pelo índice da linha.
+
+    `n_features_in_` é o que o MAPIE 1.5 confere para tomar o estimador por ajustado:
+    sem ele, avisa "Estimator does not appear fitted" (medido; o teste da perna `mapie`
+    trava). `__sklearn_is_fitted__` não muda nada no MAPIE 1.5 (também medido) e fica
+    pelo protocolo do `sklearn.utils.validation.check_is_fitted`.
+    """
 
     n_features_in_ = 1
 

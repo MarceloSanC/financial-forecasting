@@ -25,6 +25,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from financial_forecasting.features.inference.adapters.out.mapie import (
+    mapie_cqr_backend as mapie_module,
+)
 from financial_forecasting.features.inference.adapters.out.mapie.mapie_cqr_backend import (
     MapieCqrBackend,
 )
@@ -186,3 +189,57 @@ def test_mapie_leg_emits_no_warning() -> None:
             calib_lower=lower, calib_upper=upper, calib_realized=realized, tail_alpha=0.1
         )
     assert [str(w.message) for w in caught] == []
+
+
+_PREFIT = mapie_module._PrefitPredictions  # o original, antes de qualquer monkeypatch
+
+
+class _WithoutFeatures:
+    """Como o `_PrefitPredictions`, sem `n_features_in_`."""
+
+    def __init__(self, values: object) -> None:
+        self._inner = _PREFIT(values)
+
+    def fit(self, X: object, y: object) -> _WithoutFeatures:
+        return self
+
+    def predict(self, X: object) -> object:
+        return self._inner.predict(X)
+
+    def __sklearn_is_fitted__(self) -> bool:
+        return True
+
+
+class _WithoutFittedHook:
+    """Como o `_PrefitPredictions`, sem `__sklearn_is_fitted__`."""
+
+    n_features_in_ = 1
+
+    def __init__(self, values: object) -> None:
+        self._inner = _PREFIT(values)
+
+    def fit(self, X: object, y: object) -> _WithoutFittedHook:
+        return self
+
+    def predict(self, X: object) -> object:
+        return self._inner.predict(X)
+
+
+def _warnings_with(estimator: type, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    monkeypatch.setattr(mapie_module, "_PrefitPredictions", estimator)
+    lower, upper, realized = _calib_values(random.Random(_SEED + 3), 252)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        MapieCqrBackend().split_cqr_corrections(
+            calib_lower=lower, calib_upper=upper, calib_realized=realized, tail_alpha=0.1
+        )
+    return [str(w.message) for w in caught]
+
+
+def test_mapie_warns_without_n_features_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    messages = _warnings_with(_WithoutFeatures, monkeypatch)
+    assert any("does not appear fitted" in m for m in messages)
+
+
+def test_mapie_is_silent_without_the_fitted_hook(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert _warnings_with(_WithoutFittedHook, monkeypatch) == []

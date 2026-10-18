@@ -1897,4 +1897,19 @@ Par ou variante repetidos no comando gerariam duas linhas com a mesma chave
 recusar os dois com `ValueError` (`pairs:` e `variants:`), antes de qualquer unidade,
 como os outros erros de comando do C3.
 
+### 2026-10-18 — [deviation] task-07-fix — o que o MAPIE confere no estimador prefit (Checkpoint C, C2-8, C2-9) — Claude (Opus 5.5)
+**Contexto:** a Task 07 diz que, sem `n_features_in_` e `__sklearn_is_fitted__`, o MAPIE
+avisa que o estimador não está ajustado.
+**Medido contra o MAPIE 1.5.0:** só o `n_features_in_` conta. Sem ele, o MAPIE avisa
+"Estimator does not appear fitted". Sem o `__sklearn_is_fitted__`, não há aviso nem
+diferença. A docstring do `_PrefitPredictions` passa a dizer isso. A perna `mapie`
+ganha os dois casos separados (`test_mapie_warns_without_n_features_in` e
+`test_mapie_is_silent_without_the_fitted_hook`). O hook fica pelo protocolo do
+`check_is_fitted` do sklearn. A frase da Task 07 no §2 fica como está (o §2 está
+congelado); esta entrada a corrige.
+**Mutante equivalente (C2-9, "ad-med"):** a mediana do adapter, (q_lo + q_hi)/2, é o
+terceiro estimador que o MAPIE exige, mas não entra nos escores do CQR assimétrico
+(`symmetric_correction=False`). Trocar a mediana por qualquer vetor entre q_lo e q_hi
+dá o mesmo Q. O mutante é equivalente, fica registrado e não tem teste.
+
 <!-- END: post-execution -->
