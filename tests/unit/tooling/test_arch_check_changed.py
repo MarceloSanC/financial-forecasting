@@ -17,7 +17,10 @@ from typing import Any
 
 import pytest
 
-pytestmark = pytest.mark.unit
+# `main()` varre a árvore REAL de `src/`, onde a injeção do `test_import_contracts.py`
+# grava módulos-probe temporários: fica no mesmo worker que `tests/architecture/**`
+# (ver `tests/conftest.py`), senão lê um probe que some no meio do `scan()`.
+pytestmark = [pytest.mark.unit, pytest.mark.xdist_group(name="real-src-tree")]
 
 _REPO = Path(__file__).resolve().parents[3]
 _SCRIPT = _REPO / ".claude" / "skills" / "architecture-fitness" / "scripts" / "check_changed.py"
