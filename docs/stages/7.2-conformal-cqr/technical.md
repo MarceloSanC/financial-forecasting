@@ -1912,4 +1912,23 @@ terceiro estimador que o MAPIE exige, mas não entra nos escores do CQR assimét
 (`symmetric_correction=False`). Trocar a mediana por qualquer vetor entre q_lo e q_hi
 dá o mesmo Q. O mutante é equivalente, fica registrado e não tem teste.
 
+### 2026-10-18 — [decision] Task 14 — "calib parcial" e o join teste × série nativa — Claude (Opus 5.5)
+**Contexto:** o C9 lista "calib parcial" e "alvos de teste ≠ alvos da série nativa do
+fold", mas não diz como se mede cada um.
+**O que foi decidido:**
+- **Calib parcial:** os índices de decisão do calib da unidade, em ordem de alvo,
+  precisam ser consecutivos. Um salto (ex.: 14, 15, 17) vira `undefined` com o salto
+  no motivo. O `RunInference` grava o calib como faixa contígua (7.1), então um salto
+  é escrita parcial. O tamanho esperado do calib não chega à montagem.
+- **Join por alvo:** os alvos da série nativa completa que caem entre o primeiro e o
+  último alvo de teste da unidade precisam ser exatamente os alvos de teste dela. Alvo
+  a mais, a menos ou trocado vira `undefined`. A comparação é sempre por
+  `target_timestamp`, nunca por posição.
+- **Ordem das verificações:** fold não inteiro, seed `None`, série nativa ausente,
+  sem calib, sem teste e, então, as regras do `SeriesAssembly` (duplicata, níveis,
+  índices e realizado), primeiro no calib e depois no teste. Na sequência vêm o
+  calib parcial e o join. Vale o primeiro motivo encontrado.
+**Razão:** são escolhas reversíveis, sem formato persistido. O motivo vai para a
+coluna `reason` da tabela gold.
+
 <!-- END: post-execution -->
