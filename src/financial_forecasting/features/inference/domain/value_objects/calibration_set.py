@@ -1,11 +1,12 @@
 """`CalibrationSet` — calib dedicado de uma unidade conformal, com embargo (concept 7.2 §4, I7).
 
-Uma unidade é (fold, seed, horizonte, par simétrico). O conjunto recusa, com
-`ValueError` nomeando o campo: calib vazio; `target_timestamp` não estritamente
-crescente; decisão de calib ≥ `test_start`; alvo de calib ≥ `test_start` (nenhum
-alvo do calib sobrepõe o teste, o embargo); valor não finito; par não simétrico ou
-τ_lo fora de (0; 0,5). Os timestamps são comparados como `datetime` com fuso;
-ISO inválido ou sem fuso é recusado (nunca o `TypeError` naive vs aware).
+Uma unidade é (fold, seed, horizonte, par simétrico). Cada `CalibrationPoint` valida
+os próprios campos (valor finito; timestamp ISO 8601 com fuso, nunca o `TypeError`
+naive vs aware). O `CalibrationSet` valida as regras entre pontos e contra o teste:
+calib vazio; `target_timestamp` não estritamente crescente; decisão de calib ≥
+`test_start`; alvo de calib ≥ `test_start` (nenhum alvo do calib sobrepõe o teste,
+o embargo); par não simétrico ou τ_lo fora de (0; 0,5). Toda recusa é `ValueError`
+nomeando o campo.
 
 `exact_level` mora aqui (o VO confere o par com ela; o calibrador importa o VO e a
 reexporta): o nível vira o seu decimal mais curto, `Fraction(repr(level))` —
@@ -52,6 +53,16 @@ class CalibrationPoint:
     upper: float  # q̂_{τ_hi} do vetor rearranjado
     realized: float  # y no `target_timestamp`
 
+    def __post_init__(self) -> None:
+        _instant(self.decision_timestamp, "decision_timestamp")
+        _instant(self.target_timestamp, "target_timestamp")
+        for field in ("lower", "upper", "realized"):
+            value = getattr(self, field)
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                raise ValueError(f"{field}: {value!r} is not a number")
+            if not math.isfinite(value):
+                raise ValueError(f"{field}: {value!r} is not finite")
+
 
 @dataclass(frozen=True)
 class CalibrationSet:
@@ -92,10 +103,6 @@ class CalibrationSet:
                     f"{name}.target_timestamp: {point.target_timestamp!r} is not before "
                     f"test_start {self.test_start!r} (embargo)"
                 )
-            for field in ("lower", "upper", "realized"):
-                value = getattr(point, field)
-                if not math.isfinite(value):
-                    raise ValueError(f"{name}.{field}: {value!r} is not finite")
 
     def _check_pair(self) -> None:
         low = exact_level(self.lower_level)

@@ -1778,6 +1778,13 @@ porque o ponto tem invariante. Verificação: os testes da Task e
 `python scripts/check_vo_invariants.py`; o ponto A cobre o resto.
 **Por que ficou abaixo do limiar de pergunta:** é conformidade com um gate que entrou
 no develop, sem contrato novo. A Task 02 nasceu antes da regra.
+**Na execução (2026-10-18):** duas asserções de `test_conformal_embargo.py` mudaram.
+Elas são `test_non_finite_value_refused` e `test_naive_or_invalid_timestamp_refused`.
+Antes casavam `points[1].<campo>`, mas agora o ponto ruim é recusado ao ser construído,
+antes de existir o set, e o ponto não conhece o próprio índice. As duas passaram a
+construir o ponto direto e casam `<campo>: …`. O ponto também recusa valor que não é
+número (`bool`, texto, `None`), com um teste novo. As recusas entre pontos seguem no set,
+com o índice na mensagem.
 
 ### 2026-10-18 — [deviation] Tasks 09, 11, 12, 13, 14, 16–19 — premissas do evaluation depois do rebase — Claude (Opus 5.5)
 **Contexto:** conferi cada Task restante contra os arquivos que o develop mudou
