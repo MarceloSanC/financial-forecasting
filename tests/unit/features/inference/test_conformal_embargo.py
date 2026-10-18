@@ -8,6 +8,13 @@ from fractions import Fraction
 
 import pytest
 
+from financial_forecasting.features.inference.application.use_cases.calibrate_conformal import (
+    CalibrateConformal,
+    CalibrateConformalCommand,
+    ConformalPointInput,
+    ConformalUnitInput,
+    UnitStatus,
+)
 from financial_forecasting.features.inference.domain.value_objects.calibration_set import (
     CalibrationPoint,
     CalibrationSet,
@@ -166,3 +173,80 @@ def test_exact_level_is_the_shortest_decimal() -> None:
 def test_exact_level_refuses_bool_and_non_finite(bad: object) -> None:
     with pytest.raises(ValueError, match="level"):
         exact_level(bad)  # type: ignore[arg-type]
+
+
+# --- Task 08: a recusa do VO vira `error` só na sua unidade (I7, independência) ---
+
+_Row = tuple[str, str, float, float, float]  # decisão, alvo, q_lo, q_hi, realizado
+
+
+def _row(day: int, *, target_day: int | None = None, **values: float) -> _Row:
+    target = day + 1 if target_day is None else target_day
+    return (
+        f"2024-01-{day:02d}T21:00:00+00:00",
+        f"2024-01-{target:02d}T21:00:00+00:00",
+        values.get("lower", -0.02),
+        values.get("upper", 0.02),
+        values.get("realized", 0.001),
+    )
+
+
+def _unit_input(fold: int, rows: tuple[_Row, ...]) -> ConformalUnitInput:
+    """Unidade do use case com um ponto de teste em `_TEST_START`, depois de todo o calib."""
+    calib = tuple(
+        ConformalPointInput(
+            decision_timestamp=decision,
+            target_timestamp=target,
+            grid={0.1: lower, 0.5: 0.0, 0.9: upper},
+            realized=realized,
+        )
+        for decision, target, lower, upper, realized in rows
+    )
+    test = (
+        ConformalPointInput(
+            decision_timestamp=_TEST_START,
+            target_timestamp="2024-01-11T21:00:00+00:00",
+            grid={0.1: -0.02, 0.5: 0.0, 0.9: 0.02},
+            realized=None,
+        ),
+    )
+    return ConformalUnitInput(fold_index=fold, seed=7, horizon=1, calib=calib, test=test)
+
+
+def _with(row: _Row, index: int, value: str) -> _Row:
+    patched = list(row)
+    patched[index] = value
+    return tuple(patched)  # type: ignore[return-value]
+
+
+_GOOD = (_row(2), _row(3), _row(4), _row(5))
+_VO_REFUSALS = {
+    "empty": (),
+    "repeated-target": (_row(2), _row(3, target_day=3)),
+    "out-of-order-target": (_row(2), _row(4), _row(3)),
+    "decision-at-test-start": (_row(2), _with(_row(9), 0, _TEST_START)),
+    "target-at-test-start": (_row(2), _row(9, target_day=10)),
+    "non-finite-lower": (_row(2), _row(3, lower=math.nan)),
+    "non-finite-upper": (_row(2), _row(3, upper=math.inf)),
+    "non-finite-realized": (_row(2), _row(3, realized=-math.inf)),
+    "naive-timestamp": (_row(2), _with(_row(3), 1, "2024-01-04T21:00:00")),
+    "invalid-timestamp": (_row(2), _with(_row(3), 0, "garbage")),
+}
+
+
+@pytest.mark.parametrize("bad_rows", list(_VO_REFUSALS.values()), ids=list(_VO_REFUSALS))
+def test_vo_refusal_becomes_error_only_in_its_unit(bad_rows: tuple[_Row, ...]) -> None:
+    good = (_unit_input(0, _GOOD), _unit_input(2, _GOOD[1:]))
+    command = CalibrateConformalCommand(
+        units=(good[0], _unit_input(1, bad_rows), good[1]),
+        pairs=((0.1, 0.9),),
+        variants=("split_cqr_asymmetric_unweighted_v1", "nexcp_fixed_geometric_weights_v1"),
+        nexcp_rho=0.99,
+    )
+    rows = CalibrateConformal()(command).units
+    bad = [r for r in rows if r.fold_index == 1]
+    assert {r.status for r in bad} == {UnitStatus.ERROR}
+    assert all(r.reason for r in bad)  # a mensagem do VO, que nomeia o campo
+    without = CalibrateConformal()(replace(command, units=good)).units
+    assert [r for r in rows if r.fold_index != 1] == list(without)
+    assert {r.status for r in without} == {UnitStatus.OK}
