@@ -44,6 +44,21 @@ class ReproductionComparison:
     max_abs_diff: float
     max_normalized_diff: float
 
+    @property
+    def nothing_to_compare(self) -> bool:
+        """Referência ou re-predição vazia: nada a comparar não prova nada."""
+        return self.compared + self.missing == 0 or self.compared + self.extra == 0
+
+    @property
+    def keys_match(self) -> bool:
+        """Os dois lados têm exatamente as mesmas chaves."""
+        return self.missing == 0 and self.extra == 0
+
+    @property
+    def passed(self) -> bool:
+        """Veredito fail-closed (ADR 7.2.0005): algo comparado, chaves iguais, zero falhas."""
+        return not self.nothing_to_compare and self.keys_match and self.failures == 0
+
 
 def reproduction_mode(
     reference: Mapping[str, str],
@@ -84,8 +99,8 @@ def compare_reproduction(
     """Compara as chaves comuns pelo `within_mode`; conta faltantes e sobrantes.
 
     `compared` é o número de chaves comuns; `max_abs_diff` e `max_normalized_diff`
-    (= max |Δ| / s) são tomados sobre elas. O chamador decide a recusa: nada
-    comparado, conjuntos de chaves diferentes ou alguma falha.
+    (= max |Δ| / s) são tomados sobre elas. O veredito fail-closed é
+    `ReproductionComparison.passed`; o chamador só escolhe a mensagem da recusa.
     """
     common = set(reference) & set(predicted)
     max_abs = 0.0
