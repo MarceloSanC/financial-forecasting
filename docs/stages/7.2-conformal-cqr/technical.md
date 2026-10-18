@@ -1875,4 +1875,26 @@ fazer com uma seed completa cuja série nativa é 100 % degenerada.
 **Razão:** são escolhas reversíveis, sem formato persistido nesta Task. A Task 18
 fixa as colunas e lê estes campos.
 
+### 2026-10-18 — [deviation] task-08-fix — pontos de teste validados por unidade (Checkpoint C, C2-1, C2-2, C2-4) — Claude (Opus 5.5)
+**Contexto:** o `calibration_set_for` não validava os pontos de teste. Um q̂ NaN ou
+±inf virava limite `ok`, e um texto erguia `TypeError` fora do bloco capturado,
+derrubando todas as unidades. O `test_start = test[0]` também dependia da ordem.
+**O que mudou:**
+- Os timestamps de teste precisam de fuso, e os q̂ do par no teste precisam ser
+  números finitos. A violação ergue `ValueError` dentro do bloco capturado e vira
+  `error` da unidade. ±inf só sai, vindo de Q = +inf.
+- Decisões de teste que não são estritamente crescentes viram `undefined` com motivo.
+  Com isso o `test_start` (a primeira decisão) é o mínimo de fato.
+- O realizado ausente no calib é procurado no calib inteiro antes de construir
+  qualquer ponto, então `undefined` prevalece sobre `error` em qualquer ordem.
+**Por que ficou abaixo do limiar de pergunta:** o I7 já manda valor não finito para
+`error` e entrada incompleta para `undefined`; o fix só estende isso aos pontos de
+teste. Nenhum DTO muda.
+
+### 2026-10-18 — [decision] task-08-fix — `validate_command` recusa par e variante duplicados (C2-7) — Claude (Opus 5.5)
+Par ou variante repetidos no comando gerariam duas linhas com a mesma chave
+(unidade, par, variante) e colidiriam na tabela gold. O `validate_command` passa a
+recusar os dois com `ValueError` (`pairs:` e `variants:`), antes de qualquer unidade,
+como os outros erros de comando do C3.
+
 <!-- END: post-execution -->

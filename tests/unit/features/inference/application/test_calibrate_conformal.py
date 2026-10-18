@@ -221,6 +221,8 @@ def test_non_ok_results_carry_reason_and_no_values() -> None:
         {"pairs": ((0.1, 0.8),)},
         {"pairs": ((0.0, 1.0),)},
         {"pairs": ((0.5, 0.5),)},
+        {"pairs": ((0.1, 0.9), (0.1, 0.9))},
+        {"variants": (_SPLIT, _SPLIT)},
     ],
     ids=[
         "duplicate-unit",
@@ -232,6 +234,8 @@ def test_non_ok_results_carry_reason_and_no_values() -> None:
         "pair-0.1-0.8",
         "tau-lo-0",
         "tau-lo-0.5",
+        "duplicate-pair",
+        "duplicate-variant",
     ],
 )
 def test_command_errors_raise_before_any_unit(
@@ -262,3 +266,109 @@ def test_rho_none_accepted_without_nexcp() -> None:
     rows = CalibrateConformal()(_command((_unit(),), variants=(_SPLIT,), rho=None)).units
     assert {r.status for r in rows} == {UnitStatus.OK}
     assert {r.rho for r in rows} == {None}
+
+
+# --- Checkpoint C do bloco 2 (task-08-fix) --------------------------------------------
+
+
+def _with_test_point(unit: ConformalUnitInput, index: int, **changes: object) -> ConformalUnitInput:
+    test = list(unit.test)
+    point = test[index]
+    test[index] = ConformalPointInput(
+        decision_timestamp=str(changes.get("decision_timestamp", point.decision_timestamp)),
+        target_timestamp=str(changes.get("target_timestamp", point.target_timestamp)),
+        grid=changes.get("grid", point.grid),  # type: ignore[arg-type]
+        realized=None,
+    )
+    return ConformalUnitInput(unit.fold_index, unit.seed, unit.horizon, unit.calib, tuple(test))
+
+
+def _statuses(unit: ConformalUnitInput) -> set[UnitStatus]:
+    return {r.status for r in CalibrateConformal()(_command((unit,))).units}
+
+
+def test_test_points_out_of_order_are_undefined() -> None:
+    unit = _unit()
+    swapped = ConformalUnitInput(
+        unit.fold_index, unit.seed, unit.horizon, unit.calib, tuple(reversed(unit.test))
+    )
+    rows = CalibrateConformal()(_command((swapped,))).units
+    assert {r.status for r in rows} == {UnitStatus.UNDEFINED}
+    assert all("not strictly after the previous test decision" in (r.reason or "") for r in rows)
+
+
+def test_test_start_is_the_first_test_decision_against_an_overlapping_calib() -> None:
+    # um alvo de calib depois da 1ª decisão de teste, mas antes da última: o embargo
+    # vale contra a 1ª (test_start), então a unidade é error
+    unit = _unit()
+    last_calib = len(unit.calib) - 1
+    overlap = _with_calib_point(unit, last_calib, target_timestamp=unit.test[1].decision_timestamp)
+    rows = CalibrateConformal()(_command((overlap,))).units
+    assert {r.status for r in rows} == {UnitStatus.ERROR}
+    assert all("embargo" in (r.reason or "") for r in rows)
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf, "0.01", True])
+def test_bad_test_grid_value_is_error_of_the_unit(value: object) -> None:
+    unit = _unit()
+    grid = {**unit.test[2].grid, 0.1: value}
+    bad = _with_test_point(unit, 2, grid=grid)
+    good = _unit(fold=1)
+    rows = CalibrateConformal()(_command((bad, good))).units
+    by_fold = {(r.fold_index, r.lower_level): r for r in rows}
+    assert by_fold[(0, 0.1)].status is UnitStatus.ERROR
+    assert "test[2].grid[0.1]" in (by_fold[(0, 0.1)].reason or "")
+    assert by_fold[(0, 0.25)].status is UnitStatus.OK  # o outro par não usa o 0,1
+    assert {r.status for r in rows if r.fold_index == 1} == {UnitStatus.OK}
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [{"decision_timestamp": "2020-03-01T21:00:00"}, {"target_timestamp": "garbage"}],
+)
+def test_bad_test_timestamp_is_error_of_the_unit(patch: dict[str, str]) -> None:
+    bad = _with_test_point(_unit(), 0, **patch)
+    rows = CalibrateConformal()(_command((bad,))).units
+    assert {r.status for r in rows} == {UnitStatus.ERROR}
+    assert all(r.reason and r.reason.startswith("test[0].") for r in rows)
+
+
+def test_missing_realized_wins_over_a_vo_error_anywhere() -> None:
+    unit = _with_calib_point(_unit(), 0, realized=math.nan)  # error do VO no 1º ponto
+    unit = _with_calib_point(unit, 30, realized=None)  # undefined num ponto posterior
+    assert _statuses(unit) == {UnitStatus.UNDEFINED}
+
+
+def test_rho_one_is_accepted() -> None:
+    rows = CalibrateConformal()(_command((_unit(),), variants=(_NEXCP,), rho=1.0)).units
+    assert {r.status for r in rows} == {UnitStatus.OK}
+    assert {r.rho for r in rows} == {1.0}
+
+
+def test_test_point_without_a_pair_level_is_undefined() -> None:
+    unit = _unit()
+    grid = {k: v for k, v in unit.test[1].grid.items() if k != 0.25}  # noqa: PLR2004
+    rows = CalibrateConformal()(_command((_with_test_point(unit, 1, grid=grid),))).units
+    by_pair = {r.lower_level: r for r in rows if r.variant == _SPLIT}
+    assert by_pair[0.25].status is UnitStatus.UNDEFINED
+    assert "test point" in (by_pair[0.25].reason or "")
+    assert by_pair[0.1].status is UnitStatus.OK
+
+
+def test_other_exceptions_of_the_calibrator_propagate(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*args: object, **kwargs: object) -> object:
+        raise TypeError("programming error")
+
+    monkeypatch.setattr(ConformalCalibrator, "calibrate", staticmethod(boom))
+    with pytest.raises(TypeError, match="programming error"):
+        CalibrateConformal()(_command((_unit(),)))
+
+
+def test_arithmetic_error_of_the_calibrator_is_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    def divide(*args: object, **kwargs: object) -> object:
+        raise ZeroDivisionError("division by zero")
+
+    monkeypatch.setattr(ConformalCalibrator, "calibrate", staticmethod(divide))
+    rows = CalibrateConformal()(_command((_unit(),))).units
+    assert {r.status for r in rows} == {UnitStatus.ERROR}
+    assert {r.reason for r in rows} == {"division by zero"}

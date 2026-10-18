@@ -27,6 +27,7 @@ primeiro ponto de teste; os q usados são `grid[tau_lo]` e `grid[tau_hi]` (o
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -44,6 +45,8 @@ from financial_forecasting.features.inference.domain.value_objects.calibration_s
     CalibrationPoint,
     CalibrationSet,
     check_symmetric_pair,
+    is_number,
+    parse_instant,
 )
 
 
@@ -144,13 +147,41 @@ def validate_command(command: CalibrateConformalCommand) -> None:
     unknown = [variant for variant in command.variants if variant not in known]
     if unknown:
         raise ValueError(f"variants: unknown conformal variants {unknown}")
+    if len(set(command.variants)) != len(command.variants):
+        raise ValueError(f"variants: duplicated variant in {list(command.variants)}")
     _check_rho(command.nexcp_rho, required=ConformalVariant.NEXCP.value in command.variants)
     for pair in command.pairs:
         _check_pair(pair)
+    if len(set(command.pairs)) != len(command.pairs):
+        raise ValueError(f"pairs: duplicated pair in {list(command.pairs)}")
 
 
 def _missing_level(point: ConformalPointInput, pair: tuple[float, float]) -> float | None:
     return next((level for level in pair if level not in point.grid), None)
+
+
+def _check_test_points(unit: ConformalUnitInput, pair: tuple[float, float]) -> str | None:
+    """Pontos de teste: timestamps com fuso e q̂ finitos (erro); decisões crescentes (motivo).
+
+    Valor de entrada não finito ou que não é número ergue `ValueError` (vira `error` da
+    unidade): ±inf só pode sair, vindo de Q = +inf, nunca entrar pela grade.
+    """
+    previous = None
+    for index, point in enumerate(unit.test):
+        name = f"test[{index}]"
+        decision = parse_instant(point.decision_timestamp, f"{name}.decision_timestamp")
+        parse_instant(point.target_timestamp, f"{name}.target_timestamp")
+        for level in pair:
+            value = point.grid[level]
+            if not is_number(value) or not math.isfinite(value):
+                raise ValueError(f"{name}.grid[{level!r}]: {value!r} is not a finite number")
+        if previous is not None and decision <= previous:
+            return (
+                f"{name}.decision_timestamp {point.decision_timestamp} is not strictly after "
+                "the previous test decision"
+            )
+        previous = decision
+    return None
 
 
 def calibration_set_for(
@@ -158,7 +189,13 @@ def calibration_set_for(
 ) -> CalibrationSet | str:
     """O `CalibrationSet` do par, ou o motivo de `undefined` (entrada incompleta).
 
-    `ValueError`/`ArithmeticError` do VO propagam: o chamador os captura como `error`.
+    Unidade sem teste, nível do par ausente numa grade e realizado ausente no calib são
+    `undefined` (entrada incompleta) e são conferidos antes de qualquer valor, então
+    prevalecem sobre `error`. Decisões de teste fora de ordem também são `undefined`.
+    `ValueError`/`ArithmeticError` dos pontos de teste (timestamp sem fuso, q̂ não
+    finito), dos pontos de calib ou do VO propagam: o chamador os captura como `error`.
+    `test_start` é a primeira decisão de teste, a menor, porque as decisões são
+    estritamente crescentes.
     """
     if not unit.test:
         return "unit has no test point (test_start does not exist)"
@@ -167,17 +204,23 @@ def calibration_set_for(
             level = _missing_level(point, pair)
             if level is not None:
                 return f"{name} point {point.decision_timestamp} grid lacks level {level!r}"
-    calib_points: list[CalibrationPoint] = []
+    realized: list[float] = []
     for point in unit.calib:
         if point.realized is None:
             return f"calib point {point.decision_timestamp} has no realized value"
+        realized.append(point.realized)
+    reason = _check_test_points(unit, pair)
+    if reason is not None:
+        return reason
+    calib_points: list[CalibrationPoint] = []
+    for point, y in zip(unit.calib, realized, strict=True):
         calib_points.append(
             CalibrationPoint(
                 decision_timestamp=point.decision_timestamp,
                 target_timestamp=point.target_timestamp,
                 lower=point.grid[pair[0]],
                 upper=point.grid[pair[1]],
-                realized=point.realized,
+                realized=y,
             )
         )
     return CalibrationSet(
