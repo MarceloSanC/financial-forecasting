@@ -16,8 +16,10 @@ que toda métrica da 6.1 consome — a grade de quantis do fornecedor
 - grade comum `levels` em (0, 1), estritamente crescente e **simétrica**
   (``|τ_k + τ_{K+1-k} - 1| ≤ 1e-12``), com ao menos um par (τ_1 < 0.5);
 - em todo ponto, `forecast.levels == levels` e `guardrail_values` finito e
-  não-decrescente — `QuantileForecast` é dataclass pública sem `__post_init__` (só o
-  `from_raw` ordena), então a série revalida em vez de confiar;
+  não-decrescente — o `QuantileForecast` garante só a FORMA da grade na construção
+  (alinhamento 1:1, níveis em (0, 1) e crescentes; issue #160) e guarda o vetor
+  persistido sem reordenar (só o `from_raw` ordena), então a série revalida ordem e
+  finitude em vez de confiar;
 - todo `realized` finito.
 
 Valor não-finito **ergue**, nunca descarta a linha (ADR `6_1_0002` item 5; ADR
@@ -165,12 +167,8 @@ class CoverageSeries:
                     f"point {index}: forecast levels {forecast.levels} differ from the "
                     f"series levels {self.levels}"
                 )
+            # alinhamento valor↔nível: garantido pelo `__post_init__` do VO (#160)
             values = forecast.guardrail_values
-            # Alinhamento valor↔nível: o VO do 4.3 construído direto não o garante.
-            if len(values) != len(self.levels):
-                raise ValueError(
-                    f"point {index}: {len(values)} guardrail values for {len(self.levels)} levels"
-                )
             if any(not is_finite_number(value) for value in values):
                 raise ValueError(
                     f"point {index}: guardrail values must all be finite, got {values}"

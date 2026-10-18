@@ -182,3 +182,62 @@ def test_bool_values_are_treated_as_non_finite_and_preserved() -> None:
     )
     assert forecast.guardrail_applied is False
     assert forecast.guardrail_values == raw
+
+
+# -- construtor cru (issue #160): a forma da grade vale fora do `from_raw` -----------
+
+
+def _direct(**overrides: object) -> QuantileForecast:
+    fields: dict[str, object] = {
+        "levels": _TRIPLET_LEVELS,
+        "raw_values": (0.2, 0.1, 0.3),
+        "guardrail_values": (0.1, 0.2, 0.3),
+        "guardrail_applied": True,
+    }
+    fields.update(overrides)
+    return QuantileForecast(**fields)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_direct_constructor_keeps_persisted_values_untouched() -> None:
+    """I6 (6.4): o caminho cru não recomputa o guardrail — guarda o que foi persistido.
+
+    Inclusive um `guardrail_values` cruzado ou com não-finito: ordem e finitude do
+    vetor pontuado são da `CoverageSeries`, não da forma do VO.
+    """
+    forecast = _direct(guardrail_values=(0.3, 0.1, math.nan), guardrail_applied=False)
+
+    assert forecast.raw_values == (0.2, 0.1, 0.3)
+    assert forecast.guardrail_values[:2] == (0.3, 0.1)
+    assert forecast.guardrail_applied is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        pytest.param({"raw_values": (0.1, 0.2)}, "levels and raw_values must align", id="raw"),
+        pytest.param(
+            {"guardrail_values": (0.1, 0.2, 0.3, 0.4)},
+            "levels and guardrail_values must align",
+            id="guardrail",
+        ),
+        pytest.param(
+            {"levels": (), "raw_values": (), "guardrail_values": ()},
+            "non-empty",
+            id="empty",
+        ),
+        pytest.param({"levels": (0.0, 0.5, 0.9)}, r"in \(0, 1\)", id="closed-bound"),
+        pytest.param({"levels": (0.1, math.nan, 0.9)}, r"in \(0, 1\)", id="nan-level"),
+        pytest.param({"levels": (0.9, 0.5, 0.1)}, "strictly increasing", id="decreasing"),
+        pytest.param({"levels": (0.1, 0.1, 0.9)}, "strictly increasing", id="duplicate"),
+        pytest.param({"guardrail_applied": 1}, "guardrail_applied must be a bool", id="int"),
+        pytest.param({"guardrail_applied": None}, "guardrail_applied must be a bool", id="none"),
+    ],
+)
+def test_direct_constructor_rejects_malformed_grid(
+    overrides: dict[str, object], message: str
+) -> None:
+    """#160: `QuantileForecast(...)` cru recusa o que o `from_raw` recusaria."""
+    with pytest.raises(ValueError, match=message):
+        _direct(**overrides)
