@@ -31,6 +31,9 @@ from financial_forecasting.features.evaluation.domain.services.diebold_mariano i
 from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
     BootstrapScheme,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.conformal_parameters import (
+    CONFORMAL_RULE_CATALOG,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
     PROFILE_CATALOG,
     Preregistration,
@@ -51,6 +54,7 @@ from financial_forecasting.shared.domain.value_objects.cohort_hash import Cohort
 from financial_forecasting.shared.domain.value_objects.preregistration_hash import (
     PreregistrationHash,
 )
+from tests.unit.features.evaluation._conformal_parameters import conformal_parameters
 
 pytestmark = pytest.mark.integration
 
@@ -192,7 +196,11 @@ def test_every_revision_hash_quoted() -> None:
     mirror = _MIRROR.read_text(encoding="utf-8")
     revisions = [p for p in sorted(_PREREG_DIR.iterdir()) if _REVISION_FILE.match(p.name)]
 
-    assert [p.name for p in revisions] == ["aapl_confirmatory-r0.toml", "aapl_confirmatory-r1.toml"]
+    assert [p.name for p in revisions] == [
+        "aapl_confirmatory-r0.toml",
+        "aapl_confirmatory-r1.toml",
+        "aapl_confirmatory-r2.toml",
+    ]
     for path in revisions:
         match = _REVISION_FILE.match(path.name)
         assert match is not None
@@ -319,3 +327,69 @@ def test_r1_anchor_after_r0() -> None:
     mirror = _MIRROR.read_text(encoding="utf-8")
     assert r1.anchor.comment_url in mirror
     assert r1.anchor.commit in mirror
+
+
+# --- Stage 7.2 Task 22: emenda cega r2 ------------------------------------------------
+
+_R1_HASH = "bfa8028498ca0768bce8d9a5ae24af1d0ff7fb143216fd09639fa4de29a674bb"
+_R1_REF = "aapl_confirmatory-r1-bfa8028498ca"
+_R2_AMENDMENT_KEYS = {"revision", "amends", "justification", "blind_status", "conformal"}
+
+
+def test_r0_and_r1_hashes_unchanged() -> None:
+    assert _r0()[1].value == _R0_HASH
+    assert _revision(1)[1].value == _R1_HASH
+
+
+def test_r2_equals_r1_except_amendment_and_conformal() -> None:
+    """Todo campo da r2 é igual ao da r1, exceto a emenda e o bloco `[conformal]` (I11)."""
+    r1, _ = _revision(1)
+    r2, _ = _revision(2)
+    p1, p2 = r1.as_payload(), r2.as_payload()
+    assert set(p2) - set(p1) <= _R2_AMENDMENT_KEYS
+    for key in set(p1) | set(p2):
+        if key not in _R2_AMENDMENT_KEYS:
+            assert p2.get(key) == p1.get(key), key
+    assert r2.revision == 2  # noqa: PLR2004
+    assert r1.conformal is None
+    assert r2.conformal is not None
+
+
+def test_r2_amends_r1_blinded() -> None:
+    r2, _ = _revision(2)
+    assert r2.amendment is not None
+    assert r2.amendment.amends == _R1_REF
+    assert r2.amendment.blind_status == "blinded"
+    assert claims_about_past(r2.amendment.justification) == []
+    for path in (_PREREG_DIR / "aapl_confirmatory-r2.toml", _MIRROR):
+        assert claims_about_past(path.read_text(encoding="utf-8")) == [], path.name
+
+
+def test_r2_conformal_block_is_the_catalog_values() -> None:
+    r2, _ = _revision(2)
+    assert r2.conformal == conformal_parameters()
+    block = r2.conformal.as_payload()
+    for key, value in CONFORMAL_RULE_CATALOG.items():
+        assert block[key] == value, key
+    assert r2.conformal.primary_pair == (r2.h1_gate.lower_level, r2.h1_gate.upper_level)
+    assert r2.conformal.primary_pair in r2.conformal.pairs
+
+
+def test_r0_to_r2_chain_read_by_the_source() -> None:
+    """A cadeia r0 -> r1 -> r2 pelo mesmo caminho do use case (`TomlPreregistrationSource`)."""
+    source = TomlPreregistrationSource(root=_PREREG_DIR)
+    plans = [
+        Preregistration.from_mapping(source.read(name="aapl_confirmatory", revision=rev).payload)
+        for rev in (0, 1, 2)
+    ]
+    digests = [
+        PreregistrationHash.compute(hasher=CanonicalJsonHasher(), payload=p.as_payload())
+        for p in plans
+    ]
+    for previous, plan, digest in zip(plans, plans[1:], digests, strict=False):
+        assert plan.amendment is not None
+        assert plan.amendment.amends == previous.reference(digest)
+    assert [p.revision for p in plans] == [0, 1, 2]
+    mirror = _MIRROR.read_text(encoding="utf-8")
+    assert plans[2].reference(digests[2]) in mirror
+    assert digests[2].value in mirror
