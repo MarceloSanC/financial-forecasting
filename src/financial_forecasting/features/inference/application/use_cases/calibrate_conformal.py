@@ -30,6 +30,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from itertools import pairwise
 
 from financial_forecasting.features.inference.domain.services.conformal_calibrator import (
     BetaReference,
@@ -160,26 +161,31 @@ def _missing_level(point: ConformalPointInput, pair: tuple[float, float]) -> flo
 
 
 def _check_test_points(unit: ConformalUnitInput, pair: tuple[float, float]) -> str | None:
-    """Pontos de teste: timestamps com fuso e q̂ finitos (erro); decisões crescentes (motivo).
+    """Pontos de teste: primeiro a ordem do conjunto inteiro (motivo), depois os valores (erro).
 
-    Valor de entrada não finito ou que não é número ergue `ValueError` (vira `error` da
-    unidade): ±inf só pode sair, vindo de Q = +inf, nunca entrar pela grade.
+    As decisões de teste precisam ser estritamente crescentes; fora de ordem é entrada
+    incompleta (`undefined`) e vale antes de qualquer defeito de valor, em qualquer
+    posição. Depois, alvo com fuso e q̂ do par finitos: violação ergue `ValueError` (vira
+    `error` da unidade). ±inf só pode sair, vindo de Q = +inf, nunca entrar pela grade.
+    Decisão sem fuso ou inválida ergue já na leitura da ordem (sem ela não há ordem).
     """
-    previous = None
+    decisions = [
+        parse_instant(point.decision_timestamp, f"test[{index}].decision_timestamp")
+        for index, point in enumerate(unit.test)
+    ]
+    for index, (previous, decision) in enumerate(pairwise(decisions), start=1):
+        if decision <= previous:
+            return (
+                f"test[{index}].decision_timestamp {unit.test[index].decision_timestamp} is "
+                "not strictly after the previous test decision"
+            )
     for index, point in enumerate(unit.test):
         name = f"test[{index}]"
-        decision = parse_instant(point.decision_timestamp, f"{name}.decision_timestamp")
         parse_instant(point.target_timestamp, f"{name}.target_timestamp")
         for level in pair:
             value = point.grid[level]
             if not is_finite(value):
                 raise ValueError(f"{name}.grid[{level!r}]: {value!r} is not a finite number")
-        if previous is not None and decision <= previous:
-            return (
-                f"{name}.decision_timestamp {point.decision_timestamp} is not strictly after "
-                "the previous test decision"
-            )
-        previous = decision
     return None
 
 

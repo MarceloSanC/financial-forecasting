@@ -372,3 +372,20 @@ def test_arithmetic_error_of_the_calibrator_is_error(monkeypatch: pytest.MonkeyP
     rows = CalibrateConformal()(_command((_unit(),))).units
     assert {r.status for r in rows} == {UnitStatus.ERROR}
     assert {r.reason for r in rows} == {"division by zero"}
+
+
+@pytest.mark.parametrize(
+    "nan_at", [0, 4], ids=["nan-before-the-disorder", "nan-after-the-disorder"]
+)
+def test_test_order_is_checked_before_values(nan_at: int) -> None:
+    # os dois defeitos juntos, nas duas ordens: a desordem (undefined) vale antes do NaN
+    # (error) (Checkpoint C, C3-6)
+    unit = _unit()
+    test = list(unit.test)
+    test[2], test[3] = test[3], test[2]
+    swapped = ConformalUnitInput(unit.fold_index, unit.seed, unit.horizon, unit.calib, tuple(test))
+    grid = {**swapped.test[nan_at].grid, 0.1: math.nan}
+    bad = _with_test_point(swapped, nan_at, grid=grid)
+    rows = CalibrateConformal()(_command((bad,))).units
+    assert {r.status for r in rows} == {UnitStatus.UNDEFINED}
+    assert all("not strictly after the previous test decision" in (r.reason or "") for r in rows)
