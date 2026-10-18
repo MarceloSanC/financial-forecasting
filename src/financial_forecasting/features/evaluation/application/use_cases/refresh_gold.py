@@ -26,7 +26,11 @@ de efeitos):
    parâmetros (ADR `6_4_0006`); depois os perfis de séries novas (`ProfileReports`, Stage
    6.6) e, com as regras de perfil da revisão, o MCS por bloco de sensibilidade
    (`mcs_block_runs`) — falha de perfil vira unidade `error`, nunca aborta o refresh
-   (ADR `6_6_0002` item 3);
+   (ADR `6_6_0002` item 3); e, com o bloco `[conformal]` da revisão (Stage 7.2, ADR
+   `7_2_0003` itens 4-5), a etapa `conformal`: `ConformalAssembly` → uma chamada ao
+   port `ConformalCalibration` com as unidades `ok` → registros, coberturas por seed e
+   médias entre seeds (`conformal_reports_from`) — unidade não-`ok` vira linha com o
+   motivo e cada `error` soma em `conformal_error_units`; exceção do port propaga;
 8. builders na ordem validada (bloqueado → só os `runs_when_blocked`);
 9. `GoldManifest` (timestamps só do `Clock`, I16) e `GoldStore.publish` — o único
    efeito colateral, por último (nada é gravado antes; exceção antes dele não toca o
@@ -43,10 +47,14 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from time import perf_counter
 from types import MappingProxyType
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     EMPTY_CONFORMAL_REPORTS,
+    ConformalReports,
+    ConformalTailRecord,
+    ConformalUndefinedCoverage,
+    ConformalUnitRecord,
     GoldInputs,
     GoldManifest,
     GoldPartition,
@@ -58,6 +66,9 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     RefreshStatus,
     failed_checks_of,
     profile_settings_from,
+)
+from financial_forecasting.features.evaluation.application.ports.out.conformal_calibration import (
+    ConformalCalibration,
 )
 from financial_forecasting.features.evaluation.application.ports.out.gold_builder import (
     GoldBuilder,
@@ -73,6 +84,15 @@ from financial_forecasting.features.evaluation.application.ports.out.silver_tabl
 )
 from financial_forecasting.features.evaluation.application.ports.out.training_grid_reader import (
     TrainingGridReader,
+)
+from financial_forecasting.features.evaluation.domain.services.conformal_assembly import (
+    ConformalAssembly,
+    ConformalAssemblyResult,
+    ConformalUnitAssembly,
+)
+from financial_forecasting.features.evaluation.domain.services.conformal_coverage import (
+    ConformalCoverage,
+    ConformalCoverageReport,
 )
 from financial_forecasting.features.evaluation.domain.services.gold_build_order import (
     gold_build_order,
@@ -122,6 +142,16 @@ from financial_forecasting.features.evaluation.domain.value_objects.block_estima
     UndefinedReason,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.cohort_run import CohortRun
+from financial_forecasting.features.evaluation.domain.value_objects.conformal_coverage_series import (  # noqa: E501
+    ConformalCoverageSeries,
+    ConformalPairLimits,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.conformal_parameters import (
+    ConformalParameters,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
+    CoverageSeries,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.forecast_record import (
     ForecastRecord,
 )
@@ -132,11 +162,21 @@ from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_
 from financial_forecasting.features.evaluation.domain.value_objects.realized_returns import (
     RealizedReturns,
 )
+from financial_forecasting.features.inference.application.use_cases.calibrate_conformal import (
+    CalibrateConformalCommand,
+    ConformalPointInput,
+    ConformalUnitInput,
+)
 from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.application.ports.out.clock import Clock
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
     DatasetContentFingerprint,
 )
+
+if TYPE_CHECKING:
+    from financial_forecasting.features.inference.application.use_cases.calibrate_conformal import (
+        ConformalUnitResult,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +214,7 @@ class GridFingerprintMismatchError(ApplicationError):
 class RefreshGold:
     """Regenera por inteiro a geração gold de um cohort (ADR `6_4_0005`)."""
 
-    def __init__(  # noqa: PLR0913 — 6 colaboradores (concept 6.4 §4 sem o Hasher, #128)
+    def __init__(  # noqa: PLR0913 — 7 colaboradores (concept 6.4 §4 sem o Hasher, #128; 7.2)
         self,
         *,
         silver_reader: SilverTableReader,
@@ -183,6 +223,7 @@ class RefreshGold:
         mcs_backend: McsBackend,
         gold_store: GoldStore,
         builders: Sequence[GoldBuilder],
+        conformal_calibration: ConformalCalibration,
     ) -> None:
         """Valida a ordem dos builders já no wiring (C1) e guarda os colaboradores.
 
@@ -198,6 +239,7 @@ class RefreshGold:
         self._clock = clock
         self._mcs_backend = mcs_backend
         self._gold_store = gold_store
+        self._conformal_calibration = conformal_calibration
         self._registry = QualityCheckRegistry(
             [
                 AlignmentCheck(),
@@ -277,6 +319,8 @@ class RefreshGold:
         mcs: tuple[McsReport, ...] = ()
         profiles: tuple[HorizonProfileReport, ...] = ()
         blocks: tuple[McsBlockRun, ...] = ()
+        conformal: ConformalReports = EMPTY_CONFORMAL_REPORTS
+        conformal_errors = 0
         if not blocked:
             reports = _timed(
                 "reports",
@@ -297,6 +341,20 @@ class RefreshGold:
                 lambda: mcs_block_runs(paired, parameters, self._mcs_backend),
                 len,
             )
+            if parameters.conformal_parameters is not None:
+                conformal, conformal_errors = _timed(
+                    "conformal",
+                    len(records),
+                    lambda: conformal_reports_from(
+                        assembled=assembled,
+                        records=records,
+                        runs=runs,
+                        realized=realized,
+                        parameters=parameters,
+                        port=self._conformal_calibration,
+                    ),
+                    lambda result: len(result[0].units),
+                )
         inputs = GoldInputs(
             partition=partition,
             parameters=parameters,
@@ -307,7 +365,7 @@ class RefreshGold:
             block_estimates=estimates,
             profile_reports=profiles,
             mcs_block_reports=blocks,
-            conformal_reports=EMPTY_CONFORMAL_REPORTS,  # o port entra na Task 19
+            conformal_reports=conformal,
         )
         builders = [b for b in self._builders if not blocked or b.runs_when_blocked]
         tables = _timed("build", len(builders), lambda: [b.build(inputs) for b in builders], len)
@@ -332,9 +390,10 @@ class RefreshGold:
             1 for b in blocks if b.status is UnitStatus.ERROR
         )
         logger.info(
-            "refresh_gold status=%s partition=%s profile_error_units=%d",
+            "refresh_gold status=%s partition=%s conformal_error_units=%d profile_error_units=%d",
             status.value,
             partition,
+            conformal_errors,
             error_units,
         )
         return RefreshGoldResult(
@@ -342,7 +401,7 @@ class RefreshGold:
             rows_by_table=rows_by_table,
             failed_checks=failed_checks_of(results),
             profile_error_units=error_units,
-            conformal_error_units=0,
+            conformal_error_units=conformal_errors,
         )
 
     # -- leituras --------------------------------------------------------------------
@@ -625,3 +684,275 @@ def _record(row: Mapping[str, object], run: CohortRun) -> ForecastRecord:
         value_guardrail=row["value_guardrail"],  # type: ignore[arg-type]
         guardrail_applied=_GUARDRAIL_FLAGS[flag],
     )
+
+
+# --- Stage 7.2: benchmark conformal (ADR 7.2.0003 itens 3-5) ----------------------------
+
+_OK = "ok"
+_UNDEFINED = "undefined"
+_ERROR = "error"
+_UnitKey = tuple[int, int, int]  # (fold, seed, horizonte) de uma unidade ok da montagem
+
+
+def _null_tail(tail: str, level: float) -> ConformalTailRecord:
+    return ConformalTailRecord(
+        tail=tail,
+        level=level,
+        n=None,
+        rank=None,
+        correction=None,
+        infinite=None,
+        beta_a=None,
+        beta_b=None,
+        beta_mean=None,
+        beta_sd=None,
+    )
+
+
+def _tail_record(row: ConformalUnitResult, side: str) -> ConformalTailRecord:
+    """A cauda `side` de uma linha `ok` do port (só o módulo do use case é importado)."""
+    tail = row.lower if side == "lower" else row.upper
+    beta = row.lower_beta if side == "lower" else row.upper_beta
+    if tail is None:
+        raise ValueError(f"an ok port row has no {side} tail: {row!r}")
+    return ConformalTailRecord(
+        tail=tail.tail,
+        level=tail.level,
+        n=tail.n,
+        rank=tail.rank,
+        correction=tail.correction,
+        infinite=tail.infinite,
+        beta_a=None if beta is None else beta.a,
+        beta_b=None if beta is None else beta.b,
+        beta_mean=None if beta is None else beta.mean,
+        beta_sd=None if beta is None else beta.sd,
+    )
+
+
+def _port_record(row: ConformalUnitResult, fold_raw: str) -> ConformalUnitRecord:
+    """O resultado do port em tipos do `evaluation` (o único mapeamento, ADR 7.2.0003)."""
+    status = str(row.status)
+    if status == _OK:
+        tails = (_tail_record(row, "lower"), _tail_record(row, "upper"))
+    else:
+        tails = (_null_tail("lower", row.lower_level), _null_tail("upper", row.upper_level))
+    return ConformalUnitRecord(
+        fold_index=row.fold_index,
+        fold_raw=fold_raw,
+        seed=row.seed,
+        horizon=row.horizon,
+        lower_level=row.lower_level,
+        upper_level=row.upper_level,
+        variant=row.variant,
+        rho=row.rho,
+        status=status,
+        reason=row.reason,
+        tails=tails,
+    )
+
+
+def _assembly_records(
+    unit: ConformalUnitAssembly, parameters: ConformalParameters, variants: tuple[str, ...]
+) -> list[ConformalUnitRecord]:
+    """Unidade `undefined` da montagem: um registro por par e variante do plano."""
+    return [
+        ConformalUnitRecord(
+            fold_index=unit.fold_index,
+            fold_raw=unit.fold_raw,
+            seed=unit.seed,
+            horizon=unit.horizon,
+            lower_level=low,
+            upper_level=high,
+            variant=variant,
+            rho=parameters.nexcp_rho if variant == parameters.sensitivity else None,
+            status=_UNDEFINED,
+            reason=unit.reason or "undefined in the assembly",
+            tails=(_null_tail("lower", low), _null_tail("upper", high)),
+        )
+        for low, high in parameters.pairs
+        for variant in variants
+    ]
+
+
+def _unit_input(key: _UnitKey, unit: ConformalUnitAssembly) -> ConformalUnitInput:
+    return ConformalUnitInput(
+        fold_index=key[0],
+        seed=key[1],
+        horizon=key[2],
+        calib=tuple(ConformalPointInput(d, t, grid, y) for d, t, grid, y in unit.calib),
+        test=tuple(ConformalPointInput(d, t, grid, None) for d, t, grid in unit.test),
+    )
+
+
+def _limits_by_target(
+    unit: ConformalUnitAssembly, row: ConformalUnitResult
+) -> dict[str, tuple[float, float]]:
+    """(L, U) por alvo de teste da unidade: o join é por `target_timestamp` (C3-8 b)."""
+    if row.test_lower is None or row.test_upper is None:
+        raise ValueError(f"an ok port row has no test limits: {row!r}")
+    return {
+        point[1]: (low, high)
+        for point, low, high in zip(unit.test, row.test_lower, row.test_upper, strict=True)
+    }
+
+
+def conformal_reports_from(  # noqa: PLR0913 — as entradas da etapa conformal
+    *,
+    assembled: AssembledCohort,
+    records: Sequence[ForecastRecord],
+    runs: Sequence[CohortRun],
+    realized: RealizedReturns,
+    parameters: RefreshParameters,
+    port: ConformalCalibration,
+) -> tuple[ConformalReports, int]:
+    """Montagem → uma chamada ao port com as unidades ok → registros, coberturas e médias.
+
+    Devolve os relatórios e o número de unidades `error` do port. Uma (seed, h,
+    variante) com qualquer unidade não-`ok` (da montagem ou do port), ou com alvo
+    nativo sem unidade, vira cobertura `undefined` com o motivo; as completas são
+    medidas pela `ConformalCoverage` sobre a série nativa, com os limites unidos por
+    `target_timestamp`. Exceção do port propaga (erro de comando ou de programação).
+    """
+    block = parameters.conformal_parameters
+    if block is None:
+        raise ValueError("conformal_reports_from needs the [conformal] block")
+    candidate = parameters.candidate
+    variants = (block.variant_of_record, block.sensitivity)
+    natives: dict[tuple[int, int], CoverageSeries] = {}
+    for samples in assembled.horizons:
+        for seed, series in zip(samples.seeds[candidate], samples.full[candidate], strict=True):
+            if seed is not None:
+                natives[(seed, samples.horizon)] = series
+    levels = assembled.horizons[0].levels
+    assembly = ConformalAssembly.assemble(
+        records,
+        runs,
+        realized,
+        natives,
+        candidate=candidate,
+        horizons=tuple(samples.horizon for samples in assembled.horizons),
+        levels=levels,
+    )
+    ok_units: dict[_UnitKey, ConformalUnitAssembly] = {}
+    for unit in assembly.units:
+        if unit.status == _OK and unit.fold_index is not None and unit.seed is not None:
+            ok_units[(unit.fold_index, unit.seed, unit.horizon)] = unit
+    rows: tuple[ConformalUnitResult, ...] = ()
+    if ok_units:
+        command = CalibrateConformalCommand(
+            units=tuple(_unit_input(key, unit) for key, unit in ok_units.items()),
+            pairs=block.pairs,
+            variants=variants,
+            nexcp_rho=block.nexcp_rho,
+        )
+        rows = port(command).units
+    records_out: list[ConformalUnitRecord] = []
+    for unit in assembly.units:
+        if unit.status != _OK:
+            records_out += _assembly_records(unit, block, variants)
+    by_key: dict[tuple[_UnitKey, tuple[float, float], str], ConformalUnitResult] = {}
+    for row in rows:
+        key: _UnitKey = (row.fold_index, row.seed, row.horizon)
+        records_out.append(_port_record(row, ok_units[key].fold_raw))
+        by_key[(key, (row.lower_level, row.upper_level), row.variant)] = row
+    errors = sum(1 for row in rows if str(row.status) == _ERROR)
+    coverage, undefined = _coverages(
+        assembly, ok_units, by_key, natives, block, variants, parameters
+    )
+    expected_seeds = tuple(sorted({seed for seed, _ in natives}))
+    seed_means = tuple(
+        ConformalCoverage.seed_mean(
+            [r for r in coverage if (r.horizon, r.variant) == (samples.horizon, variant)],
+            horizon=samples.horizon,
+            variant=variant,
+            expected_seeds=expected_seeds,
+            band_levels=parameters.band_levels,
+        )
+        for samples in assembled.horizons
+        for variant in variants
+    )
+    reports = ConformalReports(
+        units=tuple(records_out),
+        coverage=tuple(coverage),
+        undefined_coverage=tuple(undefined),
+        seed_means=seed_means,
+    )
+    return reports, errors
+
+
+def _coverages(  # noqa: PLR0913 — o que a cobertura de cada (seed, h, variante) junta
+    assembly: ConformalAssemblyResult,
+    ok_units: Mapping[_UnitKey, ConformalUnitAssembly],
+    by_key: Mapping[tuple[_UnitKey, tuple[float, float], str], ConformalUnitResult],
+    natives: Mapping[tuple[int, int], CoverageSeries],
+    block: ConformalParameters,
+    variants: tuple[str, ...],
+    parameters: RefreshParameters,
+) -> tuple[list[ConformalCoverageReport], list[ConformalUndefinedCoverage]]:
+    coverage: list[ConformalCoverageReport] = []
+    undefined: list[ConformalUndefinedCoverage] = []
+    for (seed, horizon), native in sorted(natives.items()):
+        units = [u for u in assembly.units if (u.seed, u.horizon) == (seed, horizon)]
+        not_ok = [u for u in units if u.status != _OK]
+        ok_here = {k: u for k, u in ok_units.items() if (k[1], k[2]) == (seed, horizon)}
+        uncovered = assembly.uncovered_targets.get((seed, horizon), ())
+        for variant in variants:
+            reason = _undefined_reason(not_ok, uncovered, ok_here, by_key, block, variant)
+            if reason is not None:
+                undefined.append(
+                    ConformalUndefinedCoverage(
+                        seed=seed,
+                        horizon=horizon,
+                        variant=variant,
+                        reason=reason,
+                        n_points=native.n_points,
+                    )
+                )
+                continue
+            limits = []
+            for pair in block.pairs:
+                joined: dict[str, tuple[float, float]] = {}
+                for key, unit in ok_here.items():
+                    joined.update(_limits_by_target(unit, by_key[(key, pair, variant)]))
+                limits.append(
+                    ConformalPairLimits(
+                        pair[0],
+                        pair[1],
+                        tuple(joined[t][0] for t in native.target_timestamps),
+                        tuple(joined[t][1] for t in native.target_timestamps),
+                    )
+                )
+            coverage.append(
+                ConformalCoverage.evaluate(
+                    ConformalCoverageSeries(
+                        seed=seed, native=native, variant=variant, pairs=tuple(limits)
+                    ),
+                    tolerance=parameters.degeneracy_tolerance,
+                    band_levels=parameters.band_levels,
+                )
+            )
+    return coverage, undefined
+
+
+def _undefined_reason(  # noqa: PLR0913 — os motivos possíveis, na ordem
+    not_ok: Sequence[ConformalUnitAssembly],
+    uncovered: tuple[str, ...],
+    ok_here: Mapping[_UnitKey, ConformalUnitAssembly],
+    by_key: Mapping[tuple[_UnitKey, tuple[float, float], str], ConformalUnitResult],
+    block: ConformalParameters,
+    variant: str,
+) -> str | None:
+    """O motivo de a (seed, h, variante) não ter cobertura, ou `None` se está completa."""
+    if not_ok:
+        first = not_ok[0]
+        return f"assembly unit fold {first.fold_raw!r}: {first.reason}"
+    if uncovered:
+        return f"native targets without a unit: {list(uncovered)}"
+    for key, unit in ok_here.items():
+        for pair in block.pairs:
+            row = by_key.get((key, pair, variant))
+            if row is None:
+                return f"unit fold {unit.fold_raw!r} pair {list(pair)}: no port result"
+            if str(row.status) != _OK:
+                return f"unit fold {unit.fold_raw!r} pair {list(pair)}: {row.status}: {row.reason}"
+    return None

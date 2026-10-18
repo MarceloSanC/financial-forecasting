@@ -47,6 +47,7 @@ from financial_forecasting.features.evaluation.domain.services import (
 from financial_forecasting.features.evaluation.domain.services.diebold_mariano import (
     DmVarianceEstimator,
 )
+from financial_forecasting.features.evaluation.domain.services.horizon_reports import SampleKind
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     ModelConfidenceSet,
 )
@@ -61,6 +62,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
     BootstrapIndices,
     BootstrapScheme,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.conformal_parameters import (
+    ConformalParameters,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
 )
@@ -73,6 +77,10 @@ from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_
 from financial_forecasting.features.evaluation.domain.value_objects.realized_returns import (
     RealizedReturns,
 )
+from financial_forecasting.features.inference.application.use_cases.calibrate_conformal import (
+    CalibrateConformalCommand,
+    CalibrateConformalResult,
+)
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
     grid_fingerprint,
 )
@@ -84,12 +92,14 @@ from financial_forecasting.features.modeling.domain.services.training_grid impor
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
     DatasetContentFingerprint,
 )
+from tests.fakes.features.evaluation.fake_conformal_calibration import FakeConformalCalibration
 from tests.fakes.features.evaluation.fake_gold_builder import FakeGoldBuilder
 from tests.fakes.features.evaluation.fake_mcs_backend import FakeMcsBackend
 from tests.fakes.features.evaluation.fake_silver_table_reader import FakeSilverTableReader
 from tests.fakes.features.evaluation.fake_training_grid_reader import FakeTrainingGridReader
 from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
 from tests.fakes.shared.in_memory_clock import FakeClock
+from tests.unit.features.evaluation._conformal_parameters import conformal_block
 from tests.unit.features.evaluation._profile_parameters import profile_parameters
 from tests.unit.features.evaluation.gold._cohort_factory import (
     Cohort,
@@ -98,6 +108,7 @@ from tests.unit.features.evaluation.gold._cohort_factory import (
     make_cohort,
     replace_records,
     targets_of,
+    with_calib,
 )
 
 _ASSET = "AAPL"
@@ -341,6 +352,7 @@ class _Harness:
     gold: _SpyStoreGold
     log: _Log
     fingerprint: str
+    conformal: FakeConformalCalibration
 
     def __call__(self, **changes: object) -> RefreshGoldResult:
         return self.use_case(_command(**{"dataset_fingerprint": self.fingerprint, **changes}))
@@ -370,6 +382,7 @@ def _harness(  # noqa: PLR0913 — um parâmetro por colaborador trocável (keyw
     dataset: Sequence[Mapping[str, object]] | None = None,
     partition_keys: Mapping[str, tuple[str, ...]] | None = None,
     estimates: Sequence[float] | None = None,
+    conformal: FakeConformalCalibration | None = None,
 ) -> _Harness:
     cohort = make_cohort() if cohort is None else cohort
     log = _Log()
@@ -378,6 +391,7 @@ def _harness(  # noqa: PLR0913 — um parâmetro por colaborador trocável (keyw
     grid = _SpyGrid(rows, log)
     backend = _SpyBackend(log, fail=fail, estimates=estimates)
     gold = _SpyStoreGold(log)
+    port = FakeConformalCalibration() if conformal is None else conformal
     use_case = RefreshGold(
         silver_reader=reader,
         grid_reader=grid,
@@ -385,8 +399,9 @@ def _harness(  # noqa: PLR0913 — um parâmetro por colaborador trocável (keyw
         mcs_backend=backend,
         gold_store=gold,
         builders=builders(log),
+        conformal_calibration=port,
     )
-    return _Harness(use_case, reader, grid, backend, gold, log, _fingerprint(cohort))
+    return _Harness(use_case, reader, grid, backend, gold, log, _fingerprint(cohort), port)
 
 
 def _gap_cohort() -> Cohort:
@@ -424,6 +439,7 @@ def test_graph_checked_before_read() -> None:
             mcs_backend=_SpyBackend(log),
             gold_store=_SpyStoreGold(log),
             builders=cyclic(log),
+            conformal_calibration=FakeConformalCalibration(),
         )
     assert log.events == []
     assert _harness().use_case.build_order[0] == _QUALITY
@@ -1126,3 +1142,163 @@ class _FailingDm:
     @staticmethod
     def compare(*_args: object, **_kwargs: object) -> object:
         raise ValueError("injected")
+
+
+# --- Stage 7.2 Task 19: a etapa conformal pelo port -----------------------------------
+
+_CONFORMAL = ConformalParameters.from_mapping(
+    {**conformal_block(), "pairs": [[0.1, 0.9], [0.25, 0.75]]}
+)
+_C_PARAMETERS = dataclasses.replace(_PARAMETERS, conformal_parameters=_CONFORMAL)
+# no fold 0, o alvo da decisão 3 em h=2 cai no test_start: o calib para na decisão 2
+_CALIB_DECISIONS = {"0": (0, 1, 2), "1": (14, 15, 16, 17)}
+_SPLIT_ID = _CONFORMAL.variant_of_record
+_NEXCP_ID = _CONFORMAL.sensitivity
+
+
+def _conformal_cohort(calib: Mapping[str, tuple[int, ...]] = _CALIB_DECISIONS) -> Cohort:
+    return with_calib(make_cohort(folds=("0", "1")), model="tft", calib_decisions=calib)
+
+
+def _conformal_harness(
+    cohort: Cohort | None = None, port: FakeConformalCalibration | None = None
+) -> _Harness:
+    return _harness(_conformal_cohort() if cohort is None else cohort, conformal=port)
+
+
+@pytest.mark.unit
+def test_one_port_call_with_only_the_ok_assembly_units() -> None:
+    harness = _conformal_harness(_conformal_cohort({"0": _CALIB_DECISIONS["0"]}))
+    harness(parameters=_C_PARAMETERS)
+    [command] = harness.conformal.calls
+    assert {(u.fold_index, u.seed, u.horizon) for u in command.units} == {
+        (0, seed, h) for seed in (1, 2) for h in _HORIZONS
+    }
+    assert command.pairs == _CONFORMAL.pairs
+    assert command.variants == (_SPLIT_ID, _NEXCP_ID)
+    assert command.nexcp_rho == _CONFORMAL.nexcp_rho
+
+
+@pytest.mark.unit
+def test_assembly_undefined_units_become_rows_without_reaching_the_port() -> None:
+    harness = _conformal_harness(_conformal_cohort({"0": _CALIB_DECISIONS["0"]}))
+    inputs = _inputs_of(harness, parameters=_C_PARAMETERS)
+    undefined = [u for u in inputs.conformal_reports.units if u.fold_raw == "1"]
+    assert len(undefined) == 2 * 2 * len(_CONFORMAL.pairs) * 2  # seeds x h x pares x variantes
+    assert {(u.status, u.reason) for u in undefined} == {("undefined", "unit has no calib point")}
+    [command] = harness.conformal.calls
+    assert all(u.fold_index != 1 for u in command.units)
+    # sem o fold 1, nenhuma (seed, h, variante) tem cobertura completa
+    assert inputs.conformal_reports.coverage == ()
+    assert len(inputs.conformal_reports.undefined_coverage) == 2 * 2 * 2
+
+
+@pytest.mark.unit
+def test_port_error_unit_counts_and_makes_that_coverage_undefined() -> None:
+    port = FakeConformalCalibration(force_status={(1, 2, 2): ("error", "forced")})
+    harness = _conformal_harness(port=port)
+    result = harness(parameters=_C_PARAMETERS)
+    assert result.conformal_error_units == len(_CONFORMAL.pairs) * 2  # pares x variantes
+    inputs = _inputs_of(_conformal_harness(port=port), parameters=_C_PARAMETERS)
+    undefined = {
+        (u.seed, u.horizon, u.variant) for u in inputs.conformal_reports.undefined_coverage
+    }
+    assert undefined == {(2, 2, _SPLIT_ID), (2, 2, _NEXCP_ID)}
+    covered = {(r.seed, r.horizon, r.variant) for r in inputs.conformal_reports.coverage}
+    assert (
+        covered
+        == {(seed, h, v) for seed in (1, 2) for h in _HORIZONS for v in (_SPLIT_ID, _NEXCP_ID)}
+        - undefined
+    )
+    reasons = {u.reason for u in inputs.conformal_reports.undefined_coverage}
+    assert all("forced" in reason for reason in reasons)
+
+
+@pytest.mark.unit
+def test_port_exception_propagates_and_nothing_is_published() -> None:
+    harness = _conformal_harness(port=FakeConformalCalibration(raises=RuntimeError("port down")))
+    with pytest.raises(RuntimeError, match="port down"):
+        harness(parameters=_C_PARAMETERS)
+    assert "publish" not in harness.log.events
+
+
+@pytest.mark.unit
+def test_without_block_the_port_is_not_called() -> None:
+    harness = _conformal_harness()
+    result = harness(parameters=_PARAMETERS)
+    assert harness.conformal.calls == []
+    assert result.conformal_error_units == 0
+
+
+@pytest.mark.unit
+def test_blocked_generation_does_not_call_the_port() -> None:
+    cohort = _conformal_cohort()
+    gap = targets_of(cohort, "tft", 1, 1)[10]
+    harness = _conformal_harness(drop_records(cohort, at_point("tft", 1, 1, gap)))
+    result = harness(parameters=_C_PARAMETERS)
+    assert result.status is RefreshStatus.BLOCKED
+    assert harness.conformal.calls == []
+    assert result.conformal_error_units == 0
+
+
+@pytest.mark.unit
+def test_verdict_inputs_identical_with_and_without_block() -> None:
+    with_block = _inputs_of(_conformal_harness(), parameters=_C_PARAMETERS)
+    without = _inputs_of(_conformal_harness(), parameters=_PARAMETERS)
+    for name in (
+        "horizon_reports",
+        "mcs_reports",
+        "profile_reports",
+        "check_results",
+        "block_estimates",
+    ):
+        assert getattr(with_block, name) == getattr(without, name), name
+    assert not with_block.conformal_reports.is_empty
+    assert without.conformal_reports.is_empty
+
+
+@pytest.mark.unit
+def test_conformal_n_evaluated_equals_the_native_n() -> None:
+    # I8/I14: o n da linha conformal é o do `CoverageMetrics` da série nativa (model_full)
+    inputs = _inputs_of(_conformal_harness(), parameters=_C_PARAMETERS)
+    assert inputs.conformal_reports.coverage
+    for report in inputs.conformal_reports.coverage:
+        [native] = [
+            r.coverage
+            for h in inputs.horizon_reports
+            if h.horizon == report.horizon
+            for r in h.series
+            if (r.model, r.seed, r.sample) == ("tft", report.seed, SampleKind.MODEL_FULL)
+        ]
+        assert report.n_evaluated == native.n_evaluated
+        assert report.n_points == native.n_points
+
+
+class _ReversedPort(FakeConformalCalibration):
+    """Devolve as linhas do fake em ordem invertida (o join tem de ser por chave e alvo)."""
+
+    def __call__(self, command: CalibrateConformalCommand) -> CalibrateConformalResult:
+        result = super().__call__(command)
+        return CalibrateConformalResult(units=tuple(reversed(result.units)))
+
+
+@pytest.mark.unit
+def test_limits_joined_by_target_not_by_position() -> None:
+    plain = _inputs_of(_conformal_harness(), parameters=_C_PARAMETERS)
+    reversed_ = _inputs_of(_conformal_harness(port=_ReversedPort()), parameters=_C_PARAMETERS)
+    assert reversed_.conformal_reports.coverage == plain.conformal_reports.coverage
+    assert reversed_.conformal_reports.seed_means == plain.conformal_reports.seed_means
+    assert sorted(reversed_.conformal_reports.units, key=repr) == sorted(
+        plain.conformal_reports.units, key=repr
+    )
+
+
+@pytest.mark.unit
+def test_seed_mean_over_complete_seeds_only() -> None:
+    port = FakeConformalCalibration(force_status={(0, 2, 1): ("error", "forced")})
+    inputs = _inputs_of(_conformal_harness(port=port), parameters=_C_PARAMETERS)
+    for mean in inputs.conformal_reports.seed_means:
+        if mean.horizon == 1:
+            assert (mean.seeds_used, mean.seeds_excluded) == ((1,), (2,))
+        else:
+            assert (mean.seeds_used, mean.seeds_excluded) == ((1, 2), ())

@@ -1946,4 +1946,35 @@ fold", mas não diz como se mede cada um.
 **Razão:** são escolhas reversíveis, sem formato persistido. O motivo vai para a
 coluna `reason` da tabela gold.
 
+### 2026-10-18 — [decision] Task 19 — a etapa conformal do `RefreshGold` e a aresta única para a `inference` — Claude (Opus 5.5)
+**Contexto:** o plano da Task 19 liga o port `ConformalCalibration` ao `RefreshGold`.
+Faltava dizer o que o use case importa da `inference`, como a ordem das unidades é
+fixada (Checkpoint C, C3-8 a/b) e o que fazer com uma linha `ok` do port sem cauda.
+**O que foi decidido:**
+- **Uma aresta de runtime:** o `refresh_gold` importa do `calibrate_conformal` só os
+  DTOs de comando (`CalibrateConformalCommand`, `ConformalUnitInput`,
+  `ConformalPointInput`). O `ConformalUnitResult` fica sob `TYPE_CHECKING`, e o
+  `_tail_record` lê a cauda da própria linha. Assim nenhum serviço do calibrador cruza.
+  A aresta entra no `.importlinter` como exceção do módulo (27 → 28). O caso
+  `other-evaluation-module-imports-calibrate-conformal` prova que outro módulo reprova.
+  Três guardas AST na `test_stage_7_2_regression_guards.py` veem o que o import-linter
+  não vê: DTOs, adapters e domínio do `evaluation` nunca importam a `inference`; o
+  port só a importa sob `TYPE_CHECKING`; o `refresh_gold` importa só o
+  `calibrate_conformal`.
+- **C3-8 a:** a aresta type-only do port entra nas listas de perímetro do
+  `.importlinter` e do LAYOUT §7.
+- **C3-8 b:** a montagem ordena as unidades por `(fold_index is None, fold_index,
+  fold_raw, seed, h)`. O fold `"10"` vem depois do `"2"`, e os não inteiros ficam no
+  fim. As linhas do port são unidas por chave `(fold, seed, h, par, variante)` e os
+  limites por `target_timestamp`. Dentro de uma unidade, `test_lower`/`test_upper`
+  seguem a ordem dos pontos de teste do comando (contrato do port), com
+  `zip(strict=True)`.
+- **Linha `ok` sem cauda ou sem limites:** é `ValueError`, e não vira linha nula. O
+  contrato do port garante as duas, e o erro propaga como erro de programação.
+- **Fixture:** no `make_cohort`, o calib do fold 0 para na decisão 2. Com a decisão
+  3, o alvo em h=2 cai no `test_start` e o `CalibrationSet` (corretamente) recusa.
+**Razão:** é a regra da ADR 7.2.0003 item 3 (o port no consumidor, dados cruzando) e
+da ADR 0.0.0053 item 3. A ordem numérica e o join por chave tiram da ordem de
+iteração qualquer efeito sobre o resultado.
+
 <!-- END: post-execution -->

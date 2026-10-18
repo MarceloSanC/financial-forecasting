@@ -958,6 +958,20 @@ _REAL_VIOLATION_CASES = (
         },
         id="bc-independence:inference-imports-new-evaluation-edge",
     ),
+    # Stage 7.2 (ADR 7.2.0003 item 3): a aresta `refresh_gold -> calibrate_conformal`
+    # é exceção do MÓDULO. Outro módulo de `evaluation` que importe o mesmo use case
+    # reprova — a exceção não virou permissão do slice.
+    pytest.param(
+        "bc-independence",
+        {
+            "features/evaluation/application/use_cases/_arch_audit_taint_cc.py": (
+                "from financial_forecasting.features.inference.application"
+                ".use_cases.calibrate_conformal import CalibrateConformalCommand\n"
+                "\n_use = CalibrateConformalCommand\n"
+            )
+        },
+        id="bc-independence:other-evaluation-module-imports-calibrate-conformal",
+    ),
 )
 
 

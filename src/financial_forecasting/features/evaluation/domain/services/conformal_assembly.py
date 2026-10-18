@@ -143,6 +143,17 @@ def _decision(group: _Group) -> tuple[str, int]:
     return row.decision_timestamp, row.decision_idx
 
 
+def _unit_order(unit: ConformalUnitAssembly) -> tuple[bool, int, str, tuple[int, int], int]:
+    """Fold inteiro em ordem numérica ("10" depois de "2"), não inteiros no fim (C3-8 b)."""
+    return (
+        unit.fold_index is None,
+        0 if unit.fold_index is None else unit.fold_index,
+        unit.fold_raw,
+        (0, 0) if unit.seed is None else (1, unit.seed),
+        unit.horizon,
+    )
+
+
 class ConformalAssembly:
     """Montagem das unidades conformais do candidato (ver docstring do módulo)."""
 
@@ -167,7 +178,7 @@ class ConformalAssembly:
             if run.model == candidate
             for horizon in horizons
         ]
-        units.sort(key=lambda u: (u.fold_raw, (0, 0) if u.seed is None else (1, u.seed), u.horizon))
+        units.sort(key=_unit_order)
         return ConformalAssemblyResult(
             units=tuple(units),
             full_series_folds=_full_series_folds(records, runs, native_full, candidate),
