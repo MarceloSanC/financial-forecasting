@@ -4,8 +4,9 @@ Rede de regressão da issue #70. Os hashes abaixo foram capturados na base
 `41745d8` (develop) ANTES de remover o `FakeHasher`, com fake e adapter real
 coincidindo em todos os payloads (asserção feita na captura). Cada literal é
 o sha256 hex que o esquema canônico de produção (ADR 1.4.0001) emite para o
-payload ao lado — o mesmo esquema que gera `run_id`, `config_signature`,
-`split_fingerprint` e `dataset_fingerprint` persistidos na camada silver.
+payload ao lado — o mesmo esquema que gera `run_id`, `config_signature` e
+`split_fingerprint`, persistidos na camada silver, e o `dataset_fingerprint`
+(`DatasetContentFingerprint`) do cohort e do manifesto do gold.
 
 Por que um golden e não só invariantes: os testes do contrato provam
 propriedades (determinismo, ordem irrelevante, arredondamento), mas nenhuma
