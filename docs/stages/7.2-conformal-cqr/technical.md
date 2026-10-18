@@ -1855,6 +1855,15 @@ da Task 06 passaram aqui (`test_two_seeds_produce_identical_grids[defaults-5.3]`
 Algum teste da suíte deixa `.git/worktrees/<wt>/index.lock` velho durante o `make check` (visto em três gates desta Stage, às 17:32, 10:50 e 15:18:59, e o commit seguinte falha até o arquivo ser removido); issue a abrir pelo orquestrador.
 
 ### 2026-10-18 — [decision] Task 09 — forma da média entre seeds e dos relatórios conformais — Claude (Opus 5.5)
+> ⚠️ **Errata (2026-10-18, Checkpoint C das Tasks 09–15, C3-2):** a premissa abaixo
+> estava errada. O concept §4 (concept.md:428) diz "PICP, MPIW, cruzamento e aninhamento
+> pelas duas médias", então a média entre seeds traz, para cada uma das quatro
+> quantidades, a contada (c̄/n̄; MPIW ponderado por n) e a média simples por seed com o
+> dp: `mean_of_seed_mpiws`, `mean_of_seed_crossed_rates` e `mean_of_seed_nesting_rates`,
+> cada uma com `sd_of_seed_*` (task-09-fix). Com MPIW infinito numa seed, a média simples
+> é infinita e o dp é `None`. A Task 18 leva essas colunas para a gold. O resto da
+> entrada vale.
+
 **Contexto:** o concept §4 deixa o corpo do `ConformalSeedMeanCoverage` em "…" e não
 diz como PICP, MPIW, cruzamento e aninhamento entram na média entre seeds, nem o que
 fazer com uma seed completa cuja série nativa é 100 % degenerada.
