@@ -241,3 +241,11 @@ def test_weighted_threshold_refuses_bad_inputs() -> None:
         weighted_conformal_threshold([], [], Fraction(1, 10))
     with pytest.raises(ValueError, match="alpha"):
         weighted_conformal_threshold([1.0], [Fraction(1)], Fraction(0))
+
+
+def test_huge_rho_refused_with_value_error() -> None:
+    # exact_rho por exact_level: 10**400 vira ValueError com o campo (Checkpoint C, C3-3)
+    with pytest.raises(ValueError, match="rho"):
+        ConformalCalibrator.calibrate(
+            _calib([i / 4 for i in range(10)]), variant=ConformalVariant.NEXCP, rho=10**400
+        )

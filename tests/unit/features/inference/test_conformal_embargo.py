@@ -276,3 +276,12 @@ def test_vo_refusal_becomes_error_only_in_its_unit(
     without = CalibrateConformal()(replace(command, units=good)).units
     assert [r for r in rows if r.fold_index != 1] == list(without)
     assert {r.status for r in without} == {UnitStatus.OK}
+
+
+@pytest.mark.parametrize("huge", [10**400, -(10**400)])
+def test_huge_int_refused_with_value_error(huge: int) -> None:
+    # int além do float64: ValueError, nunca o OverflowError cru (Checkpoint C, C3-3)
+    with pytest.raises(ValueError, match="level must be finite"):
+        exact_level(huge)
+    with pytest.raises(ValueError, match=r"^lower: .* is not finite"):
+        _point(3, lower=huge)  # type: ignore[arg-type]
