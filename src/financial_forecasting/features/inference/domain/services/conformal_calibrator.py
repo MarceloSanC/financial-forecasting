@@ -41,6 +41,7 @@ __all__ = [
     "TailCorrection",
     "beta_reference",
     "exact_level",
+    "exact_rho",
     "split_conformal_rank",
     "weighted_conformal_threshold",
 ]
@@ -155,16 +156,17 @@ def weighted_conformal_threshold(
     return math.inf
 
 
-def _exact_rho(rho: float | None) -> Fraction:
-    """rho ∈ (0, 1] tomado exato pelo decimal mais curto; ausente ou inválido → `ValueError`."""
-    if rho is None:
-        raise ValueError("rho: the nexcp variant needs rho in (0, 1]")
+def exact_rho(rho: float) -> Fraction:
+    """rho ∈ (0, 1] tomado exato pelo decimal mais curto: a regra única do rho no `inference`.
+
+    O calibrador e o `validate_command` a chamam e só prefixam a mensagem com o campo.
+    """
     try:
         exact = exact_level(rho)
     except ValueError:
-        raise ValueError(f"rho: {rho!r} is not a finite number in (0, 1]") from None
+        raise ValueError(f"{rho!r} is not a finite number in (0, 1]") from None
     if not 0 < exact <= 1:
-        raise ValueError(f"rho: {rho!r} is not in (0, 1]")
+        raise ValueError(f"{rho!r} is not in (0, 1]")
     return exact
 
 
@@ -228,7 +230,12 @@ class ConformalCalibrator:
         lower_scores = [point.lower - point.realized for point in calib.points]
         upper_scores = [point.realized - point.upper for point in calib.points]
         if variant is ConformalVariant.NEXCP:
-            exact = _exact_rho(rho)
+            if rho is None:
+                raise ValueError("rho: the nexcp variant needs rho in (0, 1]")
+            try:
+                exact = exact_rho(rho)
+            except ValueError as exc:
+                raise ValueError(f"rho: {exc}") from None
             n = len(calib.points)
             # i = 1..n em ordem crescente de alvo (garantida pelo VO): o mais recente pesa rho
             weights = [exact ** (n + 1 - i) for i in range(1, n + 1)]

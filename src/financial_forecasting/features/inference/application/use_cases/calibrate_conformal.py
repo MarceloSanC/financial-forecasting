@@ -30,7 +30,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from fractions import Fraction
 
 from financial_forecasting.features.inference.domain.services.conformal_calibrator import (
     BetaReference,
@@ -39,14 +38,13 @@ from financial_forecasting.features.inference.domain.services.conformal_calibrat
     PairCorrection,
     TailCorrection,
     beta_reference,
-    exact_level,
+    exact_rho,
 )
 from financial_forecasting.features.inference.domain.value_objects.calibration_set import (
     CalibrationPoint,
     CalibrationSet,
+    check_symmetric_pair,
 )
-
-_HALF = Fraction(1, 2)
 
 
 @dataclass(frozen=True)
@@ -118,13 +116,9 @@ class CalibrateConformalResult:
 
 def _check_pair(pair: tuple[float, float]) -> None:
     try:
-        low, high = exact_level(pair[0]), exact_level(pair[1])
+        check_symmetric_pair(pair[0], pair[1])
     except ValueError as exc:
-        raise ValueError(f"pairs: {pair!r} has an invalid level ({exc})") from None
-    if low + high != 1:
-        raise ValueError(f"pairs: {pair!r} is not symmetric (lower + upper != 1 exactly)")
-    if not 0 < low < _HALF:
-        raise ValueError(f"pairs: lower level of {pair!r} is not in (0, 0.5)")
+        raise ValueError(f"pairs: {exc}") from None
 
 
 def _check_rho(rho: float | None, *, required: bool) -> None:
@@ -133,11 +127,9 @@ def _check_rho(rho: float | None, *, required: bool) -> None:
             raise ValueError(f"nexcp_rho: required for the {ConformalVariant.NEXCP.value} variant")
         return
     try:
-        exact = exact_level(rho)
-    except ValueError:
-        raise ValueError(f"nexcp_rho: {rho!r} is not a finite number in (0, 1]") from None
-    if not 0 < exact <= 1:
-        raise ValueError(f"nexcp_rho: {rho!r} is not in (0, 1]")
+        exact_rho(rho)
+    except ValueError as exc:
+        raise ValueError(f"nexcp_rho: {exc}") from None
 
 
 def validate_command(command: CalibrateConformalCommand) -> None:
