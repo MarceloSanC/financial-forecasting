@@ -778,7 +778,7 @@ Refs #$issue"
 #### Gates em camadas
 
 **Fonte única** de *qual gate roda quando* durante a execução de Stage ou
-issue (ADR 0.0.0058, que emenda a 0.0.0055). Os PROMPTs de sessão única, o
+issue (ADR 0.0.0059, que emenda a 0.0.0055). Os PROMPTs de sessão única, o
 template `stage-technical.md` e a skill `task-ordering-hex` apontam para cá.
 O `make check` completo é caro (dezenas de minutos no Docker local); por
 isso ele **não** roda por Task nem por bloco, e sim nos poucos pontos que o
@@ -792,7 +792,7 @@ isso ele **não** roda por Task nem por bloco, e sim nos poucos pontos que o
 | **T3** — saída | Passo 10 (fim da Stage/issue), antes do `git push` que abre o PR — é sempre um dos pontos do plano | `make check` | idem |
 | **T4** — CI | todo PR | `make check` (workflow `ci`) | o veredito bloqueante do merge |
 
-Não há mais T2: o `check-block` por Checkpoint C saiu com a ADR 0.0.0058
+Não há mais T2: o `check-block` por Checkpoint C saiu com a ADR 0.0.0059
 (a numeração das demais camadas foi mantida para não quebrar referências).
 
 **Plano de gates** (escrito na Fase 3B, em §1 do `technical.md`; revisado no
