@@ -5,7 +5,7 @@ when-use: Reference when touching ConformalCalibrator, the ConformalBackend port
 keywords: [adr, conformal, cqr, nexcp, mapie, oracle, contract-suite, fixture, rank, weighted-quantile, fractions, infinity, inference, domain]
 status: accepted
 created_at: 2026-10-17
-updated_at: 2026-10-17
+updated_at: 2026-10-18
 adr_id: 7.2.0002
 decision: The asymmetric split-CQR and the NexCP weighted variant are implemented once, stdlib-only, in inference/domain (ConformalCalibrator) as the implementation of record, with the rank ⌈(n+1)(1−α_tail)⌉ and the NexCP cumulative weights in exact rational arithmetic over the decimal of each level and +∞ (no clipping) when the rank exceeds n or the finite weighted mass never reaches 1−α_tail; MAPIE (>=1.5,<1.6, in dependencies) is the oracle of the unweighted variant behind a ConformalBackend port, compared in a [fake, mapie] contract suite only at calibration sizes where MAPIE's "higher" rank coincides with the domain's; the NexCP oracle is a frozen fixture generated from the threshold block of the authors' splitCP_LS; no library is called at runtime.
 context_stage: 7.2-conformal-cqr
@@ -106,6 +106,14 @@ Facts that drive the decision:
    adapter: its own check refuses n < max(1/α_pair, 1/(1−α_pair)) (n < 25 for
    α_tail = 0.02), and `np.quantile` raises when (1 − α_tail)(1 + 1/n) > 1
    (n from 25 to 48 for α_tail = 0.02).
+
+   > ⚠️ **Errata (2026-10-17):** measured against MAPIE 1.5.0, the small-n refusal
+   > works differently. With α_tail = 0.02, `conformalize` (α_pair = 0.04) refuses
+   > n < 25, and `predict_interval` calls the same `_check_alpha_and_n_samples` with
+   > α_pair/2 = 0.02 and refuses every n < 50, with "Number of samples of the score
+   > is too low". The `np.quantile` branch is never reached. The contract suite runs
+   > with n ≥ 50 (Stage 7.2 technical §7, `[deviation]` C5). Nothing else in this
+   > ADR changes.
 5. **NexCP oracle = frozen fixture** under `tests/fixtures/nexcp_oracle/`: a
    generator that transcribes the threshold block of `splitCP_LS` (the zip's
    URL and sha256, notebook cell id and numpy version in a provenance block;
