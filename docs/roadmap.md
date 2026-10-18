@@ -52,7 +52,7 @@ graph LR
   S65-->S66[6.6-scorecard-profiles]
   S54-->S71[7.1-inference-engine]; S43-->S71
   S71-->S72[7.2-conformal-cqr]; S51-->S72; S61-->S72
-  S71-->S73[7.3-explainability]; S61-->S73
+  S71-->S73[7.3-explainability]; S61-->S73; S72-->S73
   S72-->S74[7.4-inference-api]; S73-->S74
   S65-->S81[8.1-confirmatory-run]; S66-->S81; S71-->S81; S72-->S81; S73-->S81
   S81-->S82[8.2-equivalence-audit]-->S83[8.3-plots-report]
@@ -107,7 +107,7 @@ graph LR
 | `6.6-scorecard-profiles` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.5 |
 | `7.1-inference-engine` | inference | multi (application + adapters/out) | vertical | done | 5.4, 4.3 |
 | `7.2-conformal-cqr` | inference | multi (domain + application + adapters/out; + evaluation) | vertical | done | 7.1, 5.1 |
-| `7.3-explainability` | inference | multi (domain + adapters/out; + modeling) | vertical | draft | 7.1, 6.1 |
+| `7.3-explainability` | inference | multi (modeling + inference + analytics_store + evaluation; Windows + Linux) | vertical | draft | 7.1, 6.1, 7.2 |
 | `7.4-inference-api` | inference | adapters/in/http | vertical | draft | 7.2, 7.3 |
 | `8.1-confirmatory-run` | evaluation | application (orquestração) | vertical | draft | 6.5, 6.6, 7.1, 7.2, 7.3 |
 | `8.2-equivalence-audit` | evaluation | application + tests | vertical | draft | 8.1 |
@@ -1079,28 +1079,49 @@ skills_hint: [ddd-tactical-patterns, hex-arch-python, dmls-ch05-model-developmen
 
 **Código novo de modelagem (doc de domínio §5.5):** a ablação exige treinar o TFT com um **subconjunto** de famílias (hoje o `TrainTft` usa a registry inteira), identidade de run / `feature_set_hash` por configuração, um cohort spec de ablação com 5 configurações (o executor de cohort hoje recusa `feature_set_hash` diferente da registry) e dispositivo ≠ `cpu` (o composition root hoje só aceita `cpu`). Custo medido de referência: ~300 treinos ≈ ~95 h em CPU; decisão do humano: 10 seeds em GPU (Linux, ROCm), com piloto 1 seed × 1 fold antes. O desenho fica no concept/technical da Stage.
 
-**Notas da #151:** a partição da volatilidade está resolvida (vale o registry: as 6 de volatilidade e os regimes em technical; errata no ADR 0.0.0016; doc de domínio inference §5.2, C8). (i) O pré-registro de H3 congela a partição pela **lista de features** de cada família + `feature_set_hash`, não pelo nome da família. (ii) Ressalva de leitura: a participação de technical inclui a volatilidade, que deve pesar na largura dos quantis. (iii) A decidir no concept da 7.3: perfil descritivo de permutação do subgrupo de volatilidade, fora do veredito e sem ablação.
+**Notas da #151:** a partição da volatilidade está resolvida (vale o registry: as 6 de volatilidade e os regimes em technical; errata no ADR 0.0.0016; doc de domínio inference §5.2, C8). (i) O pré-registro de H3 congela a partição pela **lista de features** de cada família + `feature_set_hash`, não pelo nome da família. (ii) Ressalva de leitura: a participação de technical inclui a volatilidade, que deve pesar na largura dos quantis. (iii) Perfil descritivo de permutação do subgrupo de volatilidade: decidido fora do escopo no concept da 7.3 (ADR 7.3.0005, H3-VOL).
 
 **Descrição para IA:**
 ```yaml
 stage_id: 7.3-explainability
 bounded_context: inference
-camada_alvo: multi (inference domain + adapters/out; modeling application + adapters/out + composition root para o cohort de ablação)
+camada_alvo: multi (modeling application + adapters/out + adapters/in/cli + composition root; inference domain + application + adapters/out + adapters/in/cli; analytics_store silver; evaluation domain + application + gold; config de cohort e de pré-registro)
+# Caminhos refinados no concept 7.3 (ADRs 7.3.0001–7.3.0006): a estatística de H3 mora no
+# domain do evaluation (não no do inference); a VSN vem do port do modeling (sem adapter de
+# torch no inference); duas fases — Windows (código + rascunhos) e Linux (GPU, freeze, âncora).
 arquivos_a_criar:
-  - src/financial_forecasting/features/inference/domain/services/{permutation_importance.py, ablation_analysis.py, contribution_agreement.py}
-  - src/financial_forecasting/features/inference/adapters/out/pytorch_forecasting/vsn_weight_extractor.py
-  - tests/unit/features/inference/test_permutation_importance.py
-  - tests/unit/features/inference/test_contribution_agreement.py
-  - config/cohorts/<cohort de ablação>.toml (nome e forma no technical da Stage)
+  - src/financial_forecasting/features/modeling/application/dtos/ablation_cohort_spec.py
+  - src/financial_forecasting/features/modeling/application/use_cases/{cohort_unit_runner.py (lock, ambiente, ledger e classificação compartilhados; o executor confirmatório e o de ablação importam dele, nunca um do outro), run_ablation_cohort.py, measure_ablation_cost.py, predict_tft_attribution_from_checkpoints.py}
+  - src/financial_forecasting/features/modeling/adapters/in/cli/ablation_cohort_file.py (loader do TOML de ablação)
+  - src/financial_forecasting/shared/domain/value_objects/family_partition_hash.py (VO de identidade da partição)
+  - src/financial_forecasting/features/inference/domain/value_objects/permutation_plan.py
+  - src/financial_forecasting/features/inference/application/ports/out/{checkpoint_attribution_predictor.py, permuted_prediction_persister.py, vsn_weight_persister.py, attribution_manifest.py}
+  - src/financial_forecasting/features/inference/application/use_cases/run_permutation_inference.py
+  - src/financial_forecasting/features/inference/adapters/out/filesystem/json_attribution_manifest.py (real do AttributionManifest)
+  - src/financial_forecasting/features/analytics_store/adapters/out/parquet/schemas/{fact_permuted_predictions_schema.py, fact_vsn_weights_schema.py}
+  - src/financial_forecasting/features/analytics_store/application/use_cases/{persist_permuted_predictions.py, persist_vsn_weights.py}
+  - src/financial_forecasting/features/evaluation/domain/value_objects/{h3_parameters.py, permuted_forecast_record.py, vsn_weight_record.py, family_loss_differentials.py, permuted_run_losses.py, ablation_run_losses.py, vsn_run_weights.py} (as três últimas são as reduções por run e as suas funções de redução)
+  - src/financial_forecasting/features/evaluation/domain/services/{attribution_assembly.py, family_contribution.py, contribution_agreement.py, vsn_summary.py}
+  - src/financial_forecasting/features/evaluation/adapters/out/duckdb/gold_builders/{h3_importance.py, h3_shares.py, h3_reading.py, h3_vsn.py}
+  - config/cohorts/aapl_ablation.toml (rascunho no Windows; congelado no Linux)
+  - docs/stages/7.3-explainability/aapl_confirmatory-r3.draft.toml (rascunho; vira config/preregistration/aapl_confirmatory-r3.toml + .anchor.toml no Linux)
 arquivos_a_modificar:
-  - src/financial_forecasting/features/modeling/application/use_cases/train_tft.py (subconjunto de famílias; identidade por configuração)
-  - src/financial_forecasting/features/modeling/application/use_cases/run_confirmatory_cohort.py (cohort de ablação com 5 configurações)
-  - src/financial_forecasting/composition_root.py (dispositivo ≠ cpu)
-contratos_introduzidos: [PermutationImportance, AblationAnalysis, ContributionAgreement (domain-services), VsnWeightExtractor (port-out), cohort de ablação (cohort spec congelado e hasheado)]
-contratos_consumidos: [ports de resolução e predição a partir do checkpoint — CheckpointResolver/CheckpointGridPredictor, satisfeitos pelo modeling (7.1, ADR 7.1.0001), PinballScore (6.1), FeatureRegistry families (3.4), TrainTft / TftTrainer (5.4) e o executor de cohort (5.5) para o cohort de ablação]
-definition_of_done: "Permutação e ablação LOCO produzem participação por família e horizonte com IC por bootstrap em bloco pareado; a regra de leitura (heterogeneidade + concordância de sinal, ADR 0_0_0007) é aplicada mecanicamente; VSN reportada como horizonte-invariante; cohort de ablação congelado e hasheado; partição da volatilidade resolvida (#151) antes do pré-registro de H3; pré-registro de H3 ancorado antes de qualquer métrica sobre o cohort real; saída rotulada como descritiva (sem causalidade)."
-non_goals: [SHAP local sofisticado (futuro), claim causal]
-complexidade_estimada: L  # possivelmente — inclui código novo de modelagem; reavaliar no concept da Stage
+  - src/financial_forecasting/features/modeling/application/use_cases/train_tft.py (excluded_family e model_version; corte do grid pelo conjunto completo)
+  - src/financial_forecasting/features/modeling/application/use_cases/run_confirmatory_cohort.py (lock, ambiente, ledger e classificação extraídos para o executor de ablação)
+  - src/financial_forecasting/features/modeling/application/ports/out/tft_checkpoint_predictor.py e adapters/out/pytorch_forecasting/pf_tft_trainer.py (accelerator por instância; predict_attribution_from_checkpoint)
+  - src/financial_forecasting/features/modeling/adapters/out/runtime/git_runtime_environment_probe.py (GPU/HIP observados só com device ≠ cpu) e modeling/adapters/in/cli/cohort_commands.py (subcomandos de ablação)
+  - src/financial_forecasting/features/inference/adapters/in/cli/inference_commands.py e src/financial_forecasting/cli.py (subcomando `attribute`)
+  - src/financial_forecasting/features/analytics_store/adapters/out/parquet/schemas/silver_registry.py
+  - src/financial_forecasting/features/evaluation/domain/value_objects/preregistration.py (bloco opcional [h3])
+  - src/financial_forecasting/features/evaluation/application/use_cases/refresh_gold.py, application/dtos/{refresh_gold.py, gold_schema.py, confirmatory_scorecard.py} (h3_parameters, leitura da partição de ablação, quatro tabelas gold)
+  - src/financial_forecasting/composition_root.py (_SUPPORTED_DEVICES; fábricas de ablação e de atribuição)
+  - src/financial_forecasting/features/analytics_store/application/ports/out/analytics_repository.py e adapters/out/parquet/parquet_analytics_repository.py (docstrings: 1..4 níveis de partição)
+  - docs/preregistration/aapl_confirmatory.md, .importlinter (arestas de dados novas), docs/LAYOUT.md §7 (contratos novos, arestas novas e o VO de identidade FamilyPartitionHash na lista de VOs de shared)
+contratos_introduzidos: [AblationCohortSpec e cohort de ablação congelado e hasheado, RunAblationCohort e MeasureAblationCost (use cases), TrainTftCommand.excluded_family/model_version, PfTftTrainer(accelerator), TftCheckpointPredictor.predict_attribution_from_checkpoint, PredictTftAttributionFromCheckpoints (use case fornecedor), FamilyPermutationPlan (value-object do inference), CheckpointAttributionPredictor/PermutedPredictionPersister/VsnWeightPersister/AttributionManifest (port-out do inference), RunPermutationInference (use case), tabelas silver fact_permuted_predictions e fact_vsn_weights, H3Parameters e FamilyLossDifferentials (value-objects do evaluation), AttributionAssembly, FamilyContribution, ContributionAgreement e VsnSummary (domain-services do evaluation), RefreshParameters.h3_parameters, tabelas gold_h3_importance/gold_h3_shares/gold_h3_reading/gold_h3_vsn, revisão r3 do aapl_confirmatory]
+contratos_consumidos: [CheckpointResolver e PredictTftFromCheckpoints (7.1, ADR 7.1.0001), política de reprodução no domain do inference e regras públicas do series_assembly (7.2), r2 (7.2), PinballScore e CoverageSeries (6.1), McsBackend, BootstrapIndices e block_length_rule (6.2), RefreshGold, SilverTableReader e TrainingGridReader (6.4), Preregistration e âncora (6.5), FeatureRegistry families (3.4), TrainTft / TftTrainer (5.4), CohortSpec e o executor de cohort (5.5)]
+definition_of_done: "Fase Windows: treino por subconjunto de famílias com identidade por configuração e device por instância (CPU e reprodução da 7.1 intactas); predições permutadas (janela inteira do encoder trocada no tensor entre as decisões de teste do fold) e pesos da VSN gravados no silver por um port do modeling; participação por família e horizonte, IC por bootstrap em bloco pareado e a regra de leitura (ADR 0_0_0007) aplicada mecanicamente no evaluation e publicada pelo RefreshGold, testada só com silver sintético; VSN reportada como horizonte-invariante; saída rotulada como descritiva; rascunhos do cohort de ablação e da r3; handoff no repo. Fase Linux: piloto, decisão das seeds, cohort de ablação congelado e hasheado (device e build do torch no hash) e treinado; r3 ancorada antes de qualquer métrica sobre o cohort real."
+non_goals: [SHAP local sofisticado (futuro), claim causal, perfil do subgrupo de volatilidade, pontuação de H3 sobre dado real (8.1), leitura das tabelas de H3 pelo scorecard]
+complexidade_estimada: L
 gate_mode: strict
 skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 ```
@@ -1124,8 +1145,8 @@ arquivos_a_modificar:
 # Da 7.2 (concept 7.2 D9): a 7.4 lê as correções conformais do gold por um port do
 # consumidor no inference (DTO/VO do inference), satisfeito por um leitor do evaluation
 # (gold_schema dono único); direção de produção só evaluation → inference.
-contratos_introduzidos: [RunInferencePort (port-in via FastAPI Depends), port-out do inference para ler gold_conformal_corrections + leitor no evaluation que o satisfaz]
-contratos_consumidos: [ports de predição a partir do checkpoint e predições persistidas test/calib (7.1), gold_conformal_corrections da geração current/ aplicada aos quantis nativos por PairCorrection.limits (7.2; a API não recalibra, doc de domínio inference §6), explainability (7.3)]
+contratos_introduzidos: [RunInferencePort (port-in via FastAPI Depends), port-out do inference para ler gold_conformal_corrections e as tabelas gold de H3 + leitor no evaluation que o satisfaz (padrão do D9 da 7.2)]
+contratos_consumidos: [ports de predição a partir do checkpoint e predições persistidas test/calib (7.1), gold_conformal_corrections da geração current/ aplicada aos quantis nativos por PairCorrection.limits (7.2; a API não recalibra, doc de domínio inference §6), tabelas gold de H3 — gold_h3_shares, gold_h3_reading, gold_h3_vsn — lidas da geração current/, sem calcular atribuição (7.3, ADR 7.3.0001)]
 definition_of_done: "`POST /inference/run` retorna quantis nativos + intervalo conformal + explicabilidade (payload com schema versionado; rótulos 'cobertura empírica' e 'descritiva'); router é fino (sem regra); exceções de domínio viram HTTP; e2e verde."
 non_goals: [autenticação, servir treino, streaming]
 complexidade_estimada: M
@@ -1161,7 +1182,7 @@ arquivos_a_criar:
   - src/financial_forecasting/features/evaluation/application/use_cases/run_confirmatory_evaluation.py
   - tests/integration/features/evaluation/test_run_confirmatory_evaluation.py
 contratos_introduzidos: [RunConfirmatoryEvaluation (use case)]
-contratos_consumidos: [BuildConfirmatoryScorecard e refresh_command_from (6.5), RefreshGold (6.4), RunInference / subcomando `infer` idempotente (7.1), tabelas gold conformais do RefreshGold e revisão r2 (7.2), PermutationImportance, AblationAnalysis e ContributionAgreement (7.3), cohort de ablação (7.3), tabelas de perfil (6.6)]
+contratos_consumidos: [BuildConfirmatoryScorecard e refresh_command_from (6.5), RefreshGold (6.4), RunInference / subcomando `infer` idempotente (7.1), tabelas gold conformais do RefreshGold e revisão r2 (7.2), tabelas gold de H3 publicadas pelo RefreshGold derivado da revisão ancorada mais recente, com o bloco [h3] da r3 (7.3, ADR 7.3.0001), predições permutadas e pesos da VSN no silver (`attribute` completo) e cohort de ablação congelado e treinado (7.3), tabelas de perfil (6.6)]
 definition_of_done: "Pipeline confirmatória roda do cohort persistido até o scorecard sem re-treino; veredito mecânico H1/H2/H3 produzido; conformal incluído como eixo comparativo; tudo rastreável por run_id + hash de pré-registro."
 non_goals: [equivalência (8.2), plots (8.3)]
 complexidade_estimada: M
@@ -1207,7 +1228,7 @@ arquivos_a_criar:
   - docs/reports/final_traceability_dossier.md
   - tests/integration/features/evaluation/test_generate_report_artifacts.py
 contratos_introduzidos: [GenerateReportArtifacts (use case)]
-contratos_consumidos: [gold tables (6.4), scorecard (6.5), explainability (7.3)]
+contratos_consumidos: [gold tables (6.4), scorecard (6.5), tabelas gold de H3 (7.3)]
 definition_of_done: "Plots canônicos gerados a partir de gold persistido (reconstruíveis sem re-treino); dossiê final lista run_ids/fingerprints/hash de pré-registro de cada decisão; pronto para o texto."
 non_goals: [redação do TCC, dashboards interativos]
 complexidade_estimada: M
@@ -1220,7 +1241,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 ## Lacunas conhecidas
 
 - **Variante do CQR (7.2):** decidida — split-CQR assimétrico sem pesos como registro + NexCP ρ = 0,99 como sensibilidade (ADR `0_0_0008`; doc de domínio inference §4.5); os detalhes do pré-registro (forma, papel do MAPIE) ficam na 7.2 (ADRs 7.2.0001 e 7.2.0002: emenda cega r2; MAPIE como oráculo).
-- **Pré-registro de H3 (7.3):** nível do IC, multiplicidade para "≥ 1 de 4 famílias", importâncias negativas / Σ I_g ≈ 0, chave de pareamento entre horizontes e bloco do bootstrap conjunto a fixar na 7.3 (doc de domínio inference §5.7); partição da volatilidade resolvida na #151 (vale o registry — volatilidade e regimes em technical; doc de domínio inference §5.2, C8); encaminhamento nas Notas da #151 no bloco da 7.3.
+- **Pré-registro de H3 (7.3):** decidido — nível 1 − 0,05/4 (Bonferroni sobre as famílias), intervalo básico, total não positivo ⇒ indefinido, pareamento por ponto de decisão, bloco como regra max(7, ⌈max b̂⌉), K_p = 10, B = 1000 (ADR 7.3.0005); perfil do subgrupo de volatilidade fora; congelado pela r3 única, ancorada no Linux depois do freeze do cohort de ablação.
 - **Parâmetros do MCS (6.2):** regra do bloco fixada no doc de domínio evaluation §6.5 (max(h, maior b̂_sb de Politis–White), sensibilidades l = h, √T e moving-block — ADR 0.0.0010); `B` de bootstrap e semente a fixar no concept de 6.2.
 - **Bandas e tolerâncias:** bandas de calibração pré-registradas (H1) e tolerância de equivalência (8.2) a fixar nos concepts de 6.5/8.2.
 - **Fallback de fundamentals (3.3):** janela exata do fallback de disponibilidade a declarar e pré-registrar no concept de 3.3.
@@ -1247,6 +1268,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 | 2026-10-06 | Stage `6.6-scorecard-profiles` `done`; Step 6 `done`; DoD da 6.6 reescrito pelo D5 (pares adjacentes pela função do dono, não serviço novo) e pela r1 cega; a 8.1 julga pela r1 | Fechamento da Stage 6.6 (issue #129; ADRs 6.6.0001–0003; r1 ancorada) |
 | 2026-10-12 | Stage `7.1-inference-engine` `done`; Step 7 `in_progress`. Execução real sobre o cohort `aapl_confirmatory` r0: 60 runs `strict` com max \|Δ\| = 0, 211.680 linhas `split = "calib"` em `fact_oos_predictions`, manifesto com 60 entradas `completed`, `verify` verde, sem `gold/` | Fechamento da Stage 7.1 (issue #153; ADRs 7.1.0001–7.1.0004; technical 7.1 §7) |
 | 2026-10-17 | Stage 7.2 refinada: ADRs na pasta única `docs/adr/` (não `docs/stages/7.2-conformal-cqr/adrs/`); camada, arquivos e contratos (calibrador e política de reprodução no domain do inference, `CalibrateConformal`, cobertura conformal e bloco `[conformal]` no evaluation, revisão r2); integração do conformal no gold (port do consumidor, montagem no `RefreshGold`, duas tabelas gold) na própria 7.2, e a 8.1 só executa; a 8.1 julga pela revisão ancorada mais recente da cadeia (r2; r3 se a 7.3 emendar), não mais "pela r1"; a 7.4 lê `gold_conformal_corrections` (não recalibra) e a 8.1 consome as tabelas conformais do refresh | Concept 7.2 (issue #158; ADRs 7.2.0001–7.2.0005) |
+| 2026-10-18 | Bloco da 7.3 refinado: estatística de H3 no domain do evaluation e gold pelo `RefreshGold` (não no domain do inference), predições permutadas e VSN pelo port do modeling em duas tabelas silver novas (sem adapter de VSN no inference), cohort de ablação por referência ao confirmatório com identidade por configuração, device por instância do treinador, r3 única ancorada no Linux, fases Windows/Linux; `contratos_consumidos` de 7.4 e 8.1 passam a nomear as tabelas gold de H3; lacuna do pré-registro de H3 fechada | Concept 7.3 (issue #186; ADRs 7.3.0001–7.3.0006) |
 | 2026-10-19 | Stage `7.2-conformal-cqr` `done`; Step 7 segue `in_progress`. Revisão r2 ancorada (`aapl_confirmatory-r2-f32ef5ebbbb8`, tag `preregistration/aapl_confirmatory-r2-f32ef5ebbbb8`, comentário na #158); prova de geometria real (Etapa G) verde, só de geometria: 60/60 runs (6 folds × 10 seeds), manifesto com 60 `completed`, sem métrica nem `gold/` | Fechamento da Stage 7.2 (issue #158; ADRs 7.2.0001–7.2.0005; technical 7.2 §7) |
 
 ## Próxima revisão de roadmap
