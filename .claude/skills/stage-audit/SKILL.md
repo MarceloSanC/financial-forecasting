@@ -79,7 +79,7 @@ Procedimento para **auditar uma Stage** depois que ela é declarada
    §11 (critérios de aceitação A1..AN), §13 (questões em aberto Q1..QN).
 2. Ler **`docs/stages/<N.M>-<slug>/technical.md`** inteiro. Pontos-chave:
    §1 (estratégia, estrutura de pastas), §2 (Tasks), §3 (gate de saída +
-   mapping invariante↔teste), §7 (post-execution `[decision]`/`[finding]`/`[deviation]`).
+   mapping invariante↔teste), §7 (post-execution `[decision]`/`[finding]`/`[deviation]`/`[measurement]`).
 3. Identificar **`camada_alvo`** no frontmatter — muda o checklist da
    Fase D (mono-layer domain ≠ vertical-slice multi).
 4. Ler docs referenciados apenas **sob demanda** (ex.: `LAYOUT.md` §3
@@ -806,7 +806,7 @@ verde — são regra de execução, já ancorada acima):
 | Questões em aberto (Q1..QN) | `concept.md` §13 |
 | Gate de saída + mapping invariante↔teste | `technical.md` §3 |
 | Tasks executadas | `technical.md` §2 |
-| §7 post-execution (`[decision]`/`[finding]`/`[deviation]`) | `technical.md` §7 |
+| §7 post-execution (`[decision]`/`[finding]`/`[deviation]`/`[measurement]`) | `technical.md` §7 |
 | Regras de import / layers | `docs/LAYOUT.md` §3 + `hex-arch-python` skill |
 | Atomicidade da Stage | `docs/PIPELINE.md` §4.2 / §4.3 |
 | Stage vs issue avulsa (o concept cabe no corpo?) | `docs/PIPELINE.md` §4.5 |

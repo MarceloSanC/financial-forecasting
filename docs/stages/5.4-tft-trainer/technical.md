@@ -1043,7 +1043,7 @@ pergunta, com o teste
 `TestAlignment::test_longest_decoder_wins_when_a_decision_repeats` pinando a
 escolha.
 
-### 2026-08-11 — [fix] Checkpoint C dos blocos 4–5: 3 mutações sobreviventes mortas — Claude (Opus 5)
+### 2026-08-11 — [deviation] Checkpoint C dos blocos 4–5: 3 mutações sobreviventes mortas — Claude (Opus 5)
 **Contexto:** o revisor adversarial rodou 11 mutações sobre as Tasks 10–14; três
 sobreviveram à suíte inteira, mais um achado sistêmico de configuração.
 **Razão e correção, uma a uma:**
@@ -1156,7 +1156,7 @@ Docker: 3 min 11 s antes da migração para `uv sync --locked`, 3 min 18 s depoi
 de determinismo (`test_two_isolated_runs_agree`, 32,01 s), que treina DUAS vezes
 por desenho — é o preço de provar I9, não desperdício.
 
-### 2026-08-11 — [fix] auditoria de testes independente: 27 mutações, 5 sobreviventes mortas — Claude (Opus 5)
+### 2026-08-11 — [measurement] auditoria de testes independente: 27 mutações, 5 sobreviventes mortas — Claude (Opus 5)
 **Contexto:** auditor independente rodou **27 mutações semânticas reais** sobre
 os seis arquivos de produção da Stage, com árvore commitada em `d43ea57`.
 Resultado: 22 mortas, 5 sobreviventes. Os invariantes que são a razão de existir
@@ -1300,7 +1300,7 @@ Task 01.
 - [x] `roadmap.md` com a 5.4 em `done` e datas de hoje.
 - [x] ADRs 5.4.0001–0006 em `accepted`.
 
-### 2026-08-11 — [fix] auditoria independente: CI vermelha no HEAD do PR — Claude (Opus 5)
+### 2026-08-11 — [deviation] auditoria independente: CI vermelha no HEAD do PR — Claude (Opus 5)
 **Achado (blocker).** O commit de fechamento `stage 5.4: complete` bumpou
 `updated_at: 2026-08-09 → 2026-08-11` no frontmatter deste arquivo e do
 `concept.md`. `CONVENTIONS.md` §3.4 é literal: **"`updated_at` do frontmatter

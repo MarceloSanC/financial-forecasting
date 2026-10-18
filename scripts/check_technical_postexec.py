@@ -23,13 +23,18 @@ realidade livremente (o plano original permanece no git). Por isso a
 checagem 2 é pulada quando o commit de aprovação já é ancestral de uma
 branch de integração.
 
-O script faz duas checagens:
+O script faz três checagens:
 
 1. **Estrutural (sempre):** o arquivo contém exatamente uma ocorrência
    dos marcadores `BEGIN/END: post-execution`, na ordem correta, com
    `END` depois de `BEGIN`. (Se o frontmatter ainda é `draft`, isso
    serve só de sanity check do template; se é `done`, é pré-requisito
    para a checagem 2.)
+1b. **Vocabulário de tags (sempre):** todo cabeçalho de entrada da §7
+   (`### AAAA-MM-DD — [tag] …` ou formato anterior ao template, como
+   `#### [tag] …`; fora de bloco de código) usa uma tag de
+   `ENTRY_TAGS` (CONVENTIONS §3.4). Vale também para Stage mergeada: a
+   tag é identificador, não plano congelado.
 2. **Diff vs. baseline (`status: done` E Stage não mergeada):** compara
    o arquivo atual com a versão do último commit reservado de aprovação
    (`stage N.M: technical approved`) localizado via `git log`. Se há
@@ -70,6 +75,25 @@ _STAGE_DIR_PATTERN = re.compile(r"docs/stages/(\d+)\.(\d+)-[^/]+/technical\.md$"
 # Regex de status: done no frontmatter (linha começa com 'status:', case-insensitive).
 _STATUS_DONE_PATTERN = re.compile(r"^status:\s*done\s*$", re.MULTILINE)
 
+# Vocabulário fechado das tags de entrada da §7 (CONVENTIONS §3.4). `decision:E`/
+# `decision:C` é o registro da skill `evidence-resolution` §5.
+ENTRY_TAGS = frozenset(
+    {"decision", "decision:E", "decision:C", "finding", "deviation", "measurement"}
+)
+
+# Cabeçalho de entrada da §7: título `###`/`####` cuja primeira marca é a tag, logo
+# depois dos `#` ou de um prefixo sem colchete seguido de separador. Cobre o formato
+# do template (`### AAAA-MM-DD — [tag] escopo — Autor`) e os anteriores a ele
+# (`#### [tag] …`, `### Task 03 — `[tag]` …`), para a tag não escapar pelo formato.
+# Aceita travessão, meia-risca ou hífen como separador. O grupo `prefix` deixa o
+# placeholder do template (`YYYY-MM-DD`) de fora.
+_ENTRY_HEADER_PATTERN = re.compile(
+    r"^#{3,4}\s+(?:(?P<prefix>[^\[`]*?)\s[\u2014\u2013-]\s+)?`?\[(?P<tag>[^\]]*)\]`?(?=\s|$)"
+)
+_PLACEHOLDER_DATE = "YYYY-MM-DD"
+
+_FENCE_PREFIXES = ("```", "~~~")
+
 
 class CheckError(Exception):
     """Falha de validação reportável ao usuário."""
@@ -108,12 +132,34 @@ def _check_markers(content: str, path: Path) -> tuple[int, int]:
     end = end_indices[0]
     if end <= begin:
         msg = (
-            f"{path}: marcador END (linha {end + 1}) deve vir depois do "
-            f"BEGIN (linha {begin + 1})."
+            f"{path}: marcador END (linha {end + 1}) deve vir depois do BEGIN (linha {begin + 1})."
         )
         raise CheckError(msg)
 
     return begin, end
+
+
+def _check_entry_tags(content: str, window: tuple[int, int], path: Path) -> list[str]:
+    """Checagem 1b: tag de cada cabeçalho de entrada da §7 está em `ENTRY_TAGS`."""
+    lines = content.splitlines()
+    errors: list[str] = []
+    in_fence = False
+    for index in range(window[0] + 1, window[1]):
+        line = lines[index]
+        if line.lstrip().startswith(_FENCE_PREFIXES):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        match = _ENTRY_HEADER_PATTERN.match(line)
+        if match is None or _PLACEHOLDER_DATE in (match.group("prefix") or ""):
+            continue
+        if match.group("tag") not in ENTRY_TAGS:
+            errors.append(
+                f"{path}:{index + 1}: tag `[{match.group('tag')}]` fora do vocabulário "
+                f"da §7 ({', '.join(sorted(ENTRY_TAGS))}) — CONVENTIONS §3.4."
+            )
+    return errors
 
 
 def _approved_commit_for(path: Path) -> str | None:
@@ -263,10 +309,7 @@ def _check_postexec_diff(path: Path, content: str, window: tuple[int, int]) -> l
 
     baseline_content = _git_show(sha, path)
     if baseline_content is None:
-        return [
-            f"{path}: não foi possível recuperar a versão de baseline "
-            f"do commit {sha[:8]}."
-        ]
+        return [f"{path}: não foi possível recuperar a versão de baseline do commit {sha[:8]}."]
 
     try:
         b_begin, b_end = _check_markers(baseline_content, path)
@@ -304,11 +347,13 @@ def check_file(path: Path) -> list[str]:
     except CheckError as exc:
         return [str(exc)]
 
-    if not _has_status_done(content):
-        # Status ainda draft — checagem estrutural basta.
-        return []
+    errors = _check_entry_tags(content, (begin, end), path)
 
-    return _check_postexec_diff(path, content, (begin, end))
+    if not _has_status_done(content):
+        # Status ainda draft — checagens estruturais bastam.
+        return errors
+
+    return errors + _check_postexec_diff(path, content, (begin, end))
 
 
 def _discover_targets(root: Path) -> list[Path]:

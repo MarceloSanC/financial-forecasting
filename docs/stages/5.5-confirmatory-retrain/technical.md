@@ -967,7 +967,7 @@ Container com 12 threads, CPU, torch 2.13.0+cpu.
   - GBM (6 ajustes) e baselines somam minutos.
 - **Conclusão:** o custo cabe em CPU mesmo no pior caso (10 seeds no canto caro ≈ 19 h de corrida). ROCm **não** é necessário (D8).
 
-### 2026-09-27 — [P] Task 33 — decisões do humano no congelamento — Claude (Opus 5.5)
+### 2026-09-27 — [decision] Task 33 — decisões do humano no congelamento — Claude (Opus 5.5)
 Perguntas feitas com o custo medido acima (entrada anterior); respostas do humano:
 - **`n_trials = 60`**, o mesmo para o sweep do TFT e o do GBM (D13). Iguala o orçamento de 60 iterações do paper do TFT (Lim et al. 2021, §6.2). O sweep estimado leva de ~1,6 h a ~14 h.
 - **Seeds do TFT = 1..10** (10 seeds), distintas da seed 0 do sweep. Custo estimado da corrida: de ~1,7 h a ~19 h, conforme os HPs congelados.

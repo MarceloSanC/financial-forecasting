@@ -90,7 +90,7 @@ Para cada Stage, em ordem linear (Chat IDE no projeto destino):
          pré-requisito: concept.status == done E technical.status == done
          produz: código + testes
          gate humano por Task (revisão de diff antes do commit)
-         §7 do technical.md cresce com [decision]/[finding]/[deviation]
+         §7 do technical.md cresce com [decision]/[finding]/[deviation]/[measurement]
 ```
 
 > **Início da Fase 3B é flexível.** O draft do `technical.md` pode
@@ -650,7 +650,7 @@ Após a última Task, executar o checklist de fechamento do
       `technical.md` ficou restrito à seção §7 (entre os marcadores
       `BEGIN/END: post-execution`).
 - [ ] §7 do `technical.md` reflete o que realmente aconteceu na execução
-      (entradas `[decision]`/`[finding]`/`[deviation]` com header `data — [tag] escopo — autor`).
+      (entradas `[decision]`/`[finding]`/`[deviation]`/`[measurement]` com header `data — [tag] escopo — autor`).
 - [ ] Findings escalados (`[finding]`) têm Stage candidata identificada.
 - [ ] Commit final `stage N.M: complete` no branch.
 - [ ] PR contra `develop` aberto e mergeado, seguindo os
