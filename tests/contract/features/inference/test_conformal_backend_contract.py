@@ -5,18 +5,29 @@ de registro (`ConformalCalibrator.calibrate(..., SPLIT_CQR)`) em todos os tamanh
 coincidência do helper `_coincidence_sizes` (n >= 50, n = 252 incluído) e nos três
 pares do plano, com escores distintos (`random.Random(20261017)`, sem empates).
 
-Pernas: `fake` (`FakeConformalBackend`, posto exato do domain). A perna `mapie`
-(`MapieCqrBackend`) entra na Task 07.
+Pernas: `fake` (`FakeConformalBackend`, posto exato do domain, igualdade exata) e
+`mapie` (`MapieCqrBackend`, sem `skipif`: o `mapie` é dependência do projeto). No
+MAPIE cada Q sai por subtração q - L (ou U - q), então a perna `mapie` compara com
+`abs_tol = 1e-12`.
+
+Só na perna `mapie`: o posto +1 num tamanho divergente (a razão de o domain, e não
+o MAPIE, ser o registro), a recusa de n pequeno (C5, medida contra o MAPIE 1.5.0) e
+zero avisos do MAPIE com os estimadores `prefit` do adapter.
 """
 
 from __future__ import annotations
 
+import math
 import random
+import warnings
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from financial_forecasting.features.inference.adapters.out.mapie.mapie_cqr_backend import (
+    MapieCqrBackend,
+)
 from financial_forecasting.features.inference.application.ports.out.conformal_backend import (
     ConformalBackend,
 )
@@ -32,6 +43,9 @@ from financial_forecasting.features.inference.domain.value_objects.calibration_s
 from tests.contract.features.inference._coincidence_sizes import (
     TAIL_ALPHAS,
     coincidence_sizes,
+    divergent_sizes,
+    domain_rank,
+    mapie_rank,
 )
 from tests.fakes.features.inference.fake_conformal_backend import FakeConformalBackend
 
@@ -41,13 +55,21 @@ _SEED = 20261017
 _PAIRS = tuple((alpha, float(1 - exact_level(alpha))) for alpha in TAIL_ALPHAS)
 _FACTORIES: dict[str, Callable[[], ConformalBackend]] = {
     "fake": FakeConformalBackend,
+    "mapie": MapieCqrBackend,
 }
+_ABS_TOL = {"fake": 0.0, "mapie": 1e-12}  # Q do MAPIE por subtração q - L
 _START = datetime(2000, 1, 3, 21, tzinfo=UTC)
 
 
 @pytest.fixture(params=list(_FACTORIES), ids=list(_FACTORIES))
-def backend(request: pytest.FixtureRequest) -> ConformalBackend:
-    return _FACTORIES[request.param]()
+def leg(request: pytest.FixtureRequest) -> tuple[ConformalBackend, float]:
+    return _FACTORIES[request.param](), _ABS_TOL[request.param]
+
+
+def _close(got: tuple[float, float], expected: tuple[float, float], tol: float) -> bool:
+    return all(
+        math.isclose(g, e, rel_tol=0.0, abs_tol=tol) for g, e in zip(got, expected, strict=True)
+    )
 
 
 def _calib_values(rng: random.Random, n: int) -> tuple[list[float], list[float], list[float]]:
@@ -91,7 +113,10 @@ def test_helper_sizes_include_252() -> None:
     assert min(sizes) >= 50  # noqa: PLR2004 — piso do MAPIE (C5)
 
 
-def test_corrections_match_the_domain_at_coincidence_sizes(backend: ConformalBackend) -> None:
+def test_corrections_match_the_domain_at_coincidence_sizes(
+    leg: tuple[ConformalBackend, float],
+) -> None:
+    backend, tol = leg
     rng = random.Random(_SEED)
     for n in coincidence_sizes():
         lower, upper, realized = _calib_values(rng, n)
@@ -99,10 +124,11 @@ def test_corrections_match_the_domain_at_coincidence_sizes(backend: ConformalBac
             got = backend.split_cqr_corrections(
                 calib_lower=lower, calib_upper=upper, calib_realized=realized, tail_alpha=pair[0]
             )
-            assert got == _domain(lower, upper, realized, pair), (n, pair)
+            assert _close(got, _domain(lower, upper, realized, pair), tol), (n, pair)
 
 
-def test_corrections_returned_as_lower_then_upper(backend: ConformalBackend) -> None:
+def test_corrections_returned_as_lower_then_upper(leg: tuple[ConformalBackend, float]) -> None:
+    backend, tol = leg
     # y sempre 1 abaixo de q_lo (E_lo = 1) e 3 abaixo de q_hi (E_hi = -3): troca de ordem
     # ou de sinal muda o par devolvido
     n = 252
@@ -112,4 +138,51 @@ def test_corrections_returned_as_lower_then_upper(backend: ConformalBackend) -> 
     got = backend.split_cqr_corrections(
         calib_lower=lower, calib_upper=upper, calib_realized=realized, tail_alpha=0.1
     )
-    assert got == (1.0, -3.0)
+    assert _close(got, (1.0, -3.0), tol)
+
+
+# --- só a perna `mapie` -------------------------------------------------------
+
+
+def test_mapie_rank_differs_by_one_at_a_divergent_size() -> None:
+    # o primeiro n divergente com o +1 numa cauda de 0,25
+    n = next(m for m in divergent_sizes() if mapie_rank(m, 0.25) != domain_rank(m, 0.25))
+    k = domain_rank(n, 0.25)
+    assert mapie_rank(n, 0.25) == k + 1
+    rng = random.Random(_SEED + 1)
+    lower, upper, realized = _calib_values(rng, n)
+    got = MapieCqrBackend().split_cqr_corrections(
+        calib_lower=lower, calib_upper=upper, calib_realized=realized, tail_alpha=0.25
+    )
+    lower_scores = sorted(q - y for q, y in zip(lower, realized, strict=True))
+    upper_scores = sorted(y - q for q, y in zip(upper, realized, strict=True))
+    # o MAPIE escolhe o (k+1)-ésimo escore do domain; o domain, o k-ésimo
+    assert math.isclose(got[0], lower_scores[k], rel_tol=0.0, abs_tol=1e-12)
+    assert math.isclose(got[1], upper_scores[k], rel_tol=0.0, abs_tol=1e-12)
+    domain = _domain(lower, upper, realized, (0.25, 0.75))
+    assert domain == (lower_scores[k - 1], upper_scores[k - 1])
+    fake = FakeConformalBackend().split_cqr_corrections(
+        calib_lower=lower, calib_upper=upper, calib_realized=realized, tail_alpha=0.25
+    )
+    assert fake == domain  # o fake não reproduz o defeito
+
+
+@pytest.mark.parametrize("n", [24, 30, 49])
+def test_mapie_refuses_small_n(n: int) -> None:
+    # C5 medido contra o MAPIE 1.5.0: n = 24 já no `conformalize` (alpha_par = 0,04);
+    # n = 30 e 49 no `predict_interval` (alpha_par / 2 = 0,02)
+    lower, upper, realized = _calib_values(random.Random(_SEED + n), n)
+    with pytest.raises(ValueError, match="Number of samples of the score is too low"):
+        MapieCqrBackend().split_cqr_corrections(
+            calib_lower=lower, calib_upper=upper, calib_realized=realized, tail_alpha=0.02
+        )
+
+
+def test_mapie_leg_emits_no_warning() -> None:
+    lower, upper, realized = _calib_values(random.Random(_SEED + 2), 252)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        MapieCqrBackend().split_cqr_corrections(
+            calib_lower=lower, calib_upper=upper, calib_realized=realized, tail_alpha=0.1
+        )
+    assert [str(w.message) for w in caught] == []
