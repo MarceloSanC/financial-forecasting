@@ -2004,4 +2004,26 @@ docs passaram nas duas rodadas.
 **Razão:** o plano pede o resultado de cada ponto no §7. O ponto C é o `make check`
 de saída da Stage.
 
+### 2026-10-18 — [deviation] Task 21 — a grade é lida com as features do painel, e o manifesto conta seeds x folds — Claude (Opus 5.5)
+**Contexto:** a Task 21 pede três tuplas literais de colunas, sem `value_*` nem
+`target_return`. Pede também o manifesto com 60 entradas `completed`.
+**O que mudou:**
+- **Grade:** `_GRID_COLUMNS` é `("timestamp", *unknown_feature_names(),
+  *known_feature_names())`, composta da registry e não literal. As sessões do painel
+  saem do `build_training_grid`, que corta o prefixo sem valor pelas colunas pedidas.
+  Só o timestamp não reproduziria esse corte (o aquecimento dos indicadores). As
+  features não são previsão nem realizado, e o `target_return` continua fora. Se o
+  corte do `target_return` diferisse do das features, o `SplitFingerprint` recomposto
+  divergiria e a prova falharia. Ela não passaria em silêncio.
+- **Manifesto:** o esperado é `len(spec.seeds) x spec.geometry.n_folds` (60 no cohort
+  real), não o literal.
+- **Datas:** decisões e alvos do silver entram como o dia ISO, que é a unidade do
+  `FoldSplit`.
+- **Leitura:** `pq.ParquetFile(path).read(columns=...)` por arquivo. O
+  `pq.read_table` sobre um arquivo dentro do diretório hive inferia a partição e
+  conflitava com a coluna `asset` gravada.
+**Razão:** é o mesmo corte que o `ResolveTftCheckpoints` usa (`load_tft_panel` →
+`cohort_tft_folds`), sem reimplementar o splitter. Continua valendo o I12: nenhuma
+coluna de previsão nem de realizado é lida.
+
 <!-- END: post-execution -->
