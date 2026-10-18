@@ -23,6 +23,8 @@ COMPLETE_BODY = "Closes #1\n\n> **Auditoria:** `complete`\n>\n> Label de status.
 
 
 def _load() -> ModuleType:
+    if str(_HOOK.parent) not in sys.path:  # o hook importa o helper vizinho `_shell_segments`
+        sys.path.insert(0, str(_HOOK.parent))
     spec = importlib.util.spec_from_file_location("publish_guard", _HOOK)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
