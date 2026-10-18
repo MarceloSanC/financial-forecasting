@@ -1933,6 +1933,12 @@ fold", mas não diz como se mede cada um.
   último alvo de teste da unidade precisam ser exatamente os alvos de teste dela. Alvo
   a mais, a menos ou trocado vira `undefined`. A comparação é sempre por
   `target_timestamp`, nunca por posição.
+- **Série nativa inteira (task-14-fix, Checkpoint C C3-5, opção 1):** por (seed, h), a
+  união dos alvos de teste das unidades `ok` tem de ser igual a
+  `native.target_timestamps`. As sobras saem em
+  `ConformalAssemblyResult.uncovered_targets[(seed, h)]`, e essa (seed, h) fica sem
+  cobertura conformal (o `RefreshGold` a publica `undefined`). Isso pega o ponto
+  nativo no vão entre folds, que o join por unidade não vê.
 - **Ordem das verificações:** fold não inteiro, seed `None`, série nativa ausente,
   sem calib, sem teste e, então, as regras do `SeriesAssembly` (duplicata, níveis,
   índices e realizado), primeiro no calib e depois no teste. Na sequência vêm o
