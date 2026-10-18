@@ -9,7 +9,7 @@ o contrato `AnalyticsRepository` despachando por `SILVER_REGISTRY[("silver",
 
 - **write** (`pyarrow`): materializa as `rows` em `DataFrame`, valida com `pandera`
   (`strict=True`, `coerce=False`) ANTES de tocar o Parquet (I4/C3); particiona em
-  Hive pelas **colunas literais** de `SilverTable.partition_by` (1..3 níveis,
+  Hive pelas **colunas literais** de `SilverTable.partition_by` (N níveis,
   `None` → sentinel `__none__`) — **sem** derivar ano de âncora temporal como o
   bronze (I2/D2); agrupa em batch por partição (I7); para cada partição alvo, lê
   as PKs lógicas já gravadas, detecta colisão (append-only sem flag →

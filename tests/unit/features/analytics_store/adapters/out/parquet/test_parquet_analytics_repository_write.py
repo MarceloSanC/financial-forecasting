@@ -190,7 +190,7 @@ def test_pandera_rejects_extra_column(tmp_path: Path) -> None:
     assert not any(tmp_path.rglob("*.parquet"))
 
 
-# -- partição literal 1..3 níveis --------------------------------------------
+# -- partição literal (2 e 3 níveis) -----------------------------------------
 
 
 def test_partition_three_levels_fact_oos(tmp_path: Path) -> None:
