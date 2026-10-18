@@ -1851,4 +1851,28 @@ da Task 06 passaram aqui (`test_two_seeds_produce_identical_grids[defaults-5.3]`
 `test_cohort_runner_end_to_end`). Fica confirmada a instabilidade de ambiente, e o
 `[finding]` fecha sem ação.
 
+### 2026-10-18 — [finding] tooling — `index.lock` velho depois do `make check` — Claude (Opus 5.5)
+Algum teste da suíte deixa `.git/worktrees/<wt>/index.lock` velho durante o `make check` (visto em três gates desta Stage, às 17:32, 10:50 e 15:18:59, e o commit seguinte falha até o arquivo ser removido); issue a abrir pelo orquestrador.
+
+### 2026-10-18 — [decision] Task 09 — forma da média entre seeds e dos relatórios conformais — Claude (Opus 5.5)
+**Contexto:** o concept §4 deixa o corpo do `ConformalSeedMeanCoverage` em "…" e não
+diz como PICP, MPIW, cruzamento e aninhamento entram na média entre seeds, nem o que
+fazer com uma seed completa cuja série nativa é 100 % degenerada.
+**O que foi decidido:**
+- `ConformalPairCoverage` ganha `covered_count` e `crossed_count`, e o
+  `ConformalCoverageReport` ganha `nesting_violation_count`. São as contagens inteiras
+  que a média entre seeds precisa para c̄/n̄ sem reconstruir contagens de razões em
+  float.
+- Na média, cada cauda tem c̄, `coverage` = c̄/n̄ (base da banda de Wilson, nominal τ),
+  `mean_of_seed_coverages` e o dp amostral (`None` com uma seed). O par tem PICP pelas
+  duas médias (c̄_dentro/n̄ e a média dos PICP por seed, com o dp). Cruzamento e
+  aninhamento usam c̄/n̄. O MPIW é a média ponderada por n (Σ n_s·MPIW_s / Σ n_s),
+  infinito se alguma seed for infinita. Cada coluna da tabela gold tem um valor só.
+- Uma seed com relatório não aplicável (série nativa 100 % degenerada, C6) não entra
+  nas médias e fica em `seeds_excluded`. Zero seeds aplicáveis dá `applicable = False`.
+- Os relatórios de média e de seed validam o rótulo (I9) e a coerência
+  `n_evaluated` × máscara na construção.
+**Razão:** são escolhas reversíveis, sem formato persistido nesta Task. A Task 18
+fixa as colunas e lê estes campos.
+
 <!-- END: post-execution -->
