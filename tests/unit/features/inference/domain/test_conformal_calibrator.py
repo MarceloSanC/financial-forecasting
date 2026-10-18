@@ -69,12 +69,19 @@ def test_rank_small_n_table() -> None:
             assert split_conformal_rank(n, alpha) == expected, (n, percent)
 
 
+def test_rank_exact_off_the_grid() -> None:
+    # fora da grade do plano o float erra: (8 + 1)(1 - 1/3) = 6 exato, mas
+    # ceil(9 * (1 - float(1/3))) = 7 (mata o mutante `float(alpha)` no posto)
+    assert split_conformal_rank(8, Fraction(1, 3)) == 6  # noqa: PLR2004
+
+
 def test_upper_alpha_of_0_9_is_exactly_one_tenth() -> None:
     alpha_hi = 1 - exact_level(0.9)
     assert alpha_hi == Fraction(1, 10)
     for n in range(1, 401):
         assert split_conformal_rank(n, alpha_hi) == split_conformal_rank(n, exact_level(0.1))
-    # pelo calibrador: n = 9 ⇒ (n+1)(1-alpha) = 9 exato; em float64 o posto seria 10
+    # pelo calibrador: n = 9 => (n+1)(1-alpha) = 9 exato; com alpha = Fraction(1 - 0.9),
+    # o binário de 0.09999999999999998, o posto seria 10
     upper = _split(_calib([(-1.0, 1.0, 0.0)] * 9)).upper
     assert upper.alpha == Fraction(1, 10)
     assert upper.rank == 9  # noqa: PLR2004
@@ -205,6 +212,14 @@ def test_beta_reference_uses_exact_alpha() -> None:
     assert ref is not None
     assert (ref.a, ref.b) == (9, 1)
     assert ref.mean == pytest.approx(0.9, abs=1e-15)
+
+
+def test_beta_reference_exact_off_the_grid() -> None:
+    # l = floor(100 * 29/100) = 29 exato; floor(100 * float(0.29)) = 28 (mata o
+    # mutante `float(alpha)` na Beta)
+    ref = beta_reference(99, Fraction(29, 100))
+    assert ref is not None
+    assert (ref.a, ref.b) == (71, 29)
 
 
 def test_split_variant_refuses_rho() -> None:
