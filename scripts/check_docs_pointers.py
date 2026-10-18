@@ -91,7 +91,7 @@ VIOLATION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         "só nos 1-3 pontos do plano)",
     ),
     (
-        # Sync #185 (ADR 0.0.0058): `check-task` deixou de ser obrigatório por
+        # Sync #185 (ADR 0.0.0059): `check-task` deixou de ser obrigatório por
         # commit e `check-block` saiu do Checkpoint C. Paráfrase da regra da
         # #110 devolve um gate pesado a cada Task/bloco.
         re.compile(

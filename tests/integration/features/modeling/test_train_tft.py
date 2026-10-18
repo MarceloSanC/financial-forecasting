@@ -65,7 +65,7 @@ if TYPE_CHECKING:
 
 # `slow`: o treino real do TFT soma ~55 s no CI (três runs completos) e sai só do
 # `make check-task` opcional (`-m "not slow"`); roda em `check-block` e em
-# `make check`/CI (ADR 0.0.0055, 0.0.0058).
+# `make check`/CI (ADR 0.0.0055, 0.0.0059).
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
 
 _ASSET = "TEST"

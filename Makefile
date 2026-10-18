@@ -107,7 +107,7 @@ migrate:
 check: lint typecheck layout-check lint-imports fake-parity port-coverage arch-ast docs-check test
 
 # ---------------------------------------------------------------------------
-# Gates em camadas (ADR 0.0.0055 emendada pela 0.0.0058 / issues #110, #185).
+# Gates em camadas (ADR 0.0.0055 emendada pela 0.0.0059 / issues #110, #185).
 # `check` acima segue sendo o gate completo: roda nos 1–3 pontos do plano de
 # gates da Stage (saída incluída) e no CI. Por Task roda só o pytest dos testes
 # da Task. Os alvos abaixo são ferramentas OPCIONAIS, não etapa de rotina —
