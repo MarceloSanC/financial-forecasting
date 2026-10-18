@@ -1660,9 +1660,11 @@ que o MAPIE aceita. Por decisão do orquestrador, o concept não regride.
   binário de ρ, e uma busca por subconjuntos com n ≤ 10 não achou nenhum.
 - Mutantes equivalentes, registrados para a auditoria. O NexCP elemento a elemento,
   sem agrupar empates, dá o mesmo escore (ADR 7.2.0002 item 3). Na Task 03, o
-  `float(alpha)` no posto e na Beta não muda nada para α ∈ {1/50, 1/10, 1/4} até
-  n = 2000, o que foi medido. O risco do float está em 1 − τ_hi, e esse mutante
-  morre.
+  `float(alpha)` no posto e na Beta é equivalente **na grade** (α ∈ {1/50, 1/10,
+  1/4}, medido até n = 2000) e é **morto por caso fora da grade**
+  (task-03-fix, Checkpoint C C1-1): `split_conformal_rank(8, Fraction(1, 3)) == 6`
+  (em float daria 7) e `beta_reference(99, Fraction(29, 100))` com b = 29 (em float
+  daria 28). O mutante de 1 − τ_hi em float também morre.
 **Razão:** são escolhas reversíveis e baratas que o plano não fixa.
 
 ### 2026-10-17 — [decision] ambiente — trava `ff-gate` na função `run()` — Claude (Opus 5.5)
