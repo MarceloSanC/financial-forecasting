@@ -5,7 +5,7 @@ when-use: Reference when deciding which gate to run before a Task commit, at a C
 keywords: [adr, process, gates, make-check, check-task, check-block, pytest-xdist, slow, ci, tdd]
 status: accepted
 created_at: 2026-09-27
-updated_at: 2026-09-27
+updated_at: 2026-10-17
 adr_id: 0.0.0055
 decision: Replace "make check green before every commit" with five tiers — T0 TDD loop, T1 per-Task `make check-task SLICE=…` (static gates + touched-slice tests, no coverage, no `slow`), T2 per-Checkpoint-C `make check-block` (full suite in parallel, no coverage), T3 stage exit and T4 CI both `make check` unchanged — and parallelize the suite with pytest-xdist.
 context_stage: 0.0-global
@@ -19,6 +19,8 @@ bounded_context: transversal
 ## Status
 
 `accepted` — issue #110.
+
+> Amended by [ADR 0.0.0058](./0_0_0058-planned-full-gate-budget-per-stage.md) (2026-10-17): Decision items 1 (T1 `check-task` on every commit, T2 `check-block` at every Checkpoint C) and 2 (escalation rules) are replaced by a planned budget of 1–3 full `make check` runs per Stage, with only the Task's own tests run on each commit. Items 3–7 still hold.
 
 ## Context
 
