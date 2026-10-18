@@ -70,9 +70,7 @@ class QuantileForecast:
         if any(not 0.0 < level < 1.0 for level in self.levels):
             raise ValueError(f"levels must all be in (0, 1), got {self.levels}")
         if any(b <= a for a, b in pairwise(self.levels)):
-            raise ValueError(
-                f"levels must be strictly increasing and unique, got {self.levels}"
-            )
+            raise ValueError(f"levels must be strictly increasing and unique, got {self.levels}")
         if type(self.guardrail_applied) is not bool:
             raise ValueError(f"guardrail_applied must be a bool, got {self.guardrail_applied!r}")
 
@@ -120,14 +118,11 @@ class QuantileForecast:
         return ordered, ordered != raw_values
 
 
-def _check_aligned(
-    levels: tuple[float, ...], values: tuple[float, ...], *, name: str
-) -> None:
+def _check_aligned(levels: tuple[float, ...], values: tuple[float, ...], *, name: str) -> None:
     """`values` alinhados 1:1 a `levels` (mensagem nomeia o vetor)."""
     if len(levels) != len(values):
         raise ValueError(
-            f"levels and {name} must align: len(levels)={len(levels)} "
-            f"!= len({name})={len(values)}"
+            f"levels and {name} must align: len(levels)={len(levels)} != len({name})={len(values)}"
         )
 
 
