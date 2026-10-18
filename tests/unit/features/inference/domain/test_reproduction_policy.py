@@ -94,9 +94,23 @@ def test_compare_reproduction_counts_failures_and_max_diffs() -> None:
     assert got == ReproductionComparison(
         compared=3, failures=2, missing=0, extra=0, max_abs_diff=0.5, max_normalized_diff=0.25
     )
-    # o mesmo par em tolerance larga não falha, e as diferenças máximas não mudam
-    exact = compare_reproduction(reference, dict(reference), mode=TOLERANCE, center=0.0, scale=2.0)
-    assert (exact.failures, exact.max_abs_diff, exact.max_normalized_diff) == (0, 0.0, 0.0)
+    # em tolerance, um delta != 0 dentro de atol + rtol*|z| não falha, e o max |d| é
+    # preservado (2**-20 é exato somado a 1, 2 e 3; |d|/s = 2**-21 < 1e-5)
+    delta = 2.0**-20
+    near = {key: value + delta for key, value in reference.items()}
+    within = compare_reproduction(reference, near, mode=TOLERANCE, center=0.0, scale=2.0)
+    assert within == ReproductionComparison(
+        compared=3,
+        failures=0,
+        missing=0,
+        extra=0,
+        max_abs_diff=delta,
+        max_normalized_diff=delta / 2,
+    )
+    assert within.passed
+    # o mesmo delta em strict falha nos três
+    strict = compare_reproduction(reference, near, mode=STRICT, center=0.0, scale=2.0)
+    assert (strict.failures, strict.passed) == (3, False)
 
 
 def test_compare_reproduction_reports_missing_and_extra_keys() -> None:
@@ -113,3 +127,29 @@ def test_compare_reproduction_with_nothing_compared() -> None:
     assert (got.missing, got.extra, got.failures) == (0, 1, 0)
     empty = compare_reproduction({}, {}, mode=STRICT, center=0.0, scale=1.0)
     assert empty == ReproductionComparison(0, 0, 0, 0, 0.0, 0.0)
+
+
+def test_passed_is_the_fail_closed_verdict() -> None:
+    reference = {(0, 1, 0.1): 1.0, (0, 1, 0.5): 2.0}
+    ok = compare_reproduction(reference, dict(reference), mode=STRICT, center=0.0, scale=1.0)
+    assert (ok.passed, ok.nothing_to_compare, ok.keys_match) == (True, False, True)
+    empty = compare_reproduction({}, {}, mode=STRICT, center=0.0, scale=1.0)
+    assert (empty.passed, empty.nothing_to_compare) == (False, True)
+    one_side = compare_reproduction(reference, {}, mode=STRICT, center=0.0, scale=1.0)
+    assert (one_side.passed, one_side.nothing_to_compare) == (False, True)
+    disjoint = compare_reproduction(
+        reference, {(9, 1, 0.1): 1.0}, mode=STRICT, center=0.0, scale=1.0
+    )
+    assert (disjoint.passed, disjoint.nothing_to_compare, disjoint.keys_match) == (
+        False,
+        False,
+        False,
+    )
+    extra = compare_reproduction(
+        reference, {**reference, (9, 1, 0.1): 1.0}, mode=STRICT, center=0.0, scale=1.0
+    )
+    assert (extra.passed, extra.keys_match) == (False, False)
+    failing = compare_reproduction(
+        reference, {**reference, (0, 1, 0.1): 1.5}, mode=STRICT, center=0.0, scale=1.0
+    )
+    assert (failing.passed, failing.keys_match, failing.failures) == (False, True, 1)

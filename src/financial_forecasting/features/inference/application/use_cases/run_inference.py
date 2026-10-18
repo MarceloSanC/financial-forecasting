@@ -690,24 +690,24 @@ def _reproduce_test(  # noqa: PLR0913 — o run, as linhas de referência e o cr
     reproduction = compare_reproduction(
         reference, predicted, mode=mode.name, center=center, scale=scale
     )
-    if not reference or not predicted:  # fail-closed: nada comparado não prova nada
+    if reproduction.passed:  # o veredito fail-closed é do domain (ADR 7.2.0005)
+        return reproduction
+    if reproduction.nothing_to_compare:
         raise ReproductionError(
             f"run {run.run_id} ({mode.name}): {len(reference)} silver test values and "
             f"{len(predicted)} re-predicted — nothing to compare (C7)"
         )
-    if reproduction.missing or reproduction.extra:
+    if not reproduction.keys_match:
         raise ReproductionError(
             f"run {run.run_id} ({mode.name}): test keys differ from silver — "
             f"{reproduction.missing} missing, {reproduction.extra} extra of {len(reference)} (C7)"
         )
-    if reproduction.failures:
-        raise ReproductionError(
-            f"run {run.run_id} ({mode.name}): {reproduction.failures} of "
-            f"{reproduction.compared} test values "
-            f"outside the criterion — max|d| {reproduction.max_abs_diff:.3e}, "
-            f"max|d|/s {reproduction.max_normalized_diff:.3e} (C7)"
-        )
-    return reproduction
+    raise ReproductionError(
+        f"run {run.run_id} ({mode.name}): {reproduction.failures} of "
+        f"{reproduction.compared} test values "
+        f"outside the criterion — max|d| {reproduction.max_abs_diff:.3e}, "
+        f"max|d|/s {reproduction.max_normalized_diff:.3e} (C7)"
+    )
 
 
 def _verify_decision(  # noqa: PLR0913 — a linha inteira e o critério
