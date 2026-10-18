@@ -24,6 +24,7 @@ O dono vence; corrija o eco.
 | Procedimento de auditoria e falsos verdes | skills `stage-audit` / `issue-audit` |
 | Label de status de auditoria no PR (enum + gate `audit-gate`) | `CONVENTIONS.md` (este doc) §3.6 |
 | Categorias de doc `domain/` e `audits/` (propósito, frontmatter, lifecycle) | [ADR 0.0.0003](./adr/0_0_0003-formalize-domain-and-audits-doc-categories.md) |
+| Harness do Claude Code: estrutura de skill, subagentes, hooks, camada de cada regra | [`HARNESS.md`](./HARNESS.md) |
 
 **Regra do eco:** citar uma regra fora do doc dono é permitido como
 **1 frase + ponteiro** (regra acionável no ponto de uso); o texto

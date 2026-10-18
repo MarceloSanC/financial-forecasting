@@ -88,6 +88,20 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/arch_feedback.py"
+            ]
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

@@ -1,5 +1,14 @@
 # DMLS Ch. 2 — Data Infrastructure Decisions (Task Reference)
 
+## Contents
+
+- [Task 1: Map Data Sources for an ML Project](#task-1-map-data-sources-for-an-ml-project)
+- [Task 2: Choose Storage Format and Data Model](#task-2-choose-storage-format-and-data-model)
+- [Task 3: Design Inter-Service Dataflow](#task-3-design-inter-service-dataflow)
+- [Task 4: Write Data System Reliability and Workload Requirements](#task-4-write-data-system-reliability-and-workload-requirements)
+- [Appendix A: Background Context (not task-critical)](#appendix-a-background-context-not-task-critical)
+- [Appendix B: Cross-chapter connections](#appendix-b-cross-chapter-connections)
+
 Task-oriented notes from Chip Huyen's *Designing Machine Learning Systems*, Chapter 2. Organized around the architectural decisions this chapter supports, not the book's narrative order.
 
 <!--

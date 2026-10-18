@@ -1,5 +1,15 @@
 # DMLS Ch. 5 — Model Development and Evaluation (Task Reference)
 
+## Contents
+
+- [Task 1: Frame an ML Problem](#task-1-frame-an-ml-problem)
+- [Task 2: Select and Evaluate Models](#task-2-select-and-evaluate-models)
+- [Task 3: Establish Model Development Practices](#task-3-establish-model-development-practices)
+- [Task 4: Tune Models with AutoML](#task-4-tune-models-with-automl)
+- [Task 5: Evaluate a Model Before Deployment](#task-5-evaluate-a-model-before-deployment)
+- [Appendix A: Background Context (not task-critical)](#appendix-a-background-context-not-task-critical)
+- [Appendix B: Cross-chapter connections](#appendix-b-cross-chapter-connections)
+
 Task-oriented notes from Chip Huyen's *Designing Machine Learning Systems*, Chapter 5. Organized around the decisions you make when developing, training, and evaluating ML models before deployment.
 
 <!--

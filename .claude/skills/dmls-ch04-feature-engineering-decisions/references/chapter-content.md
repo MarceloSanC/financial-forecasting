@@ -1,5 +1,14 @@
 # DMLS Ch. 4 — Feature Engineering Decisions (Task Reference)
 
+## Contents
+
+- [Task 1: Handle Missing Values](#task-1-handle-missing-values)
+- [Task 2: Transform Raw Features Into Model-Ready Features](#task-2-transform-raw-features-into-model-ready-features)
+- [Task 3: Detect and Prevent Data Leakage](#task-3-detect-and-prevent-data-leakage)
+- [Task 4: Evaluate Whether a Feature Should Stay in the Model](#task-4-evaluate-whether-a-feature-should-stay-in-the-model)
+- [Appendix A: Background Context (not task-critical)](#appendix-a-background-context-not-task-critical)
+- [Appendix B: Cross-chapter connections](#appendix-b-cross-chapter-connections)
+
 Task-oriented notes from Chip Huyen's *Designing Machine Learning Systems*, Chapter 4. Organized around the decisions you make when turning raw data into model-ready features.
 
 <!--
