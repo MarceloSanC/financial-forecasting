@@ -107,9 +107,11 @@ migrate:
 check: lint typecheck layout-check lint-imports fake-parity port-coverage arch-ast docs-check test
 
 # ---------------------------------------------------------------------------
-# Gates em camadas (ADR 0.0.0055 / issue #110). `check` acima segue sendo o
-# gate completo (T3 fim de Stage/pré-push, T4 CI). Os alvos abaixo são as
-# camadas intermediárias — NÃO substituem `check` antes do PR.
+# Gates em camadas (ADR 0.0.0055 emendada pela 0.0.0058 / issues #110, #185).
+# `check` acima segue sendo o gate completo: roda nos 1–3 pontos do plano de
+# gates da Stage (saída incluída) e no CI. Por Task roda só o pytest dos testes
+# da Task. Os alvos abaixo são ferramentas OPCIONAIS, não etapa de rotina —
+# e NÃO substituem `check` antes do PR.
 #
 # PYTEST_PAR: `--dist loadgroup` + os grupos do tests/conftest.py = um arquivo
 # por worker (fixtures module-scoped, ex.: o treino real do TFT, rodam uma vez)
@@ -118,15 +120,15 @@ check: lint typecheck layout-check lint-imports fake-parity port-coverage arch-a
 PYTEST_PAR := -n auto --dist loadgroup
 STATIC_GATES := lint typecheck layout-check lint-imports fake-parity port-coverage arch-ast
 
-# check-task (T1, commit da Task) — gates estáticos + testes SÓ dos slices
-# tocados, sem cobertura e sem `slow`. Uso:
+# check-task (opcional, com motivo concreto) — gates estáticos + testes SÓ dos
+# slices tocados, sem cobertura e sem `slow`. Uso:
 #     make check-task SLICE=modeling
 #     make check-task SLICE="modeling shared"
 # SLICE aceita os slices de features/ e também `shared` e `tooling`.
 # tests/architecture/ fica FORA: testa os próprios gates (que já rodam aqui como
 # STATIC_GATES) e custa minutos por reconstruir o grafo de imports sem cache.
-# Mexer em .importlinter/scripts de gate já sobe a Task para T3 (RUNBOOK).
-# O guard de SLICE roda ANTES dos gates (sub-make), para falhar em 0 s.
+# Mexer em .importlinter/scripts de gate pede um ponto de `make check` no plano
+# de gates (RUNBOOK §Gates em camadas). O guard de SLICE roda ANTES dos gates (sub-make), para falhar em 0 s.
 check-task:
 	@if [ -z "$(SLICE)" ]; then \
 		printf "%b\n" "$(YELLOW)Uso: make check-task SLICE=<slice> [SLICE=\"a b\"]$(RESET)"; exit 2; \
@@ -144,9 +146,9 @@ check-task:
 	echo "uv run pytest $$paths $(PYTEST_PAR) -q -m 'not slow'"; \
 	uv run pytest $$paths $(PYTEST_PAR) -q -m "not slow"
 
-# check-block (T2, Checkpoint C a cada 2–3 Tasks) — todos os gates estáticos +
-# docs-check + suíte INTEIRA (inclui `slow`) em paralelo, sem cobertura. Pega a
-# quebra em slice não tocado que o check-task não enxerga.
+# check-block (opcional) — todos os gates estáticos + docs-check + suíte INTEIRA
+# (inclui `slow`) em paralelo, sem cobertura. Custa quase o mesmo que `check` e
+# conta no orçamento de 1–3 gates completos por Stage.
 check-block: $(STATIC_GATES) docs-check
 	uv run pytest tests/ $(PYTEST_PAR) -q
 

@@ -86,8 +86,21 @@ VIOLATION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
             r"make check`?\**\s*(verde\s*\**\s*)?(antes de (todo|cada) commit|por (commit|Task))",
             re.IGNORECASE,
         ),
-        "gate completo por commit/Task: o canônico é o modelo em camadas "
-        "(RUNBOOK §Gates em camadas; `make check-task` por Task, `make check` no fim)",
+        "gate completo por commit/Task: o canônico é o plano de gates "
+        "(RUNBOOK §Gates em camadas; testes da Task por commit, `make check` "
+        "só nos 1-3 pontos do plano)",
+    ),
+    (
+        # Sync #185 (ADR 0.0.0058): `check-task` deixou de ser obrigatório por
+        # commit e `check-block` saiu do Checkpoint C. Paráfrase da regra da
+        # #110 devolve um gate pesado a cada Task/bloco.
+        re.compile(
+            r"check-task`?\**[^.\n]{0,40}(antes de (todo|cada) commit|por (commit|Task))"
+            r"|check-block`?\**[^.\n]{0,40}(a cada 2|no Checkpoint C|por bloco)",
+            re.IGNORECASE,
+        ),
+        "`check-task`/`check-block` como etapa obrigatória: são opcionais; o "
+        "canônico é o plano de gates (RUNBOOK §Gates em camadas)",
     ),
 )
 
