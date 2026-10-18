@@ -326,3 +326,45 @@ def test_violation_is_never_an_alignment_finding() -> None:
         required_models=frozenset({"tft"}),
     )
     assert assembled.alignment.findings == ()
+
+
+# --- Checkpoint C das Tasks 09-15 (task-14-fix): a série nativa inteira coberta -------
+
+
+def test_complete_cohort_leaves_no_uncovered_target() -> None:
+    assert _assemble(_cohort()).uncovered_targets == {}
+
+
+def test_native_point_in_the_gap_between_folds_is_uncovered() -> None:
+    cohort = _cohort()
+    native = _native(cohort)
+    series = native[(1, 1)]
+    # alvos de teste do fold 0 vão até a sessão 22; o fold 1 começa na 23
+    gap = session(22).replace("T00:00:00", "T12:00:00")
+    position = series.target_timestamps.index(session(23))
+    native[(1, 1)] = CoverageSeries(
+        horizon=series.horizon,
+        levels=series.levels,
+        target_timestamps=(
+            *series.target_timestamps[:position],
+            gap,
+            *series.target_timestamps[position:],
+        ),
+        forecasts=(
+            *series.forecasts[:position],
+            series.forecasts[position],
+            *series.forecasts[position:],
+        ),
+        realized=(*series.realized[:position], 0.0, *series.realized[position:]),
+    )
+    result = _assemble(cohort, native)
+    # cada unidade passa no join do próprio fold: o ponto do vão fica fora dos dois
+    assert {u.status for u in result.units if (u.seed, u.horizon) == (1, 1)} == {OK}
+    assert result.uncovered_targets == {(1, 1): (gap,)}
+
+
+def test_undefined_unit_leaves_its_targets_uncovered() -> None:
+    result = _assemble(_cohort(calib={"0": _CALIB["0"]}))  # fold 1 sem calib
+    uncovered = result.uncovered_targets
+    assert set(uncovered) == {(1, 1), (1, 2), (2, 1), (2, 2)}
+    assert all(t >= session(23) for t in uncovered[(1, 1)])

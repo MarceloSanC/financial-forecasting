@@ -76,6 +76,9 @@ class ConformalAssemblyResult:
 
     units: tuple[ConformalUnitAssembly, ...]
     full_series_folds: Mapping[tuple[int, int], tuple[int | None, ...]]
+    # (seed, h) → alvos da série nativa que nenhuma unidade ok cobre (só os não vazios);
+    # essa (seed, h) não tem cobertura conformal (o RefreshGold a publica undefined)
+    uncovered_targets: Mapping[tuple[int, int], tuple[str, ...]]
 
 
 def _fold_index(fold: str | None) -> int | None:
@@ -168,6 +171,7 @@ class ConformalAssembly:
         return ConformalAssemblyResult(
             units=tuple(units),
             full_series_folds=_full_series_folds(records, runs, native_full, candidate),
+            uncovered_targets=_uncovered_targets(units, native_full),
         )
 
 
@@ -262,3 +266,24 @@ def _full_series_folds(
         key: tuple(fold_at.get((key[0], key[1], t)) for t in series.target_timestamps)
         for key, series in sorted(native_full.items())
     }
+
+
+def _uncovered_targets(
+    units: Sequence[ConformalUnitAssembly],
+    native_full: Mapping[tuple[int, int], CoverageSeries],
+) -> Mapping[tuple[int, int], tuple[str, ...]]:
+    """Alvos nativos fora da união dos testes das unidades ok, por (seed, h).
+
+    O join por unidade só olha o intervalo do fold; um ponto nativo no vão entre dois
+    folds (ou antes do primeiro, ou depois do último) só aparece aqui.
+    """
+    covered: dict[tuple[int, int], set[str]] = defaultdict(set)
+    for unit in units:
+        if unit.status == OK and unit.seed is not None:
+            covered[(unit.seed, unit.horizon)].update(point[1] for point in unit.test)
+    result: dict[tuple[int, int], tuple[str, ...]] = {}
+    for key, series in sorted(native_full.items()):
+        left = tuple(t for t in series.target_timestamps if t not in covered[key])
+        if left:
+            result[key] = left
+    return result
