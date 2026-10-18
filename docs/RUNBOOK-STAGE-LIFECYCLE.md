@@ -545,6 +545,15 @@ técnicos, critério de aceite, comando de verificação em bloco bash,
 mensagem de commit sugerida no formato:
 `<type>(<scope>): <desc> [N.M/task-NN]` com rodapé `Refs #<issue>`.
 
+O comando de verificação de cada Task roda **só os testes que a Task
+escreve ou altera** — sem `make check`, `check-task` ou `check-block`,
+exceto nas Tasks que o plano de gates nomeia.
+
+Inclua em §1 o **plano de gates**: depois de quais Tasks roda o
+`make check` completo e por quê — 1 a 3 por Stage, o de saída incluído;
+mais de 3 só com justificativa por ponto extra (regras em §Gates em
+camadas, Passo 9).
+
 Inclua no fim:
 - Ordem de dependência entre Tasks (se não óbvia).
 - Riscos e fallbacks.
@@ -571,6 +580,9 @@ Checklist (**fonte única** — PIPELINE §8.4 aponta para cá):
 - [ ] Cada Task cumpre os 5 critérios de Task Atômica (§4.3).
 - [ ] Caminhos batem com `LAYOUT.md`.
 - [ ] Checks objetivos cobrem cada Task.
+- [ ] Plano de gates presente: 1–3 pontos de `make check` (saída
+      incluída), cada ponto do meio com razão; acima de 3, justificativa
+      por ponto extra (§Gates em camadas).
 - [ ] Ordem respeita dependências.
 - [ ] Riscos identificados são razoáveis.
 - [ ] Gate de saída da Stage definido (testes + critério funcional).
@@ -755,7 +767,8 @@ Para cada Task implementada, revisar diff antes do commit (PIPELINE §9.4):
 
 ```powershell
 # IA escreve os arquivos
-make check-task SLICE=<slice>   # T1 — ver §Gates em camadas abaixo
+pytest <testes-da-task> -q --no-cov   # T1 — ver §Gates em camadas abaixo
+# make check só se esta Task é um ponto do plano de gates
 git add <arquivos-da-task>
 git commit -m "<type>(<scope>): <desc> [$N.$M/task-NN]
 
@@ -765,37 +778,61 @@ Refs #$issue"
 #### Gates em camadas
 
 **Fonte única** de *qual gate roda quando* durante a execução de Stage ou
-issue (ADR 0.0.0055). Os PROMPTs de sessão única e a skill
-`task-ordering-hex` apontam para cá. O gate completo continua obrigatório,
-mas roda no fim da Stage e no CI, não em cada commit: o custo dele não cabe
-no ciclo de uma Task, e a quebra que só ele pega aparece no T2 no máximo
-2–3 commits depois.
+issue (ADR 0.0.0058, que emenda a 0.0.0055). Os PROMPTs de sessão única, o
+template `stage-technical.md` e a skill `task-ordering-hex` apontam para cá.
+O `make check` completo é caro (dezenas de minutos no Docker local); por
+isso ele **não** roda por Task nem por bloco, e sim nos poucos pontos que o
+**plano de gates** do `technical.md` escolhe.
 
 | Camada | Quando | Comando | O que cobre |
 |---|---|---|---|
 | **T0** — ciclo TDD | cada vermelho→verde | `pytest <arquivo>::<teste> -x --no-cov` | o comportamento em construção |
-| **T1** — commit da Task | antes de **todo** commit de Task | `make check-task SLICE=<slice>` (vários: `SLICE="modeling shared"`) | ruff, mypy, check_layout, import-linter, fake-parity, port-coverage, arch-ast + testes dos slices tocados, sem `slow` e sem cobertura |
-| **T2** — bloco | no Checkpoint C (a cada 2–3 Tasks) e antes de retomar sessão interrompida | `make check-block` | T1 inteiro + docs-check + suíte **inteira** (inclui `slow`) em paralelo, sem cobertura |
-| **T3** — saída | Passo 10 (fim da Stage/issue) e antes do `git push` que abre o PR | `make check` | gate completo com cobertura ≥ 90% — **idêntico ao CI** |
+| **T1** — commit da Task | antes de **todo** commit de Task | `pytest <arquivos de teste escritos/alterados na Task> -q --no-cov` + hooks de pre-commit (ruff, ruff-format, mypy) no próprio commit | os testes da Task |
+| **T3** — ponto do plano | só depois das Tasks que o plano de gates nomeia (**1 a 3 por Stage/issue, contando a saída**) | `make check` | gate completo com cobertura ≥ 90% — **idêntico ao CI** |
+| **T3** — saída | Passo 10 (fim da Stage/issue), antes do `git push` que abre o PR — é sempre um dos pontos do plano | `make check` | idem |
 | **T4** — CI | todo PR | `make check` (workflow `ci`) | o veredito bloqueante do merge |
+
+**Plano de gates** (escrito na Fase 3B, em §1 do `technical.md`; revisado no
+Passo 7 / Checkpoint B):
+
+- **Orçamento: 1 a 3 `make check` por Stage ou issue**, o de saída incluído.
+  Uma Stage sem Task de risco (abaixo) tem só o de saída.
+- **Objetivo é minimizar.** Cada ponto no meio da Stage precisa de uma razão
+  de uma linha: que quebra ele pega e por que esperar o próximo ponto sairia
+  caro (Tasks seguintes construídas sobre algo quebrado).
+- **Onde um ponto do meio se justifica** — logo depois da **última** Task de
+  um grupo que, se quebrar, invalida as Tasks seguintes:
+  - mudou port/contrato consumido por outro slice, `shared/` ou o
+    composition root;
+  - mudou dependência, config de ferramenta, script de gate ou `conftest.py`
+    compartilhado (pyproject, uv.lock, `.importlinter`, Makefile,
+    `scripts/check_*.py`, `scripts/arch_baseline.toml`) — o T1 não roda
+    `tests/architecture/`, que testa esses gates.
+
+  Ordene as Tasks para **agrupar** essas mudanças, de modo que um ponto
+  cubra todas.
+- **Mais de 3 pontos** só com justificativa explícita por ponto extra no
+  plano: qual risco concreto ele pega que o próximo ponto pegaria tarde
+  demais. "Por segurança" não é justificativa. Se a necessidade surgir na
+  execução, o ponto extra entra como `[deviation]` em §7 com essa mesma
+  justificativa.
 
 Regras:
 
-- **`SLICE` é o que a Task tocou**, em `src/` **e** em `tests/`. Se a Task
-  mexe em `shared/`, no composition root ou em algo que vários slices
-  importam, o T1 dela é `make check-block`: o raio de impacto já não cabe
-  num slice.
-- **Tocou dependência, config de ferramenta, script de gate ou
-  `conftest.py`** (pyproject, uv.lock, `.importlinter`, Makefile,
-  `scripts/check_*.py`, `scripts/arch_baseline.toml`, conftest
-  compartilhado) → T3 nessa mesma Task. O T1 não roda `tests/architecture/`
-  (que testa os gates); é esta regra que os cobre.
-- **T1 vermelho bloqueia o commit**, como antes. T2 vermelho vira commit
-  `fix(<scope>): ... [N.M/task-NN-fix]` antes da próxima Task.
-- **`slow`** marca teste com custo de minutos (treino real). Ele sai só do
-  T1; T2, T3 e T4 rodam tudo. Não use `slow` para esconder teste instável.
-- T3 continua sendo o único alvo cujo verde vale como evidência de gate em
-  PR, auditoria e checklist de saída.
+- **T1 vermelho bloqueia o commit.** `make check` vermelho num ponto do
+  plano vira commit `fix(<scope>): ... [N.M/task-NN-fix]` antes da próxima
+  Task.
+- **`make check-task` e `make check-block` são opcionais**, não etapa de
+  rotina. `check-task SLICE=<slice>` (gates estáticos + testes do slice) só
+  com motivo concreto — ex.: import novo entre camadas que você quer o
+  import-linter confirmando antes de construir em cima. `check-block` custa
+  quase o mesmo que `make check` e **conta no orçamento**.
+- **Checkpoint C** continua (revisão do bloco por subagente), sem gate de
+  suíte acoplado.
+- **`slow`** marca teste com custo de minutos (treino real); `make check` e
+  CI rodam tudo. Não use `slow` para esconder teste instável.
+- `make check` continua sendo o único alvo cujo verde vale como evidência
+  de gate em PR, auditoria e checklist de saída.
 
 ### Passo 10 — Gate de saída da Stage
 
