@@ -260,7 +260,9 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 - **Value object valida na construção.** `@dataclass(frozen=True)` em `domain/value_objects/`
   tem `__post_init__` — factory validadora não basta, o construtor da dataclass segue chamável;
   VO sem invariante por desenho declara `# vo-invariant: none — <motivo>` (gate:
-  `scripts/check_vo_invariants.py`, issue #61; dívida de hoje no baseline → #160).
+  `scripts/check_vo_invariants.py`, issue #61; baseline zerado pela #160). Hash de identidade
+  guardado como `str` valida a forma pela regra única `validate_sha256_hex`
+  (`shared/domain/services/sha256_hex.py`).
 - **Use cases retornam DTOs, não entidades.** Entidades de domínio (com identidade, mutáveis) não vazam para fora da camada application. **Value objects** imutáveis de domínio (ex: `Money`) **podem** trafegar em DTOs — são valores puros sem identidade, indistinguíveis de tipos primitivos do ponto de vista do consumidor.
 - **Um use case por arquivo.** `create_order.py`, não `order_use_cases.py`.
 - **Adapters implementam ports.** `PostgresPaymentRepository` satisfaz `PaymentRepository` Protocol.
