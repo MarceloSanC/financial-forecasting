@@ -5,8 +5,8 @@ Serviço de domínio stdlib-only com **dono único** da forma de um hash de iden
 devolve (ADR 1.4.0001). Consumidores:
 
 - os VOs de identidade de `shared/domain/value_objects/` (`RunId`, `ConfigSignature`,
-  `SplitFingerprint`, `DatasetFingerprint`, `DatasetContentFingerprint`, `CohortHash`,
-  `PreregistrationHash`), no `__post_init__`;
+  `SplitFingerprint`, `DatasetContentFingerprint`, `CohortHash`, `PreregistrationHash`),
+  no `__post_init__`;
 - os VOs do `analytics_store` que guardam esses hashes como `str` (`RunRecord`,
   `PredictionRow`);
 - os blocos do pré-registro do `evaluation` (`CohortReference.cohort_hash`,
