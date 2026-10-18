@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -16,12 +16,11 @@ HERE = Path("/repo").resolve()
 
 
 def _load() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("_shell_segments", _HELPER)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    # import pelo nome (não por arquivo): os hooks importam o mesmo objeto de módulo, e o teste
+    # de regra comum do git_guard compara identidade das funções
+    if str(_HELPER.parent) not in sys.path:
+        sys.path.insert(0, str(_HELPER.parent))
+    return importlib.import_module("_shell_segments")
 
 
 ss = _load()

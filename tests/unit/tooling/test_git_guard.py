@@ -18,6 +18,8 @@ LOCAL_BRANCHES = {"develop", "feat/77-6-1-scoring", "feat/80-remote-only"}  # lo
 
 
 def _load() -> ModuleType:
+    if str(_HOOK.parent) not in sys.path:  # o hook importa o helper vizinho `_shell_segments`
+        sys.path.insert(0, str(_HOOK.parent))
     spec = importlib.util.spec_from_file_location("git_guard", _HOOK)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -60,6 +62,43 @@ def _blocked(command: str, cwd: Path = MAIN) -> bool:
 )
 def test_blocks_branch_changes_in_main_checkout(command: str) -> None:
     assert _blocked(command)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "git status && git checkout -b feat/99-x",
+        "git status || git checkout -b feat/99-x",
+        "git status; git checkout -b feat/99-x",
+        "git log | git checkout -b feat/99-x",
+        "git status\ngit checkout -b feat/99-x",
+        "git status\r\ngit checkout -b feat/99-x",
+        "git status & git checkout -b feat/99-x",
+        "& git checkout -b feat/99-x",
+        "& 'C:\\Program Files\\Git\\bin\\git.exe' checkout -b feat/99-x",
+        "(git checkout -b feat/99-x)",
+        "( git checkout -b feat/99-x )",
+        "{ git checkout -b feat/99-x; }",
+        "$(git switch -c feat/99-x)",
+        "FOO=1 git switch -c feat/99-x",
+        "if true; then git switch -c feat/99-x; fi",
+        "git status\n(git switch feat/77-6-1-scoring)",
+    ],
+)
+def test_blocks_branch_change_after_any_separator(command: str) -> None:
+    assert _blocked(command)
+
+
+def test_cd_to_worktree_on_a_previous_line_is_honored() -> None:
+    assert not _blocked(f"cd {WORKTREE}\ngit switch -c feat/99-x")
+    assert _blocked(f"cd {WORKTREE}\ncd {MAIN}\ngit switch -c feat/99-x")
+
+
+def test_shares_the_segmentation_rule_with_publish_guard() -> None:
+    import publish_guard  # noqa: PLC0415 — carregado do mesmo diretório que o git_guard
+
+    assert gg.commands is publish_guard.commands
+    assert gg.git_invocation is publish_guard.git_invocation
 
 
 @pytest.mark.parametrize(
