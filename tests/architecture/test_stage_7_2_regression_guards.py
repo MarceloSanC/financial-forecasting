@@ -100,3 +100,52 @@ def test_guard_catches_every_import_form(tmp_path: Path) -> None:
 
     offenders = {entry.split(":")[0].rsplit("/", 1)[-1] for entry in _offenders(tmp_path)}
     assert offenders == {"direct.py", "package.py", "dynamic.py", "composition_root.py"}
+
+
+_FAKE = _REPO / "tests/fakes/features/evaluation/fake_conformal_calibration.py"
+_SUPPLIER = "financial_forecasting.features.inference.application.use_cases.calibrate_conformal"
+
+
+def _fake_violations(source: str) -> list[str]:
+    """O que o fake do `ConformalCalibration` não pode ter, e o que ele precisa importar.
+
+    O `check_fake_parity.py` compara fake e adapter, e é cego a use case: esta guarda
+    cobre o ponto cego. O fake reusa as regras do fornecedor (`validate_command` e
+    `calibration_set_for`) e não calibra: não define `calibrate` nem importa o
+    `ConformalCalibrator`.
+    """
+    tree = ast.parse(source)
+    imported_from_supplier: set[str] = set()
+    problems: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == _SUPPLIER:
+            imported_from_supplier.update(alias.name for alias in node.names)
+        if isinstance(node, ast.ImportFrom | ast.Import) and any(
+            alias.name == "ConformalCalibrator" for alias in node.names
+        ):
+            problems.append(f"imports ConformalCalibrator (line {node.lineno})")
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == "calibrate":
+            problems.append(f"defines calibrate (line {node.lineno})")
+    for name in ("validate_command", "calibration_set_for"):
+        if name not in imported_from_supplier:
+            problems.append(f"does not import {name} from calibrate_conformal")
+    return problems
+
+
+@pytest.mark.unit
+def test_fake_conformal_calibration_reuses_the_supplier_rules() -> None:
+    assert _fake_violations(_FAKE.read_text(encoding="utf-8")) == []
+
+
+@pytest.mark.unit
+def test_fake_guard_catches_a_reimplemented_calibrator() -> None:
+    bad = (
+        "from financial_forecasting.features.inference.domain.services.conformal_calibrator "
+        "import ConformalCalibrator\n"
+        "def calibrate(x):\n    return x\n"
+    )
+    problems = _fake_violations(bad)
+    assert any("ConformalCalibrator" in p for p in problems)
+    assert any("defines calibrate" in p for p in problems)
+    assert any("validate_command" in p for p in problems)
+    assert any("calibration_set_for" in p for p in problems)
