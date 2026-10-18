@@ -5,7 +5,7 @@ when-use: Reference whenever adding, changing, or deferring an analytics silver 
 keywords: [adr, analytics-store, silver, schema-per-table, pandera, registry, deferred-tables]
 status: accepted
 created_at: 2026-06-29
-updated_at: 2026-06-29
+updated_at: 2026-10-18
 adr_id: 4.1.0001
 decision: Each analytics silver table gets its own schema module (SilverTable + pandera) wired through a SILVER_REGISTRY keyed by (layer, table), defining only the 5 tables consumed by Steps 1–4 and deferring 8 others.
 context_stage: 4.1-silver-schema-per-table
@@ -17,6 +17,17 @@ bounded_context: analytics_store
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese.
 
 ## Status
+
+> **Note (2026-10-18, issue #164).** Three of the five tables defined here were
+> removed: `fact_config`, `fact_split_metrics` and `fact_failures`. None of them
+> ever gained a writer in `src/`, and no Step 8 Stage lists them as a consumed
+> contract. `fact_split_metrics` held point metrics (RMSE, MAE, MAPE, sMAPE,
+> directional accuracy) that the probabilistic confirmatory scorecard does not
+> use; the configuration of a run is already identified by `dim_run`
+> (`config_signature`) and by the anchored cohort file; failures stop the run with
+> a typed error. `SILVER_REGISTRY` now holds `dim_run` (upsert) and
+> `fact_oos_predictions` (append-only). The one-module-per-table decision and the
+> registry seam are unchanged; a table comes back only together with its writer.
 
 `accepted`
 

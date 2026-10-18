@@ -227,6 +227,21 @@ def test_unknown_layer_table_raises(repo: AnalyticsRepository) -> None:
 
 
 @pytest.mark.contract
+@pytest.mark.parametrize("table", ["fact_config", "fact_split_metrics", "fact_failures"])
+def test_tables_without_writer_are_refused(repo: AnalyticsRepository, table: str) -> None:
+    """#164: as 3 tabelas silver que saíram são recusadas pelo fake E pelo real.
+
+    Pega o drift do registry-leve do fake: se ele ainda aceitasse uma delas, o fake
+    passaria a responder diferente do adapter real.
+    """
+    with pytest.raises(ApplicationError):
+        repo.write(layer=_SILVER, table=table, rows=[])
+
+    with pytest.raises(ApplicationError):
+        repo.read(layer=_SILVER, table=table, filters={"asset": "AAPL"})
+
+
+@pytest.mark.contract
 def test_read_missing_returns_empty(repo: AnalyticsRepository) -> None:
     """C4: `read` de tabela não gravada ou `asset` sem dados → sequência vazia."""
     assert list(repo.read(layer=_SILVER, table="dim_run", filters={"asset": "AAPL"})) == []

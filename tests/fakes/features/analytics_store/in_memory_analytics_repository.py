@@ -44,7 +44,6 @@ Row = Mapping[str, object]
 # como dado puro (sem pandas) para o fake permanecer agnóstico de storage libs.
 _PK_BY_TABLE: dict[str, tuple[str, ...]] = {
     "dim_run": ("run_id",),
-    "fact_config": ("run_id",),
     "fact_oos_predictions": (
         "run_id",
         "split",
@@ -53,22 +52,14 @@ _PK_BY_TABLE: dict[str, tuple[str, ...]] = {
         "target_timestamp_utc",
         "quantile_level",
     ),
-    "fact_split_metrics": ("run_id", "split"),
-    "fact_failures": ("run_id", "failed_at_utc", "stage"),
 }
 _PARTITION_BY_TABLE: dict[str, tuple[str, ...]] = {
     "dim_run": ("asset", "parent_sweep_id"),
-    "fact_config": ("asset", "parent_sweep_id"),
     "fact_oos_predictions": ("asset", "feature_set_name", "year"),
-    "fact_split_metrics": ("asset", "parent_sweep_id"),
-    "fact_failures": ("asset",),
 }
 _UPDATE_POLICY_BY_TABLE: dict[str, str] = {
     "dim_run": "upsert",
-    "fact_config": "append-only",
     "fact_oos_predictions": "append-only",
-    "fact_split_metrics": "append-only",
-    "fact_failures": "append-only",
 }
 # Colunas de partição que devem voltar como `None` quando armazenadas como sentinel.
 _NULLABLE_PARTITION_COLS = frozenset({"parent_sweep_id"})

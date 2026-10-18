@@ -17,10 +17,11 @@ Semântica garantida por qualquer implementação deste contrato:
 - **Partição derivada do schema, não do chamador (I2).** As colunas de PK lógica
   e de partição de cada `(layer, table)` vêm do `SILVER_REGISTRY` (4.1) interno
   ao adapter, não dos argumentos — são **colunas literais do payload**
-  (`asset`/`parent_sweep_id`/`feature_set_name`/`year`), em 1..3 níveis distintos
-  por tabela; sem derivar ano de âncora temporal (divergência chave vs bronze).
-  Um par `(layer, table)` fora do registry é erro de aplicação (C2).
-- **`write` é append-only nos 4 fatos (I3/C1).** Re-gravar uma linha cuja PK
+  (`asset`/`parent_sweep_id`/`feature_set_name`/`year`), com quantos níveis o
+  `partition_by` de cada tabela declarar; sem derivar ano de âncora temporal
+  (divergência chave vs bronze). Um par `(layer, table)` fora do registry é erro de
+  aplicação (C2).
+- **`write` é append-only nos fatos (I3/C1).** Re-gravar uma linha cuja PK
   lógica já existe na partição alvo levanta `DuplicateKeyError` (`ApplicationError`).
   Upsert (substituir só as linhas colididas) acontece quando o
   `SilverTable.update_policy == "upsert"` (apenas `dim_run`) **ou** quando

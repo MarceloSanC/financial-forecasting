@@ -1,13 +1,12 @@
 """Integration test do `ParquetAnalyticsRepository` — layout Hive real em disco.
 
 Escreve com o adapter real em `tmp_path` e inspeciona o **layout Hive físico**
-(caminhos de partição literais por tabela, 1..3 níveis), confere append-only/upsert
+(caminhos de partição literais por tabela, 2 e 3 níveis), confere append-only/upsert
 reais lendo o disco, o round-trip `parent_sweep_id=None` → `None` e a validação
 `pandera` antes do disco (concept 4.2 §11 A10):
 
 - `silver/dim_run/asset=AAPL/parent_sweep_id=<sweep|__none__>/dim_run.parquet` (2 níveis)
 - `silver/fact_oos_predictions/asset=AAPL/feature_set_name=<fs>/year=<yyyy>/...` (3 níveis)
-- `silver/fact_failures/asset=AAPL/fact_failures.parquet` (1 nível)
 """
 
 from __future__ import annotations
@@ -74,20 +73,6 @@ def _fact_oos_row(
     }
 
 
-def _fact_failures_row(run_id: str = "run-1") -> dict[str, object]:
-    return {
-        "schema_version": 1,
-        "run_id": run_id,
-        "asset": "AAPL",
-        "failed_at_utc": "2024-01-02T00:00:00+00:00",
-        "stage": "train",
-        "error_type": "ValueError",
-        "error_message": "boom",
-        "trace_hash": "abc123",
-        "traceback_excerpt": None,
-    }
-
-
 @pytest.mark.integration
 def test_hive_layout_three_levels_fact_oos(tmp_path: Path) -> None:
     """A10/I2: `fact_oos_predictions` grava em asset=/feature_set_name=/year= (3 níveis)."""
@@ -120,16 +105,6 @@ def test_hive_layout_two_levels_dim_run(tmp_path: Path) -> None:
         / "parent_sweep_id=sweep-1"
         / "dim_run.parquet"
     )
-    assert expected.is_file()
-
-
-@pytest.mark.integration
-def test_hive_layout_one_level_fact_failures(tmp_path: Path) -> None:
-    """A10/I2: `fact_failures` grava em asset= (1 nível)."""
-    repo = _repo(tmp_path)
-    repo.write(layer=_SILVER, table="fact_failures", rows=[_fact_failures_row()])
-
-    expected = tmp_path / "silver" / "fact_failures" / "asset=AAPL" / "fact_failures.parquet"
     assert expected.is_file()
 
 

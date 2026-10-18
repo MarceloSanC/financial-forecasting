@@ -498,7 +498,7 @@ Silver modular (schema por tabela, sem o mega-schema antigo), repositório appen
 
 #### Stage 4.1 — `4.1-silver-schema-per-table`
 
-**Descrição humana:** Schemas silver **por tabela** (dim_run, fact_config, fact_oos_predictions, fact_split_metrics, fact_failures, ...) como módulos separados + value objects de domínio, validados por `pandera`. Cada tabela com `schema_version`.
+**Descrição humana:** Schemas silver **por tabela** (dim_run, fact_config, fact_oos_predictions, fact_split_metrics, fact_failures, ...) como módulos separados + value objects de domínio, validados por `pandera`. Cada tabela com `schema_version`. *(Nota 2026-10-18, issue #164: `fact_config`, `fact_split_metrics` e `fact_failures` saíram do silver por nunca terem tido escritor; o registry ficou com `dim_run` e `fact_oos_predictions` — ADR 4.1.0001.)*
 
 **Descrição para IA:**
 ```yaml

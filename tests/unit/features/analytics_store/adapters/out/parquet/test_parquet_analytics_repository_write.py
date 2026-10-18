@@ -3,8 +3,8 @@
 Cobre (concept 4.2 A2/A3/A4/A5/A6, C1/C2/C3/C5, I2/I3/I4/I7): despacho por
 `(layer, table)` e `(layer, table)` fora do registry → `ApplicationError` (C2);
 `pandera` ANTES do disco (dtype divergente → `SchemaError`, nenhum arquivo
-escrito) (C3/I4); partição Hive literal em 1..3 níveis — `fact_failures`
-`asset=` (1 nível), `dim_run` `asset=/parent_sweep_id=` (2), `fact_oos_predictions`
+escrito) (C3/I4); partição Hive literal pelas colunas de `partition_by` —
+`dim_run` `asset=/parent_sweep_id=` (2 níveis), `fact_oos_predictions`
 `asset=/feature_set_name=/year=` (3) — sem derivar ano de âncora (I2/A4); colisão
 de PK lógica sem flag → `DuplicateKeyError` (C1); `allow_upsert=True` substitui só
 as colididas (C5); `dim_run` upsert por `update_policy` sem flag (I3); o mapper
@@ -80,20 +80,6 @@ def _fact_oos_row(
         "value_guardrail": value_raw,
         "guardrail_applied": 0,
         "year": 2024,
-    }
-
-
-def _fact_failures_row(run_id: str = _RUN_1) -> dict[str, object]:
-    return {
-        "schema_version": 1,
-        "run_id": run_id,
-        "asset": "AAPL",
-        "failed_at_utc": "2024-01-02T00:00:00+00:00",
-        "stage": "train",
-        "error_type": "ValueError",
-        "error_message": "boom",
-        "trace_hash": "abc123",
-        "traceback_excerpt": None,
     }
 
 
@@ -204,7 +190,7 @@ def test_pandera_rejects_extra_column(tmp_path: Path) -> None:
     assert not any(tmp_path.rglob("*.parquet"))
 
 
-# -- partição literal 1..3 níveis --------------------------------------------
+# -- partição literal (2 e 3 níveis) -----------------------------------------
 
 
 def test_partition_three_levels_fact_oos(tmp_path: Path) -> None:
@@ -239,15 +225,6 @@ def test_partition_two_levels_dim_run(tmp_path: Path) -> None:
         / "parent_sweep_id=sweep-1"
         / "dim_run.parquet"
     )
-    assert expected.exists()
-
-
-def test_partition_one_level_fact_failures(tmp_path: Path) -> None:
-    """A4/I2: `fact_failures` particiona só por asset (1 nível)."""
-    repo = _repo(tmp_path)
-    repo.write(layer=_SILVER, table="fact_failures", rows=[_fact_failures_row()])
-
-    expected = tmp_path / "silver" / "fact_failures" / "asset=AAPL" / "fact_failures.parquet"
     assert expected.exists()
 
 
