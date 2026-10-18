@@ -8,7 +8,9 @@ devolve (ADR 1.4.0001). Consumidores:
   `SplitFingerprint`, `DatasetFingerprint`, `DatasetContentFingerprint`, `CohortHash`,
   `PreregistrationHash`), no `__post_init__`;
 - os VOs do `analytics_store` que guardam esses hashes como `str` (`RunRecord`,
-  `PredictionRow`).
+  `PredictionRow`);
+- os blocos do pré-registro do `evaluation` (`CohortReference.cohort_hash`,
+  `RealizedSource.dataset_fingerprint`).
 
 Validar na construção, e não só na factory `compute`, é o que fecha o caminho cru
 `Cls(value=...)` (gate `scripts/check_vo_invariants.py`, issue #61). O formato não
