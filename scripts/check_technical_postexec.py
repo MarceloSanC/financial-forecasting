@@ -31,7 +31,8 @@ O script faz três checagens:
    serve só de sanity check do template; se é `done`, é pré-requisito
    para a checagem 2.)
 1b. **Vocabulário de tags (sempre):** todo cabeçalho de entrada da §7
-   (`### AAAA-MM-DD — [tag] …`, fora de bloco de código) usa uma tag de
+   (`### AAAA-MM-DD — [tag] …` ou formato anterior ao template, como
+   `#### [tag] …`; fora de bloco de código) usa uma tag de
    `ENTRY_TAGS` (CONVENTIONS §3.4). Vale também para Stage mergeada: a
    tag é identificador, não plano congelado.
 2. **Diff vs. baseline (`status: done` E Stage não mergeada):** compara
@@ -80,10 +81,16 @@ ENTRY_TAGS = frozenset(
     {"decision", "decision:E", "decision:C", "finding", "deviation", "measurement"}
 )
 
-# Cabeçalho de entrada da §7 (template §7): `### AAAA-MM-DD — [tag] escopo — Autor`.
-# Aceita travessão, meia-risca ou hífen como separador para não deixar escapar a
-# tag por causa da pontuação. Placeholder `YYYY-MM-DD` não casa (exige dígitos).
-_ENTRY_HEADER_PATTERN = re.compile(r"^###\s+\d{4}-\d{2}-\d{2}\s+[\u2014\u2013-]\s+\[([^\]]*)\]")
+# Cabeçalho de entrada da §7: título `###`/`####` cuja primeira marca é a tag, logo
+# depois dos `#` ou de um prefixo sem colchete seguido de separador. Cobre o formato
+# do template (`### AAAA-MM-DD — [tag] escopo — Autor`) e os anteriores a ele
+# (`#### [tag] …`, `### Task 03 — `[tag]` …`), para a tag não escapar pelo formato.
+# Aceita travessão, meia-risca ou hífen como separador. O grupo `prefix` deixa o
+# placeholder do template (`YYYY-MM-DD`) de fora.
+_ENTRY_HEADER_PATTERN = re.compile(
+    r"^#{3,4}\s+(?:(?P<prefix>[^\[`]*?)\s[\u2014\u2013-]\s+)?`?\[(?P<tag>[^\]]*)\]`?(?=\s|$)"
+)
+_PLACEHOLDER_DATE = "YYYY-MM-DD"
 
 _FENCE_PREFIXES = ("```", "~~~")
 
@@ -145,9 +152,11 @@ def _check_entry_tags(content: str, window: tuple[int, int], path: Path) -> list
         if in_fence:
             continue
         match = _ENTRY_HEADER_PATTERN.match(line)
-        if match and match.group(1) not in ENTRY_TAGS:
+        if match is None or _PLACEHOLDER_DATE in (match.group("prefix") or ""):
+            continue
+        if match.group("tag") not in ENTRY_TAGS:
             errors.append(
-                f"{path}:{index + 1}: tag `[{match.group(1)}]` fora do vocabulário "
+                f"{path}:{index + 1}: tag `[{match.group('tag')}]` fora do vocabulário "
                 f"da §7 ({', '.join(sorted(ENTRY_TAGS))}) — CONVENTIONS §3.4."
             )
     return errors

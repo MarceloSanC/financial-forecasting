@@ -96,9 +96,39 @@ def test_untagged_entry_and_template_placeholder_pass(tmp_path: Path) -> None:
     section = (
         "### 2026-10-17 — Checkpoint C — disposições — Claude\n"
         "### YYYY-MM-DD — [tag] <Task NN ou escopo> — <Autor>\n"
-        "#### 2026-10-17 — [nota] subtítulo de nível 4\n"
+        "#### Saída com a mutação [nota]\n"
+        "#### Execução — 2026-06-29 (todas as Tasks)\n"
+        "## [nota] título de nível 2 não é entrada\n"
     )
     assert ctp.check_file(_technical(tmp_path, section)) == []
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "#### 2026-10-17 — [nota] entrada de nível 4",
+        "#### [nota] formato anterior ao template (1.2, 2.1)",
+        "### Task 03 — `[nota]` formato anterior ao template (2.4)",
+        "### [nota] sem data",
+    ],
+)
+def test_entry_header_outside_the_template_format_is_checked(tmp_path: Path, header: str) -> None:
+    errors = ctp.check_file(_technical(tmp_path, f"{header}\n**Contexto:** x\n"))
+    assert len(errors) == 1
+    assert "`[nota]`" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "#### [deviation] formato anterior ao template",
+        "### Task 06 — `[finding]` `uv sync` remove o extra `.[dev]`",
+        "#### [finding] DuckDB devolve `datetime64[us, UTC]`",
+    ],
+)
+def test_legacy_header_with_vocabulary_tag_passes(tmp_path: Path, header: str) -> None:
+    # Só a primeira marca do título é a tag; colchetes no resto do título não contam.
+    assert ctp.check_file(_technical(tmp_path, f"{header}\n")) == []
 
 
 def test_main_exit_code_follows_the_tags(tmp_path: Path) -> None:
