@@ -6,20 +6,21 @@ Recusa, quando o diretório efetivo do comando é o checkout PRINCIPAL (não uma
   só remota — o `checkout` cria a local por DWIM), e `-` (volta à branch anterior);
 - `git worktree add` manual (o script valida nome/issue, copia `.env` e isola portas).
 
-Diretório efetivo = `cwd` do hook, seguido de `cd <dir>` anteriores no mesmo comando e de
-`git -C <dir>`. Regra: docs/GIT-WORKFLOW.md §"Branches em voo".
+Segmentos (`&&`, `||`, `;`, `|`, `&`, quebra de linha, grupos `( )`/`{ }`) e diretório efetivo
+(`cwd` do hook, `cd <dir>` anteriores no mesmo comando, `git -C <dir>`): regra comum em
+`_shell_segments.py`, a mesma do `publish_guard`. Regra: docs/GIT-WORKFLOW.md §"Branches em voo".
 """
 
 from __future__ import annotations
 
 import json
-import re
-import shlex
 import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+from _shell_segments import commands, executable, git_invocation
 
 BASE_BRANCH = "develop"
 REASON = (
@@ -27,8 +28,6 @@ REASON = (
     "Crie a worktree: `python scripts/worktree-new.py <branch> --no-setup --no-vscode` "
     "e trabalhe dentro dela."
 )
-_SEGMENT_SPLIT = re.compile(r"&&|\|\||;|\|")
-_GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
 
 
 def _git(cwd: Path, *args: str) -> str | None:
@@ -91,25 +90,11 @@ def blocked(
     is_main: Callable[[Path], bool] = is_main_worktree,
     exists: Callable[[Path, str], bool] = branch_exists,
 ) -> bool:
-    here = cwd
-    for segment in _SEGMENT_SPLIT.split(command):
-        try:  # posix=False preserva `\` de caminho Windows; aspas removidas à mão
-            tokens = [t.strip("\"'") for t in shlex.split(segment, posix=False)]
-        except ValueError:
-            tokens = segment.split()
-        if not tokens:
+    for here, tokens in commands(command, cwd):
+        if executable(tokens) != "git":
             continue
-        if tokens[0] in ("cd", "Set-Location", "pushd") and len(tokens) > 1:
-            here = (here / tokens[1]).resolve()
-            continue
-        if Path(tokens[0]).stem.lower() != "git":
-            continue
-        target, i = here, 1
-        while i < len(tokens) and tokens[i].startswith("-"):
-            if tokens[i] == "-C" and i + 1 < len(tokens):
-                target = (here / tokens[i + 1]).resolve()
-            i += 2 if tokens[i] in _GIT_OPTS_WITH_VALUE else 1
-        if _violation(tokens[i:], target, exists) and is_main(target):
+        target, _config, args = git_invocation(tokens, here)
+        if _violation(args, target, exists) and is_main(target):
             return True
     return False
 

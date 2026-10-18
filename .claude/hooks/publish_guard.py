@@ -18,16 +18,13 @@ Recusa:
 - `gh api` que escreve: `-X/--method` diferente de GET, campo sem método, ou `graphql` com
   `mutation`.
 
-Segmentos: `&&`, `||`, `;`, `|`, `&` (inclusive o operador de chamada do PowerShell) e quebra de
-linha — a permissão do Claude Code é avaliada por subcomando, então o hook precisa ver cada um.
-Fora do alcance do parsing (o classificador continua cobrindo, porque não casam com as regras
-allow): `bash -c`/`pwsh -c`/`cmd /c`, `eval`, alias do `gh`, scripts e curl.
+Segmentos, diretório efetivo (`cd`, `git -C`) e o que fica fora do alcance do parsing: regra
+comum em `_shell_segments.py` (a mesma do `git_guard`). O classificador continua cobrindo o que
+o parsing não vê, porque não casa com as regras allow (alias do `gh`, scripts, curl, `bash -c`).
 
 Passam: push da branch da worktree, edição de título/corpo, comentários, leituras.
 
-Diretório efetivo = `cwd` do hook, seguido de `cd <dir>` anteriores no mesmo comando e de
-`git -C <dir>` (como no `git_guard`). Regra: docs/GIT-WORKFLOW.md §"Fechamento autônomo pela
-auditoria".
+Regra: docs/GIT-WORKFLOW.md §"Fechamento autônomo pela auditoria".
 """
 
 from __future__ import annotations
@@ -35,27 +32,23 @@ from __future__ import annotations
 import itertools
 import json
 import re
-import shlex
 import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from _shell_segments import commands, executable, git_invocation
+
 PROTECTED = frozenset({"develop", "main"})
 BASE_BRANCH = "develop"
 _RULE = 'GIT-WORKFLOW §"Fechamento autônomo pela auditoria"'
-_SEGMENT_SPLIT = re.compile(r"&&|\|\||[;|&\n]")
-_GIT_OPTS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
-_ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _AUDIT_COMPLETE = re.compile(r"^>\s*\*\*Auditoria:\*\*\s*`?complete`?\s*$", re.MULTILINE)
 _CHECK_OK = {"SUCCESS", "SKIPPED", "NEUTRAL"}
 _REQUIRED_CHECKS = frozenset({"lint-and-test", "audit-status"})
 _PUSH_FORCE = {"--force", "-f"}
 _PUSH_BROAD = {"--all", "--mirror", "--branches", "--prune"}
 _PUSH_CONFIG = ("push.", "remote.")
-_WRAPPERS = {"env", "command", "time", "nohup", "sudo", "exec", "xargs"}
-_WRAPPERS |= {"then", "do", "else", "elif", "if", "while", "until", "!"}  # palavra de shell
 _PUSH_OPTS_WITH_VALUE = {"--repo", "-o", "--push-option", "--receive-pack", "--exec"}
 _EDIT_FORBIDDEN = {
     "--add-label",
@@ -343,13 +336,6 @@ def _gh_reason(args: list[str], cwd: Path, fetch: PrFetcher) -> str | None:
     return found
 
 
-def _tokens(segment: str) -> list[str]:
-    try:  # posix=False preserva `\` de caminho Windows; aspas e `)`/`}` de grupo removidos à mão
-        return [t.rstrip(")}").strip("\"'") for t in shlex.split(segment, posix=False)]
-    except ValueError:
-        return segment.split()
-
-
 def reason(
     command: str,
     cwd: Path,
@@ -357,32 +343,13 @@ def reason(
     branch: Callable[[Path], str | None] = current_branch,
     fetch: PrFetcher = fetch_pr,
 ) -> str | None:
-    here = cwd
-    for segment in _SEGMENT_SPLIT.split(command):
-        tokens = _tokens(segment)
-        while tokens and (
-            _ENV_ASSIGN.match(tokens[0]) or tokens[0] in _WRAPPERS or not tokens[0].lstrip("({$")
-        ):
-            tokens = tokens[1:]
-        if not tokens:
-            continue
-        tokens[0] = tokens[0].lstrip("({$")
-        if tokens[0] in ("cd", "Set-Location", "pushd"):
-            dirs = [t for t in tokens[1:] if t not in ("-Path", "-LiteralPath")]
-            here = (here / dirs[0]).resolve() if dirs else here
-            continue
-        exe = Path(tokens[0]).stem.lower()
+    for here, tokens in commands(command, cwd):
+        exe = executable(tokens)
         found: str | None = None
         if exe == "git":
-            target, i, config = here, 1, []
-            while i < len(tokens) and tokens[i].startswith("-"):
-                if tokens[i] == "-C" and i + 1 < len(tokens):
-                    target = (here / tokens[i + 1]).resolve()
-                if tokens[i] == "-c" and i + 1 < len(tokens):
-                    config.append(tokens[i + 1])
-                i += 2 if tokens[i] in _GIT_OPTS_WITH_VALUE else 1
-            if tokens[i : i + 1] == ["push"]:
-                found = _push_reason(tokens[i + 1 :], target, is_main, branch, config)
+            target, config, args = git_invocation(tokens, here)
+            if args[:1] == ["push"]:
+                found = _push_reason(args[1:], target, is_main, branch, config)
         elif exe == "gh":
             found = _gh_reason(tokens[1:], here, fetch)
         if found:
