@@ -37,7 +37,6 @@ Task 02); nenhum desses módulos importa este.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
@@ -93,6 +92,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.profile_para
 from financial_forecasting.shared.domain.services.path_identifier import (
     validate_path_identifier,
 )
+from financial_forecasting.shared.domain.services.sha256_hex import validate_sha256_hex
 
 if TYPE_CHECKING:
     from financial_forecasting.shared.domain.value_objects.preregistration_hash import (
@@ -150,7 +150,6 @@ REALIZED_SOURCES: Final[tuple[str, ...]] = ("training_grid_target_return",)
 SEEDLESS: Final = "seedless"
 """Grafia, no TOML, de um modelo sem seed (baselines; gravados com `None`)."""
 
-_SHA256_HEX: Final = re.compile(r"[0-9a-f]{64}")
 _CENTRAL_LEVEL: Final = 0.5
 
 
@@ -190,11 +189,6 @@ def require_implemented_rule(key: str, value: object) -> None:
 def _check_text(value: object, *, field: str) -> None:
     if not isinstance(value, str) or not value:
         raise ValueError(f"{field} must be a non-empty str, got {value!r}")
-
-
-def _check_sha256(value: object, *, field: str) -> None:
-    if not isinstance(value, str) or not _SHA256_HEX.fullmatch(value):
-        raise ValueError(f"{field} must be a lowercase sha256 hex of 64 characters, got {value!r}")
 
 
 def _check_texts(values: object, *, field: str) -> None:
@@ -242,7 +236,7 @@ class CohortReference:
     def __post_init__(self) -> None:
         """Identificador de caminho e sha256 hex minúsculo."""
         validate_path_identifier(self.cohort_id, field="cohort.cohort_id")
-        _check_sha256(self.cohort_hash, field="cohort.cohort_hash")
+        validate_sha256_hex(self.cohort_hash, field="cohort.cohort_hash")
 
 
 @dataclass(frozen=True)
@@ -259,7 +253,7 @@ class RealizedSource:
                 f"realized.source must be one of {list(REALIZED_SOURCES)} (the only sources "
                 f"the domain implements), got {self.source!r}"
             )
-        _check_sha256(self.dataset_fingerprint, field="realized.dataset_fingerprint")
+        validate_sha256_hex(self.dataset_fingerprint, field="realized.dataset_fingerprint")
 
 
 @dataclass(frozen=True)
