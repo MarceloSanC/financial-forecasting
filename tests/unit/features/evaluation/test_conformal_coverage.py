@@ -316,3 +316,76 @@ def test_seed_mean_refuses_mixed_horizon_variant_and_bad_seeds(
         ConformalCoverage.seed_mean(
             [one], horizon=1, variant=_V, expected_seeds=(1, 1), band_levels=_BANDS
         )
+
+
+# --- Checkpoint C das Tasks 09-15 (task-09-fix): as duas médias e as contagens --------
+
+
+def _crossed_report(make_series: SeriesFactory, *, seed: int, n: int) -> ConformalCoverageReport:
+    """n linhas, a primeira cruzada (L = 0,01 > U = -0,01), as outras com largura 0,04; y = 0."""
+    native = make_series([_SPREAD] * n, [0.0] * n)
+    lower = (0.01,) + (-0.02,) * (n - 1)
+    upper = (-0.01,) + (0.02,) * (n - 1)
+    series = _explicit(native, lower, upper, seed=seed)
+    return ConformalCoverage.evaluate(series, tolerance=_TOL, band_levels=_BANDS)
+
+
+def test_seed_mean_of_widths_crossings_and_nesting(make_series: SeriesFactory) -> None:
+    reports = [
+        _crossed_report(make_series, seed=1, n=2),  # MPIW 0,01; cruzado 1/2; PICP 1/2
+        _crossed_report(make_series, seed=2, n=4),  # MPIW 0,025; cruzado 1/4; PICP 3/4
+    ]
+    mean = ConformalCoverage.seed_mean(
+        reports, horizon=1, variant=_V, expected_seeds=(1, 2), band_levels=_BANDS
+    )
+    pair = mean.per_pair[0]
+    assert mean.n_mean == 3.0  # noqa: PLR2004
+    # MPIW: ponderado por n (Σ n·MPIW / Σ n) e a média simples por seed, lado a lado
+    assert math.isclose(pair.mpiw, (2 * 0.01 + 4 * 0.025) / 6, rel_tol=1e-12)
+    assert math.isclose(pair.mean_of_seed_mpiws, (0.01 + 0.025) / 2, rel_tol=1e-12)
+    assert pair.sd_of_seed_mpiws == pytest.approx(abs(0.025 - 0.01) / math.sqrt(2))
+    assert pair.mpiw_infinite is False
+    # cruzamento: c̄/n̄ e a média das taxas
+    assert pair.crossed_rate == 1.0 / 3.0
+    assert pair.mean_of_seed_crossed_rates == (0.5 + 0.25) / 2
+    assert pair.sd_of_seed_crossed_rates == pytest.approx(0.25 / math.sqrt(2))
+    # aninhamento (um par só: a violação é o cruzamento)
+    assert mean.nesting_violation_rate == 1.0 / 3.0
+    assert mean.mean_of_seed_nesting_rates == (0.5 + 0.25) / 2
+    assert mean.sd_of_seed_nesting_rates == pytest.approx(0.25 / math.sqrt(2))
+    # PICP: c̄_dentro/n̄ e a média com o dp conferido
+    assert pair.picp == ((1 + 3) / 2) / 3.0
+    assert pair.mean_of_seed_picps == (0.5 + 0.75) / 2
+    assert pair.sd_of_seed_picps == pytest.approx(0.25 / math.sqrt(2))
+
+
+def test_seed_mean_mpiw_is_infinite_if_any_seed_is(make_series: SeriesFactory) -> None:
+    finite = _crossed_report(make_series, seed=1, n=2)
+    native = make_series([_SPREAD] * 2, [0.0, 0.0])
+    infinite = ConformalCoverage.evaluate(
+        _explicit(native, (-math.inf, -0.02), (0.02, 0.02), seed=2),
+        tolerance=_TOL,
+        band_levels=_BANDS,
+    )
+    mean = ConformalCoverage.seed_mean(
+        [finite, infinite], horizon=1, variant=_V, expected_seeds=(1, 2), band_levels=_BANDS
+    )
+    pair = mean.per_pair[0]
+    assert (pair.mpiw, pair.mpiw_infinite) == (math.inf, True)
+    assert (pair.mean_of_seed_mpiws, pair.sd_of_seed_mpiws) == (math.inf, None)
+
+
+def test_report_counts_must_agree_with_rates(make_series: SeriesFactory) -> None:
+    report = _crossed_report(make_series, seed=1, n=4)
+    assert (report.nesting_violation_count, report.nesting_violation_rate) == (1, 0.25)
+    for changes in ({"nesting_violation_count": None}, {"nesting_violation_count": 2}):
+        with pytest.raises(ValueError, match="nesting_violation_count"):
+            dataclasses.replace(report, **changes)  # type: ignore[arg-type]
+    pair = report.per_pair[0]
+    for changes, name in (
+        ({"covered_count": 5}, "covered_count"),
+        ({"covered_count": 2}, "covered_count"),
+        ({"crossed_count": 0}, "crossed_count"),
+    ):
+        with pytest.raises(ValueError, match=name):
+            dataclasses.replace(report, per_pair=(dataclasses.replace(pair, **changes),))  # type: ignore[arg-type]

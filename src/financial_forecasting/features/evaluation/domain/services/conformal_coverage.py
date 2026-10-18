@@ -18,7 +18,9 @@ relatório carrega `EMPIRICAL_COVERAGE_LABEL` (I9), validado na construção.
 
 `seed_mean` agrega as seeds completas de um (horizonte, variante): c̄, n̄, a estimativa
 c̄/n̄ (a base da banda, ADR 6.5.0006 item 2) e, ao lado, a média das coberturas por seed
-com o dp amostral (o literal do doc §4.9 e do ADR 0.0.0008 item 9).
+com o dp amostral (o literal do doc §4.9 e do ADR 0.0.0008 item 9). PICP, MPIW,
+cruzamento e aninhamento também saem "pelas duas médias" (concept 7.2 §4): a contada
+(c̄/n̄; MPIW ponderado por n) e a média simples por seed com o dp.
 """
 
 from __future__ import annotations
@@ -115,6 +117,28 @@ class ConformalCoverageReport:
             )
         if not self.applicable and (self.per_pair or self.nesting_violation_rate is not None):
             raise ValueError("a non-applicable report has no per_pair and no nesting rate")
+        if self.applicable:
+            self._check_counts()
+
+    def _check_counts(self) -> None:
+        """Contagens presentes, em [0, n] e coerentes com as taxas (aninhamento, par)."""
+        n = self.n_evaluated
+        count = self.nesting_violation_count
+        if count is None or not 0 <= count <= n or self.nesting_violation_rate != count / n:
+            raise ValueError(
+                f"nesting_violation_count={count!r} and nesting_violation_rate="
+                f"{self.nesting_violation_rate!r} must agree over n_evaluated={n}"
+            )
+        for pair in self.per_pair:
+            for name, value, rate in (
+                ("covered_count", pair.covered_count, pair.picp),
+                ("crossed_count", pair.crossed_count, pair.crossed_rate),
+            ):
+                if not 0 <= value <= n or rate != value / n:
+                    raise ValueError(
+                        f"pair ({pair.lower_level}, {pair.upper_level}): {name}={value} and its "
+                        f"rate {rate} must agree over n_evaluated={n}"
+                    )
 
 
 @dataclass(frozen=True)
@@ -141,7 +165,11 @@ class ConformalSeedMeanPair:
     sd_of_seed_picps: float | None
     mpiw: float  # Σ n_s·MPIW_s / Σ n_s (infinito se alguma seed for infinita)
     mpiw_infinite: bool
+    mean_of_seed_mpiws: float  # média simples dos MPIW por seed (infinita se alguma for)
+    sd_of_seed_mpiws: float | None  # None com uma seed ou com MPIW infinito
     crossed_rate: float  # c̄_cruzado / n̄
+    mean_of_seed_crossed_rates: float
+    sd_of_seed_crossed_rates: float | None
     lower_tail: ConformalSeedMeanTail
     upper_tail: ConformalSeedMeanTail
 
@@ -158,6 +186,8 @@ class ConformalSeedMeanCoverage:
     n_mean: float | None  # n̄ = média dos n_evaluated das seeds usadas
     per_pair: tuple[ConformalSeedMeanPair, ...]
     nesting_violation_rate: float | None  # c̄_violação / n̄
+    mean_of_seed_nesting_rates: float | None = None
+    sd_of_seed_nesting_rates: float | None = None
     label: str = EMPIRICAL_COVERAGE_LABEL
 
     def __post_init__(self) -> None:
@@ -346,12 +376,9 @@ class ConformalCoverage:
             if [(p.lower_level, p.upper_level) for p in report.per_pair] != pairs:
                 raise ValueError("reports of the seed mean must hold the same pairs")
         n_mean = math.fsum(r.n_evaluated for r in used) / len(used)
-        nesting = [r.nesting_violation_count for r in used]
-        nesting_mean = (
-            math.fsum(c for c in nesting if c is not None) / len(used) / n_mean
-            if all(c is not None for c in nesting)
-            else None
-        )
+        # o relatório aplicável valida a contagem (presente e coerente com a taxa)
+        nesting_mean = math.fsum(r.nesting_violation_count or 0 for r in used) / len(used) / n_mean
+        mean_nesting, sd_nesting = _mean_sd([r.nesting_violation_rate or 0.0 for r in used])
         return ConformalSeedMeanCoverage(
             horizon=horizon,
             variant=variant,
@@ -363,6 +390,8 @@ class ConformalCoverage:
                 _mean_pair(used, k, n_mean, horizon, band_levels) for k in range(len(pairs))
             ),
             nesting_violation_rate=nesting_mean,
+            mean_of_seed_nesting_rates=mean_nesting,
+            sd_of_seed_nesting_rates=sd_nesting,
         )
 
 
@@ -400,7 +429,9 @@ def _mean_pair(
     pairs = [r.per_pair[k] for r in used]
     first = pairs[0]
     mean_picp, sd_picp = _mean_sd([p.picp for p in pairs])
+    mean_crossed, sd_crossed = _mean_sd([p.crossed_rate for p in pairs])
     infinite = any(p.mpiw_infinite for p in pairs)
+    mean_mpiw, sd_mpiw = (math.inf, None) if infinite else _mean_sd([p.mpiw for p in pairs])
     total_n = math.fsum(r.n_evaluated for r in used)
     mpiw = (
         math.inf
@@ -416,7 +447,11 @@ def _mean_pair(
         sd_of_seed_picps=sd_picp,
         mpiw=mpiw,
         mpiw_infinite=infinite,
+        mean_of_seed_mpiws=mean_mpiw,
+        sd_of_seed_mpiws=sd_mpiw,
         crossed_rate=math.fsum(p.crossed_count for p in pairs) / len(pairs) / n_mean,
+        mean_of_seed_crossed_rates=mean_crossed,
+        sd_of_seed_crossed_rates=sd_crossed,
         lower_tail=_mean_tail([p.lower_tail for p in pairs], n_mean, horizon, band_levels),
         upper_tail=_mean_tail([p.upper_tail for p in pairs], n_mean, horizon, band_levels),
     )
