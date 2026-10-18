@@ -133,32 +133,3 @@ key = "src/financial_forecasting/features/analytics_store/domain/value_objects/r
 motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
 issue = 160
 
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/shared/domain/value_objects/cohort_hash.py::CohortHash"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/shared/domain/value_objects/config_signature.py::ConfigSignature"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/shared/domain/value_objects/dataset_content_fingerprint.py::DatasetContentFingerprint"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/shared/domain/value_objects/preregistration_hash.py::PreregistrationHash"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/shared/domain/value_objects/run_id.py::RunId"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
-key = "src/financial_forecasting/shared/domain/value_objects/split_fingerprint.py::SplitFingerprint"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160

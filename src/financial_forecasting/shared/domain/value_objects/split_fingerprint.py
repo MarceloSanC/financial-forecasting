@@ -16,6 +16,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from financial_forecasting.shared.domain.services.sha256_hex import validate_sha256_hex
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -32,6 +34,10 @@ class SplitFingerprint:
     """
 
     value: str
+
+    def __post_init__(self) -> None:
+        # o construtor cru também passa por aqui, não só a factory `compute` (#160)
+        validate_sha256_hex(self.value, field="SplitFingerprint.value")
 
     @classmethod
     def compute(
