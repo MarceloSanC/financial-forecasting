@@ -101,7 +101,8 @@ class CalibrationSet:
             if target >= test_start:
                 raise ValueError(
                     f"{name}.target_timestamp: {point.target_timestamp!r} is not before "
-                    f"test_start {self.test_start!r} (embargo)"
+                    f"test_start {self.test_start!r} (sem sobreposição com o teste; "
+                    "o gap do embargo vem do FoldSplit)"
                 )
 
     def _check_pair(self) -> None:
