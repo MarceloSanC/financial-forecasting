@@ -43,7 +43,8 @@ from financial_forecasting.features.evaluation.domain.services.confirmatory_scor
 from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
     Preregistration,
 )
-from tests.unit.features.evaluation._preregistration_payload import valid_payload
+from tests.unit.features.evaluation._conformal_parameters import conformal_block
+from tests.unit.features.evaluation._preregistration_payload import r2_payload, valid_payload
 from tests.unit.features.evaluation._profile_parameters import profile_block
 from tests.unit.features.evaluation._scorecard_factory import (
     REFERENCE,
@@ -565,4 +566,23 @@ def test_mismatch_on_a_divergent_break_alpha() -> None:
     stored.manifest["parameters"]["profile_parameters"]["stationarity"]["break_alpha"] = 0.01  # type: ignore[index]
     with pytest.raises(PreregistrationMismatchError) as raised:
         evidence_from_generation(prereg=plan, command=command, generation=stored.generation())
+    assert raised.value.field == MismatchField.PARAMETERS
+
+
+@pytest.mark.unit
+def test_check_manifest_refuses_a_divergent_conformal_block() -> None:
+    """Stage 7.2 Task 16: o bloco `[conformal]` entra na comparação dos parâmetros (I16)."""
+    plan = Preregistration.from_mapping(r2_payload())
+    command = refresh_command_from(plan, REFERENCE)
+    stored = make_stored(plan)
+    block = conformal_block()
+    block["nexcp_rho"] = 0.95
+    stored.manifest["parameters"]["conformal_parameters"] = block  # type: ignore[index]
+    with pytest.raises(PreregistrationMismatchError) as raised:
+        evidence_from_generation(prereg=plan, command=command, generation=stored.generation())
+    assert raised.value.field == MismatchField.PARAMETERS
+    absent = make_stored(plan)
+    absent.manifest["parameters"]["conformal_parameters"] = None  # type: ignore[index]
+    with pytest.raises(PreregistrationMismatchError) as raised:
+        evidence_from_generation(prereg=plan, command=command, generation=absent.generation())
     assert raised.value.field == MismatchField.PARAMETERS

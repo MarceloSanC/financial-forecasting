@@ -80,6 +80,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
     BootstrapScheme,
     validate_bootstrap_parameters,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.conformal_parameters import (
+    ConformalParameters,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.profile_parameters import (
     ProfileParameters,
 )
@@ -165,6 +168,7 @@ class RefreshParameters:
     monte_carlo_seed: int
     mcs_block_sensitivities: tuple[str, ...]
     profile_parameters: ProfileParameters | None
+    conformal_parameters: ConformalParameters | None  # Stage 7.2; None sem bloco [conformal]
 
     def __post_init__(self) -> None:
         """Presença, estrutura e os validadores públicos donos (ADR `6_4_0006` item 2)."""
@@ -199,6 +203,13 @@ class RefreshParameters:
                 f"profile_parameters must be a ProfileParameters or None, got "
                 f"{self.profile_parameters!r}"
             )
+        if self.conformal_parameters is not None and not isinstance(
+            self.conformal_parameters, ConformalParameters
+        ):
+            raise ValueError(
+                f"conformal_parameters must be a ConformalParameters or None, got "
+                f"{self.conformal_parameters!r}"
+            )
 
     def as_mapping(self) -> dict[str, object]:
         """Os parâmetros em forma JSON-safe (enums pelo valor, tuplas como listas)."""
@@ -219,6 +230,11 @@ class RefreshParameters:
             "mcs_block_sensitivities": list(self.mcs_block_sensitivities),
             "profile_parameters": (
                 None if self.profile_parameters is None else self.profile_parameters.as_payload()
+            ),
+            "conformal_parameters": (
+                None
+                if self.conformal_parameters is None
+                else self.conformal_parameters.as_payload()
             ),
         }
 
@@ -258,6 +274,11 @@ class RefreshParameters:
                 if fields["profile_parameters"] is None
                 else ProfileParameters.from_mapping(fields["profile_parameters"])
             ),
+            conformal_parameters=(
+                None
+                if fields["conformal_parameters"] is None
+                else ConformalParameters.from_mapping(fields["conformal_parameters"])
+            ),
         )
 
 
@@ -277,6 +298,7 @@ _PARAMETER_KEYS = (
     "monte_carlo_seed",
     "mcs_block_sensitivities",
     "profile_parameters",
+    "conformal_parameters",
 )
 
 

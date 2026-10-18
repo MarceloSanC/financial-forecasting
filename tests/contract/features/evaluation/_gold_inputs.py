@@ -116,6 +116,7 @@ PARAMETERS = RefreshParameters(
     monte_carlo_seed=128,
     mcs_block_sensitivities=("h", "sqrt_T"),
     profile_parameters=profile_parameters(),  # forma da r1: todo builder de perfil com linhas
+    conformal_parameters=None,
 )
 FINGERPRINT = DatasetContentFingerprint(value="e3" * 32)
 GRID_TRIMMED_PREFIX = 3

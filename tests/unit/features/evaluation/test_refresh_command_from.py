@@ -27,8 +27,11 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
 from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
     Preregistration,
 )
+from tests.unit.features.evaluation._conformal_parameters import conformal_parameters
 from tests.unit.features.evaluation._preregistration_payload import (
     TEST_FINGERPRINT,
+    r1_payload,
+    r2_payload,
     valid_payload,
 )
 from tests.unit.features.evaluation._profile_parameters import (
@@ -93,6 +96,7 @@ def test_command_parameters_from_plan() -> None:
         "monte_carlo_seed": 128,
         "mcs_block_sensitivities": ["h", "sqrt_T"],
         "profile_parameters": None,
+        "conformal_parameters": None,
     }
 
 
@@ -155,3 +159,24 @@ def test_profile_parameters_from_the_plan() -> None:
     assert refresh_command_from(
         amended, "test_plan-r1-0123456789ab"
     ).parameters.profile_parameters == (profile_parameters())
+
+
+# --- Stage 7.2 Task 16: bloco `[conformal]` na derivação única ----------------------
+
+
+@pytest.mark.unit
+def test_r0_and_r1_derive_no_conformal_parameters() -> None:
+    assert _COMMAND.parameters.conformal_parameters is None
+    r1 = Preregistration.from_mapping(r1_payload())
+    assert (
+        refresh_command_from(r1, "test_plan-r1-0123456789ab").parameters.conformal_parameters
+        is None
+    )
+
+
+@pytest.mark.unit
+def test_plan_with_block_derives_the_block() -> None:
+    r2 = Preregistration.from_mapping(r2_payload())
+    parameters = refresh_command_from(r2, "test_plan-r2-0123456789ab").parameters
+    assert parameters.conformal_parameters == conformal_parameters()
+    assert parameters.conformal_parameters is r2.conformal

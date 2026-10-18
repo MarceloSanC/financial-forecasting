@@ -45,6 +45,10 @@ from financial_forecasting.features.evaluation.domain.value_objects.quality_chec
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
     DatasetContentFingerprint,
 )
+from tests.unit.features.evaluation._conformal_parameters import (
+    conformal_block,
+    conformal_parameters,
+)
 from tests.unit.features.evaluation._profile_parameters import (
     profile_block,
     profile_parameters,
@@ -67,6 +71,7 @@ _VALID: dict[str, object] = {
     "monte_carlo_seed": 128,
     "mcs_block_sensitivities": ("h", "sqrt_T"),
     "profile_parameters": None,
+    "conformal_parameters": None,
 }
 _PARAMETERS = RefreshParameters(**_VALID)  # type: ignore[arg-type]
 _NOW = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
@@ -772,3 +777,33 @@ def test_profile_settings_use_the_primary_estimator(
     assert settings.tolerance == parameters.degeneracy_tolerance
     assert settings.min_violations == parameters.min_violations
     assert settings.profile_parameters is parameters.profile_parameters
+
+
+# --- Stage 7.2 Task 16: `conformal_parameters` ---------------------------------------
+
+
+@pytest.mark.unit
+def test_manifest_without_conformal_parameters_is_corrupt() -> None:
+    """C10: manifesto anterior à 7.2 (sem a chave) não lê, como na 6.6 D6."""
+    manifest = _manifest().as_mapping()
+    parameters = {k: v for k, v in manifest["parameters"].items() if k != "conformal_parameters"}  # type: ignore[union-attr]
+    with pytest.raises(GoldGenerationCorruptError, match="conformal_parameters"):
+        GoldGeneration.from_stored(
+            {**manifest, "parameters": parameters}, {}, partition=_manifest().partition
+        )
+
+
+@pytest.mark.unit
+def test_conformal_parameters_type_refused() -> None:
+    with pytest.raises(ValueError, match="conformal_parameters must be a ConformalParameters"):
+        _parameters(conformal_parameters=conformal_block())
+
+
+@pytest.mark.unit
+def test_as_mapping_round_trip_with_block() -> None:
+    parameters = _parameters(conformal_parameters=conformal_parameters())
+    mapping = parameters.as_mapping()
+    assert mapping["conformal_parameters"] == conformal_block()
+    assert RefreshParameters.from_mapping(mapping) == parameters
+    assert RefreshParameters.from_mapping(json.loads(json.dumps(mapping))) == parameters
+    assert _PARAMETERS.as_mapping()["conformal_parameters"] is None
