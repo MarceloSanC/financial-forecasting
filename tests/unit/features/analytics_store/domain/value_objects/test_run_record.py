@@ -23,7 +23,7 @@ def _record(**overrides: object) -> RunRecord:
         "parent_sweep_id": "sweep-1",
         "feature_set_name": "all_features",
         "config_signature": "c" * 64,
-        "split_fingerprint": "s" * 64,
+        "split_fingerprint": "d" * 64,
         "fold": "fold-0",
         "seed": 42,
         "model_version": "tft_v1",
@@ -76,3 +76,33 @@ def test_fingerprints_are_stored_as_strings() -> None:
 
     assert isinstance(record.config_signature, str)
     assert isinstance(record.split_fingerprint, str)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("field", ["run_id", "config_signature", "split_fingerprint"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("run-1", id="label"),
+        pytest.param("A" * 64, id="uppercase"),
+        pytest.param("a" * 63, id="63-chars"),
+        pytest.param(None, id="none"),
+    ],
+)
+def test_hash_fields_must_be_sha256_hex(field: str, value: object) -> None:
+    """#160: o construtor cru valida a forma dos hashes da 1.4 (não só os use cases)."""
+    with pytest.raises(ValueError, match=rf"^{field} must be a lowercase sha256 hex"):
+        _record(**{field: value})
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("schema_version", [0, -1, True, 1.0, "1", None])
+def test_schema_version_must_be_a_positive_int(schema_version: object) -> None:
+    """#160: `schema_version` é inteiro >= 1 (bool e float recusados)."""
+    with pytest.raises(ValueError, match="schema_version must be an int >= 1"):
+        _record(schema_version=schema_version)
+
+
+@pytest.mark.unit
+def test_schema_version_accepts_later_versions() -> None:
+    assert _record(schema_version=2).schema_version == 2  # noqa: PLR2004

@@ -39,20 +39,21 @@ from tests.fakes.shared.in_memory_clock import FIXED_NOW, FakeClock
 
 _SILVER = "silver"
 _TWO_ROWS = 2
+_RUN_1 = "1" * 64  # sha256 hex: o `RunRecord` recusa rótulo (#160)
 
 
 def _repo(tmp_path: Path) -> ParquetAnalyticsRepository:
     return ParquetAnalyticsRepository(data_root=tmp_path, clock=FakeClock())
 
 
-def _run_record(run_id: str = "run-1", *, parent_sweep_id: str | None = "sweep-1") -> RunRecord:
+def _run_record(run_id: str = _RUN_1, *, parent_sweep_id: str | None = "sweep-1") -> RunRecord:
     return RunRecord(
         run_id=run_id,
         asset="AAPL",
         parent_sweep_id=parent_sweep_id,
         feature_set_name="fs_all",
-        config_signature="cfg-hash",
-        split_fingerprint="split-hash",
+        config_signature="c" * 64,
+        split_fingerprint="d" * 64,
         fold="fold-0",
         seed=42,
         model_version="tft_v1",
@@ -61,7 +62,7 @@ def _run_record(run_id: str = "run-1", *, parent_sweep_id: str | None = "sweep-1
 
 
 def _fact_oos_row(
-    run_id: str = "run-1", *, quantile_level: float = 0.5, value_raw: float = 0.01
+    run_id: str = _RUN_1, *, quantile_level: float = 0.5, value_raw: float = 0.01
 ) -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -82,7 +83,7 @@ def _fact_oos_row(
     }
 
 
-def _fact_failures_row(run_id: str = "run-1") -> dict[str, object]:
+def _fact_failures_row(run_id: str = _RUN_1) -> dict[str, object]:
     return {
         "schema_version": 1,
         "run_id": run_id,
@@ -104,7 +105,7 @@ def test_mapper_fills_created_at_utc_via_clock() -> None:
     row = run_record_to_row(_run_record(), clock=FakeClock())
 
     assert row["created_at_utc"] == FIXED_NOW.isoformat()
-    assert row["run_id"] == "run-1"
+    assert row["run_id"] == _RUN_1
     assert "created_at_utc" not in {f for f in RunRecord.__dataclass_fields__}
 
 
@@ -446,7 +447,7 @@ def test_valid_stale_temp_next_to_partition_is_not_read(tmp_path: Path) -> None:
 
     rows = repo.read(layer=_SILVER, table="fact_oos_predictions")
 
-    assert [row["run_id"] for row in rows] == ["run-1"]
+    assert [row["run_id"] for row in rows] == [_RUN_1]
 
 
 def test_first_write_removes_stale_temp_files(tmp_path: Path) -> None:
