@@ -1,4 +1,4 @@
-"""Os gold builders: os cinco da Stage 6.4 e os oito de perfil da 6.6.
+"""Os gold builders: os cinco da Stage 6.4, os oito de perfil da 6.6 e os dois conformais da 7.2.
 
 Satisfazem o port `GoldBuilder` (ADR 6.4.0001).
 

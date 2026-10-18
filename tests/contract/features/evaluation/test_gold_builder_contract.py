@@ -27,6 +27,12 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.christoffersen_monte_carlo import (  # noqa: E501
     ChristoffersenMonteCarloGoldBuilder,
 )
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.conformal_corrections import (  # noqa: E501
+    ConformalCorrectionsGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.conformal_coverage import (  # noqa: E501
+    ConformalCoverageGoldBuilder,
+)
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.differential_acf import (  # noqa: E501
     DifferentialAcfGoldBuilder,
 )
@@ -101,6 +107,8 @@ BUILDERS: dict[str, Callable[[], GoldBuilder]] = {
     "differential_acf": DifferentialAcfGoldBuilder,
     "differential_breaks": DifferentialBreaksGoldBuilder,
     "loss_differentials": LossDifferentialsGoldBuilder,
+    "conformal_corrections": ConformalCorrectionsGoldBuilder,  # Stage 7.2
+    "conformal_coverage": ConformalCoverageGoldBuilder,
 }
 
 

@@ -571,6 +571,8 @@ def test_wire_dependencies_wires_refresh_gold(tmp_path: Path) -> None:
         "quality_checks",
         "calibration_table",
         "christoffersen_monte_carlo",
+        "conformal_corrections",
+        "conformal_coverage",
         "differential_acf",
         "differential_breaks",
         "dm_profiles",

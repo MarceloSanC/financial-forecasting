@@ -449,6 +449,8 @@ def test_schema_tables_complete() -> None:
         "gold_differential_acf",
         "gold_differential_breaks",
         "gold_loss_differentials",
+        "gold_conformal_corrections",  # Stage 7.2
+        "gold_conformal_coverage",
     }
     assert set(CONFIRMATORY_TABLES) == set(GOLD_SCHEMAS) - {"gold_quality_checks"}
     for name, schema in GOLD_SCHEMAS.items():
