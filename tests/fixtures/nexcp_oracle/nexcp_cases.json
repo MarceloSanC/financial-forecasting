@@ -14,6 +14,20 @@
    "calib_thresh = np.sort(R)[ind_thresh]",
    "calib_thresh = np.inf"
   ],
+  "weight_lines": [
+   {
+    "line": "weights=rho**(np.arange(n,0,-1))",
+    "cell_ids": [
+     "24b14d78"
+    ]
+   },
+   {
+    "line": "weights = np.r_[weights,1]",
+    "cell_ids": [
+     "2c69b8d6"
+    ]
+   }
+  ],
   "numpy_version": "2.5.0",
   "python_version": "3.12.13",
   "seed": 20261017,
@@ -37,7 +51,7 @@
   "margin": 1e-09,
   "discarded_cases": 3,
   "weights": "w_i = rho**(n+1-i), i = 1 oldest; test point weight 1",
-  "generated_at": "2026-10-17",
+  "generated_at": "2026-10-18",
   "command": "uv run --no-sync python tests/fixtures/nexcp_oracle/generate_nexcp_cases.py --zip /scratch/nonexchangeable_conformal.zip --sha256 <zip_sha256> --out tests/fixtures/nexcp_oracle/nexcp_cases.json"
  },
  "cases": [

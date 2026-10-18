@@ -11,7 +11,10 @@ O que faz:
 
 1. recusa o zip se o sha256 calculado ≠ `--sha256` (e grava esse valor);
 2. localiza o único notebook com `def splitCP_LS(` e a célula que o define, e
-   AFIRMA que cada linha transcrita do bloco de limiar está no código da célula;
+   AFIRMA que cada linha transcrita do bloco de limiar está no código da célula; e
+   afirma também as duas linhas dos pesos: `weights=rho**(np.arange(n,0,-1))` numa
+   célula do mesmo notebook (a simulação) e `weights = np.r_[weights,1]` na do
+   `splitCP_LS` (o peso 1 do ponto de teste);
 3. gera escores |N(0, 1)| (semente 20261017) para n ∈ {20, 49, 100, 252},
    rho ∈ {1,0; 0,99; 0,95; 0,9} e alpha ∈ {0,02; 0,1; 0,25}, com os pesos do NexCP
    w_i = rho^(n+1-i) (i = 1 o mais antigo) e o peso 1 do ponto de teste, e aplica a
@@ -54,6 +57,9 @@ TRANSCRIBED = (
     "calib_thresh = np.sort(R)[ind_thresh]",
     "calib_thresh = np.inf",
 )
+# Linhas dos pesos do NexCP, reproduzidas literalmente em `_cases`.
+GEOMETRIC_WEIGHTS = "weights=rho**(np.arange(n,0,-1))"
+TEST_POINT_WEIGHT = "weights = np.r_[weights,1]"
 
 
 def _sha256(data: bytes) -> str:
@@ -74,6 +80,33 @@ def _locate_cell(archive: zipfile.ZipFile) -> tuple[str, str, str]:
     if len(found) != 1:
         raise SystemExit(f"expected one cell defining splitCP_LS, found {len(found)}")
     return found[0]
+
+
+def _cells_with(archive: zipfile.ZipFile, notebook: str, line: str) -> list[str]:
+    """Ids das células de código do notebook cujas linhas contêm `line` (sem espaços nas pontas)."""
+    document = json.load(io.TextIOWrapper(archive.open(notebook), encoding="utf-8"))
+    return [
+        str(cell.get("id"))
+        for cell in document["cells"]
+        if cell["cell_type"] == "code"
+        and line in {text.strip() for text in "".join(cell["source"]).splitlines()}
+    ]
+
+
+def _check_weight_lines(
+    archive: zipfile.ZipFile, notebook: str, cell_id: str
+) -> list[dict[str, object]]:
+    """Afirma as duas linhas dos pesos contra o notebook e devolve onde estão."""
+    geometric = _cells_with(archive, notebook, GEOMETRIC_WEIGHTS)
+    if not geometric:
+        raise SystemExit(f"{GEOMETRIC_WEIGHTS!r} not in any cell of {notebook}")
+    appended = _cells_with(archive, notebook, TEST_POINT_WEIGHT)
+    if cell_id not in appended:
+        raise SystemExit(f"{TEST_POINT_WEIGHT!r} not in the splitCP_LS cell {cell_id}")
+    return [
+        {"line": GEOMETRIC_WEIGHTS, "cell_ids": geometric},
+        {"line": TEST_POINT_WEIGHT, "cell_ids": [cell_id]},
+    ]
 
 
 def _check_transcription(source: str) -> None:
@@ -120,7 +153,8 @@ def _cases() -> tuple[list[dict[str, object]], int]:
         for rho in RHOS:
             for alpha in ALPHAS:
                 R = np.abs(rng.standard_normal(n))
-                weights = np.r_[rho ** (n + 1 - np.arange(1, n + 1)), 1.0]
+                weights = rho ** (np.arange(n, 0, -1))  # GEOMETRIC_WEIGHTS
+                weights = np.r_[weights, 1]  # TEST_POINT_WEIGHT
                 threshold, mass, before = _authors_threshold(R, weights, alpha)
                 near = [m for m in (mass, before) if m is not None]
                 if any(abs(m - (1 - alpha)) < MARGIN for m in near):
@@ -153,6 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"zip sha256 {digest} != --sha256 {args.sha256}")
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         notebook, cell_id, source = _locate_cell(archive)
+        weight_lines = _check_weight_lines(archive, notebook, cell_id)
     _check_transcription(source)
     cases, discarded = _cases()
     document = {
@@ -164,6 +199,7 @@ def main(argv: list[str] | None = None) -> int:
             "cell_id": cell_id,
             "function": "splitCP_LS",
             "transcribed_lines": list(TRANSCRIBED),
+            "weight_lines": weight_lines,
             "numpy_version": np.__version__,
             "python_version": sys.version.split()[0],
             "seed": SEED,
