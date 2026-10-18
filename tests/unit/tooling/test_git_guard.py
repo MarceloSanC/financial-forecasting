@@ -117,6 +117,21 @@ def test_cd_to_worktree_on_a_previous_line_is_honored() -> None:
     assert _blocked(f"cd {WORKTREE}\ncd {MAIN}\ngit switch -c feat/99-x")
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        f"(cd {WORKTREE}) ; git checkout -b feat/99-x",
+        f"(cd {WORKTREE} && git status); git checkout -b feat/99-x",
+        f"pushd {WORKTREE}; popd; git checkout -b feat/99-x",
+        "if ($true) { git checkout -b feat/99-x }",
+        "if (Test-Path x) { git switch -c feat/99-x }",
+        "foreach ($b in 'x') { git checkout -b feat/99-x }",
+    ],
+)
+def test_subshell_cd_and_powershell_blocks_do_not_hide_the_branch_change(command: str) -> None:
+    assert _blocked(command)
+
+
 def test_shares_the_segmentation_rule_with_publish_guard() -> None:
     import publish_guard  # noqa: PLC0415 — carregado do mesmo diretório que o git_guard
 

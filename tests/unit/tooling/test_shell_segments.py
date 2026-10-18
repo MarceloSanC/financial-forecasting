@@ -81,6 +81,44 @@ def test_cd_updates_the_effective_directory_and_is_not_emitted() -> None:
     assert list(ss.commands("cd", HERE)) == []
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "(cd sub) ; git status",
+        "(cd sub && git log); git status",
+        "$(cd sub); git status",
+        "pushd sub; popd; git status",
+        "Push-Location sub; Pop-Location; git status",
+    ],
+)
+def test_cd_in_subshell_or_popped_does_not_leak_to_later_commands(command: str) -> None:
+    assert list(ss.commands(command, HERE))[-1] == (HERE, ["git", "status"])
+
+
+def test_cd_inside_subshell_applies_until_the_close() -> None:
+    got = list(ss.commands("(cd sub && git log $(git rev-parse HEAD)); git status", HERE))
+    assert got[0][0] == (HERE / "sub").resolve()
+    assert got[-1] == (HERE, ["git", "status"])
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "if ($true) { git push }",
+        "if (Test-Path x) {git push}",
+        "foreach ($b in 'x') { git push }",
+        "} else { git push }",
+    ],
+)
+def test_powershell_block_after_control_keyword_is_the_command(command: str) -> None:
+    assert _argv(command) == [["git", "push"]]
+
+
+def test_brace_outside_control_block_stays_an_argument() -> None:
+    (argv,) = _argv("gh api graphql -f query='mutation { x }'")
+    assert argv[:6] == ["gh", "api", "graphql", "-f", "query='mutation", "{"]
+
+
 def test_unbalanced_quotes_fall_back_to_whitespace_split() -> None:
     assert _argv('git commit -m "x') == [["git", "commit", "-m", '"x']]
 
