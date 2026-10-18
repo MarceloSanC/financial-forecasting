@@ -19,17 +19,44 @@ import math
 from dataclasses import dataclass
 from datetime import datetime
 from fractions import Fraction
+from typing import TypeGuard
 
 _HALF = Fraction(1, 2)
 
 
+def is_number(value: object) -> TypeGuard[int | float]:
+    """`int`/`float` não-`bool`: a única escrita do teste de "número" do `inference`."""
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
 def exact_level(level: float) -> Fraction:
     """Decimal mais curto do nível, exato: `Fraction(repr(level))`; recusa bool e não finito."""
-    if isinstance(level, bool) or not isinstance(level, int | float):
+    if not is_number(level):
         raise ValueError(f"level must be a finite number, got {level!r}")
     if not math.isfinite(level):
         raise ValueError(f"level must be finite, got {level!r}")
     return Fraction(repr(level))
+
+
+def check_symmetric_pair(lower: float, upper: float) -> tuple[Fraction, Fraction]:
+    """Par simétrico exato (τ_lo + τ_hi = 1 pelo decimal mais curto) e τ_lo ∈ (0; 0,5).
+
+    Regra única do par no `inference`: o VO, o calibrador e o `validate_command` a
+    chamam e só prefixam a mensagem com o próprio campo.
+    """
+    low, high = exact_level(lower), exact_level(upper)
+    if low + high != 1:
+        raise ValueError(
+            f"({lower!r}, {upper!r}) is not a symmetric pair (lower + upper != 1 exactly)"
+        )
+    if not 0 < low < _HALF:
+        raise ValueError(f"lower level {lower!r} is not in (0, 0.5)")
+    return low, high
+
+
+def parse_instant(value: str, field: str) -> datetime:
+    """ISO 8601 com fuso, como `datetime`; inválido ou sem fuso → `ValueError` com o campo."""
+    return _instant(value, field)
 
 
 def _instant(value: str, field: str) -> datetime:
@@ -58,7 +85,7 @@ class CalibrationPoint:
         _instant(self.target_timestamp, "target_timestamp")
         for field in ("lower", "upper", "realized"):
             value = getattr(self, field)
-            if isinstance(value, bool) or not isinstance(value, int | float):
+            if not is_number(value):
                 raise ValueError(f"{field}: {value!r} is not a number")
             if not math.isfinite(value):
                 raise ValueError(f"{field}: {value!r} is not finite")
@@ -106,12 +133,7 @@ class CalibrationSet:
                 )
 
     def _check_pair(self) -> None:
-        low = exact_level(self.lower_level)
-        high = exact_level(self.upper_level)
-        if low + high != 1:
-            raise ValueError(
-                f"lower_level/upper_level: ({self.lower_level!r}, {self.upper_level!r}) "
-                "is not a symmetric pair (lower + upper != 1 exactly)"
-            )
-        if not 0 < low < _HALF:
-            raise ValueError(f"lower_level: {self.lower_level!r} is not in (0, 0.5)")
+        try:
+            check_symmetric_pair(self.lower_level, self.upper_level)
+        except ValueError as exc:
+            raise ValueError(f"lower_level/upper_level: {exc}") from None
