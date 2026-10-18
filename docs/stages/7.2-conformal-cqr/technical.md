@@ -1698,4 +1698,129 @@ coincidiu com o engine do Docker sob carga (vários gates de outras sessões ati
 **Direção sugerida:** tratar como provável instabilidade de ambiente e reconfirmar no
 próximo gate completo planejado da Stage. Se repetirem, investigar fora desta Stage.
 
+### 2026-10-18 — [decision] gates — plano de gates da Stage pela ADR 0.0.0059 (Tasks 07–23) — Claude (Opus 5.5)
+**Contexto:** com a Stage em execução (Tasks 01–06 commitadas), o develop trocou a
+regra de gates (PR #188, [ADR 0.0.0059](../../adr/0_0_0059-planned-full-gate-budget-per-stage.md);
+fonte única: [RUNBOOK §Gates em camadas](../../RUNBOOK-STAGE-LIFECYCLE.md#gates-em-camadas)),
+e a branch foi rebaseada sobre o `origin/develop` (HEAD `ab3b574`). O plano entra
+aqui, e não no §1: o §1–§6 está congelado desde `stage 7.2: technical approved`
+(`ef4ccb7`), e o `check_technical_postexec.py` reprova diff fora da §7. **Esta
+entrada prevalece** sobre as linhas `make check-task …`, `make check-block …`,
+`make check $PAR` e "Checkpoint C (T2 …)" das Verificações das Tasks 07–23.
+**Pergunta:** onde rodam os `make check` completos dos 17 commits que faltam?
+**Opções:**
+- A — manter o plano aprovado (T3 nas Tasks 07, 15 e 19, T2 na 18, check-block nos
+  Checkpoints C): seis ou mais gates completos, acima do orçamento.
+- B — três pontos (depois da 07, depois da 19 e na saída); por Task, só os testes da
+  Task e os gates específicos que ela toca ✅ recomendada.
+**Decisão:** B, a regra que o usuário pediu: gate completo só onde é essencial.
+
+**Por Task (T1 da ADR 0.0.0059).** Antes de todo commit: `run sh -c "$PRE; uv run
+--no-sync pytest <arquivos de teste que a Task escreveu ou alterou> -q --no-cov"`, e os
+hooks do pre-commit (ruff-format, ruff, mypy, commit-msg) no próprio commit. Extras,
+só quando a Task toca o que eles guardam (todos rodam em segundos, sem `make`):
+
+| Task toca… | Roda também | Tasks |
+|---|---|---|
+| `tests/architecture/`, `scripts/arch_baseline.toml` ou o port-coverage | os testes de arquitetura alterados + `python scripts/check_port_coverage.py` | 07, 15 |
+| `.importlinter` | `uv run --no-sync lint-imports` + `pytest tests/architecture/test_import_contracts.py` + a contagem de arestas da Task 19 | 19 |
+| VO novo em `domain/value_objects/` | `python scripts/check_vo_invariants.py` | 09, 11, task-02-fix |
+| `src/` do evaluation | `pytest tests/architecture/test_evaluation_validation_single_owner.py --no-cov` | 09, 11, 12, 13, 14, 16, 17, 18, 19 |
+| `tests/unit/features/evaluation/` | `pytest tests/architecture/test_unit_evaluation_purity.py --no-cov` | 09, 11, 12, 13, 14, 16, 17, 19 |
+| `tests/architecture/test_stage_7_2_regression_guards.py` | esse arquivo | 15, 19 |
+
+Esses extras não são gate completo: cobrem o ponto cego do T1 (que não roda
+`tests/architecture/`) só para o gate que a Task pode quebrar. `make check-task` e
+`make check-block` saem da rotina; `check-task` só com motivo concreto registrado em §7.
+
+**Gates completos (`make check $PAR`, T3) — 3 pontos, a saída incluída:**
+
+| # | Depois de | Por quê |
+|---|---|---|
+| A | Task 07 | fecha o grupo **dependências e scripts de gate**. É o primeiro gate completo depois do rebase de 136 commits, com o `uv.lock` mesclado automaticamente, o `arch_baseline.toml` do develop com seções novas e quatro gates de arquitetura novos (`check_vo_invariants`, `check_use_case_deps`, `check_domain_determinism`, `check_schema_literals`). Cobre também o `fix` da Task 02 (abaixo), o adapter `mapie` e a reversão do par do ADR 6.1.0005. Esperar a Task 19 deixaria doze Tasks construídas sobre um lock ou baseline possivelmente quebrado |
+| B | Task 19 | fecha o grupo **contratos entre slices e composition root**: o port do consumidor lido pelo `refresh_gold` (15), `GOLD_SCHEMAS`/`CONFIRMATORY_TABLES` e os builders registrados no composition root (18), o construtor do `RefreshGold`, a aresta nova no `.importlinter` e o wiring do `CalibrateConformal` (19). Esperar a saída deixaria o e2e (20) e a Etapa G montados sobre um wiring não verificado |
+| C | saída (Passo 10) | gate de saída, antes do `git push` que abre o PR (§3) |
+
+Nenhuma reordenação: 15, 18 e 19, as Tasks de risco do segundo grupo, já são
+contíguas e terminam no ponto B. A saída de cada ponto é colada nesta §7. Ponto
+vermelho → commit `fix(<escopo>): … [7.2/task-NN-fix]` antes da próxima Task.
+
+**Os `make check` das Tasks 05 e 06 não valem mais.** Rodaram antes do rebase,
+sobre outro `develop`, e não contam no orçamento. As duas falhas da Task 06
+(`[finding]` acima) são reconfirmadas no ponto A.
+
+**Checkpoint C** continua por bloco (depois de 08, 12, 15, 19 e 22), como revisão do
+diff por subagente, **sem** gate de suíte.
+
+**Ambiente (inalterado):** gate completo como `--name ff-gate-158`, um por vez,
+`--cpus 6 --memory 8g --memory-swap 8g`, `PYTEST_PAR='-n 4 --dist loadgroup'`, log em
+arquivo montado; volume `financial-forecasting_ff72-venv`; só aspas simples dentro de
+`sh -c "…"`.
+**Razão:** ADR 0.0.0059 itens 1–6. O orçamento fica em 3, e cada ponto do meio fecha
+um grupo cuja quebra invalidaria as Tasks seguintes.
+
+### 2026-10-18 — [deviation] task-02-fix — `CalibrationPoint` sem `__post_init__` reprova o gate novo de VO — Claude (Opus 5.5)
+**Contexto:** o develop trouxe o `check_vo_invariants.py` (#61/#160): todo
+`@dataclass(frozen=True)` em `domain/value_objects/` precisa de `__post_init__`. Sobre
+o HEAD rebaseado (`ab3b574`), o script reprova
+`inference/domain/value_objects/calibration_set.py::CalibrationPoint` (L46). A Task 02
+pôs as recusas por ponto (finitude, timestamps) no `CalibrationSet`.
+**O que muda:** um commit `fix(inference): CalibrationPoint valida os próprios campos
+[7.2/task-02-fix]` **antes da Task 07**. Arquivos:
+`src/financial_forecasting/features/inference/domain/value_objects/calibration_set.py`
+e `tests/unit/features/inference/test_conformal_embargo.py`. O `CalibrationPoint`
+ganha `__post_init__` com as regras de um ponto: valor finito e timestamp ISO com
+fuso. O `CalibrationSet` fica com as regras entre pontos e contra o teste (ordem,
+repetição, embargo, par). As mensagens continuam nomeando o campo. Um teste novo
+constrói o ponto inválido direto, sem passar pelo set, e as asserções existentes de
+`test_conformal_embargo.py` não mudam. Não vale o marcador `# vo-invariant: none`,
+porque o ponto tem invariante. Verificação: os testes da Task e
+`python scripts/check_vo_invariants.py`; o ponto A cobre o resto.
+**Por que ficou abaixo do limiar de pergunta:** é conformidade com um gate que entrou
+no develop, sem contrato novo. A Task 02 nasceu antes da regra.
+
+### 2026-10-18 — [deviation] Tasks 09, 11, 12, 13, 14, 16–19 — premissas do evaluation depois do rebase — Claude (Opus 5.5)
+**Contexto:** conferi cada Task restante contra os arquivos que o develop mudou
+(`8a2df7c..972e571`): `preregistration.py`, `toml_preregistration_source.py`,
+`preregistration_hash.py`, `series_assembly.py`, `dtos/refresh_gold.py`, os testes do
+refresh, `arch_baseline*` e `pyproject.toml`.
+**Seguem válidas, sem mudança:**
+- os nomes que o technical cita (`CoverageSeries`, `is_at_or_below`,
+  `is_inside_closed`, `pair_nominal`, `is_symmetric_pair`, `DegeneracyGate`,
+  `WilsonBand`);
+- as regras privadas do `SeriesAssembly` que a Task 13 extrai (o develop só trocou a
+  validação de `window_deficits` no `_check_call`);
+- as construções de `RefreshParameters` listadas na Task 16 (os mesmos sete
+  arquivos) e as duas de `RefreshGold` em `test_refresh_gold_use_case.py`;
+- `_ALL_TABLES` e `all(generation.tables[name] …)` em `test_refresh_gold.py:126/453`
+  (Task 18);
+- a lista `[r0, r1]` de `test_every_revision_hash_quoted` (l. 195, Task 22);
+- "As 27 arestas de runtime" em LAYOUT §7 l. 311 (Task 19: 27 → 28);
+- a lista literal `["ConformalBackend", "Hasher"]` e a entrada temporária no
+  baseline (Task 07 reverte só a entrada `ConformalBackend`; o "sem diferença
+  contra `$BASE`" vale com o `$BASE` novo).
+
+**O que muda nas Tasks:**
+- **Dono único das regras do evaluation** (`test_evaluation_validation_single_owner.py`,
+  #118/#167). O código novo do evaluation (09, 11, 12, 14, 16, 17, 18, 19) valida
+  inteiro por `is_int`/`validate_int_at_least` (`_integer.py`), número por
+  `is_real_number`/`is_finite_number` (`_finite_number.py`) e ordem estrita de
+  timestamps por `check_strictly_increasing` (`_timestamps.py`). Nunca se escreve
+  `isinstance(x, bool)` ao lado de `isinstance(x, int | float)`. O `nexcp_rho` do
+  `ConformalParameters` (11) passa por `is_real_number`. Os arquivos das listas
+  fechadas não mudam: são imports de módulos existentes.
+- **Task 12:** o `preregistration.py` não tem mais `_check_int_at_least` nem
+  `_check_sha256`; o bloco `[conformal]` usa `validate_int_at_least` e
+  `validate_sha256_hex`, se precisar. Os testes de hash que constroem
+  `PreregistrationHash` cru usam hex válido, porque o VO agora valida no
+  `__post_init__` (#160).
+- **VOs novos (09, 11)** têm `__post_init__` por desenho (`ConformalPairLimits`,
+  `ConformalCoverageSeries`, `ConformalParameters`). Um VO auxiliar sem invariante
+  leva `# vo-invariant: none — <motivo>`.
+- **`check_use_case_deps`:** o `RefreshGold.__init__` recebe o port
+  `ConformalCalibration` (19), nunca o `CalibrateConformal`. O plano já previa isso;
+  agora há gate.
+**Por que ficou abaixo do limiar de pergunta:** nenhuma assinatura de contrato da
+Stage muda. São regras de dono único e de VO que o develop passou a impor.
+
 <!-- END: post-execution -->
