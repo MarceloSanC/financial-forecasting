@@ -1291,6 +1291,9 @@ grep -n "Errata (2026-10-06)" docs/adr/5_4_0006-explicit-train-fitted-target-nor
   inclui "direção sugerida" e Stage candidata.
 - `[deviation]` — ajuste pequeno aplicado vs. o plano original; corpo
   diz o que mudou e por que ficou abaixo do threshold de perguntar.
+- `[measurement]` — evidência que o plano manda colar aqui (tempo medido,
+  saída de mutação, prova manual, execução real, auditoria de testes),
+  sem decisão nem desvio.
 
 ### 2026-10-06 — [measurement] task-04 — mutação obrigatória: dropout ativo na predição a partir do checkpoint — Claude (Opus 5.5)
 **Contexto:** a Task 04 exige registrar aqui a mutação "forçar o dropout ativo na predição".
