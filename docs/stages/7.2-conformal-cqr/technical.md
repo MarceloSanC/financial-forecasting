@@ -1977,4 +1977,20 @@ fixada (Checkpoint C, C3-8 a/b) e o que fazer com uma linha `ok` do port sem cau
 da ADR 0.0.0053 item 3. A ordem numérica e o join por chave tiram da ordem de
 iteração qualquer efeito sobre o resultado.
 
+### 2026-10-18 — [finding] ponto B — `test_arch_check_changed` corre contra a injeção de violação — Claude (Opus 5.5)
+**Contexto:** a primeira rodada do ponto B (`make check` completo, depois da Task 19)
+falhou num teste só, `tests/unit/tooling/test_arch_check_changed.py::test_main_exit_codes`
+(7013 passed, 1 failed). O erro foi `FileNotFoundError` em
+`src/.../inference/domain/_arch_audit_taint.py`.
+**O que foi achado:** o `main()` do `check_changed.py` (#161) varre a árvore real de
+`src/`. O probe de violação do `test_import_contracts.py`, gravado e apagado em outro
+worker, sumiu entre o `rglob` e o `read_text`. O `tests/conftest.py` só põe no grupo
+`real-src-tree` os testes de `tests/architecture/**`, e esse arquivo fica em
+`tests/unit/tooling/`. O flake não vem da 7.2: já existe em `develop` e depende de
+como o xdist distribui os testes.
+**O que foi feito:** o arquivo declara `xdist_group(name="real-src-tree")`, que o
+`conftest` respeita. Os testes dele passam a rodar no mesmo worker que os de
+`tests/architecture/**`. O fix está no commit `fix(tooling)` `[7.2/--]`; o ponto B
+foi rodado de novo depois dele.
+
 <!-- END: post-execution -->
