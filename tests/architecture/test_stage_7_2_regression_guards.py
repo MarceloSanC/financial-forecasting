@@ -7,6 +7,10 @@ sob `TYPE_CHECKING` invisíveis ao import-linter, então a guarda lê o AST de t
 `features/inference/adapters/out/mapie/**` pode importar `conformal_backend`. As três
 formas são acusadas: `from ….conformal_backend import …`, `from ….ports.out import
 conformal_backend [as x]` e `importlib.import_module("…conformal_backend")`.
+
+ADR 7.2.0003 item 3: do `evaluation`, só o `RefreshGold` importa a `inference` em
+runtime, e só o módulo `calibrate_conformal`; o port `ConformalCalibration` o anota
+só sob `TYPE_CHECKING`; DTOs, builders e domínio do `evaluation` nunca o importam.
 """
 
 from __future__ import annotations
@@ -149,3 +153,73 @@ def test_fake_guard_catches_a_reimplemented_calibrator() -> None:
     assert any("defines calibrate" in p for p in problems)
     assert any("validate_command" in p for p in problems)
     assert any("calibration_set_for" in p for p in problems)
+
+
+_EVALUATION = _SRC / "financial_forecasting/features/evaluation"
+_INFERENCE = "financial_forecasting.features.inference"
+
+
+def _inference_imports(source: str) -> list[tuple[str, bool]]:
+    """(módulo da `inference` importado, se está sob `if TYPE_CHECKING:`)."""
+    tree = ast.parse(source)
+    typing_only: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If) and ast.unparse(node.test).endswith("TYPE_CHECKING"):
+            typing_only.update(id(child) for child in ast.walk(node))
+    found: list[tuple[str, bool]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            modules = [node.module]
+        elif isinstance(node, ast.Import):
+            modules = [alias.name for alias in node.names]
+        else:
+            continue
+        found.extend(
+            (module, id(node) in typing_only)
+            for module in modules
+            if module == _INFERENCE or module.startswith(_INFERENCE + ".")
+        )
+    return found
+
+
+def _read(relative: str) -> str:
+    return (_EVALUATION / relative).read_text(encoding="utf-8")
+
+
+@pytest.mark.unit
+def test_evaluation_dtos_builders_and_domain_never_import_inference() -> None:
+    offenders = [
+        f"{path.relative_to(_EVALUATION).as_posix()}: {module}"
+        for folder in ("application/dtos", "adapters", "domain")
+        for path in sorted((_EVALUATION / folder).rglob("*.py"))
+        for module, _ in _inference_imports(path.read_text(encoding="utf-8"))
+    ]
+    assert offenders == []
+
+
+@pytest.mark.unit
+def test_conformal_calibration_port_imports_inference_only_for_typing() -> None:
+    found = _inference_imports(_read("application/ports/out/conformal_calibration.py"))
+    assert found
+    assert all(typing_only for _, typing_only in found), found
+
+
+@pytest.mark.unit
+def test_refresh_gold_imports_only_calibrate_conformal_from_inference() -> None:
+    found = _inference_imports(_read("application/use_cases/refresh_gold.py"))
+    assert {module for module, _ in found} == {_SUPPLIER}
+
+
+@pytest.mark.unit
+def test_inference_import_helper_sees_typing_blocks_and_plain_imports() -> None:
+    source = (
+        "from typing import TYPE_CHECKING\n"
+        "import financial_forecasting.features.inference.domain\n"
+        "if TYPE_CHECKING:\n"
+        "    from financial_forecasting.features.inference.application import x\n"
+        "from financial_forecasting.features.inferencex import y\n"
+    )
+    assert _inference_imports(source) == [
+        ("financial_forecasting.features.inference.domain", False),
+        ("financial_forecasting.features.inference.application", True),
+    ]

@@ -535,7 +535,9 @@ allow_indirect_imports = False
 #     `NewsArticle` do `FinbertSentimentModel` (`feature_engineering` ->
 #     `market_data`) e a anotação `TrainingGrid` (`modeling.domain`) do port
 #     `TrainingGridReader` de `evaluation` (Stage 6.4, ADR 6.4.0009; o real é o
-#     use case `ReadTrainingGrid` da `modeling`).
+#     use case `ReadTrainingGrid` da `modeling`) e a assinatura do port
+#     `ConformalCalibration` de `evaluation`, que anota o comando e o resultado do
+#     use case `CalibrateConformal` da `inference` (Stage 7.2, ADR 7.2.0003 item 3).
 #
 # Os seis slices estão no perímetro: `market_data` entrou na #95 com as suas 8
 # arestas de runtime declaradas e `evaluation` na Stage 6.1 com 1 (o VO
@@ -544,8 +546,10 @@ allow_indirect_imports = False
 # item 5); `inference` entrou na Stage 7.1 e a Task 09 trouxe as suas 5 (DTOs de
 # comando, chaves do probe, `PersistPredictionsCommand` e `QuantileForecast` — ADR
 # 7.1.0001); a #159 trouxe 6 `modeling -> feature_engineering` (o contrato de
-# leitura do dataset TFT, que antes cada use case redeclarava). Cada aresta de
-# runtime existente entra como exceção NOMEADA abaixo (33 hoje). Elas
+# leitura do dataset TFT, que antes cada use case redeclarava); a Stage 7.2 trouxe 1
+# de `evaluation` para `inference` (os DTOs de comando do `CalibrateConformal`
+# montados pelo `RefreshGold` — ADR 7.2.0003 item 3). Cada aresta de runtime
+# existente entra como exceção NOMEADA abaixo (34 hoje). Elas
 # não são "ok": são o débito medido, e a lista encolhe conforme as issues de
 # fronteira fecham. Aresta nova entre estes seis slices reprova o build — que é
 # o ponto.
@@ -672,6 +676,17 @@ ignore_imports =
     financial_forecasting.features.inference.application.use_cases.run_inference -> financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe
     financial_forecasting.features.inference.application.use_cases.run_inference -> financial_forecasting.features.analytics_store.application.use_cases.persist_predictions
     financial_forecasting.features.inference.application.use_cases.run_inference -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
+    # -- evaluation -> inference (aresta de DADOS: DTOs de comando, Stage 7.2)
+    # O `RefreshGold` chama o benchmark conformal pelo port do consumidor
+    # `ConformalCalibration` (satisfeito pelo use case `CalibrateConformal`, #93) e
+    # monta o `CalibrateConformalCommand` com os `ConformalUnitInput`/
+    # `ConformalPointInput` do fornecedor; o resultado é só de tipo (TYPE_CHECKING)
+    # e é mapeado para os registros do `evaluation` num único lugar. Nenhum serviço
+    # do calibrador cruza. Exceção do MÓDULO `refresh_gold`, não do slice: outro
+    # módulo de `evaluation` que importe o use case reprova (caso
+    # `other-evaluation-module-imports-calibrate-conformal`).
+    # ADR 7.2.0003 item 3 / ADR 0.0.0053 item 3.
+    financial_forecasting.features.evaluation.application.use_cases.refresh_gold -> financial_forecasting.features.inference.application.use_cases.calibrate_conformal
 # `error` é o detector de EXCEÇÃO MORTA: quando uma issue de fronteira remover
 # uma aresta, o ignore correspondente deixa de casar e o build cobra a remoção
 # da linha. É o que faz esta lista encolher sozinha em vez de virar sedimento.

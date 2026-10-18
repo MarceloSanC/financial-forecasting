@@ -181,6 +181,9 @@ from financial_forecasting.features.feature_engineering.domain.services.feature_
 from financial_forecasting.features.inference.adapters.out.filesystem.json_inference_manifest import (  # noqa: E501
     JsonInferenceManifest,
 )
+from financial_forecasting.features.inference.application.use_cases.calibrate_conformal import (
+    CalibrateConformal,
+)
 from financial_forecasting.features.inference.application.use_cases.run_inference import (
     RunInference,
 )
@@ -964,6 +967,9 @@ def wire_dependencies(
             ConformalCorrectionsGoldBuilder(),
             ConformalCoverageGoldBuilder(),
         ),
+        # Stage 7.2 (ADR 7.2.0003 item 3): o real do port do consumidor
+        # `ConformalCalibration` é o use case `CalibrateConformal` do inference, puro
+        conformal_calibration=CalibrateConformal(),
     )
 
     # BC evaluation (Stage 6.5, Task 11): o scorecard confirmatório lê a geração viva

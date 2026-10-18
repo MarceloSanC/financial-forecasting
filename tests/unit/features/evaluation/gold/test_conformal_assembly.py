@@ -242,6 +242,13 @@ def test_two_non_integer_folds_stay_distinct() -> None:
     assert len(result.units) == 8  # noqa: PLR2004
 
 
+def test_units_ordered_by_numeric_fold_then_non_integer() -> None:
+    # C3-8 b: "10" depois de "2" (ordem do inteiro, não do texto); não inteiros no fim
+    result = _assemble(_cohort(folds=("x", "10", "2"), calib={}))
+    order = list(dict.fromkeys(u.fold_raw for u in result.units))
+    assert order == ["2", "10", "x"]
+
+
 def test_seed_none_is_undefined_with_reason() -> None:
     cohort = _cohort(seeds={"gbm": (None,), "tft": (None,)})
     result = _assemble(cohort, native={})
