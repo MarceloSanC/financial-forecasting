@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -94,6 +95,22 @@ def test_payload_with_utf8_bom_is_read(root: Path) -> None:
     result = _run("﻿" + json.dumps(_payload(str(edited))))
 
     assert result.returncode == af.EXIT_FEEDBACK
+
+
+def test_stderr_is_utf8_even_when_the_pipe_encoding_is_not(root: Path) -> None:
+    """No Windows o stderr de pipe é cp1252; o Claude Code decodifica UTF-8."""
+    edited = _write(root, _DOMAIN_FILE, "import time\nx = time.time()\n")
+
+    result = subprocess.run(
+        [sys.executable, str(_HOOK)],
+        input=json.dumps(_payload(str(edited))).encode(),
+        capture_output=True,
+        check=False,
+        env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+    )
+
+    assert result.returncode == af.EXIT_FEEDBACK
+    assert "regra e correção" in result.stderr.decode("utf-8")
 
 
 def test_clean_edit_is_silent(root: Path) -> None:

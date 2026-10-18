@@ -76,7 +76,11 @@ def main() -> int:
         return 0
     if message is None:
         return 0
-    print(message, file=sys.stderr)
+    # bytes UTF-8: no Windows o stderr de pipe sai em cp1252 e o Claude Code lê UTF-8 (o
+    # acento de "correção" e o travessão chegavam ao agente como U+FFFD)
+    sys.stderr.flush()
+    sys.stderr.buffer.write(f"{message}\n".encode())
+    sys.stderr.buffer.flush()
     return EXIT_FEEDBACK
 
 
