@@ -5,7 +5,7 @@ when-use: Ao ler o que o estudo confirmatório AAPL congelou (hipóteses, gate H
 keywords: [preregistration, pre-registro, aapl, confirmatory, h1-gate, h2, scorecard, anchor, blinding, espelho]
 status: accepted
 created_at: 2026-09-30
-updated_at: 2026-10-06
+updated_at: 2026-10-18
 ---
 
 # Pré-registro confirmatório AAPL — espelho
@@ -195,3 +195,50 @@ emenda é ancorada antes da Stage 8.1, que julga pela r1.
 - **Registro:** `config/preregistration/aapl_confirmatory-r1.anchor.toml` (fora do
   hash). A conferência é por conteúdo: o arquivo do plano na tag é byte-igual ao de
   HEAD.
+
+## Revisão r2 (emenda cega, Stage 7.2)
+
+- **Arquivo:** `config/preregistration/aapl_confirmatory-r2.toml`
+- **`preregistration_ref`:** `aapl_confirmatory-r2-f32ef5ebbbb8`
+- **Hash completo (sha256, floats codificados exatamente):**
+  `f32ef5ebbbb8e08a3bcc09c0cd2ea438be229cd20bffcaa03ff5bbc5b5b1d4a9`
+- **Emenda de:** `aapl_confirmatory-r1-bfa8028498ca` (`blind_status = "blinded"`).
+
+### O que muda
+
+Só o bloco `[conformal]`, que congela as regras do benchmark conformal da Stage 7.2
+(ADRs 7.2.0001-0005). Todo outro campo é igual ao da r1, e um teste confere isso
+campo a campo. Então o que julga H1, H2 e H3 não muda: o veredito nunca lê as
+tabelas conformais, que são só descritivas.
+
+- **Variante de registro:** split-CQR assimétrico sem pesos
+  (`split_cqr_asymmetric_unweighted_v1`). Cada cauda tem a sua correção, pelo posto
+  k = ⌈(n + 1)(1 − α)⌉ em aritmética exata
+  (`ceil_n_plus_1_one_minus_tail_alpha_exact_v1`). Quando k passa de n, a correção
+  é +∞ e não é cortada.
+- **Sensibilidade:** NexCP com pesos geométricos fixos, ρ = 0,99
+  (`nexcp_fixed_geometric_weights_v1`). O limiar é o menor escore cuja soma de pesos
+  alcança o nível (`smallest_score_cumulative_weight_ge_v1`).
+- **Unidade de calibração:** por fold, seed, horizonte, par e cauda
+  (`fold_seed_horizon_pair_tail_v1`), sobre o calib dedicado de cada fold.
+- **Vetor de base:** os quantis depois do guardrail (`guardrail`). A saída não é
+  rearranjada (`none`).
+- **Pares:** (0,02; 0,98), (0,1; 0,9) e (0,25; 0,75). O par primário é (0,1; 0,9),
+  o mesmo do gate H1.
+- **Comparação:** descritiva, sobre a série nativa do modelo inteiro com a mesma
+  máscara de degeneração, e média entre seeds pelas contagens
+  (`descriptive_model_full_native_mask_seed_mean_counts_v1`). O rótulo é de
+  cobertura empírica.
+- **Quantidades de perfil:** aninhamento dos pares, cruzamento, dispersão entre
+  seeds e a referência Beta de cada cauda
+  (`nesting_crossing_seed_dispersion_tail_beta_reference_v1`).
+
+Sob a r1, as duas tabelas conformais saem vazias. Sob a r2, elas saem cheias, e as
+tabelas da 6.4 à 6.6 e o veredito são os mesmos da r1.
+
+### Declaração de cegamento da emenda
+
+As regras acima vieram da literatura e dos registros `[decision]` da Stage 7.2, sem
+nenhum valor de desempenho à vista. Os testes da Stage usam silver sintético. A
+prova de geometria (Etapa G) lê só timestamps, partições, fingerprints e o
+manifesto da inferência. A emenda é ancorada antes da Stage 8.1, que julga pela r2.
