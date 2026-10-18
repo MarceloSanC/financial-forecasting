@@ -1675,4 +1675,27 @@ container alheio nunca é removido; um `ff-gate` parado (Exited) pode sair com
 `docker rm`. O `make check` da Task 05 rodou de novo, inteiro, sob a trava.
 **Razão:** é detalhe operacional e não muda nenhum contrato da Stage.
 
+### 2026-10-18 — [decision] ambiente — gate desta Stage com o nome `ff-gate-158` — Claude (Opus 5.5)
+**Contexto:** a fila da trava `ff-gate` ficou presa por dois containers de outras
+sessões (`ff-gate` e `ff-gate-160`), travados havia ~15 h com ~0 % de CPU. Esses
+containers não são removidos nem tocados.
+**O que foi decidido:** por orientação do orquestrador, os gates desta Stage rodam
+como `--name ff-gate-158`, com os mesmos limites (`--cpus 6 --memory 8g
+--memory-swap 8g`, `PYTEST_PAR='-n 4 --dist loadgroup'`), um por vez. Antes de cada
+um, confere-se que não há outro `ff-gate-158` e que nenhum gate alheio está ativo
+(CPU > 50 %). O log vai para um arquivo montado, porque o CLI do Docker perdeu a
+conexão com "unexpected EOF" várias vezes com o container ainda rodando.
+**Razão:** é detalhe operacional e não muda nenhum contrato da Stage.
+
+### 2026-10-18 — [finding] ambiente — 2 falhas fora do escopo no `make check` da Task 06 — Claude (Opus 5.5)
+**Contexto:** o `make check` da Task 06 (rodado antes da regra do ADR 0.0.0059)
+terminou com `2 failed, 6274 passed, 24 skipped`. As duas falhas foram
+`tests/contract/features/modeling/test_quantile_model_trainer_determinism.py::test_two_seeds_produce_identical_grids[defaults-5.3]`
+e `tests/e2e/test_cohort_cli.py::test_cohort_runner_end_to_end`. Elas ficam fora do
+slice `inference`, e a Task 06 não toca nenhum arquivo que elas importam. A execução
+coincidiu com o engine do Docker sob carga (vários gates de outras sessões ativos e
+"unexpected EOF" no CLI), e os tracebacks se perderam.
+**Direção sugerida:** tratar como provável instabilidade de ambiente e reconfirmar no
+próximo gate completo planejado da Stage. Se repetirem, investigar fora desta Stage.
+
 <!-- END: post-execution -->
