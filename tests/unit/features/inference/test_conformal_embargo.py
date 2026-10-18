@@ -95,8 +95,16 @@ def test_calib_target_one_second_before_test_start_accepted() -> None:
 @pytest.mark.parametrize("field", ["lower", "upper", "realized"])
 @pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
 def test_non_finite_value_refused(field: str, value: float) -> None:
-    with pytest.raises(ValueError, match=rf"points\[1\]\.{field}"):
-        _set(points=(_point(2), _point(3, **{field: value})))
+    # o ponto valida os próprios campos: recusa ao construir, antes de qualquer set
+    with pytest.raises(ValueError, match=rf"^{field}: .* is not finite"):
+        _point(3, **{field: value})
+
+
+@pytest.mark.parametrize("field", ["lower", "upper", "realized"])
+@pytest.mark.parametrize("value", [True, "0.1", None])
+def test_non_number_value_refused(field: str, value: object) -> None:
+    with pytest.raises(ValueError, match=rf"^{field}: .* is not a number"):
+        _point(3, **{field: value})  # type: ignore[arg-type]
 
 
 def test_non_symmetric_pair_refused() -> None:
@@ -135,8 +143,9 @@ def test_symmetric_pairs_of_the_plan_accepted() -> None:
     ],
 )
 def test_naive_or_invalid_timestamp_refused(field: str, patch: dict[str, str]) -> None:
-    with pytest.raises(ValueError, match=rf"points\[1\]\.{field}"):
-        _set(points=(_point(2), replace(_point(3), **patch)))
+    # o ponto recusa o próprio timestamp: o `replace` reconstrói e roda o __post_init__
+    with pytest.raises(ValueError, match=rf"^{field}: "):
+        replace(_point(3), **patch)
 
 
 @pytest.mark.parametrize("test_start", ["2024-01-10T21:00:00", "garbage"])
