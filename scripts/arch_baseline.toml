@@ -149,11 +149,6 @@ motivo = "VO congelado sem __post_init__: a invariante documentada não é checa
 issue = 160
 
 [[vo_invariants.allow]]
-key = "src/financial_forecasting/shared/domain/value_objects/dataset_fingerprint.py::DatasetFingerprint"
-motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
-issue = 160
-
-[[vo_invariants.allow]]
 key = "src/financial_forecasting/shared/domain/value_objects/preregistration_hash.py::PreregistrationHash"
 motivo = "VO congelado sem __post_init__: a invariante documentada não é checada na construção (factory, quando existe, não fecha o construtor cru); a validar na #160."
 issue = 160

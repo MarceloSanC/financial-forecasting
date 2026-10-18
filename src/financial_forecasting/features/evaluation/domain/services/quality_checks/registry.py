@@ -7,7 +7,8 @@ resultados; `is_blocking` é verdadeiro se e só se algum resultado é `ERROR` +
 O contexto é o que os checks leem — a montagem (`AssembledCohort`), a
 `PairedLossSeries` por horizonte (quando montada), as estimativas b̂_sb por horizonte
 (`BlockEstimate`, definidas ou com motivo), a tolerância de degeneração, o
-`DatasetFingerprint` e o `RealizedReturns` consumido. Nenhum check lê estado de outro.
+`DatasetContentFingerprint` da grade e o `RealizedReturns` consumido. Nenhum check lê
+estado de outro.
 """
 
 from __future__ import annotations

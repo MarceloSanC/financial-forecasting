@@ -285,7 +285,7 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 - **Nenhum import circular.** Se você precisar, é sinal de que a camada está errada.
 - **Shared não importa de features.** O fluxo é sempre: features → shared, nunca o contrário.
 - **Identidade só pelos VOs de `shared/domain/value_objects/`.** `RunId`, `ConfigSignature`,
-  `SplitFingerprint`, `DatasetFingerprint`, `CohortHash` (hash do spec do cohort
+  `SplitFingerprint`, `CohortHash` (hash do spec do cohort
   confirmatório, ADR 5.5.0001), `DatasetContentFingerprint` (conteúdo do grid de
   treino, ADR 5.5.0004) e `PreregistrationHash` (hash do pré-registro
   confirmatório, floats codificados exatamente, ADR 6.5.0001) são o único caminho de hash; fora deles ninguém
