@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import replace
 from fractions import Fraction
 
@@ -220,22 +221,47 @@ def _with(row: _Row, index: int, value: str) -> _Row:
 
 
 _GOOD = (_row(2), _row(3), _row(4), _row(5))
-_VO_REFUSALS = {
-    "empty": (),
-    "repeated-target": (_row(2), _row(3, target_day=3)),
-    "out-of-order-target": (_row(2), _row(4), _row(3)),
-    "decision-at-test-start": (_row(2), _with(_row(9), 0, _TEST_START)),
-    "target-at-test-start": (_row(2), _row(9, target_day=10)),
-    "non-finite-lower": (_row(2), _row(3, lower=math.nan)),
-    "non-finite-upper": (_row(2), _row(3, upper=math.inf)),
-    "non-finite-realized": (_row(2), _row(3, realized=-math.inf)),
-    "naive-timestamp": (_row(2), _with(_row(3), 1, "2024-01-04T21:00:00")),
-    "invalid-timestamp": (_row(2), _with(_row(3), 0, "garbage")),
+_VO_REFUSALS: dict[str, tuple[tuple[_Row, ...], str]] = {
+    "empty": ((), r"^lower_level/upper_level|^points: the calibration set is empty"),
+    "repeated-target": (
+        (_row(2), _row(3, target_day=3)),
+        r"^points\[1\]\.target_timestamp: .* not strictly after",
+    ),
+    "out-of-order-target": (
+        (_row(2), _row(4), _row(3)),
+        r"^points\[2\]\.target_timestamp: .* not strictly after",
+    ),
+    "decision-at-test-start": (
+        (_row(2), _with(_row(9), 0, _TEST_START)),
+        r"^points\[1\]\.decision_timestamp: .* not before test_start",
+    ),
+    "target-at-test-start": (
+        (_row(2), _row(9, target_day=10)),
+        r"^points\[1\]\.target_timestamp: .* embargo",
+    ),
+    "non-finite-lower": ((_row(2), _row(3, lower=math.nan)), r"^lower: nan is not finite"),
+    "non-finite-upper": ((_row(2), _row(3, upper=math.inf)), r"^upper: inf is not finite"),
+    "non-finite-realized": (
+        (_row(2), _row(3, realized=-math.inf)),
+        r"^realized: -inf is not finite",
+    ),
+    "naive-timestamp": (
+        (_row(2), _with(_row(3), 1, "2024-01-04T21:00:00")),
+        r"^target_timestamp: .* has no time zone",
+    ),
+    "invalid-timestamp": (
+        (_row(2), _with(_row(3), 0, "garbage")),
+        r"^decision_timestamp: 'garbage' is not an ISO 8601",
+    ),
 }
 
 
-@pytest.mark.parametrize("bad_rows", list(_VO_REFUSALS.values()), ids=list(_VO_REFUSALS))
-def test_vo_refusal_becomes_error_only_in_its_unit(bad_rows: tuple[_Row, ...]) -> None:
+@pytest.mark.parametrize(
+    ("bad_rows", "expected"), list(_VO_REFUSALS.values()), ids=list(_VO_REFUSALS)
+)
+def test_vo_refusal_becomes_error_only_in_its_unit(
+    bad_rows: tuple[_Row, ...], expected: str
+) -> None:
     good = (_unit_input(0, _GOOD), _unit_input(2, _GOOD[1:]))
     command = CalibrateConformalCommand(
         units=(good[0], _unit_input(1, bad_rows), good[1]),
@@ -246,7 +272,7 @@ def test_vo_refusal_becomes_error_only_in_its_unit(bad_rows: tuple[_Row, ...]) -
     rows = CalibrateConformal()(command).units
     bad = [r for r in rows if r.fold_index == 1]
     assert {r.status for r in bad} == {UnitStatus.ERROR}
-    assert all(r.reason for r in bad)  # a mensagem do VO, que nomeia o campo
+    assert all(re.search(expected, r.reason or "") for r in bad), [r.reason for r in bad]
     without = CalibrateConformal()(replace(command, units=good)).units
     assert [r for r in rows if r.fold_index != 1] == list(without)
     assert {r.status for r in without} == {UnitStatus.OK}
