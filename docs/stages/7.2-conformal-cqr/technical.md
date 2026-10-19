@@ -2237,4 +2237,92 @@ NexCP), F01, F02, F03, RG03, R06, S05, CV01, RG02 e S03. Todos morrem.
   ff-gate-158, `--cpus 6 --memory 8g`, HEAD `a81332f5`): `7198 passed, 25 skipped`,
   cobertura 99,10 % (mínimo 90 %), `EXIT=0`.
 
+### 2026-10-19 — [measurement] auditoria da Stage — cobertura por arquivo de `src/` tocado pela 7.2 (F1) — Claude (Opus 5.5)
+**Fonte:** o relatório `term-missing` do ponto C (`make check` em `a81332f5`). O
+`mapie_cqr_backend.py` foi medido de novo depois do fix `e364a338` (`[7.2/task-07-fix]`),
+com a suíte de contrato do backend: `28 0 100%`. Antes do fix ele estava em 89 %, com
+as linhas 44, 51 e 66 sem teste. Todos os arquivos estão em ≥ 90 %.
+
+| arquivo (`src/financial_forecasting/…`) | stmts | miss | cover |
+|---|---|---|---|
+| `composition_root.py` | 238 | 6 | 97 % |
+| `features/evaluation/adapters/out/duckdb/gold_builders/__init__.py` | 8 | 0 | 100 % |
+| `…/gold_builders/conformal_corrections.py` | 17 | 0 | 100 % |
+| `…/gold_builders/conformal_coverage.py` | 83 | 0 | 100 % |
+| `features/evaluation/application/dtos/confirmatory_scorecard.py` | 287 | 0 | 100 % |
+| `features/evaluation/application/dtos/gold_schema.py` | 29 | 0 | 100 % |
+| `features/evaluation/application/dtos/refresh_gold.py` | 497 | 0 | 100 % |
+| `features/evaluation/application/ports/out/conformal_calibration.py` | 4 | 0 | 100 % |
+| `features/evaluation/application/use_cases/refresh_gold.py` | 295 | 4 | 99 % |
+| `features/evaluation/domain/services/conformal_assembly.py` | 149 | 2 | 99 % |
+| `features/evaluation/domain/services/conformal_coverage.py` | 191 | 7 | 96 % |
+| `features/evaluation/domain/services/series_assembly.py` | 280 | 0 | 100 % |
+| `features/evaluation/domain/value_objects/conformal_coverage_series.py` | 52 | 2 | 96 % |
+| `features/evaluation/domain/value_objects/conformal_parameters.py` | 76 | 0 | 100 % |
+| `features/evaluation/domain/value_objects/coverage_series.py` | 77 | 0 | 100 % |
+| `features/evaluation/domain/value_objects/preregistration.py` | 501 | 21 | 96 % |
+| `features/inference/adapters/in/cli/inference_commands.py` | 15 | 0 | 100 % |
+| `features/inference/adapters/out/mapie/__init__.py` | 0 | 0 | 100 % |
+| `features/inference/adapters/out/mapie/mapie_cqr_backend.py` | 28 | 0 | 100 % (era 89 %) |
+| `features/inference/application/ports/out/conformal_backend.py` | 5 | 0 | 100 % |
+| `features/inference/application/use_cases/calibrate_conformal.py` | 151 | 0 | 100 % |
+| `features/inference/application/use_cases/run_inference.py` | 249 | 0 | 100 % |
+| `features/inference/domain/services/__init__.py` | 0 | 0 | 100 % |
+| `features/inference/domain/services/conformal_calibrator.py` | 118 | 2 | 98 % |
+| `features/inference/domain/services/reproduction_policy.py` | 53 | 0 | 100 % |
+| `features/inference/domain/value_objects/__init__.py` | 0 | 0 | 100 % |
+| `features/inference/domain/value_objects/calibration_set.py` | 87 | 0 | 100 % |
+
+### 2026-10-19 — [deviation] auditoria da Stage — hashes citados antes dos dois rebases (F2) — Claude (Opus 5.5)
+**Contexto:** a branch foi rebaseada duas vezes: na retomada do bloco 1 e antes da
+âncora da r2. Com isso, 7 hashes citados nesta §7 e no PR saíram da ancestralidade.
+**Preservação:** duas tags anotadas, publicadas no `origin`, preservam os históricos
+antigos:
+- `archive/158-7-2-pre-rebase-1`, em `dfb07733`;
+- `archive/158-7-2-pre-rebase-2`, em `2a7ee572`.
+
+**Equivalência.** Cada par foi conferido com `git log`: o mesmo subject, o antigo
+alcançável pela tag indicada e o novo ancestral do HEAD.
+
+| antigo | novo | tag que preserva o antigo | commit |
+|---|---|---|---|
+| `4389bec` | `ff0278e4` | `archive/158-7-2-pre-rebase-1` | `stage 7.2: conceptual approved` |
+| `ce772b8` | `c6ce060e` | `archive/158-7-2-pre-rebase-1` | `docs(roadmap): alinha a 7.2 ao concept …` |
+| `ef4ccb7` | `958a1c39` | `archive/158-7-2-pre-rebase-2` | `stage 7.2: technical approved` |
+| `ab3b574` | `d2cf54cc` | `archive/158-7-2-pre-rebase-2` | `feat(inference): port ConformalBackend …` |
+| `ee2a530` | `648f3c4c` | `archive/158-7-2-pre-rebase-2` | `feat(inference): MapieCqrBackend …` |
+| `2d79bba` | `7d63897c` | `archive/158-7-2-pre-rebase-2` | `fix(tooling): teste do check_changed …` |
+| `6867f18` | `2f55cd55` | `archive/158-7-2-pre-rebase-2` | `docs(stages): decisões e desvio do Checkpoint C …` |
+
+As entradas que citam o hash antigo ficam como estão (§7 append-only); esta tabela
+traduz cada um. No corpo do PR, `2d79bba` passa a `7d63897c`.
+
+### 2026-10-19 — [decision] auditoria da Stage — regra do par e do ρ duplicada entre os slices, travada por paridade (F6) — Claude (Opus 5.5)
+**O que foi decidido:** a regra do par simétrico e a do ρ ∈ (0, 1] ficam duplicadas.
+De um lado está o `ConformalParameters` do `evaluation`; do outro, o
+`check_symmetric_pair` e o `exact_rho` do `inference`.
+- O `bc-independence` proíbe o `evaluation` de importar o domain do `inference`.
+- Os testes `test_pair_rule_parity` e `test_rho_rule_parity` (em
+  `tests/integration/features/evaluation/test_conformal_catalog_matches_variants.py`)
+  travam a igualdade das decisões caso a caso, inclusive os casos de borda do C4-3.
+**Nota:** um helper numérico em `shared/` (par simétrico pelo decimal mais curto, ρ
+exato) eliminaria a duplicação. Ele fica como nota, sem issue, porque hoje só a 7.2
+usa a regra e a paridade já reprova qualquer divergência.
+
+### 2026-10-19 — [decision] auditoria da Stage — `full_series_folds` é diagnóstico do contrato, sem consumidor (F7) — Claude (Opus 5.5)
+**O que foi decidido:** `ConformalAssemblyResult.full_series_folds` (o fold que previu
+cada alvo da série nativa) faz parte do contrato da montagem pedido no CA13 e é
+testado lá, mas nenhum código de produção o lê.
+- O `RefreshGold` une os limites por `target_timestamp` (C3-8 b), não por fold.
+- Os alvos nativos sem unidade saem em `uncovered_targets` (C3-5).
+- O campo fica como diagnóstico, para quem investigar uma cobertura `undefined`.
+  Removê-lo exigiria mudar o CA13.
+
+### 2026-10-19 — [deviation] auditoria da Stage — reclassificação da entrada do flake do ponto B (F8) — Claude (Opus 5.5)
+**Nota append-only:** a entrada "[finding] ponto B — `test_arch_check_changed` corre
+contra a injeção de violação" deve ser lida como `[deviation]`. O fix
+(`7d63897c`, ex-`2d79bba`) mudou código fora do escopo da 7.2, no grupo xdist de um
+teste de tooling da #161, para destravar o gate. Por isso é um desvio de escopo, não
+um achado deixado para outra Stage. O cabeçalho original fica como está.
+
 <!-- END: post-execution -->
