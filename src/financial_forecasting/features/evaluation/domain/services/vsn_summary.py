@@ -8,8 +8,8 @@ fora das quatro famílias (calendário, alvo passado, índice relativo de tempo)
 variáveis com família `"none"`, sem linha de família. O rótulo é fixo: o peso da VSN não
 depende do horizonte e descreve quanto o modelo usa cada família.
 
-Seed ausente, decisões diferentes entre as seeds, folds sobrepostos ou variáveis
-diferentes deixam o resumo `undefined` com o motivo.
+Seed ausente, decisões diferentes entre as seeds, folds sobrepostos, variáveis
+diferentes ou feature da partição sem peso deixam o resumo `undefined` com o motivo.
 """
 
 from __future__ import annotations
@@ -112,6 +112,18 @@ class VsnSummary:
             return VsnSummaryReport(entries=(), status=UNDEFINED, reason=exc.reason)
         decisions = sorted(by_seed[seeds[0]])
         variables = sorted(by_seed[seeds[0]][decisions[0]])
+        missing = sorted(
+            feature
+            for features in parameters.partition.values()
+            for feature in features
+            if feature not in variables
+        )
+        if missing:  # C7-5: família sem peso não é "peso zero"
+            return VsnSummaryReport(
+                entries=(),
+                status=UNDEFINED,
+                reason=f"partition features without a vsn weight: {missing[:3]}",
+            )
         mean = {
             (decision, variable): math.fsum(by_seed[s][decision][variable] for s in seeds)
             / len(seeds)

@@ -22,7 +22,16 @@ pytestmark = pytest.mark.unit
 
 _D = [f"2024-01-{i + 2:02d}T00:00:00+00:00" for i in range(6)]
 # a partição sintética do helper: price = log_return, range_pct; technical = rsi_14, macd
-_VARIABLES = ("log_return", "range_pct", "rsi_14", "macd", "relative_time_idx")
+_VARIABLES = (
+    "log_return",
+    "range_pct",
+    "rsi_14",
+    "macd",
+    "sentiment_mean",
+    "pe_ratio",
+    "eps_growth",
+    "relative_time_idx",
+)
 
 
 def _weights(seed: int, decisions: list[str]) -> dict[str, dict[str, float]]:
@@ -88,7 +97,8 @@ def test_vsn_family_is_the_sum_of_its_variables() -> None:
         "sentiment",
         "fundamental",
     }
-    assert _entry(report, "family", "sentiment").p90 == 0.0  # nenhuma variável da família
+    sentiment = _entry(report, "family", "sentiment")  # uma variável só: a família é ela
+    assert sentiment.p50 == _entry(report, "variable", "sentiment_mean").p50
 
 
 def test_non_family_variables_reported_apart() -> None:
@@ -141,3 +151,21 @@ def test_incoherent_reductions_are_undefined(damage: str, message: str) -> None:
 def test_vsn_label_is_exact() -> None:
     assert VSN_LABEL == "horizonte-invariante; descreve quanto o modelo usa cada família"
     assert _summary().label == VSN_LABEL
+
+
+def test_partition_feature_without_a_vsn_weight_is_undefined() -> None:
+    """C7-5: feature da partição ausente das variáveis da VSN não é peso zero."""
+    reductions = [
+        VsnRunWeights(
+            run_id=r.run_id,
+            seed=r.seed,
+            fold_index=r.fold_index,
+            weights={
+                d: {v: w for v, w in row.items() if v != "pe_ratio"} for d, row in r.weights.items()
+            },
+        )
+        for r in _reductions()
+    ]
+    report = _summary(reductions)
+    assert report.status == "undefined"
+    assert "pe_ratio" in str(report.reason)
