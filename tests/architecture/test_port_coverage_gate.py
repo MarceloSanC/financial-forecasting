@@ -476,3 +476,31 @@ def test_protocol_outside_application_ports_out_is_not_a_port(
     _write(src, "features/x/application/ports/out/probe_fetcher.py", _PORT)
 
     assert [name for name, _ in gate.find_ports(src)] == ["ProbeFetcher"]
+
+
+def test_real_repo_attribution_ports_resolve(gate: ModuleType) -> None:
+    """Stage 7.3: os ports do consumidor da atribuição, com o real pela regra #93."""
+    ports: dict[tuple[str, str], Any] = _by_slice_and_name(gate)
+    contract = gate.CONTRACT_ROOT / "features" / "inference" / "test_attribution_ports_contract.py"
+    for name, fake, real in (
+        (
+            "CheckpointAttributionPredictor",
+            "InMemoryCheckpointAttributionPredictor",
+            "PredictTftAttributionFromCheckpoints",
+        ),
+        (
+            "PermutedPredictionPersister",
+            "InMemoryPermutedPredictionPersister",
+            "PersistPermutedPredictions",
+        ),
+        ("VsnWeightPersister", "InMemoryVsnWeightPersister", "PersistVsnWeights"),
+    ):
+        port = ports[("inference", name)]
+        assert port.adapters == (real,)
+        assert port.violation is None
+        assert port.contract is not None
+        assert port.contract.name == contract.name
+        assert _contract_satisfies(gate, contract, fake, real)
+        # nenhum homônimo noutro slice (o gate é cego a slice)
+        assert ("modeling", name) not in ports
+        assert ("evaluation", name) not in ports
