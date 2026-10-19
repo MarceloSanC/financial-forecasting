@@ -1014,6 +1014,10 @@ def test_blocked_inputs_have_no_h3_reports() -> None:
     assert blocked.h3_reports.is_empty
     with pytest.raises(ValueError, match="h3_reports must be empty in a BLOCKED generation"):
         dataclasses.replace(blocked, h3_reports=h3_reports_sample())
+    # C7-9: BLOCKED recusa os relatórios mesmo com o bloco [h3] presente (mutante D1)
+    with_h3 = dataclasses.replace(blocked, parameters=_parameters(h3_parameters=h3_parameters()))
+    with pytest.raises(ValueError, match="h3_reports must be empty in a BLOCKED generation"):
+        dataclasses.replace(with_h3, h3_reports=h3_reports_sample())
     with pytest.raises(ValueError, match="h3_reports must be a H3Reports"):
         dataclasses.replace(blocked, h3_reports=None)
 
