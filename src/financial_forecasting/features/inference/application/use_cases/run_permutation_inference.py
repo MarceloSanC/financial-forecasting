@@ -1,0 +1,631 @@
+"""Use case `RunPermutationInference` — predições de atribuição do candidato no silver (7.3).
+
+Para o cohort confirmatório congelado, por seed e por run do candidato TFT: pede ao
+fornecedor do `modeling` a identidade, as predições com a janela inteira do encoder de
+cada família trocada entre as decisões de teste do fold (K_p permutações por fold, a
+MESMA para toda seed e família) e os pesos da VSN; confere a identidade contra as linhas
+de teste da 7.1 pela política de reprodução; e grava as duas tabelas silver com manifesto
+write-ahead (concept 7.3 §1 item 6, I6, I7, I17, I19; ADR 7.3.0002 itens 2-3). Só
+predições: nada do realizado, nada de `evaluation` (cegamento, I9).
+
+Ordem por run (technical 7.3 §1): validação do comando → lock → probe → resolução →
+leitura do silver de teste do run → plano → predição (guardas do fornecedor) →
+identidade x silver pela política de reprodução da 7.2 → manifesto `started`
+(write-ahead) → `PersistPermutedPredictions` → `PersistVsnWeights` → manifesto
+`completed`. Falha antes do write-ahead não grava nada.
+
+Retomada (C8): run com entrada `completed` no manifesto é re-conferido por leitura —
+contagem por `(família, k)` igual à da identidade para cada família e k = 1..K_p, as
+colunas do plano e da partição iguais às do manifesto e as linhas da VSN iguais às
+gravadas — e não é predito de novo (status `verified`). Linhas no silver sem `completed`,
+ou contagem incompleta, erguem `PartialAttributionError`. A predição é por seed: uma seed
+com algum run a gravar é predita inteira, e só os runs não `completed` são gravados.
+
+Arestas de dados de runtime (declaradas no `bc-independence`, uma linha cada, exceção do
+MÓDULO; ADR 7.3.0002, ADR 0.0.0053 item 3): os DTOs de comando de
+`ResolveTftCheckpoints` e de `PredictTftAttributionFromCheckpoints`, as chaves do port do
+probe do `modeling`, os DTOs de comando dos dois escritores do `analytics_store` e o VO
+`QuantileForecast` (guardrail, ADR 4.3.0002).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from financial_forecasting.features.analytics_store.application.use_cases.persist_permuted_predictions import (  # noqa: E501
+    PermutedDecisionEntry,
+    PersistPermutedPredictionsCommand,
+)
+from financial_forecasting.features.analytics_store.application.use_cases.persist_vsn_weights import (  # noqa: E501
+    PersistVsnWeightsCommand,
+    VsnDecisionEntry,
+)
+from financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast import (
+    QuantileForecast,
+)
+from financial_forecasting.features.inference.application.ports.out.attribution_manifest import (
+    COMPLETED,
+    STARTED,
+)
+from financial_forecasting.features.inference.application.use_cases.run_inference import (
+    ArtifactChangedError,
+    CohortNotFrozenError,
+    InferenceEnvironmentError,
+    ReproductionError,
+    UnknownRunError,
+)
+from financial_forecasting.features.inference.domain.services.reproduction_policy import (
+    ReproductionMode,
+    compare_reproduction,
+    reproduction_mode,
+)
+from financial_forecasting.features.inference.domain.value_objects.permutation_plan import (
+    K_P,
+    PERMUTATION_ALGORITHM,
+    PERMUTATION_SEED,
+    FamilyPermutationPlan,
+)
+from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
+    CODE_KEYS,
+    DIRTY_KEY,
+    THREADS_KEY,
+)
+from financial_forecasting.features.modeling.application.use_cases.predict_tft_attribution_from_checkpoints import (  # noqa: E501
+    PredictTftAttributionCommand,
+)
+from financial_forecasting.features.modeling.application.use_cases.resolve_tft_checkpoints import (
+    ResolveTftCheckpointsCommand,
+)
+from financial_forecasting.shared.application.exceptions import ApplicationError
+from financial_forecasting.shared.domain.value_objects.cohort_hash import CohortHash
+from financial_forecasting.shared.domain.value_objects.family_partition_hash import (
+    FamilyPartitionHash,
+)
+
+if TYPE_CHECKING:
+    from financial_forecasting.features.inference.application.ports.out.attribution_manifest import (  # noqa: E501
+        AttributionManifest,
+    )
+    from financial_forecasting.features.inference.application.ports.out.checkpoint_attribution_predictor import (  # noqa: E501
+        CheckpointAttributionPredictor,
+    )
+    from financial_forecasting.features.inference.application.ports.out.checkpoint_resolver import (
+        CheckpointResolver,
+    )
+    from financial_forecasting.features.inference.application.ports.out.cohort_ledger import (
+        CohortLedger,
+    )
+    from financial_forecasting.features.inference.application.ports.out.permuted_prediction_persister import (  # noqa: E501
+        PermutedPredictionPersister,
+    )
+    from financial_forecasting.features.inference.application.ports.out.runtime_environment_probe import (  # noqa: E501
+        RuntimeEnvironmentProbe,
+    )
+    from financial_forecasting.features.inference.application.ports.out.silver_table_reader import (
+        SilverTableReader,
+    )
+    from financial_forecasting.features.inference.application.ports.out.vsn_weight_persister import (  # noqa: E501
+        VsnWeightPersister,
+    )
+    from financial_forecasting.features.modeling.application.dtos.cohort_spec import CohortSpec
+    from financial_forecasting.features.modeling.application.use_cases.predict_tft_attribution_from_checkpoints import (  # noqa: E501
+        AttributionRunPrediction,
+    )
+    from financial_forecasting.shared.application.ports.out.clock import Clock
+    from financial_forecasting.shared.application.ports.out.hasher import Hasher
+
+_SILVER = "silver"
+_FACT = "fact_oos_predictions"
+_PERMUTED = "fact_permuted_predictions"
+_VSN = "fact_vsn_weights"
+_TEST = "test"
+_IDENTITY_FAMILY = "none"
+_VERIFIED = "verified"
+_WRITTEN = "written"
+FINDING_TAG = "[finding]"
+_IGNORED_KEYS = frozenset({*CODE_KEYS, DIRTY_KEY})
+
+Row = Mapping[str, object]
+
+
+class PartialAttributionError(ApplicationError):
+    """Run com linhas de atribuição no silver sem `completed`, ou incompleto (C8)."""
+
+
+@dataclass(frozen=True)
+class RunPermutationInferenceCommand:
+    """DTO de entrada — o spec congelado, a partição de famílias, o lock e a justificativa."""
+
+    spec: CohortSpec
+    family_partition: Mapping[str, tuple[str, ...]]
+    break_stale_lock: bool = False
+    cross_environment_justification: str | None = None
+
+
+@dataclass(frozen=True)
+class AttributionRunOutcome:
+    """O que aconteceu com um run: gravado ou re-conferido, modo e contagens."""
+
+    run_id: str
+    fold_index: int
+    seed: int
+    status: str
+    reproduction_mode: str
+    identity_values_compared: int
+    max_abs_diff: float
+    max_normalized_diff: float
+    permuted_rows_written: int
+    permuted_rows_verified: int
+    vsn_rows_written: int
+    vsn_rows_verified: int
+
+
+@dataclass(frozen=True)
+class RunPermutationInferenceResult:
+    """DTO de saída — o cohort, o hash da partição e um desfecho por run."""
+
+    cohort_id: str
+    partition_hash: str
+    outcomes: tuple[AttributionRunOutcome, ...]
+
+
+def _float(value: object) -> float:
+    # célula numérica do silver; `float(str(v))` mudaria um np.float32 e o |d| = 0 bit a bit
+    return float(value)  # type: ignore[arg-type]
+
+
+def _validate_justification(justification: str | None) -> str | None:
+    """A justificativa de `--cross-environment`, quando dada, cita o `[finding]`."""
+    if justification is None:
+        return None
+    if not justification.strip() or FINDING_TAG not in justification:
+        raise ValueError(
+            "--cross-environment needs a non-empty justification citing the diagnosed "
+            f"{FINDING_TAG}"
+        )
+    return justification
+
+
+def _recorded_threads(environment: Mapping[str, str], cohort_id: str) -> int:
+    value = environment.get(THREADS_KEY)
+    try:
+        threads = int(str(value))
+    except ValueError:
+        threads = 0
+    if threads < 1:
+        raise InferenceEnvironmentError(
+            f"cohort {cohort_id}: recorded {THREADS_KEY}={value!r} is not a positive integer"
+        )
+    return threads
+
+
+def variable_families(
+    partition: Mapping[str, Sequence[str]], variables: Sequence[str]
+) -> dict[str, str]:
+    """Família de cada variável do encoder pela MESMA partição do `partition_hash` (C4-3).
+
+    Variável fora de toda família (calendário, alvo passado, índice relativo) é `"none"`.
+    """
+    family_of = {feature: family for family, features in partition.items() for feature in features}
+    return {variable: family_of.get(variable, _IDENTITY_FAMILY) for variable in variables}
+
+
+@dataclass(frozen=True)
+class _Context:
+    spec: CohortSpec
+    cohort_id: str
+    seed: int
+    partition: Mapping[str, tuple[str, ...]]
+    partition_hash: str
+    cohort_environment: Mapping[str, str]
+    current_environment: Mapping[str, str]
+    justification: str | None
+
+
+class RunPermutationInference:
+    """Grava as predições de atribuição de cada run do candidato do cohort congelado."""
+
+    def __init__(  # noqa: PLR0913 — os ports do consumidor (concept 7.3 §4)
+        self,
+        *,
+        resolver: CheckpointResolver,
+        predictor: CheckpointAttributionPredictor,
+        probe: RuntimeEnvironmentProbe,
+        permuted_persister: PermutedPredictionPersister,
+        vsn_persister: VsnWeightPersister,
+        silver: SilverTableReader,
+        ledger: CohortLedger,
+        manifest: AttributionManifest,
+        hasher: Hasher,
+        clock: Clock,
+    ) -> None:
+        self._resolver = resolver
+        self._predictor = predictor
+        self._probe = probe
+        self._permuted_persister = permuted_persister
+        self._vsn_persister = vsn_persister
+        self._silver = silver
+        self._ledger = ledger
+        self._manifest = manifest
+        self._hasher = hasher
+        self._clock = clock
+
+    def __call__(self, command: RunPermutationInferenceCommand) -> RunPermutationInferenceResult:
+        spec = command.spec
+        if not spec.is_frozen():
+            raise CohortNotFrozenError(
+                f"cohort {spec.name!r} r{spec.revision} is not frozen — nothing to attribute"
+            )
+        justification = _validate_justification(command.cross_environment_justification)
+        partition = {family: tuple(f) for family, f in command.family_partition.items()}
+        partition_hash = FamilyPartitionHash.compute(
+            hasher=self._hasher, feature_set_hash=spec.feature_set_hash, partition=partition
+        ).value
+        cohort_id = spec.cohort_id(
+            CohortHash.compute(hasher=self._hasher, payload=spec.hash_payload())
+        )
+
+        self._ledger.acquire_writer(break_stale=command.break_stale_lock)
+        try:
+            current = dict(self._probe.snapshot())
+            if current.get(DIRTY_KEY) == "true":
+                raise InferenceEnvironmentError(
+                    "tracked uncommitted changes in src/, uv.lock or the cohort file — commit first"
+                )
+            recorded_environment = self._ledger.environment(cohort_id)
+            if recorded_environment is None:
+                raise InferenceEnvironmentError(
+                    f"cohort {cohort_id} has no recorded environment — run the cohort first"
+                )
+            _recorded_threads(recorded_environment, cohort_id)
+            outcomes: list[AttributionRunOutcome] = []
+            for seed in spec.seeds:
+                context = _Context(
+                    spec=spec,
+                    cohort_id=cohort_id,
+                    seed=seed,
+                    partition=partition,
+                    partition_hash=partition_hash,
+                    cohort_environment=dict(recorded_environment),
+                    current_environment=current,
+                    justification=justification,
+                )
+                outcomes.extend(self._run_seed(context))
+        finally:
+            self._ledger.release_writer()
+        return RunPermutationInferenceResult(
+            cohort_id=cohort_id, partition_hash=partition_hash, outcomes=tuple(outcomes)
+        )
+
+    # -- seed ---------------------------------------------------------------------
+
+    def _recorded_runs(self, cohort_id: str) -> Mapping[str, Mapping[str, object]]:
+        document = self._manifest.recorded(cohort_id) or {}
+        runs = document.get("runs", {})
+        return runs if isinstance(runs, Mapping) else {}
+
+    def _run_seed(self, context: _Context) -> list[AttributionRunOutcome]:
+        spec = context.spec
+        resolution = self._resolver(ResolveTftCheckpointsCommand(spec=spec, seed=context.seed))
+        if resolution.cohort_id != context.cohort_id or resolution.seed != context.seed:
+            raise UnknownRunError(
+                f"resolver answered for cohort {resolution.cohort_id} seed {resolution.seed}, "
+                f"asked for {context.cohort_id} seed {context.seed}"
+            )
+        recorded = self._recorded_runs(context.cohort_id)
+        test_rows = self._test_rows(spec, {run.run_id for run in resolution.runs})
+        allowed: dict[str, str] = {}
+        donors_by_fold: dict[int, tuple[tuple[int, ...], ...]] = {}
+        verified: list[AttributionRunOutcome] = []
+        pending: set[str] = set()
+        for run in resolution.runs:
+            entry = recorded.get(run.run_id)
+            if entry is not None and entry.get("checkpoint_sha256") != run.checkpoint_sha256:
+                raise ArtifactChangedError(
+                    f"run {run.run_id}: checkpoint sha256 {run.checkpoint_sha256[:12]} != "
+                    f"attribution manifest {str(entry.get('checkpoint_sha256'))[:12]} (C7)"
+                )
+            allowed[run.run_id] = run.checkpoint_sha256
+            decisions = sorted({int(str(r["decision_idx"])) for r in test_rows.get(run.run_id, [])})
+            if not decisions:
+                raise UnknownRunError(f"run {run.run_id} has no test rows in the silver")
+            plan = FamilyPermutationPlan.generate(
+                permutation_seed=PERMUTATION_SEED,
+                k_p=K_P,
+                fold_index=run.fold_index,
+                n_decisions=len(decisions),
+            )
+            donors_by_fold[run.fold_index] = plan.permutations
+            if entry is not None and entry.get("status") == COMPLETED:
+                verified.append(self._reconfer(context, run.run_id, run.fold_index, entry))
+                continue
+            self._refuse_partial(context, run.run_id, entry)
+            pending.add(run.run_id)
+        if not pending:
+            return sorted(verified, key=lambda o: o.fold_index)
+
+        prediction = self._predictor(
+            PredictTftAttributionCommand(
+                spec=spec,
+                seed=context.seed,
+                allowed=allowed,
+                num_threads=_recorded_threads(context.cohort_environment, context.cohort_id),
+                donors_by_fold=donors_by_fold,
+                family_partition=context.partition,
+            )
+        )
+        returned = {run.run_id for run in prediction.runs}
+        if prediction.cohort_id != context.cohort_id or returned != set(allowed):
+            raise UnknownRunError(
+                f"predictor answered runs {sorted(returned)}; asked for {sorted(allowed)}"
+            )
+        written = [
+            self._write_run(
+                context,
+                run=run,
+                plan_n=len(donors_by_fold[run.fold_index][0]),
+                test_rows=test_rows.get(run.run_id, []),
+                settings=prediction.settings,
+                timestamps=tuple(prediction.dataset_timestamps),
+            )
+            for run in sorted(prediction.runs, key=lambda r: r.fold_index)
+            if run.run_id in pending
+        ]
+        return sorted([*verified, *written], key=lambda o: o.fold_index)
+
+    def _test_rows(self, spec: CohortSpec, run_ids: set[str]) -> dict[str, list[Row]]:
+        by_run: dict[str, list[Row]] = {}
+        for fact in self._silver.read(
+            layer=_SILVER,
+            table=_FACT,
+            filters={"asset": spec.asset_id, "feature_set_name": spec.feature_set_name},
+        ):
+            run_id = str(fact["run_id"])
+            if run_id in run_ids and fact.get("split") == _TEST:
+                by_run.setdefault(run_id, []).append(fact)
+        return by_run
+
+    def _attribution_rows(self, spec: CohortSpec, table: str, run_id: str) -> list[Row]:
+        filters = {
+            "asset": spec.asset_id,
+            "feature_set_name": spec.feature_set_name,
+            "run_id": run_id,
+        }
+        return [
+            row
+            for row in self._silver.read(layer=_SILVER, table=table, filters=filters)
+            if str(row["run_id"]) == run_id
+        ]
+
+    # -- retomada (C8) ---------------------------------------------------------------
+
+    def _refuse_partial(
+        self, context: _Context, run_id: str, entry: Mapping[str, object] | None
+    ) -> None:
+        """Linhas presentes sem `completed` são gravação parcial (C8): nunca reescreve."""
+        permuted = self._attribution_rows(context.spec, _PERMUTED, run_id)
+        vsn = self._attribution_rows(context.spec, _VSN, run_id)
+        if permuted or vsn:
+            status = None if entry is None else entry.get("status")
+            raise PartialAttributionError(
+                f"run {run_id} has {len(permuted)} permuted and {len(vsn)} vsn rows in the "
+                f"silver with manifest status {status!r} — partial attribution (C8)"
+            )
+
+    def _reconfer(
+        self, context: _Context, run_id: str, fold_index: int, entry: Mapping[str, object]
+    ) -> AttributionRunOutcome:
+        """Run `completed`: as contagens e o plano gravados batem com o manifesto (C8)."""
+        permuted = self._attribution_rows(context.spec, _PERMUTED, run_id)
+        vsn = self._attribution_rows(context.spec, _VSN, run_id)
+        counts: dict[tuple[str, int], int] = {}
+        for row in permuted:
+            key = (str(row["permuted_family"]), int(str(row["permutation_index"])))
+            counts[key] = counts.get(key, 0) + 1
+        identity = counts.get((_IDENTITY_FAMILY, 0), 0)
+        k_p = int(str(entry.get("k_p")))
+        expected = {(_IDENTITY_FAMILY, 0)} | {
+            (family, k) for family in context.partition for k in range(1, k_p + 1)
+        }
+        problems: list[str] = []
+        if identity == 0 or set(counts) != expected or any(counts[k] != identity for k in expected):
+            problems.append(f"permuted counts {dict(sorted(counts.items()))}")
+        plan = {
+            "permutation_seed": entry.get("permutation_seed"),
+            "permutation_algorithm": entry.get("permutation_algorithm"),
+            "partition_hash": entry.get("partition_hash"),
+        }
+        if entry.get("partition_hash") != context.partition_hash:
+            problems.append("manifest partition_hash differs from the command's partition")
+        for column, value in plan.items():
+            if any(row.get(column) != value for row in permuted):
+                problems.append(f"column {column} differs from the manifest")
+        if len(permuted) != entry.get("permuted_rows") or len(vsn) != entry.get("vsn_rows"):
+            problems.append(
+                f"{len(permuted)} permuted / {len(vsn)} vsn rows, manifest "
+                f"{entry.get('permuted_rows')} / {entry.get('vsn_rows')}"
+            )
+        if problems:
+            raise PartialAttributionError(
+                f"run {run_id} is completed in the manifest but the silver differs: "
+                + "; ".join(problems)
+                + " (C8)"
+            )
+        return AttributionRunOutcome(
+            run_id=run_id,
+            fold_index=fold_index,
+            seed=context.seed,
+            status=_VERIFIED,
+            reproduction_mode=str(entry.get("mode")),
+            identity_values_compared=0,
+            max_abs_diff=float(str(entry.get("max_abs_diff"))),
+            max_normalized_diff=float(str(entry.get("max_normalized_diff", 0.0))),
+            permuted_rows_written=0,
+            permuted_rows_verified=len(permuted),
+            vsn_rows_written=0,
+            vsn_rows_verified=len(vsn),
+        )
+
+    # -- escrita de um run -----------------------------------------------------------
+
+    def _mode(self, context: _Context) -> ReproductionMode:
+        return reproduction_mode(
+            context.cohort_environment,
+            context.current_environment,
+            context.justification,
+            ignored_keys=_IGNORED_KEYS,
+        )
+
+    def _write_run(  # noqa: PLR0913 — o run predito e o que a escrita precisa
+        self,
+        context: _Context,
+        *,
+        run: AttributionRunPrediction,
+        plan_n: int,
+        test_rows: Sequence[Row],
+        settings: Mapping[str, str],
+        timestamps: tuple[str, ...],
+    ) -> AttributionRunOutcome:
+        spec = context.spec
+        silver_decisions = sorted({int(str(r["decision_idx"])) for r in test_rows})
+        if list(run.test_decisions) != silver_decisions or len(run.test_decisions) != plan_n:
+            raise ReproductionError(
+                f"run {run.run_id}: predicted test decisions differ from the 7.1 silver "
+                f"({len(run.test_decisions)} vs {len(silver_decisions)}) (C3-4)"
+            )
+        mode = self._mode(context)
+        reference = {
+            (
+                int(str(r["decision_idx"])),
+                int(str(r["horizon"])),
+                _float(r["quantile_level"]),
+            ): _float(r["value_raw"])
+            for r in test_rows
+        }
+        predicted = {
+            (decision, horizon, float(level)): float(value)
+            for decision, by_horizon in run.identity.items()
+            for horizon, grid in by_horizon.items()
+            for level, value in zip(spec.quantile_levels, grid, strict=True)
+        }
+        comparison = compare_reproduction(
+            reference,
+            predicted,
+            mode=mode.name,
+            center=run.normalizer_center,
+            scale=run.normalizer_scale,
+        )
+        if not comparison.passed:  # C6 — antes de qualquer escrita
+            raise ReproductionError(
+                f"run {run.run_id} ({mode.name}): identity outside the reproduction policy — "
+                f"{comparison.failures} of {comparison.compared} values, keys match "
+                f"{comparison.keys_match}, max|d| {comparison.max_abs_diff:.3e} (C6)"
+            )
+        entry: dict[str, object] = {
+            "checkpoint_sha256": run.checkpoint_sha256,
+            "first_write_environment": dict(context.current_environment),
+            "settings": dict(settings),
+            "mode": mode.name,
+            "max_abs_diff": comparison.max_abs_diff,
+            "max_normalized_diff": comparison.max_normalized_diff,
+            "permutation_seed": PERMUTATION_SEED,
+            "k_p": K_P,
+            "permutation_algorithm": PERMUTATION_ALGORITHM,
+            "fold_index": run.fold_index,
+            "n_decisions": plan_n,
+            "family_partition": {f: list(v) for f, v in context.partition.items()},
+            "partition_hash": context.partition_hash,
+            "permuted_rows": 0,
+            "vsn_rows": 0,
+            "started_at": self._clock.now().isoformat(),
+        }
+        self._manifest.record_run(context.cohort_id, run.run_id, {**entry, "status": STARTED})
+        model_version, feature_set_name = self._identity_of(test_rows)
+        permuted = self._permuted_persister(
+            PersistPermutedPredictionsCommand(
+                run_id=run.run_id,
+                model_version=model_version,
+                asset=spec.asset_id,
+                feature_set_name=feature_set_name,
+                schema_version=self._schema_version(test_rows),
+                permutation_seed=PERMUTATION_SEED,
+                permutation_algorithm=PERMUTATION_ALGORITHM,
+                partition_hash=context.partition_hash,
+                dataset_timestamps=timestamps,
+                entries=self._entries(run, spec),
+            )
+        )
+        variables = sorted({v for weights in run.encoder_weights.values() for v in weights})
+        vsn = self._vsn_persister(
+            PersistVsnWeightsCommand(
+                run_id=run.run_id,
+                model_version=model_version,
+                asset=spec.asset_id,
+                feature_set_name=feature_set_name,
+                schema_version=self._schema_version(test_rows),
+                dataset_timestamps=timestamps,
+                variable_families=variable_families(context.partition, variables),
+                decisions=[
+                    VsnDecisionEntry(decision, dict(weights))
+                    for decision, weights in sorted(run.encoder_weights.items())
+                ],
+            )
+        )
+        self._manifest.record_run(
+            context.cohort_id,
+            run.run_id,
+            {
+                **entry,
+                "status": COMPLETED,
+                "permuted_rows": permuted.rows_written,
+                "vsn_rows": vsn.rows_written,
+                "completed_at": self._clock.now().isoformat(),
+            },
+        )
+        return AttributionRunOutcome(
+            run_id=run.run_id,
+            fold_index=run.fold_index,
+            seed=context.seed,
+            status=_WRITTEN,
+            reproduction_mode=mode.name,
+            identity_values_compared=comparison.compared,
+            max_abs_diff=comparison.max_abs_diff,
+            max_normalized_diff=comparison.max_normalized_diff,
+            permuted_rows_written=permuted.rows_written,
+            permuted_rows_verified=0,
+            vsn_rows_written=vsn.rows_written,
+            vsn_rows_verified=0,
+        )
+
+    @staticmethod
+    def _entries(run: AttributionRunPrediction, spec: CohortSpec) -> list[PermutedDecisionEntry]:
+        """A identidade (`none`, 0) e cada (família, k), com o guardrail do 4.3 (`from_raw`)."""
+        levels = tuple(spec.quantile_levels)
+
+        def forecasts(by_horizon: Mapping[int, Sequence[float]]) -> dict[int, QuantileForecast]:
+            return {
+                horizon: QuantileForecast.from_raw(levels=levels, raw_values=tuple(grid))
+                for horizon, grid in sorted(by_horizon.items())
+            }
+
+        entries = [
+            PermutedDecisionEntry(_IDENTITY_FAMILY, 0, decision, forecasts(by_horizon))
+            for decision, by_horizon in sorted(run.identity.items())
+        ]
+        for (family, k), grids in sorted(run.permuted.items()):
+            entries.extend(
+                PermutedDecisionEntry(family, k, decision, forecasts(by_horizon))
+                for decision, by_horizon in sorted(grids.items())
+            )
+        return entries
+
+    @staticmethod
+    def _identity_of(test_rows: Sequence[Row]) -> tuple[str, str]:
+        first = test_rows[0]
+        return str(first["model_version"]), str(first["feature_set_name"])
+
+    @staticmethod
+    def _schema_version(test_rows: Sequence[Row]) -> int:
+        return int(str(test_rows[0]["schema_version"]))

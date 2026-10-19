@@ -972,6 +972,74 @@ _REAL_VIOLATION_CASES = (
         },
         id="bc-independence:other-evaluation-module-imports-calibrate-conformal",
     ),
+    # Stage 7.3 (ADR 7.3.0002): as seis arestas do `run_permutation_inference` são exceções
+    # do MÓDULO; um módulo irmão do `inference` com o mesmo import reprova.
+    pytest.param(
+        "bc-independence",
+        {
+            "features/inference/application/use_cases/_arch_audit_taint_t73_1.py": (
+                "from financial_forecasting.features.modeling.application.use_cases"
+                ".resolve_tft_checkpoints import ResolveTftCheckpointsCommand\n"
+                "\n_use = ResolveTftCheckpointsCommand\n"
+            )
+        },
+        id="bc-independence:other-inference-module-imports-resolve-tft-checkpoints-for-attribution",
+    ),
+    pytest.param(
+        "bc-independence",
+        {
+            "features/inference/application/use_cases/_arch_audit_taint_t73_2.py": (
+                "from financial_forecasting.features.modeling.application.use_cases"
+                ".predict_tft_attribution_from_checkpoints import PredictTftAttributionCommand\n"
+                "\n_use = PredictTftAttributionCommand\n"
+            )
+        },
+        id="bc-independence:other-inference-module-imports-predict-tft-attribution",
+    ),
+    pytest.param(
+        "bc-independence",
+        {
+            "features/inference/application/use_cases/_arch_audit_taint_t73_3.py": (
+                "from financial_forecasting.features.modeling.application.ports.out"
+                ".runtime_environment_probe import CODE_KEYS\n"
+                "\n_use = CODE_KEYS\n"
+            )
+        },
+        id="bc-independence:other-inference-module-imports-probe-code-keys",
+    ),
+    pytest.param(
+        "bc-independence",
+        {
+            "features/inference/application/use_cases/_arch_audit_taint_t73_4.py": (
+                "from financial_forecasting.features.analytics_store.application.use_cases"
+                ".persist_permuted_predictions import PermutedDecisionEntry\n"
+                "\n_use = PermutedDecisionEntry\n"
+            )
+        },
+        id="bc-independence:other-inference-module-imports-persist-permuted-predictions",
+    ),
+    pytest.param(
+        "bc-independence",
+        {
+            "features/inference/application/use_cases/_arch_audit_taint_t73_5.py": (
+                "from financial_forecasting.features.analytics_store.application.use_cases"
+                ".persist_vsn_weights import VsnDecisionEntry\n"
+                "\n_use = VsnDecisionEntry\n"
+            )
+        },
+        id="bc-independence:other-inference-module-imports-persist-vsn-weights",
+    ),
+    pytest.param(
+        "bc-independence",
+        {
+            "features/inference/application/use_cases/_arch_audit_taint_t73_6.py": (
+                "from financial_forecasting.features.analytics_store.domain.value_objects"
+                ".quantile_forecast import QuantileForecast\n"
+                "\n_use = QuantileForecast\n"
+            )
+        },
+        id="bc-independence:other-inference-module-imports-quantile-forecast",
+    ),
 )
 
 
