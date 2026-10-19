@@ -52,14 +52,29 @@ _PK_BY_TABLE: dict[str, tuple[str, ...]] = {
         "target_timestamp_utc",
         "quantile_level",
     ),
+    # Stage 7.3 (ADR 7.3.0002 item 4): predições permutadas e pesos da VSN.
+    "fact_permuted_predictions": (
+        "run_id",
+        "permuted_family",
+        "permutation_index",
+        "horizon",
+        "timestamp_utc",
+        "target_timestamp_utc",
+        "quantile_level",
+    ),
+    "fact_vsn_weights": ("run_id", "timestamp_utc", "variable"),
 }
 _PARTITION_BY_TABLE: dict[str, tuple[str, ...]] = {
     "dim_run": ("asset", "parent_sweep_id"),
     "fact_oos_predictions": ("asset", "feature_set_name", "year"),
+    "fact_permuted_predictions": ("asset", "feature_set_name", "run_id", "year"),
+    "fact_vsn_weights": ("asset", "feature_set_name", "run_id", "year"),
 }
 _UPDATE_POLICY_BY_TABLE: dict[str, str] = {
     "dim_run": "upsert",
     "fact_oos_predictions": "append-only",
+    "fact_permuted_predictions": "append-only",
+    "fact_vsn_weights": "append-only",
 }
 # Colunas de partição que devem voltar como `None` quando armazenadas como sentinel.
 _NULLABLE_PARTITION_COLS = frozenset({"parent_sweep_id"})

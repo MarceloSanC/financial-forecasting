@@ -1,6 +1,7 @@
 """`SILVER_REGISTRY` — registry `(layer, table) -> SilverTable` (Stage 4.1, task-08).
 
-Agrega as 2 tabelas silver com escritor (`dim_run` e `fact_oos_predictions`) num único
+Agrega as 4 tabelas silver com escritor (`dim_run`, `fact_oos_predictions` e, desde a
+Stage 7.3, `fact_permuted_predictions` e `fact_vsn_weights`) num único
 `Mapping` chaveado por `("silver", <table>)`, espelhando o `BRONZE_REGISTRY` da Stage
 2.1. É a costura (seam) sobre a qual o repositório da Stage 4.2 despacha
 escritas/leituras por tabela, sem hard-coding tabela a tabela.
@@ -11,7 +12,7 @@ feature_contrib_local/epoch_metrics/model_artifacts/bridge_run_features/
 split_timestamps_ref/fact_run_snapshot) NÃO entram aqui (ADR 4.1.0001); `fact_config`,
 `fact_split_metrics` e `fact_failures` saíram por nunca terem tido escritor (#164).
 
-Vive no adapter (importa os 2 módulos de schema + `SilverTable`).
+Vive no adapter (importa os módulos de schema + `SilverTable`).
 """
 
 from __future__ import annotations
@@ -24,6 +25,12 @@ from financial_forecasting.features.analytics_store.adapters.out.parquet.schemas
 from financial_forecasting.features.analytics_store.adapters.out.parquet.schemas.fact_oos_predictions_schema import (  # noqa: E501
     FACT_OOS_PREDICTIONS,
 )
+from financial_forecasting.features.analytics_store.adapters.out.parquet.schemas.fact_permuted_predictions_schema import (  # noqa: E501
+    FACT_PERMUTED_PREDICTIONS,
+)
+from financial_forecasting.features.analytics_store.adapters.out.parquet.schemas.fact_vsn_weights_schema import (  # noqa: E501
+    FACT_VSN_WEIGHTS,
+)
 from financial_forecasting.features.analytics_store.adapters.out.parquet.schemas.silver_table import (  # noqa: E501
     SilverTable,
 )
@@ -35,4 +42,6 @@ SILVER_LAYER = "silver"
 SILVER_REGISTRY: Mapping[tuple[str, str], SilverTable] = {
     (SILVER_LAYER, DIM_RUN.name): DIM_RUN,
     (SILVER_LAYER, FACT_OOS_PREDICTIONS.name): FACT_OOS_PREDICTIONS,
+    (SILVER_LAYER, FACT_PERMUTED_PREDICTIONS.name): FACT_PERMUTED_PREDICTIONS,
+    (SILVER_LAYER, FACT_VSN_WEIGHTS.name): FACT_VSN_WEIGHTS,
 }
