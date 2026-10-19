@@ -393,3 +393,20 @@ def test_r0_to_r2_chain_read_by_the_source() -> None:
     mirror = _MIRROR.read_text(encoding="utf-8")
     assert plans[2].reference(digests[2]) in mirror
     assert digests[2].value in mirror
+
+
+def test_r2_anchor_after_r1() -> None:
+    """CA9 (Task 23; TA-13): r0, r1 e r2 ancorados; a âncora da r2 depois da da r1."""
+    source = TomlPreregistrationSource(root=_PREREG_DIR)
+    records = [source.read(name="aapl_confirmatory", revision=rev) for rev in (0, 1, 2)]
+    assert all(record.anchor is not None for record in records)
+    r1_anchor, r2_anchor = records[1].anchor, records[2].anchor
+    assert r1_anchor is not None
+    assert r2_anchor is not None
+    plan, digest = _revision(2)
+    assert r2_anchor.tag == f"preregistration/{plan.reference(digest)}"
+    assert r2_anchor.anchored_at > r1_anchor.anchored_at
+    assert "/issues/158#issuecomment-" in r2_anchor.comment_url
+    mirror = _MIRROR.read_text(encoding="utf-8")
+    assert r2_anchor.comment_url in mirror
+    assert r2_anchor.commit in mirror

@@ -5,7 +5,7 @@ when-use: Ao ler o que o estudo confirmatório AAPL congelou (hipóteses, gate H
 keywords: [preregistration, pre-registro, aapl, confirmatory, h1-gate, h2, scorecard, anchor, blinding, espelho]
 status: accepted
 created_at: 2026-09-30
-updated_at: 2026-10-18
+updated_at: 2026-10-19
 ---
 
 # Pré-registro confirmatório AAPL — espelho
@@ -244,3 +244,16 @@ prova de geometria (Etapa G) lê timestamps, as features do painel do TFT (inclu
 preços e retornos passados, para reproduzir o corte do `build_training_grid`),
 partições, fingerprints e o manifesto da inferência; nenhuma coluna de previsão
 (`value_*`) nem o `target_return`. A emenda é ancorada antes da Stage 8.1, que julga pela r2.
+
+### Âncora r2 (ADR 6.5.0003)
+
+- **Tag:** `preregistration/aapl_confirmatory-r2-f32ef5ebbbb8` (commit
+  `25edda90eb19c30b2873d01b6edcae4e96b940d1`).
+- **Comentário na #158:**
+  <https://github.com/MarceloSanC/financial-forecasting/issues/158#issuecomment-6258545893>,
+  criado pelo servidor em **2026-10-19T02:45:31Z**, depois da âncora da r1
+  (2026-10-06T09:27:41Z).
+- **Registro:** `config/preregistration/aapl_confirmatory-r2.anchor.toml` (fora do
+  hash). A conferência é por conteúdo: o arquivo do plano na tag é igual, byte a
+  byte, ao de HEAD.
+
