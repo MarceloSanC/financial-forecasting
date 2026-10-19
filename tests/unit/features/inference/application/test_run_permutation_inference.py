@@ -820,3 +820,30 @@ def test_same_size_but_different_test_decisions_are_refused() -> None:
     assert len(harness.predictor.calls) == 1  # a recusa vem depois da predição
     assert harness.rows("fact_permuted_predictions") == []
     assert harness.manifest.recorded(_cohort_id(harness.spec)) is None
+
+
+# -- seed mista: um run completed e outro sem entrada (C5-7) --------------------------------
+
+
+def test_mixed_seed_verifies_the_completed_run_and_writes_the_other_once() -> None:
+    harness = _harness()
+    harness.run()
+    cohort_id = _cohort_id(harness.spec)
+    done, missing = _run_id(11, 0), _run_id(11, 1)
+    document = harness.manifest.recorded(cohort_id)
+    assert document is not None
+    runs = {k: v for k, v in document["runs"].items() if k != missing}  # type: ignore[union-attr]
+    harness.manifest = InMemoryAttributionManifest({cohort_id: {**document, "runs": runs}})
+    for key, rows in harness.repo._partitions.items():
+        if key[1] in {"fact_permuted_predictions", "fact_vsn_weights"}:
+            rows[:] = [r for r in rows if r["run_id"] != missing]
+    before = [r for r in harness.rows("fact_permuted_predictions") if r["run_id"] == done]
+    calls = len(harness.predictor.calls)
+
+    result = harness.run()
+
+    status = {(o.run_id, o.status) for o in result.outcomes if o.seed == 11}  # noqa: PLR2004
+    assert status == {(done, "verified"), (missing, "written")}
+    assert len(harness.predictor.calls) == calls + 1  # só a seed 11, uma vez
+    after = [r for r in harness.rows("fact_permuted_predictions") if r["run_id"] == done]
+    assert len(after) == len(before)  # o run completed não foi regravado
