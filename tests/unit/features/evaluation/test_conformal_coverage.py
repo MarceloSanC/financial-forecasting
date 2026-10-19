@@ -474,3 +474,17 @@ def test_seed_mean_dispersions_are_distinct_per_quantity(make_series: SeriesFact
     sds["nesting"] = _sd(rates)
     # os dp das quantidades que podem ser trocadas entre si são todos distintos
     assert len({round(v, 12) for v in sds.values()}) == len(sds), sds
+
+
+def test_degenerate_interval_on_the_realized_is_covered_and_not_crossed(
+    make_series: SeriesFactory,
+) -> None:
+    """TA-8 (mutante CV01, `>` → `>=`): L == U == y não é cruzado e cobre no PICP."""
+    native = make_series([_SPREAD] * 2, [0.0, 0.0])
+    report = ConformalCoverage.evaluate(
+        _explicit(native, (0.0, -0.02), (0.0, 0.02)), tolerance=_TOL, band_levels=_BANDS
+    )
+    [pair] = report.per_pair
+    assert pair.crossed_count == 0
+    assert pair.covered_count == 2  # noqa: PLR2004
+    assert pair.picp == 1.0
