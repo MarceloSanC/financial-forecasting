@@ -24,6 +24,9 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_vsn import (
     H3VsnGoldBuilder,
 )
+from financial_forecasting.features.evaluation.domain.services.vsn_summary import (
+    VsnSummaryReport,
+)
 from tests.contract.features.evaluation._gold_inputs import (
     PARTITION,
     completed_inputs,
@@ -149,6 +152,24 @@ def test_vsn_rows_by_variable_and_family() -> None:
     )
     assert family["label"] == "horizonte-invariante; descreve quanto o modelo usa cada família"
     assert _one(H3VsnGoldBuilder, kind="variable", name="relative_time_idx")["family"] == "none"
+
+
+def test_undefined_vsn_gives_one_null_row_per_family_with_the_reason() -> None:
+    """TA-7: VSN `undefined` ⇒ 4 linhas `family`, medidas e rótulo nulos, e o motivo."""
+    import dataclasses  # noqa: PLC0415
+
+    inputs = completed_inputs()
+    vsn = VsnSummaryReport(entries=(), status="undefined", reason="x")
+    reports = dataclasses.replace(inputs.h3_reports, vsn=vsn)
+    rows = H3VsnGoldBuilder().build(dataclasses.replace(inputs, h3_reports=reports)).rows
+    assert len(rows) == 4  # noqa: PLR2004
+    assert {(r["kind"], r["name"], r["family"]) for r in rows} == {
+        ("family", f, f) for f in ("price", "technical", "sentiment", "fundamental")
+    }
+    for row in rows:
+        for column in ("p10", "p50", "p90", "n_decisions", "label"):
+            assert row[column] is None, column
+        assert (row["status"], row["reason"]) == ("undefined", "x")
 
 
 @pytest.mark.parametrize("builder", _BUILDERS, ids=lambda b: b.name)
