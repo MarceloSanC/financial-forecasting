@@ -80,6 +80,9 @@ from financial_forecasting.features.feature_engineering.domain.services.feature_
 from financial_forecasting.features.inference.adapters.out.filesystem.json_inference_manifest import (  # noqa: E501
     JsonInferenceManifest,
 )
+from financial_forecasting.features.inference.application.use_cases.calibrate_conformal import (
+    CalibrateConformal,
+)
 from financial_forecasting.features.inference.application.use_cases.run_inference import (
     RunInference,
 )
@@ -571,6 +574,8 @@ def test_wire_dependencies_wires_refresh_gold(tmp_path: Path) -> None:
         "quality_checks",
         "calibration_table",
         "christoffersen_monte_carlo",
+        "conformal_corrections",
+        "conformal_coverage",
         "differential_acf",
         "differential_breaks",
         "dm_profiles",
@@ -601,6 +606,13 @@ def test_refresh_gold_grid_reader_wired(tmp_path: Path) -> None:
     assert isinstance(grid_reader, ReadTrainingGrid)
     assert grid_reader._store is deps.store
     assert grid_reader._columns == deps.modeling_columns
+
+
+@pytest.mark.unit
+def test_refresh_gold_wires_calibrate_conformal(tmp_path: Path) -> None:
+    """ADR 7.2.0003 item 3: o port `ConformalCalibration` é o use case da `inference`."""
+    deps = wire_dependencies(settings=Settings(_env_file=None, data_root=tmp_path))
+    assert isinstance(deps.refresh_gold._conformal_calibration, CalibrateConformal)
 
 
 @pytest.mark.unit

@@ -6,8 +6,9 @@ itens 1-2, `6_5_0009`, `6_5_0010`). Um arquivo TOML por revisão é lido pelo
 adapter e entregue aqui como mapeamento; `Preregistration.from_mapping`:
 
 1. recusa chave desconhecida e chave ausente, nomeando o caminho pontuado (as
-   chaves opcionais são `blinding_statement` e o bloco `profile_parameters` —
-   Stage 6.6, conferido pelo seu VO, ADR 6.6.0001 item 5; os três campos de emenda
+   chaves opcionais são `blinding_statement`, o bloco `profile_parameters` —
+   Stage 6.6, conferido pelo seu VO, ADR 6.6.0001 item 5 — e o bloco `conformal` —
+   Stage 7.2, conferido pelo `ConformalParameters`, ADR 7.2.0001; os três campos de emenda
    são proibidos em r0 e obrigatórios em r ≥ 1 — ADR 6.5.0002);
 2. coage cada número ao tipo declarado — `float` aceita `int`/`float` não-`bool`
    e guarda `float` (`0` e `0.0` são o mesmo plano); `int` aceita só `int`
@@ -82,6 +83,9 @@ from financial_forecasting.features.evaluation.domain.value_objects._tolerance i
 from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
     BootstrapScheme,
     validate_bootstrap_parameters,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.conformal_parameters import (
+    ConformalParameters,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     is_symmetric_pair,
@@ -580,7 +584,7 @@ _SCHEMA: Final[Mapping[str, object]] = {
     "backtests": {"min_violations": _LEAF, "monte_carlo": {"draws": _LEAF, "seed": _LEAF}},
     "profiles": {"declared": _LEAF},
 }
-_OPTIONAL_KEYS: Final = frozenset({"blinding_statement", "profile_parameters"})
+_OPTIONAL_KEYS: Final = frozenset({"blinding_statement", "profile_parameters", "conformal"})
 _AMENDMENT_KEYS: Final = ("amends", "justification", "blind_status")
 
 
@@ -726,6 +730,7 @@ class Preregistration:
     blinding_statement: str | None
     amendment: Amendment | None
     profile_parameters: ProfileParameters | None
+    conformal: ConformalParameters | None = None  # Stage 7.2; ausente nas revisões antigas
 
     def __post_init__(self) -> None:
         """Forma dos campos de topo pelos donos e as regras cruzadas (C1)."""
@@ -763,6 +768,7 @@ class Preregistration:
                 )
         self._check_not_evaluated()
         self._check_amendment()
+        self._check_conformal()
 
     def _check_grid(self) -> None:
         if not isinstance(self.horizons, tuple) or not self.horizons:
@@ -820,6 +826,32 @@ class Preregistration:
             raise ValueError(
                 f"revision {self.revision} requires the amendment fields (amends, "
                 "justification, blind_status)"
+            )
+
+    def _check_conformal(self) -> None:
+        """C4: o bloco conformal é tipado, proibido no r0, na grade e com o par do gate."""
+        block = self.conformal
+        if block is None:
+            return
+        if not isinstance(block, ConformalParameters):
+            raise ValueError(f"conformal must be a ConformalParameters, got {block!r}")
+        if self.revision == 0:
+            raise ValueError(
+                "conformal is forbidden in revision 0 (the conformal benchmark enters by a "
+                "blinded amendment, ADR 7.2.0001)"
+            )
+        for index, pair in enumerate(block.pairs):
+            for level in pair:
+                if level not in self.quantile_levels:
+                    raise ValueError(
+                        f"conformal.pairs[{index}] level {level!r} must be a level of "
+                        f"quantile_levels {list(self.quantile_levels)}"
+                    )
+        gate_pair = (self.h1_gate.lower_level, self.h1_gate.upper_level)
+        if block.primary_pair != gate_pair:
+            raise ValueError(
+                f"conformal.primary_pair {list(block.primary_pair)} must be the h1_gate pair "
+                f"{list(gate_pair)}"
             )
 
     # --- leitura ----------------------------------------------------------------------
@@ -895,6 +927,11 @@ class Preregistration:
                 if "profile_parameters" in mapping
                 else None
             ),
+            conformal=(
+                ConformalParameters.from_mapping(mapping["conformal"])
+                if "conformal" in mapping
+                else None
+            ),
         )
 
     def as_payload(self) -> dict[str, object]:
@@ -956,6 +993,8 @@ class Preregistration:
         }
         if self.profile_parameters is not None:
             payload["profile_parameters"] = self.profile_parameters.as_payload()
+        if self.conformal is not None:
+            payload["conformal"] = self.conformal.as_payload()
         return payload
 
     def _rules_payload(self) -> dict[str, object]:

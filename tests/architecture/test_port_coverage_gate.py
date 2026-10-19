@@ -382,6 +382,27 @@ def test_real_repo_scorecard_ports_resolve(gate: ModuleType) -> None:
         assert port.violation is None
 
 
+def test_real_repo_conformal_ports_resolve(gate: ModuleType) -> None:
+    """Stage 7.2: o port do consumidor e o do oráculo, cada um com o seu real e contrato."""
+    ports: dict[tuple[str, str], Any] = _by_slice_and_name(gate)
+    calibration = ports[("evaluation", "ConformalCalibration")]
+    assert calibration.adapters == ("CalibrateConformal",)  # o real pela regra #93
+    assert calibration.violation is None
+    contract = (
+        gate.CONTRACT_ROOT / "features" / "evaluation" / "test_conformal_calibration_contract.py"
+    )
+    assert calibration.contract is not None
+    assert calibration.contract.name == contract.name
+    assert _contract_satisfies(gate, contract, "FakeConformalCalibration", "CalibrateConformal")
+    backend = ports[("inference", "ConformalBackend")]
+    assert "MapieCqrBackend" in backend.adapters  # pertencimento: a lista é por citação
+    assert backend.violation is None
+    oracle = gate.CONTRACT_ROOT / "features" / "inference" / "test_conformal_backend_contract.py"
+    assert backend.contract is not None
+    assert backend.contract.name == oracle.name
+    assert _contract_satisfies(gate, oracle, "FakeConformalBackend", "MapieCqrBackend")
+
+
 def test_main_exit_code_follows_the_baseline_verdict(
     gate: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

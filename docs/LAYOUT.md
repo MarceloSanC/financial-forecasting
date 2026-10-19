@@ -79,7 +79,8 @@ tests/
 │   └── features/<feature>/
 │       └── in_memory_<entity>_repository.py
 ├── fixtures/                       # Dados de teste versionados (lidos só por integration)
-│   └── r_oracle/                   # Oráculo R: <unidade>.{json,R,sessionInfo.txt} + Dockerfile (ADR 6.2.0006)
+│   ├── r_oracle/                   # Oráculo R: <unidade>.{json,R,sessionInfo.txt} + Dockerfile (ADR 6.2.0006)
+│   └── nexcp_oracle/               # Oráculo NexCP: gerador + JSON do `splitCP_LS` dos autores (ADR 7.2.0002)
 └── architecture/                   # Testes dos próprios gates (import-linter, layout, fake-parity, port-coverage, arch-ast)
 
 migrations/
@@ -305,7 +306,9 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   `evaluation` — este desde a Stage 6.1 —, e `inference` — desde a Stage 7.1: seus
   ports do consumidor só têm imports de tipo; o contrato `inference-no-torch-leak`
   mantém `torch`/`lightning`/`pytorch_forecasting` fora da application/domain do
-  slice, ADR 7.1.0001 item 4). As 33 arestas de runtime existentes
+  slice, ADR 7.1.0001 item 4; desde a Stage 7.2, o `inference-no-mapie-leak` mantém
+  `mapie`/`numpy`/`sklearn`/`scipy` fora dela — só o adapter
+  `inference/adapters/out/mapie/` os importa, ADR 7.2.0002 item 1). As 34 arestas de runtime existentes
   estão declaradas UMA A UMA como exceção comentada (débito medido, não
   permissão) — as 8 `feature_engineering → market_data.domain.entities`
   (`Candle`, `NewsArticle`, `FundamentalReport`, #95), as seis
@@ -317,7 +320,9 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   Stage 6.4 / ADR 6.4.0004) e as cinco do `inference.application.use_cases.run_inference`
   (Stage 7.1: os DTOs de comando de `ResolveTftCheckpoints`/`PredictTftFromCheckpoints`,
   as chaves `CODE_KEYS`/`DIRTY_KEY`/`THREADS_KEY` do port do probe do `modeling`, o
-  `PersistPredictionsCommand` e o VO `QuantileForecast`) são dados, pela regra da ADR
+  `PersistPredictionsCommand` e o VO `QuantileForecast`) e a do
+  `evaluation.application.use_cases.refresh_gold → inference.application.use_cases.calibrate_conformal`
+  (Stage 7.2: os DTOs de comando do `CalibrateConformal`, ADR 7.2.0003 item 3) são dados, pela regra da ADR
   0.0.0053 — e **uma aresta nova reprova o build**. O que o gate não vê:
 
   - **Arestas sob `if TYPE_CHECKING:` são invisíveis ao contrato**
@@ -326,7 +331,9 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
     `RunRecordPersister` de `modeling` (anotam DTOs/VO do `analytics_store`), a
     anotação `NewsArticle` do `FinbertSentimentModel` (`feature_engineering`) e a
     anotação `TrainingGrid` (`modeling.domain`) do port `TrainingGridReader` de
-    `evaluation` (Stage 6.4, ADR 6.4.0009 — o real é o use case `ReadTrainingGrid`).
+    `evaluation` (Stage 6.4, ADR 6.4.0009 — o real é o use case `ReadTrainingGrid`) e
+    a assinatura do port `ConformalCalibration` de `evaluation`, que anota o comando e o
+    resultado do use case `CalibrateConformal` da `inference` (Stage 7.2, ADR 7.2.0003).
 
   **Nota de escopo (ADR 0.0.0053):** esta regra enforça direção de dependência e
   aciclicidade entre slices — NÃO afirma que cada slice é um Bounded Context

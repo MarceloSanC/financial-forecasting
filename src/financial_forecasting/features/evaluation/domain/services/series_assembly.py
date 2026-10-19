@@ -24,6 +24,12 @@ do cohort (`CohortRun`) e o realizado do dataset (`RealizedReturns`) e devolve u
   **nunca achado**: o pareamento é por alvo e não depende do fold, que só serve ao perfil
   "DM por fold" (Stage 6.6, ADR `6_6_0003`; um perfil não bloqueia o veredito).
 
+As regras de alinhamento por ponto (duplicata, índices de sessão e realizado, níveis da
+grade) são funções públicas deste módulo (`duplicate_levels`, `index_violations`,
+`missing_levels`) que devolvem `RuleViolation`: o `SeriesAssembly` as converte em
+`AlignmentFinding`, e a `ConformalAssembly` da Stage 7.2 as aplica ao calib (ADR
+7.2.0003 item 4). Uma definição só por regra.
+
 `ValueError` só para erro de CHAMADA (entradas estruturais: `horizons`,
 `window_deficits`, `required_models`, run duplicado, fato fora dos runs — a leitura já
 descartou os fatos fora do cohort, ADR `6_4_0004` item 2). Valor não-finito em
@@ -117,6 +123,82 @@ class _Findings:
 
     def sorted(self) -> tuple[AlignmentFinding, ...]:
         return tuple(sorted(set(self.items), key=_finding_key))
+
+
+@dataclass(frozen=True)
+class RuleViolation:
+    """Uma violação de regra de alinhamento, sem escopo (o chamador acrescenta h/modelo/seed)."""
+
+    kind: AlignmentKind
+    detail: str
+
+
+def duplicate_levels(
+    rows_by_level: Mapping[float, Sequence[ForecastRecord]], *, target_timestamp: str
+) -> RuleViolation | None:
+    """D2/I4: algum nível observado mais de uma vez no ponto (sem escolha entre as linhas)."""
+    repeated = sorted(level for level, rows in rows_by_level.items() if len(rows) > 1)
+    if not repeated:
+        return None
+    return RuleViolation(
+        AlignmentKind.DUPLICATE_POINT,
+        f"target {target_timestamp!r}: levels {repeated} observed more than once",
+    )
+
+
+def index_violations(
+    *,
+    target_timestamp: str,
+    decisions: Iterable[tuple[str, int]],
+    horizon: int,
+    realized: RealizedReturns,
+) -> tuple[RuleViolation, ...]:
+    """I5/I7: alvo é sessão do dataset, `decision_idx` bate e alvo - decisão == h."""
+    violations: list[RuleViolation] = []
+    target = target_timestamp
+    target_index = realized.index_of(target)
+    if target_index is None:
+        violations.append(
+            RuleViolation(
+                AlignmentKind.REALIZED_MISSING,
+                f"target {target!r} is not a session of the dataset",
+            )
+        )
+    for decision_timestamp, decision_idx in sorted(set(decisions)):
+        decision_index = realized.index_of(decision_timestamp)
+        if decision_index != decision_idx:
+            violations.append(
+                RuleViolation(
+                    AlignmentKind.DECISION_INDEX_MISMATCH,
+                    f"target {target!r}: decision {decision_timestamp!r} has dataset index "
+                    f"{decision_index} but decision_idx {decision_idx}",
+                )
+            )
+        if (
+            target_index is not None
+            and decision_index is not None
+            and target_index - decision_index != horizon
+        ):
+            violations.append(
+                RuleViolation(
+                    AlignmentKind.HORIZON_LABEL_MISMATCH,
+                    f"target {target!r} is {target_index - decision_index} sessions after "
+                    f"decision {decision_timestamp!r}, not h={horizon}",
+                )
+            )
+    return tuple(violations)
+
+
+def missing_levels(
+    *, present: Iterable[float], expected: Iterable[float], target_timestamp: str
+) -> RuleViolation | None:
+    """I6: o ponto tem todo nível esperado da grade."""
+    missing = sorted(set(expected) - set(present))
+    if not missing:
+        return None
+    return RuleViolation(
+        AlignmentKind.GRID_INCOMPLETE, f"target {target_timestamp!r}: missing levels {missing}"
+    )
 
 
 @dataclass(frozen=True)
@@ -283,11 +365,11 @@ def _group_points(
         grouped[key][record.quantile_level].append(record)
     points: Points = {horizon: defaultdict(list) for horizon in horizons}
     for (horizon, series, target), by_level in grouped.items():
-        repeated = sorted(level for level, rows in by_level.items() if len(rows) > 1)
-        if repeated:
+        violation = duplicate_levels(by_level, target_timestamp=target)
+        if violation is not None:
             findings.add(
-                AlignmentKind.DUPLICATE_POINT,
-                f"target {target!r}: levels {repeated} observed more than once",
+                violation.kind,
+                violation.detail,
                 horizon=horizon,
                 model=series[0],
                 seed=series[1],
@@ -327,41 +409,13 @@ def _check_point(  # noqa: PLR0913 — um ponto e o seu escopo (h, modelo, seed)
     realized: RealizedReturns,
     findings: _Findings,
 ) -> None:
-    target = point.target_timestamp
-    target_index = realized.index_of(target)
-    if target_index is None:
-        findings.add(
-            AlignmentKind.REALIZED_MISSING,
-            f"target {target!r} is not a session of the dataset",
-            horizon=horizon,
-            model=model,
-            seed=seed,
-        )
-    decisions = sorted({(row.decision_timestamp, row.decision_idx) for row in _all_rows(point)})
-    for decision_timestamp, decision_idx in decisions:
-        decision_index = realized.index_of(decision_timestamp)
-        if decision_index != decision_idx:
-            findings.add(
-                AlignmentKind.DECISION_INDEX_MISMATCH,
-                f"target {target!r}: decision {decision_timestamp!r} has dataset index "
-                f"{decision_index} but decision_idx {decision_idx}",
-                horizon=horizon,
-                model=model,
-                seed=seed,
-            )
-        if (
-            target_index is not None
-            and decision_index is not None
-            and target_index - decision_index != horizon
-        ):
-            findings.add(
-                AlignmentKind.HORIZON_LABEL_MISMATCH,
-                f"target {target!r} is {target_index - decision_index} sessions after "
-                f"decision {decision_timestamp!r}, not h={horizon}",
-                horizon=horizon,
-                model=model,
-                seed=seed,
-            )
+    for violation in index_violations(
+        target_timestamp=point.target_timestamp,
+        decisions=((row.decision_timestamp, row.decision_idx) for row in _all_rows(point)),
+        horizon=horizon,
+        realized=realized,
+    ):
+        findings.add(violation.kind, violation.detail, horizon=horizon, model=model, seed=seed)
 
 
 # --- 6. grade e guardrail (I6) ---------------------------------------------------------
@@ -377,14 +431,12 @@ def _check_grids(points: Points, findings: _Findings) -> dict[int, tuple[float, 
         for (model, seed), series_points in per_series.items():
             grid = by_model[model]
             for point in series_points:
-                missing = sorted(grid - set(point.by_level))
-                if missing:
+                violation = missing_levels(
+                    present=point.by_level, expected=grid, target_timestamp=point.target_timestamp
+                )
+                if violation is not None:
                     findings.add(
-                        AlignmentKind.GRID_INCOMPLETE,
-                        f"target {point.target_timestamp!r}: missing levels {missing}",
-                        horizon=horizon,
-                        model=model,
-                        seed=seed,
+                        violation.kind, violation.detail, horizon=horizon, model=model, seed=seed
                     )
                 flags = {row.guardrail_applied for row in _all_rows(point)}
                 if len(flags) > 1:

@@ -120,6 +120,9 @@ _EXPECTED_CONTRACTS = (
     # Stage 7.1 (I2/I13): o core do slice `inference` não importa a pilha de deep
     # learning — mesmo perímetro do `modeling-no-torch-leak` (ADR 7.1.0001 item 4).
     "inference-no-torch-leak",
+    # Stage 7.2 (I1): mapie/numpy/sklearn/scipy confinados ao adapter
+    # features/inference/adapters/out/mapie/ (ADR 7.2.0002 item 1).
+    "inference-no-mapie-leak",
     # Issue #60: independência entre bounded contexts. `hexagonal-layers` é
     # `type=layers` POR CONTAINER (só ordena camadas DENTRO de cada BC) e o
     # `check_layout.py` só barra adapter<->adapter — nenhum gate cobria import
@@ -845,6 +848,62 @@ _REAL_VIOLATION_CASES = (
         },
         id="inference-no-torch-leak:inference-application-imports-pytorch-forecasting",
     ),
+    # `inference-no-mapie-leak` (Stage 7.2, I1): cada módulo proibido em ao menos uma
+    # das duas fontes, e cada fonte com ao menos um caso.
+    pytest.param(
+        "inference-no-mapie-leak",
+        {
+            "features/inference/domain/_arch_audit_taint_mapie.py": (
+                "import mapie  # violação temporária\n"
+            )
+        },
+        id="inference-no-mapie-leak:inference-domain-imports-mapie",
+    ),
+    pytest.param(
+        "inference-no-mapie-leak",
+        {
+            "features/inference/application/_arch_audit_taint_mapie.py": (
+                "import mapie  # violação temporária\n"
+            )
+        },
+        id="inference-no-mapie-leak:inference-application-imports-mapie",
+    ),
+    pytest.param(
+        "inference-no-mapie-leak",
+        {
+            "features/inference/application/_arch_audit_taint_numpy.py": (
+                "import numpy  # violação temporária\n"
+            )
+        },
+        id="inference-no-mapie-leak:inference-application-imports-numpy",
+    ),
+    pytest.param(
+        "inference-no-mapie-leak",
+        {
+            "features/inference/domain/_arch_audit_taint_numpy.py": (
+                "import numpy  # violação temporária\n"
+            )
+        },
+        id="inference-no-mapie-leak:inference-domain-imports-numpy",
+    ),
+    pytest.param(
+        "inference-no-mapie-leak",
+        {
+            "features/inference/domain/_arch_audit_taint_scipy.py": (
+                "import scipy  # violação temporária\n"
+            )
+        },
+        id="inference-no-mapie-leak:inference-domain-imports-scipy",
+    ),
+    pytest.param(
+        "inference-no-mapie-leak",
+        {
+            "features/inference/application/_arch_audit_taint_sklearn.py": (
+                "import sklearn  # violação temporária\n"
+            )
+        },
+        id="inference-no-mapie-leak:inference-application-imports-sklearn",
+    ),
     pytest.param(
         "domain-purity",
         {
@@ -898,6 +957,20 @@ _REAL_VIOLATION_CASES = (
             )
         },
         id="bc-independence:inference-imports-new-evaluation-edge",
+    ),
+    # Stage 7.2 (ADR 7.2.0003 item 3): a aresta `refresh_gold -> calibrate_conformal`
+    # é exceção do MÓDULO. Outro módulo de `evaluation` que importe o mesmo use case
+    # reprova — a exceção não virou permissão do slice.
+    pytest.param(
+        "bc-independence",
+        {
+            "features/evaluation/application/use_cases/_arch_audit_taint_cc.py": (
+                "from financial_forecasting.features.inference.application"
+                ".use_cases.calibrate_conformal import CalibrateConformalCommand\n"
+                "\n_use = CalibrateConformalCommand\n"
+            )
+        },
+        id="bc-independence:other-evaluation-module-imports-calibrate-conformal",
     ),
 )
 

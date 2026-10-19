@@ -123,7 +123,11 @@ _PROFILE_TABLES = (  # Stage 6.6: perfis de séries novas (forma da r1)
     "gold_differential_breaks",
     "gold_loss_differentials",
 )
-_ALL_TABLES = _TABLES + _PROFILE_TABLES
+_CONFORMAL_TABLES = (  # Stage 7.2: sem bloco [conformal] neste cenário, as duas vazias
+    "gold_conformal_corrections",
+    "gold_conformal_coverage",
+)
+_ALL_TABLES = _TABLES + _PROFILE_TABLES + _CONFORMAL_TABLES
 _K = len(_SEEDS)
 _ESTIMATORS = (DmVarianceEstimator.RECTANGULAR, DmVarianceEstimator.BARTLETT)
 _SCHEMES = (BootstrapScheme.STATIONARY, BootstrapScheme.MOVING_BLOCK)
@@ -144,6 +148,7 @@ _PARAMETERS = RefreshParameters(
     monte_carlo_seed=128,
     mcs_block_sensitivities=("h", "sqrt_T"),
     profile_parameters=profile_parameters(),
+    conformal_parameters=None,
 )
 
 Rows = list[tuple[object, ...]]
@@ -440,7 +445,7 @@ def test_e2e_wired_lazy_backend_loaded(scenario: _Scenario) -> None:
 
 
 def test_e2e_completed_all_tables(scenario: _Scenario) -> None:
-    """As cinco tabelas da 6.4 e as oito de perfil da 6.6 na mesma geração (CA10)."""
+    """As cinco da 6.4, as oito de perfil da 6.6 e as duas conformais da 7.2 (CA10, I14)."""
     generation = scenario.completed
     assert generation.result.status is RefreshStatus.COMPLETED
     assert generation.manifest["status"] == "COMPLETED"
@@ -450,12 +455,14 @@ def test_e2e_completed_all_tables(scenario: _Scenario) -> None:
     assert sorted(generation.result.rows_by_table) == sorted(_ALL_TABLES)
     files = ("MANIFEST.json", *(f"{t}.parquet" for t in _ALL_TABLES))
     assert generation.files == tuple(sorted(files))
-    assert all(generation.tables[name] for name in _ALL_TABLES)
+    assert all(generation.tables[name] for name in _TABLES + _PROFILE_TABLES)
+    # sem bloco [conformal], as duas tabelas conformais existem com zero linhas
+    assert all(generation.tables[name] == [] for name in _CONFORMAL_TABLES)
     assert generation.result.profile_error_units == 0
 
 
 def test_e2e_completed_generation_reads_back(scenario: _Scenario) -> None:
-    """A geração com as treze tabelas passa no `from_stored`/`check_generation`.
+    """A geração com as quinze tabelas passa no `from_stored`/`check_generation`.
 
     Cohort B: o A termina `BLOCKED` no fim do cenário (passo 3); o B fica `COMPLETED`.
     """
@@ -497,7 +504,7 @@ def test_e2e_duckdb_counts(scenario: _Scenario) -> None:
 
 
 def test_e2e_rerun_identical(scenario: _Scenario) -> None:
-    """Rerun sem apagar: toda linha das treze tabelas idêntica (NaN = NaN) — I16."""
+    """Rerun sem apagar: toda linha das quinze tabelas idêntica (NaN = NaN) — I16."""
     assert scenario.rerun.result == scenario.completed.result
     assert set(scenario.rerun.tables) == set(scenario.completed.tables)
     for name, rows in scenario.completed.tables.items():

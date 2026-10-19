@@ -374,3 +374,20 @@ def r1_payload() -> dict[str, object]:
     from tests.unit.features.evaluation._profile_parameters import profile_block  # noqa: PLC0415
 
     return {**valid_payload(), **R1_AMENDMENT, "profile_parameters": profile_block()}
+
+
+R2_AMENDMENT: dict[str, object] = {
+    "revision": 2,
+    "amends": "test_plan-r1-0123456789ab",
+    "justification": "a blinded conformal benchmark",
+    "blind_status": "blinded",
+}
+
+
+def r2_payload() -> dict[str, object]:
+    """O r1 emendado como r2, com o bloco `[conformal]` do technical 7.2 §1 (Task 12)."""
+    from tests.unit.features.evaluation._conformal_parameters import (  # noqa: PLC0415
+        conformal_block,
+    )
+
+    return {**r1_payload(), **R2_AMENDMENT, "conformal": conformal_block()}

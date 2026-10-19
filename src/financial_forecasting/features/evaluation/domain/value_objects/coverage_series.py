@@ -184,8 +184,11 @@ class CoverageSeries:
 def is_symmetric_pair(lower_level: float, upper_level: float) -> bool:
     """`τ_l + τ_u == 1` dentro da tolerância de representação float64 da grade (1e-12).
 
-    Regra única da simetria (ADR 6.1.0002 item 2): a `CoverageSeries` a aplica a cada
-    par da grade e a `HitSequence` (6.3) ao par de um `HitKind.INTERVAL`.
+    Regra única da simetria **da grade nativa** (ADR 6.1.0002 item 2): a `CoverageSeries`
+    a aplica a cada par da grade e a `HitSequence` (6.3) ao par de um `HitKind.INTERVAL`.
+    O par conformal do pré-registro é outra regra, exata pelo decimal mais curto
+    (`ConformalParameters`, ADR 7.2.0001): 0,4/0,6000000000000001 passa aqui e é
+    recusado lá.
     """
     return abs(lower_level + upper_level - 1.0) <= _SYMMETRY_TOLERANCE
 

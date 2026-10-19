@@ -18,6 +18,11 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
     GOLD_SCHEMAS,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    EMPTY_CONFORMAL_REPORTS,
+    ConformalReports,
+    ConformalTailRecord,
+    ConformalUndefinedCoverage,
+    ConformalUnitRecord,
     FailedCheck,
     GoldGeneration,
     GoldGenerationCorruptError,
@@ -45,6 +50,10 @@ from financial_forecasting.features.evaluation.domain.value_objects.quality_chec
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
     DatasetContentFingerprint,
 )
+from tests.unit.features.evaluation._conformal_parameters import (
+    conformal_block,
+    conformal_parameters,
+)
 from tests.unit.features.evaluation._profile_parameters import (
     profile_block,
     profile_parameters,
@@ -67,6 +76,7 @@ _VALID: dict[str, object] = {
     "monte_carlo_seed": 128,
     "mcs_block_sensitivities": ("h", "sqrt_T"),
     "profile_parameters": None,
+    "conformal_parameters": None,
 }
 _PARAMETERS = RefreshParameters(**_VALID)  # type: ignore[arg-type]
 _NOW = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
@@ -350,6 +360,7 @@ def test_gold_inputs_status_coherence() -> None:
         block_estimates={},
         profile_reports=(),
         mcs_block_reports=(),
+        conformal_reports=EMPTY_CONFORMAL_REPORTS,
     )
     assert blocked.preregistration_ref == _PREREG
     with pytest.raises(ValueError, match="BLOCKED generation has no"):
@@ -438,6 +449,8 @@ def test_schema_tables_complete() -> None:
         "gold_differential_acf",
         "gold_differential_breaks",
         "gold_loss_differentials",
+        "gold_conformal_corrections",  # Stage 7.2
+        "gold_conformal_coverage",
     }
     assert set(CONFIRMATORY_TABLES) == set(GOLD_SCHEMAS) - {"gold_quality_checks"}
     for name, schema in GOLD_SCHEMAS.items():
@@ -772,3 +785,155 @@ def test_profile_settings_use_the_primary_estimator(
     assert settings.tolerance == parameters.degeneracy_tolerance
     assert settings.min_violations == parameters.min_violations
     assert settings.profile_parameters is parameters.profile_parameters
+
+
+# --- Stage 7.2 Task 16: `conformal_parameters` ---------------------------------------
+
+
+@pytest.mark.unit
+def test_manifest_without_conformal_parameters_is_corrupt() -> None:
+    """C10: manifesto anterior à 7.2 (sem a chave) não lê, como na 6.6 D6."""
+    manifest = _manifest().as_mapping()
+    parameters = {k: v for k, v in manifest["parameters"].items() if k != "conformal_parameters"}  # type: ignore[union-attr]
+    with pytest.raises(GoldGenerationCorruptError, match="conformal_parameters"):
+        GoldGeneration.from_stored(
+            {**manifest, "parameters": parameters}, {}, partition=_manifest().partition
+        )
+
+
+@pytest.mark.unit
+def test_conformal_parameters_type_refused() -> None:
+    with pytest.raises(ValueError, match="conformal_parameters must be a ConformalParameters"):
+        _parameters(conformal_parameters=conformal_block())
+
+
+@pytest.mark.unit
+def test_as_mapping_round_trip_with_block() -> None:
+    parameters = _parameters(conformal_parameters=conformal_parameters())
+    mapping = parameters.as_mapping()
+    assert mapping["conformal_parameters"] == conformal_block()
+    assert RefreshParameters.from_mapping(mapping) == parameters
+    assert RefreshParameters.from_mapping(json.loads(json.dumps(mapping))) == parameters
+    assert _PARAMETERS.as_mapping()["conformal_parameters"] is None
+
+
+# --- Stage 7.2 Task 17: relatórios conformais nos insumos ---------------------------
+
+
+def _conformal_tail(tail: str, level: float, **values: object) -> ConformalTailRecord:
+    fields: dict[str, object] = {
+        "tail": tail,
+        "level": level,
+        "n": None,
+        "rank": None,
+        "correction": None,
+        "infinite": None,
+        "beta_a": None,
+        "beta_b": None,
+        "beta_mean": None,
+        "beta_sd": None,
+    }
+    fields.update(values)
+    return ConformalTailRecord(**fields)  # type: ignore[arg-type]
+
+
+def _ok_tails() -> tuple[ConformalTailRecord, ...]:
+    return (
+        _conformal_tail("lower", 0.1, n=10, rank=10, correction=0.01, infinite=False),
+        _conformal_tail("upper", 0.9, n=10, rank=10, correction=float("inf"), infinite=True),
+    )
+
+
+def _conformal_unit(**changes: object) -> ConformalUnitRecord:
+    fields: dict[str, object] = {
+        "fold_index": 0,
+        "fold_raw": "0",
+        "seed": 1,
+        "horizon": 1,
+        "lower_level": 0.1,
+        "upper_level": 0.9,
+        "variant": "split_cqr_asymmetric_unweighted_v1",
+        "rho": None,
+        "status": "ok",
+        "reason": None,
+        "tails": _ok_tails(),
+    }
+    fields.update(changes)
+    return ConformalUnitRecord(**fields)  # type: ignore[arg-type]
+
+
+_NULL_TAILS = (_conformal_tail("lower", 0.1), _conformal_tail("upper", 0.9))
+
+
+@pytest.mark.unit
+def test_conformal_records_validate_their_fields() -> None:
+    assert _conformal_unit().status == "ok"
+    _conformal_unit(status="undefined", reason="seed is None", tails=_NULL_TAILS)
+    _conformal_unit(status="error", reason="embargo", tails=_NULL_TAILS)
+    for changes, message in (
+        ({"status": "skipped"}, "status must be one of"),
+        ({"status": "error", "tails": _NULL_TAILS}, "reason is required"),
+        ({"reason": "why"}, "reason is required"),
+        ({"status": "undefined", "reason": "x"}, "non-ok conformal unit has no measures"),
+        ({"tails": _ok_tails()[:1]}, r"tails must be \(lower, upper\)"),
+        ({"tails": tuple(reversed(_ok_tails()))}, r"tails must be \(lower, upper\)"),
+        ({"tails": _NULL_TAILS}, "ok conformal unit needs n, correction and infinite"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            _conformal_unit(**changes)
+    with pytest.raises(ValueError, match="tail must be one of"):
+        _conformal_tail("middle", 0.5)
+    with pytest.raises(ValueError, match="Beta reference is all set or all None"):
+        _conformal_tail("lower", 0.1, beta_a=9)
+    with pytest.raises(ValueError, match="n_points must be an int >= 1"):
+        ConformalUndefinedCoverage(seed=1, horizon=1, variant="v", reason="r", n_points=0)
+    with pytest.raises(ValueError, match="reason"):
+        ConformalUndefinedCoverage(seed=1, horizon=1, variant="v", reason="", n_points=3)
+
+
+def _blocked_inputs() -> GoldInputs:
+    return GoldInputs(
+        partition=GoldPartition("AAPL", "sweep-01"),
+        parameters=_PARAMETERS,
+        status=RefreshStatus.BLOCKED,
+        check_results=(_result(CheckSeverity.ERROR, CheckOutcome.FAIL, "alignment_check"),),
+        horizon_reports=(),
+        mcs_reports=(),
+        block_estimates={},
+        profile_reports=(),
+        mcs_block_reports=(),
+        conformal_reports=EMPTY_CONFORMAL_REPORTS,
+    )
+
+
+_SOME_REPORTS = ConformalReports(
+    units=(_conformal_unit(),), coverage=(), undefined_coverage=(), seed_means=()
+)
+
+
+@pytest.mark.unit
+def test_blocked_inputs_have_no_conformal_reports() -> None:
+    blocked = dataclasses.replace(
+        _blocked_inputs(),
+        parameters=_parameters(conformal_parameters=conformal_parameters()),
+    )
+    assert blocked.conformal_reports.is_empty
+    with pytest.raises(ValueError, match="conformal_reports must be empty in a BLOCKED"):
+        dataclasses.replace(blocked, conformal_reports=_SOME_REPORTS)
+    with pytest.raises(ValueError, match="must be a ConformalReports"):
+        dataclasses.replace(blocked, conformal_reports=())
+
+
+@pytest.mark.unit
+def test_completed_inputs_accept_conformal_reports() -> None:
+    completed = dataclasses.replace(
+        _blocked_inputs(),
+        status=RefreshStatus.COMPLETED,
+        check_results=(),
+        parameters=_parameters(conformal_parameters=conformal_parameters()),
+    )
+    with_reports = dataclasses.replace(completed, conformal_reports=_SOME_REPORTS)
+    assert with_reports.conformal_reports.units == (_conformal_unit(),)
+    # sem o bloco [conformal] no plano, os relatórios têm de vir vazios
+    with pytest.raises(ValueError, match=r"without a \[conformal\] block"):
+        dataclasses.replace(with_reports, parameters=_PARAMETERS)

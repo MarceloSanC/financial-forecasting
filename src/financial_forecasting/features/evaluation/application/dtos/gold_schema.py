@@ -9,7 +9,7 @@ itens 2-3). Antes cada builder da 6.4 tinha a sua chave privada (`_KEY`) e o nom
 - `read_columns` — as colunas fora da chave que o scorecard e o perfil leem por
   nome; nenhuma outra coluna é lida por nome fora deste schema.
 
-Consumidores: os treze builders (`build` devolve a tabela com `name`/`key` daqui) e
+Consumidores: os quinze builders (`build` devolve a tabela com `name`/`key` daqui) e
 `GoldGeneration.from_stored` (monta cada tabela lida com a chave daqui).
 """
 
@@ -198,6 +198,62 @@ GOLD_LOSS_DIFFERENTIALS: Final = GoldTableSchema(
     read_columns=("fold", "differential"),
 )
 
+# --- Stage 7.2: benchmark conformal (ADR 7.2.0003 item 7; technical 7.2 §1) -------------
+
+GOLD_CONFORMAL_CORRECTIONS: Final = GoldTableSchema(
+    name="gold_conformal_corrections",
+    key=("fold_raw", "seed", "horizon", "lower_level", "upper_level", "variant", "tail"),
+    read_columns=(
+        "fold",
+        "tail_level",
+        "rho",
+        "status",
+        "reason",
+        "n",
+        "rank",
+        "correction",
+        "infinite",
+        "beta_a",
+        "beta_b",
+        "beta_mean",
+        "beta_sd",
+    ),
+)
+GOLD_CONFORMAL_COVERAGE: Final = GoldTableSchema(
+    name="gold_conformal_coverage",
+    key=("horizon", "variant", "kind", "lower_level", "upper_level", "seed", "band_level"),
+    read_columns=(
+        "status",
+        "reason",
+        "label",
+        "n_points",
+        "n_evaluated",
+        "n_mean",
+        "nominal",
+        "count",
+        "mean_count",
+        "coverage",
+        "mean_of_seed_coverages",
+        "sd_of_seed_coverages",
+        "n_seeds_used",
+        "seeds_excluded",
+        "mpiw",
+        "mpiw_infinite",
+        "mean_of_seed_mpiws",
+        "sd_of_seed_mpiws",
+        "crossed_rate",
+        "mean_of_seed_crossed_rates",
+        "sd_of_seed_crossed_rates",
+        "nesting_violation_rate",
+        "mean_of_seed_nesting_rates",
+        "sd_of_seed_nesting_rates",
+        "wilson_lower",
+        "wilson_upper",
+        "wilson_contains_nominal",
+        "serial_dependence_warning",
+    ),
+)
+
 GOLD_SCHEMAS: Final[Mapping[str, GoldTableSchema]] = MappingProxyType(
     {
         schema.name: schema
@@ -215,10 +271,12 @@ GOLD_SCHEMAS: Final[Mapping[str, GoldTableSchema]] = MappingProxyType(
             GOLD_DIFFERENTIAL_ACF,
             GOLD_DIFFERENTIAL_BREAKS,
             GOLD_LOSS_DIFFERENTIALS,
+            GOLD_CONFORMAL_CORRECTIONS,
+            GOLD_CONFORMAL_COVERAGE,
         )
     }
 )
-"""As tabelas pelo nome (as cinco da 6.4 e as de perfil da 6.6)."""
+"""As tabelas pelo nome (as cinco da 6.4, as de perfil da 6.6 e as conformais da 7.2)."""
 
 CONFIRMATORY_TABLES: Final[tuple[str, ...]] = (
     GOLD_METRICS_BY_RUN.name,
@@ -233,5 +291,7 @@ CONFIRMATORY_TABLES: Final[tuple[str, ...]] = (
     GOLD_DIFFERENTIAL_ACF.name,
     GOLD_DIFFERENTIAL_BREAKS.name,
     GOLD_LOSS_DIFFERENTIALS.name,
+    GOLD_CONFORMAL_CORRECTIONS.name,
+    GOLD_CONFORMAL_COVERAGE.name,
 )
 """As tabelas que carregam `preregistration_ref` (ADR 6.4.0006 item 4)."""
