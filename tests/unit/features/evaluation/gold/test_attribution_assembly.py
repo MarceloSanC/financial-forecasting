@@ -537,3 +537,26 @@ def test_reduce_ablation_run_reads_only_test_rows_of_its_run() -> None:
     undefined = reduce_ablation_run(rows, run=odd, realized=cohort.realized, levels=GOLD_LEVELS)
     assert isinstance(undefined, UndefinedRunReduction)
     assert "is not an int" in undefined.reason
+
+
+# --- regras públicas compartilhadas com a 6.4 (C6-4) ------------------------------------
+
+
+def test_extra_levels_and_guardrail_flag_are_the_series_assembly_rules() -> None:
+    from financial_forecasting.features.evaluation.domain.services import (  # noqa: PLC0415
+        attribution_assembly,
+        series_assembly,
+    )
+
+    assert attribution_assembly.extra_levels is series_assembly.extra_levels
+    assert attribution_assembly.guardrail_flag_mismatch is series_assembly.guardrail_flag_mismatch
+    extra = series_assembly.extra_levels(present=(0.1, 0.5, 0.7), expected=(0.1, 0.5), where="t")
+    assert extra is not None
+    assert (extra.kind.value, extra.detail) == (
+        "grid_divergent",
+        "t: levels [0.7] outside the grid",
+    )
+    assert series_assembly.extra_levels(present=(0.1,), expected=(0.1, 0.5), where="t") is None
+    flag = series_assembly.guardrail_flag_mismatch((True, False), target_timestamp="x")
+    assert flag is not None and flag.kind.value == "guardrail_flag_mismatch"
+    assert series_assembly.guardrail_flag_mismatch((True, True), target_timestamp="x") is None

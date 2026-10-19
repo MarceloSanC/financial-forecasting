@@ -47,6 +47,8 @@ from financial_forecasting.features.evaluation.domain.services.pinball_score imp
 from financial_forecasting.features.evaluation.domain.services.series_assembly import (
     RuleViolation,
     duplicate_levels,
+    extra_levels,
+    guardrail_flag_mismatch,
     index_violations,
     missing_levels,
 )
@@ -130,7 +132,7 @@ def _point_violation(
     levels: tuple[float, ...],
     realized: RealizedReturns,
 ) -> RuleViolation | None:
-    """As regras públicas do `SeriesAssembly` num ponto, mais grade e flag do guardrail."""
+    """As regras públicas do `SeriesAssembly` num ponto (uma definição por regra, C6-4)."""
     by_level: dict[float, list[Row]] = defaultdict(list)
     for row in rows:
         by_level[row.quantile_level].append(row)
@@ -145,19 +147,13 @@ def _point_violation(
     )
     if indexes:
         return indexes[0]
-    missing = missing_levels(present=by_level, expected=levels, target_timestamp=target)
-    if missing is not None:
-        return missing
-    extra = sorted(set(by_level) - set(levels))
-    if extra:
-        return RuleViolation(
-            AlignmentKind.GRID_DIVERGENT, f"target {target!r}: levels {extra} outside the grid"
-        )
-    if len({row.guardrail_applied for row in rows}) > 1:
-        return RuleViolation(
-            AlignmentKind.GUARDRAIL_FLAG_MISMATCH,
-            f"target {target!r}: guardrail_applied differs between levels",
-        )
+    for violation in (
+        missing_levels(present=by_level, expected=levels, target_timestamp=target),
+        extra_levels(present=by_level, expected=levels, where=f"target {target!r}"),
+        guardrail_flag_mismatch((row.guardrail_applied for row in rows), target_timestamp=target),
+    ):
+        if violation is not None:
+            return violation
     return None
 
 

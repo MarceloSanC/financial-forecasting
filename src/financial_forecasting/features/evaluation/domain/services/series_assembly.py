@@ -25,10 +25,12 @@ do cohort (`CohortRun`) e o realizado do dataset (`RealizedReturns`) e devolve u
   "DM por fold" (Stage 6.6, ADR `6_6_0003`; um perfil não bloqueia o veredito).
 
 As regras de alinhamento por ponto (duplicata, índices de sessão e realizado, níveis da
-grade) são funções públicas deste módulo (`duplicate_levels`, `index_violations`,
-`missing_levels`) que devolvem `RuleViolation`: o `SeriesAssembly` as converte em
-`AlignmentFinding`, e a `ConformalAssembly` da Stage 7.2 as aplica ao calib (ADR
-7.2.0003 item 4). Uma definição só por regra.
+grade, níveis fora da grade, flag do guardrail) são funções públicas deste módulo
+(`duplicate_levels`, `index_violations`, `missing_levels`, `extra_levels`,
+`guardrail_flag_mismatch`) que devolvem `RuleViolation`: o `SeriesAssembly` as converte
+em `AlignmentFinding`, a `ConformalAssembly` da Stage 7.2 as aplica ao calib (ADR
+7.2.0003 item 4) e a `AttributionAssembly` da 7.3 às linhas de atribuição. Uma definição
+só por regra; `GRID_DIVERGENT` é sempre "níveis além da grade esperada".
 
 `ValueError` só para erro de CHAMADA (entradas estruturais: `horizons`,
 `window_deficits`, `required_models`, run duplicado, fato fora dos runs — a leitura já
@@ -198,6 +200,32 @@ def missing_levels(
         return None
     return RuleViolation(
         AlignmentKind.GRID_INCOMPLETE, f"target {target_timestamp!r}: missing levels {missing}"
+    )
+
+
+def extra_levels(
+    *, present: Iterable[float], expected: Iterable[float], where: str
+) -> RuleViolation | None:
+    """I6: níveis presentes além da grade esperada (`GRID_DIVERGENT`).
+
+    Na 6.4, a grade esperada é a comum aos modelos do horizonte (os níveis da união além
+    da interseção); na 7.3, a grade declarada no comando.
+    """
+    extra = sorted(set(present) - set(expected))
+    if not extra:
+        return None
+    return RuleViolation(AlignmentKind.GRID_DIVERGENT, f"{where}: levels {extra} outside the grid")
+
+
+def guardrail_flag_mismatch(
+    flags: Iterable[bool], *, target_timestamp: str
+) -> RuleViolation | None:
+    """I6: um `guardrail_applied` só por ponto (é um atributo do vetor, não do nível)."""
+    if len(set(flags)) <= 1:
+        return None
+    return RuleViolation(
+        AlignmentKind.GUARDRAIL_FLAG_MISMATCH,
+        f"target {target_timestamp!r}: guardrail_applied differs between levels",
     )
 
 
@@ -438,24 +466,25 @@ def _check_grids(points: Points, findings: _Findings) -> dict[int, tuple[float, 
                     findings.add(
                         violation.kind, violation.detail, horizon=horizon, model=model, seed=seed
                     )
-                flags = {row.guardrail_applied for row in _all_rows(point)}
-                if len(flags) > 1:
-                    findings.add(
-                        AlignmentKind.GUARDRAIL_FLAG_MISMATCH,
-                        f"target {point.target_timestamp!r}: guardrail_applied differs "
-                        "between levels",
-                        horizon=horizon,
-                        model=model,
-                        seed=seed,
-                    )
+                flag = guardrail_flag_mismatch(
+                    (row.guardrail_applied for row in _all_rows(point)),
+                    target_timestamp=point.target_timestamp,
+                )
+                if flag is not None:
+                    findings.add(flag.kind, flag.detail, horizon=horizon, model=model, seed=seed)
         distinct = {tuple(sorted(grid)) for grid in by_model.values()}
-        if len(distinct) > 1:
-            findings.add(
-                AlignmentKind.GRID_DIVERGENT,
-                "grids by model: "
+        divergent = (
+            extra_levels(
+                present=set().union(*by_model.values()),
+                expected=set.intersection(*by_model.values()),
+                where="grids by model: "
                 + "; ".join(f"{m}={sorted(by_model[m])}" for m in sorted(by_model)),
-                horizon=horizon,
             )
+            if by_model
+            else None
+        )
+        if divergent is not None:
+            findings.add(divergent.kind, divergent.detail, horizon=horizon)
         if by_model:
             grids[horizon] = tuple(sorted(next(iter(distinct))))
     return grids
