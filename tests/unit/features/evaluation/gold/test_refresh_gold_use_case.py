@@ -1775,3 +1775,34 @@ def test_method_undefined_in_assembly_runs_no_bootstrap() -> None:
     assert reports.permutation.reason == JOINT_BLOCK_NEEDS_BOTH
     assert "has no run" in str(reports.ablation.reason)
     assert reports.block_length is None
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("table", "damage", "report", "reason"),
+    [
+        ("fact_vsn_weights", {"weight": 1.5}, "vsn", "weight must be a finite float in [0, 1]"),
+        ("fact_vsn_weights", {"weight": math.inf}, "vsn", "weight must be a finite float"),
+        ("fact_vsn_weights", "duplicate", "vsn", "twice at decision"),
+        ("fact_permuted_predictions", {"value_guardrail": math.inf}, "permutation", "h="),
+    ],
+    ids=["vsn-weight-1.5", "vsn-weight-inf", "vsn-duplicate", "permuted-inf"],
+)
+def test_bad_attribution_row_is_undefined_never_aborts(
+    table: str, damage: object, report: str, reason: str
+) -> None:
+    """C8-2: ValueError de registro ou redução vira `undefined` com o motivo (I16)."""
+    cohort = _h3_cohort()
+    silver = _h3_silver(cohort)
+    rows = silver[table]
+    if damage == "duplicate":
+        rows.append(dict(rows[0]))
+    else:
+        rows[0] = {**rows[0], **damage}  # type: ignore[dict-item]
+    harness = _harness(cohort, silver=silver)
+    inputs = _h3_run(harness)
+    assert inputs.status is RefreshStatus.COMPLETED
+    target = getattr(inputs.h3_reports, report)
+    assert target is not None
+    assert target.status == "undefined"
+    assert reason in str(target.reason), target.reason

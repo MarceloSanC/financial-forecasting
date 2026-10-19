@@ -259,7 +259,9 @@ def _h3_reading(n_runs: int) -> int:
     use_case = _use_case(reader)
 
     def read() -> tuple[object, object]:
-        permuted, vsn = use_case._attribution_reductions(_PARTITION, candidate, _REALIZED, _LEVELS)
+        permuted, vsn, _ = use_case._attribution_reductions(
+            _PARTITION, candidate, _REALIZED, _LEVELS
+        )
         losses = use_case._ablation_reductions(_PARTITION, ablation, (2019,), _REALIZED, _LEVELS)
         return (permuted, vsn), losses
 

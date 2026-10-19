@@ -665,7 +665,9 @@ class RefreshGold:
         test = [r for r in records if r.run_id in candidate_ids and r.split == _TEST_SPLIT]
         levels = tuple(sorted({r.quantile_level for r in test}))
         years = tuple(sorted({int(r.decision_timestamp[:4]) for r in test}))
-        permuted, vsn = self._attribution_reductions(partition, candidate_runs, realized, levels)
+        permuted, vsn, vsn_failure = self._attribution_reductions(
+            partition, candidate_runs, realized, levels
+        )
         ablation_runs = self._ablation_runs(partition, h3)
         ablation = self._ablation_reductions(partition, ablation_runs, years, realized, levels)
         assembly = AttributionAssembly.assemble(
@@ -678,10 +680,13 @@ class RefreshGold:
             candidate_seeds=seeds,
             horizons=H3_HORIZONS,
         )
-        try:
-            vsn_report = VsnSummary.summarize(vsn, parameters=h3, seeds=seeds)
-        except ValueError as exc:  # VSN incoerente é dado, não erro de programação
-            vsn_report = VsnSummaryReport(entries=(), status=UNDEFINED, reason=str(exc))
+        if vsn_failure is not None:
+            vsn_report = VsnSummaryReport(entries=(), status=UNDEFINED, reason=vsn_failure)
+        else:
+            try:
+                vsn_report = VsnSummary.summarize(vsn, parameters=h3, seeds=seeds)
+            except ValueError as exc:  # VSN incoerente é dado, não erro de programação
+                vsn_report = VsnSummaryReport(entries=(), status=UNDEFINED, reason=str(exc))
         joint = JointContribution.evaluate(
             permutation=assembly.permutation,
             ablation=assembly.ablation,
@@ -711,10 +716,11 @@ class RefreshGold:
         candidate_runs: Sequence[CohortRun],
         realized: RealizedReturns,
         levels: tuple[float, ...],
-    ) -> tuple[list[PermutedRunLosses | UndefinedRunReduction], list[VsnRunWeights]]:
+    ) -> tuple[list[PermutedRunLosses | UndefinedRunReduction], list[VsnRunWeights], str | None]:
         """Um run por chamada, filtrado por `run_id` (CA14b); os registros são descartados."""
         permuted: list[PermutedRunLosses | UndefinedRunReduction] = []
         vsn: list[VsnRunWeights] = []
+        vsn_failure: str | None = None
         for run in candidate_runs:
             fold = _fold_index(run)
             if fold is None or run.seed is None:
@@ -739,13 +745,12 @@ class RefreshGold:
                     UndefinedRunReduction(run.run_id, f"run {run.run_id}: no attribution rows")
                 )
             else:
-                permuted.append(
-                    reduce_permuted_run(
-                        [_permuted_record(row, run, fold) for row in rows],
-                        realized=realized,
-                        levels=levels,
-                    )
-                )
+                try:  # C8-2: linha inválida é dado do run, nunca aborta o refresh (I16)
+                    records = [_permuted_record(row, run, fold) for row in rows]
+                except ValueError as exc:
+                    permuted.append(UndefinedRunReduction(run.run_id, f"run {run.run_id}: {exc}"))
+                else:
+                    permuted.append(reduce_permuted_run(records, realized=realized, levels=levels))
             weights = [
                 row
                 for row in self._silver_reader.read(
@@ -754,8 +759,11 @@ class RefreshGold:
                 if row.get("run_id") == run.run_id and row.get("asset") == partition.asset
             ]
             if weights:
-                vsn.append(reduce_vsn_run([_vsn_record(row, run, fold) for row in weights]))
-        return permuted, vsn
+                try:  # C8-2: peso inválido ou variável repetida deixa a VSN undefined
+                    vsn.append(reduce_vsn_run([_vsn_record(row, run, fold) for row in weights]))
+                except ValueError as exc:
+                    vsn_failure = vsn_failure or f"run {run.run_id}: {exc}"
+        return permuted, vsn, vsn_failure
 
     def _ablation_runs(self, partition: GoldPartition, h3: H3Parameters) -> tuple[CohortRun, ...]:
         """O `dim_run` da ablação pelo `cohort_id` do bloco `[h3]`."""
