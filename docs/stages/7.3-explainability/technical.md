@@ -2723,4 +2723,60 @@ valores substituem os do `[measurement] C8-5`, que usavam o `ru_maxrss`.
 **Segunda rodada** (HEAD `0604489`, mesmo comando): `7969 passed, 27 skipped, 762
 warnings in 1549.63s`, cobertura 98,79 % (>= 90 %), `PONTO_C_EXIT=0`.
 
+### 2026-10-19 — [deviation] etapa-w — `attribute` sobre os 60 runs reais (só predições) — Claude (Opus 5.5)
+**HEAD da corrida:** `0604489` (Ponto C verde, árvore limpa). Container `ff-gate-186`
+com `--cpus 6 --memory 8g`, os mounts da W2 (`.git` e `artifacts/` só leitura,
+`data/cohorts/aapl` em leitura e escrita). Nenhuma métrica: o `RefreshGold` não rodou e
+não há `gold/`.
+
+**W0:** `git status --short` vazio; nenhum outro `ff-gate`; `data/cohorts/aapl` com
+`bronze inference processed raw silver` (sem `gold/` nem `.writer.lock`); `silver/` sem
+`fact_permuted*` nem `fact_vsn*`.
+
+**W1:** backup `data/backups/aapl-pre-7.3-20261019-153353` (62 arquivos), `BACKUP_OK`.
+
+**W3 (pré-voo):**
+```
+dirty false
+non-code diff []
+W3_EXIT=0
+```
+
+**W4** (`$CLI attribute $ATTR`, 16:52 → 19:14, 2 h 21 min), primeira e última linha de
+run e o resumo:
+```
+run d58a4cfe09ddd867f0ee0c089693d55383f4744768f8d82d9256802573764887 fold 0 seed 1: strict identity compared 3528 max|d| 0.000e+00 max|d|/s 0.000e+00 permuted written 144648 vsn written 14868
+run af912477dda2f0166460c832cb1d316d6dc23f0c9188b75bc6bb4d4a3e6ba450 fold 5 seed 10: strict identity compared 3472 max|d| 0.000e+00 max|d|/s 0.000e+00 permuted written 142352 vsn written 14809
+attribution aapl_confirmatory-r0-665f45d9169a: 60 runs (60 strict, 0 tolerance); permuted rows written 8655920, verified 0; vsn rows written 891490, verified 0
+EXIT=0
+```
+As 60 linhas são `strict` com max|d| 0. `permuted written` = 41 × n por run (144 648 =
+41 × 3 528; 142 352 = 41 × 3 472), total 8 655 920, como esperado.
+
+**Desvio — VSN 891 490, não 889 720.** O checkpoint tem as 59 variáveis esperadas
+(14 868 = 252 × 59). O fold 5 grava 14 809 = **251** × 59 decisões, e não 248: a VSN é
+gravada para toda decisão com amostra de predição (d + 1 dentro do painel). Os 3 472
+valores de identidade comparados do fold 5 são 248 decisões × 14 (2 horizontes × 7
+níveis); a VSN cobre também três decisões da cauda fora dessas 248. Total: 10 × (5 × 252 + 251) = 15 110 decisões × 59 = 891 490. É a regra do contrato
+(`encoder_weights` por decisão amostrada, I19), não uma divergência de dado. A estimativa
+do §2 (15 080 × 59) supunha 248 decisões de VSN no fold 5.
+
+**W5:**
+```
+attribution aapl_confirmatory-r0-665f45d9169a: 60 runs (60 strict, 0 tolerance); permuted rows written 0, verified 8655920; vsn rows written 0, verified 891490
+EXIT=0
+cohort aapl_confirmatory-r0-665f45d9169a: 16 models x 6 folds; rows expected 337792, observed 337792
+OK
+VERIFY_EXIT=0
+```
+- A segunda corrida só re-confere: 60 `verified` e 0 written, em 8 min 35 s.
+- `ls -a data/cohorts/aapl` igual ao da W0 (`diff` vazio): só o `silver/` ganhou
+  `fact_permuted_predictions` e `fact_vsn_weights`, e não há `gold/`.
+- `attribution_manifest.json` com 60 entradas, todas `('completed', 'strict')`.
+- `PARTITION_HASH_OK`: o `partition_hash` gravado é o literal do rascunho da r3.
+
+**Estado para o handoff:** a Etapa W foi **feita no Windows**. A L6 vira só
+re-conferência no Linux (`attribute` com 60 `verified`, já na L0), e a L6b leva também
+as duas tabelas e o manifesto da atribuição.
+
 <!-- END: post-execution -->
