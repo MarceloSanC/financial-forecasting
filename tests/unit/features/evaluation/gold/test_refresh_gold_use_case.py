@@ -1434,3 +1434,13 @@ def test_port_rows_map_back_to_the_raw_fold() -> None:
     assert {(r.seed, r.horizon) for r in inputs.conformal_reports.coverage} == {
         (seed, h) for seed in (1, 2) for h in _HORIZONS
     }
+
+
+@pytest.mark.unit
+def test_assembly_undefined_reason_names_the_raw_fold() -> None:
+    """TA-9 (mutante RG02): o motivo começa pelo fold cru da unidade culpada."""
+    harness = _conformal_harness(_conformal_cohort({"0": _CALIB_DECISIONS["0"]}))
+    inputs = _inputs_of(harness, parameters=_C_PARAMETERS)
+    reasons = [u.reason for u in inputs.conformal_reports.undefined_coverage]
+    assert reasons
+    assert all(r.startswith("assembly unit fold '1': unit has no calib point") for r in reasons)
