@@ -1040,6 +1040,19 @@ _REAL_VIOLATION_CASES = (
         },
         id="bc-independence:other-inference-module-imports-quantile-forecast",
     ),
+    # Stage 7.3 (ADR 7.3.0001 item 1): a aresta `attribution_assembly -> quantile_forecast`
+    # é exceção do MÓDULO; um serviço irmão do `evaluation` com o mesmo import reprova.
+    pytest.param(
+        "bc-independence",
+        {
+            "features/evaluation/domain/services/_arch_audit_taint_h3.py": (
+                "from financial_forecasting.features.analytics_store.domain"
+                ".value_objects.quantile_forecast import QuantileForecast\n"
+                "\n_use = QuantileForecast\n"
+            )
+        },
+        id="bc-independence:other-evaluation-module-imports-quantile-forecast-for-h3",
+    ),
 )
 
 

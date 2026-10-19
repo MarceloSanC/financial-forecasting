@@ -309,7 +309,7 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   mantém `torch`/`lightning`/`pytorch_forecasting` fora da application/domain do
   slice, ADR 7.1.0001 item 4; desde a Stage 7.2, o `inference-no-mapie-leak` mantém
   `mapie`/`numpy`/`sklearn`/`scipy` fora dela — só o adapter
-  `inference/adapters/out/mapie/` os importa, ADR 7.2.0002 item 1). As 40 arestas de runtime existentes
+  `inference/adapters/out/mapie/` os importa, ADR 7.2.0002 item 1). As 41 arestas de runtime existentes
   estão declaradas UMA A UMA como exceção comentada (débito medido, não
   permissão) — as 8 `feature_engineering → market_data.domain.entities`
   (`Candle`, `NewsArticle`, `FundamentalReport`, #95), as seis
@@ -327,7 +327,9 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   `inference.application.use_cases.run_permutation_inference` (Stage 7.3: os DTOs de comando de
   `ResolveTftCheckpoints`/`PredictTftAttributionFromCheckpoints` e dos escritores
   `PersistPermutedPredictions`/`PersistVsnWeights`, as chaves do port do probe e o VO
-  `QuantileForecast`, ADR 7.3.0002) são dados, pela regra da ADR
+  `QuantileForecast`, ADR 7.3.0002) e a do `evaluation.domain.services.attribution_assembly`
+  (Stage 7.3: o VO `QuantileForecast` construído com os valores persistidos do silver de
+  atribuição, ADR 7.3.0001 item 1) são dados, pela regra da ADR
   0.0.0053 — e **uma aresta nova reprova o build**. O que o gate não vê:
 
   - **Arestas sob `if TYPE_CHECKING:` são invisíveis ao contrato**

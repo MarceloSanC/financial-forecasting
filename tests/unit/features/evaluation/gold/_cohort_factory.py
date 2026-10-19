@@ -16,6 +16,12 @@ decisão) tem `value_raw` cruzado, `value_guardrail` não-decrescente **diferent
 `sorted(value_raw)` e `guardrail_applied = False` — o que `from_raw` nunca produziria.
 
 Os mutadores devolvem um `Cohort` novo (imutável).
+
+Stage 7.3 (Task 24): `with_permuted`, `with_ablation` e `with_vsn` acrescentam registros
+sintéticos de atribuição pelos MESMOS runs e decisões de teste do candidato: linhas de
+`fact_permuted_predictions` (identidade com valores próprios, diferentes do
+`fact_oos_predictions`), runs e linhas LOCO da ablação (fold como inteiro em texto, o
+formato do `dim_run`) e pesos da VSN.
 """
 
 from __future__ import annotations
@@ -30,8 +36,20 @@ from financial_forecasting.features.evaluation.domain.value_objects.cohort_run i
 from financial_forecasting.features.evaluation.domain.value_objects.forecast_record import (
     ForecastRecord,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.h3_parameters import (
+    H3_FAMILIES,
+    LOCO_REFERENCE_MODEL,
+    loco_model_of,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.permuted_forecast_record import (  # noqa: E501
+    IDENTITY_FAMILY,
+    PermutedForecastRecord,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.realized_returns import (
     RealizedReturns,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.vsn_weight_record import (
+    VsnWeightRecord,
 )
 
 GOLD_LEVELS: tuple[float, ...] = (0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95)
@@ -59,6 +77,11 @@ class Cohort:
     runs: tuple[CohortRun, ...]
     realized: RealizedReturns
     special: Special | None = None
+    # Stage 7.3: registros de atribuição (vazios até os mutadores `with_*`)
+    permuted: tuple[PermutedForecastRecord, ...] = ()
+    ablation_runs: tuple[CohortRun, ...] = ()
+    ablation_records: tuple[ForecastRecord, ...] = ()
+    vsn: tuple[VsnWeightRecord, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -280,3 +303,165 @@ def with_calib(
                         )
                     )
     return add_records(cohort, *extra)
+
+
+# --- Stage 7.3, Task 24: registros de atribuição ------------------------------------------
+
+PERMUTATION_ALGORITHM = "fisher_yates_random_random_v1"
+PERMUTATION_SEED = 130
+PARTITION_HASH = "a1" * 32  # o `SYNTHETIC_PARTITION_HASH` do helper `_h3_parameters`
+ABLATION_FEATURE_SET = "fs_all_ablation"
+
+
+def fold_index_of(cohort: Cohort, fold: str | None) -> int:
+    """Posição do fold do candidato (os folds sintéticos são `f0`, `f1`, ...)."""
+    folds = sorted({run.fold for run in cohort.runs if run.fold is not None})
+    return folds.index(str(fold))
+
+
+def points_of_run(cohort: Cohort, run: CohortRun) -> list[ForecastRecord]:
+    """Uma linha por (h, decisão) do teste do run (só pelas coordenadas do ponto)."""
+    seen: dict[tuple[int, int], ForecastRecord] = {}
+    for record in cohort.records:
+        if record.run_id == run.run_id and record.split == "test":
+            seen.setdefault((record.horizon, record.decision_idx), record)
+    return [seen[key] for key in sorted(seen)]
+
+
+def with_permuted(  # noqa: PLR0913 — um parâmetro por coluna de proveniência
+    cohort: Cohort,
+    *,
+    model: str = "tft",
+    k_p: int = 2,
+    families: tuple[str, ...] = H3_FAMILIES,
+    partition_hash: str = PARTITION_HASH,
+    permutation_seed: int = PERMUTATION_SEED,
+    permutation_algorithm: str = PERMUTATION_ALGORITHM,
+) -> Cohort:
+    """Linhas de `fact_permuted_predictions` para cada run do `model`: identidade e (f, k).
+
+    Os valores vêm de um `random.Random` semeado por (run, família, k, h, decisão), com
+    `value_guardrail = value_raw` (grade monótona): a identidade NÃO repete o
+    `fact_oos_predictions` do mesmo ponto.
+    """
+    levels = sorted({r.quantile_level for r in cohort.records})
+    labels = [(IDENTITY_FAMILY, 0), *((f, k) for f in families for k in range(1, k_p + 1))]
+    extra: list[PermutedForecastRecord] = []
+    for run in cohort.runs:
+        if run.model != model or run.seed is None:
+            continue
+        for point in points_of_run(cohort, run):
+            for family, k in labels:
+                rng = random.Random(
+                    f"perm|{run.run_id}|{family}|{k}|{point.horizon}|{point.decision_idx}"
+                )
+                for level, value in zip(levels, _values(rng), strict=False):
+                    extra.append(
+                        PermutedForecastRecord(
+                            run_id=run.run_id,
+                            model=model,
+                            seed=run.seed,
+                            fold_index=fold_index_of(cohort, run.fold),
+                            permuted_family=family,
+                            permutation_index=k,
+                            permutation_seed=permutation_seed,
+                            permutation_algorithm=permutation_algorithm,
+                            partition_hash=partition_hash,
+                            horizon=point.horizon,
+                            decision_idx=point.decision_idx,
+                            decision_timestamp=point.decision_timestamp,
+                            target_timestamp=point.target_timestamp,
+                            quantile_level=level,
+                            value_raw=value,
+                            value_guardrail=value,
+                            guardrail_applied=False,
+                        )
+                    )
+    return dataclasses.replace(cohort, permuted=cohort.permuted + tuple(extra))
+
+
+def ablation_models(families: tuple[str, ...] = H3_FAMILIES) -> tuple[str, ...]:
+    """A configuração de referência e as quatro LOCO, na ordem das famílias."""
+    return (LOCO_REFERENCE_MODEL, *(loco_model_of(family) for family in families))
+
+
+def with_ablation(cohort: Cohort, *, model: str = "tft", seeds: tuple[int, ...] = (1, 2)) -> Cohort:
+    """Runs e linhas de teste LOCO nas MESMAS decisões do candidato, por fold e seed.
+
+    O fold do run é o inteiro em texto (`"0"`, `"1"`), o formato do `dim_run`.
+    """
+    levels = sorted({r.quantile_level for r in cohort.records})
+    reference = next(run for run in cohort.runs if run.model == model)
+    by_fold = {
+        str(run.fold): points_of_run(cohort, run)
+        for run in cohort.runs
+        if run.model == model and run.seed == reference.seed
+    }
+    runs: list[CohortRun] = []
+    records: list[ForecastRecord] = []
+    for configuration in ablation_models():
+        for seed in seeds:
+            for fold in sorted(by_fold):
+                index = fold_index_of(cohort, fold)
+                ablation = CohortRun(
+                    run_id=f"{configuration}-s{seed}-{index}",
+                    model=configuration,
+                    seed=seed,
+                    fold=str(index),
+                    feature_set_name=ABLATION_FEATURE_SET,
+                    config_signature=f"sig-{configuration}",
+                )
+                runs.append(ablation)
+                for point in by_fold[fold]:
+                    rng = random.Random(
+                        f"loco|{configuration}|{seed}|{point.horizon}|{point.decision_idx}"
+                    )
+                    for level, value in zip(levels, _values(rng), strict=False):
+                        records.append(
+                            dataclasses.replace(
+                                point,
+                                run_id=ablation.run_id,
+                                model=configuration,
+                                seed=seed,
+                                fold=ablation.fold,
+                                quantile_level=level,
+                                value_raw=value,
+                                value_guardrail=value,
+                                guardrail_applied=False,
+                            )
+                        )
+    return dataclasses.replace(
+        cohort,
+        ablation_runs=cohort.ablation_runs + tuple(runs),
+        ablation_records=cohort.ablation_records + tuple(records),
+    )
+
+
+def with_vsn(cohort: Cohort, *, variables: Mapping[str, str], model: str = "tft") -> Cohort:
+    """Pesos da VSN (variável → família) em cada decisão de teste de cada run do `model`."""
+    extra: list[VsnWeightRecord] = []
+    for run in cohort.runs:
+        if run.model != model or run.seed is None:
+            continue
+        decisions = sorted(
+            {(p.decision_idx, p.decision_timestamp) for p in points_of_run(cohort, run)}
+        )
+        for decision_idx, timestamp in decisions:
+            rng = random.Random(f"vsn|{run.run_id}|{decision_idx}")
+            raw = [rng.uniform(0.1, 1.0) for _ in variables]
+            total = sum(raw)
+            for (variable, family), weight in zip(sorted(variables.items()), raw, strict=True):
+                extra.append(
+                    VsnWeightRecord(
+                        run_id=run.run_id,
+                        model=model,
+                        seed=run.seed,
+                        fold_index=fold_index_of(cohort, run.fold),
+                        decision_idx=decision_idx,
+                        decision_timestamp=timestamp,
+                        variable=variable,
+                        family=family,
+                        weight=weight / total,
+                    )
+                )
+    return dataclasses.replace(cohort, vsn=cohort.vsn + tuple(extra))
