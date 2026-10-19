@@ -389,3 +389,41 @@ def test_test_order_is_checked_before_values(nan_at: int) -> None:
     rows = CalibrateConformal()(_command((bad,))).units
     assert {r.status for r in rows} == {UnitStatus.UNDEFINED}
     assert all("not strictly after the previous test decision" in (r.reason or "") for r in rows)
+
+
+# --- Auditoria de testes (TA-7, TA-10) ------------------------------------------------
+
+
+def test_equal_test_decisions_are_undefined() -> None:
+    """TA-7 (mutante S05, `<=` → `<`): decisão de teste repetida também é fora de ordem."""
+    unit = _unit()
+    test = list(unit.test)
+    test[1] = ConformalPointInput(
+        test[0].decision_timestamp, test[1].target_timestamp, test[1].grid, None
+    )
+    rows = CalibrateConformal()(
+        _command(
+            (ConformalUnitInput(unit.fold_index, unit.seed, unit.horizon, unit.calib, tuple(test)),)
+        )
+    ).units
+    assert {r.status for r in rows} == {UnitStatus.UNDEFINED}
+    assert all("test[1].decision_timestamp" in (r.reason or "") for r in rows)
+    assert all("not strictly after the previous test decision" in (r.reason or "") for r in rows)
+
+
+def test_arithmetic_error_building_the_calib_is_a_unit_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """TA-10 (mutante S03): a defesa `ArithmeticError` do `calibration_set_for` fica."""
+    from financial_forecasting.features.inference.application.use_cases import (  # noqa: PLC0415
+        calibrate_conformal as module,
+    )
+
+    def boom(unit: ConformalUnitInput, pair: tuple[float, float]) -> object:
+        raise ZeroDivisionError("planted")
+
+    monkeypatch.setattr(module, "calibration_set_for", boom)
+    rows = CalibrateConformal()(_command((_unit(),))).units
+    assert rows
+    assert {r.status for r in rows} == {UnitStatus.ERROR}
+    assert {r.reason for r in rows} == {"planted"}
