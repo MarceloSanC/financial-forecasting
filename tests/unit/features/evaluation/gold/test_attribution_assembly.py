@@ -693,3 +693,155 @@ def test_vo_invariants_become_undefined(damage: str) -> None:
 
     assert isinstance(reduced, UndefinedRunReduction)
     assert "price k=1" in reduced.reason
+
+
+# --- entradas extras ou misturadas viram undefined com o seu motivo (C6-2) ----------------
+
+
+def _reduce_reason(records: list[PermutedForecastRecord]) -> str:
+    cohort = _cohort()
+    reduced = reduce_permuted_run(records, realized=cohort.realized, levels=GOLD_LEVELS)
+    assert isinstance(reduced, UndefinedRunReduction), reduced
+    return reduced.reason
+
+
+def _e11() -> str:
+    rows = _first_run_rows(_cohort())
+    target = rows[0]
+    return _reduce_reason(
+        [
+            dataclasses.replace(r, guardrail_applied=True)
+            if (r.horizon, r.target_timestamp, r.permuted_family, r.permutation_index)
+            == (target.horizon, target.target_timestamp, "none", 0)
+            and r.quantile_level == GOLD_LEVELS[3]
+            else r
+            for r in rows
+        ]
+    )
+
+
+def _e12() -> str:
+    rows = _first_run_rows(_cohort())
+    return _reduce_reason([*rows, dataclasses.replace(rows[0], quantile_level=0.33)])
+
+
+def _e16() -> str:
+    rows = _first_run_rows(_cohort())
+    return _reduce_reason([dataclasses.replace(rows[-1], permutation_seed=131), *rows[:-1]])
+
+
+def _e17() -> str:
+    rows = _first_run_rows(_cohort())
+    point = max(r.target_timestamp for r in rows if r.horizon == 1)
+    return _reduce_reason(
+        [
+            r
+            for r in rows
+            if not (
+                (r.permuted_family, r.permutation_index, r.horizon) == ("price", 2, 1)
+                and r.target_timestamp == point
+            )
+        ]
+    )
+
+
+def _e18() -> str:
+    cohort = _cohort()
+    run = cohort.ablation_runs[0]
+    rows = [r for r in cohort.ablation_records if r.run_id == run.run_id]
+    reduced = reduce_ablation_run(
+        [*rows[1:], dataclasses.replace(rows[0], model="tft_quantile")],
+        run=run,
+        realized=cohort.realized,
+        levels=GOLD_LEVELS,
+    )
+    assert isinstance(reduced, UndefinedRunReduction)
+    return reduced.reason
+
+
+def _assembled(permuted: Any = None, candidate_runs: Any = None, ablation: Any = None) -> Any:  # noqa: ANN401
+    return _assemble(permuted=permuted, candidate_runs=candidate_runs, ablation=ablation)
+
+
+def _e13() -> str:
+    permuted = _hand_permuted()
+    runs = [_candidate_run(1), _candidate_run(2)]
+    extra_run = dataclasses.replace(_candidate_run(1), run_id="tft-s1-1", fold="1")
+    extra = dataclasses.replace(permuted[0], run_id="tft-s1-1", fold_index=1)
+    return str(_assembled([*permuted, extra], [*runs, extra_run]).permutation_reason)
+
+
+def _e13b() -> str:
+    permuted = _hand_permuted()
+    runs = [_candidate_run(1), _candidate_run(2)]
+    extra_run = dataclasses.replace(_candidate_run(1), run_id="tft-s1-1")
+    later = tuple(session(20 + i) for i in range(3))
+    extra = dataclasses.replace(permuted[0], run_id="tft-s1-1", decision_timestamps=later)
+    return str(_assembled([*permuted, extra], [*runs, extra_run]).permutation_reason)
+
+
+def _e14() -> str:
+    permuted = _hand_permuted()
+    permuted[0] = dataclasses.replace(permuted[0], seed=3)
+    return str(_assembled(permuted).permutation_reason)
+
+
+def _e15() -> str:
+    permuted = _hand_permuted()
+    permuted[0] = dataclasses.replace(
+        permuted[0], permuted={**permuted[0].permuted, ("price", 3, 1): (0.0, 0.0, 0.0)}
+    )
+    return str(_assembled(permuted).permutation_reason)
+
+
+def _e20() -> str:
+    runs, losses = _hand_ablation()
+    extra_run = _ablation_run(_REFERENCE, 3)
+    extra = dataclasses.replace(losses[0], run_id=extra_run.run_id, seed=3)
+    return str(_assembled(ablation=([*runs, extra_run], [*losses, extra])).ablation_reason)
+
+
+def _e21() -> str:
+    runs, losses = _hand_ablation()
+    losses[0] = dataclasses.replace(losses[0], model_version=loco_model_of("price"))
+    return str(_assembled(ablation=(runs, losses)).ablation_reason)
+
+
+def _e24() -> str:
+    permuted = _hand_permuted()
+    permuted[0] = dataclasses.replace(
+        permuted[0],
+        identity={1: permuted[0].identity[1]},
+        permuted={k: v for k, v in permuted[0].permuted.items() if k[2] == 1},
+    )
+    return str(_assembled(permuted).permutation_reason)
+
+
+def _e25() -> str:
+    permuted = _hand_permuted()
+    shifted = (session(10), session(11), session(14))
+    permuted[1] = dataclasses.replace(permuted[1], decision_timestamps=shifted)
+    return str(_assembled(permuted).permutation_reason)
+
+
+@pytest.mark.parametrize(
+    ("case", "build", "reason"),
+    [
+        pytest.param("E11", _e11, "guardrail_flag_mismatch", id="E11"),
+        pytest.param("E12", _e12, "grid_divergent", id="E12"),
+        pytest.param("E13", _e13, "decisions of the folds overlap or are out of order", id="E13"),
+        pytest.param("E13b", _e13b, "fold repeated", id="E13b"),
+        pytest.param("E14", _e14, "seed 3 != dim_run 1", id="E14"),
+        pytest.param("E15", _e15, "['price', 3, 1] outside [h3]", id="E15"),
+        pytest.param("E16", _e16, "mixed seed, fold or permutation provenance", id="E16"),
+        pytest.param("E17", _e17, "price k=2 h=1: decisions differ from the identity", id="E17"),
+        pytest.param("E18", _e18, "model_version_mismatch", id="E18"),
+        pytest.param("E20", _e20, "seed 3 is not a declared seed", id="E20"),
+        pytest.param("E21", _e21, "reduction identity differs from the dim_run", id="E21"),
+        pytest.param("E24", _e24, "identity horizons [1] != [1, 7]", id="E24"),
+        pytest.param("E25", _e25, "decision sets differ between seeds or configurations", id="E25"),
+    ],
+)
+def test_extra_or_mixed_inputs_are_undefined(case: str, build: Any, reason: str) -> None:  # noqa: ANN401
+    """Os 13 mutantes sobreviventes do C6-2: cada entrada inválida vira undefined e o motivo."""
+    assert reason in build(), case
