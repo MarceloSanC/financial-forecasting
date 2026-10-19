@@ -150,14 +150,16 @@ def _point_violation(
     )
     if indexes:
         return indexes[0]
-    for violation in (
-        missing_levels(present=by_level, expected=levels, target_timestamp=target),
-        extra_levels(present=by_level, expected=levels, where=f"target {target!r}"),
-        guardrail_flag_mismatch((row.guardrail_applied for row in rows), target_timestamp=target),
-    ):
-        if violation is not None:
-            return violation
-    return None
+    missing = missing_levels(present=by_level, expected=levels, target_timestamp=target)
+    if missing is not None:
+        return missing
+    extra = extra_levels(present=by_level, expected=levels)
+    if extra:
+        return RuleViolation(
+            AlignmentKind.GRID_DIVERGENT,
+            f"target {target!r}: levels {list(extra)} outside the grid",
+        )
+    return guardrail_flag_mismatch((row.guardrail_applied for row in rows), target_timestamp=target)
 
 
 def _series_losses(

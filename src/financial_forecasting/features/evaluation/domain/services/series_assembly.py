@@ -203,18 +203,14 @@ def missing_levels(
     )
 
 
-def extra_levels(
-    *, present: Iterable[float], expected: Iterable[float], where: str
-) -> RuleViolation | None:
-    """I6: níveis presentes além da grade esperada (`GRID_DIVERGENT`).
+def extra_levels(*, present: Iterable[float], expected: Iterable[float]) -> tuple[float, ...]:
+    """I6: os níveis presentes além da grade esperada, ordenados (vazio se nenhum).
 
-    Na 6.4, a grade esperada é a comum aos modelos do horizonte (os níveis da união além
-    da interseção); na 7.3, a grade declarada no comando.
+    A regra devolve os dados; cada montagem formata o seu `GRID_DIVERGENT` (C7-10): na
+    6.4 a grade esperada é a comum aos modelos do horizonte e o detalhe lista as grades
+    por modelo; na 7.3 é a grade declarada no comando e o detalhe nomeia o alvo.
     """
-    extra = sorted(set(present) - set(expected))
-    if not extra:
-        return None
-    return RuleViolation(AlignmentKind.GRID_DIVERGENT, f"{where}: levels {extra} outside the grid")
+    return tuple(sorted(set(present) - set(expected)))
 
 
 def guardrail_flag_mismatch(
@@ -473,18 +469,15 @@ def _check_grids(points: Points, findings: _Findings) -> dict[int, tuple[float, 
                 if flag is not None:
                     findings.add(flag.kind, flag.detail, horizon=horizon, model=model, seed=seed)
         distinct = {tuple(sorted(grid)) for grid in by_model.values()}
-        divergent = (
-            extra_levels(
-                present=set().union(*by_model.values()),
-                expected=set.intersection(*by_model.values()),
-                where="grids by model: "
+        if by_model and extra_levels(
+            present=set().union(*by_model.values()), expected=set.intersection(*by_model.values())
+        ):
+            findings.add(
+                AlignmentKind.GRID_DIVERGENT,
+                "grids by model: "
                 + "; ".join(f"{m}={sorted(by_model[m])}" for m in sorted(by_model)),
+                horizon=horizon,
             )
-            if by_model
-            else None
-        )
-        if divergent is not None:
-            findings.add(divergent.kind, divergent.detail, horizon=horizon)
         if by_model:
             grids[horizon] = tuple(sorted(next(iter(distinct))))
     return grids

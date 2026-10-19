@@ -562,13 +562,9 @@ def test_extra_levels_and_guardrail_flag_are_the_series_assembly_rules() -> None
 
     assert attribution_assembly.extra_levels is series_assembly.extra_levels
     assert attribution_assembly.guardrail_flag_mismatch is series_assembly.guardrail_flag_mismatch
-    extra = series_assembly.extra_levels(present=(0.1, 0.5, 0.7), expected=(0.1, 0.5), where="t")
-    assert extra is not None
-    assert (extra.kind.value, extra.detail) == (
-        "grid_divergent",
-        "t: levels [0.7] outside the grid",
-    )
-    assert series_assembly.extra_levels(present=(0.1,), expected=(0.1, 0.5), where="t") is None
+    # C7-10: a regra devolve os dados; cada montagem formata o seu texto
+    assert series_assembly.extra_levels(present=(0.1, 0.5, 0.7), expected=(0.1, 0.5)) == (0.7,)
+    assert series_assembly.extra_levels(present=(0.1,), expected=(0.1, 0.5)) == ()
     flag = series_assembly.guardrail_flag_mismatch((True, False), target_timestamp="x")
     assert flag is not None and flag.kind.value == "guardrail_flag_mismatch"
     assert series_assembly.guardrail_flag_mismatch((True, True), target_timestamp="x") is None
