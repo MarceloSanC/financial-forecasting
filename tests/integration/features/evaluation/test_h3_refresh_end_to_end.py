@@ -412,6 +412,8 @@ def test_null_case_both_methods_ok_and_not_sustained(
     # C8-8: nenhuma família exclui 0 em nenhum método
     assert reading["heterogeneous_permutation"] is False
     assert reading["heterogeneous_ablation"] is False
+    # TA-13 (CA14): nenhuma família exclui 0, linha a linha
+    assert all(r["excludes_zero"] is not True for r in shares)
 
 
 def test_opposite_sides_between_methods_not_sustained_ok(scenario: _Scenario) -> None:
@@ -425,6 +427,14 @@ def test_opposite_sides_between_methods_not_sustained_ok(scenario: _Scenario) ->
         if r["family"] == "sentiment"
     }
     assert sides == {"permutation": 1, "loco": -1}
+    # TA-13: o "não sustentado" vem do lado oposto, não de um intervalo largo — a família
+    # exclui 0 nos dois métodos
+    excludes = {
+        r["method"]: r["excludes_zero"]
+        for r in _rows(scenario.opposite, GOLD_H3_SHARES.name)
+        if r["family"] == "sentiment"
+    }
+    assert excludes == {"permutation": True, "loco": True}
     # TA-3: as duas flags de heterogeneidade, uma por método, gravadas na leitura
     assert reading["heterogeneous_permutation"] is True
     assert reading["heterogeneous_ablation"] is True
