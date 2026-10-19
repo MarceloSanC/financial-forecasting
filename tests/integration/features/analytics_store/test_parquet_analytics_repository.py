@@ -342,7 +342,7 @@ def _permuted_command(run_id: str) -> PersistPermutedPredictionsCommand:
     )
 
 
-def test_permuted_round_trip_and_run_filter_pushdown(tmp_path: Path) -> None:
+def test_permuted_round_trip_and_run_filter(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     writer = PersistPermutedPredictions(repository=repo)
     first = writer(_permuted_command("a" * 64))
@@ -363,7 +363,7 @@ def test_permuted_round_trip_and_run_filter_pushdown(tmp_path: Path) -> None:
     assert any(p.name == f"run_id={'a' * 64}" for p in tmp_path.rglob("run_id=*"))
 
 
-def test_vsn_round_trip_and_run_filter_pushdown(tmp_path: Path) -> None:
+def test_vsn_round_trip_and_run_filter(tmp_path: Path) -> None:
     repo = _repo(tmp_path)
     timestamps = tuple(f"2024-03-{day:02d}T00:00:00+00:00" for day in range(4, 10))
     families = {"close": "price", "rsi_14": "technical", "target": "none"}
