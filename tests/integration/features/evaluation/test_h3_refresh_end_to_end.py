@@ -409,6 +409,9 @@ def test_null_case_both_methods_ok_and_not_sustained(
     assert {r["method_status"] for r in shares} == {"ok"}
     assert reading["sustained"] is False
     assert reading["status"] == "ok"
+    # C8-8: nenhuma família exclui 0 em nenhum método
+    assert reading["heterogeneous_permutation"] is False
+    assert reading["heterogeneous_ablation"] is False
 
 
 def test_opposite_sides_between_methods_not_sustained_ok(scenario: _Scenario) -> None:
