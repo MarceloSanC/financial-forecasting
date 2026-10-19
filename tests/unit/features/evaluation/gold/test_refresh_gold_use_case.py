@@ -1820,3 +1820,31 @@ def test_candidate_run_without_vsn_rows_makes_the_vsn_undefined() -> None:
     assert vsn is not None
     assert vsn.status == "undefined"
     assert f"run {run_id}: no vsn rows" in str(vsn.reason)
+
+
+class _CountingAfter(_SpyBackend):
+    """Depois das `ok` chamadas da 6.4, devolve b̂ = 1, 2, …, 16 (o máximo numa série LOCO)."""
+
+    def __init__(self, log: _Log, *, ok: int) -> None:
+        super().__init__(log)
+        self._ok = ok
+
+    def optimal_block_length(self, *, series: Sequence[float]) -> float:
+        value = super().optimal_block_length(series=series)
+        index = len(self.block_series) - self._ok
+        return float(index) if index > 0 else value
+
+
+@pytest.mark.unit
+def test_block_is_the_joint_max_over_the_16_series() -> None:
+    """C8-3: b̂ distinto por série; o máximo (16.0) é da última série, da LOCO."""
+    before = _calls_without_h3()
+    harness = _h3_harness()
+    harness.use_case._mcs_backend = _CountingAfter(harness.log, ok=before)
+    inputs = _h3_run(harness)
+    backend = harness.use_case._mcs_backend
+    assert len(backend.block_series) - before == 16  # noqa: PLR2004
+    assert inputs.h3_reports.max_block_estimate == 16.0  # noqa: PLR2004
+    assert inputs.h3_reports.block_length == block_length_rule(horizon=7, max_estimate=16.0)
+    [call] = [c for c in backend.index_calls if c["reps"] == 1000]  # noqa: PLR2004
+    assert call["block_size"] == 16  # noqa: PLR2004
