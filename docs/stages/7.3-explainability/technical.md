@@ -2310,4 +2310,17 @@ com `"confirmatory_ready"` recomendada e `"ablation"` como alternativa.
 **Razão:** é a opção recomendada pelo plano, e é reversível (só a tag do tracker, fora
 do `run_id` e do silver).
 
+### 2026-10-19 — [decision] ambiente — formatador pinado e git sem locks opcionais (aprovação do orquestrador) — Claude (Opus 5.5)
+**Contexto:** a worktree não tem o hook de pre-commit, e o ruff do venv (0.15.20)
+reformataria 33 arquivos já commitados. O hook pina o ruff 0.6.9
+(`.pre-commit-config.yaml`).
+**O que foi decidido:**
+- O check de formato de cada Task é `uvx ruff@0.6.9 format` só nos arquivos tocados,
+  igual ao hook. `ruff check` e `mypy src/` rodam com as versões do venv, iguais às do
+  `make lint`/`make typecheck`.
+- Todo container desta Stage roda com `GIT_OPTIONAL_LOCKS=0`, porque o `git status` de
+  dentro do container não deve deixar `index.lock` na worktree.
+Os dois foram aprovados pelo orquestrador junto com as Tasks 01–04.
+**Razão:** mantém o estilo já commitado e evita o lock órfão. Nenhum contrato muda.
+
 <!-- END: post-execution -->
