@@ -153,3 +153,10 @@ def test_passed_is_the_fail_closed_verdict() -> None:
         reference, {**reference, (0, 1, 0.1): 1.5}, mode=STRICT, center=0.0, scale=1.0
     )
     assert (failing.passed, failing.keys_match, failing.failures) == (False, True, 1)
+
+
+def test_within_mode_exact_boundary_is_inclusive() -> None:
+    """TA-5 (mutante R06, `<=` → `<`): |Δ| exatamente igual ao ATOL passa."""
+    new, ref, center, scale = TOLERANCE_ATOL, 0.0, 0.0, 1.0
+    assert abs(new - ref) / scale == TOLERANCE_ATOL  # a fronteira é exata em float
+    assert within_mode(new=new, ref=ref, center=center, scale=scale, mode=TOLERANCE)
