@@ -163,7 +163,9 @@ class InMemoryTftCheckpointPredictor:
                     "encoder reals in the checkpoint (C5)"
                 )
         last = len(target) - 1
-        sampled = [d for d in decisions if any(d + h <= last for h in horizons)]
+        # a regra de amostra do real: com decodificador mínimo de 1 passo, d tem amostra
+        # de predição se e só se d + 1 cabe no painel (independe dos horizontes pedidos)
+        sampled = [d for d in decisions if d + 1 <= last]
         if len(sampled) != len(decisions):
             missing = sorted(set(decisions) - set(sampled))
             raise ValueError(

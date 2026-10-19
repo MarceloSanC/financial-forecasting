@@ -42,7 +42,6 @@ from tests.fakes.features.modeling.in_memory_tft_checkpoint_predictor import (
 from tests.unit.features.modeling.application import _frozen_tft_cohort as cohort
 from tests.unit.features.modeling.application.test_predict_tft_from_checkpoints import (
     _SEED,
-    _indices,
     _Setup,
 )
 
@@ -59,9 +58,14 @@ _REGISTRY: dict[str, tuple[str, ...]] = {
 _K_P = 2
 
 
+# Decisões de teste com emissão de cada fold do cohort sintético (120 sessões, h = 1, 2):
+# o fold 1 termina no fim do painel, e a última decisão dele não tem alvo (C3-4: literal,
+# não a fórmula do fornecedor).
+_TEST_DECISIONS = {0: (114, 115, 116), 1: (117, 118)}
+
+
 def _emitting_test_decisions(setup: _Setup, fold: Any) -> tuple[int, ...]:  # noqa: ANN401
-    last = len(cohort.sessions()) - 1
-    return tuple(d for d in sorted(_indices(fold.test)) if d + min(cohort.HORIZONS) <= last)
+    return _TEST_DECISIONS[fold.fold_index]
 
 
 def _donors(setup: _Setup) -> dict[int, tuple[tuple[int, ...], ...]]:
