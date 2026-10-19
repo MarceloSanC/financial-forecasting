@@ -2113,4 +2113,72 @@ As citações `be50d72` (§1, Pré-condições) e `58e70aa` (§1 e CA17) devem s
 `5341530` e `8292d88`. O §1 não é editado (`check_technical_postexec`).
 **Razão:** é a P1 do plano. O mapeamento fica aqui porque o §1–§6 está congelado.
 
+### 2026-10-19 — [deviation] gap-7.2 — verificação de gap contra a 7.2 mergeada e o develop — Claude (Opus 5.5)
+**Contexto:** a verificação de gap do §1 ("Preparação da Fase 4") rodou sobre o HEAD
+rebaseado (`$BASE` = `0f461e1`). Também foi conferido o que o develop trouxe depois da
+escrita do plano: a #159 (contrato do dataset TFT), os gates de arquitetura da #61/#160 e
+o dono único do evaluation (#118/#167).
+
+**Saída da tabela do §1.** Bateram com o esperado:
+- `reproduction_policy.py` (5);
+- `ReproductionError` em `inference/application/use_cases/run_inference.py:125`;
+- `PKGS_OK`;
+- `series_assembly.py` (4);
+- o campo `conformal: ConformalParameters | None` (1);
+- `R2_OK`;
+- `refresh_gold.py` dos DTOs (22);
+- `inference-no-mapie-leak` (2);
+- `violating == ["Hasher"]` (1);
+- as listas de `RefreshParameters(` e `GoldInputs(`.
+
+A lista de `RefreshParameters(` tem seis arquivos: `_gold_inputs.py`,
+`test_gold_generation_reader_contract.py`, `test_gold_store_contract.py`,
+`test_refresh_gold.py`, `test_refresh_gold_dtos.py` e `test_refresh_gold_use_case.py`.
+Todos estão na lista da Task 27. A de `GoldInputs(` tem `_gold_inputs.py` e
+`test_refresh_gold_dtos.py`, os dois na Task 28. Também conferem:
+- a forma do bloco `[conformal]` (default `None`, `_OPTIONAL_KEYS`, `_check_conformal`
+  recusa no r0, `as_payload` só com a chave);
+- a r2 ancorada (`aapl_confirmatory-r2-f32ef5ebbbb8`, tag
+  `preregistration/aapl_confirmatory-r2-f32ef5ebbbb8`, `.anchor.toml` com `commit`,
+  `comment_url` e `anchored_at = 2026-10-19T02:45:31Z`);
+- `test_every_revision_hash_quoted` com `[r0, r1, r2]`;
+- os helpers `r2_payload()`, `_conformal_parameters.py`, `gold/_cohort_factory.py` e
+  `completed_inputs()`, este com `completed_inputs_without_conformal()` e
+  `completed_inputs_r0()` ao lado;
+- o padrão de infinito (`correction = null` + `infinite`);
+- os builders com `depends_on = {QUALITY_CHECKS}` e `runs_when_blocked = False`;
+- `RefreshParameters.conformal_parameters` e `refresh_command_from` com
+  `prereg.conformal`;
+- a aresta única `refresh_gold → calibrate_conformal`.
+
+**Divergências e ajustes:**
+
+| # | Observado | Tasks | Ajuste |
+|---|---|---|---|
+| G1 | O LAYOUT §7 (l. 311) e o cabeçalho do `bc-independence` contam **34** arestas de runtime, não 28 (a #159 trouxe 6 e a 7.2, 1). O concept §8 já dizia "sobe 7 sobre o número que a 7.2 deixar" | 19, 24 | Task 19: **34 → 40**. Task 24: **40 → 41**. O comentário "(34 hoje)" do `.importlinter` sobe junto |
+| G2 | O `grep -cE '^\+…-> '` contra `$BASE` também conta a linha trocada pela Task 07 (G4) | 19, 24 | Contagem por `… \| grep -vc cohort_unit_runner`: **= 6** na Task 19 e **= 7** na Task 24 |
+| G3 | `grep -n '_timed("conformal"'` não acha nada, porque a chamada é multilinha (`_timed(` l. 345, `"conformal",` l. 346). A forma é a esperada: `_timed(step, n_in, action, count)`, dentro do ramo sem bloqueio e sob `if parameters.conformal_parameters is not None` | 30 | Conferência por `grep -n '"conformal",'`. A etapa `"h3"` entra logo depois desse bloco, com a mesma forma |
+| G4 | `[schema_literals]` já está **vazio** (#159). O `run_confirmatory_cohort.py` importa `DATASET_TFT_LAYER`/`DATASET_TFT_TABLE` do `dataset_tft_contract`, e a aresta está declarada no `.importlinter`. Se o `load_training_grid` sair desse módulo, a linha `run_confirmatory_cohort -> dataset_tft_contract` deixa de casar (`unmatched_ignore_imports_alerting = error`), e `cohort_unit_runner -> dataset_tft_contract` vira aresta nova, que reprova o `bc-independence` | 07, §3 | Proposta, que **muda a lista fechada e aguarda OK antes da Task 07**: sai `scripts/arch_baseline.toml` (nada a remover), sai `train_tft.py` (o alias `DATASET_LAYER` fica desnecessário) e entra `.importlinter`, onde a linha `run_confirmatory_cohort -> …dataset_tft_contract` vira `cohort_unit_runner -> …dataset_tft_contract`. A contagem continua 34, e o LAYOUT §7 continua certo ("as seis `modeling.application.use_cases → …dataset_tft_contract`"). Verificação da Task 07: `lint-imports` + `test_import_contracts.py`. No §3 e na Task 18, o `arch_baseline.toml` passa a não ter **nenhuma** diferença contra `$BASE` (`git diff --exit-code "$BASE" -- scripts/arch_baseline.toml`) |
+| G5 | `GOLD_SCHEMAS` e o composition root têm **15** tabelas e builders, mas `CONFIRMATORY_TABLES` tem **14** (sem `quality_checks`) | 29 | Depois da Task 29: 19 schemas, 18 confirmatórias e 19 builders. O `build_order` do `test_composition_root.py` é `quality_checks` seguido dos outros em ordem alfabética, então os `h3_*` entram entre `dm_seed_fraction` e `loss_differentials` |
+| G6 | `duplicate_levels(rows_by_level: Mapping[float, Sequence[ForecastRecord]], …)` é tipado pelo `ForecastRecord` | 23, 24 | `PermutedForecastRecord` **compõe** um `ForecastRecord` (`forecast`) com `permuted_family`, `permutation_index`, `permutation_seed`, `permutation_algorithm` e `partition_hash`. A montagem passa os `ForecastRecord` às regras públicas sem cast nem cópia da regra. Os arquivos não mudam |
+| G7 | Os gates novos do develop não aparecem no plano: `check_vo_invariants`, `check_use_case_deps`, `check_domain_determinism`, `test_evaluation_validation_single_owner` e as guardas da 7.2 (`test_refresh_gold_imports_only_calibrate_conformal_from_inference`, `test_evaluation_dtos_builders_and_domain_never_import_inference`, `test_refresh_gold_imports_only_the_command_dtos_at_runtime`) | 01, 07–09, 12, 13, 15, 19, 21–30 | O código novo do evaluation valida inteiro por `is_int`/`validate_int_at_least`, número por `is_real_number`/`is_finite_number` e ordem de timestamps por `check_strictly_increasing`. O `permutation_plan` usa `random.Random(semente)` local, nunca função de módulo do `random`. Os `__init__` de use case recebem ports, ou use case do mesmo slice (`TrainTft` no `RunAblationCohort`). `refresh_gold.py`, DTOs, builders e domain do evaluation não importam nada novo do inference, e o catálogo de H3 duplica as constantes, travado pelo teste de integração da Task 21. A guarda da Task 29 cobre o modeling. A parte do inference já é coberta pela guarda da 7.2 |
+| G8 | Os testes unitários do `RunInference` (7.1) leem o silver pelo `FakeAnalyticsRepository`, não pelo `FakeSilverTableReader` do evaluation | 19 | A Task 19 segue o padrão da 7.1: o `FakeAnalyticsRepository` já tem as tabelas novas desde a Task 14. A edição do `fake_silver_table_reader.py`, que está na lista, continua para servir à Task 30 |
+| G9 | `[handoff]` não é tag aceita por `check_technical_postexec.py` (`ENTRY_TAGS` = decision, finding, deviation, measurement, CONVENTIONS §3.4) | 33, L0 | O cabeçalho da entrada fica `### <data> — [decision] handoff — …`. O `test_handoff_cites_only_known_subcommands` localiza a entrada pelo escopo `handoff`, e "a entrada `[handoff]`" do plano se lê assim |
+| G10 | O composition root tem `_TRAINERS_DEVICE = "cpu"` como `supported_device` de cinco construções | 03 | Não é divergência. O `_SUPPORTED_DEVICES` novo convive com ele, e as fábricas confirmatória e de inferência seguem com `"cpu"` |
+
+**Ambiente** (o §1 manda colar aqui). Por orientação do orquestrador, a Stage usa o volume
+próprio `financial-forecasting_ff73-venv`, sincronizado por `uv sync --extra dev`, e não
+o compartilhado `financial-forecasting_app-venv`. Os gates rodam como
+`--name ff-gate-186`, com `--cpus 6 --memory 8g --memory-swap 8g`,
+`PYTEST_PAR='-n 4 --dist loadgroup'` e um gate de 8 GB por vez. O nome é a trava, e
+container alheio nunca é tocado. A função `run()` do §1 fica com
+`VENV=financial-forecasting_ff73-venv` e `--name ff-gate-186`. Saída medida:
+1. `uv lock --check` → `Resolved 182 packages`, exit 0 (uv 0.12.3 na imagem; o CI pina
+   0.11.28, `[finding]` da 7.2);
+2. `import torch, mapie` → `2.13.0+cpu 1.5.0`.
+
+**Razão:** G1–G3, G5 e G10 são números e formas medidos, e nenhuma assinatura consumida
+mudou. G6–G9 cabem nas listas fechadas. Só G4 mexe numa lista fechada, por isso fica
+como pergunta antes da Task 07 (§1, "sem mudar a lista fechada sem perguntar").
+
 <!-- END: post-execution -->
