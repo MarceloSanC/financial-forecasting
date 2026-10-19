@@ -1464,12 +1464,20 @@ def test_assembly_undefined_reason_names_the_raw_fold() -> None:
 _H3_HORIZONS = (1, 7)
 
 
+_H3_REPS = 37
+_H3_BOOTSTRAP_SEED = 7
+
+
 def _h3_parameters_for_test() -> H3Parameters:
     from tests.unit.features.evaluation._h3_parameters import h3_block  # noqa: PLC0415
 
     block: dict[str, Any] = copy.deepcopy(h3_block())
     block["k_p"] = 2
     block["ablation"]["seeds"] = [1, 2]
+    # TA-10: B e semente do bootstrap ≠ os de produção (1000, 129), para que o repasse do
+    # plano ao `bootstrap_indices` seja distinguível de um literal
+    block["reps"] = _H3_REPS
+    block["bootstrap_seed"] = _H3_BOOTSTRAP_SEED
     return H3Parameters.from_mapping(block)
 
 
@@ -1644,10 +1652,10 @@ def test_one_bootstrap_indices_call_serves_both_methods() -> None:
     before = _calls_without_h3()
     harness = _h3_harness()
     inputs = _h3_run(harness)
-    h3_calls = [c for c in harness.backend.index_calls if c["reps"] == 1000]  # noqa: PLR2004
+    h3_calls = [c for c in harness.backend.index_calls if c["reps"] == _H3_REPS]
     assert len(h3_calls) == 1
     [call] = h3_calls
-    assert call["seed"] == 129  # noqa: PLR2004
+    assert (call["reps"], call["seed"]) == (_H3_REPS, _H3_BOOTSTRAP_SEED)
     assert call["scheme"] is BootstrapScheme.STATIONARY
     assert len(harness.backend.block_series) - before == 16  # noqa: PLR2004
     assert call["block_size"] == 7  # noqa: PLR2004 — max(7, ⌈2,5⌉), o piso
@@ -1768,7 +1776,7 @@ def test_method_undefined_in_assembly_runs_no_bootstrap() -> None:
     harness = _harness(cohort, silver=silver)
     inputs = _h3_run(harness)
     assert len(harness.backend.block_series) == before
-    assert [c for c in harness.backend.index_calls if c["reps"] == 1000] == []  # noqa: PLR2004
+    assert [c for c in harness.backend.index_calls if c["reps"] == _H3_REPS] == []
     reports = inputs.h3_reports
     assert reports.permutation is not None and reports.ablation is not None
     assert reports.permutation.reason == JOINT_BLOCK_NEEDS_BOTH
@@ -1852,7 +1860,7 @@ def test_block_is_the_joint_max_over_the_16_series() -> None:
     assert len(backend.block_series) - before == 16  # noqa: PLR2004
     assert inputs.h3_reports.max_block_estimate == 9.3  # noqa: PLR2004
     assert inputs.h3_reports.block_length == 10  # noqa: PLR2004 — max(7, ⌈9,3⌉)
-    [call] = [c for c in backend.index_calls if c["reps"] == 1000]  # noqa: PLR2004
+    [call] = [c for c in backend.index_calls if c["reps"] == _H3_REPS]
     assert call["block_size"] == 10  # noqa: PLR2004
 
 
