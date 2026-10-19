@@ -891,6 +891,7 @@ def test_ablation_base_other_than_the_spec_is_refused_before_the_lock() -> None:
     harness = _harness()
     with pytest.raises(AblationBaseMismatchError, match="declares base cohort_hash"):
         harness.run(base_cohort_hash="e" * 64)
+    assert harness.ledger.acquire_count == 0  # recusado ANTES do lock (C7-8)
     assert not harness.ledger.is_locked
     assert harness.manifest.recorded(_cohort_id(harness.spec)) is None
     assert harness.predictor.calls == []
