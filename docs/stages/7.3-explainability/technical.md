@@ -2497,4 +2497,40 @@ pushdown. A Task 15 e a linha CA10 da matriz de rastreabilidade (acima, congelad
 seguem com os nomes antigos. Os nomes válidos são os novos. Achado C4-7 do
 Checkpoint C 13–15.
 
+### 2026-10-19 — [deviation] Task 24 — reduções devolvem `UndefinedRunReduction` e a montagem não recebe o realizado — Claude (Opus 5.5)
+O concept §4 desenha `reduce_permuted_run`/`reduce_ablation_run` devolvendo só o VO e
+`AttributionAssembly.assemble` recebendo `realized` e `levels`. Na implementação, uma
+redução que viola uma regra de alinhamento devolve `UndefinedRunReduction(run_id, reason)`,
+e `assemble` aceita `Sequence[PermutedRunLosses | UndefinedRunReduction]` (idem para a
+ablação). A primeira redução indefinida torna o método `undefined` com aquele motivo.
+O realizado e a grade entram só nas reduções, que são onde as perdas são calculadas; por
+isso `assemble` não os recebe. Assim a leitura de um run por vez (I19) continua possível
+e a violação nunca vira exceção nem `AlignmentFinding`. Testes:
+`test_alignment_rules_from_series_assembly`, `test_violation_is_never_an_alignment_finding`.
+
+### 2026-10-19 — [decision] Task 21 — `H3Parameters` exige as 4 famílias na ordem do ADR 0.0.0016 e o helper usa partição sintética — Claude (Opus 5.5)
+O VO recusa `families` diferente de `("price", "technical", "sentiment", "fundamental")`,
+inclusive com outra ordem. Assim o `Preregistration` não repete a regra: ele só confere o
+r0 e os modelos LOCO fora do plano. O helper `_h3_parameters.py` usa os valores do §1 para
+regras, números e `feature_set_hash`. A partição, o `partition_hash` e a ablação são
+sintéticos, porque o literal da r3 nasce no rascunho da Task 32 e o cohort de ablação só
+existe depois do freeze no Linux.
+
+### 2026-10-19 — [decision] C5-8 — `started` sem linhas segue a forma da 7.1 — Claude (Opus 5.5)
+Uma entrada `started` sem linhas no silver só é retomada quando o ambiente da primeira
+escrita e o atual dão `strict` (`environment_mode`). Senão ergue
+`InferenceEnvironmentError` com C11, sem predizer nem gravar. É a mesma guarda do
+`RunInference` da 7.1, escolhida por consistência no lugar de reescrever a entrada com o
+ambiente atual. Testes: `test_started_without_rows_in_another_environment_is_refused`,
+`test_started_without_rows_in_the_same_environment_is_resumed`.
+
+### 2026-10-19 — [decision] C5-1 — erro próprio para predição que não cobre o plano — Claude (Opus 5.5)
+A predição de atribuição pode faltar um `(família, k)`, ter uma grade fora das decisões
+x horizontes do teste da 7.1 ou não trazer peso da VSN para uma decisão. Nesses casos
+ergue `IncompleteAttributionError` (novo, em `run_permutation_inference.py`) antes do
+`started`. Divergência descoberta depois das escritas (contagem ou releitura) ergue
+`PartialAttributionError` e deixa a entrada `started`. Os achados C5-10 e C5-11 entraram
+como `[7.3/task-20-fix]` e `[7.3/task-18-fix]`, porque mudam código dessas Tasks; os
+demais achados do C5 entraram como `[7.3/task-19-fix]`.
+
 <!-- END: post-execution -->
