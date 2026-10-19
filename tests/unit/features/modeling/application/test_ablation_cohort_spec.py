@@ -49,7 +49,7 @@ def _spec(**overrides: Any) -> AblationCohortSpec:  # noqa: ANN401
         "name": "aapl_ablation",
         "revision": 0,
         "base_cohort_file": "config/cohorts/aapl_confirmatory.toml",
-        "base_cohort_id": "aapl_confirmatory-r0-665f45d9169a",
+        "base_cohort_id": "aapl_confirmatory-r0-0123456789ab",
         "base_cohort_hash": _hex("base"),
         "feature_set_name": ABLATION_FEATURE_SET_NAME,
         "configurations": _configurations(),

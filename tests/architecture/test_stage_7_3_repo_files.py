@@ -4,11 +4,16 @@ Fica em `tests/architecture/` porque lê arquivos do repo (`config/cohorts/`), o
 testes unitários não fazem (technical 7.3 §1, premissas). CA1 (hash do TOML
 confirmatório inalterado) e CA3 (o rascunho real carrega, sem congelar, com a
 partição da registry).
+
+O id e o hash do cohort confirmatório não são escritos aqui como literal (guarda I14 da
+6.6, `test_no_test_or_script_reads_the_real_cohort`): a referência é o bloco `[cohort]`
+da revisão r2 ANCORADA do pré-registro, que é a âncora pública desses valores.
 """
 
 from __future__ import annotations
 
 import importlib
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +37,15 @@ pytestmark = pytest.mark.unit
 _REPO = Path(__file__).resolve().parents[2]
 _CONFIRMATORY = "config/cohorts/aapl_confirmatory.toml"
 _ABLATION = _REPO / "config" / "cohorts" / "aapl_ablation.toml"
-_CONFIRMATORY_HASH = "665f45d9169aba576d194e73d45c0508f51f231f573c4de283c96fc5847365b1"
+_ANCHORED_PLAN = _REPO / "config" / "preregistration" / "aapl_confirmatory-r2.toml"
+
+
+def _anchored_cohort() -> dict[str, str]:
+    """O `[cohort]` da r2 ancorada: `cohort_id` e `cohort_hash` do confirmatório."""
+    with _ANCHORED_PLAN.open("rb") as handle:
+        block: dict[str, str] = tomllib.load(handle)["cohort"]
+    return block
+
 
 cohort_file: Any = importlib.import_module(
     "financial_forecasting.features.modeling.adapters.in.cli.cohort_file"
@@ -57,8 +70,9 @@ def test_ablation_draft_loads_unfrozen_with_registry_partition() -> None:
     assert spec.device == "rocm"
     assert spec.feature_set_name == ABLATION_FEATURE_SET_NAME
     assert spec.base_cohort_file == _CONFIRMATORY
-    assert spec.base_cohort_id == "aapl_confirmatory-r0-665f45d9169a"
-    assert spec.base_cohort_hash == _CONFIRMATORY_HASH
+    anchored = _anchored_cohort()
+    assert spec.base_cohort_id == anchored["cohort_id"]
+    assert spec.base_cohort_hash == anchored["cohort_hash"]
     assert dict(spec.family_partition) == registry_family_partition()
     assert tuple(c.name for c in spec.configurations) == ABLATION_CONFIGURATIONS
     for configuration in spec.configurations:
@@ -68,4 +82,6 @@ def test_ablation_draft_loads_unfrozen_with_registry_partition() -> None:
 def test_confirmatory_cohort_file_hash_unchanged() -> None:
     spec = cohort_file.load(_REPO / _CONFIRMATORY)
     digest = CohortHash.compute(hasher=CanonicalJsonHasher(), payload=spec.hash_payload())
-    assert digest.value == _CONFIRMATORY_HASH
+    anchored = _anchored_cohort()
+    assert digest.value == anchored["cohort_hash"]
+    assert spec.cohort_id(digest) == anchored["cohort_id"]
