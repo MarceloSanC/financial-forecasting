@@ -389,3 +389,88 @@ def test_report_counts_must_agree_with_rates(make_series: SeriesFactory) -> None
     ):
         with pytest.raises(ValueError, match=name):
             dataclasses.replace(report, per_pair=(dataclasses.replace(pair, **changes),))  # type: ignore[arg-type]
+
+
+# --- Checkpoint C das Tasks 16-19 (task-09-fix, C4-2) --------------------------------
+
+
+def _two_pair_report(
+    make_series: SeriesFactory,
+    *,
+    seed: int,
+    outer: Sequence[tuple[float, float]],
+    inner: Sequence[tuple[float, float]],
+) -> ConformalCoverageReport:
+    """Dois pares, (0,1; 0,9) por fora e (0,25; 0,75) por dentro, com y = 0 em todo ponto."""
+    native = make_series([_SPREAD] * len(outer), [0.0] * len(outer))
+    series = ConformalCoverageSeries(
+        seed=seed,
+        native=native,
+        variant=_V,
+        pairs=(
+            ConformalPairLimits(
+                0.1, 0.9, tuple(low for low, _ in outer), tuple(up for _, up in outer)
+            ),
+            ConformalPairLimits(
+                0.25, 0.75, tuple(low for low, _ in inner), tuple(up for _, up in inner)
+            ),
+        ),
+    )
+    return ConformalCoverage.evaluate(series, tolerance=_TOL, band_levels=_BANDS)
+
+
+def _sd(values: Sequence[float]) -> float:
+    mean = math.fsum(values) / len(values)
+    return math.sqrt(math.fsum((v - mean) ** 2 for v in values) / (len(values) - 1))
+
+
+def test_seed_mean_dispersions_are_distinct_per_quantity(make_series: SeriesFactory) -> None:
+    """C4-2: PICP, cruzamento e aninhamento com dp diferentes, em dois pares.
+
+    Trocar um dp (ou uma média) de quantidade, ou de par, muda o resultado.
+    """
+    reports = [
+        _two_pair_report(
+            make_series,
+            seed=1,
+            outer=[(0.01, -0.01), (0.005, 0.02)],  # cruzado; acima de y sem cruzar
+            inner=[(0.01, -0.01), (0.02, -0.03)],  # os dois cruzados
+        ),
+        _two_pair_report(
+            make_series,
+            seed=2,
+            outer=[(0.01, 0.02)] + [(-0.02, 0.02)] * 4,  # acima de y; quatro normais
+            # dois acima de y por dentro do par de fora; três cobrem y saindo por baixo
+            inner=[(0.012, 0.015), (0.012, 0.02)] + [(-0.03, 0.01)] * 3,
+        ),
+    ]
+    mean = ConformalCoverage.seed_mean(
+        reports, horizon=1, variant=_V, expected_seeds=(1, 2), band_levels=_BANDS
+    )
+    n = [r.n_evaluated for r in reports]
+    assert mean.n_mean == math.fsum(n) / 2
+    sds: dict[str, float] = {}
+    for k, pair in enumerate(mean.per_pair):
+        per_seed = [r.per_pair[k] for r in reports]
+        picps = [p.picp for p in per_seed]
+        crossed = [p.crossed_rate for p in per_seed]
+        assert pair.picp == math.fsum(p.covered_count for p in per_seed) / 2 / mean.n_mean
+        assert pair.crossed_rate == math.fsum(p.crossed_count for p in per_seed) / 2 / mean.n_mean
+        assert pair.mean_of_seed_picps == math.fsum(picps) / 2
+        assert pair.mean_of_seed_crossed_rates == math.fsum(crossed) / 2
+        assert pair.sd_of_seed_picps == pytest.approx(_sd(picps))
+        assert pair.sd_of_seed_crossed_rates == pytest.approx(_sd(crossed))
+        widths = [p.mpiw for p in per_seed]
+        assert pair.mean_of_seed_mpiws == pytest.approx(math.fsum(widths) / 2)
+        assert pair.sd_of_seed_mpiws == pytest.approx(_sd(widths))
+        sds[f"picp{k}"] = _sd(picps)
+        sds[f"crossed{k}"] = _sd(crossed)
+        sds[f"mpiw{k}"] = _sd(widths)
+    nesting = [r.nesting_violation_rate for r in reports]
+    assert None not in nesting
+    rates = [float(rate) for rate in nesting if rate is not None]
+    assert mean.mean_of_seed_nesting_rates == math.fsum(rates) / 2
+    assert mean.sd_of_seed_nesting_rates == pytest.approx(_sd(rates))
+    sds["nesting"] = _sd(rates)
+    # os dp das quantidades que podem ser trocadas entre si são todos distintos
+    assert len({round(v, 12) for v in sds.values()}) == len(sds), sds
