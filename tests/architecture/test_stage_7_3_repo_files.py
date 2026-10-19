@@ -202,6 +202,15 @@ def test_r3_k_p_seed_algorithm_equal_the_inference_plan() -> None:
     )
 
 
+def test_r3_bootstrap_numbers_are_those_of_adr_7_3_0005() -> None:
+    """TA-9: reps, semente do bootstrap e family_alpha do `[h3]` são os do ADR 7.3.0005.
+
+    O VO aceita qualquer inteiro; o rascunho é a trava dos números pré-registrados.
+    """
+    block = _toml(_DRAFT)["h3"]
+    assert (block["reps"], block["bootstrap_seed"], block["family_alpha"]) == (1000, 129, 0.05)
+
+
 def _frozen_ablation_values(spec: Any) -> dict[str, object]:  # noqa: ANN401
     """O que a r3 tem de declarar do cohort de ablação CONGELADO: id, hash e seeds (C8-6)."""
     assert spec.is_frozen(), "the ablation spec must be frozen (L4) before the r3 (L7)"
