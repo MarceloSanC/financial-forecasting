@@ -2549,4 +2549,19 @@ seed`). Com isso, média de diferenças e diferença de médias são a mesma som
 pelo mesmo S, e o mutante é equivalente: nenhum teste o distingue. O teste confere só o
 valor à mão, e a docstring dele diz isso. A fórmula registrada continua a do I10.
 
+### 2026-10-19 — [deviation] Tasks 23/24 — a redução anual da ablação é uma `AblationRunPart` (C6-1) — Claude (Opus 5.5)
+O concept §4 desenha `reduce_ablation_run(...) -> AblationRunLosses`, e a Task 23 desenha
+`merge_ablation_parts` sobre `AblationRunLosses`. Isso não funciona quando a cauda de um
+fold cai num ano novo: ela tem só h+1, porque as decisões finais não têm alvo de h+7, e
+o `year` é o ano da decisão. A redução de um bloco passa a devolver `AblationRunPart`
+(horizonte → decisão → perda, sem interseção). `merge_ablation_parts` une as partes por
+horizonte e só então aplica H3-PAIR, devolvendo `AblationRunLosses`. Violação de dado
+ergue `AblationMergeError`. `merge_ablation_run` (no serviço) traduz esse erro, e um
+bloco indefinido, em `UndefinedRunReduction`. Quando falta uma parte anual, o motivo de
+decisões diferentes nomeia a unidade que diverge. `reduce_permuted_run` e
+`reduce_vsn_run` não têm o problema: as duas tabelas são lidas por `run_id`, com todos
+os anos de uma vez. Testes: `test_a_yearly_part_with_only_h1_merges_to_the_intersection`,
+`test_a_missing_yearly_part_is_undefined_with_an_explicit_reason`,
+`test_a_part_with_only_h1_merges_by_horizon_then_intersects`.
+
 <!-- END: post-execution -->
