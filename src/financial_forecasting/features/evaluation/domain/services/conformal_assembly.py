@@ -179,6 +179,8 @@ def _without_fold_collisions(units: list[ConformalUnitAssembly]) -> list[Conform
             elif len(same) > 1:
                 reason = f"folds {sorted(same)} map to the same integer fold {unit.fold_index}"
             if reason is not None:
+                # PLW2901: a unidade da iteração é trocada pela sua versão `undefined`
+                # (VO frozen, `replace` cria outra); a original não é mais lida
                 unit = replace(unit, status=UNDEFINED, reason=reason)  # noqa: PLW2901
         result.append(unit)
     return result
