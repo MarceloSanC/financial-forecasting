@@ -2202,8 +2202,9 @@ linhas `make check-task …`, `make check-block …`, `make check $PAR` e "Check
 
 **Por Task (T1).** Antes de todo commit roda `run sh -c "$PRE; uv run --no-sync pytest
 <arquivos de teste que a Task escreveu ou alterou> -q --no-cov"`. Também rodam
-`uv run --no-sync ruff format --check src tests`, `uv run --no-sync ruff check src tests`
-e `uv run --no-sync mypy src/`, à mão e no container, porque a worktree só tem o hook
+`uvx ruff@0.6.9 format` só nos arquivos tocados pela Task (o ruff pinado do hook; ver o
+`[decision] ambiente` do formatador abaixo), `uv run --no-sync ruff check <arquivos
+tocados>` e `uv run --no-sync mypy src/`, à mão e no container, porque a worktree só tem o hook
 `commit-msg` e não o pre-commit. Teste vermelho bloqueia o commit. Os extras abaixo
 rodam só quando a Task toca o que eles guardam. São scripts e testes de segundos, sem
 `make`:
@@ -2322,5 +2323,16 @@ reformataria 33 arquivos já commitados. O hook pina o ruff 0.6.9
   dentro do container não deve deixar `index.lock` na worktree.
 Os dois foram aprovados pelo orquestrador junto com as Tasks 01–04.
 **Razão:** mantém o estilo já commitado e evita o lock órfão. Nenhum contrato muda.
+
+### 2026-10-19 — [finding] tooling — deriva do formatador: ruff 0.15.20 do venv × 0.6.9 do pre-commit — Claude (Opus 5.5)
+**Contexto:** `uv run --no-sync ruff format --check src tests` com o ruff 0.15.20 do
+`uv.lock` reformataria **33 arquivos** já commitados, todos anteriores a esta Stage. O
+ruff 0.6.9 pinado no `.pre-commit-config.yaml` aceita os mesmos arquivos. A diferença
+mais vista é a junção de strings implícitas concatenadas. O `make check` não roda
+`ruff format --check`, então a deriva não aparece no gate.
+**Direção sugerida:** tratar na #198, alinhando o pin do hook à versão do `uv.lock` (ou o
+contrário) e reformatando o repo num commit só de formato, fora desta Stage. Até lá, a
+7.3 formata só os arquivos tocados com `uvx ruff@0.6.9` (`[decision] ambiente` acima).
+Achado C1-6 do Checkpoint C 01–04.
 
 <!-- END: post-execution -->
