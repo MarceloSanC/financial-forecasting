@@ -10,6 +10,7 @@ por `tomllib.loads` (texto em memória; nenhum arquivo).
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import re
 import tomllib
@@ -32,10 +33,12 @@ from financial_forecasting.features.evaluation.domain.value_objects.preregistrat
     SeedSpec,
 )
 from tests.unit.features.evaluation._conformal_parameters import conformal_block
+from tests.unit.features.evaluation._h3_parameters import h3_block
 from tests.unit.features.evaluation._preregistration_payload import (
     PAYLOAD_TOML,
     key_paths,
     r2_payload,
+    r3_payload,
     to_toml,
     valid_payload,
     with_leaf,
@@ -633,3 +636,91 @@ def test_conformal_block_must_be_typed() -> None:
     plan = _plan(r2_payload())
     with pytest.raises(ValueError, match="must be a ConformalParameters"):
         dataclasses.replace(plan, conformal=conformal_block())
+
+
+# --- Stage 7.3 Task 22: bloco opcional `h3` --------------------------------------------
+
+
+def _rename_model(payload: dict[str, object], old: str, new: str) -> dict[str, object]:
+    """O plano com o modelo `old` renomeado em `new` no candidato, níveis, seeds e déficits."""
+    renamed = copy.deepcopy(payload)
+    if renamed["candidate"] == old:
+        renamed["candidate"] = new
+    tiers: dict[str, list[str]] = renamed["comparators"]  # type: ignore[assignment]
+    for tier, models in tiers.items():
+        tiers[tier] = [new if model == old else model for model in models]
+    for block in ("seeds", "window_deficits"):
+        table: dict[str, object] = renamed[block]  # type: ignore[assignment]
+        renamed[block] = {new if model == old else model: value for model, value in table.items()}
+    return renamed
+
+
+@pytest.mark.unit
+def test_h3_block_forbidden_in_revision_0() -> None:
+    _raises({**valid_payload(), "h3": h3_block()}, "h3 is forbidden in revision 0")
+
+
+@pytest.mark.unit
+def test_h3_block_absent_by_default() -> None:
+    plan = _plan(r2_payload())
+    assert plan.h3 is None
+    assert "h3" not in plan.as_payload()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "families",
+    [
+        ["price", "technical", "sentiment"],
+        ["price", "technical", "sentiment", "volatility"],
+        ["technical", "price", "sentiment", "fundamental"],
+    ],
+)
+def test_h3_families_must_be_the_adr_0016_four(families: list[str]) -> None:
+    _raises(
+        {**r3_payload(), "h3": {**h3_block(), "families": families}},
+        r"h3\.families must be \['price', 'technical', 'sentiment', 'fundamental'\]",
+    )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("tft_quantile", "tft_quantile_loco_full"),
+        ("gbm_quantile", "tft_quantile_loco_minus_sentiment"),
+        ("baseline_ar1", "tft_quantile_loco_minus_price"),
+    ],
+)
+def test_ablation_models_distinct_from_candidate_and_comparators(old: str, new: str) -> None:
+    _raises(
+        _rename_model(r3_payload(), old, new),
+        rf"h3\.ablation model '{new}' must be distinct from the candidate and the comparators",
+    )
+
+
+@pytest.mark.unit
+def test_plan_with_h3_round_trips() -> None:
+    plan = _plan(r3_payload())
+    assert plan.h3 is not None
+    assert plan.h3.interval_level == 0.9875  # noqa: PLR2004
+    assert plan.conformal is not None  # o r3 é o r2 + emenda + [h3]
+    payload = plan.as_payload()
+    assert payload["h3"] == h3_block()
+    assert Preregistration.from_mapping(payload) == plan
+    assert Preregistration.from_mapping(tomllib.loads(to_toml(payload))) == plan
+
+
+@pytest.mark.unit
+def test_h3_block_errors_carry_the_dotted_path() -> None:
+    nested = copy.deepcopy(h3_block())
+    nested["ablation"]["cohort_hash"] = "__FILL_AFTER_FREEZE__"  # type: ignore[index]
+    _raises({**r3_payload(), "h3": nested}, r"h3\.ablation\.cohort_hash still holds")
+    _raises({**r3_payload(), "h3": {**h3_block(), "x": 1}}, "unknown key 'h3.x'")
+
+
+@pytest.mark.unit
+def test_h3_block_must_be_typed() -> None:
+    plan = _plan(r3_payload())
+    with pytest.raises(ValueError, match="must be a H3Parameters"):
+        dataclasses.replace(plan, h3=h3_block())

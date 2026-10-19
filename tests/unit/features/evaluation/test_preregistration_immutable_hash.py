@@ -25,6 +25,7 @@ from tests.unit.features.evaluation._preregistration_payload import (
     leaf_value,
     r1_payload,
     r2_payload,
+    r3_payload,
     valid_payload,
     with_leaf,
 )
@@ -189,3 +190,30 @@ def test_any_block_field_changes_the_hash(path: str) -> None:
 def test_block_leaves_cover_every_key() -> None:
     leaves = {p.split("[")[0] for p in leaf_paths(_R2_PAYLOAD) if p.startswith("conformal")}
     assert len(leaves) == 12  # noqa: PLR2004 — as doze chaves do bloco
+
+
+# --- Stage 7.3 Task 22: bloco `h3` -----------------------------------------------------
+
+# Digest do r2 sintético, medido antes da Task 22 com o `FloatRefusingHasher`.
+_R2_DIGEST = "66775779a7700ee49bab9a94b0d4647e522ff5f40f570c041f1cd85c0f0c463b"
+_R3_PAYLOAD = Preregistration.from_mapping(r3_payload()).as_payload()
+
+
+@pytest.mark.unit
+def test_r0_to_r2_payload_hashes_unchanged() -> None:
+    assert _plan_digest(valid_payload()).value == _R0_DIGEST
+    assert _plan_digest(r1_payload()).value == _R1_DIGEST
+    assert _plan_digest(r2_payload()).value == _R2_DIGEST
+
+
+@pytest.mark.unit
+def test_h3_block_changes_the_hash() -> None:
+    without_block = {k: v for k, v in _R3_PAYLOAD.items() if k != "h3"}
+    assert _digest(_R3_PAYLOAD) != _digest(without_block)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("path", [p for p in leaf_paths(_R3_PAYLOAD) if p.startswith("h3")])
+def test_any_h3_field_changes_the_hash(path: str) -> None:
+    changed = with_leaf(_R3_PAYLOAD, path, _alternative(leaf_value(_R3_PAYLOAD, path)))
+    assert _digest(changed) != _digest(_R3_PAYLOAD)

@@ -391,3 +391,18 @@ def r2_payload() -> dict[str, object]:
     )
 
     return {**r1_payload(), **R2_AMENDMENT, "conformal": conformal_block()}
+
+
+R3_AMENDMENT: dict[str, object] = {
+    "revision": 3,
+    "amends": "test_plan-r2-0123456789ab",
+    "justification": "a blinded H3 reading",
+    "blind_status": "blinded",
+}
+
+
+def r3_payload() -> dict[str, object]:
+    """O r2 emendado como r3, com o bloco `[h3]` do technical 7.3 §1 (Task 22)."""
+    from tests.unit.features.evaluation._h3_parameters import h3_block  # noqa: PLC0415
+
+    return {**r2_payload(), **R3_AMENDMENT, "h3": h3_block()}
