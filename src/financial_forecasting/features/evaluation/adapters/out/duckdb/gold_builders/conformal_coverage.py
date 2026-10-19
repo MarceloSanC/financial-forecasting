@@ -12,7 +12,9 @@ de linhas em qualquer status, então as chaves nunca colidem:
   (série nativa 100 % degenerada, C6); fora de `ok`, medidas, Wilson e `label` nulos;
 - linha de média entre seeds com `seed` nulo: `coverage` = c̄/n̄ (a base da banda) e, ao
   lado, `mean_of_seed_coverages` e o dp; o mesmo para PICP, MPIW, cruzamento e
-  aninhamento ("pelas duas médias", concept 7.2 §4); `n_seeds_used` e `seeds_excluded`
+  aninhamento ("pelas duas médias", concept 7.2 §4); n̄ em `n_mean` e c̄ em `mean_count`
+  (DOUBLE; `n_evaluated` e `count` ficam inteiros, só nas linhas por seed — C4-9);
+  `n_seeds_used` e `seeds_excluded`
   (texto `"1,2"` ordenado, `""` sem exclusão); com zero seeds completas, o conjunto de
   linhas com `status = undefined`; com uma seed, os dp são nulos;
 - MPIW infinito vai como `null` com `mpiw_infinite = true` (o `GoldTable` recusa não
@@ -173,7 +175,7 @@ def _mean_tail_rows(base: Row, common: Row, kind: str, tail: ConformalSeedMeanTa
             **common,
             "kind": kind,
             "nominal": tail.level,
-            "count": tail.mean_count,
+            "mean_count": tail.mean_count,
             "coverage": tail.coverage,
             "mean_of_seed_coverages": tail.mean_of_seed_coverages,
             "sd_of_seed_coverages": tail.sd_of_seed_coverages,
@@ -197,7 +199,7 @@ def _mean_rows(base: Row, scaffold: _Scaffold, mean: ConformalSeedMeanCoverage) 
     }
     if not mean.applicable:
         return list(scaffold.rows({**seeds, "status": UNDEFINED, "reason": NO_COMPLETE_SEED}))
-    common = {**seeds, "status": OK, "label": EMPIRICAL_COVERAGE_LABEL, "n_evaluated": mean.n_mean}
+    common = {**seeds, "status": OK, "label": EMPIRICAL_COVERAGE_LABEL, "n_mean": mean.n_mean}
     rows: list[Row] = []
     for pair in mean.per_pair:
         levels = {"lower_level": pair.lower_level, "upper_level": pair.upper_level}

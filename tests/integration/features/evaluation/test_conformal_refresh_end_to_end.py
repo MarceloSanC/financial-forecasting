@@ -372,7 +372,8 @@ def test_conformal_n_evaluated_equals_native_n_observed(scenario: _Scenario) -> 
     for row in means:
         key = (row["horizon"], row["variant"], row["kind"], row["lower_level"], row["band_level"])
         n = by_seed[key]
-        assert row["n_evaluated"] == pytest.approx(sum(n) / len(n)), row
+        assert row["n_mean"] == pytest.approx(sum(n) / len(n)), row
+        assert row["n_evaluated"] is None
 
 
 def test_zero_corrections_coverage_equals_native(scenario: _Scenario) -> None:
@@ -542,3 +543,18 @@ def test_real_use_case_through_the_composition_root(scenario: _Scenario) -> None
                     assert row["correction"] == tail.correction
                 differs_from_raw += raw.lower.correction != expected.lower.correction
     assert differs_from_raw > 0
+
+
+def test_gold_store_round_trip_keeps_count_and_mean_types(scenario: _Scenario) -> None:
+    """C4-9: pelo `ParquetGoldStore` real, n e contagem por seed voltam inteiros e n̄/c̄ float."""
+    rows = _rows(scenario.r2, GOLD_CONFORMAL_COVERAGE.name)
+    seeds = [r for r in rows if r["seed"] is not None and r["status"] == "ok"]
+    means = [r for r in rows if r["seed"] is None and r["status"] == "ok"]
+    assert seeds
+    assert means
+    assert all(type(r["n_evaluated"]) is int for r in seeds)
+    assert all(type(r["count"]) is int for r in seeds if r["kind"] in _TAILS)
+    assert all(type(r["n_mean"]) is float for r in means)
+    assert all(type(r["mean_count"]) is float for r in means if r["kind"] in _TAILS)
+    corrections = _rows(scenario.r2, GOLD_CONFORMAL_CORRECTIONS.name)
+    assert all(type(r["n"]) is int for r in corrections if r["status"] == "ok")

@@ -275,11 +275,14 @@ def test_coverage_rows_cell_by_cell() -> None:
         tail.mean_of_seed_coverages,
         tail.sd_of_seed_coverages,
     )
-    assert (mean_tail["n_seeds_used"], mean_tail["seeds_excluded"], mean_tail["n_evaluated"]) == (
+    assert (mean_tail["n_seeds_used"], mean_tail["seeds_excluded"], mean_tail["n_mean"]) == (
         2,
         "",
         mean.n_mean,
     )
+    # C4-9: n̄ e c̄ em colunas DOUBLE próprias; `n_evaluated`/`count` só nas linhas por seed
+    assert (mean_tail["n_evaluated"], mean_tail["count"]) == (None, None)
+    assert mean_tail["mean_count"] == tail.mean_count
     [mean_pair] = _only(
         rows, seed=None, horizon=1, variant=CONFORMAL_SPLIT, kind="pair", lower_level=0.1
     )
@@ -475,3 +478,86 @@ def test_undefined_coverage_type_is_distinct_from_reports() -> None:
         isinstance(u, ConformalUndefinedCoverage)
         for u in completed_inputs().conformal_reports.undefined_coverage
     )
+
+
+# --- Checkpoint C das Tasks 16-19 (task-18-fix, C4-1 e C4-9) ---------------------------
+
+
+def test_mean_rows_cell_by_cell() -> None:
+    """C4-1: as seeds de h = 1 diferem em n, cruzamento e aninhamento; cada célula confere."""
+    reports = completed_inputs().conformal_reports
+    seeds = [r for r in reports.coverage if (r.horizon, r.variant) == (1, CONFORMAL_SPLIT)]
+    assert len({r.n_evaluated for r in seeds}) == 2  # noqa: PLR2004 — n diferente por seed
+    mean = next(m for m in reports.seed_means if (m.horizon, m.variant) == (1, CONFORMAL_SPLIT))
+    assert mean.n_mean is not None
+    assert mean.n_mean != int(mean.n_mean)  # n̄ fracionário: só cabe na coluna DOUBLE
+    rows = _coverage()
+    dispersions: list[object] = []
+    for pair in mean.per_pair:
+        [row] = _only(
+            rows,
+            seed=None,
+            horizon=1,
+            variant=CONFORMAL_SPLIT,
+            kind="pair",
+            lower_level=pair.lower_level,
+        )
+        expected = {
+            "coverage": pair.picp,
+            "mean_of_seed_coverages": pair.mean_of_seed_picps,
+            "sd_of_seed_coverages": pair.sd_of_seed_picps,
+            "mpiw": pair.mpiw,
+            "mean_of_seed_mpiws": pair.mean_of_seed_mpiws,
+            "sd_of_seed_mpiws": pair.sd_of_seed_mpiws,
+            "crossed_rate": pair.crossed_rate,
+            "mean_of_seed_crossed_rates": pair.mean_of_seed_crossed_rates,
+            "sd_of_seed_crossed_rates": pair.sd_of_seed_crossed_rates,
+            "n_mean": mean.n_mean,
+            "n_evaluated": None,
+            "count": None,
+        }
+        assert {k: row[k] for k in expected} == expected
+        dispersions += [pair.sd_of_seed_picps, pair.sd_of_seed_mpiws, pair.sd_of_seed_crossed_rates]
+        for kind, tail in (("lower_tail", pair.lower_tail), ("upper_tail", pair.upper_tail)):
+            for tail_row in _only(
+                rows,
+                seed=None,
+                horizon=1,
+                variant=CONFORMAL_SPLIT,
+                kind=kind,
+                lower_level=pair.lower_level,
+            ):
+                assert (
+                    tail_row["coverage"],
+                    tail_row["mean_count"],
+                    tail_row["mean_of_seed_coverages"],
+                    tail_row["sd_of_seed_coverages"],
+                ) == (
+                    tail.coverage,
+                    tail.mean_count,
+                    tail.mean_of_seed_coverages,
+                    tail.sd_of_seed_coverages,
+                )
+    [nesting] = _only(rows, seed=None, horizon=1, variant=CONFORMAL_SPLIT, kind="nesting")
+    assert (
+        nesting["nesting_violation_rate"],
+        nesting["mean_of_seed_nesting_rates"],
+        nesting["sd_of_seed_nesting_rates"],
+    ) == (
+        mean.nesting_violation_rate,
+        mean.mean_of_seed_nesting_rates,
+        mean.sd_of_seed_nesting_rates,
+    )
+    dispersions.append(mean.sd_of_seed_nesting_rates)
+    # dp presentes e distintos: trocar coluna de quantidade ou de par muda a célula
+    assert None not in dispersions
+    assert len(set(dispersions)) == len(dispersions), dispersions
+
+
+def test_per_seed_counts_stay_integers() -> None:
+    """C4-9: `n_evaluated` e `count` são inteiros em toda linha por seed `ok`."""
+    for row in _coverage():
+        if row["seed"] is not None and row["status"] == "ok":
+            assert type(row["n_evaluated"]) is int, row
+            assert row["count"] is None or type(row["count"]) is int, row
+            assert (row["n_mean"], row["mean_count"]) == (None, None), row
