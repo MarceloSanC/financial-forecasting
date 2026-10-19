@@ -303,3 +303,17 @@ def test_vsn_weights_equal_an_independent_interpretation(trained: TrainedCheckpo
         assert attribution.encoder_weights[decision] == pytest.approx(expected, abs=1e-7)
     distinct = {tuple(sorted(w.items())) for w in attribution.encoder_weights.values()}
     assert len(distinct) >= 2  # noqa: PLR2004 — duas decisões com pesos diferentes
+
+
+def test_raw_pass_quantiles_equal_the_identity_grid(trained: TrainedCheckpoint) -> None:
+    """C3-3: a passagem raw (de onde saem a VSN e os doadores) prediz o mesmo que a identidade."""
+    attribution = _attribute(trained)
+    _, raw, best = _independent_raw(trained)
+    compared = 0
+    for decision, by_horizon in attribution.identity.items():
+        sample = best[decision]
+        for horizon, grid in by_horizon.items():
+            values = tuple(float(v) for v in raw.output["prediction"][sample, horizon - 1, :])
+            assert values == pytest.approx(grid, abs=1e-6)
+            compared += 1
+    assert compared > 0
