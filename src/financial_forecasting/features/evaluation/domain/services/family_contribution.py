@@ -122,7 +122,10 @@ def _read(  # noqa: PLR0913 — os campos de uma família já calculados
     side = _side(delta)
     reason: str | None = None
     excludes: bool | None = False
-    if lower == 0 or upper == 0:
+    if any(math.isnan(value) for value in (delta, lower, upper)):
+        # defesa (C7-1): um NaN nunca vira "ok" no gold
+        reason = "the interval has a NaN bound"
+    elif lower == 0 or upper == 0:
         reason = "a bound of the interval is exactly 0"
     elif lower > 0 or upper < 0:
         if (side > 0 and lower > 0) or (side < 0 and upper < 0):

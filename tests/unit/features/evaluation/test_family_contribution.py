@@ -323,3 +323,38 @@ def test_call_errors() -> None:
         _evaluate(_ones(3), _identity_rows(2))
     with pytest.raises(ValueError, match="level"):
         _evaluate(_ones(2), _identity_rows(2), level=1.0)
+
+
+# --- infinitos do mesmo sinal com fração ≠ 0 e a defesa contra NaN (C7-1) -----------------
+
+
+def test_linear_quantile_between_two_infinities_of_the_same_sign() -> None:
+    assert linear_quantile([1.0, math.inf, math.inf], 0.75) == math.inf
+    assert linear_quantile([-math.inf, -math.inf, 1.0], 0.25) == -math.inf
+
+
+def test_many_nonpositive_replicas_at_the_bonferroni_level_give_minus_inf_not_nan() -> None:
+    rng = random.Random(5)
+    series = _negative_at(1)
+    rows = [[0, 0, 0]] * 10 + [[rng.choice((1, 2)) for _ in range(3)] for _ in range(990)]
+
+    report = _evaluate(series, _indices(rows))
+
+    price = _share(report, "price")
+    assert report.nonpositive_replicas[1] >= 8  # noqa: PLR2004
+    assert price.lower == -math.inf  # type: ignore[attr-defined]
+    assert not math.isnan(price.lower)  # type: ignore[attr-defined]
+    assert price.status == "ok"  # type: ignore[attr-defined]
+
+
+def test_a_nan_bound_is_never_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    from financial_forecasting.features.evaluation.domain.services import (  # noqa: PLC0415
+        family_contribution,
+    )
+
+    monkeypatch.setattr(family_contribution, "linear_quantile", lambda values, p: math.nan)
+    report = _evaluate(_ones(2), _identity_rows(2))
+    for share in report.shares:
+        assert share.status == "undefined"
+        assert "NaN" in str(share.reason)
+    assert report.heterogeneous is False
