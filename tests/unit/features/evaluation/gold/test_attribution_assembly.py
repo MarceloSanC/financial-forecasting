@@ -63,6 +63,8 @@ _HORIZONS = (1, 7)
 _SEEDS = (1, 2)
 _T = (session(10), session(11), session(12))
 _REFERENCE = "tft_quantile_loco_full"
+_H7_SCALE = 2.0  # perm: h+7 = 2 x h+1; LOCO: h+7 = 3 x h+1 (`_LOCO_H7_SCALE`)
+_LOCO_H7_SCALE = 3.0
 
 
 def _params(**changes: Any) -> H3Parameters:  # noqa: ANN401
@@ -88,13 +90,16 @@ def _candidate_run(seed: int) -> CohortRun:
 
 
 def _permuted(seed: int, identity: Sequence[float], price: Sequence[Sequence[float]]) -> Any:  # noqa: ANN401
-    """Identidade igual nos dois horizontes; `price[k-1]` por k, as outras famílias = id."""
+    """`price[k-1]` por k e as outras famílias = id; h+7 é h+1 vezes `_H7_SCALE` (TA-1).
+
+    Perdas distintas por horizonte: ler a identidade de outro horizonte muda d_t.
+    """
     permuted: dict[tuple[str, int, int], tuple[float, ...]] = {}
     for family in H3_FAMILIES:
         for k in (1, 2):
             values = tuple(price[k - 1]) if family == "price" else tuple(identity)
             for h in _HORIZONS:
-                permuted[(family, k, h)] = values
+                permuted[(family, k, h)] = _at(h, values)
     return PermutedRunLosses(
         run_id=f"tft-s{seed}-0",
         seed=seed,
@@ -103,9 +108,13 @@ def _permuted(seed: int, identity: Sequence[float], price: Sequence[Sequence[flo
         permutation_algorithm="fisher_yates_random_random_v1",
         partition_hash=PARTITION_HASH,
         decision_timestamps=_T,
-        identity={h: tuple(identity) for h in _HORIZONS},
+        identity={h: _at(h, identity) for h in _HORIZONS},
         permuted=permuted,
     )
+
+
+def _at(h: int, values: Sequence[float]) -> tuple[float, ...]:
+    return tuple(v * (_H7_SCALE if h == _HORIZONS[1] else 1.0) for v in values)
 
 
 def _hand_permuted() -> list[PermutedRunLosses]:
@@ -146,7 +155,10 @@ def _hand_ablation() -> tuple[list[CohortRun], list[AblationRunLosses]]:
                     seed=seed,
                     fold_index=0,
                     decision_timestamps=_T,
-                    losses={h: series for h in _HORIZONS},
+                    losses={
+                        h: tuple(v * (_LOCO_H7_SCALE if h == _HORIZONS[1] else 1.0) for v in series)
+                        for h in _HORIZONS
+                    },
                 )
             )
     return runs, losses
@@ -185,10 +197,12 @@ def test_permutation_d_t_equals_the_hand_computed_value() -> None:
     """2 seeds, K_p = 2, 3 decisões: média nas seeds da média nas k de L^perm - L^id."""
     permutation, _ = _defined(_assemble())
 
-    # seed 1: gaps k1 (1, 0, 2), k2 (2, 2, 0) → média em k (1.5, 1, 1)
-    # seed 2: gaps k1 (0, 1, 0), k2 (2, 0, 0) → média em k (1, 0.5, 0)
+    # h+1, seed 1: gaps k1 (1, 0, 2), k2 (2, 2, 0) → média em k (1.5, 1, 1)
+    # h+1, seed 2: gaps k1 (0, 1, 0), k2 (2, 0, 0) → média em k (1, 0.5, 0)
+    # h+7: perdas em dobro nos dois termos, então cada gap dobra (TA-1)
+    assert permutation.differentials[("price", 1)] == pytest.approx((1.25, 0.75, 0.5))
+    assert permutation.differentials[("price", 7)] == pytest.approx((2.5, 1.5, 1.0))
     for h in _HORIZONS:
-        assert permutation.differentials[("price", h)] == pytest.approx((1.25, 0.75, 0.5))
         for family in ("technical", "sentiment", "fundamental"):
             assert permutation.differentials[(family, h)] == (0.0, 0.0, 0.0)
     assert permutation.decision_timestamps == _T
@@ -204,8 +218,11 @@ def test_loco_d_t_is_seed_mean_minus_seed_mean() -> None:
     """
     _, ablation = _defined(_assemble())
 
-    # média nas seeds de L^{-price} (2.5, 3, 2) - média nas seeds de L^{full} (2, 2, 2)
+    # h+1: média nas seeds de L^{-price} (2.5, 3, 2) - média de L^{full} (2, 2, 2)
+    # h+7: as perdas são 3 x as de h+1, (7.5, 9, 6) - (6, 6, 6) (TA-1)
     assert ablation.differentials[("price", 1)] == pytest.approx((0.5, 1.0, 0.0))
+    assert ablation.differentials[("price", 7)] == pytest.approx((1.5, 3.0, 0.0))
+    assert ablation.differentials[("sentiment", 1)] == (0.0, 0.0, 0.0)
     assert ablation.differentials[("sentiment", 7)] == (0.0, 0.0, 0.0)
     assert ablation.method == "loco"
     assert dict(ablation.permutation_importances) == {}
@@ -216,8 +233,8 @@ def test_seed_and_k_profiles() -> None:
 
     assert permutation.seed_importances[("price", 1, 1)] == pytest.approx(3.5 / 3)
     assert permutation.seed_importances[("price", 1, 2)] == pytest.approx(0.5)
-    assert permutation.permutation_importances[("price", 7, 1)] == pytest.approx(2 / 3)
-    assert permutation.permutation_importances[("price", 7, 2)] == pytest.approx(1.0)
+    assert permutation.permutation_importances[("price", 7, 1)] == pytest.approx(4 / 3)
+    assert permutation.permutation_importances[("price", 7, 2)] == pytest.approx(2.0)
     assert permutation.seed_importances[("technical", 1, 2)] == 0.0
     assert ablation.seed_importances[("price", 1, 1)] == pytest.approx(1 / 3)
     assert ablation.seed_importances[("price", 1, 2)] == pytest.approx(2 / 3)
