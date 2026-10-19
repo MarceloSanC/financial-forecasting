@@ -19,10 +19,12 @@ import pytest
 import torch
 from pytorch_forecasting import TemporalFusionTransformer
 
+from financial_forecasting.composition_root import _SUPPORTED_DEVICES, _tft_trainer_factory
 from financial_forecasting.features.modeling.adapters.out.pytorch_forecasting import (
     pf_tft_trainer as module,
 )
 from financial_forecasting.features.modeling.adapters.out.pytorch_forecasting.pf_tft_trainer import (  # noqa: E501
+    SUPPORTED_ACCELERATORS,
     PfTftTrainer,
 )
 from tests.contract.features.modeling._tft_checkpoint_fixture import (
@@ -182,6 +184,16 @@ def test_settings_report_the_instance_accelerator(
 def test_accelerator_outside_cpu_and_gpu_refused(accelerator: str) -> None:
     with pytest.raises(ValueError, match="accelerator must be one of"):
         PfTftTrainer(accelerator=accelerator)
+
+
+@pytest.mark.parametrize(("device", "accelerator"), [("cpu", "cpu"), ("rocm", "gpu")])
+def test_wired_device_reaches_the_adapter_instance(device: str, accelerator: str) -> None:
+    """Checkpoint C C1-1: o proxy do composition root constrói o adapter com o accelerator."""
+    adapter = _tft_trainer_factory()(device)._ensure()
+
+    assert isinstance(adapter, PfTftTrainer)
+    assert adapter.accelerator == accelerator
+    assert set(_SUPPORTED_DEVICES.values()) <= SUPPORTED_ACCELERATORS
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="sem GPU visível ao torch")
