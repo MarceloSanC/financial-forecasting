@@ -327,7 +327,9 @@ def _permuted_losses(
                 for h, series in by_horizon.items()
             },
         )
-    except ValueError as exc:  # C6-3: a invariante do VO é dado, não erro de chamada
+    # Ramo defensivo (C7-7): os registros e a `CoverageSeries` já garantem o que o VO
+    # confere (hash, decisões crescentes, uma perda finita por decisão); inalcançável por dado.
+    except ValueError as exc:  # pragma: no cover
         raise _Undefined(f"run {first.run_id}: {exc}") from None
 
 
@@ -384,7 +386,9 @@ def reduce_ablation_run(
                 fold_index=fold_index,
                 losses=by_horizon,
             )
-        except ValueError as exc:  # C6-3
+        # Ramo defensivo (C7-7): `ForecastRecord` e `CoverageSeries` já garantem horizonte
+        # válido e perdas finitas; inalcançável por dado.
+        except ValueError as exc:  # pragma: no cover
             raise _Undefined(f"run {run.run_id}: {exc}") from None
     except _Undefined as exc:
         return UndefinedRunReduction(run_id=run.run_id, reason=exc.reason)

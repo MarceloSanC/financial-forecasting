@@ -2564,4 +2564,18 @@ os anos de uma vez. Testes: `test_a_yearly_part_with_only_h1_merges_to_the_inter
 `test_a_missing_yearly_part_is_undefined_with_an_explicit_reason`,
 `test_a_part_with_only_h1_merges_by_horizon_then_intersects`.
 
+### 2026-10-19 — [deviation] Task 24 — invariantes de `PermutedRunLosses`/`AblationRunPart` são ramo defensivo (C7-7) — Claude (Opus 5.5)
+O commit `193d9e9` diz que as invariantes de `PermutedRunLosses` e `AblationRunPart` viram
+`UndefinedRunReduction`. Nenhum dado chega lá, porque o que esses VOs conferem já foi
+garantido antes:
+
+- o `partition_hash` e a identidade, pelo `PermutedForecastRecord`/`ForecastRecord`;
+- as decisões crescentes, pela ordenação;
+- uma perda finita por decisão, pela `CoverageSeries`, cujo `ValueError` já vira
+  `undefined`. Esse caminho é alcançável e tem teste: `test_vo_invariants_become_undefined`.
+
+Os dois `except ValueError` dos VOs ficam como ramo defensivo, com `# pragma: no cover` e
+a justificativa ao lado. A afirmação do `193d9e9` vale só para o caminho da
+`CoverageSeries`.
+
 <!-- END: post-execution -->
