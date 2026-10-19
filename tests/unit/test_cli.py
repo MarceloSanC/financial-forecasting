@@ -507,3 +507,76 @@ def test_infer_cross_environment_without_finding_exits_2(tmp_path: Path) -> None
     assert "error: ValueError" in err.getvalue()
     assert "[finding]" in err.getvalue()
     assert not (tmp_path / "d" / ".writer.lock").exists()
+
+
+# -- Stage 7.3, Task 10: subcomandos do cohort de ablação -------------------------------
+
+_ABLATION_SUBCOMMANDS = ("ablation-pilot", "ablation-run", "ablation-verify", "ablation-freeze")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("command", _ABLATION_SUBCOMMANDS)
+def test_ablation_subcommands_have_help(command: str, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main([command, "--help"])
+
+    assert exc.value.code == 0
+    text = capsys.readouterr().out
+    assert "--data-root" in text
+    assert "--cohort" in text
+    if command == "ablation-freeze":
+        assert "--seeds" in text
+
+
+@pytest.mark.unit
+def test_ablation_freeze_parses_the_seed_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commands: Any = cli.importlib.import_module(f"{cli._CLI_PACKAGE}.ablation_commands")
+    seen: dict[str, Any] = {}
+
+    def fake_freeze(deps: object, path: Path, **kwargs: object) -> int:
+        seen.update(deps=deps, path=path, **kwargs)
+        return 0
+
+    monkeypatch.setattr(commands, "freeze", fake_freeze)
+    ablation = tmp_path / "ablation.toml"
+
+    code = cli.main(
+        [
+            "ablation-freeze",
+            "--data-root",
+            str(tmp_path / "d"),
+            "--cohort",
+            str(ablation),
+            "--seeds",
+            "1,2,3",
+        ],
+        wiring=_wiring(tmp_path),
+    )
+
+    assert code == 0
+    assert seen["path"] == ablation
+    assert seen["seeds"] == (1, 2, 3)
+    assert seen["deps"].ledger._lock_path == tmp_path / "d" / ".writer.lock"
+
+
+@pytest.mark.unit
+def test_ablation_freeze_refuses_a_malformed_seed_list(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(
+            [
+                "ablation-freeze",
+                "--data-root",
+                str(tmp_path),
+                "--cohort",
+                "a.toml",
+                "--seeds",
+                "1,x",
+            ]
+        )
+
+    assert exc.value.code == _EXIT_ERROR
+    assert "seeds must be integers" in capsys.readouterr().err

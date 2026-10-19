@@ -60,6 +60,7 @@ silver, o ledger do cohort e o `JsonInferenceManifest` sob `data_root`. O probe 
 de `runtime_probe_for`, como no `confirmatory_cohort_for`.
 """
 
+import importlib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -250,6 +251,9 @@ from financial_forecasting.features.modeling.application.ports.out.tft_trainer i
     TftTrainingParams,
     TftTrainingResult,
 )
+from financial_forecasting.features.modeling.application.use_cases.measure_ablation_cost import (
+    MeasureAblationCost,
+)
 from financial_forecasting.features.modeling.application.use_cases.predict_tft_from_checkpoints import (  # noqa: E501
     PredictTftFromCheckpoints,
 )
@@ -258,6 +262,9 @@ from financial_forecasting.features.modeling.application.use_cases.read_training
 )
 from financial_forecasting.features.modeling.application.use_cases.resolve_tft_checkpoints import (
     ResolveTftCheckpoints,
+)
+from financial_forecasting.features.modeling.application.use_cases.run_ablation_cohort import (
+    RunAblationCohort,
 )
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
@@ -312,6 +319,10 @@ if TYPE_CHECKING:
     from financial_forecasting.features.modeling.adapters.out.pytorch_forecasting.pf_tft_trainer import (  # noqa: E501
         PfTftTrainer,
     )
+    from financial_forecasting.features.modeling.application.dtos.ablation_cohort_spec import (
+        AblationCohortSpec,
+    )
+    from financial_forecasting.features.modeling.application.dtos.cohort_spec import CohortSpec
 
 # Revisão pinada do FinBERT (espelha o default do adapter; ADR 0.0.0017).
 _FINBERT_PINNED_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
@@ -546,6 +557,40 @@ class _LazyPfTftTrainer:
         )
 
 
+_MODELING_CLI = "financial_forecasting.features.modeling.adapters.in.cli"
+
+
+def ablation_spec_loader(
+    repo_root: Path, hasher: Hasher
+) -> Callable[[Path], "tuple[AblationCohortSpec, CohortSpec]"]:
+    """Lê o arquivo de ablação e a base que ele declara (caminho relativo ao `repo_root`).
+
+    Os módulos de `adapters/in` são carregados por `importlib` (`in` é keyword, LAYOUT
+    §8). O loader confere a base e a registry (C2) antes de devolver.
+    """
+    cohort_file = importlib.import_module(f"{_MODELING_CLI}.cohort_file")
+    ablation_file = importlib.import_module(f"{_MODELING_CLI}.ablation_cohort_file")
+
+    def load(path: Path) -> "tuple[AblationCohortSpec, CohortSpec]":
+        bases: dict[str, CohortSpec] = {}
+
+        def load_base(declared: str) -> "CohortSpec":
+            bases[declared] = cohort_file.load(repo_root / declared)
+            return bases[declared]
+
+        spec = ablation_file.load_ablation_cohort(path, hasher=hasher, load_base=load_base)
+        return spec, bases[spec.base_cohort_file]
+
+    return load
+
+
+def dump_ablation_spec(spec: "AblationCohortSpec") -> str:
+    """O TOML do spec de ablação (`ablation_cohort_file.dump_ablation_cohort`)."""
+    ablation_file = importlib.import_module(f"{_MODELING_CLI}.ablation_cohort_file")
+    text: str = ablation_file.dump_ablation_cohort(spec)
+    return text
+
+
 def _tft_trainer_factory() -> Callable[[str], _LazyPfTftTrainer]:
     """Um proxy lazy do `PfTftTrainer` por device, criado na primeira vez (Stage 7.3).
 
@@ -740,6 +785,12 @@ class ApplicationDependencies:
     # BC inference (Stage 7.1, Task 11): a inferência de um cohort, por arquivo e device
     # (o probe depende do caminho do cohort, como em `confirmatory_cohort_for`).
     run_inference_for: Callable[[Path, str], RunInference]
+    # BC modeling (Stage 7.3, Task 10): o cohort de ablação, por arquivo; o device vem do
+    # spec (`_SUPPORTED_DEVICES`) e o treinador é o proxy desse device.
+    load_ablation_spec: Callable[[Path], "tuple[AblationCohortSpec, CohortSpec]"]
+    dump_ablation_spec: Callable[["AblationCohortSpec"], str]
+    ablation_cohort_for: Callable[[Path], RunAblationCohort]
+    measure_ablation_cost_for: Callable[[Path], MeasureAblationCost]
 
 
 def wire_dependencies(
@@ -930,6 +981,53 @@ def wire_dependencies(
             supported_device=_TRAINERS_DEVICE,
         )
 
+    # BC modeling (Stage 7.3, Task 10): cohort de ablação e piloto. O device é LIDO do
+    # spec: o proxy do treinador é o do device (fora do mapa ⇒ `ValueError`, sem torch);
+    # a base confirmatória é conferida com o device dos treinadores de hoje (`cpu`).
+    load_ablation_spec = ablation_spec_loader(cfg.repo_root, hasher)
+
+    def ablation_train_tft(device: str) -> TrainTft:
+        return TrainTft(
+            store=store,
+            splitter=splitter,
+            trainer=tft_trainer_for(device),
+            persist_predictions=PersistPredictions(repository=analytics_repository),
+            persist_run_record=PersistRunRecord(repository=analytics_repository),
+            tracker=tracker,
+            hasher=hasher,
+            artifacts_root=cfg.artifacts_root,
+        )
+
+    def ablation_cohort_for(path: Path) -> RunAblationCohort:
+        spec, _ = load_ablation_spec(path)
+        train = ablation_train_tft(spec.device)
+        return RunAblationCohort(
+            store=store,
+            hasher=hasher,
+            clock=SystemClock(),
+            ledger=cohort_ledger,
+            run_index=cohort_run_index,
+            probe=runtime_probe_for(path, spec.device),
+            train_tft=train,
+            modeling_columns=columns,
+            observed_feature_set_hash=observed_feature_set_hash,
+            pipeline_version=PIPELINE_VERSION,
+            schema_version=_SILVER_SCHEMA_VERSION,
+            base_supported_device=_TRAINERS_DEVICE,
+        )
+
+    def measure_ablation_cost_for(path: Path) -> MeasureAblationCost:
+        spec, _ = load_ablation_spec(path)
+        trainer = tft_trainer_for(spec.device)
+        return MeasureAblationCost(
+            store=store,
+            splitter=splitter,
+            trainer=trainer,
+            probe=runtime_probe_for(path, spec.device),
+            clock=SystemClock(),
+            hasher=hasher,
+        )
+
     # BC inference (Stage 7.1, Task 11): resolução e predição a partir do checkpoint com
     # o MESMO splitter, store, hasher, `artifacts_root`, colunas e declarações do cohort
     # (o `run_id` derivado tem de ser o que o treino gravou). O locator é stdlib e entra
@@ -1050,4 +1148,8 @@ def wire_dependencies(
         refresh_gold=refresh_gold,
         build_confirmatory_scorecard=build_confirmatory_scorecard,
         run_inference_for=run_inference_for,
+        load_ablation_spec=load_ablation_spec,
+        dump_ablation_spec=dump_ablation_spec,
+        ablation_cohort_for=ablation_cohort_for,
+        measure_ablation_cost_for=measure_ablation_cost_for,
     )

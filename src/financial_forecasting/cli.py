@@ -7,6 +7,9 @@ Subcomandos: `materialize` (brutos → bronze → dataset), `sweep`, `freeze`,
 `infer` (Stage 7.1: reproduz o teste a partir dos checkpoints e completa a partição
 `calib`; `--break-stale-lock`, `--cross-environment "<justificativa>"`; comando em
 `features/inference/adapters/in/cli`).
+Stage 7.3: `ablation-pilot`, `ablation-run`, `ablation-verify` e `ablation-freeze
+--seeds 1,2,…` (cohort de ablação; `--cohort` é o arquivo de ablação; comandos em
+`features/modeling/adapters/in/cli/ablation_commands.py`).
 `--data-root` é obrigatório em todos, sem default: o dado de um cohort vive
 isolado em `data/cohorts/<nome>/` (concept D10) e um default silencioso poderia
 misturá-lo com o `data/` de desenvolvimento.
@@ -71,6 +74,7 @@ _MATERIALIZE_START = datetime(1990, 1, 1, tzinfo=UTC)
 _MATERIALIZE_END = datetime(2035, 12, 31, 23, 59, 59, tzinfo=UTC)
 _SENTIMENT_MODULE = "transformers"
 _EXIT_ERROR = 2
+_ABLATION_PREFIX = "ablation-"
 
 
 class MissingSentimentExtraError(ApplicationError):
@@ -135,7 +139,28 @@ def _parser() -> argparse.ArgumentParser:
         metavar="JUSTIFICATIVA",
         help="força o modo tolerance com a justificativa gravada no manifesto",
     )
+    add("ablation-pilot", "mede o custo de uma unidade da ablação (não grava nada)", lock=False)
+    add("ablation-run", "corre o cohort de ablação congelado (retomável)")
+    add("ablation-verify", "confere a corrida da ablação pela contagem no silver", lock=False)
+    ablation_freeze = add(
+        "ablation-freeze",
+        "congela o cohort de ablação com as seeds e o torch observado",
+        lock=False,
+    )
+    ablation_freeze.add_argument(
+        "--seeds", type=_seed_list, required=True, help="seeds do cohort, ex.: 1,2,3"
+    )
     return parser
+
+
+def _seed_list(text: str) -> tuple[int, ...]:
+    """`1,2,3` → `(1, 2, 3)`; o spec recusa seed repetida ou não positiva."""
+    try:
+        return tuple(int(part) for part in text.split(","))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"seeds must be integers separated by commas: {text!r}"
+        ) from exc
 
 
 def main(
@@ -181,6 +206,8 @@ def main(
                 cross_environment=args.cross_environment,
             )
             return exit_code
+        if args.command.startswith(_ABLATION_PREFIX):
+            return _dispatch_ablation_command(args, deps, stdout)
         return _dispatch_cohort_command(args, deps, cohort_file, stdout)
     except (ApplicationError, DomainError, ValueError, RuntimeError, OSError, TypeError) as exc:
         # Erro de execução sai com 2; divergência do `verify` sai com 1
@@ -229,6 +256,34 @@ def _dispatch_cohort_command(
         )
     else:
         exit_code = commands.verify(command_deps, args.cohort, out=out)
+    return exit_code
+
+
+def _dispatch_ablation_command(
+    args: argparse.Namespace, deps: ApplicationDependencies, out: TextIO
+) -> int:
+    commands = importlib.import_module(f"{_CLI_PACKAGE}.ablation_commands")
+    command_deps = commands.AblationCommandDeps(
+        hasher=deps.hasher,
+        ledger=deps.cohort_ledger,
+        run_index=deps.cohort_run_index,
+        load_spec=deps.load_ablation_spec,
+        dump_spec=deps.dump_ablation_spec,
+        ablation_cohort_for=deps.ablation_cohort_for,
+        measure_ablation_cost_for=deps.measure_ablation_cost_for,
+        runtime_probe_for=deps.runtime_probe_for,
+    )
+    exit_code: int
+    if args.command == "ablation-pilot":
+        exit_code = commands.pilot(command_deps, args.cohort, out=out)
+    elif args.command == "ablation-run":
+        exit_code = commands.run(
+            command_deps, args.cohort, out=out, break_stale_lock=args.break_stale_lock
+        )
+    elif args.command == "ablation-verify":
+        exit_code = commands.verify(command_deps, args.cohort, out=out)
+    else:
+        exit_code = commands.freeze(command_deps, args.cohort, out=out, seeds=args.seeds)
     return exit_code
 
 
