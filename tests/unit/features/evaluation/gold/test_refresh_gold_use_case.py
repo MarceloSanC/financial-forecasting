@@ -139,6 +139,7 @@ _PARAMETERS = RefreshParameters(
     mcs_block_sensitivities=("h", "sqrt_T"),
     profile_parameters=None,
     conformal_parameters=None,
+    h3_parameters=None,
 )
 _R1_PARAMETERS = dataclasses.replace(_PARAMETERS, profile_parameters=profile_parameters())
 _WARMUP = 3  # linhas de aquecimento com NaN numa feature, aparadas pela grade

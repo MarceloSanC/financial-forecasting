@@ -149,6 +149,7 @@ _PARAMETERS = RefreshParameters(
     mcs_block_sensitivities=("h", "sqrt_T"),
     profile_parameters=profile_parameters(),
     conformal_parameters=None,
+    h3_parameters=None,
 )
 
 Rows = list[tuple[object, ...]]

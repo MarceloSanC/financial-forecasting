@@ -88,6 +88,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
 from financial_forecasting.features.evaluation.domain.value_objects.conformal_parameters import (
     ConformalParameters,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.h3_parameters import (
+    H3Parameters,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.profile_parameters import (
     ProfileParameters,
 )
@@ -174,6 +177,7 @@ class RefreshParameters:
     mcs_block_sensitivities: tuple[str, ...]
     profile_parameters: ProfileParameters | None
     conformal_parameters: ConformalParameters | None  # Stage 7.2; None sem bloco [conformal]
+    h3_parameters: H3Parameters | None  # Stage 7.3; None sem bloco [h3] (chave obrigatória)
 
     def __post_init__(self) -> None:
         """Presença, estrutura e os validadores públicos donos (ADR `6_4_0006` item 2)."""
@@ -215,6 +219,10 @@ class RefreshParameters:
                 f"conformal_parameters must be a ConformalParameters or None, got "
                 f"{self.conformal_parameters!r}"
             )
+        if self.h3_parameters is not None and not isinstance(self.h3_parameters, H3Parameters):
+            raise ValueError(
+                f"h3_parameters must be a H3Parameters or None, got {self.h3_parameters!r}"
+            )
 
     def as_mapping(self) -> dict[str, object]:
         """Os parâmetros em forma JSON-safe (enums pelo valor, tuplas como listas)."""
@@ -240,6 +248,9 @@ class RefreshParameters:
                 None
                 if self.conformal_parameters is None
                 else self.conformal_parameters.as_payload()
+            ),
+            "h3_parameters": (
+                None if self.h3_parameters is None else self.h3_parameters.as_payload()
             ),
         }
 
@@ -284,6 +295,11 @@ class RefreshParameters:
                 if fields["conformal_parameters"] is None
                 else ConformalParameters.from_mapping(fields["conformal_parameters"])
             ),
+            h3_parameters=(
+                None
+                if fields["h3_parameters"] is None
+                else H3Parameters.from_mapping(fields["h3_parameters"])
+            ),
         )
 
 
@@ -304,6 +320,7 @@ _PARAMETER_KEYS = (
     "mcs_block_sensitivities",
     "profile_parameters",
     "conformal_parameters",
+    "h3_parameters",
 )
 
 

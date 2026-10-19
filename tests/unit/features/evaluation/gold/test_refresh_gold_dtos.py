@@ -54,6 +54,7 @@ from tests.unit.features.evaluation._conformal_parameters import (
     conformal_block,
     conformal_parameters,
 )
+from tests.unit.features.evaluation._h3_parameters import h3_block, h3_parameters
 from tests.unit.features.evaluation._profile_parameters import (
     profile_block,
     profile_parameters,
@@ -77,6 +78,7 @@ _VALID: dict[str, object] = {
     "mcs_block_sensitivities": ("h", "sqrt_T"),
     "profile_parameters": None,
     "conformal_parameters": None,
+    "h3_parameters": None,
 }
 _PARAMETERS = RefreshParameters(**_VALID)  # type: ignore[arg-type]
 _NOW = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
@@ -937,3 +939,33 @@ def test_completed_inputs_accept_conformal_reports() -> None:
     # sem o bloco [conformal] no plano, os relatórios têm de vir vazios
     with pytest.raises(ValueError, match=r"without a \[conformal\] block"):
         dataclasses.replace(with_reports, parameters=_PARAMETERS)
+
+
+# --- Stage 7.3 Task 27: `h3_parameters` ----------------------------------------------------
+
+
+@pytest.mark.unit
+def test_manifest_without_h3_parameters_is_corrupt() -> None:
+    """C10: manifesto anterior à 7.3 (sem a chave) não lê."""
+    manifest = _manifest().as_mapping()
+    parameters = {k: v for k, v in manifest["parameters"].items() if k != "h3_parameters"}  # type: ignore[union-attr]
+    with pytest.raises(GoldGenerationCorruptError, match="h3_parameters"):
+        GoldGeneration.from_stored(
+            {**manifest, "parameters": parameters}, {}, partition=_manifest().partition
+        )
+
+
+@pytest.mark.unit
+def test_h3_parameters_type_refused() -> None:
+    with pytest.raises(ValueError, match="h3_parameters must be a H3Parameters"):
+        _parameters(h3_parameters=h3_block())
+
+
+@pytest.mark.unit
+def test_as_mapping_round_trip_with_h3() -> None:
+    parameters = _parameters(h3_parameters=h3_parameters())
+    mapping = parameters.as_mapping()
+    assert mapping["h3_parameters"] == h3_block()
+    assert RefreshParameters.from_mapping(mapping) == parameters
+    assert RefreshParameters.from_mapping(json.loads(json.dumps(mapping))) == parameters
+    assert _PARAMETERS.as_mapping()["h3_parameters"] is None

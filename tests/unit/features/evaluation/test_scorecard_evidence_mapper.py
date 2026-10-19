@@ -586,3 +586,27 @@ def test_check_manifest_refuses_a_divergent_conformal_block() -> None:
     with pytest.raises(PreregistrationMismatchError) as raised:
         evidence_from_generation(prereg=plan, command=command, generation=absent.generation())
     assert raised.value.field == MismatchField.PARAMETERS
+
+
+@pytest.mark.unit
+def test_check_manifest_refuses_a_divergent_h3_block() -> None:
+    """Stage 7.3 Task 27: o bloco `[h3]` entra na comparação dos parâmetros (I17)."""
+    from tests.unit.features.evaluation._h3_parameters import h3_block  # noqa: PLC0415
+    from tests.unit.features.evaluation._preregistration_payload import (  # noqa: PLC0415
+        r3_payload,
+    )
+
+    plan = Preregistration.from_mapping(r3_payload())
+    command = refresh_command_from(plan, REFERENCE)
+    stored = make_stored(plan)
+    block = h3_block()
+    block["bootstrap_seed"] = 130
+    stored.manifest["parameters"]["h3_parameters"] = block  # type: ignore[index]
+    with pytest.raises(PreregistrationMismatchError) as raised:
+        evidence_from_generation(prereg=plan, command=command, generation=stored.generation())
+    assert raised.value.field == MismatchField.PARAMETERS
+    absent = make_stored(plan)
+    absent.manifest["parameters"]["h3_parameters"] = None  # type: ignore[index]
+    with pytest.raises(PreregistrationMismatchError) as raised:
+        evidence_from_generation(prereg=plan, command=command, generation=absent.generation())
+    assert raised.value.field == MismatchField.PARAMETERS
