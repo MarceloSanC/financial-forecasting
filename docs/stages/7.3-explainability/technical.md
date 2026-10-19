@@ -2606,4 +2606,19 @@ Container `ff-gate-186`, `--cpus 3 --memory 8g` (revisão `ff-review-186` em par
 O C7-11 (`match=r"without a \[h3\] block"`) já tinha entrado no commit da Task 29
 (`baf1974`), que corrigiu o aviso de escape inválido.
 
+### 2026-10-19 — [decision] Task 30 — correção: sem um dos métodos, nenhum bootstrap (C8-1) — Claude (Opus 5.5)
+Esta nota corrige o `[decision] Task 30 — bootstrap com os métodos definidos`, que fica
+SUPERADO. A política anterior estimava o b̂ com as 8 séries do método definido. Isso
+contradiz a ADR 7.3.0005 H3-BLOCK e o id `max_7_ceil_max_bsb_joint_16_series_v1`, para
+os quais o bloco é o das 16 séries. Decisão do orquestrador: se qualquer método sai
+`undefined` da montagem, nenhum bootstrap roda. O método montado fica `undefined` com
+"bootstrap undefined: joint block needs both methods (16 series)". O outro fica com o
+motivo da montagem.
+
+A política mora no domain, em `JointContribution.evaluate`
+(`evaluation/domain/services/joint_contribution.py`, C8-15). O `_h3` do `RefreshGold` só
+orquestra. O backend chega por um `Protocol` local, com o mesmo contrato do `McsBackend`.
+Testes: `test_without_one_method_no_bootstrap_runs`,
+`test_method_undefined_in_assembly_runs_no_bootstrap`.
+
 <!-- END: post-execution -->

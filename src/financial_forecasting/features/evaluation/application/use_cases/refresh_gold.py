@@ -108,9 +108,6 @@ from financial_forecasting.features.evaluation.domain.services.contribution_agre
 )
 from financial_forecasting.features.evaluation.domain.services.family_contribution import (
     UNDEFINED,
-    FamilyContribution,
-    FamilyContributionReport,
-    FamilyShare,
 )
 from financial_forecasting.features.evaluation.domain.services.gold_build_order import (
     gold_build_order,
@@ -119,10 +116,12 @@ from financial_forecasting.features.evaluation.domain.services.horizon_reports i
     HorizonReport,
     HorizonReports,
 )
+from financial_forecasting.features.evaluation.domain.services.joint_contribution import (
+    JointContribution,
+)
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     McsReport,
     ModelConfidenceSet,
-    block_length_rule,
     block_sensitivity_length,
 )
 from financial_forecasting.features.evaluation.domain.services.paired_pinball_losses import (
@@ -168,11 +167,6 @@ from financial_forecasting.features.evaluation.domain.value_objects.block_estima
     BlockEstimate,
     UndefinedReason,
 )
-from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
-    BootstrapIndices,
-    BootstrapScheme,
-    validate_block_length_request,
-)
 from financial_forecasting.features.evaluation.domain.value_objects.cohort_run import CohortRun
 from financial_forecasting.features.evaluation.domain.value_objects.conformal_coverage_series import (  # noqa: E501
     ConformalCoverageSeries,
@@ -186,15 +180,11 @@ from financial_forecasting.features.evaluation.domain.value_objects.coverage_ser
 )
 from financial_forecasting.features.evaluation.domain.value_objects.family_loss_differentials import (  # noqa: E501
     H3_HORIZONS,
-    LOCO,
-    PERMUTATION,
-    FamilyLossDifferentials,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.forecast_record import (
     ForecastRecord,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.h3_parameters import (
-    H3_FAMILIES,
     H3Parameters,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
@@ -664,7 +654,7 @@ class RefreshGold:
         realized: RealizedReturns,
         h3: H3Parameters,
     ) -> H3Reports:
-        """Leitura por run → montagem → um bootstrap → dois relatórios → leitura e VSN.
+        """Leitura por run → montagem → `JointContribution` → leitura e VSN (orquestra).
 
         Dado inválido vira `undefined` com o motivo (C9); nada aborta o refresh. Exceção
         fora das esperadas (erro de programação) propaga.
@@ -692,72 +682,28 @@ class RefreshGold:
             vsn_report = VsnSummary.summarize(vsn, parameters=h3, seeds=seeds)
         except ValueError as exc:  # VSN incoerente é dado, não erro de programação
             vsn_report = VsnSummaryReport(entries=(), status=UNDEFINED, reason=str(exc))
-        level = h3.interval_level
-        series = {
-            PERMUTATION: (assembly.permutation, assembly.permutation_reason),
-            LOCO: (assembly.ablation, assembly.ablation_reason),
-        }
-        defined = [d for d, _ in series.values() if d is not None]
-        block: int | None = None
-        max_estimate: float | None = None
-        bootstrap: BootstrapIndices | None = None
-        bootstrap_reason: str | None = None
-        if defined:
-            try:
-                max_estimate = self._h3_max_block_estimate(defined)
-                block = block_length_rule(horizon=max(H3_HORIZONS), max_estimate=max_estimate)
-                bootstrap = self._mcs_backend.bootstrap_indices(
-                    n_obs=len(defined[0].decision_timestamps),
-                    block_size=block,
-                    reps=h3.reps,
-                    seed=h3.bootstrap_seed,
-                    scheme=BootstrapScheme.STATIONARY,
-                )
-            except _H3BootstrapUndefined as exc:
-                bootstrap_reason = exc.reason
-                max_estimate, block = None, None
-        reports: dict[str, FamilyContributionReport] = {}
-        for method, (differentials, reason) in series.items():
-            if differentials is None:
-                reports[method] = _undefined_report(method, str(reason), level)
-            elif bootstrap is None:
-                reports[method] = _undefined_report(
-                    method, f"bootstrap undefined: {bootstrap_reason}", level
-                )
-            else:
-                reports[method] = FamilyContribution.evaluate(
-                    differentials, bootstrap=bootstrap, level=level
-                )
+        joint = JointContribution.evaluate(
+            permutation=assembly.permutation,
+            ablation=assembly.ablation,
+            permutation_reason=assembly.permutation_reason,
+            ablation_reason=assembly.ablation_reason,
+            backend=self._mcs_backend,
+            reps=h3.reps,
+            seed=h3.bootstrap_seed,
+            level=h3.interval_level,
+        )
+        defined = [d for d in (assembly.permutation, assembly.ablation) if d is not None]
         return H3Reports(
-            permutation=reports[PERMUTATION],
-            ablation=reports[LOCO],
+            permutation=joint.permutation,
+            ablation=joint.ablation,
             permutation_differentials=assembly.permutation,
             ablation_differentials=assembly.ablation,
-            reading=ContributionAgreement.read(reports[PERMUTATION], reports[LOCO]),
+            reading=ContributionAgreement.read(joint.permutation, joint.ablation),
             vsn=vsn_report,
-            block_length=block,
-            max_block_estimate=max_estimate,
+            block_length=joint.block_length,
+            max_block_estimate=joint.max_block_estimate,
             n_points=len(defined[0].decision_timestamps) if defined else None,
         )
-
-    def _h3_max_block_estimate(self, defined: Sequence[FamilyLossDifferentials]) -> float:
-        """O maior b̂ de Politis-White das séries d_t (16 com os dois métodos, I12)."""
-        estimates: list[float] = []
-        for differentials in defined:
-            for key, values in differentials.differentials.items():
-                try:
-                    validate_block_length_request(values)
-                except ValueError as exc:
-                    raise _H3BootstrapUndefined(
-                        f"{differentials.method} {key}: invalid series ({exc})"
-                    ) from None
-                try:
-                    estimates.append(self._mcs_backend.optimal_block_length(series=values))
-                except ArithmeticError as exc:
-                    raise _H3BootstrapUndefined(
-                        f"{differentials.method} {key}: {type(exc).__name__}: {exc}"
-                    ) from None
-        return max(estimates)
 
     def _attribution_reductions(
         self,
@@ -1265,36 +1211,11 @@ _FACT_TABLE: Final = "fact_oos_predictions"
 _TEST_SPLIT: Final = "test"
 
 
-class _H3BootstrapUndefined(Exception):
-    """O b̂ ou a série de alguma d_t não serve ao bootstrap (I12): a leitura sai `undefined`."""
-
-    def __init__(self, reason: str) -> None:
-        super().__init__(reason)
-        self.reason = reason
-
-
 def _fold_index(run: CohortRun) -> int | None:
     try:
         return int(str(run.fold))
     except ValueError:
         return None
-
-
-def _undefined_report(method: str, reason: str, level: float) -> FamilyContributionReport:
-    """O relatório de um método que não foi calculado: 4 famílias `undefined` com o motivo."""
-    return FamilyContributionReport(
-        method=method,
-        importance={},
-        shares=tuple(
-            FamilyShare(f, None, None, None, None, None, None, None, UNDEFINED, reason)
-            for f in H3_FAMILIES
-        ),
-        level=level,
-        nonpositive_replicas={},
-        status=UNDEFINED,
-        reason=reason,
-        heterogeneous=None,
-    )
 
 
 def _permuted_record(

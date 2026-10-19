@@ -54,6 +54,9 @@ from financial_forecasting.features.evaluation.domain.services.diebold_mariano i
     DmVarianceEstimator,
 )
 from financial_forecasting.features.evaluation.domain.services.horizon_reports import SampleKind
+from financial_forecasting.features.evaluation.domain.services.joint_contribution import (
+    JOINT_BLOCK_NEEDS_BOTH,
+)
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     ModelConfidenceSet,
     block_length_rule,
@@ -80,6 +83,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.forecast_rec
 )
 from financial_forecasting.features.evaluation.domain.value_objects.h3_parameters import (
     H3Parameters,
+    loco_model_of,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
@@ -1673,8 +1677,8 @@ def test_invalid_series_or_arithmetic_error_gives_undefined_reading(error: Excep
 
 @pytest.mark.unit
 def test_constant_series_gives_undefined_reading(monkeypatch: pytest.MonkeyPatch) -> None:
-    from financial_forecasting.features.evaluation.application.use_cases import (  # noqa: PLC0415
-        refresh_gold as module,
+    from financial_forecasting.features.evaluation.domain.services import (  # noqa: PLC0415
+        joint_contribution as module,
     )
 
     def invalid(series: Sequence[float]) -> None:
@@ -1737,8 +1741,8 @@ def test_unexpected_exception_propagates(monkeypatch: pytest.MonkeyPatch) -> Non
 
 @pytest.mark.unit
 def test_contribution_receives_the_bonferroni_level(monkeypatch: pytest.MonkeyPatch) -> None:
-    from financial_forecasting.features.evaluation.application.use_cases import (  # noqa: PLC0415
-        refresh_gold as module,
+    from financial_forecasting.features.evaluation.domain.services import (  # noqa: PLC0415
+        joint_contribution as module,
     )
 
     levels: list[float] = []
@@ -1752,3 +1756,22 @@ def test_contribution_receives_the_bonferroni_level(monkeypatch: pytest.MonkeyPa
     _h3_run(_h3_harness())
     assert levels == [0.9875, 0.9875]
     assert _h3_parameters_for_test().interval_level == 0.9875  # noqa: PLR2004
+
+
+@pytest.mark.unit
+def test_method_undefined_in_assembly_runs_no_bootstrap() -> None:
+    """C8-1: com a LOCO indefinida, nenhum b̂ nem índice de H3 (o bloco é das 16 séries)."""
+    before = _calls_without_h3()
+    cohort = _h3_cohort()
+    silver = _h3_silver(cohort)
+    missing = loco_model_of("fundamental")
+    silver["dim_run"] = [row for row in silver["dim_run"] if row["model_version"] != missing]
+    harness = _harness(cohort, silver=silver)
+    inputs = _h3_run(harness)
+    assert len(harness.backend.block_series) == before
+    assert [c for c in harness.backend.index_calls if c["reps"] == 1000] == []  # noqa: PLR2004
+    reports = inputs.h3_reports
+    assert reports.permutation is not None and reports.ablation is not None
+    assert reports.permutation.reason == JOINT_BLOCK_NEEDS_BOTH
+    assert "has no run" in str(reports.ablation.reason)
+    assert reports.block_length is None
