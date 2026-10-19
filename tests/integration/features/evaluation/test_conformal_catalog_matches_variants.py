@@ -61,7 +61,15 @@ def _inference_accepts(
 
 @pytest.mark.parametrize(
     ("pair", "accepted"),
-    [((0.1, 0.9), True), ((0.02, 0.98), True), ((0.4, 0.6000000000000001), False)],
+    [
+        ((0.1, 0.9), True),
+        ((0.02, 0.98), True),
+        ((0.4, 0.6000000000000001), False),
+        # C4-3: o nível central, os extremos fora de (0, 1) e o par invertido
+        ((0.5, 0.5), False),
+        ((0.0, 1.0), False),
+        ((0.6, 0.4), False),
+    ],
 )
 def test_pair_rule_parity(pair: tuple[float, float], accepted: bool) -> None:
     evaluation = _evaluation_accepts(pairs=[list(pair)], primary_pair=list(pair))
@@ -73,7 +81,17 @@ def test_pair_rule_parity(pair: tuple[float, float], accepted: bool) -> None:
 
 @pytest.mark.parametrize(
     ("rho", "accepted"),
-    [(0.99, True), (0, False), (1, True), (1.0000001, False), (math.nan, False), (True, False)],
+    [
+        (0.99, True),
+        (0, False),
+        (1, True),
+        (1.0000001, False),
+        (math.nan, False),
+        (True, False),
+        # C4-3: int enorme (o float() estoura) e negativo
+        (10**400, False),
+        (-0.5, False),
+    ],
 )
 def test_rho_rule_parity(rho: object, accepted: bool) -> None:
     evaluation = _evaluation_accepts(nexcp_rho=rho)
