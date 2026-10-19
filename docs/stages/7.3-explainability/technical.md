@@ -2779,4 +2779,87 @@ VERIFY_EXIT=0
 re-conferência no Linux (`attribute` com 60 `verified`, já na L0), e a L6b leva também
 as duas tabelas e o manifesto da atribuição.
 
+### 2026-10-19 — [decision] handoff — fase Windows → fase Linux (Task 33) — Claude (Opus 5.5)
+**X (commit pai da Task 33, `make check` verde):** `55bfd2927f1efa39d25297dcf2792d04469384f9`. O Ponto C de saída foi
+verde em `0604489` (7969 passed, 27 skipped; cobertura 98,79 %). Os commits depois dele
+só tocam `docs/` (evidências na §7), e o desta Task acrescenta o
+`test_stage_7_3_handoff_commands.py`, conferido sozinho, pelo `make check-task SLICE=inference` e por
+`tests/architecture` inteiro, sem um quarto `make check` (decisão do orquestrador;
+saídas no fim desta entrada). Na L0, `git rev-parse "$T33^"` tem de dar X.
+
+**Estado da Etapa W (CA15):** **feita no Windows** (`[deviation] etapa-w` acima, HEAD `0604489`): 60 runs `strict` com max|d| 0, 8 655 920 linhas em `fact_permuted_predictions`, 891 490 em `fact_vsn_weights`, `attribution_manifest.json` com 60 `completed`/`strict`, `PARTITION_HASH_OK`. A L6 vira re-conferência (já feita na L0), e a L6b leva as duas tabelas e o manifesto.
+
+**Refinamento declarado da tabela do ADR 7.3.0006 item 6** (o ADR não é editado):
+- a **L0** (chegada) separa o checkout, a transferência, o ambiente travado e as
+  conferências que dependem dele; a L1 fica só com o torch ROCm e o probe;
+- a **L6b** (saída Linux → máquina da 8.1), que o item 5 do ADR exige e a tabela não
+  tinha.
+
+**Variáveis** (no checkout do Linux):
+```bash
+CLI="uv run --no-sync python -m financial_forecasting.cli"   # nunca `uv run` puro: ressincroniza o torch CPU
+ABL="--data-root data/cohorts/aapl --cohort config/cohorts/aapl_ablation.toml"
+ATTR="--data-root data/cohorts/aapl --cohort config/cohorts/aapl_confirmatory.toml --ablation-cohort config/cohorts/aapl_ablation.toml"
+IN=<diretório fora da árvore onde chegaram o .tar e o .sha>
+```
+
+**Transferência Windows → Linux** (host Windows, Git Bash, antes da L0; `.tar` e `.sha`
+fora da árvore):
+```bash
+OUT=<diretório fora da árvore, caminho absoluto>
+cd /c/Users/Marcelo/Documents/Code/financial-forecasting
+LIST="data/cohorts/aapl/processed/dataset_tft data/cohorts/aapl/silver data/cohorts/aapl/inference artifacts/tft artifacts/cohorts/aapl_confirmatory-r0-665f45d9169a"
+find $LIST -type f -print0 | sort -z | xargs -0 sha256sum > "$OUT/transfer-in.sha"
+tar -cf "$OUT/transfer-in.tar" $LIST
+```
+Como a Etapa W rodou, `data/cohorts/aapl/silver` já leva `fact_permuted_predictions` e `fact_vsn_weights`, e `data/cohorts/aapl/inference` leva o `attribution_manifest.json`.
+
+| Etapa | Comando | Saída esperada | Parada |
+|---|---|---|---|
+| **L0** chegada | `uv --version` (se diferente: `curl -LsSf https://astral.sh/uv/0.11.28/install.sh \| sh`); `gh auth status`; `git fetch && git checkout feat/186-7-3-explainability`; `make setup` (instala o hook `commit-msg`); `T33=$(git log --format=%H -1 --grep='\[7.3/task-33\]')`; `git rev-parse "$T33^"`; `git diff --name-only "$T33^" "$T33"`; `tar -xf "$IN/transfer-in.tar" && sha256sum -c --quiet "$IN/transfer-in.sha" && echo TRANSFER_OK`; `uv sync --locked --extra dev`; `$CLI verify --data-root data/cohorts/aapl --cohort config/cohorts/aapl_confirmatory.toml`; `$CLI attribute $ATTR` (a Etapa W rodou) | `uv 0.11.28`; `gh` autenticado; hook instalado; `$T33^` = X; o diff contém `docs/stages/7.3-explainability/technical.md` e `tests/architecture/test_stage_7_3_handoff_commands.py`; `TRANSFER_OK`; `rows expected 337792, observed 337792` + `OK`; `attribute`: 60 runs `verified`, `permuted rows written 0, verified 8655920; vsn rows written 0, verified 891490` | qualquer divergência: não seguir; `[finding]` |
+| **L1** ambiente ROCm | `uv pip install --no-sources --no-deps --reinstall --index-url https://download.pytorch.org/whl/rocm<X.Y> "torch==2.13.0+rocm<X.Y>"`; `uv run --no-sync python -c "import pathlib; from financial_forecasting.features.modeling.adapters.out.runtime.git_runtime_environment_probe import GitRuntimeEnvironmentProbe as P; print(dict(P(repo_root=pathlib.Path('.'), cohort_file=pathlib.Path('config/cohorts/aapl_ablation.toml').resolve(), device='rocm').snapshot()))"`; `git status --short`; `git diff --exit-code -- uv.lock pyproject.toml` | `gpu.available true`, `gpu.name` da RX 7700 XT, `gpu.hip_version` não vazio, `torch 2.13.0+rocm…`; árvore limpa; lock intocado | C12 |
+| **L2** piloto | `$CLI ablation-pilot $ABL` | relatório (`seconds_per_epoch`, `max_epochs`, teto e estimativa por S = 1..10) colado em §7 | C12 (kernel sem determinismo ou falha do ROCm): `[decision]` em §7 e commit **antes** da L4 |
+| **L3** seeds (P) | pergunta ao humano no formato "Anatomia da pergunta" de `PROMPT-step-single-session.md` §2, com o teto e a estimativa do piloto por S; ADR `docs/adr/7_3_0007-ablation-seed-count.md`; commit `docs(adr): número de seeds do cohort de ablação [7.3/--]` e `git push` **antes** da L4 | ADR `accepted` com S, no remoto | — |
+| **L4** freeze e âncora | `$CLI ablation-freeze $ABL --seeds 1,…,S`; commit `chore(modeling): congela o cohort de ablação [7.3/--]`; `git push origin feat/186-7-3-explainability`; `git tag cohort/<cohort_id da ablação> <commit>`; `git push origin <tag>`; `gh issue comment 186` com id, hash completo, commit e tag | `frozen <cohort_id>: cohort_hash <64 hex>; seeds <S>; torch_build <versão>` (spec com `seeds` e `torch_build` = a chave `torch` do probe); branch e tag no remoto; comentário publicado | C2, C13 (não seguir sem a tag e o comentário) |
+| **L5** treino | `$CLI ablation-run $ABL` (retomável; `--break-stale-lock` só sem processo vivo); `$CLI ablation-verify $ABL` | `ablation <id>: 5 configurations x 6 folds x S seeds = 30·S runs; rows expected 105560·S, observed 105560·S` + `OK` | C3, C4 (unidade parcial ⇒ nova revisão do spec, nunca editar o silver); **nenhuma mudança em `src/` entre a L4 e o fim da L5** |
+| **L6** atribuição | N/A: a Etapa W rodou no Windows; a re-conferência é a `attribute` da L0. Só se a L0 não puder re-conferir (ex.: transferência refeita sem as tabelas): `$CLI attribute $ATTR` e o `python -c` do `PARTITION_HASH_OK` da W5 (caminhos relativos ao checkout) | na L0: 60 `verified`, 0 written; se rodar de novo: 60 `completed` em modo `tolerance` (ambiente ≠ 7.1), max \|Δ\| por run dentro da tolerância, contagens da Etapa W, sem `gold/`, `PARTITION_HASH_OK` | C5–C8; `MISMATCH` ⇒ HALT |
+| **L6b** saída para a 8.1 | ver "Transferência Linux → 8.1" abaixo; no destino: `git pull origin feat/186-7-3-explainability` (traz o spec congelado da L4), `tar -xf "$IN/transfer-out.tar" && sha256sum -c --quiet "$IN/transfer-out.sha" && echo TRANSFER_OK`, `$CLI ablation-verify $ABL` e `$CLI attribute $ATTR` (no Windows com Docker, pelo `RUNW` da W2 com `MSYS_NO_PATHCONV=1`) | `TRANSFER_OK`; `ablation-verify` `OK`; `attribute` com 60 `verified`, 0 written | qualquer divergência: `[finding]`. Se a 8.1 rodar no próprio Linux, a L6b é N/A por `[decision]` em §7 |
+| **L7** r3 | preencher os três valores de `[h3.ablation]` do rascunho (`cohort_id`, `cohort_hash`, `seeds`) a partir do spec congelado na L4 e **reescrever o cabeçalho "RASCUNHO"** do arquivo (só comentários); copiar para `config/preregistration/aapl_confirmatory-r3.toml`; `uv run --no-sync pytest tests/architecture/test_stage_7_3_repo_files.py -v -rs` (inclui `test_filled_r3_differs_from_draft_only_in_h3_ablation`, agora não pulado, que confere id, hash e seeds contra o spec congelado pelo loader); acrescentar r3 em `test_every_revision_hash_quoted`; commit; tag `preregistration/<ref r3>`; conferir a ordem das tags: `test "$(git log -1 --format=%ct cohort/<id da ablação>)" -le "$(git log -1 --format=%ct preregistration/<ref r3>)" && git merge-base --is-ancestor cohort/<id da ablação> preregistration/<ref r3> && echo TAG_ORDER_OK`; comentário na #186 (ref, hash completo, tag, commit, os dois `cohort_id` e hashes); `.anchor.toml` com o `created_at` lido por `gh api`; seções "Revisão r3" e "Âncora r3" em `docs/preregistration/aapl_confirmatory.md` | só `[h3.ablation]` e o cabeçalho de comentários diferem do rascunho; `TAG_ORDER_OK`; `anchored_at(r3) > anchored_at(r2)`; a âncora da ablação (L4) anterior à da r3 | C11, C13 (rede ou permissão ⇒ não gravar `.anchor.toml`, repetir) |
+| **L8** fecho | skill `stage-audit`; `make check` num venv travado separado, sem o torch ROCm (`export UV_PROJECT_ENVIRONMENT="$HOME/.venvs/ff-ci"; uv sync --locked --extra dev && uv run --no-sync make check`) ou o CI do PR; roadmap `done`; `stage 7.3: complete`; trocar `Refs #186` por `Closes #186` no corpo do PR; merge | veredito da auditoria no PR; CI verde | — |
+
+**Transferência Linux → 8.1** (L6b, depois da L5 e da L6; no checkout do Linux):
+```bash
+OUT=<diretório fora da árvore>
+LIST="data/cohorts/aapl/silver/dim_run data/cohorts/aapl/silver/fact_oos_predictions artifacts/cohorts/<cohort_id da ablação>"
+# a Etapa W rodou no Windows: as tabelas e o manifesto da atribuição também vão
+LIST="$LIST data/cohorts/aapl/silver/fact_permuted_predictions data/cohorts/aapl/silver/fact_vsn_weights data/cohorts/aapl/inference/aapl_confirmatory-r0-665f45d9169a/attribution_manifest.json"
+find $LIST -type f -print0 | sort -z | xargs -0 sha256sum > "$OUT/transfer-out.sha"
+tar -cf "$OUT/transfer-out.tar" $LIST
+```
+**Checkpoints da ablação (L6b, C8):** os 30·S checkpoints da ablação em `artifacts/tft/`
+ficam no Linux e **não vão para a 8.1** (o gold lê só o silver). Antes de qualquer
+limpeza da máquina, `artifacts/tft/` inteiro (os 60 do confirmatório e os da ablação) é
+arquivado fora da árvore com conferência:
+```bash
+find artifacts/tft -type f -print0 | sort -z | xargs -0 sha256sum > "$OUT/ablation-checkpoints.sha"
+tar -cf "$OUT/ablation-checkpoints.tar" artifacts/tft
+```
+com uma cópia do par `.tar`/`.sha` num segundo disco, conferida por
+`sha256sum -c --quiet`. A §7 registra o caminho e o tamanho (`[decision] L6b`).
+
+Depois da tag da r3, **nenhum rebase** da branch (atualização com o `develop` só por
+merge). Toda entrada nova na §7 durante a fase Linux leva data e autor.
+
+**Conferência deste commit** (muda `tests/`; sem um quarto `make check`, por decisão do
+orquestrador), sobre X + este diff, `--name ff-gate-186 --cpus 6 --memory 8g`:
+- `pytest tests/architecture/test_stage_7_3_handoff_commands.py -v`: `7 passed`;
+- `make check-task SLICE=inference PYTEST_PAR='-n 4 --dist loadgroup'`: gates estáticos
+  verdes e `417 passed, 1 skipped`, `CHECK_TASK_EXIT=0`;
+- `pytest tests/architecture -n 4 --dist loadgroup`: `325 passed, 1 skipped`.
+
+A primeira rodada do `check-task` reprovou no `ruff` (RUF002, um travessão "–" no
+docstring do teste novo), corrigido antes do commit. O `check_technical_postexec.py`
+recusou o título `[handoff]` (fora do vocabulário, G9); a entrada usa `[decision]
+handoff`, e o teste a localiza assim (`7 passed` de novo, `ruff` e o `postexec` verdes).
+
 <!-- END: post-execution -->
