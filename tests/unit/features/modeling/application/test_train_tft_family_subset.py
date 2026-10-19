@@ -215,6 +215,7 @@ def test_tracking_phase_tag_of_loco_runs(tmp_path: Path) -> None:
         assert run.tags["phase"] == _CONFIRMATORY_PHASE
         assert run.tags["model_version"] == "tft_quantile_loco_minus_technical"
         assert run.params["model_version"] == "tft_quantile_loco_minus_technical"
+        assert run.run_name == f"tft_quantile_loco_minus_technical-{summary.run_id}"
 
 
 @pytest.mark.parametrize(
