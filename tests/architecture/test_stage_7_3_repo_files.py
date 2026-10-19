@@ -85,3 +85,138 @@ def test_confirmatory_cohort_file_hash_unchanged() -> None:
     anchored = _anchored_cohort()
     assert digest.value == anchored["cohort_hash"]
     assert spec.cohort_id(digest) == anchored["cohort_id"]
+
+
+# --- Task 32: o rascunho cego da r3 (CA11 rascunho; I17, I18; ADR 7.3.0005 itens 1-2) ------
+
+_PREREGISTRATION = _REPO / "config" / "preregistration"
+_DRAFT = _REPO / "docs" / "stages" / "7.3-explainability" / "aapl_confirmatory-r3.draft.toml"
+_FILLED = _PREREGISTRATION / "aapl_confirmatory-r3.toml"
+_AMENDMENT = ("revision", "amends", "justification", "blind_status")
+_SENTINEL = "__FILL_AFTER_FREEZE__"
+_FILLED_FIELDS = ("cohort_id", "cohort_hash", "seeds")
+
+
+def _toml(path: Path) -> dict[str, Any]:
+    with path.open("rb") as handle:
+        return tomllib.load(handle)
+
+
+def _reference(payload: dict[str, Any]) -> str:
+    from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (  # noqa: PLC0415
+        Preregistration,
+    )
+    from financial_forecasting.shared.domain.value_objects.preregistration_hash import (  # noqa: PLC0415
+        PreregistrationHash,
+    )
+
+    plan = Preregistration.from_mapping(payload)
+    return plan.reference(
+        PreregistrationHash.compute(hasher=CanonicalJsonHasher(), payload=plan.as_payload())
+    )
+
+
+def _filled(draft: dict[str, Any]) -> dict[str, Any]:
+    """O rascunho com valores sintéticos nas três sentinelas (nada do cohort real)."""
+    import copy  # noqa: PLC0415
+
+    filled = copy.deepcopy(draft)
+    filled["h3"]["ablation"].update(
+        cohort_id="synthetic_ablation-r0-0123456789ab", cohort_hash="c" * 64, seeds=[1, 2, 3]
+    )
+    return filled
+
+
+def test_r3_draft_is_r2_plus_amendment_plus_h3() -> None:
+    draft, r2 = _toml(_DRAFT), _toml(_PREREGISTRATION / "aapl_confirmatory-r2.toml")
+    common = [key for key in r2 if key not in _AMENDMENT]
+    assert {key: draft[key] for key in common} == {key: r2[key] for key in common}
+    assert set(draft) == set(r2) | {"h3"}
+    assert draft["revision"] == 3  # noqa: PLR2004
+    assert draft["amends"] == _reference(r2)
+    assert draft["blind_status"] == "blinded"
+    assert draft["justification"].strip()
+    assert draft["justification"] != r2["justification"]
+
+
+def test_r3_draft_filled_with_synthetic_values_parses() -> None:
+    from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (  # noqa: PLC0415
+        Preregistration,
+    )
+
+    plan = Preregistration.from_mapping(_filled(_toml(_DRAFT)))
+    assert plan.revision == 3  # noqa: PLR2004
+    assert plan.h3 is not None
+    assert plan.h3.interval_level == 0.9875  # noqa: PLR2004
+    assert plan.conformal is not None and plan.profile_parameters is not None
+
+
+def test_r3_draft_unfilled_is_refused() -> None:
+    """C11: o rascunho com as sentinelas não vira plano."""
+    from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (  # noqa: PLC0415
+        Preregistration,
+    )
+
+    draft = _toml(_DRAFT)
+    assert {draft["h3"]["ablation"][field] for field in _FILLED_FIELDS} == {_SENTINEL}
+    with pytest.raises(ValueError, match="draft sentinel"):
+        Preregistration.from_mapping(draft)
+
+
+def test_partition_hash_literal_recomputes() -> None:
+    from financial_forecasting.shared.domain.value_objects.family_partition_hash import (  # noqa: PLC0415
+        FamilyPartitionHash,
+    )
+
+    block = _toml(_DRAFT)["h3"]
+    partition = {f: tuple(v) for f, v in block["partition"].items() if f != "partition_hash"}
+    recomputed = FamilyPartitionHash.compute(
+        hasher=CanonicalJsonHasher(),
+        feature_set_hash=block["feature_set_hash"],
+        partition=partition,
+    )
+    assert recomputed.value == block["partition"]["partition_hash"]
+    assert block["feature_set_hash"] == tft_feature_set_hash(None)
+
+
+def test_r3_partition_equals_registry_and_ablation_draft() -> None:
+    block = _toml(_DRAFT)["h3"]["partition"]
+    partition = {f: tuple(v) for f, v in block.items() if f != "partition_hash"}
+    ablation = {f: tuple(v) for f, v in _toml(_ABLATION)["partition"].items()}
+    assert partition == registry_family_partition() == ablation
+
+
+def test_r3_k_p_seed_algorithm_equal_the_inference_plan() -> None:
+    """I17: o VALOR da r3 é a trava de K_p e da semente (o catálogo só fixa o algoritmo)."""
+    from financial_forecasting.features.inference.domain.value_objects.permutation_plan import (  # noqa: PLC0415
+        K_P,
+        PERMUTATION_ALGORITHM,
+        PERMUTATION_SEED,
+    )
+
+    block = _toml(_DRAFT)["h3"]
+    assert (block["k_p"], block["permutation_seed"], block["permutation_algorithm"]) == (
+        K_P,
+        PERMUTATION_SEED,
+        PERMUTATION_ALGORITHM,
+    )
+
+
+@pytest.mark.skipif(not _FILLED.exists(), reason="a r3 preenchida só existe no Linux (L7)")
+def test_filled_r3_differs_from_draft_only_in_h3_ablation() -> None:
+    draft, filled = _toml(_DRAFT), _toml(_FILLED)
+    draft_ablation = dict(draft["h3"].pop("ablation"))
+    filled_ablation = dict(filled["h3"].pop("ablation"))
+    assert filled == draft
+    for field in _FILLED_FIELDS:
+        draft_ablation.pop(field)
+        assert filled_ablation.pop(field) != _SENTINEL, field
+    assert filled_ablation == draft_ablation
+
+
+@pytest.mark.parametrize("revision", [0, 1, 2])
+def test_r0_to_r2_files_unchanged(revision: int) -> None:
+    """Cada revisão ancorada continua com a referência que a sua âncora publicou (I18)."""
+    plan = _toml(_PREREGISTRATION / f"aapl_confirmatory-r{revision}.toml")
+    anchor = _toml(_PREREGISTRATION / f"aapl_confirmatory-r{revision}.anchor.toml")
+    assert anchor["tag"] == f"preregistration/{_reference(plan)}"
