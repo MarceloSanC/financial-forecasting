@@ -240,5 +240,7 @@ tabelas da 6.4 à 6.6 e o veredito são os mesmos da r1.
 
 As regras acima vieram da literatura e dos registros `[decision]` da Stage 7.2, sem
 nenhum valor de desempenho à vista. Os testes da Stage usam silver sintético. A
-prova de geometria (Etapa G) lê só timestamps, partições, fingerprints e o
-manifesto da inferência. A emenda é ancorada antes da Stage 8.1, que julga pela r2.
+prova de geometria (Etapa G) lê timestamps, as features do painel do TFT (inclusive
+preços e retornos passados, para reproduzir o corte do `build_training_grid`),
+partições, fingerprints e o manifesto da inferência; nenhuma coluna de previsão
+(`value_*`) nem o `target_return`. A emenda é ancorada antes da Stage 8.1, que julga pela r2.
