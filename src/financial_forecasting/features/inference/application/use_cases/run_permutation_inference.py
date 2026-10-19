@@ -136,6 +136,42 @@ class PartialAttributionError(ApplicationError):
     """Run com linhas de atribuição no silver sem `completed`, ou incompleto (C8)."""
 
 
+class IncompleteAttributionError(ApplicationError):
+    """A predição não cobre o plano: (família, k), decisões x horizontes ou pesos da VSN."""
+
+
+def check_attribution_coverage(
+    run: AttributionRunPrediction,
+    *,
+    partition: Mapping[str, Sequence[str]],
+    test_points: set[tuple[int, int]],
+) -> None:
+    """C5-1: todo (família, k) do plano, cada grade cobrindo as decisões x horizontes do
+    teste da 7.1 e um peso da VSN por decisão de teste — antes de qualquer escrita."""
+    expected = {(family, k) for family in partition for k in range(1, K_P + 1)}
+    if set(run.permuted) != expected:
+        missing = sorted(expected - set(run.permuted))
+        extra = sorted(set(run.permuted) - expected)
+        raise IncompleteAttributionError(
+            f"run {run.run_id}: permuted (family, k) missing {missing[:3]} extra {extra[:3]} "
+            f"of the {len(expected)} of the plan (C5-1)"
+        )
+    grids = {(_IDENTITY_FAMILY, 0): run.identity, **run.permuted}
+    for label, by_decision in grids.items():
+        points = {(d, h) for d, by_h in by_decision.items() for h in by_h}
+        if points != test_points:
+            raise IncompleteAttributionError(
+                f"run {run.run_id} {label}: {len(points)} decision x horizon grids, the 7.1 "
+                f"test has {len(test_points)} (C5-1)"
+            )
+    decisions = {d for d, _ in test_points}
+    if set(run.encoder_weights) != decisions or not all(run.encoder_weights.values()):
+        raise IncompleteAttributionError(
+            f"run {run.run_id}: vsn weights for {len(run.encoder_weights)} decisions, the 7.1 "
+            f"test has {len(decisions)} (C5-1)"
+        )
+
+
 @dataclass(frozen=True)
 class RunPermutationInferenceCommand:
     """DTO de entrada — o spec congelado, a partição de famílias, o lock e a justificativa."""
@@ -171,6 +207,11 @@ class RunPermutationInferenceResult:
     cohort_id: str
     partition_hash: str
     outcomes: tuple[AttributionRunOutcome, ...]
+
+
+def grids_of(run: AttributionRunPrediction) -> int:
+    """Grades por valor de teste: a identidade e cada (família, k)."""
+    return 1 + len(run.permuted)
 
 
 def variable_families(
@@ -410,6 +451,29 @@ class RunPermutationInference:
         self, context: _Context, run_id: str, fold_index: int, entry: Mapping[str, object]
     ) -> AttributionRunOutcome:
         """Run `completed`: as contagens e o plano gravados batem com o manifesto (C8)."""
+        permuted, vsn = self._check_rows(context, run_id, entry)
+        return AttributionRunOutcome(
+            run_id=run_id,
+            fold_index=fold_index,
+            seed=context.seed,
+            status=_VERIFIED,
+            reproduction_mode=str(entry.get("mode")),
+            identity_values_compared=0,
+            max_abs_diff=float(str(entry.get("max_abs_diff"))),
+            max_normalized_diff=float(str(entry.get("max_normalized_diff", 0.0))),
+            permuted_rows_written=0,
+            permuted_rows_verified=len(permuted),
+            vsn_rows_written=0,
+            vsn_rows_verified=len(vsn),
+        )
+
+    def _check_rows(
+        self, context: _Context, run_id: str, entry: Mapping[str, object]
+    ) -> tuple[list[Row], list[Row]]:
+        """A regra única de conferência das duas tabelas contra uma entrada (C8, C5-1).
+
+        Usada na retomada (`_reconfer`) e depois de gravar, antes do `completed`.
+        """
         permuted = self._attribution_rows(context.spec, _PERMUTED, run_id)
         vsn = self._attribution_rows(context.spec, _VSN, run_id)
         counts: dict[tuple[str, int], int] = {}
@@ -441,24 +505,11 @@ class RunPermutationInference:
             )
         if problems:
             raise PartialAttributionError(
-                f"run {run_id} is completed in the manifest but the silver differs: "
+                f"run {run_id}: the silver differs from the manifest entry: "
                 + "; ".join(problems)
                 + " (C8)"
             )
-        return AttributionRunOutcome(
-            run_id=run_id,
-            fold_index=fold_index,
-            seed=context.seed,
-            status=_VERIFIED,
-            reproduction_mode=str(entry.get("mode")),
-            identity_values_compared=0,
-            max_abs_diff=float(str(entry.get("max_abs_diff"))),
-            max_normalized_diff=float(str(entry.get("max_normalized_diff", 0.0))),
-            permuted_rows_written=0,
-            permuted_rows_verified=len(permuted),
-            vsn_rows_written=0,
-            vsn_rows_verified=len(vsn),
-        )
+        return permuted, vsn
 
     # -- escrita de um run -----------------------------------------------------------
 
@@ -485,6 +536,8 @@ class RunPermutationInference:
                 f"({len(run.test_decisions)} vs {len(silver_decisions)}) (C3-4)"
             )
         check_normalizer_scale(run.run_id, run.normalizer_scale)  # C7
+        test_points = {(int(str(r["decision_idx"])), int(str(r["horizon"]))) for r in test_rows}
+        check_attribution_coverage(run, partition=context.partition, test_points=test_points)
         mode = self._mode(context)
         reference = {
             (
@@ -568,17 +621,25 @@ class RunPermutationInference:
                 decisions=decisions,
             )
         )
-        self._manifest.record_run(
-            context.cohort_id,
-            run.run_id,
-            {
-                **entry,
-                "status": COMPLETED,
-                "permuted_rows": permuted.rows_written,
-                "vsn_rows": vsn.rows_written,
-                "completed_at": self._clock.now().isoformat(),
-            },
-        )
+        completed = {
+            **entry,
+            "status": COMPLETED,
+            "permuted_rows": len(test_rows) * grids_of(run),
+            "vsn_rows": len(decisions) * len(variables),
+            "completed_at": self._clock.now().isoformat(),
+        }
+        if (permuted.rows_written, vsn.rows_written) != (
+            completed["permuted_rows"],
+            completed["vsn_rows"],
+        ):
+            raise PartialAttributionError(
+                f"run {run.run_id}: wrote {permuted.rows_written} permuted / {vsn.rows_written} "
+                f"vsn rows, expected {completed['permuted_rows']} / {completed['vsn_rows']} — "
+                "left started (C5-1)"
+            )
+        # ADR 7.1.0004: o `completed` só depois de reler o silver pela regra do `_reconfer`
+        self._check_rows(context, run.run_id, completed)
+        self._manifest.record_run(context.cohort_id, run.run_id, completed)
         return AttributionRunOutcome(
             run_id=run.run_id,
             fold_index=run.fold_index,

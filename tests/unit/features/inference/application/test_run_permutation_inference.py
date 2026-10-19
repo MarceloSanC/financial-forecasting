@@ -34,6 +34,7 @@ from financial_forecasting.features.inference.application.use_cases.run_inferenc
     UnknownRunError,
 )
 from financial_forecasting.features.inference.application.use_cases.run_permutation_inference import (  # noqa: E501
+    IncompleteAttributionError,
     PartialAttributionError,
     RunPermutationInference,
     RunPermutationInferenceCommand,
@@ -612,3 +613,52 @@ def test_started_without_rows_in_the_same_environment_is_resumed() -> None:
     document = harness.manifest.recorded(_cohort_id(harness.spec))
     assert document is not None
     assert document["runs"][_run_id(11, 0)]["status"] == "completed"  # type: ignore[index]
+
+
+# -- cobertura do plano e releitura antes do `completed` (C5-1) ---------------------------
+
+
+@pytest.mark.parametrize("probe", ["without-sentiment", "no-vsn-weights", "short-grid"])
+def test_incomplete_prediction_refused_on_the_first_run(probe: str) -> None:
+    """Sondas do C5-1: a predição que não cobre o plano é recusada antes de escrever."""
+    harness = _harness()
+    seed = harness.spec.seeds[0]
+
+    def damage(run: AttributionRunPrediction) -> AttributionRunPrediction:
+        if probe == "without-sentiment":
+            return replace(
+                run, permuted={k: v for k, v in run.permuted.items() if k[0] != "sentiment"}
+            )
+        if probe == "no-vsn-weights":
+            return replace(run, encoder_weights={})
+        first = min(run.permuted[("price", 1)])
+        grids = {d: g for d, g in run.permuted[("price", 1)].items() if d != first}
+        return replace(run, permuted={**run.permuted, ("price", 1): grids})
+
+    _with_runs(harness, seed, lambda r: replace(r, runs=(damage(r.runs[0]), *r.runs[1:])))
+    with pytest.raises(IncompleteAttributionError, match="C5-1"):
+        harness.run()
+    assert harness.rows("fact_permuted_predictions") == []
+    assert harness.manifest.recorded(_cohort_id(harness.spec)) is None
+
+
+class _DroppingRepository(FakeAnalyticsRepository):
+    """Silver que perde a última linha de VSN de cada escrita (e diz que gravou todas)."""
+
+    def write(self, *, layer: str, table: str, rows: Any, allow_upsert: bool = False) -> Any:  # noqa: ANN401
+        if table == "fact_vsn_weights":
+            rows = list(rows)[:-1]
+        return super().write(layer=layer, table=table, rows=rows, allow_upsert=allow_upsert)
+
+
+def test_completed_only_after_rereading_the_silver() -> None:
+    harness = _harness()
+    dropping = _DroppingRepository(clock=FakeClock())
+    for row in harness.rows("fact_oos_predictions"):
+        dropping.write(layer="silver", table="fact_oos_predictions", rows=[row])
+    harness.repo = dropping
+    with pytest.raises(PartialAttributionError, match="C8"):
+        harness.run()
+    document = harness.manifest.recorded(_cohort_id(harness.spec))
+    assert document is not None
+    assert document["runs"][_run_id(11, 0)]["status"] == "started"  # type: ignore[index]
