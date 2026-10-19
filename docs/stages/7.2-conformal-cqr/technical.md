@@ -2180,4 +2180,41 @@ O e2e da Task 20 não repete dois casos, porque eles já estão cobertos no unit
   posto e sem Beta) e a fixture dos autores em
   `tests/integration/features/inference/test_nexcp_oracle_fixture.py`.
 
+### 2026-10-18 — [decision] auditoria de testes — o fake devolve o posto do real; 13 mutantes sobreviventes mortos (TA-1 a TA-12) — Claude (Opus 5.5)
+**Contexto:** a auditoria independente de testes rodou 70 mutantes, e 12 sobreviveram.
+Os 4 achados major e os 9 minor foram aplicados como task-NN-fix.
+**O que foi decidido:**
+- **TA-3:** o `FakeConformalCalibration` devolve `rank = split_conformal_rank(n,
+  alpha)` na variante sem pesos e `None` no NexCP, em paridade com o real.
+  - As correções do fake continuam zero.
+  - O contrato afirma nas duas pernas:
+    - `(lower.level, upper.level) == pair`;
+    - `lower.alpha == upper.alpha == exact_level(tau_lo)`;
+    - `lower.n == upper.n == len(calib)`;
+    - o posto.
+- **TA-1:** a prova sintética do CA7 roda a faixa do split e o lado garantido do
+  NexCP com sigma do modelo base em {0,5; 1; 2}.
+  - Um teste de não vacuidade mostra que a cobertura nativa (correção zero) sai da
+    faixa com sigma 0,5 e 2. Com sigma 0,5, sai também do lado garantido do NexCP.
+  - Com sigma 2, o modelo largo já é conservador sem correção. Nesse caso, só a
+    faixa do split pega a correção zero.
+- **TA-4:** o e2e planta pontos de teste do candidato com grade quase constante
+  (passos de 1e-14) em d % 23 == 1.
+  - Esses pontos são degenerados pela tolerância do plano (1e-12) e não pela
+    tolerância 0.
+  - O teste afirma `n_evaluated < n_points` e a igualdade com o `n_observed` nativo.
+- **TA-6:** o posto do helper das coincidências MAPIE × domain é recalculado por
+  inteiros.
+  - A contagem (245) e os 105 tamanhos divergentes em [50, 399] estão congelados
+    com `==`.
+  - Um teste cruza esse posto com o `split_conformal_rank`.
+- **Demais (TA-2, TA-5, TA-7 a TA-12):** níveis das caudas por literal, fronteira
+  exata do ATOL, decisão de teste repetida, L == U == y, prefixo do motivo,
+  `ArithmeticError` do `calibration_set_for`, regex do calib vazio e os 8 erros de
+  comando do C3 parametrizados no contrato.
+- **TA-13:** o `test_r2_anchor_after_r1` entra na Task 23.
+
+**Mutantes conferidos, um a um, com o arquivo restaurado depois:** X01, X02, M11 (split e
+NexCP), F01, F02, F03, RG03, R06, S05, CV01, RG02 e S03. Todos morrem.
+
 <!-- END: post-execution -->
