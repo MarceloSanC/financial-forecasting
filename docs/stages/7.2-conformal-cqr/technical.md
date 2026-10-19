@@ -2048,4 +2048,47 @@ inteiro do fold, então `"01"` e `"1"` colidiam.
 **Razão:** o CA15 conta unidades. A identidade da unidade no gold é o `fold_raw`, e
 um fold cru ambíguo é dado inconsistente (motivo na linha), não erro do refresh.
 
+### 2026-10-18 — [decision] task-18-fix — n̄ e c̄ da média entre seeds em colunas DOUBLE próprias (Checkpoint C, C4-9) — Claude (Opus 5.5)
+**Contexto:** a linha de média da `gold_conformal_coverage` gravava n̄ em `n_evaluated`
+e c̄ em `count`, que são inteiros nas linhas por seed. Com n diferente entre as seeds,
+a coluna misturava int e float.
+**O que foi decidido:** o schema ganha `n_mean` e `mean_count` (DOUBLE) logo depois de
+`n_evaluated` e `count`, em `read_columns`.
+- **Linha de média:** n̄ e c̄ vão nas colunas novas, e `n_evaluated` e `count` ficam
+  nulos.
+- **Linha por seed:** `n_evaluated` e `count` são inteiros, e `n_mean` e `mean_count`
+  ficam nulos.
+- **Onde vale a mudança:** ela vale para o §1 ("Colunas das tabelas gold") e para os
+  `[decision]` das Tasks 09 e 18. Fica registrada aqui porque o
+  `check_technical_postexec.py` só aceita edição dentro da §7 durante a execução.
+- **Testes:** o round-trip pelo `ParquetGoldStore` real com o bloco preenchido está no
+  e2e da Task 20 (`test_gold_store_round_trip_keeps_count_and_mean_types`). Na
+  fixture, n̄ é fracionário (C4-1), então um n̄ truncado reprova.
+**Razão:** uma coluna, um tipo. O leitor da 7.4 não precisa separar o int da seed do
+float da média pela chave.
+
+### 2026-10-18 — [deviation] Task 17 — `ConformalUndefinedCoverage` é dataclass, não a tupla do concept (Checkpoint C, C4-11) — Claude (Opus 5.5)
+**Contexto:** o concept §4 descreve a cobertura indefinida como uma tupla
+`(seed, horizonte, variante, motivo)`.
+**O que mudou:** `ConformalUndefinedCoverage` é uma dataclass frozen com `seed`,
+`horizon`, `variant`, `reason` e `n_points`.
+- O `n_points` existe porque a forma fixa das linhas não-`ok` da tabela gold (§1) o
+  publica.
+- Os campos de fold não existem: a cobertura é por (seed, h, variante), e o fold
+  da unidade culpada vai no texto do `reason`.
+- `seed` não é opcional: só uma seed com série nativa entra na cobertura, e a seed
+  `None` fica como unidade `undefined` da montagem, na
+  `gold_conformal_corrections`.
+**Razão:** campos nomeados e tipados no DTO do gold, sem mudar o que a tabela
+publica.
+
+### 2026-10-18 — [decision] task-09-fix — média entre seeds exige o aninhamento quando aplicável (Checkpoint C, C4-10) — Claude (Opus 5.5)
+**O que foi decidido:** `mean_of_seed_nesting_rates` e `sd_of_seed_nesting_rates`
+deixam de ter default no `ConformalSeedMeanCoverage`. Com `applicable`, o
+`__post_init__` exige `n_mean`, `nesting_violation_rate` e
+`mean_of_seed_nesting_rates`. O caso não aplicável passa os dois como `None`,
+explicitamente.
+**Razão:** a média sem o aninhamento era um objeto aplicável incompleto que o
+builder publicaria com célula nula.
+
 <!-- END: post-execution -->
