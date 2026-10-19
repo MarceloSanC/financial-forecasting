@@ -2293,4 +2293,21 @@ de gates.
 aresta muda de módulo dentro do mesmo slice, e o `unmatched_ignore_imports_alerting =
 error` continua cobrando a lista.
 
+### 2026-10-19 — [decision] Task 02 — tag `phase` dos runs LOCO e literais medidos — Claude (Opus 5.5)
+**Contexto:** a Task 02 deixa a tag `phase` do tracker nos runs LOCO para o executor,
+com `"confirmatory_ready"` recomendada e `"ablation"` como alternativa.
+**O que foi decidido:**
+- Fica **`phase = "confirmatory_ready"`**. O run LOCO segue o procedimento
+  pré-registrado, e a configuração já está no `model_version`
+  (`tft_quantile_loco_<configuração>`), na tag `model_version` e nos params do tracker.
+  `test_tracking_phase_tag_of_loco_runs` fixa o valor.
+- Os literais de `test_default_command_keeps_the_pinned_run_id_and_config_signature` foram
+  medidos no `$BASE` (`0f461e1`), antes da mudança, com as fixtures de `test_train_tft.py`:
+  `run_id` do fold 0 `ea8ed2e8…216d`, do fold 1 `640eb66b…f279`, `config_signature`
+  `b5d077bd…4c62`. O teste usa os valores completos.
+- O teste do corte do grid foi conferido por mutação: aparar pelo subconjunto
+  (`trim_columns = feature_names`) reprova os 4 casos parametrizados.
+**Razão:** é a opção recomendada pelo plano, e é reversível (só a tag do tracker, fora
+do `run_id` e do silver).
+
 <!-- END: post-execution -->

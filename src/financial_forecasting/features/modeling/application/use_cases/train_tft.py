@@ -51,6 +51,15 @@ rerun idêntico); C3/C4/C5/C10 erguem no trainer (port).
 mudar valor persistido — os use cases que predizem a partir do checkpoint as
 chamam em vez de recopiar a leitura do painel, a identidade do run, a regra do
 diretório do artefato e a guarda de emissão.
+
+**Treino por subconjunto de famílias (Stage 7.3, ablação LOCO; ADR 7.3.0003 item 2):**
+o comando aceita `excluded_family` (uma das `TFT_FAMILIES`, ou `None`) e
+`model_version`. O painel é lido e aparado pelo conjunto COMPLETO de colunas
+(`build_training_grid`) e só então perde as colunas da família, então a geometria
+(timestamps, folds, decisões, `split_fingerprint`) é a mesma em toda configuração
+(I2). O `run_id` usa o `feature_set_hash` do subconjunto e o `model_version` do
+comando, e o `model_version` vai a toda linha persistida e ao `dim_run` (I3). O
+comando default (`None`, `tft_quantile`) dá exatamente a identidade de antes (I1).
 """
 
 from __future__ import annotations
@@ -59,7 +68,7 @@ import logging
 from dataclasses import asdict, dataclass
 from itertools import pairwise
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
     PersistPredictionsCommand,
@@ -76,6 +85,7 @@ from financial_forecasting.features.feature_engineering.domain.services.dataset_
     TARGET_COLUMN,
 )
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
+    FEATURE_SPECS,
     feature_set_hash,
     list_feature_specs,
 )
@@ -148,6 +158,57 @@ _UNKNOWN_TYPING = "unknown"
 _StructuralEntry = tuple[str, int, int, float, int]
 _ALIGNMENT_KEY_WIDTH = 4
 
+# Famílias da registry na ordem do ADR 0.0.0016 (Stage 7.3, ablação LOCO).
+TFT_FAMILIES: Final = ("price", "technical", "sentiment", "fundamental")
+_LOCO_PREFIX = "tft_quantile_loco_"
+_LOCO_FULL = "full"
+_LOCO_MINUS = "minus_"
+
+
+def registry_family_partition() -> dict[str, tuple[str, ...]]:
+    """Features habilitadas da registry por `spec.family`, na ordem da registry.
+
+    É a partição que a ablação congela e que o hash de H3 identifica (ADR 7.3.0002
+    item 4); as famílias saem na ordem de `TFT_FAMILIES`.
+    """
+    specs = list_feature_specs(enabled_only=True)
+    return {
+        family: tuple(spec.name for spec in specs if spec.family == family)
+        for family in TFT_FAMILIES
+    }
+
+
+def _check_family(excluded_family: str | None) -> None:
+    if excluded_family is not None and excluded_family not in TFT_FAMILIES:
+        raise ValueError(
+            f"excluded_family must be one of {list(TFT_FAMILIES)} or None, "
+            f"got {excluded_family!r} (C2)"
+        )
+
+
+def tft_feature_set_hash(excluded_family: str | None) -> str:
+    """`feature_set_hash` do conjunto treinado: a registry sem a família excluída.
+
+    Com `None` é o `feature_set_hash()` de sempre (I1).
+    """
+    _check_family(excluded_family)
+    if excluded_family is None:
+        return feature_set_hash()
+    return feature_set_hash(
+        {name: spec for name, spec in FEATURE_SPECS.items() if spec.family != excluded_family}
+    )
+
+
+def loco_model_version(configuration: str) -> str:
+    """`model_version` de uma configuração da ablação: `tft_quantile_loco_<nome>`."""
+    return _LOCO_PREFIX + configuration
+
+
+def _expected_model_versions(excluded_family: str | None) -> tuple[str, ...]:
+    if excluded_family is None:
+        return (MODEL_VERSION, loco_model_version(_LOCO_FULL))
+    return (loco_model_version(_LOCO_MINUS + excluded_family),)
+
 
 @dataclass(frozen=True)
 class TftPanel:
@@ -180,6 +241,10 @@ class TrainTftCommand:
     calib_size: int
     embargo: int
     schema_version: int
+    # Stage 7.3 (ablação LOCO): família fora do painel e versão do modelo da
+    # configuração; os defaults são o candidato confirmatório (I1).
+    excluded_family: str | None = None
+    model_version: str = MODEL_VERSION
 
 
 @dataclass(frozen=True)
@@ -253,20 +318,32 @@ def _assert_zero_removal(*, before: int, after: int) -> None:
         )
 
 
-def load_tft_panel(*, store: MedallionStore, asset_id: str) -> TftPanel:
+def load_tft_panel(
+    *, store: MedallionStore, asset_id: str, excluded_family: str | None = None
+) -> TftPanel:
     """O painel do ativo pelo grid único, com a tipagem da registry (I2) — C1/C6.
 
     É a leitura que o `TrainTft` faz: as colunas são `unknown_feature_names()`
     seguidas de `known_feature_names()`. Quem prediz a partir do checkpoint
-    (Stage 7.1) monta o painel por aqui, nunca por uma cópia.
+    (Stage 7.1) monta o painel por aqui, nunca por uma cópia. Com
+    `excluded_family` (Stage 7.3), o grid é aparado pelo conjunto COMPLETO e só
+    então as colunas da família saem do painel (I2: geometria igual).
     """
+    _check_family(excluded_family)
     unknown_names = unknown_feature_names()
     known_names = known_feature_names()
+    full_names = unknown_names + known_names
+    if excluded_family is None:
+        return _read_panel(
+            store=store, asset_id=asset_id, feature_names=full_names, known_names=known_names
+        )
+    dropped = set(registry_family_partition()[excluded_family])
     return _read_panel(
         store=store,
         asset_id=asset_id,
-        feature_names=unknown_names + known_names,
-        known_names=known_names,
+        feature_names=tuple(name for name in full_names if name not in dropped),
+        known_names=tuple(name for name in known_names if name not in dropped),
+        grid_columns=full_names,
     )
 
 
@@ -276,6 +353,7 @@ def _read_panel(
     asset_id: str,
     feature_names: tuple[str, ...],
     known_names: tuple[str, ...],
+    grid_columns: tuple[str, ...] | None = None,
 ) -> TftPanel:
     """Corpo único da leitura: (timestamps ISO, target_return, sessões, matriz).
 
@@ -285,6 +363,8 @@ def _read_panel(
     colunas explícitas porque a caracterização da leitura da 5.5
     (`test_dataset_loading_characterization.py`) a exercita com colunas
     arbitrárias; o use case e a inferência leem por `load_tft_panel`.
+    `grid_columns` (default: `feature_names`) são as colunas que aparam o grid;
+    a matriz sai só com `feature_names`.
     """
     rows = store.read(layer=DATASET_TFT_LAYER, table=DATASET_TFT_TABLE, filters={"asset": asset_id})
     if not rows:
@@ -292,7 +372,8 @@ def _read_panel(
             f"dataset ({DATASET_TFT_LAYER!r}, {DATASET_TFT_TABLE!r}) is empty for "
             f"asset {asset_id!r} — nothing to train (C1)"
         )
-    grid = build_training_grid(rows, columns=(*feature_names, TARGET_COLUMN))
+    trim_columns = feature_names if grid_columns is None else grid_columns
+    grid = build_training_grid(rows, columns=(*trim_columns, TARGET_COLUMN))
     return TftPanel(
         timestamps=grid.timestamps_iso(),
         target=grid.column(TARGET_COLUMN),
@@ -339,11 +420,11 @@ def tft_run_identity(
     run_id = RunId.compute(
         hasher=hasher,
         asset=command.scope.asset_id,
-        feature_set_hash=feature_set_hash(),
+        feature_set_hash=tft_feature_set_hash(command.excluded_family),
         trial_number=None,  # só o sweep tem trials, e ele não persiste runs
         fold=str(fold.fold_index),
         seed=command.params.seed,
-        model_version=MODEL_VERSION,
+        model_version=command.model_version,
         config_signature=config_signature.value,
         split_signature=fold.fingerprint.value,
         pipeline_version=PIPELINE_VERSION,
@@ -417,7 +498,11 @@ class TrainTft:
 
         # Painel e tipagem pela MESMA função que a predição a partir do checkpoint
         # usa (Stage 7.1): a ordem desconhecidas + conhecidas tem uma definição só.
-        panel = load_tft_panel(store=self._store, asset_id=command.scope.asset_id)  # C1/C6
+        panel = load_tft_panel(
+            store=self._store,
+            asset_id=command.scope.asset_id,
+            excluded_family=command.excluded_family,
+        )  # C1/C6
         feature_names = panel.feature_names
         known_names = panel.known_feature_names
         dataset_timestamps, returns, sessions, feature_rows = (
@@ -504,7 +589,7 @@ class TrainTft:
                     PersistPredictionsCommand(
                         run_id=run_id,
                         split=_SPLIT,
-                        model_version=MODEL_VERSION,
+                        model_version=command.model_version,
                         asset=command.scope.asset_id,
                         feature_set_name=command.scope.feature_set_name,
                         schema_version=command.schema_version,
@@ -522,7 +607,7 @@ class TrainTft:
             summaries.append(
                 TftRunSummary(
                     run_id=run_id,
-                    model_version=MODEL_VERSION,
+                    model_version=command.model_version,
                     fold_index=fold.fold_index,
                     rows_written=rows_written,
                     rows_skipped=rows_skipped,
@@ -564,12 +649,12 @@ class TrainTft:
             "monitored_decisions": float(training.monitored_decision_count),
         }
         tags = {
-            "model_version": MODEL_VERSION,
+            "model_version": command.model_version,
             "phase": _CONFIRMATORY_PHASE,
             "fold": str(fold.fold_index),
         }
         try:
-            tracking_run_id = self._tracker.start_run(run_name=f"{MODEL_VERSION}-{run_id}")
+            tracking_run_id = self._tracker.start_run(run_name=f"{command.model_version}-{run_id}")
             self._tracker.log_params(params)
             for epoch, loss in enumerate(training.val_loss_by_epoch):
                 self._tracker.log_metrics({"val_loss": loss}, step=epoch)
@@ -667,7 +752,7 @@ class TrainTft:
             split_fingerprint=fold.fingerprint.value,
             fold=str(fold.fold_index),
             seed=command.params.seed,
-            model_version=MODEL_VERSION,
+            model_version=command.model_version,
             schema_version=command.schema_version,
         )
         # `analytics_store` grava (dono de `dim_run`); `created_at_utc` é do adapter (4.2 I5).
@@ -679,6 +764,13 @@ class TrainTft:
 
 def _validate_command(command: TrainTftCommand) -> None:
     """C2: comando inválido ergue `ValueError` ANTES de qualquer I/O."""
+    _check_family(command.excluded_family)
+    allowed = _expected_model_versions(command.excluded_family)
+    if command.model_version not in allowed:
+        raise ValueError(
+            f"model_version {command.model_version!r} does not pair with excluded_family "
+            f"{command.excluded_family!r}; expected one of {list(allowed)} (C2)"
+        )
     levels = command.quantile_levels
     if not levels:
         raise ValueError("quantile_levels must be non-empty (C2)")
@@ -721,7 +813,7 @@ def _tracking_params(command: TrainTftCommand, fold: FoldSplit, run_id: str) -> 
         "val_size": command.val_size,
         "calib_size": command.calib_size,
         "embargo": command.embargo,
-        "model_version": MODEL_VERSION,
+        "model_version": command.model_version,
         "pipeline_version": PIPELINE_VERSION,
         **asdict(command.params),
     }
