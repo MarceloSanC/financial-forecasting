@@ -153,7 +153,9 @@ def test_donor_in_another_batch_gets_the_donor_block(
     trained: TrainedCheckpoint, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     decisions = trained.calib_decisions
-    permutation = tuple(reversed(range(len(decisions))))
+    # TA-5: um ciclo de n (π ≠ π⁻¹), não a reversão (involução): a direção do doador
+    # (`donors[k][i]` é a posição da decisão que DOA para a i-ésima) fica fixada
+    permutation = (*range(1, len(decisions)), 0)
     identity_loader, permuted_loader = _captured_loaders(trained, monkeypatch, (permutation,))
     identity, permuted = _batches(identity_loader), _batches(permuted_loader)
     column = list(identity_loader.dataset.reals).index(_INFORMATIVE)

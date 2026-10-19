@@ -298,6 +298,35 @@ def test_permuted_keys_are_family_and_one_based_k(leg: _Leg) -> None:
 
 
 @pytest.mark.contract
+def test_permuted_grid_is_the_identity_of_the_donor_decision(leg: _Leg) -> None:
+    """TA-5: com um ciclo (π ≠ π⁻¹), a grade permutada da decisão i é a identidade de π[i].
+
+    Só a coluna da família varia entre as decisões (as outras colunas e o alvo ficam
+    constantes), então trocar a janela da família inteira equivale a prever a decisão
+    doadora `decisions[π[i]]`. Fake e real precisam concordar na direção da troca.
+    """
+    n = len(leg.decisions)
+    cycle = (*range(1, n), 0)
+    column = leg.feature_names.index(_family_column(leg))
+    first = leg.rows[0]
+    rows = tuple(
+        tuple(value if j == column else first[j] for j, value in enumerate(row)) for row in leg.rows
+    )
+    target = (leg.target[0],) * len(leg.target)
+
+    attribution = _attribution(leg, rows=rows, target=target, donors=(cycle,))
+
+    permuted = attribution.permuted[("fam", 1)]
+    for i, decision in enumerate(leg.decisions):
+        donor = leg.decisions[cycle[i]]
+        assert set(permuted[decision]) == set(attribution.identity[donor])
+        for h, grid in permuted[decision].items():
+            assert grid == pytest.approx(attribution.identity[donor][h], abs=1e-6)
+    distinct = {tuple(attribution.identity[d][1]) for d in leg.decisions}
+    assert len(distinct) == n  # a identidade distingue as decisões: o teste não é trivial
+
+
+@pytest.mark.contract
 def test_attribution_wrong_sha_raises(leg: _Leg) -> None:
     with pytest.raises(ArtifactChangedError):
         _attribution(leg, expected_sha256="0" * 64)
