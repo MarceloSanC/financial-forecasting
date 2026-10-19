@@ -2698,4 +2698,29 @@ Notas:
   contrato aceita as duas exceções pela mensagem.
 - **H2** continua equivalente (o probe real só grava `"true"` ou `"false"`).
 
+### 2026-10-19 — [measurement] Ponto C — pico de H3 pelo VmHWM zerado; saída do `make check` — Claude (Opus 5.5)
+**Primeira rodada** (HEAD `05b7a75`; `--name ff-gate-186 --cpus 6 --memory 8g`;
+`uv lock --check && make check PYTEST_PAR='-n 4 --dist loadgroup'`): `1 failed, 7968
+passed, 27 skipped`, cobertura 98,79 %, `PONTO_C_EXIT=2`. A falha foi
+`test_h3_step_peak_bounded_and_flat_in_runs`, com pico de 1 235 918 848 B (1,15 GiB)
+contra o teto de 512 MiB. Isolado, com e sem `--cov`, o mesmo probe deu 264 MiB.
+
+**Causa:** a medida, não o código. O `ru_maxrss` é o pico do processo inteiro, inclusive
+o dos imports. Sob o `-n 4` no cgroup de 8 GiB, o kernel recupera páginas e o RSS-base
+medido antes da etapa encolhe; a diferença infla.
+
+**Correção (`0604489`):** `clear_refs = 5` zera o VmHWM antes do `_h3`. O pico passa a
+ser o VmHWM da etapa menos o VmRSS de então. Isolado, `--cpus 3`:
+
+| Runs do candidato | Pico acima da base |
+|---|---|
+| 30 (S = 5) | 263 MiB |
+| 60 (S = 10) | 238 MiB |
+
+Inclinação negativa (ruído de alocador), dentro do orçamento de 2 MiB por run. Estes
+valores substituem os do `[measurement] C8-5`, que usavam o `ru_maxrss`.
+
+**Segunda rodada** (HEAD `0604489`, mesmo comando): `7969 passed, 27 skipped, 762
+warnings in 1549.63s`, cobertura 98,79 % (>= 90 %), `PONTO_C_EXIT=0`.
+
 <!-- END: post-execution -->
