@@ -74,7 +74,8 @@ class PersistPermutedPredictionsResult:
     rows_skipped: int
 
 
-def _check_entry(entry: PermutedDecisionEntry) -> None:
+def check_permuted_entry(entry: PermutedDecisionEntry) -> None:
+    """`none ⇔ 0` e índice inteiro >= 0, antes de qualquer escrita (o fake reusa, TA-12)."""
     index = entry.permutation_index
     if not isinstance(index, int) or isinstance(index, bool) or index < 0:
         raise ValueError(f"permutation_index must be an int >= 0, got {index!r}")
@@ -96,7 +97,7 @@ class PersistPermutedPredictions:
     ) -> PersistPermutedPredictionsResult:
         """Valida as entradas, monta as linhas LONG e grava o run (ver docstring do módulo)."""
         for entry in command.entries:
-            _check_entry(entry)
+            check_permuted_entry(entry)
         rows: list[Row] = []
         rows_skipped = 0
         for entry in command.entries:
