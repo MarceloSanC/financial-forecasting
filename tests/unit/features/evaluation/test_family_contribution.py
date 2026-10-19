@@ -358,3 +358,30 @@ def test_a_nan_bound_is_never_ok(monkeypatch: pytest.MonkeyPatch) -> None:
         assert share.status == "undefined"
         assert "NaN" in str(share.reason)
     assert report.heterogeneous is False
+
+
+# --- fronteira Σ == 0.0 exato (C7-2) -------------------------------------------------------
+
+
+def test_point_total_exactly_zero_is_undefined() -> None:
+    series = _ones(2)
+    series[("price", 1)] = (1.0, 1.0)
+    series[("technical", 1)] = (-1.0, -1.0)
+    series[("sentiment", 1)] = (0.0, 0.0)
+    series[("fundamental", 1)] = (0.0, 0.0)
+
+    report = _evaluate(series, _identity_rows(2))
+
+    assert report.status == "undefined"
+    assert "H3-NEG" in str(report.reason)
+
+
+def test_replica_total_exactly_zero_counts_as_nonpositive() -> None:
+    series = _ones(2)
+    for family in H3_FAMILIES:
+        series[(family, 1)] = (0.0, 1.0)  # t = 0 soma exatamente 0 em h = 1
+
+    report = _evaluate(series, _indices([[0, 0], [1, 1], [0, 0], [0, 1]]), level=0.5)
+
+    assert report.status == "ok"
+    assert report.nonpositive_replicas[1] == 2  # noqa: PLR2004
