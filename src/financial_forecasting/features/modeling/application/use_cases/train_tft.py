@@ -92,6 +92,7 @@ from financial_forecasting.features.feature_engineering.domain.services.feature_
 from financial_forecasting.features.modeling.application.pipeline_version import (
     PIPELINE_VERSION,
 )
+from financial_forecasting.features.modeling.domain.services import loco_identity
 from financial_forecasting.features.modeling.domain.services.operationally_latest_dedup import (
     deduplicate_operationally_latest,
 )
@@ -158,11 +159,10 @@ _UNKNOWN_TYPING = "unknown"
 _StructuralEntry = tuple[str, int, int, float, int]
 _ALIGNMENT_KEY_WIDTH = 4
 
-# Famílias da registry na ordem do ADR 0.0.0016 (Stage 7.3, ablação LOCO).
-TFT_FAMILIES: Final = ("price", "technical", "sentiment", "fundamental")
-_LOCO_PREFIX = "tft_quantile_loco_"
-_LOCO_FULL = "full"
-_LOCO_MINUS = "minus_"
+# Famílias da registry na ordem do ADR 0.0.0016 e o `model_version` de uma configuração
+# LOCO (Stage 7.3): a regra nome ↔ família mora no domínio (`loco_identity`, dono único).
+TFT_FAMILIES: Final = loco_identity.TFT_FAMILIES
+loco_model_version = loco_identity.loco_model_version
 
 
 def registry_family_partition() -> dict[str, tuple[str, ...]]:
@@ -179,11 +179,10 @@ def registry_family_partition() -> dict[str, tuple[str, ...]]:
 
 
 def _check_family(excluded_family: str | None) -> None:
-    if excluded_family is not None and excluded_family not in TFT_FAMILIES:
-        raise ValueError(
-            f"excluded_family must be one of {list(TFT_FAMILIES)} or None, "
-            f"got {excluded_family!r} (C2)"
-        )
+    try:
+        loco_identity.configuration_of(excluded_family)
+    except ValueError as exc:
+        raise ValueError(f"{exc} (C2)") from exc
 
 
 def tft_feature_set_hash(excluded_family: str | None) -> str:
@@ -199,15 +198,10 @@ def tft_feature_set_hash(excluded_family: str | None) -> str:
     )
 
 
-def loco_model_version(configuration: str) -> str:
-    """`model_version` de uma configuração da ablação: `tft_quantile_loco_<nome>`."""
-    return _LOCO_PREFIX + configuration
-
-
 def _expected_model_versions(excluded_family: str | None) -> tuple[str, ...]:
-    if excluded_family is None:
-        return (MODEL_VERSION, loco_model_version(_LOCO_FULL))
-    return (loco_model_version(_LOCO_MINUS + excluded_family),)
+    configuration = loco_identity.configuration_of(excluded_family)
+    loco = loco_identity.loco_model_version(configuration)
+    return (MODEL_VERSION, loco) if excluded_family is None else (loco,)
 
 
 @dataclass(frozen=True)

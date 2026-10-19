@@ -28,8 +28,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Final
 
-from financial_forecasting.features.modeling.application.use_cases.train_tft import (
+from financial_forecasting.features.modeling.domain.services.loco_identity import (
+    ABLATION_CONFIGURATIONS,
     TFT_FAMILIES,
+    excluded_family_of,
     loco_model_version,
 )
 from financial_forecasting.shared.application.exceptions import ApplicationError
@@ -38,16 +40,18 @@ from financial_forecasting.shared.domain.services.sha256_hex import validate_sha
 if TYPE_CHECKING:
     from financial_forecasting.shared.domain.value_objects.cohort_hash import CohortHash
 
-ABLATION_CONFIGURATIONS: Final = (
-    "full",
-    "minus_price",
-    "minus_technical",
-    "minus_sentiment",
-    "minus_fundamental",
-)
+# A regra configuração ↔ família é do domínio (`loco_identity`); reexportada aqui para
+# os consumidores do spec.
+__all__ = [
+    "ABLATION_CONFIGURATIONS",
+    "ABLATION_FEATURE_SET_NAME",
+    "AblationCohortSpec",
+    "AblationConfiguration",
+    "AblationDeclarationError",
+    "excluded_family_of",
+]
+
 ABLATION_FEATURE_SET_NAME: Final = "fs_all_ablation"
-_FULL = "full"
-_MINUS = "minus_"
 _HASH_PREFIX = 12
 
 
@@ -58,15 +62,6 @@ class AblationDeclarationError(ApplicationError):
 def _check_text(value: object, *, field: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"AblationCohortSpec.{field} must be a non-empty string, got {value!r}")
-
-
-def excluded_family_of(configuration: str) -> str | None:
-    """A família que a configuração tira (`None` em `full`)."""
-    if configuration not in ABLATION_CONFIGURATIONS:
-        raise ValueError(
-            f"configuration must be one of {list(ABLATION_CONFIGURATIONS)}, got {configuration!r}"
-        )
-    return None if configuration == _FULL else configuration.removeprefix(_MINUS)
 
 
 @dataclass(frozen=True)
