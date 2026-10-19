@@ -15,7 +15,7 @@ diferentes ou feature da partição sem peso deixam o resumo `undefined` com o m
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
@@ -67,30 +67,61 @@ class _Undefined(Exception):
         self.reason = reason
 
 
-def _per_seed(
-    reductions: Sequence[VsnRunWeights], seeds: tuple[int, ...]
-) -> dict[int, dict[str, Mapping[str, float]]]:
-    """Decisão → pesos de cada seed, unindo os folds (decisões disjuntas)."""
-    by_seed: dict[int, dict[str, Mapping[str, float]]] = {}
-    for reduction in sorted(reductions, key=lambda r: (r.seed, r.fold_index)):
-        weights = by_seed.setdefault(reduction.seed, {})
-        overlap = sorted(set(weights) & set(reduction.weights))
+class VsnAccumulator:
+    """A média nas seeds por decisão, acumulada run a run (C8-5a; I19).
+
+    O `RefreshGold` reduz cada run (`reduce_vsn_run`), soma os pesos por (decisão,
+    variável) aqui e descarta a redução: o que fica na memória é uma soma por decisão e
+    variável e o conjunto de decisões de cada seed — nunca os pesos crus de todos os runs.
+    """
+
+    def __init__(self) -> None:
+        self._sums: dict[str, dict[str, float]] = {}
+        self._decisions: dict[int, set[str]] = {}
+        self._variables: frozenset[str] | None = None
+        self._failure: str | None = None
+
+    def add(self, run: VsnRunWeights) -> None:
+        """Soma os pesos de um run; incoerência vira o motivo do resumo `undefined`."""
+        if self._failure is not None:
+            return
+        decisions = self._decisions.setdefault(run.seed, set())
+        overlap = sorted(decisions & set(run.weights))
         if overlap:
-            raise _Undefined(f"seed {reduction.seed}: decision {overlap[0]} in two folds")
-        weights.update(reduction.weights)
-    missing = sorted(set(seeds) - set(by_seed))
-    if missing:
-        raise _Undefined(f"seed {missing[0]} has no vsn weights")
-    extra = sorted(set(by_seed) - set(seeds))
-    if extra:
-        raise _Undefined(f"seed {extra[0]} is not a seed of the candidate")
-    decision_sets = {frozenset(by_seed[s]) for s in seeds}
-    if len(decision_sets) != 1:
-        raise _Undefined("the vsn decisions differ between seeds")
-    variable_sets = {frozenset(row) for s in seeds for row in by_seed[s].values()}
-    if len(variable_sets) != 1:
-        raise _Undefined("the vsn variables differ between decisions or seeds")
-    return by_seed
+            self._failure = f"seed {run.seed}: decision {overlap[0]} in two folds"
+            return
+        for decision, row in run.weights.items():
+            names = frozenset(row)
+            if self._variables is None:
+                self._variables = names
+            elif names != self._variables:
+                self._failure = "the vsn variables differ between decisions or seeds"
+                return
+            sums = self._sums.setdefault(decision, dict.fromkeys(names, 0.0))
+            for variable, weight in row.items():
+                sums[variable] += weight
+        decisions.update(run.weights)
+
+    def means(self, seeds: tuple[int, ...]) -> dict[str, dict[str, float]]:
+        """Decisão → variável → média nas seeds.
+
+        Raises:
+            _Undefined: run incoerente, seed ausente ou extra, decisões diferentes.
+        """
+        if self._failure is not None:
+            raise _Undefined(self._failure)
+        missing = sorted(set(seeds) - set(self._decisions))
+        if missing:
+            raise _Undefined(f"seed {missing[0]} has no vsn weights")
+        extra = sorted(set(self._decisions) - set(seeds))
+        if extra:
+            raise _Undefined(f"seed {extra[0]} is not a seed of the candidate")
+        if len({frozenset(self._decisions[s]) for s in seeds}) != 1:
+            raise _Undefined("the vsn decisions differ between seeds")
+        return {
+            decision: {variable: total / len(seeds) for variable, total in row.items()}
+            for decision, row in self._sums.items()
+        }
 
 
 def _entry(kind: str, name: str, family: str, values: Sequence[float]) -> VsnEntry:
@@ -106,12 +137,22 @@ class VsnSummary:
         reductions: Sequence[VsnRunWeights], *, parameters: H3Parameters, seeds: tuple[int, ...]
     ) -> VsnSummaryReport:
         """p10/p50/p90 nas decisões da média nas seeds, por variável e por família."""
+        accumulator = VsnAccumulator()
+        for reduction in sorted(reductions, key=lambda r: (r.seed, r.fold_index)):
+            accumulator.add(reduction)
+        return VsnSummary.from_accumulator(accumulator, parameters=parameters, seeds=seeds)
+
+    @staticmethod
+    def from_accumulator(
+        accumulator: VsnAccumulator, *, parameters: H3Parameters, seeds: tuple[int, ...]
+    ) -> VsnSummaryReport:
+        """O resumo a partir das médias acumuladas run a run (o caminho do refresh)."""
         try:
-            by_seed = _per_seed(reductions, seeds)
+            mean_by_decision = accumulator.means(seeds)
         except _Undefined as exc:
             return VsnSummaryReport(entries=(), status=UNDEFINED, reason=exc.reason)
-        decisions = sorted(by_seed[seeds[0]])
-        variables = sorted(by_seed[seeds[0]][decisions[0]])
+        decisions = sorted(mean_by_decision)
+        variables = sorted(mean_by_decision[decisions[0]])
         missing = sorted(
             feature
             for features in parameters.partition.values()
@@ -125,8 +166,7 @@ class VsnSummary:
                 reason=f"partition features without a vsn weight: {missing[:3]}",
             )
         mean = {
-            (decision, variable): math.fsum(by_seed[s][decision][variable] for s in seeds)
-            / len(seeds)
+            (decision, variable): mean_by_decision[decision][variable]
             for decision in decisions
             for variable in variables
         }

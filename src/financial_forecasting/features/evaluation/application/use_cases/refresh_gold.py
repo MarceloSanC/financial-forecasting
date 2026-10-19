@@ -153,6 +153,7 @@ from financial_forecasting.features.evaluation.domain.services.series_assembly i
     SeriesAssembly,
 )
 from financial_forecasting.features.evaluation.domain.services.vsn_summary import (
+    VsnAccumulator,
     VsnSummary,
     VsnSummaryReport,
 )
@@ -201,7 +202,6 @@ from financial_forecasting.features.evaluation.domain.value_objects.realized_ret
     RealizedReturns,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.vsn_run_weights import (
-    VsnRunWeights,
     reduce_vsn_run,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.vsn_weight_record import (
@@ -684,7 +684,7 @@ class RefreshGold:
             vsn_report = VsnSummaryReport(entries=(), status=UNDEFINED, reason=vsn_failure)
         else:
             try:
-                vsn_report = VsnSummary.summarize(vsn, parameters=h3, seeds=seeds)
+                vsn_report = VsnSummary.from_accumulator(vsn, parameters=h3, seeds=seeds)
             except ValueError as exc:  # VSN incoerente é dado, não erro de programação
                 vsn_report = VsnSummaryReport(entries=(), status=UNDEFINED, reason=str(exc))
         joint = JointContribution.evaluate(
@@ -716,10 +716,10 @@ class RefreshGold:
         candidate_runs: Sequence[CohortRun],
         realized: RealizedReturns,
         levels: tuple[float, ...],
-    ) -> tuple[list[PermutedRunLosses | UndefinedRunReduction], list[VsnRunWeights], str | None]:
+    ) -> tuple[list[PermutedRunLosses | UndefinedRunReduction], VsnAccumulator, str | None]:
         """Um run por chamada, filtrado por `run_id` (CA14b); os registros são descartados."""
         permuted: list[PermutedRunLosses | UndefinedRunReduction] = []
-        vsn: list[VsnRunWeights] = []
+        vsn = VsnAccumulator()  # C8-5a: média parcial por decisão, sem os pesos crus
         vsn_failure: str | None = None
         for run in candidate_runs:
             fold = _fold_index(run)
@@ -760,7 +760,7 @@ class RefreshGold:
             ]
             if weights:
                 try:  # C8-2: peso inválido ou variável repetida deixa a VSN undefined
-                    vsn.append(reduce_vsn_run([_vsn_record(row, run, fold) for row in weights]))
+                    vsn.add(reduce_vsn_run([_vsn_record(row, run, fold) for row in weights]))
                 except ValueError as exc:
                     vsn_failure = vsn_failure or f"run {run.run_id}: {exc}"
             else:  # C8-10: run do candidato sem pesos não é "peso zero"
