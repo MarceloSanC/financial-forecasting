@@ -9,7 +9,10 @@ Subcomandos: `materialize` (brutos → bronze → dataset), `sweep`, `freeze`,
 `features/inference/adapters/in/cli`).
 Stage 7.3: `ablation-pilot`, `ablation-run`, `ablation-verify` e `ablation-freeze
 --seeds 1,2,…` (cohort de ablação; `--cohort` é o arquivo de ablação; comandos em
-`features/modeling/adapters/in/cli/ablation_commands.py`).
+`features/modeling/adapters/in/cli/ablation_commands.py`) e `attribute --ablation-cohort
+<toml>` (predições de atribuição do candidato no silver; `--cohort` é o confirmatório e o
+`[partition]` vem do arquivo de ablação, lido aqui pelo loader do `modeling` — o slice
+`inference` nunca importa esse loader).
 `--data-root` é obrigatório em todos, sem default: o dado de um cohort vive
 isolado em `data/cohorts/<nome>/` (concept D10) e um default silencioso poderia
 misturá-lo com o `data/` de desenvolvimento.
@@ -75,6 +78,7 @@ _MATERIALIZE_END = datetime(2035, 12, 31, 23, 59, 59, tzinfo=UTC)
 _SENTIMENT_MODULE = "transformers"
 _EXIT_ERROR = 2
 _ABLATION_PREFIX = "ablation-"
+_INFERENCE_SUBCOMMANDS = frozenset({"infer", "attribute"})
 
 
 class MissingSentimentExtraError(ApplicationError):
@@ -139,6 +143,19 @@ def _parser() -> argparse.ArgumentParser:
         metavar="JUSTIFICATIVA",
         help="força o modo tolerance com a justificativa gravada no manifesto",
     )
+    attribute = add("attribute", "grava as predições de atribuição e os pesos da VSN do candidato")
+    attribute.add_argument(
+        "--ablation-cohort",
+        type=Path,
+        required=True,
+        help="arquivo TOML do cohort de ablação (fonte do [partition])",
+    )
+    attribute.add_argument(
+        "--cross-environment",
+        default=None,
+        metavar="JUSTIFICATIVA",
+        help="força o modo tolerance com a justificativa gravada no manifesto",
+    )
     add("ablation-pilot", "mede o custo de uma unidade da ablação (não grava nada)", lock=False)
     add("ablation-run", "corre o cohort de ablação congelado (retomável)")
     add("ablation-verify", "confere a corrida da ablação pela contagem no silver", lock=False)
@@ -195,17 +212,8 @@ def main(
                 dataset_start=_dataset_start(args.start, spec.dataset_start),
                 out=stdout,
             )
-        if args.command == "infer":
-            inference_commands = importlib.import_module(_INFERENCE_COMMANDS)
-            exit_code: int = inference_commands.infer(
-                deps.run_inference_for,
-                cohort_file.load(args.cohort),
-                args.cohort,
-                out=stdout,
-                break_stale_lock=args.break_stale_lock,
-                cross_environment=args.cross_environment,
-            )
-            return exit_code
+        if args.command in _INFERENCE_SUBCOMMANDS:
+            return _dispatch_inference_command(args, deps, cohort_file, stdout)
         if args.command.startswith(_ABLATION_PREFIX):
             return _dispatch_ablation_command(args, deps, stdout)
         return _dispatch_cohort_command(args, deps, cohort_file, stdout)
@@ -256,6 +264,39 @@ def _dispatch_cohort_command(
         )
     else:
         exit_code = commands.verify(command_deps, args.cohort, out=out)
+    return exit_code
+
+
+def _dispatch_inference_command(
+    args: argparse.Namespace, deps: ApplicationDependencies, cohort_file: ModuleType, out: TextIO
+) -> int:
+    """`infer` (7.1) e `attribute` (7.3): comandos do slice `inference`.
+
+    O `attribute` recebe o `[partition]` do arquivo de ablação lido AQUI, pelo loader do
+    `modeling` (`deps.load_ablation_spec`): o slice `inference` nunca importa esse loader.
+    """
+    commands = importlib.import_module(_INFERENCE_COMMANDS)
+    exit_code: int
+    if args.command == "infer":
+        exit_code = commands.infer(
+            deps.run_inference_for,
+            cohort_file.load(args.cohort),
+            args.cohort,
+            out=out,
+            break_stale_lock=args.break_stale_lock,
+            cross_environment=args.cross_environment,
+        )
+    else:
+        ablation_spec, _ = deps.load_ablation_spec(args.ablation_cohort)
+        exit_code = commands.attribute(
+            deps.permutation_inference_for,
+            cohort_file.load(args.cohort),
+            args.cohort,
+            ablation_spec.family_partition,
+            out=out,
+            break_stale_lock=args.break_stale_lock,
+            cross_environment=args.cross_environment,
+        )
     return exit_code
 
 

@@ -58,6 +58,13 @@ e `PredictTftFromCheckpoints` do `modeling` (mesmo splitter, store, hasher,
 direto (stdlib, fora do proxy lazy do TFT), o `PersistPredictions` e o repositório
 silver, o ledger do cohort e o `JsonInferenceManifest` sob `data_root`. O probe vem
 de `runtime_probe_for`, como no `confirmatory_cohort_for`.
+
+Stage 7.3 (Task 20): a fábrica `permutation_inference_for(cohort_path)` monta o
+`RunPermutationInference` com o MESMO resolvedor da 7.1, o
+`PredictTftAttributionFromCheckpoints` sobre o proxy do treinador de `cpu` (a partição da
+registry como referência), os dois escritores do silver de atribuição sobre o MESMO
+repositório, o ledger do cohort e o `JsonAttributionManifest` sob `data_root`. Nada de
+`evaluation` (I9).
 """
 
 import importlib
@@ -77,11 +84,17 @@ from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet
 from financial_forecasting.features.analytics_store.application.ports.out.analytics_repository import (  # noqa: E501
     AnalyticsRepository,
 )
+from financial_forecasting.features.analytics_store.application.use_cases.persist_permuted_predictions import (  # noqa: E501
+    PersistPermutedPredictions,
+)
 from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
     PersistPredictions,
 )
 from financial_forecasting.features.analytics_store.application.use_cases.persist_run_record import (  # noqa: E501
     PersistRunRecord,
+)
+from financial_forecasting.features.analytics_store.application.use_cases.persist_vsn_weights import (  # noqa: E501
+    PersistVsnWeights,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.calibration_table import (  # noqa: E501
     CalibrationTableGoldBuilder,
@@ -180,6 +193,9 @@ from financial_forecasting.features.feature_engineering.domain.services.dataset_
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
     feature_set_hash,
 )
+from financial_forecasting.features.inference.adapters.out.filesystem.json_attribution_manifest import (  # noqa: E501
+    JsonAttributionManifest,
+)
 from financial_forecasting.features.inference.adapters.out.filesystem.json_inference_manifest import (  # noqa: E501
     JsonInferenceManifest,
 )
@@ -188,6 +204,9 @@ from financial_forecasting.features.inference.application.use_cases.calibrate_co
 )
 from financial_forecasting.features.inference.application.use_cases.run_inference import (
     RunInference,
+)
+from financial_forecasting.features.inference.application.use_cases.run_permutation_inference import (  # noqa: E501
+    RunPermutationInference,
 )
 from financial_forecasting.features.market_data.adapters.out.parquet.parquet_fundamental_fetcher import (  # noqa: E501
     ParquetFundamentalFetcher,
@@ -255,6 +274,9 @@ from financial_forecasting.features.modeling.application.ports.out.tft_trainer i
 from financial_forecasting.features.modeling.application.use_cases.measure_ablation_cost import (
     MeasureAblationCost,
 )
+from financial_forecasting.features.modeling.application.use_cases.predict_tft_attribution_from_checkpoints import (  # noqa: E501
+    PredictTftAttributionFromCheckpoints,
+)
 from financial_forecasting.features.modeling.application.use_cases.predict_tft_from_checkpoints import (  # noqa: E501
     PredictTftFromCheckpoints,
 )
@@ -285,6 +307,7 @@ from financial_forecasting.features.modeling.application.use_cases.train_gbm_qua
 )
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     TrainTft,
+    registry_family_partition,
 )
 from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
     WalkForwardSplitter,
@@ -830,6 +853,9 @@ class ApplicationDependencies:
     measure_ablation_cost_for: Callable[[Path], MeasureAblationCost]
     # os devices que as fábricas de ablação sabem montar (chaves de `_SUPPORTED_DEVICES`)
     supported_devices: frozenset[str]
+    # BC inference (Stage 7.3, Task 20): a atribuição do candidato, por arquivo do cohort
+    # confirmatório (o probe depende do caminho); predição sempre no treinador de `cpu`.
+    permutation_inference_for: Callable[[Path], RunPermutationInference]
 
 
 def wire_dependencies(
@@ -1114,6 +1140,40 @@ def wire_dependencies(
             clock=SystemClock(),
         )
 
+    # BC inference (Stage 7.3, Task 20): a atribuição reusa o resolvedor da 7.1 e prediz
+    # com o MESMO proxy de `cpu` do treino e da inferência (o cohort confirmatório é
+    # `cpu`, ADR 7.3.0004 item 2), contra a partição da registry (C4 do fornecedor). Os
+    # dois escritores do silver de atribuição escrevem no MESMO repositório que o
+    # `RunPermutationInference` lê; o manifesto é o da atribuição, ao lado do da 7.1.
+    # Nada de `evaluation` entra aqui (I9).
+    predict_tft_attribution = PredictTftAttributionFromCheckpoints(
+        store=store,
+        hasher=hasher,
+        splitter=splitter,
+        locator=checkpoint_locator,
+        predictor=tft_trainer,
+        artifacts_root=cfg.artifacts_root,
+        modeling_columns=columns,
+        observed_feature_set_hash=observed_feature_set_hash,
+        pipeline_version=PIPELINE_VERSION,
+        supported_device=_TRAINERS_DEVICE,
+        registry_partition=registry_family_partition(),
+    )
+
+    def permutation_inference_for(cohort_path: Path) -> RunPermutationInference:
+        return RunPermutationInference(
+            resolver=resolve_tft_checkpoints,
+            predictor=predict_tft_attribution,
+            probe=runtime_probe_for(cohort_path, _TRAINERS_DEVICE),
+            permuted_persister=PersistPermutedPredictions(repository=analytics_repository),
+            vsn_persister=PersistVsnWeights(repository=analytics_repository),
+            silver=analytics_repository,
+            ledger=cohort_ledger,
+            manifest=JsonAttributionManifest(data_root=cfg.data_root),
+            hasher=hasher,
+            clock=SystemClock(),
+        )
+
     # BC evaluation (Stage 6.4, Tasks 12/15): `RefreshGold` sobre o MESMO repositório
     # silver (como `SilverTableReader`, ADR 0.0.0053/6.4.0004); o
     # realizado vem da grade de treino da 5.5 — `ReadTrainingGrid` (real do port
@@ -1194,4 +1254,5 @@ def wire_dependencies(
         ablation_cohort_for=ablation_cohort_for,
         measure_ablation_cost_for=measure_ablation_cost_for,
         supported_devices=frozenset(_SUPPORTED_DEVICES),
+        permutation_inference_for=permutation_inference_for,
     )

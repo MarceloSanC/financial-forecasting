@@ -42,11 +42,17 @@ from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet
 from financial_forecasting.features.analytics_store.adapters.out.parquet.schemas.silver_registry import (  # noqa: E501
     SILVER_REGISTRY,
 )
+from financial_forecasting.features.analytics_store.application.use_cases.persist_permuted_predictions import (  # noqa: E501
+    PersistPermutedPredictions,
+)
 from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
     PersistPredictions,
 )
 from financial_forecasting.features.analytics_store.application.use_cases.persist_run_record import (  # noqa: E501
     PersistRunRecord,
+)
+from financial_forecasting.features.analytics_store.application.use_cases.persist_vsn_weights import (  # noqa: E501
+    PersistVsnWeights,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
     ParquetGoldStore,
@@ -79,6 +85,9 @@ from financial_forecasting.features.feature_engineering.domain.services.dataset_
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
     feature_set_hash,
 )
+from financial_forecasting.features.inference.adapters.out.filesystem.json_attribution_manifest import (  # noqa: E501
+    JsonAttributionManifest,
+)
 from financial_forecasting.features.inference.adapters.out.filesystem.json_inference_manifest import (  # noqa: E501
     JsonInferenceManifest,
 )
@@ -87,6 +96,9 @@ from financial_forecasting.features.inference.application.use_cases.calibrate_co
 )
 from financial_forecasting.features.inference.application.use_cases.run_inference import (
     RunInference,
+)
+from financial_forecasting.features.inference.application.use_cases.run_permutation_inference import (  # noqa: E501
+    RunPermutationInference,
 )
 from financial_forecasting.features.market_data.adapters.out.parquet.parquet_fundamental_fetcher import (  # noqa: E501
     ParquetFundamentalFetcher,
@@ -125,6 +137,9 @@ from financial_forecasting.features.modeling.application.ports.out.tft_checkpoin
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
     TftTrainer,
 )
+from financial_forecasting.features.modeling.application.use_cases.predict_tft_attribution_from_checkpoints import (  # noqa: E501
+    PredictTftAttributionFromCheckpoints,
+)
 from financial_forecasting.features.modeling.application.use_cases.predict_tft_from_checkpoints import (  # noqa: E501
     PredictTftFromCheckpoints,
 )
@@ -151,6 +166,7 @@ from financial_forecasting.features.modeling.application.use_cases.train_gbm_qua
 )
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     TrainTft,
+    registry_family_partition,
 )
 from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
     WalkForwardSplitter,
@@ -987,3 +1003,73 @@ def test_ablation_factory_refuses_device_outside_the_map_without_importing_torch
 
     lines = completed.stdout.strip().splitlines()
     assert lines[-3:] == ["refused True", "refused True", "[]"]
+
+
+# -- Stage 7.3, Task 20: fábrica da inferência por permutação -------------------------
+
+
+@pytest.mark.unit
+def test_permutation_inference_uses_the_cpu_trainer(tmp_path: Path) -> None:
+    """O preditor de atribuição é o MESMO proxy de `cpu` do treino e da inferência da 7.1."""
+    calls: list[tuple[Path, str]] = []
+    fake_probe = InMemoryRuntimeEnvironmentProbe()
+
+    def factory(cohort_path: Path, device: str) -> InMemoryRuntimeEnvironmentProbe:
+        calls.append((cohort_path, device))
+        return fake_probe
+
+    deps = wire_dependencies(settings=_inference_settings(tmp_path), runtime_probe_factory=factory)
+
+    use_case = deps.permutation_inference_for(tmp_path / "c.toml")
+
+    assert isinstance(use_case, RunPermutationInference)
+    trainer = deps.train_tft._trainer
+    assert isinstance(trainer, _LazyPfTftTrainer)
+    assert trainer._accelerator == "cpu"
+    assert trainer._delegate is None  # montar não constrói o adapter real
+    predictor = use_case._predictor
+    assert isinstance(predictor, PredictTftAttributionFromCheckpoints)
+    assert predictor._predictor is trainer
+    assert predictor._supported_device == "cpu"
+    assert predictor._registry_partition == registry_family_partition()
+    # as MESMAS declarações do cohort que o treino usou (o run_id derivado é o gravado)
+    assert predictor._store is deps.store
+    assert predictor._hasher is deps.hasher
+    assert predictor._splitter is deps.train_tft._splitter
+    assert predictor._artifacts_root == tmp_path / "a"
+    assert predictor._modeling_columns == deps.modeling_columns
+    assert predictor._observed_feature_set_hash == feature_set_hash()
+    assert predictor._pipeline_version == PIPELINE_VERSION
+    inference = deps.run_inference_for(tmp_path / "c.toml", "cpu")
+    assert use_case._resolver is inference._resolver
+    assert predictor._locator is inference._resolver._locator
+    assert use_case._probe is fake_probe
+    assert calls == [(tmp_path / "c.toml", "cpu"), (tmp_path / "c.toml", "cpu")]
+    for persister, kind in (
+        (use_case._permuted_persister, PersistPermutedPredictions),
+        (use_case._vsn_persister, PersistVsnWeights),
+    ):
+        assert isinstance(persister, kind)
+        assert persister._repository is deps.analytics_repository
+    assert use_case._silver is deps.analytics_repository
+    assert use_case._ledger is deps.cohort_ledger
+    assert use_case._hasher is deps.hasher
+    assert isinstance(use_case._clock, SystemClock)
+    manifest = use_case._manifest
+    assert isinstance(manifest, JsonAttributionManifest)
+    assert manifest.path("x") == tmp_path / "d" / "inference" / "x" / "attribution_manifest.json"
+
+
+@pytest.mark.unit
+def test_permutation_inference_wires_no_evaluation_use_case(tmp_path: Path) -> None:
+    """I9: nada do `evaluation` no grafo montado pela fábrica da atribuição."""
+    deps = wire_dependencies(settings=_inference_settings(tmp_path))
+
+    graph = _wired_objects(deps.permutation_inference_for(tmp_path / "c.toml"))
+
+    modules = {type(obj).__module__ for obj in graph}
+    assert (
+        "financial_forecasting.features.modeling.application.use_cases."
+        "predict_tft_attribution_from_checkpoints" in modules
+    )  # o percurso entra nos use cases fornecedores
+    assert not [m for m in modules if m.startswith("financial_forecasting.features.evaluation")]

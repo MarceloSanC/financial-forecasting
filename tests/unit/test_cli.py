@@ -580,3 +580,23 @@ def test_ablation_freeze_refuses_a_malformed_seed_list(
 
     assert exc.value.code == _EXIT_ERROR
     assert "seeds must be integers" in capsys.readouterr().err
+
+
+# -- Stage 7.3, Task 20: subcomando `attribute` -----------------------------------------
+
+
+@pytest.mark.unit
+def test_attribute_help(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["attribute", "--help"])
+
+    assert exc.value.code == 0
+    text = capsys.readouterr().out
+    for flag in (
+        "--data-root",
+        "--cohort",
+        "--ablation-cohort",
+        "--cross-environment",
+        "--break-stale-lock",
+    ):
+        assert flag in text, flag
