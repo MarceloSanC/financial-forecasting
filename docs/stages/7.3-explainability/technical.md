@@ -2578,4 +2578,32 @@ Os dois `except ValueError` dos VOs ficam como ramo defensivo, com `# pragma: no
 a justificativa ao lado. A afirmação do `193d9e9` vale só para o caminho da
 `CoverageSeries`.
 
+### 2026-10-19 — [deviation] Task 29 — `H3Reports` carrega as séries d_t de cada método — Claude (Opus 5.5)
+O concept §4 desenha `H3Reports` com os dois relatórios, a leitura, a VSN e os números
+do bootstrap. A `gold_h3_importance` precisa dos perfis por seed e por permutação, que
+moram no `FamilyLossDifferentials`, e não no `FamilyContributionReport`. Por isso
+`H3Reports` ganhou `permutation_differentials` e `ablation_differentials`
+(`FamilyLossDifferentials | None`; `None` quando a montagem do método foi `undefined`).
+Um método `undefined` antes do bootstrap vira um `FamilyContributionReport` com as 4
+famílias `undefined` e o motivo, e as tabelas gold mostram esse motivo.
+
+### 2026-10-19 — [decision] Task 30 — bootstrap com os métodos definidos — Claude (Opus 5.5)
+O b̂ é o máximo das séries d_t dos métodos com montagem definida: 16 séries com os dois
+métodos (I12) e 8 se um deles for `undefined`. O bootstrap avalia só o método definido.
+A leitura fica `undefined` de qualquer forma, porque um método é `undefined`. Série
+inválida ou `ArithmeticError` no b̂ deixam os dois relatórios `undefined` ("bootstrap
+undefined: …") e nada aborta. As fábricas sintéticas ganharam `shift`: com valores
+aleatórios, a permutação não piora a previsão e o total de importâncias sai <= 0.
+
+### 2026-10-19 — [measurement] gates — make check depois das Tasks 29 e 32 — Claude (Opus 5.5)
+Container `ff-gate-186`, `--cpus 3 --memory 8g` (revisão `ff-review-186` em paralelo),
+`make check PYTEST_PAR='-n 3 --dist loadgroup'`:
+- depois da Task 29 (árvore de `baf1974`): `7888 passed, 26 skipped`, cobertura 98,78%,
+  EXIT=0, 1615 s;
+- depois da Task 32 (árvore de `58c794a`): `7937 passed, 27 skipped` (o pulado novo é a
+  comparação com a r3 preenchida, que roda na L7), cobertura 98,80%, EXIT=0, 2474 s.
+
+O C7-11 (`match=r"without a \[h3\] block"`) já tinha entrado no commit da Task 29
+(`baf1974`), que corrigiu o aviso de escape inválido.
+
 <!-- END: post-execution -->
