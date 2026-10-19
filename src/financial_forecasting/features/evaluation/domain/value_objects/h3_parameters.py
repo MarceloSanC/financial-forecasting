@@ -19,9 +19,18 @@ O rascunho da r3 traz o sentinela `"__FILL_AFTER_FREEZE__"` nos três campos da 
 que só existem depois do freeze no Linux; o VO o recusa em cada um (ADR 7.3.0005 item 2).
 
 O algoritmo, o `k_p` e a semente da permutação repetem as constantes do
-`permutation_plan` do `inference` (o `bc-independence` não deixa importar); um teste de
-integração trava a igualdade (I17). Os nomes dos modelos LOCO repetem a regra
-`loco_model_version` do `modeling`, pelo mesmo motivo.
+`permutation_plan` do `inference` (o `bc-independence` não deixa importar). Onde mora a
+trava (I17):
+
+- o ALGORITMO é um id do catálogo, e `test_h3_catalog_matches_permutation_plan.py` trava
+  `H3_RULE_CATALOG["permutation_algorithm"] == PERMUTATION_ALGORITHM`;
+- `k_p` e `permutation_seed` são números livres aqui (o VO só exige inteiros válidos). A
+  igualdade com `K_P`/`PERMUTATION_SEED` é travada no VALOR da r3, por
+  `test_r3_k_p_seed_algorithm_equal_the_inference_plan` (Task 32, sobre o rascunho), e o
+  refresh confere a semente e o algoritmo de cada linha contra o `[h3]` (C9).
+
+Os nomes dos modelos LOCO repetem a regra `loco_model_version` do `modeling`, pelo mesmo
+motivo, travados pelo mesmo teste de integração.
 
 `as_payload()` é a serialização única (a forma do TOML, JSON-safe, e a do manifesto) e
 `from_mapping` a inversa, recusando chave desconhecida/ausente com o caminho pontuado

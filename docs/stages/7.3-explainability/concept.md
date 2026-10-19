@@ -727,6 +727,11 @@ models = { price = "tft_quantile_loco_minus_price", technical = "tft_quantile_lo
   consistência o recalcula com o `FamilyPartitionHash`. O refresh, que não tem
   `Hasher` (retirado na #128), só compara a coluna das linhas com o valor do
   plano e marca a permutação `undefined` se divergir.
+  > ⚠️ Errata (2026-10-19): o catálogo do evaluation fixa só o ALGORITMO, travado por
+  > `test_h3_catalog_matches_permutation_plan.py`. `k_p` e `permutation_seed` são valores
+  > do `[h3]`, e a igualdade com `K_P`/`PERMUTATION_SEED` do inference é travada sobre a
+  > r3 por `test_r3_k_p_seed_algorithm_equal_the_inference_plan` (Task 32). O refresh
+  > confere semente e algoritmo das linhas contra o `[h3]` (technical 7.3 §7, C6-6).
 - **I18 — r3.** Rascunho = r2 + campos da emenda + `[h3]`; nenhum
   `aapl_confirmatory-r3.toml` antes do Linux; hashes de r0–r2 inalterados;
   `anchored_at(r3) > anchored_at(r2)`; a âncora vem antes de qualquer métrica
