@@ -1680,6 +1680,9 @@ def test_invalid_series_or_arithmetic_error_gives_undefined_reading(error: Excep
     assert reading.sustained is False
     assert "bootstrap undefined" in str(reading.reason)
     assert inputs.status is RefreshStatus.COMPLETED
+    # TA-14 (R6): sem bootstrap, nem bloco nem b̂ máximo
+    assert inputs.h3_reports.block_length is None
+    assert inputs.h3_reports.max_block_estimate is None
 
 
 @pytest.mark.unit
@@ -1889,18 +1892,32 @@ def test_level_follows_family_alpha_of_the_plan(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.unit
-def test_ablation_rows_outside_test_are_ignored() -> None:
-    """C8-9: linhas `val` da ablação (valores absurdos) não entram nas perdas da LOCO."""
+@pytest.mark.parametrize("split", ["val", "calib"])
+def test_ablation_rows_outside_test_are_ignored(
+    split: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C8-9/TA-14 (R8): linhas `val` ou `calib` da ablação (valores absurdos) não entram
+    nas perdas da LOCO, e o refresh nem as entrega à redução (só `test` é materializado,
+    I19 — a redução também filtra, então o resultado sozinho não distingue os filtros)."""
+    real_reduce = refresh_gold_module.reduce_ablation_run
+    splits: set[str] = set()
+
+    def spy(records: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        splits.update(record.split for record in records)
+        return real_reduce(records, **kwargs)
+
     cohort = _h3_cohort()
     clean = _h3_run(_harness(cohort, silver=_h3_silver(cohort)))
     silver = _h3_silver(cohort)
     validation = [
-        {**row, "split": "val", "value_raw": 9.0, "value_guardrail": 9.0}
+        {**row, "split": split, "value_raw": 9.0, "value_guardrail": 9.0}
         for row in silver["fact_oos_predictions"]
         if row["feature_set_name"] == "fs_all_ablation"
     ]
     silver["fact_oos_predictions"] += validation
+    monkeypatch.setattr(refresh_gold_module, "reduce_ablation_run", spy)
     noisy = _h3_run(_harness(cohort, silver=silver))
     assert validation
+    assert splits == {"test"}
     assert noisy.h3_reports.ablation == clean.h3_reports.ablation
     assert noisy.h3_reports.ablation_differentials == clean.h3_reports.ablation_differentials

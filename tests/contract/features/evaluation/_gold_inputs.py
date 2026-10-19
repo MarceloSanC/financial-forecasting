@@ -655,7 +655,7 @@ def h3_reports_sample() -> H3Reports:
         method="permutation",
         importance=importance,
         shares=shares,
-        level=0.9875,
+        level=0.975,  # TA-14 (B7): ≠ 0,9875, o builder tem de ler o nível do relatório
         nonpositive_replicas={1: 3, 7: 5},  # TA-6: 4 contagens distintas na amostra
         status="ok",
         reason=None,
@@ -669,7 +669,7 @@ def h3_reports_sample() -> H3Reports:
             FamilyShare(s.family, None, None, None, None, None, None, None, "undefined", reason)
             for s in shares
         ),
-        level=0.9875,
+        level=0.975,
         nonpositive_replicas={1: 2, 7: 4},
         status="undefined",
         reason=reason,

@@ -87,7 +87,7 @@ def test_shares_rows_cell_by_cell() -> None:
     assert (price["share_h1"], price["share_h7"], price["delta"]) == (0.4, 0.2, -0.2)
     assert (price["lower"], price["upper"]) == (-0.3, -0.1)
     assert (price["lower_infinite"], price["upper_infinite"]) == (False, False)
-    assert (price["side"], price["excludes_zero"], price["level"]) == (-1, True, 0.9875)
+    assert (price["side"], price["excludes_zero"], price["level"]) == (-1, True, 0.975)
     assert (price["status"], price["reason"]) == ("ok", None)
     assert (price["nonpositive_replicas_h1"], price["nonpositive_replicas_h7"]) == (3, 5)
     assert (price["method_status"], price["method_reason"]) == ("ok", None)

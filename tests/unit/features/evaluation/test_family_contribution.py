@@ -347,7 +347,7 @@ def test_many_nonpositive_replicas_at_the_bonferroni_level_give_minus_inf_not_na
     report = _evaluate(series, _indices(rows))
 
     price = _share(report, "price")
-    assert report.nonpositive_replicas[1] >= 8  # noqa: PLR2004
+    assert report.nonpositive_replicas[1] == 10  # noqa: PLR2004 — as 10 linhas [0, 0, 0]
     assert price.lower == -math.inf  # type: ignore[attr-defined]
     assert not math.isnan(price.lower)  # type: ignore[attr-defined]
     assert price.status == "ok"  # type: ignore[attr-defined]
