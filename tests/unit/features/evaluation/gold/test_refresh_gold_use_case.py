@@ -44,6 +44,10 @@ from financial_forecasting.features.evaluation.domain.services import (
     dm_profiles,
     profile_reports,
 )
+from financial_forecasting.features.evaluation.domain.services.conformal_assembly import (
+    ConformalAssembly,
+    ConformalAssemblyResult,
+)
 from financial_forecasting.features.evaluation.domain.services.diebold_mariano import (
     DmVarianceEstimator,
 )
@@ -1198,7 +1202,8 @@ def test_port_error_unit_counts_and_makes_that_coverage_undefined() -> None:
     port = FakeConformalCalibration(force_status={(1, 2, 2): ("error", "forced")})
     harness = _conformal_harness(port=port)
     result = harness(parameters=_C_PARAMETERS)
-    assert result.conformal_error_units == len(_CONFORMAL.pairs) * 2  # pares x variantes
+    # C4-6 (CA15): unidades (fold, seed, h) distintas, não linhas (pares x variantes)
+    assert result.conformal_error_units == 1
     inputs = _inputs_of(_conformal_harness(port=port), parameters=_C_PARAMETERS)
     undefined = {
         (u.seed, u.horizon, u.variant) for u in inputs.conformal_reports.undefined_coverage
@@ -1302,3 +1307,110 @@ def test_seed_mean_over_complete_seeds_only() -> None:
             assert (mean.seeds_used, mean.seeds_excluded) == ((1,), (2,))
         else:
             assert (mean.seeds_used, mean.seeds_excluded) == ((1, 2), ())
+
+
+# --- Checkpoint C das Tasks 16-19 (task-19-fix) ----------------------------------------
+
+
+@pytest.mark.unit
+def test_two_error_units_count_two() -> None:
+    """C4-6: a contagem é de unidades distintas com alguma linha `error`."""
+    port = FakeConformalCalibration(
+        force_status={(1, 2, 2): ("error", "forced"), (0, 1, 1): ("error", "forced")}
+    )
+    assert _conformal_harness(port=port)(parameters=_C_PARAMETERS).conformal_error_units == 2  # noqa: PLR2004
+
+
+@pytest.mark.unit
+def test_port_undefined_unit_makes_that_coverage_undefined() -> None:
+    """C4-4: `undefined` do port não conta como erro e tira a cobertura daquela seed e h."""
+    port = FakeConformalCalibration(force_status={(0, 2, 1): ("undefined", "forced undefined")})
+    harness = _conformal_harness(port=port)
+    result = harness(parameters=_C_PARAMETERS)
+    assert result.status is RefreshStatus.COMPLETED
+    assert result.conformal_error_units == 0
+    inputs = _inputs_of(_conformal_harness(port=port), parameters=_C_PARAMETERS)
+    undefined = {
+        (u.seed, u.horizon, u.variant): u.reason
+        for u in inputs.conformal_reports.undefined_coverage
+    }
+    assert set(undefined) == {(2, 1, _SPLIT_ID), (2, 1, _NEXCP_ID)}
+    assert all("forced undefined" in reason for reason in undefined.values())
+    records = [
+        u for u in inputs.conformal_reports.units if (u.fold_raw, u.seed, u.horizon) == ("0", 2, 1)
+    ]
+    assert {u.status for u in records} == {"undefined"}
+
+
+@pytest.mark.unit
+def test_seed_undefined_in_every_horizon_is_excluded_from_every_mean() -> None:
+    """C4-4 (U4): a seed sem cobertura em todo horizonte sai de toda média."""
+    port = FakeConformalCalibration(
+        force_status={(0, 2, h): ("undefined", "forced undefined") for h in _HORIZONS}
+    )
+    inputs = _inputs_of(_conformal_harness(port=port), parameters=_C_PARAMETERS)
+    means = inputs.conformal_reports.seed_means
+    assert len(means) == len(_HORIZONS) * 2
+    assert {(m.seeds_used, m.seeds_excluded) for m in means} == {((1,), (2,))}
+
+
+@pytest.mark.unit
+def test_native_point_without_a_unit_makes_the_coverage_undefined(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """C4-5: alvo nativo fora das unidades ok (o vão entre folds) → `undefined`, COMPLETED."""
+    original = ConformalAssembly.assemble
+
+    def with_gap(*args: object, **kwargs: object) -> ConformalAssemblyResult:
+        result = original(*args, **kwargs)  # type: ignore[arg-type]
+        return dataclasses.replace(result, uncovered_targets={(1, 1): ("gap-target",)})
+
+    monkeypatch.setattr(ConformalAssembly, "assemble", staticmethod(with_gap))
+    harness = _conformal_harness()
+    result = harness(parameters=_C_PARAMETERS)
+    assert result.status is RefreshStatus.COMPLETED
+    inputs = _inputs_of(_conformal_harness(), parameters=_C_PARAMETERS)
+    undefined = {
+        (u.seed, u.horizon, u.variant): u.reason
+        for u in inputs.conformal_reports.undefined_coverage
+    }
+    assert set(undefined) == {(1, 1, _SPLIT_ID), (1, 1, _NEXCP_ID)}
+    assert all("native targets without a unit" in r for r in undefined.values())
+
+
+def _cohort_with_folds(folds: tuple[str, str], calib: Mapping[str, tuple[int, ...]]) -> Cohort:
+    return with_calib(make_cohort(folds=folds), model="tft", calib_decisions=calib)
+
+
+@pytest.mark.unit
+def test_zero_corrections_match_native_with_units_out_of_temporal_order() -> None:
+    """C4-7: o fold "1" vem antes do "0" no tempo; o join por alvo mantém cada y no seu limite."""
+    cohort = _cohort_with_folds(("1", "0"), {"1": (0, 1, 2), "0": (14, 15, 16, 17)})
+    inputs = _inputs_of(_conformal_harness(cohort), parameters=_C_PARAMETERS)
+    assert inputs.conformal_reports.coverage
+    for report in inputs.conformal_reports.coverage:
+        [native] = [
+            r.coverage
+            for h in inputs.horizon_reports
+            if h.horizon == report.horizon
+            for r in h.series
+            if (r.model, r.seed, r.sample) == ("tft", report.seed, SampleKind.MODEL_FULL)
+        ]
+        per_level = dict(native.per_level)
+        for pair in report.per_pair:
+            assert pair.lower_tail.coverage == per_level[pair.lower_level]
+            assert pair.upper_tail.coverage == per_level[pair.upper_level]
+
+
+@pytest.mark.unit
+def test_folds_with_the_same_integer_never_reach_the_port() -> None:
+    """C4-8: "01" e "1" ficam `undefined` na montagem; o refresh segue COMPLETED."""
+    cohort = _cohort_with_folds(("01", "1"), {"01": (0, 1, 2), "1": (14, 15, 16, 17)})
+    harness = _conformal_harness(cohort)
+    result = harness(parameters=_C_PARAMETERS)
+    assert result.status is RefreshStatus.COMPLETED
+    assert harness.conformal.calls == []
+    inputs = _inputs_of(_conformal_harness(cohort), parameters=_C_PARAMETERS)
+    assert inputs.conformal_reports.coverage == ()
+    assert {u.fold_raw for u in inputs.conformal_reports.units} == {"01", "1"}
+    assert all("same integer fold" in (u.reason or "") for u in inputs.conformal_reports.units)

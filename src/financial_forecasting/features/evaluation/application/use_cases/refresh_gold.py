@@ -691,7 +691,8 @@ def _record(row: Mapping[str, object], run: CohortRun) -> ForecastRecord:
 _OK = "ok"
 _UNDEFINED = "undefined"
 _ERROR = "error"
-_UnitKey = tuple[int, int, int]  # (fold, seed, horizonte) de uma unidade ok da montagem
+_UnitKey = tuple[str, int, int]  # (fold_raw, seed, horizonte) de uma unidade ok (C4-8)
+_PortKey = tuple[int, int, int]  # (fold, seed, horizonte) como o port os devolve
 
 
 def _null_tail(tail: str, level: float) -> ConformalTailRecord:
@@ -774,7 +775,7 @@ def _assembly_records(
     ]
 
 
-def _unit_input(key: _UnitKey, unit: ConformalUnitAssembly) -> ConformalUnitInput:
+def _unit_input(key: _PortKey, unit: ConformalUnitAssembly) -> ConformalUnitInput:
     return ConformalUnitInput(
         fold_index=key[0],
         seed=key[1],
@@ -807,7 +808,8 @@ def conformal_reports_from(  # noqa: PLR0913 — as entradas da etapa conformal
 ) -> tuple[ConformalReports, int]:
     """Montagem → uma chamada ao port com as unidades ok → registros, coberturas e médias.
 
-    Devolve os relatórios e o número de unidades `error` do port. Uma (seed, h,
+    Devolve os relatórios e o número de unidades (fold, seed, h) distintas com alguma
+    linha `error` do port (CA15; C4-6), não o de linhas. Uma (seed, h,
     variante) com qualquer unidade não-`ok` (da montagem ou do port), ou com alvo
     nativo sem unidade, vira cobertura `undefined` com o motivo; as completas são
     medidas pela `ConformalCoverage` sobre a série nativa, com os limites unidos por
@@ -834,13 +836,18 @@ def conformal_reports_from(  # noqa: PLR0913 — as entradas da etapa conformal
         levels=levels,
     )
     ok_units: dict[_UnitKey, ConformalUnitAssembly] = {}
+    inputs: list[ConformalUnitInput] = []
+    raw_of: dict[_PortKey, str] = {}  # único: a montagem já recusou o inteiro repetido
     for unit in assembly.units:
         if unit.status == _OK and unit.fold_index is not None and unit.seed is not None:
-            ok_units[(unit.fold_index, unit.seed, unit.horizon)] = unit
+            ok_units[(unit.fold_raw, unit.seed, unit.horizon)] = unit
+            port_key = (unit.fold_index, unit.seed, unit.horizon)
+            raw_of[port_key] = unit.fold_raw
+            inputs.append(_unit_input(port_key, unit))
     rows: tuple[ConformalUnitResult, ...] = ()
-    if ok_units:
+    if inputs:
         command = CalibrateConformalCommand(
-            units=tuple(_unit_input(key, unit) for key, unit in ok_units.items()),
+            units=tuple(inputs),
             pairs=block.pairs,
             variants=variants,
             nexcp_rho=block.nexcp_rho,
@@ -852,10 +859,13 @@ def conformal_reports_from(  # noqa: PLR0913 — as entradas da etapa conformal
             records_out += _assembly_records(unit, block, variants)
     by_key: dict[tuple[_UnitKey, tuple[float, float], str], ConformalUnitResult] = {}
     for row in rows:
-        key: _UnitKey = (row.fold_index, row.seed, row.horizon)
-        records_out.append(_port_record(row, ok_units[key].fold_raw))
+        raw = raw_of[(row.fold_index, row.seed, row.horizon)]
+        key: _UnitKey = (raw, row.seed, row.horizon)
+        records_out.append(_port_record(row, raw))
         by_key[(key, (row.lower_level, row.upper_level), row.variant)] = row
-    errors = sum(1 for row in rows if str(row.status) == _ERROR)
+    errors = len(
+        {(row.fold_index, row.seed, row.horizon) for row in rows if str(row.status) == _ERROR}
+    )
     coverage, undefined = _coverages(
         assembly, ok_units, by_key, natives, block, variants, parameters
     )

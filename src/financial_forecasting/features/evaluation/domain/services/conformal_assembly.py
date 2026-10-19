@@ -16,7 +16,9 @@ comando, monta uma unidade (fold, seed, horizonte):
   do fold;
 - `fold` chega como `str`: a montagem converte com `int(fold)`; fold que não é inteiro
   (inclusive `None`) vira unidade `undefined` com o fold cru em `fold_raw`. Seed `None`
-  também vira `undefined`.
+  também vira `undefined`. Dois folds crus distintos com o mesmo inteiro (`"01"` e
+  `"1"`) na mesma seed e horizonte viram `undefined` os dois (C4-8): a identidade da
+  unidade é o `fold_raw`, e o port só aceita uma unidade por inteiro.
 
 Qualquer violação vira `status = "undefined"` com o motivo — nunca `AlignmentFinding`,
 porque o conformal não está no caminho do veredito.
@@ -26,7 +28,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import pairwise
 
 from financial_forecasting.features.evaluation.domain.services.series_assembly import (
@@ -154,6 +156,22 @@ def _unit_order(unit: ConformalUnitAssembly) -> tuple[bool, int, str, tuple[int,
     )
 
 
+def _without_fold_collisions(units: list[ConformalUnitAssembly]) -> list[ConformalUnitAssembly]:
+    """Unidades `ok` com o mesmo inteiro de fold e folds crus distintos viram `undefined`."""
+    raws: dict[tuple[int | None, int | None, int], set[str]] = defaultdict(set)
+    for unit in units:
+        if unit.status == OK:
+            raws[(unit.fold_index, unit.seed, unit.horizon)].add(unit.fold_raw)
+    result = []
+    for unit in units:
+        same = raws.get((unit.fold_index, unit.seed, unit.horizon), set())
+        if unit.status == OK and len(same) > 1:
+            reason = f"folds {sorted(same)} map to the same integer fold {unit.fold_index}"
+            unit = replace(unit, status=UNDEFINED, reason=reason)  # noqa: PLW2901
+        result.append(unit)
+    return result
+
+
 class ConformalAssembly:
     """Montagem das unidades conformais do candidato (ver docstring do módulo)."""
 
@@ -178,6 +196,7 @@ class ConformalAssembly:
             if run.model == candidate
             for horizon in horizons
         ]
+        units = _without_fold_collisions(units)
         units.sort(key=_unit_order)
         return ConformalAssemblyResult(
             units=tuple(units),
