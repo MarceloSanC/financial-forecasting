@@ -165,6 +165,15 @@ def test_unknown_key_refused_with_dotted_path(
         _load(_write(tmp_path, text))
 
 
+def test_confirmatory_feature_set_name_in_the_file_refused(tmp_path: Path) -> None:
+    """C2-1: `feature_set_name = "fs_all"` no TOML é erro tipado, não spec carregado."""
+    text = ablation_file.dump_ablation_cohort(_draft()).replace(
+        'feature_set_name = "fs_all_ablation"', 'feature_set_name = "fs_all"'
+    )
+    with pytest.raises(AblationFileError, match="feature_set_name"):
+        _load(_write(tmp_path, text))
+
+
 def test_missing_required_field_refused(tmp_path: Path) -> None:
     text = ablation_file.dump_ablation_cohort(_draft()).replace('device = "rocm"\n', "")
     with pytest.raises(AblationFileError, match="missing required field 'device'"):

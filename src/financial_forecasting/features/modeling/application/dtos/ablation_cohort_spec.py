@@ -166,6 +166,13 @@ class AblationCohortSpec:
                 f"AblationCohortSpec.revision must be an int >= 0, got {self.revision!r}"
             )
         validate_sha256_hex(self.base_cohort_hash, field="AblationCohortSpec.base_cohort_hash")
+        if self.feature_set_name != ABLATION_FEATURE_SET_NAME:
+            # I3: as linhas LOCO vivem na partição própria de `fact_oos_predictions`; com
+            # o `feature_set_name` do confirmatório, o refresh confirmatório as leria.
+            raise ValueError(
+                f"AblationCohortSpec.feature_set_name must be {ABLATION_FEATURE_SET_NAME!r} "
+                f"(the ablation partition, I3), got {self.feature_set_name!r}"
+            )
         names = tuple(getattr(c, "name", None) for c in self.configurations)
         if names != ABLATION_CONFIGURATIONS:
             raise ValueError(

@@ -166,7 +166,6 @@ _CHANGES: dict[str, Any] = {
     "base_cohort_file": "config/cohorts/other.toml",
     "base_cohort_id": "aapl_confirmatory-r1-000000000000",
     "base_cohort_hash": _hex("other-base"),
-    "feature_set_name": "fs_other",
     "configurations": tuple(
         AblationConfiguration.of(name, feature_set_hash=_hex("x" + name))
         for name in ABLATION_CONFIGURATIONS
@@ -181,6 +180,13 @@ _CHANGES: dict[str, Any] = {
 @pytest.mark.parametrize("field", sorted(_CHANGES))
 def test_every_field_changes_the_hash(field: str) -> None:
     assert _hash(_spec(**{field: _CHANGES[field]})) != _hash(_spec())
+
+
+@pytest.mark.parametrize("name", ["fs_all", "fs_other", ""])
+def test_feature_set_name_other_than_the_ablation_partition_refused(name: str) -> None:
+    """C2-1: com `fs_all`, as linhas LOCO cairiam na partição confirmatória (I3)."""
+    with pytest.raises(ValueError, match="feature_set_name"):
+        _spec(feature_set_name=name)
 
 
 def test_cohort_id_pattern() -> None:
