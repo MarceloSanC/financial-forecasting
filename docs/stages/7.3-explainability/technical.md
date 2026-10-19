@@ -2533,4 +2533,12 @@ ergue `IncompleteAttributionError` (novo, em `run_permutation_inference.py`) ant
 como `[7.3/task-20-fix]` e `[7.3/task-18-fix]`, porque mudam código dessas Tasks; os
 demais achados do C5 entraram como `[7.3/task-19-fix]`.
 
+### 2026-10-19 — [measurement] gates — ponto B (depois da Task 24 e dos achados do Checkpoint C 16–20) — Claude (Opus 5.5)
+Container `ff-gate-186` (`--cpus 6 --memory 8g --memory-swap 8g`, volume
+`financial-forecasting_ff73-venv`; nenhuma revisão rodando), comando `uv lock --check &&
+make check PYTEST_PAR='-n 4 --dist loadgroup'`, HEAD `2e4cc516`. Verde na 1ª corrida:
+`7764 passed, 26 skipped`, cobertura 98,76% (mínimo 90%), EXIT=0, 929 s. O
+`.importlinter` tem as 7 arestas novas da Stage (6 da Task 19 e 1 da Task 24) mais a
+aresta movida do `cohort_unit_runner`.
+
 <!-- END: post-execution -->
