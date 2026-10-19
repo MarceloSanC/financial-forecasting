@@ -245,6 +245,7 @@ from financial_forecasting.features.modeling.application.ports.out.runtime_envir
     RuntimeEnvironmentProbe,
 )
 from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (
+    TftAttributionPrediction,
     TftCheckpointPrediction,
 )
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
@@ -554,6 +555,42 @@ class _LazyPfTftTrainer:
             quantile_levels=quantile_levels,
             batch_size=batch_size,
             num_threads=num_threads,
+        )
+
+    def predict_attribution_from_checkpoint(  # noqa: PLR0913 — assinatura do port
+        self,
+        *,
+        checkpoint_path: str,
+        expected_sha256: str,
+        feature_names: Sequence[str],
+        known_feature_names: Sequence[str],
+        rows: Sequence[Sequence[float]],
+        target: Sequence[float],
+        decision_indices: Sequence[int],
+        max_horizon: int,
+        horizons: Sequence[int],
+        quantile_levels: Sequence[float],
+        batch_size: int,
+        num_threads: int,
+        permuted_columns: Mapping[str, Sequence[str]],
+        donors: Sequence[Sequence[int]],
+    ) -> TftAttributionPrediction:
+        """Delega ao adapter real (Stage 7.3), com a assinatura do port campo a campo."""
+        return self._ensure().predict_attribution_from_checkpoint(
+            checkpoint_path=checkpoint_path,
+            expected_sha256=expected_sha256,
+            feature_names=feature_names,
+            known_feature_names=known_feature_names,
+            rows=rows,
+            target=target,
+            decision_indices=decision_indices,
+            max_horizon=max_horizon,
+            horizons=horizons,
+            quantile_levels=quantile_levels,
+            batch_size=batch_size,
+            num_threads=num_threads,
+            permuted_columns=permuted_columns,
+            donors=donors,
         )
 
 

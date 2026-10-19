@@ -26,6 +26,8 @@ from financial_forecasting.features.modeling.application.ports.out.tft_checkpoin
     SETTINGS_KEYS,
     ArtifactChangedError,
     CheckpointMismatchError,
+    FamilyFeatureKnownError,
+    TftAttributionPrediction,
     TftCheckpointPrediction,
     TftCheckpointPredictor,
 )
@@ -231,3 +233,77 @@ def test_leg_fixture_is_consistent(leg: _Leg) -> None:
     """Sanidade da fixture: a faixa pedida cabe no painel com todos os horizontes."""
     assert max(leg.decisions) + max(leg.horizons) <= len(leg.target) - 1
     assert list(leg.decisions) == list(range(leg.decisions[0], leg.decisions[-1] + 1))
+
+
+# -- Stage 7.3, Task 11: predição de atribuição (identidade, permutadas, VSN) -----------
+
+
+def _family_column(leg: _Leg) -> str:
+    """A primeira real desconhecida do checkpoint: a coluna da família de teste."""
+    return next(name for name in leg.feature_names if name not in leg.known_feature_names)
+
+
+def _attribution(leg: _Leg, **overrides: object) -> TftAttributionPrediction:
+    n = len(leg.decisions)
+    arguments: dict[str, object] = {
+        "checkpoint_path": leg.checkpoint_path,
+        "expected_sha256": leg.sha256,
+        "feature_names": leg.feature_names,
+        "known_feature_names": leg.known_feature_names,
+        "rows": leg.rows,
+        "target": leg.target,
+        "decision_indices": leg.decisions,
+        "max_horizon": leg.max_horizon,
+        "horizons": leg.horizons,
+        "quantile_levels": leg.quantile_levels,
+        "batch_size": 8,
+        "num_threads": 1,
+        "permuted_columns": {"fam": (_family_column(leg),)},
+        "donors": (tuple(reversed(range(n))), (*range(1, n), 0)),
+    }
+    arguments.update(overrides)
+    return leg.predictor.predict_attribution_from_checkpoint(**arguments)  # type: ignore[arg-type]
+
+
+@pytest.mark.contract
+def test_attribution_identity_matches_the_grid_method(leg: _Leg) -> None:
+    attribution = _attribution(leg)
+    assert attribution.identity == leg.predict().grids
+    assert set(attribution.settings) == set(SETTINGS_KEYS)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize(
+    "donors",
+    [
+        pytest.param(((0, 0, 1, 2, 3, 4, 5),), id="repeated"),
+        pytest.param(((0, 1),), id="short"),
+        pytest.param((), id="empty"),
+    ],
+)
+def test_donors_that_are_not_permutations_refused(leg: _Leg, donors: object) -> None:
+    with pytest.raises(ValueError, match="permutation"):
+        _attribution(leg, donors=donors)
+
+
+@pytest.mark.contract
+def test_permuted_keys_are_family_and_one_based_k(leg: _Leg) -> None:
+    attribution = _attribution(leg)
+    assert set(attribution.permuted) == {("fam", 1), ("fam", 2)}
+    for grids in attribution.permuted.values():
+        assert set(grids) == set(attribution.identity)
+    assert set(attribution.encoder_weights) == set(leg.decisions)
+    for weights in attribution.encoder_weights.values():
+        assert sum(weights.values()) == pytest.approx(1.0)
+
+
+@pytest.mark.contract
+def test_attribution_wrong_sha_raises(leg: _Leg) -> None:
+    with pytest.raises(ArtifactChangedError):
+        _attribution(leg, expected_sha256="0" * 64)
+
+
+@pytest.mark.contract
+def test_attribution_known_family_column_raises(leg: _Leg) -> None:
+    with pytest.raises(FamilyFeatureKnownError):
+        _attribution(leg, permuted_columns={"fam": (leg.known_feature_names[0],)})

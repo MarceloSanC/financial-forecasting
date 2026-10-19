@@ -101,3 +101,46 @@ def train_tiny_checkpoint(directory: Path) -> TrainedCheckpoint:
         normalizer_center=result.normalizer_center,
         normalizer_scale=result.normalizer_scale,
     )
+
+
+# Stage 7.3 (Task 11): checkpoint com uma coluna de família tipada `known` (C5).
+KNOWN_FAMILY_COLUMN = "rsi_14"
+
+
+def train_tiny_checkpoint_with_known_family_column(directory: Path) -> TrainedCheckpoint:
+    """O TFT minúsculo com `rsi_14` entre as reais CONHECIDAS (a guarda C5 da atribuição)."""
+    rows, target = _panel()
+    known = (KNOWN_FAMILY_COLUMN, *_KNOWN)
+    result = PfTftTrainer().train_and_predict(
+        params=_PARAMS,
+        feature_names=_FEATURES,
+        known_feature_names=known,
+        rows=rows,
+        target=target,
+        train_decision_indices=_TRAIN,
+        early_stop_decision_indices=_EARLY_STOP,
+        test_decision_indices=_TEST,
+        max_horizon=_MAX_HORIZON,
+        horizons=_HORIZONS,
+        quantile_levels=_LEVELS,
+        artifact_dir=str(directory / "ckpt-known"),
+    )
+    sha256 = hashlib.sha256(Path(result.artifact_path).read_bytes()).hexdigest()
+    return TrainedCheckpoint(
+        path=result.artifact_path,
+        sha256=sha256,
+        feature_names=tuple(_FEATURES),
+        known_feature_names=known,
+        rows=tuple(tuple(row) for row in rows),
+        target=tuple(target),
+        max_horizon=_MAX_HORIZON,
+        horizons=tuple(_HORIZONS),
+        quantile_levels=tuple(_LEVELS),
+        batch_size=_PARAMS.batch_size,
+        num_threads=torch.get_num_threads(),
+        test_decisions=tuple(_TEST),
+        calib_decisions=CALIB_DECISIONS,
+        test_grids={d: dict(by_h) for d, by_h in result.grids.items()},
+        normalizer_center=result.normalizer_center,
+        normalizer_scale=result.normalizer_scale,
+    )

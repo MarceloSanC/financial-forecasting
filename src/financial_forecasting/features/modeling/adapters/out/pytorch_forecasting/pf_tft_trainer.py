@@ -86,9 +86,10 @@ from financial_forecasting.features.modeling.domain.services.tft_panel_geometry 
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from collections.abc import Iterator, Mapping, Sequence
 
     from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (  # noqa: E501
+        TftAttributionPrediction,
         TftCheckpointPrediction,
     )
     from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
@@ -308,6 +309,166 @@ def _require_checkpoint(path: str | None) -> str:
 SUPPORTED_ACCELERATORS: frozenset[str] = frozenset({"cpu", "gpu"})
 
 
+def _predict_trainer_kwargs(accelerator: str) -> dict[str, Any]:
+    """`trainer_kwargs` do `predict`: sem logger, o accelerator da instância, 1 device."""
+    return {
+        "logger": False,
+        "accelerator": accelerator,
+        "devices": 1,
+        "enable_progress_bar": False,
+        "enable_model_summary": False,
+    }
+
+
+def _best_sample_by_decision(
+    decision_of_sample: Sequence[int], lengths: Sequence[int], requested: frozenset[int]
+) -> dict[int, int]:
+    """Decisão pedida → amostra de decodificador MAIS LONGO (regra única do `_emit`).
+
+    Filtro EXPLÍCITO pelas decisões pedidas. Recortar o quadro não basta: com
+    decodificador mínimo de 1 passo, a decisão seguinte à última pedida ainda cabe no
+    quadro (usa uma linha só) e a biblioteca a gera. O contrato do port é "para cada
+    decisão de teste", e o use case reprovaria o excedente (D5).
+    """
+    best: dict[int, int] = {}
+    for sample, decision in enumerate(decision_of_sample):
+        if decision not in requested:
+            continue
+        current = best.get(decision)
+        if current is None or lengths[sample] > lengths[current]:
+            best[decision] = sample
+    return best
+
+
+def _identity_dataloader(dataset: Any, batch_size: int) -> Any:  # noqa: ANN401 — tipos da lib
+    """O dataloader que o `predict` monta para um `TimeSeriesDataSet` (identidade, I7)."""
+    return dataset.to_dataloader(train=False, batch_size=batch_size, num_workers=0)
+
+
+def _load_checked_checkpoint(  # noqa: PLR0913 — as entradas conferidas, uma por argumento
+    *,
+    checkpoint_path: str,
+    expected_sha256: str,
+    feature_names: Sequence[str],
+    known_feature_names: Sequence[str],
+    max_horizon: int,
+    quantile_levels: Sequence[float],
+    artifact_changed: type[Exception],
+    checkpoint_mismatch: type[Exception],
+) -> tuple[Any, dict[str, Any]]:
+    """Bytes lidos uma vez, sha256 antes da carga (C10) e entradas declaradas (C4)."""
+    data = Path(checkpoint_path).read_bytes()  # lidos UMA vez (C10)
+    observed = sha256_of_stream(io.BytesIO(data))
+    if observed != expected_sha256:
+        msg = (
+            f"checkpoint {checkpoint_path} sha256 {observed[:12]} != expected "
+            f"{expected_sha256[:12]} — not loaded (C10)"
+        )
+        raise artifact_changed(msg)
+    with _translating_backend_errors():
+        model = TemporalFusionTransformer.load_from_checkpoint(io.BytesIO(data))
+    parameters = dict(model.dataset_parameters)
+    mismatches = _declared_mismatches(
+        parameters=parameters,
+        checkpoint_levels=list(model.loss.quantiles),
+        feature_names=feature_names,
+        known_feature_names=known_feature_names,
+        max_horizon=max_horizon,
+        quantile_levels=quantile_levels,
+    )
+    if mismatches:
+        msg = f"checkpoint {checkpoint_path} declares other inputs: {'; '.join(mismatches)} (C4)"
+        raise checkpoint_mismatch(msg)
+    return model, parameters
+
+
+def _check_family_columns(
+    parameters: Mapping[str, Any],
+    permuted_columns: Mapping[str, Sequence[str]],
+    *,
+    error: type[Exception],
+) -> None:
+    """C5/I8: toda coluna de família é real `unknown` do encoder no checkpoint."""
+    unknown = set(parameters.get("time_varying_unknown_reals", []))
+    known = set(parameters.get("time_varying_known_reals", []))
+    for family, names in permuted_columns.items():
+        offending = [name for name in names if name not in unknown or name in known]
+        if not names or offending:
+            msg = (
+                f"family {family!r}: columns {offending or list(names)!r} are not unknown "
+                "encoder reals in the checkpoint (C5)"
+            )
+            raise error(msg)
+
+
+def donor_blocks(
+    encoder_cont: Any,  # noqa: ANN401 — tensor da lib
+    encoder_lengths: Any,  # noqa: ANN401
+    best_sample_by_decision: Mapping[int, int],
+    decisions: Sequence[int],
+    columns: Mapping[str, Sequence[int]],
+) -> tuple[dict[str, list[Any]], int]:
+    """Família → bloco doador por POSIÇÃO em `decisions`, e o comprimento L do encoder.
+
+    O bloco é `encoder_cont[amostra, :L, colunas da família]` da amostra de decodificador
+    mais longo de cada decisão. Toda decisão precisa de amostra e todas têm o mesmo L;
+    senão `ValueError` (o adapter nunca trunca nem completa).
+    """
+    missing = [decision for decision in decisions if decision not in best_sample_by_decision]
+    if missing:
+        msg = f"decisions without a prediction sample cannot take part in a swap: {missing!r}"
+        raise ValueError(msg)
+    samples = [best_sample_by_decision[decision] for decision in decisions]
+    lengths = {int(encoder_lengths[sample]) for sample in samples}
+    if len(lengths) != 1:
+        msg = f"encoder lengths differ between the decisions: {sorted(lengths)!r}"
+        raise ValueError(msg)
+    (length,) = lengths
+    blocks = {
+        family: [encoder_cont[sample, :length, list(cols)].clone() for sample in samples]
+        for family, cols in columns.items()
+    }
+    return blocks, length
+
+
+def _swapping_collate(  # noqa: PLR0913 — o que a troca de uma (família, k) precisa
+    dataset: Any,  # noqa: ANN401 — TimeSeriesDataSet
+    *,
+    decisions: Sequence[int],
+    permutation: Sequence[int],
+    columns: Sequence[int],
+    blocks: Sequence[Any],
+    encoder_length: int,
+) -> Any:  # noqa: ANN401 — callable do DataLoader
+    """`collate_fn` que troca o encoder das colunas da família pelo bloco do doador.
+
+    A decisão de cada amostra é lida de `decoder_time_idx[i, 0] - 1` (a mesma amarração
+    do `_emit`); a decisão na posição p recebe o bloco da posição `permutation[p]`.
+    Amostra de decisão fora do pedido passa intacta.
+    """
+    position = {decision: p for p, decision in enumerate(decisions)}
+    default = dataset._collate_fn  # o collate da lib, envolvido
+    cols = list(columns)
+
+    def collate(batch: Any) -> Any:  # noqa: ANN401
+        x, y = default(batch)
+        decision_of_sample = (x["decoder_time_idx"][:, 0] - 1).tolist()
+        for i, decision in enumerate(decision_of_sample):
+            p = position.get(int(decision))
+            if p is None:
+                continue
+            if int(x["encoder_lengths"][i]) != encoder_length:
+                msg = (
+                    f"decision {decision}: encoder length {int(x['encoder_lengths'][i])} != "
+                    f"{encoder_length} of the donor blocks"
+                )
+                raise ValueError(msg)
+            x["encoder_cont"][i, :encoder_length, cols] = blocks[permutation[p]]
+        return x, y
+
+    return collate
+
+
 class PfTftTrainer:
     """TFT quantílico sobre `pytorch-forecasting`.
 
@@ -428,30 +589,16 @@ class PfTftTrainer:
 
         decisions = tuple(decision_indices)
         _require_contiguous(decisions)  # regra do pedido: antes de ler qualquer byte
-        data = Path(checkpoint_path).read_bytes()  # lidos UMA vez (C10)
-        observed = sha256_of_stream(io.BytesIO(data))
-        if observed != expected_sha256:
-            msg = (
-                f"checkpoint {checkpoint_path} sha256 {observed[:12]} != expected "
-                f"{expected_sha256[:12]} — not loaded (C10)"
-            )
-            raise ArtifactChangedError(msg)
-        with _translating_backend_errors():
-            model = TemporalFusionTransformer.load_from_checkpoint(io.BytesIO(data))
-        parameters = dict(model.dataset_parameters)
-        mismatches = _declared_mismatches(
-            parameters=parameters,
-            checkpoint_levels=list(model.loss.quantiles),
+        model, parameters = _load_checked_checkpoint(
+            checkpoint_path=checkpoint_path,
+            expected_sha256=expected_sha256,
             feature_names=feature_names,
             known_feature_names=known_feature_names,
             max_horizon=max_horizon,
             quantile_levels=quantile_levels,
+            artifact_changed=ArtifactChangedError,
+            checkpoint_mismatch=CheckpointMismatchError,
         )
-        if mismatches:
-            msg = (
-                f"checkpoint {checkpoint_path} declares other inputs: {'; '.join(mismatches)} (C4)"
-            )
-            raise CheckpointMismatchError(msg)
         frame = self._panel_frame(feature_names, rows, target)
 
         threads_before = torch.get_num_threads()
@@ -481,17 +628,152 @@ class PfTftTrainer:
             grids=grids,
             normalizer_center=center,
             normalizer_scale=scale,
-            settings={
-                "batch_size": str(batch_size),
-                "num_workers": "0",
-                "accelerator": self._accelerator,
-                "num_threads": str(num_threads),
-                "deterministic_algorithms": "false",
-                "cpu_capability": str(torch.backends.cpu.get_cpu_capability()),
-                "platform": platform.platform(),
-                _SKLEARN_DISTRIBUTION: metadata.version(_SKLEARN_DISTRIBUTION),
-            },
+            settings=self._settings(batch_size=batch_size, num_threads=num_threads),
         )
+
+    def predict_attribution_from_checkpoint(  # noqa: PLR0913 — espelha a assinatura do port
+        self,
+        *,
+        checkpoint_path: str,
+        expected_sha256: str,
+        feature_names: Sequence[str],
+        known_feature_names: Sequence[str],
+        rows: Sequence[Sequence[float]],
+        target: Sequence[float],
+        decision_indices: Sequence[int],
+        max_horizon: int,
+        horizons: Sequence[int],
+        quantile_levels: Sequence[float],
+        batch_size: int,
+        num_threads: int,
+        permuted_columns: Mapping[str, Sequence[str]],
+        donors: Sequence[Sequence[int]],
+    ) -> TftAttributionPrediction:
+        """Implementa `predict_attribution_from_checkpoint` (concept 7.3 §4, I6-I8; ADR 7.3.0002).
+
+        Passagens sobre o MESMO dataset de predição do 7.1 (`_prediction_dataset`):
+
+        1. uma passagem `mode="raw"` com `return_x`, de onde saem os blocos doadores
+           (`encoder_cont[:L, colunas da família]` da amostra de decodificador mais longo
+           de cada decisão) e os pesos da VSN do encoder;
+        2. a identidade, pelo `_emit`, sobre o dataloader que o `predict` montaria
+           (`to_dataloader(train=False, batch_size, num_workers=0)`);
+        3. uma passagem por (família, k): o `collate_fn` da lib é envolvido, e a janela
+           inteira do encoder das colunas da família de cada amostra é trocada pelo bloco
+           da decisão doadora, lido da tabela da passagem 1 — o doador pode estar em
+           qualquer lote. O decodificador e as outras colunas ficam intactos.
+        """
+        from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (  # noqa: PLC0415, E501
+            ArtifactChangedError,
+            CheckpointMismatchError,
+            FamilyFeatureKnownError,
+            TftAttributionPrediction,
+            check_donors,
+        )
+
+        decisions = tuple(decision_indices)
+        _require_contiguous(decisions)
+        check_donors(donors, n_decisions=len(decisions))
+        model, parameters = _load_checked_checkpoint(
+            checkpoint_path=checkpoint_path,
+            expected_sha256=expected_sha256,
+            feature_names=feature_names,
+            known_feature_names=known_feature_names,
+            max_horizon=max_horizon,
+            quantile_levels=quantile_levels,
+            artifact_changed=ArtifactChangedError,
+            checkpoint_mismatch=CheckpointMismatchError,
+        )
+        _check_family_columns(parameters, permuted_columns, error=FamilyFeatureKnownError)
+        frame = self._panel_frame(feature_names, rows, target)
+
+        threads_before = torch.get_num_threads()
+        deterministic_before = torch.are_deterministic_algorithms_enabled()
+        warn_only_before = torch.is_deterministic_algorithms_warn_only_enabled()
+        try:
+            torch.set_num_threads(num_threads)
+            torch.use_deterministic_algorithms(False)
+            with _translating_backend_errors():
+                dataset = _prediction_dataset(
+                    parameters, frame, decision_indices=decisions, max_horizon=max_horizon
+                )
+                center, scale = self._normalizer_parameters(dataset)
+                raw = model.predict(
+                    _identity_dataloader(dataset, batch_size),
+                    mode="raw",
+                    return_x=True,
+                    return_index=True,
+                    return_decoder_lengths=True,
+                    trainer_kwargs=_predict_trainer_kwargs(self._accelerator),
+                )
+                interpretation = model.interpret_output(raw.output, reduction="none")
+            best = _best_sample_by_decision(
+                [int(time_idx) - 1 for time_idx in raw.index[_TIME_IDX_COLUMN]],
+                [int(length) for length in raw.decoder_lengths],
+                frozenset(decisions),
+            )
+            columns = {
+                family: [list(dataset.reals).index(name) for name in names]
+                for family, names in permuted_columns.items()
+            }
+            blocks, encoder_length = donor_blocks(
+                raw.x["encoder_cont"], raw.x["encoder_lengths"], best, decisions, columns
+            )
+            emit = {
+                "model": model,
+                "requested_decisions": frozenset(decisions),
+                "horizons": horizons,
+                "quantile_levels": quantile_levels,
+                "batch_size": batch_size,
+                "accelerator": self._accelerator,
+            }
+            identity = self._emit(
+                prediction_dataset=_identity_dataloader(dataset, batch_size), **emit
+            )
+            permuted: dict[tuple[str, int], dict[int, dict[int, tuple[float, ...]]]] = {}
+            for family, family_columns in columns.items():
+                for k, permutation in enumerate(donors, start=1):
+                    collate = _swapping_collate(
+                        dataset,
+                        decisions=decisions,
+                        permutation=permutation,
+                        columns=family_columns,
+                        blocks=blocks[family],
+                        encoder_length=encoder_length,
+                    )
+                    loader = dataset.to_dataloader(
+                        train=False, batch_size=batch_size, num_workers=0, collate_fn=collate
+                    )
+                    permuted[(family, k)] = self._emit(prediction_dataset=loader, **emit)
+        finally:
+            torch.set_num_threads(threads_before)
+            torch.use_deterministic_algorithms(deterministic_before, warn_only=warn_only_before)
+        weights = interpretation["encoder_variables"]
+        names = list(model.encoder_variables)
+        return TftAttributionPrediction(
+            identity=identity,
+            permuted=permuted,
+            encoder_weights={
+                decision: {name: float(weights[sample, j]) for j, name in enumerate(names)}
+                for decision, sample in sorted(best.items())
+            },
+            normalizer_center=center,
+            normalizer_scale=scale,
+            settings=self._settings(batch_size=batch_size, num_threads=num_threads),
+        )
+
+    def _settings(self, *, batch_size: int, num_threads: int) -> dict[str, str]:
+        """Os parâmetros da inferência, em texto (`SETTINGS_KEYS` do port)."""
+        return {
+            "batch_size": str(batch_size),
+            "num_workers": "0",
+            "accelerator": self._accelerator,
+            "num_threads": str(num_threads),
+            "deterministic_algorithms": "false",
+            "cpu_capability": str(torch.backends.cpu.get_cpu_capability()),
+            "platform": platform.platform(),
+            _SKLEARN_DISTRIBUTION: metadata.version(_SKLEARN_DISTRIBUTION),
+        }
 
     @staticmethod
     def _emit(  # noqa: PLR0913 — parâmetros coesos da regra de emissão
@@ -536,29 +818,13 @@ class PfTftTrainer:
                 # enquanto o treino foi fixado em CPU (o que enfraqueceria I9).
                 # Fixar aqui é o único ponto onde isso é controlável: vai o
                 # `accelerator` da instância, o mesmo do `fit` (Stage 7.3).
-                trainer_kwargs={
-                    "logger": False,
-                    "accelerator": accelerator,
-                    "devices": 1,
-                    "enable_progress_bar": False,
-                    "enable_model_summary": False,
-                },
+                trainer_kwargs=_predict_trainer_kwargs(accelerator),
             )
         decision_of_sample = [int(time_idx) - 1 for time_idx in prediction.index[_TIME_IDX_COLUMN]]
         lengths = [int(length) for length in prediction.decoder_lengths]
-
-        best_sample_by_decision: dict[int, int] = {}
-        for sample, decision in enumerate(decision_of_sample):
-            # Filtro EXPLÍCITO pelas decisões pedidas. Recortar o quadro não
-            # basta: com decodificador mínimo de 1 passo, a decisão seguinte à
-            # última pedida ainda cabe no quadro (usa uma linha só) e a
-            # biblioteca a gera. O contrato do port é "para cada decisão de
-            # teste", e o use case reprovaria o excedente (D5).
-            if decision not in requested_decisions:
-                continue
-            current = best_sample_by_decision.get(decision)
-            if current is None or lengths[sample] > lengths[current]:
-                best_sample_by_decision[decision] = sample
+        best_sample_by_decision = _best_sample_by_decision(
+            decision_of_sample, lengths, requested_decisions
+        )
 
         grids: dict[int, dict[int, tuple[float, ...]]] = {}
         for decision, sample in sorted(best_sample_by_decision.items()):
