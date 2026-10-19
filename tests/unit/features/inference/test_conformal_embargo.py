@@ -222,7 +222,7 @@ def _with(row: _Row, index: int, value: str) -> _Row:
 
 _GOOD = (_row(2), _row(3), _row(4), _row(5))
 _VO_REFUSALS: dict[str, tuple[tuple[_Row, ...], str]] = {
-    "empty": ((), r"^lower_level/upper_level|^points: the calibration set is empty"),
+    "empty": ((), r"^points: the calibration set is empty"),  # TA-11
     "repeated-target": (
         (_row(2), _row(3, target_day=3)),
         r"^points\[1\]\.target_timestamp: .* not strictly after",
