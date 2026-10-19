@@ -64,6 +64,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
@@ -352,6 +353,22 @@ _SILVER_SCHEMA_VERSION = 1
 # LightGBM roda em CPU. O cohort que declarar outro device é recusado (I4).
 _TRAINERS_DEVICE = "cpu"
 
+# Device declarado no cohort → `accelerator` do Lightning do `PfTftTrainer` (Stage 7.3,
+# ADR 7.3.0004 item 2). `rocm` é o device do cohort de ablação no Linux (o build ROCm do
+# torch expõe a GPU pela API `cuda`, e o Lightning a chama de `"gpu"`). Device fora do
+# mapa é recusado aqui, antes de qualquer import de torch.
+_SUPPORTED_DEVICES: Mapping[str, str] = MappingProxyType({"cpu": "cpu", "rocm": "gpu"})
+
+
+def _accelerator_for(device: str) -> str:
+    """O `accelerator` do Lightning para o device do cohort (C1: fora do mapa ergue)."""
+    if device not in _SUPPORTED_DEVICES:
+        raise ValueError(
+            f"device {device!r} is not supported; expected one of {sorted(_SUPPORTED_DEVICES)}"
+        )
+    return _SUPPORTED_DEVICES[device]
+
+
 # Fábrica do probe de ambiente: (caminho do arquivo do cohort, device) → probe.
 RuntimeProbeFactory = Callable[[Path, str], RuntimeEnvironmentProbe]
 
@@ -443,7 +460,9 @@ class _LazyPfTftTrainer:
     7.1) passa pelo mesmo proxy: a mesma instância do adapter treina e prediz.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, accelerator: str = "cpu") -> None:
+        # Stage 7.3: o accelerator é da instância do adapter (ADR 7.3.0004 item 1).
+        self._accelerator = accelerator
         self._delegate: PfTftTrainer | None = None
 
     def _ensure(self) -> "PfTftTrainer":
@@ -453,7 +472,7 @@ class _LazyPfTftTrainer:
                 PfTftTrainer,
             )
 
-            self._delegate = PfTftTrainer()
+            self._delegate = PfTftTrainer(accelerator=self._accelerator)
         return self._delegate
 
     def train_and_predict(  # noqa: PLR0913 — assinatura do port (parâmetros coesos)
@@ -524,6 +543,24 @@ class _LazyPfTftTrainer:
             batch_size=batch_size,
             num_threads=num_threads,
         )
+
+
+def _tft_trainer_factory() -> Callable[[str], _LazyPfTftTrainer]:
+    """Um proxy lazy do `PfTftTrainer` por device, criado na primeira vez (Stage 7.3).
+
+    O mesmo device devolve sempre a mesma instância (treino e predição a partir do
+    checkpoint seguem compartilhando o adapter, Stage 7.1). Device fora de
+    `_SUPPORTED_DEVICES` ergue `ValueError` sem importar torch.
+    """
+    proxies: dict[str, _LazyPfTftTrainer] = {}
+
+    def trainer_for(device: str) -> _LazyPfTftTrainer:
+        accelerator = _accelerator_for(device)
+        if device not in proxies:
+            proxies[device] = _LazyPfTftTrainer(accelerator)
+        return proxies[device]
+
+    return trainer_for
 
 
 class _LazyOptunaSearch:
@@ -820,7 +857,10 @@ def wire_dependencies(
     # emissão comuns. A varredura recebe o mesmo trainer e o mesmo store (para
     # LER o dataset), mas NENHUMA porta de persistência de resultados: o
     # isolamento exploratório/confirmatório é estrutural (ADR 5.4.0005).
-    tft_trainer = _LazyPfTftTrainer()
+    # Stage 7.3: um proxy por device; o candidato, a varredura e a inferência usam o
+    # de `cpu` (o caminho confirmatório da 5.4/7.1, intacto).
+    tft_trainer_for = _tft_trainer_factory()
+    tft_trainer = tft_trainer_for(_TRAINERS_DEVICE)
     train_tft = TrainTft(
         store=store,
         splitter=splitter,

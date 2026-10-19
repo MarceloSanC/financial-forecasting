@@ -305,12 +305,35 @@ def _require_checkpoint(path: str | None) -> str:
     return path
 
 
+SUPPORTED_ACCELERATORS: frozenset[str] = frozenset({"cpu", "gpu"})
+
+
 class PfTftTrainer:
     """TFT quantílico sobre `pytorch-forecasting`.
 
     Satisfaz os ports `TftTrainer` (treino + teste) e `TftCheckpointPredictor`
     (predição a partir do checkpoint gravado, Stage 7.1).
+
+    O `accelerator` do Lightning é da INSTÂNCIA (Stage 7.3, ADR 7.3.0004 itens 1-2):
+    o mesmo valor vai ao `Trainer` do `fit`, ao `Trainer` interno do `predict` no
+    `_emit` e à chave `accelerator` dos `settings` da predição a partir do
+    checkpoint. O default `"cpu"` é o caminho confirmatório da 5.4/7.1, intacto; o
+    composition root monta uma instância `"gpu"` só para o cohort de ablação (ROCm).
     """
+
+    def __init__(self, accelerator: str = "cpu") -> None:
+        if accelerator not in SUPPORTED_ACCELERATORS:
+            msg = (
+                f"accelerator must be one of {sorted(SUPPORTED_ACCELERATORS)}, "
+                f"got {accelerator!r}"
+            )
+            raise ValueError(msg)
+        self._accelerator = accelerator
+
+    @property
+    def accelerator(self) -> str:
+        """O `accelerator` do Lightning desta instância."""
+        return self._accelerator
 
     def train_and_predict(  # noqa: PLR0913 — espelha a assinatura do port
         self,
@@ -363,6 +386,7 @@ class PfTftTrainer:
                 horizons=horizons,
                 quantile_levels=quantile_levels,
                 batch_size=params.batch_size,
+                accelerator=self._accelerator,
             )
             if test_decision_indices
             else {}
@@ -448,6 +472,7 @@ class PfTftTrainer:
                 horizons=horizons,
                 quantile_levels=quantile_levels,
                 batch_size=batch_size,
+                accelerator=self._accelerator,
             )
         finally:
             torch.set_num_threads(threads_before)
@@ -459,7 +484,7 @@ class PfTftTrainer:
             settings={
                 "batch_size": str(batch_size),
                 "num_workers": "0",
-                "accelerator": "cpu",
+                "accelerator": self._accelerator,
                 "num_threads": str(num_threads),
                 "deterministic_algorithms": "false",
                 "cpu_capability": str(torch.backends.cpu.get_cpu_capability()),
@@ -477,6 +502,7 @@ class PfTftTrainer:
         horizons: Sequence[int],
         quantile_levels: Sequence[float],
         batch_size: int,
+        accelerator: str,
     ) -> dict[int, dict[int, tuple[float, ...]]]:
         """Grade crua por (decisão x horizonte), recortada pelo decodificador real.
 
@@ -508,10 +534,11 @@ class PfTftTrainer:
                 # `logger=True` escreve `lightning_logs/` no diretório de trabalho a
                 # cada chamada, e `accelerator="auto"` poderia predizer em GPU
                 # enquanto o treino foi fixado em CPU (o que enfraqueceria I9).
-                # Fixar aqui é o único ponto onde isso é controlável.
+                # Fixar aqui é o único ponto onde isso é controlável: vai o
+                # `accelerator` da instância, o mesmo do `fit` (Stage 7.3).
                 trainer_kwargs={
                     "logger": False,
-                    "accelerator": "cpu",
+                    "accelerator": accelerator,
                     "devices": 1,
                     "enable_progress_bar": False,
                     "enable_model_summary": False,
@@ -706,7 +733,7 @@ class PfTftTrainer:
             deterministic_before = torch.are_deterministic_algorithms_enabled()
             trainer = pl.Trainer(
                 max_epochs=params.max_epochs,
-                accelerator="cpu",
+                accelerator=self._accelerator,
                 devices=1,
                 deterministic=True,
                 # Sem passagem de sanidade: ela dispara o mesmo gancho ANTES da

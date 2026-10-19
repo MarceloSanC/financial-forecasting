@@ -22,6 +22,7 @@ import pytest
 from financial_forecasting.composition_root import (
     _DATASET_MAX_NAN_RATIO_PER_FEATURE,
     _SILVER_SCHEMA_VERSION,
+    _SUPPORTED_DEVICES,
     ApplicationDependencies,
     _LazyArchMcs,
     _LazyFinbertSentimentModel,
@@ -29,6 +30,7 @@ from financial_forecasting.composition_root import (
     _LazyOptunaSearch,
     _LazyPfTftTrainer,
     _LazyStatsforecastBaselineForecaster,
+    _tft_trainer_factory,
     wire_dependencies,
 )
 from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
@@ -823,3 +825,72 @@ def test_run_inference_for_wires_no_evaluation_use_case(tmp_path: Path) -> None:
         in (modules)
     )  # o percurso entra nos use cases fornecedores
     assert not [m for m in modules if m.startswith("financial_forecasting.features.evaluation")]
+
+
+# -- Stage 7.3, Task 03: device por instância do treinador do TFT (ADR 7.3.0004) --------
+
+
+@pytest.mark.unit
+def test_supported_devices_map_is_cpu_and_rocm() -> None:
+    assert dict(_SUPPORTED_DEVICES) == {"cpu": "cpu", "rocm": "gpu"}
+
+
+@pytest.mark.unit
+def test_trainer_factory_keeps_one_lazy_proxy_per_device() -> None:
+    trainer_for = _tft_trainer_factory()
+
+    cpu, rocm = trainer_for("cpu"), trainer_for("rocm")
+
+    assert trainer_for("cpu") is cpu
+    assert trainer_for("rocm") is rocm
+    assert cpu is not rocm
+    assert (cpu._accelerator, rocm._accelerator) == ("cpu", "gpu")
+    assert cpu._delegate is None
+    assert rocm._delegate is None
+
+
+@pytest.mark.unit
+def test_device_outside_the_map_refused_without_importing_torch() -> None:
+    script = textwrap.dedent(
+        """
+        import sys
+        from financial_forecasting.composition_root import _tft_trainer_factory
+        trainer_for = _tft_trainer_factory()
+        trainer_for("rocm")
+        for device in ("cuda", "gpu", "", "CPU"):
+            try:
+                trainer_for(device)
+            except ValueError as exc:
+                print("refused", device, "not supported" in str(exc))
+            else:
+                print("accepted", device)
+        print(sorted({"torch", "lightning", "pytorch_forecasting"} & set(sys.modules)))
+        """
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=True
+    )
+
+    lines = completed.stdout.strip().splitlines()
+    assert lines[:-1] == [
+        "refused cuda True",
+        "refused gpu True",
+        "refused  True",
+        "refused CPU True",
+    ]
+    assert lines[-1] == "[]"
+
+
+@pytest.mark.unit
+def test_confirmatory_and_inference_factories_use_cpu(tmp_path: Path) -> None:
+    deps = wire_dependencies(settings=_inference_settings(tmp_path))
+
+    trainer = deps.train_tft._trainer
+    assert isinstance(trainer, _LazyPfTftTrainer)
+    assert trainer._accelerator == "cpu"
+    assert deps.run_tft_sweep._trainer is trainer
+    cohort = deps.confirmatory_cohort_for(tmp_path / "c.toml", "cpu")
+    assert cohort._train_tft._trainer is trainer
+    inference = deps.run_inference_for(tmp_path / "c.toml", "cpu")
+    assert inference._predictor._predictor is trainer
