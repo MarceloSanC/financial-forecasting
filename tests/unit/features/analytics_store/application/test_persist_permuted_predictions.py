@@ -18,6 +18,7 @@ from financial_forecasting.features.analytics_store.application.use_cases.persis
 from financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast import (
     QuantileForecast,
 )
+from financial_forecasting.shared.application.exceptions import DuplicateKeyError
 from tests.fakes.features.analytics_store.in_memory_analytics_repository import (
     FakeAnalyticsRepository,
 )
@@ -169,3 +170,14 @@ def test_incomplete_window_is_skipped_and_counted() -> None:
     result = PersistPermutedPredictions(repository=repo)(_command([_entry(decision=last - 1)]))
     assert result.rows_written == len(_LEVELS)
     assert result.rows_skipped == len(_LEVELS)
+
+
+def test_second_write_of_same_run_raises_duplicate_key() -> None:
+    """C4-1: append-only — regravar o mesmo run ergue e não muda a contagem."""
+    repo = _CountingRepository()
+    writer = PersistPermutedPredictions(repository=repo)
+    writer(_command([_entry()]))
+    before = len(_rows(repo))
+    with pytest.raises(DuplicateKeyError):
+        writer(_command([_entry()]))
+    assert len(_rows(repo)) == before

@@ -391,3 +391,36 @@ def test_vsn_round_trip_and_run_filter_pushdown(tmp_path: Path) -> None:
     assert {row["run_id"] for row in rows} == {"b" * 64}
     assert {row["family"] for row in rows} == {"price", "technical", "none"}
     assert sum(row["weight"] for row in rows if row["decision_idx"] == 1) == pytest.approx(1.0)
+
+
+def test_permuted_second_write_of_same_run_raises_duplicate_key(tmp_path: Path) -> None:
+    """C4-1: no Parquet real, regravar o mesmo run ergue e não muda a contagem."""
+    repo = _repo(tmp_path)
+    writer = PersistPermutedPredictions(repository=repo)
+    writer(_permuted_command("a" * 64))
+    filters = {"asset": "AAPL", "run_id": "a" * 64}
+    before = len(repo.read(layer=_SILVER, table="fact_permuted_predictions", filters=filters))
+    with pytest.raises(DuplicateKeyError):
+        writer(_permuted_command("a" * 64))
+    after = repo.read(layer=_SILVER, table="fact_permuted_predictions", filters=filters)
+    assert len(after) == before
+
+
+def test_vsn_second_write_of_same_run_raises_duplicate_key(tmp_path: Path) -> None:
+    """C4-1: no Parquet real, regravar o mesmo run ergue e não muda a contagem."""
+    repo = _repo(tmp_path)
+    command = PersistVsnWeightsCommand(
+        run_id="a" * 64,
+        model_version="tft_quantile",
+        asset="AAPL",
+        feature_set_name="fs_all",
+        schema_version=1,
+        dataset_timestamps=tuple(f"2024-03-{day:02d}T00:00:00+00:00" for day in range(4, 10)),
+        variable_families={"close": "price"},
+        decisions=[VsnDecisionEntry(1, {"close": 1.0})],
+    )
+    PersistVsnWeights(repository=repo)(command)
+    filters = {"asset": "AAPL", "run_id": "a" * 64}
+    with pytest.raises(DuplicateKeyError):
+        PersistVsnWeights(repository=repo)(command)
+    assert len(repo.read(layer=_SILVER, table="fact_vsn_weights", filters=filters)) == 1

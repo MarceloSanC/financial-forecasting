@@ -9,6 +9,7 @@ from financial_forecasting.features.analytics_store.application.use_cases.persis
     PersistVsnWeightsCommand,
     VsnDecisionEntry,
 )
+from financial_forecasting.shared.application.exceptions import DuplicateKeyError
 from tests.unit.features.analytics_store.application.test_persist_permuted_predictions import (
     _CountingRepository,
 )
@@ -96,3 +97,14 @@ def test_decision_outside_the_grid_refused() -> None:
         PersistVsnWeights(repository=_CountingRepository())(
             _command([VsnDecisionEntry(len(_TIMESTAMPS), _weights())])
         )
+
+
+def test_second_write_of_same_run_raises_duplicate_key() -> None:
+    """C4-1: append-only — regravar o mesmo run ergue e não muda a contagem."""
+    repo = _CountingRepository()
+    writer = PersistVsnWeights(repository=repo)
+    writer(_command([VsnDecisionEntry(4, _weights())]))
+    before = len(repo.read(layer="silver", table=_TABLE))
+    with pytest.raises(DuplicateKeyError):
+        writer(_command([VsnDecisionEntry(4, _weights())]))
+    assert len(repo.read(layer="silver", table=_TABLE)) == before
