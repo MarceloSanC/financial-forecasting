@@ -653,3 +653,43 @@ def test_overlapping_yearly_parts_are_undefined_not_value_error() -> None:
 
     assert isinstance(merged, UndefinedRunReduction)
     assert "is in two parts" in merged.reason
+
+
+# --- dado inválido vira undefined, nunca ValueError (C6-3) -------------------------------
+
+
+def _first_run_rows(cohort: Cohort) -> list[PermutedForecastRecord]:
+    run_id = sorted({r.run_id for r in cohort.permuted})[0]
+    return [r for r in cohort.permuted if r.run_id == run_id]
+
+
+def test_identity_only_rows_are_undefined() -> None:
+    cohort = _cohort()
+    rows = [r for r in _first_run_rows(cohort) if r.permuted_family == "none"]
+    reduced = reduce_permuted_run(rows, realized=cohort.realized, levels=GOLD_LEVELS)
+    assert isinstance(reduced, UndefinedRunReduction)
+    assert "no permuted rows (I11)" in reduced.reason
+
+
+@pytest.mark.parametrize("damage", ["nan", "non-monotone"])
+def test_vo_invariants_become_undefined(damage: str) -> None:
+    cohort = _cohort()
+    rows = _first_run_rows(cohort)
+    point = min((r.horizon, r.target_timestamp) for r in rows if r.permuted_family == "price")
+    changed = []
+    for r in rows:
+        if (r.horizon, r.target_timestamp, r.permuted_family, r.permutation_index) == (
+            *point,
+            "price",
+            1,
+        ):
+            if damage == "nan":
+                r = dataclasses.replace(r, value_guardrail=float("nan"))  # noqa: PLW2901
+            elif r.quantile_level == GOLD_LEVELS[0]:
+                r = dataclasses.replace(r, value_guardrail=10.0)  # noqa: PLW2901
+        changed.append(r)
+
+    reduced = reduce_permuted_run(changed, realized=cohort.realized, levels=GOLD_LEVELS)
+
+    assert isinstance(reduced, UndefinedRunReduction)
+    assert "price k=1" in reduced.reason

@@ -175,8 +175,26 @@ def _series_losses(
         )
         if violation is not None:
             raise _Undefined(f"{violation.kind.value}: {violation.detail}")
+    try:
+        losses = _grid_losses(points, targets, horizon=horizon, levels=levels, realized=realized)
+    except ValueError as exc:  # C6-3: NaN, monotonia — dado, nunca erro de chamada
+        raise _Undefined(f"h={horizon}: {exc}") from None
+    decisions = [points[target][0].decision_timestamp for target in targets]
+    if len(set(decisions)) != len(decisions):
+        raise _Undefined(f"h={horizon}: two targets for one decision")
+    return dict(zip(decisions, losses, strict=True))
+
+
+def _grid_losses(
+    points: Mapping[str, Sequence[Row]],
+    targets: Sequence[str],
+    *,
+    horizon: int,
+    levels: tuple[float, ...],
+    realized: RealizedReturns,
+) -> tuple[float, ...]:
+    """O pinball médio na grade por alvo (os VOs validam NaN e monotonia)."""
     forecasts = []
-    decisions = []
     for target in targets:
         by_level = {row.quantile_level: row for row in points[target]}
         rows = [by_level[level] for level in levels]
@@ -189,7 +207,6 @@ def _series_losses(
                 guardrail_applied=rows[0].guardrail_applied,
             )
         )
-        decisions.append(rows[0].decision_timestamp)
     series = CoverageSeries(
         horizon=horizon,
         levels=levels,
@@ -197,10 +214,7 @@ def _series_losses(
         forecasts=tuple(forecasts),
         realized=tuple(realized.realized_at(target) for target in targets),
     )
-    losses = PinballScore.per_point_losses(series)
-    if len(set(decisions)) != len(decisions):
-        raise _Undefined(f"h={horizon}: two targets for one decision")
-    return dict(zip(decisions, losses, strict=True))
+    return PinballScore.per_point_losses(series)
 
 
 def _common_decisions(by_horizon: Mapping[int, Losses], *, run_id: str) -> tuple[str, ...]:
@@ -281,7 +295,22 @@ def reduce_permuted_run(
         losses = _labelled_losses(records, levels=levels, realized=realized)
         identity_label = (IDENTITY_FAMILY, 0)
         identity = losses[identity_label]
+        if len(losses) == 1:
+            raise _Undefined(f"run {first.run_id}: no permuted rows (I11)")
         decisions = _common_decisions(identity, run_id=first.run_id)
+        return _permuted_losses(first, decisions, losses)
+    except _Undefined as exc:
+        return UndefinedRunReduction(run_id=first.run_id, reason=exc.reason)
+
+
+def _permuted_losses(
+    first: PermutedForecastRecord,
+    decisions: tuple[str, ...],
+    losses: Mapping[SeriesLabel, Mapping[int, Mapping[str, float]]],
+) -> PermutedRunLosses:
+    identity_label = (IDENTITY_FAMILY, 0)
+    identity = losses[identity_label]
+    try:
         return PermutedRunLosses(
             run_id=first.run_id,
             seed=first.seed,
@@ -298,8 +327,8 @@ def reduce_permuted_run(
                 for h, series in by_horizon.items()
             },
         )
-    except _Undefined as exc:
-        return UndefinedRunReduction(run_id=first.run_id, reason=exc.reason)
+    except ValueError as exc:  # C6-3: a invariante do VO é dado, não erro de chamada
+        raise _Undefined(f"run {first.run_id}: {exc}") from None
 
 
 def reduce_ablation_run(
@@ -347,13 +376,16 @@ def reduce_ablation_run(
                 )
             except _Undefined as exc:
                 raise _Undefined(f"run {run.run_id} h={horizon}: {exc.reason}") from None
-        return AblationRunPart(
-            run_id=run.run_id,
-            model_version=run.model,
-            seed=run.seed,
-            fold_index=fold_index,
-            losses=by_horizon,
-        )
+        try:
+            return AblationRunPart(
+                run_id=run.run_id,
+                model_version=run.model,
+                seed=run.seed,
+                fold_index=fold_index,
+                losses=by_horizon,
+            )
+        except ValueError as exc:  # C6-3
+            raise _Undefined(f"run {run.run_id}: {exc}") from None
     except _Undefined as exc:
         return UndefinedRunReduction(run_id=run.run_id, reason=exc.reason)
 
