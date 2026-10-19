@@ -2475,4 +2475,11 @@ O commit `fix(modeling): pré-condições do executor de ablação antes do lock
 executor), C2-2, C2-3, C2-4, C2-6, C2-7 e C2-8. Eles estão listados um a um no corpo do
 commit. A partir do C3, cada achado tem o seu commit.
 
+### 2026-10-19 — [deviation] Task 14 — correção do registro anterior: a docstring do port foi editada (C4-6) — Claude (Opus 5.5)
+O `[deviation] Task 14` acima diz que as docstrings do repositório "não foram editadas".
+Isso valeu até o Checkpoint C 13–15. O achado C4-6 pediu o `run_id` nas listas de
+colunas de partição e de filtros da docstring de `analytics_repository.py`, conforme o
+ADR 7.3.0002 item 4. A docstring foi editada (1 a 4 níveis hoje). A docstring do
+`ParquetAnalyticsRepository` ("N níveis") continua sem mudança.
+
 <!-- END: post-execution -->
