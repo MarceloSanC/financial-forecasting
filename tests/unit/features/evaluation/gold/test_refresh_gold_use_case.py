@@ -1806,3 +1806,17 @@ def test_bad_attribution_row_is_undefined_never_aborts(
     assert target is not None
     assert target.status == "undefined"
     assert reason in str(target.reason), target.reason
+
+
+@pytest.mark.unit
+def test_candidate_run_without_vsn_rows_makes_the_vsn_undefined() -> None:
+    """C8-10: um run do candidato sem linhas de VSN deixa o resumo undefined com o motivo."""
+    cohort = _h3_cohort()
+    silver = _h3_silver(cohort)
+    run_id = sorted(r.run_id for r in cohort.runs if r.model == "tft")[0]
+    silver["fact_vsn_weights"] = [r for r in silver["fact_vsn_weights"] if r["run_id"] != run_id]
+    inputs = _h3_run(_harness(cohort, silver=silver))
+    vsn = inputs.h3_reports.vsn
+    assert vsn is not None
+    assert vsn.status == "undefined"
+    assert f"run {run_id}: no vsn rows" in str(vsn.reason)

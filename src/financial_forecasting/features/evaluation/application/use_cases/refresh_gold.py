@@ -763,6 +763,8 @@ class RefreshGold:
                     vsn.append(reduce_vsn_run([_vsn_record(row, run, fold) for row in weights]))
                 except ValueError as exc:
                     vsn_failure = vsn_failure or f"run {run.run_id}: {exc}"
+            else:  # C8-10: run do candidato sem pesos não é "peso zero"
+                vsn_failure = vsn_failure or f"run {run.run_id}: no vsn rows"
         return permuted, vsn, vsn_failure
 
     def _ablation_runs(self, partition: GoldPartition, h3: H3Parameters) -> tuple[CohortRun, ...]:
