@@ -41,6 +41,7 @@ from financial_forecasting.features.modeling.application.use_cases.train_tft imp
     registry_family_partition,
     tft_feature_set_hash,
 )
+from financial_forecasting.features.modeling.domain.services.loco_identity import TFT_FAMILIES
 from financial_forecasting.shared.domain.value_objects.cohort_hash import CohortHash
 
 if TYPE_CHECKING:
@@ -109,6 +110,7 @@ def parse_ablation_cohort(text: str) -> AblationCohortSpec:
     base = _table(raw, "base")
     _reject_unknown(base, _BASE_KEYS, path="base")
     partition = _table(raw, "partition")
+    _reject_unknown(partition, TFT_FAMILIES, path="partition")
     configurations = _table(raw, "configurations")
     _reject_unknown(configurations, ABLATION_CONFIGURATIONS, path="configurations")
     declared = []

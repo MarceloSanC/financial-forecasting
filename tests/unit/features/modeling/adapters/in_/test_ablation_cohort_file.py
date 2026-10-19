@@ -155,6 +155,7 @@ def test_procedure_fields_in_the_ablation_file_refused(
             "configurations.full.model_version",
         ),
         ("[configurations.full]\n", "[configurations.full_v2]\n", "configurations.full_v2"),
+        ("[partition]\n", '[partition]\nvolatility = ["atr"]\n', "partition.volatility"),
     ],
 )
 def test_unknown_key_refused_with_dotted_path(
