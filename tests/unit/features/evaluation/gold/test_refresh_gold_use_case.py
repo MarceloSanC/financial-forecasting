@@ -1848,3 +1848,27 @@ def test_block_is_the_joint_max_over_the_16_series() -> None:
     assert inputs.h3_reports.block_length == block_length_rule(horizon=7, max_estimate=16.0)
     [call] = [c for c in backend.index_calls if c["reps"] == 1000]  # noqa: PLR2004
     assert call["block_size"] == 16  # noqa: PLR2004
+
+
+@pytest.mark.unit
+def test_level_follows_family_alpha_of_the_plan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """C8-7: family_alpha = 0,1 ⇒ nível 1 - 0,1/4 = 0,975 (mata o 0,9875 literal, M2)."""
+    from financial_forecasting.features.evaluation.domain.services import (  # noqa: PLC0415
+        joint_contribution as module,
+    )
+
+    levels: list[float] = []
+    real = module.FamilyContribution.evaluate
+
+    def spy(differentials: Any, *, bootstrap: Any, level: float) -> Any:  # noqa: ANN401
+        levels.append(level)
+        return real(differentials, bootstrap=bootstrap, level=level)
+
+    monkeypatch.setattr(module.FamilyContribution, "evaluate", staticmethod(spy))
+    block = _h3_parameters_for_test().as_payload()
+    block["family_alpha"] = 0.1
+    parameters = dataclasses.replace(_PARAMETERS, h3_parameters=H3Parameters.from_mapping(block))
+    inputs = _h3_run(_h3_harness(), parameters)
+    assert levels == [0.975, 0.975]
+    assert inputs.h3_reports.permutation is not None
+    assert inputs.h3_reports.permutation.level == 0.975  # noqa: PLR2004
