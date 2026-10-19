@@ -186,8 +186,8 @@ class ConformalSeedMeanCoverage:
     n_mean: float | None  # n̄ = média dos n_evaluated das seeds usadas
     per_pair: tuple[ConformalSeedMeanPair, ...]
     nesting_violation_rate: float | None  # c̄_violação / n̄
-    mean_of_seed_nesting_rates: float | None = None
-    sd_of_seed_nesting_rates: float | None = None
+    mean_of_seed_nesting_rates: float | None  # obrigatório quando `applicable` (C4-10)
+    sd_of_seed_nesting_rates: float | None  # None com uma seed só
     label: str = EMPIRICAL_COVERAGE_LABEL
 
     def __post_init__(self) -> None:
@@ -196,6 +196,15 @@ class ConformalSeedMeanCoverage:
             raise ValueError("applicable must be (seeds_used is not empty)")
         if not self.applicable and (self.per_pair or self.n_mean is not None):
             raise ValueError("a non-applicable seed mean has no per_pair and no n_mean")
+        if self.applicable and None in (
+            self.n_mean,
+            self.nesting_violation_rate,
+            self.mean_of_seed_nesting_rates,
+        ):
+            raise ValueError(
+                "an applicable seed mean needs n_mean, nesting_violation_rate and "
+                "mean_of_seed_nesting_rates"
+            )
 
 
 def _tail(
@@ -370,6 +379,8 @@ class ConformalCoverage:
                 n_mean=None,
                 per_pair=(),
                 nesting_violation_rate=None,
+                mean_of_seed_nesting_rates=None,
+                sd_of_seed_nesting_rates=None,
             )
         pairs = [(p.lower_level, p.upper_level) for p in used[0].per_pair]
         for report in used[1:]:
