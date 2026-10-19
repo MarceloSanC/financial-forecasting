@@ -1872,3 +1872,21 @@ def test_level_follows_family_alpha_of_the_plan(monkeypatch: pytest.MonkeyPatch)
     assert levels == [0.975, 0.975]
     assert inputs.h3_reports.permutation is not None
     assert inputs.h3_reports.permutation.level == 0.975  # noqa: PLR2004
+
+
+@pytest.mark.unit
+def test_ablation_rows_outside_test_are_ignored() -> None:
+    """C8-9: linhas `val` da ablação (valores absurdos) não entram nas perdas da LOCO."""
+    cohort = _h3_cohort()
+    clean = _h3_run(_harness(cohort, silver=_h3_silver(cohort)))
+    silver = _h3_silver(cohort)
+    validation = [
+        {**row, "split": "val", "value_raw": 9.0, "value_guardrail": 9.0}
+        for row in silver["fact_oos_predictions"]
+        if row["feature_set_name"] == "fs_all_ablation"
+    ]
+    silver["fact_oos_predictions"] += validation
+    noisy = _h3_run(_harness(cohort, silver=silver))
+    assert validation
+    assert noisy.h3_reports.ablation == clean.h3_reports.ablation
+    assert noisy.h3_reports.ablation_differentials == clean.h3_reports.ablation_differentials
