@@ -1082,4 +1082,6 @@ class RefreshGoldResult:
     rows_by_table: Mapping[str, int]
     failed_checks: tuple[FailedCheck, ...]
     profile_error_units: int
-    conformal_error_units: int  # Stage 7.2: unidades conformais com status error
+    # Stage 7.2 (CA15; C4-6): unidades (fold, seed, h) DISTINTAS com alguma linha `error`
+    # do port, não linhas (uma unidade tem pares x variantes linhas).
+    conformal_error_units: int

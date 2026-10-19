@@ -412,7 +412,7 @@ def test_blocked_generation_has_no_conformal_tables(
 def test_port_error_unit_row_count_and_undefined_coverage(scenario: _Scenario) -> None:
     run = scenario.forced
     pairs = len(conformal_block()["pairs"])  # type: ignore[arg-type]
-    assert run.refresh.conformal_error_units == pairs * 2  # pares x variantes
+    assert run.refresh.conformal_error_units == 1  # unidades distintas (CA15; C4-6)
     fold, seed, horizon = _FORCED
     errors = [
         row

@@ -375,3 +375,28 @@ def test_undefined_unit_leaves_its_targets_uncovered() -> None:
     uncovered = result.uncovered_targets
     assert set(uncovered) == {(1, 1), (1, 2), (2, 1), (2, 2)}
     assert all(t >= session(23) for t in uncovered[(1, 1)])
+
+
+# --- Checkpoint C das Tasks 16-19 (task-19-fix, C4-5 e C4-8) --------------------------
+
+
+def test_folds_with_the_same_integer_are_both_undefined() -> None:
+    """C4-8: "01" e "1" são unidades distintas (fold_raw) que o port não separaria."""
+    cohort = _cohort(folds=("01", "1"), calib={"01": _CALIB["0"], "1": _CALIB["1"]})
+    result = _assemble(cohort)
+    assert {u.fold_raw for u in result.units} == {"01", "1"}
+    assert {u.fold_index for u in result.units} == {1}
+    assert {u.status for u in result.units} == {UNDEFINED}
+    assert all("map to the same integer fold 1" in (u.reason or "") for u in result.units)
+
+
+def test_undefined_unit_with_test_points_leaves_them_uncovered() -> None:
+    """C4-5 (A2): a unidade `undefined` aqui TEM teste; só as `ok` cobrem a série nativa."""
+    cohort = _cohort(folds=("01", "1"), calib={"01": _CALIB["0"], "1": _CALIB["1"]})
+    result = _assemble(cohort)
+    unit = _unit(result, "01", 1, 1)
+    assert unit.status == UNDEFINED
+    assert unit.test
+    uncovered = set(result.uncovered_targets[(1, 1)])
+    assert {point[1] for point in unit.test} <= uncovered
+    assert set(_native(cohort)[(1, 1)].target_timestamps) == uncovered

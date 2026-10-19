@@ -2026,4 +2026,26 @@ de saída da Stage.
 `cohort_tft_folds`), sem reimplementar o splitter. Continua valendo o I12: nenhuma
 coluna de previsão nem de realizado é lida.
 
+### 2026-10-18 — [decision] task-19-fix — `conformal_error_units` conta unidades, e a unidade é o `fold_raw` (Checkpoint C, C4-6, C4-8) — Claude (Opus 5.5)
+**Contexto:** a Task 19 contava as linhas `error` do port, e uma unidade tem pares x
+variantes linhas. O CA15 fala em unidades. As unidades `ok` eram chaveadas pelo
+inteiro do fold, então `"01"` e `"1"` colidiam.
+**O que foi decidido:**
+- **C4-6:** `conformal_error_units` = número de unidades `(fold, seed, h)` distintas
+  com alguma linha `error`, seguindo o CA15 ao pé da letra. O código, os testes da
+  Task 19 e da Task 20 e o comentário do `RefreshGoldResult` foram ajustados.
+  - No plano da Task 20, onde vale "Cada `error` soma 1 a `conformal_error_units`",
+    leia "cada unidade com `error` soma 1".
+  - Essa correção do plano fica registrada aqui, e não no texto da Task: o
+    `check_technical_postexec.py` só aceita edição dentro da §7 durante a execução.
+- **C4-8:** `ok_units` é chaveado por `(fold_raw, seed, h)`. O port continua recebendo o
+  inteiro, e a volta do port para o `fold_raw` é um mapa único. Dois folds crus com o
+  mesmo inteiro na mesma seed e horizonte viram `undefined` os dois, já na montagem,
+  com o motivo `folds [...] map to the same integer fold N`. Eles nunca chegam ao port,
+  cujo `validate_command` recusaria a unidade duplicada e derrubaria o refresh
+  inteiro. As unidades guardam calib e teste, então os alvos delas ficam em
+  `uncovered_targets`. Isso também fixa o filtro `status == OK` (C4-5, A2).
+**Razão:** o CA15 conta unidades. A identidade da unidade no gold é o `fold_raw`, e
+um fold cru ambíguo é dado inconsistente (motivo na linha), não erro do refresh.
+
 <!-- END: post-execution -->

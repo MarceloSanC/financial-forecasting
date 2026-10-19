@@ -210,6 +210,43 @@ def test_refresh_gold_imports_only_calibrate_conformal_from_inference() -> None:
     assert {module for module, _ in found} == {_SUPPLIER}
 
 
+def _supplier_names(source: str) -> dict[bool, set[str]]:
+    """Nomes importados do `calibrate_conformal`, por `typing_only` (C4-12)."""
+    tree = ast.parse(source)
+    typing_only: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If) and ast.unparse(node.test).endswith("TYPE_CHECKING"):
+            typing_only.update(id(child) for child in ast.walk(node))
+    names: dict[bool, set[str]] = {False: set(), True: set()}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == _SUPPLIER:
+            names[id(node) in typing_only].update(alias.name for alias in node.names)
+    return names
+
+
+@pytest.mark.unit
+def test_refresh_gold_imports_only_the_command_dtos_at_runtime() -> None:
+    """C4-12: em runtime só os DTOs de comando; o resultado só para tipo."""
+    names = _supplier_names(_read("application/use_cases/refresh_gold.py"))
+    assert names[False] == {
+        "CalibrateConformalCommand",
+        "ConformalUnitInput",
+        "ConformalPointInput",
+    }
+    assert names[True] == {"ConformalUnitResult"}
+
+
+@pytest.mark.unit
+def test_supplier_names_helper_splits_runtime_and_typing() -> None:
+    source = (
+        "from typing import TYPE_CHECKING\n"
+        f"from {_SUPPLIER} import CalibrateConformal\n"
+        "if TYPE_CHECKING:\n"
+        f"    from {_SUPPLIER} import ConformalUnitResult\n"
+    )
+    assert _supplier_names(source) == {False: {"CalibrateConformal"}, True: {"ConformalUnitResult"}}
+
+
 @pytest.mark.unit
 def test_inference_import_helper_sees_typing_blocks_and_plain_imports() -> None:
     source = (
