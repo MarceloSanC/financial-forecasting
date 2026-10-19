@@ -1,9 +1,11 @@
 # Pré-registro confirmatório AAPL — RASCUNHO da revisão r3 (Stage 7.3; ADR 7.3.0005).
 # Emenda cega da r2: idêntica a ela exceto `revision`, os campos da emenda e o bloco
 # [h3] (as regras da leitura de H3, que a r2 não nomeia). As três sentinelas de
-# [h3.ablation] (cohort_id, cohort_hash, seeds) são preenchidas no Linux depois do
-# `ablation-freeze` (L5), quando o arquivo vira config/preregistration/
-# aapl_confirmatory-r3.toml e é ancorado. Nenhuma métrica de H3 antes da âncora.
+# [h3.ablation] (cohort_id, cohort_hash, seeds) são preenchidas na L7 com os valores
+# do spec congelado pelo `ablation-freeze` (L4); na L7 o arquivo vira
+# config/preregistration/aapl_confirmatory-r3.toml, este cabeçalho de RASCUNHO é
+# reescrito (só comentários; os valores ficam os do rascunho) e a r3 é ancorada.
+# Nenhuma métrica de H3 antes da âncora.
 
 name = "aapl_confirmatory"
 revision = 3
