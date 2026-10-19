@@ -141,6 +141,7 @@ _STAGE_MODULES = (
     "features/evaluation/domain/services/attribution_assembly",
     "features/evaluation/domain/services/contribution_agreement",
     "features/evaluation/domain/services/family_contribution",
+    "features/evaluation/domain/services/joint_contribution",
     "features/evaluation/domain/services/vsn_summary",
     "features/evaluation/domain/value_objects/ablation_run_losses",
     "features/evaluation/domain/value_objects/family_loss_differentials",
