@@ -25,29 +25,52 @@ _ABLATION = f"{_PACKAGE}.run_ablation_cohort"
 _RUNNER = f"{_PACKAGE}.cohort_unit_runner"
 
 
-def imported_modules(source: str) -> set[str]:
-    """Módulos importados por qualquer forma: `from`, `import` e `import_module` constante.
+def _absolute(module: str | None, level: int, package: str) -> str:
+    """O nome absoluto de um `from` relativo, resolvido contra `package` (C2-5)."""
+    if level == 0:
+        return module or ""
+    parts = package.split(".")
+    base = ".".join(parts[: len(parts) - (level - 1)])
+    return f"{base}.{module}" if module else base
+
+
+def _call_name(node: ast.Call) -> str | None:
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr
+    if isinstance(node.func, ast.Name):
+        return node.func.id
+    return None
+
+
+def _constant_target(node: ast.Call) -> str | None:
+    """O módulo constante de `import_module(...)`/`__import__(...)`, posicional ou `name=`."""
+    candidates = [*node.args[:1], *(kw.value for kw in node.keywords if kw.arg == "name")]
+    for candidate in candidates:
+        if isinstance(candidate, ast.Constant) and isinstance(candidate.value, str):
+            return candidate.value
+    return None
+
+
+def imported_modules(source: str, *, package: str = _PACKAGE) -> set[str]:
+    """Módulos importados por qualquer forma (absoluta, relativa ou dinâmica).
 
     `from pacote import modulo` conta como `pacote.modulo` (o nome pode ser um
-    submódulo), além do próprio `pacote`.
+    submódulo), além do próprio `pacote`. `from . import x` e `from .x import y` são
+    resolvidos contra `package` (o pacote dos executores). `importlib.import_module` e
+    `__import__` com o nome constante, posicional ou `name=`, também contam.
     """
     found: set[str] = set()
     for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            found.add(node.module)
-            found.update(f"{node.module}.{alias.name}" for alias in node.names)
+        if isinstance(node, ast.ImportFrom):
+            module = _absolute(node.module, node.level, package)
+            found.add(module)
+            found.update(f"{module}.{alias.name}" for alias in node.names)
         elif isinstance(node, ast.Import):
             found.update(alias.name for alias in node.names)
-        elif (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute | ast.Name)
-            and (node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id)
-            == "import_module"
-            and node.args
-            and isinstance(node.args[0], ast.Constant)
-            and isinstance(node.args[0].value, str)
-        ):
-            found.add(node.args[0].value)
+        elif isinstance(node, ast.Call) and _call_name(node) in {"import_module", "__import__"}:
+            target = _constant_target(node)
+            if target is not None:
+                found.add(target)
     return found
 
 
@@ -84,6 +107,13 @@ def test_cohort_runners_never_import_each_other() -> None:
         pytest.param(
             f"from importlib import import_module\nmodule = import_module({_CONFIRMATORY!r})\n",
             id="import-module-name",
+        ),
+        pytest.param("from . import run_confirmatory_cohort\n", id="relative-package"),
+        pytest.param("from .run_confirmatory_cohort import X\n", id="relative-module"),
+        pytest.param(f"module = __import__({_CONFIRMATORY!r})\n", id="dunder-import"),
+        pytest.param(
+            f"import importlib\nmodule = importlib.import_module(name={_CONFIRMATORY!r})\n",
+            id="import-module-keyword",
         ),
     ],
 )
