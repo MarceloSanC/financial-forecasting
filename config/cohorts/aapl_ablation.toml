@@ -1,0 +1,37 @@
+# Cohort de ablação LOCO — RASCUNHO (Stage 7.3; ADRs 7.3.0003 e 7.3.0004).
+# Referencia o cohort confirmatório pelo arquivo, id e hash; o procedimento (geometria,
+# tft_params, horizontes, grade, dataset_fingerprint, pipeline_version) vem da base.
+# `seeds` vazio e `torch_build` ausente até o freeze no Linux (L4, `ablation-freeze`).
+# A partição e os feature_set_hash das configurações são os da registry (o loader confere).
+
+name = "aapl_ablation"
+revision = 0
+feature_set_name = "fs_all_ablation"
+device = "rocm"
+seeds = []
+
+[base]
+cohort_file = "config/cohorts/aapl_confirmatory.toml"
+cohort_id = "aapl_confirmatory-r0-665f45d9169a"
+cohort_hash = "665f45d9169aba576d194e73d45c0508f51f231f573c4de283c96fc5847365b1"
+
+[partition]
+price = ["open", "high", "low", "close", "volume", "log_return_1d", "log_return_5d", "log_return_21d", "momentum_5d", "momentum_21d", "momentum_63d", "reversal_1d", "reversal_5d", "drawdown_lookback", "amihud_illiquidity_proxy", "volume_zscore", "volume_spike_flag"]
+technical = ["rsi_14", "macd", "macd_signal", "ema_10", "ema_50", "ema_100", "ema_200", "volatility_20d", "candle_range", "candle_body", "volatility_parkinson", "volatility_garman_klass", "downside_semivolatility", "vol_of_vol", "volatility_regime", "trend_regime", "stress_tail_return_flag"]
+sentiment = ["sentiment_score", "news_volume", "sentiment_std", "has_news", "sentiment_lag_1", "sentiment_lag_3", "sentiment_lag_5", "sentiment_ema", "sentiment_surprise", "sentiment_x_volatility", "sentiment_x_volume"]
+fundamental = ["revenue", "net_income", "operating_cash_flow", "total_shareholder_equity", "total_liabilities", "net_margin", "leverage_ratio", "cashflow_efficiency", "revenue_yoy_growth", "net_income_yoy_growth"]
+
+[configurations.full]
+feature_set_hash = "7df0e1b4d6e93e3edb5695414a47d2d77882a2ffc674d00037f2a9f87a6409e0"
+
+[configurations.minus_price]
+feature_set_hash = "7631c0aee20da042858e417f68eee13840c420bbee4777d52491e50a51b10302"
+
+[configurations.minus_technical]
+feature_set_hash = "b75eca486c73f8efeaf97ac463456401cc9d4c733f30f8e869a1d52d345a3947"
+
+[configurations.minus_sentiment]
+feature_set_hash = "5f737061fe3454ec881d21ba0aa5046fc562fc48b5300e8d57b0a818e438f482"
+
+[configurations.minus_fundamental]
+feature_set_hash = "c58b322f283328db2cb346fb2e247c8b762deae6f50912547e5dab8eef490a18"
