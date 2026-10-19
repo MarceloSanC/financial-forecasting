@@ -2662,4 +2662,40 @@ dois.
   - reescreve o cabeçalho "RASCUNHO" do arquivo ao ancorar (só comentários).
 - **Etapa W:** o `[handoff]` registra o estado dela (CA15).
 
+### 2026-10-19 — [finding] auditoria de testes da fase Windows (sobre 54efff2) e as correções — Claude (Opus 5.5)
+A auditoria independente rodou 70 mutantes sobre 54efff2: 47 mortos e 23 sobreviventes
+(H2 e B7 equivalentes sob a fixture da época). Foram 2 blocker e 12 entre major e minor.
+Cada achado virou um commit, e cada mutante citado foi refeito sobre o código atual
+(`JointContribution` mora no domain desde o C8-15) e morre:
+
+| Achado | Commit | Mutantes mortos |
+|---|---|---|
+| TA-1 (blocker) d_t por horizonte | `ea2e498` | X1 e o mesmo troco no `seed_mean` da LOCO |
+| TA-2 (blocker) bloco conjunto | `f2653ce` | R1 (`estimates[0]`), `estimates[-1]`, R10 (bloco 7) |
+| TA-3 flags por método | `857812a` | AG3 |
+| TA-4 totais por horizonte | `ff4715e` | FC5 |
+| TA-5 direção do doador | `d5b8c1e` | W1 (real) e F1 (fake) |
+| TA-6 contagens distintas | `ba4a9a8` | B1, B2, B9 |
+| TA-7 VSN `undefined` no builder | `f5f5de5` | B4, B5 |
+| TA-8 `max_abs_diff` no manifesto | `575bc15` | M4 e o 0,0 na releitura |
+| TA-9 números do ADR no rascunho | `3b7cc85` | D1, D2 e `family_alpha = 0.1` |
+| TA-10 reps e semente do plano | `15838ef` | R3, R4 (no refresh e no domain) |
+| TA-11 torch com device `cpu` | `f065b27` | H1 |
+| TA-12 fakes reusam as regras | `e96fc85`, `f66a47c` | F5 e as guardas de vocabulário, PK repetida e `none ⇔ 0` do fake permutado |
+| TA-13 `excludes_zero` no e2e | `791b706` | — (assert de CA14; sem mutante citado) |
+| TA-14 ramos defensivos | `dd16c1e` | R6, R8, B7 |
+
+Notas:
+- **R8 deixa de ser equivalente.** O `[decision] C8` acima dizia que cada filtro de
+  `split` sozinho é mutante equivalente. Continua verdade para o resultado da LOCO. Mas
+  `test_ablation_rows_outside_test_are_ignored` agora espia o `reduce_ablation_run` e
+  afirma que o refresh só lhe entrega linhas `test` (I19: só `test` é materializado), e
+  isso mata o filtro do refresh sozinho.
+- **TA-12.** `_check_entry` virou `check_permuted_entry` (público) para o fake reusar a
+  regra. O fake permutado também usa o `MultiHorizonPredictionPersister.build` e o
+  vocabulário `PERMUTED_FAMILIES` do schema, e recusa PK repetida com
+  `DuplicateKeyError`. O real recusa a família fora do vocabulário pelo pandera; o
+  contrato aceita as duas exceções pela mensagem.
+- **H2** continua equivalente (o probe real só grava `"true"` ou `"false"`).
+
 <!-- END: post-execution -->
