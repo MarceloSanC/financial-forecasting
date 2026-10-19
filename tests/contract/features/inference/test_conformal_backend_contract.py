@@ -251,6 +251,25 @@ def test_mapie_is_silent_without_the_fitted_hook(monkeypatch: pytest.MonkeyPatch
     assert _warnings_with(_WithoutFittedHook, monkeypatch) == []
 
 
+def test_mapie_refuses_misaligned_calib() -> None:
+    """F1: listas de calib de tamanhos diferentes erguem antes de chamar o MAPIE."""
+    with pytest.raises(ValueError, match="must align"):
+        MapieCqrBackend().split_cqr_corrections(
+            calib_lower=[0.0, 0.1], calib_upper=[0.2], calib_realized=[0.0, 0.1], tail_alpha=0.1
+        )
+
+
+def test_prefit_predictions_fit_is_a_no_op_and_reports_fitted() -> None:
+    """F1: o `fit` devolve o próprio estimador (o MAPIE nunca reajusta) e o gancho do
+    sklearn diz ajustado; o `predict` lê pelo índice da linha."""
+    import numpy as np  # noqa: PLC0415 — numpy só nesta perna (contrato do adapter)
+
+    estimator = _PREFIT(np.array([1.0, 2.0, 3.0]))
+    assert estimator.fit(np.zeros((3, 1)), np.zeros(3)) is estimator
+    assert estimator.__sklearn_is_fitted__() is True
+    assert list(estimator.predict(np.array([[2.0], [0.0]]))) == [3.0, 1.0]
+
+
 def test_integer_rank_of_the_helper_equals_the_domain_rank() -> None:
     """TA-6: o posto por inteiros do helper (independente) confere com o do domain."""
     for n in range(50, 400):
