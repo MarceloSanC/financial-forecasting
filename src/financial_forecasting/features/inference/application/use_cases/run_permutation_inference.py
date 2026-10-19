@@ -63,6 +63,7 @@ from financial_forecasting.features.inference.application.use_cases.run_inferenc
     validate_justification,
 )
 from financial_forecasting.features.inference.domain.services.reproduction_policy import (
+    STRICT,
     ReproductionMode,
     compare_reproduction,
 )
@@ -181,6 +182,26 @@ def variable_families(
     """
     family_of = {feature: family for family, features in partition.items() for feature in features}
     return {variable: family_of.get(variable, _IDENTITY_FAMILY) for variable in variables}
+
+
+def _refuse_started_elsewhere(
+    context: _Context, run_id: str, entry: Mapping[str, object] | None
+) -> None:
+    """`started` sem linhas só é retomado no ambiente da primeira escrita (C11, como na 7.1).
+
+    A entrada é reescrita (`started` de novo, com o ambiente atual) só quando os dois
+    ambientes dão `strict`; senão a retomada é recusada e nada é gravado.
+    """
+    if entry is None or entry.get("status") != STARTED:
+        return
+    recorded = entry.get("first_write_environment")
+    first = {str(k): str(v) for k, v in recorded.items()} if isinstance(recorded, Mapping) else {}
+    differing = environment_mode(first, context.current_environment, None)
+    if differing.name != STRICT:
+        raise InferenceEnvironmentError(
+            f"run {run_id} was started in another environment ({differing.reason}) — "
+            "resume it in the original environment (C11)"
+        )
 
 
 @dataclass(frozen=True)
@@ -314,6 +335,7 @@ class RunPermutationInference:
                 verified.append(self._reconfer(context, run.run_id, run.fold_index, entry))
                 continue
             self._refuse_partial(context, run.run_id, entry)
+            _refuse_started_elsewhere(context, run.run_id, entry)  # C11, como na 7.1
             pending.add(run.run_id)
         if not pending:
             return sorted(verified, key=lambda o: o.fold_index)
@@ -509,8 +531,17 @@ class RunPermutationInference:
             "vsn_rows": 0,
             "started_at": self._clock.now().isoformat(),
         }
-        self._manifest.record_run(context.cohort_id, run.run_id, {**entry, "status": STARTED})
+        # C5-8: tudo o que pode recusar a predição (o guardrail do `from_raw`, as famílias
+        # da VSN) é montado ANTES do write-ahead; o `started` só precede a escrita.
+        entries = self._entries(run, spec)
+        variables = sorted({v for weights in run.encoder_weights.values() for v in weights})
+        families = variable_families(context.partition, variables)
+        decisions = [
+            VsnDecisionEntry(decision, dict(weights))
+            for decision, weights in sorted(run.encoder_weights.items())
+        ]
         model_version, feature_set_name = self._identity_of(test_rows)
+        self._manifest.record_run(context.cohort_id, run.run_id, {**entry, "status": STARTED})
         permuted = self._permuted_persister(
             PersistPermutedPredictionsCommand(
                 run_id=run.run_id,
@@ -522,10 +553,9 @@ class RunPermutationInference:
                 permutation_algorithm=PERMUTATION_ALGORITHM,
                 partition_hash=context.partition_hash,
                 dataset_timestamps=timestamps,
-                entries=self._entries(run, spec),
+                entries=entries,
             )
         )
-        variables = sorted({v for weights in run.encoder_weights.values() for v in weights})
         vsn = self._vsn_persister(
             PersistVsnWeightsCommand(
                 run_id=run.run_id,
@@ -534,11 +564,8 @@ class RunPermutationInference:
                 feature_set_name=feature_set_name,
                 schema_version=self._schema_version(test_rows),
                 dataset_timestamps=timestamps,
-                variable_families=variable_families(context.partition, variables),
-                decisions=[
-                    VsnDecisionEntry(decision, dict(weights))
-                    for decision, weights in sorted(run.encoder_weights.items())
-                ],
+                variable_families=families,
+                decisions=decisions,
             )
         )
         self._manifest.record_run(

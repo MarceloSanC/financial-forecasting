@@ -552,3 +552,63 @@ def test_environment_errors_carry_the_7_1_codes() -> None:
         harness.run()
     with pytest.raises(ValueError, match="C13"):
         _harness().run(cross_environment_justification="sem o marcador")
+
+
+# -- montagem antes do write-ahead e retomada de `started` (C5-8) ------------------------
+
+
+def test_from_raw_refusal_happens_before_started() -> None:
+    """Grade com tamanho errado: o `from_raw` recusa antes de qualquer entrada no manifesto."""
+    harness = _harness()
+    seed = harness.spec.seeds[0]
+    bad = {
+        d: {h: grid[:-1] for h, grid in by_h.items()}
+        for d, by_h in harness.predictor._results[seed].runs[0].permuted[("price", 1)].items()
+    }
+    _with_runs(
+        harness,
+        seed,
+        lambda r: replace(
+            r,
+            runs=(
+                replace(r.runs[0], permuted={**r.runs[0].permuted, ("price", 1): bad}),
+                *r.runs[1:],
+            ),
+        ),
+    )
+    with pytest.raises(ValueError, match="raw_values"):
+        harness.run()
+    assert harness.manifest.recorded(_cohort_id(harness.spec)) is None
+    assert harness.rows("fact_permuted_predictions") == []
+
+
+def _started_entry(harness: _Harness, environment: dict[str, str]) -> None:
+    harness.manifest.record_run(
+        _cohort_id(harness.spec),
+        _run_id(11, 0),
+        {
+            "status": "started",
+            "checkpoint_sha256": harness.predictor._results[11].runs[0].checkpoint_sha256,
+            "first_write_environment": environment,
+        },
+    )
+
+
+def test_started_without_rows_in_another_environment_is_refused() -> None:
+    harness = _harness()
+    other = dict(InMemoryRuntimeEnvironmentProbe(torch_threads="4", torch="2.14.0+cpu").snapshot())
+    _started_entry(harness, other)
+    with pytest.raises(InferenceEnvironmentError, match=r"started in another environment.*C11"):
+        harness.run()
+    assert harness.rows("fact_permuted_predictions") == []
+    assert harness.predictor.calls == []
+
+
+def test_started_without_rows_in_the_same_environment_is_resumed() -> None:
+    harness = _harness()
+    _started_entry(harness, dict(harness.probe.snapshot()))
+    result = harness.run()
+    assert {o.status for o in result.outcomes} == {"written"}
+    document = harness.manifest.recorded(_cohort_id(harness.spec))
+    assert document is not None
+    assert document["runs"][_run_id(11, 0)]["status"] == "completed"  # type: ignore[index]
