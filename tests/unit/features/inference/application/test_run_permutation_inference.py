@@ -498,9 +498,7 @@ def test_lock_released_on_error() -> None:
 
 def test_artifact_changed_propagates() -> None:
     harness = _harness()
-    harness.run()
     cohort_id = _cohort_id(harness.spec)
-    harness.manifest.record_run(cohort_id, _run_id(11, 0), {"checkpoint_sha256": "z" * 64})
     harness.manifest = InMemoryAttributionManifest(
         {
             cohort_id: {
