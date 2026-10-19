@@ -662,3 +662,51 @@ def test_completed_only_after_rereading_the_silver() -> None:
     document = harness.manifest.recorded(_cohort_id(harness.spec))
     assert document is not None
     assert document["runs"][_run_id(11, 0)]["status"] == "started"  # type: ignore[index]
+
+
+# -- a retomada confere a entrada contra o plano e o teste da 7.1 (C5-4) -------------------
+
+
+def _tamper_entry(harness: _Harness, **changes: object) -> None:
+    cohort_id = _cohort_id(harness.spec)
+    document = harness.manifest.recorded(cohort_id)
+    assert document is not None
+    entry = dict(document["runs"][_run_id(11, 0)])  # type: ignore[index]
+    entry.update(changes)
+    harness.manifest.record_run(cohort_id, _run_id(11, 0), entry)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("k_p", K_P - 1),
+        ("permutation_seed", PERMUTATION_SEED + 1),
+        ("permutation_algorithm", "random_shuffle_v1"),
+        ("fold_index", 1),
+        ("n_decisions", len(_DECISIONS[0]) + 1),
+    ],
+)
+def test_reconfer_checks_the_entry_against_the_plan(field: str, value: object) -> None:
+    harness = _harness()
+    harness.run()
+    _tamper_entry(harness, **{field: value})
+    with pytest.raises(PartialAttributionError, match=rf"manifest {field}"):
+        harness.run()
+
+
+def _edit_rows(harness: _Harness, table: str, change: Any) -> None:  # noqa: ANN401
+    for key, rows in harness.repo._partitions.items():
+        if key[1] == table:
+            rows[:] = [change(r) if r["run_id"] == _run_id(11, 0) else r for r in rows]
+
+
+def test_reconfer_checks_the_vsn_family_and_decisions() -> None:
+    harness = _harness()
+    harness.run()
+    _edit_rows(
+        harness,
+        "fact_vsn_weights",
+        lambda r: {**r, "family": "price"} if r["variable"] == "rsi_14" else r,
+    )
+    with pytest.raises(PartialAttributionError, match="vsn family differs"):
+        harness.run()

@@ -245,6 +245,68 @@ def _refuse_started_elsewhere(
         )
 
 
+def _test_decisions(test_rows: Sequence[Row]) -> set[int]:
+    return {int(str(r["decision_idx"])) for r in test_rows}
+
+
+def _entry_problems(
+    context: _Context, entry: Mapping[str, object], *, fold_index: int, test_rows: Sequence[Row]
+) -> list[str]:
+    """A entrada contra as constantes do plano e o plano gerado (C5-4)."""
+    expected: dict[str, object] = {
+        "k_p": K_P,
+        "permutation_seed": PERMUTATION_SEED,
+        "permutation_algorithm": PERMUTATION_ALGORITHM,
+        "partition_hash": context.partition_hash,
+        "fold_index": fold_index,
+        "n_decisions": len(_test_decisions(test_rows)),
+    }
+    return [
+        f"manifest {key} {entry.get(key)!r} != {value!r}"
+        for key, value in expected.items()
+        if entry.get(key) != value
+    ]
+
+
+def _permuted_problems(
+    context: _Context,
+    entry: Mapping[str, object],
+    permuted: Sequence[Row],
+    *,
+    test_rows: Sequence[Row],
+) -> list[str]:
+    """Uma contagem igual à do teste da 7.1 por (família, k), as decisões e as colunas."""
+    counts: dict[tuple[str, int], int] = {}
+    for row in permuted:
+        key = (str(row["permuted_family"]), int(str(row["permutation_index"])))
+        counts[key] = counts.get(key, 0) + 1
+    expected = {(_IDENTITY_FAMILY, 0)} | {
+        (family, k) for family in context.partition for k in range(1, K_P + 1)
+    }
+    problems: list[str] = []
+    if set(counts) != expected or any(counts[key] != len(test_rows) for key in expected):
+        problems.append(
+            f"permuted counts {dict(sorted(counts.items()))}, {len(test_rows)} test rows each"
+        )
+    if {int(str(row["decision_idx"])) for row in permuted} != _test_decisions(test_rows):
+        problems.append("permuted decisions differ from the 7.1 test decisions")
+    for column in ("permutation_seed", "permutation_algorithm", "partition_hash"):
+        if any(row.get(column) != entry.get(column) for row in permuted):
+            problems.append(f"column {column} differs from the manifest")
+    return problems
+
+
+def _vsn_problems(context: _Context, vsn: Sequence[Row], *, test_rows: Sequence[Row]) -> list[str]:
+    """As decisões da VSN são as de teste e a família de cada variável é a da partição."""
+    problems: list[str] = []
+    if {int(str(row["decision_idx"])) for row in vsn} != _test_decisions(test_rows):
+        problems.append("vsn decisions differ from the 7.1 test decisions")
+    families = variable_families(context.partition, sorted({str(r["variable"]) for r in vsn}))
+    if any(row.get("family") != families[str(row["variable"])] for row in vsn):
+        problems.append("vsn family differs from the partition")
+    return problems
+
+
 @dataclass(frozen=True)
 class _Context:
     spec: CohortSpec
@@ -373,7 +435,15 @@ class RunPermutationInference:
             )
             donors_by_fold[run.fold_index] = plan.permutations
             if entry is not None and entry.get("status") == COMPLETED:
-                verified.append(self._reconfer(context, run.run_id, run.fold_index, entry))
+                verified.append(
+                    self._reconfer(
+                        context,
+                        run.run_id,
+                        run.fold_index,
+                        entry,
+                        test_rows=test_rows.get(run.run_id, []),
+                    )
+                )
                 continue
             self._refuse_partial(context, run.run_id, entry)
             _refuse_started_elsewhere(context, run.run_id, entry)  # C11, como na 7.1
@@ -448,10 +518,18 @@ class RunPermutationInference:
             )
 
     def _reconfer(
-        self, context: _Context, run_id: str, fold_index: int, entry: Mapping[str, object]
+        self,
+        context: _Context,
+        run_id: str,
+        fold_index: int,
+        entry: Mapping[str, object],
+        *,
+        test_rows: Sequence[Row],
     ) -> AttributionRunOutcome:
         """Run `completed`: as contagens e o plano gravados batem com o manifesto (C8)."""
-        permuted, vsn = self._check_rows(context, run_id, entry)
+        permuted, vsn = self._check_rows(
+            context, run_id, entry, fold_index=fold_index, test_rows=test_rows
+        )
         return AttributionRunOutcome(
             run_id=run_id,
             fold_index=fold_index,
@@ -468,36 +546,26 @@ class RunPermutationInference:
         )
 
     def _check_rows(
-        self, context: _Context, run_id: str, entry: Mapping[str, object]
+        self,
+        context: _Context,
+        run_id: str,
+        entry: Mapping[str, object],
+        *,
+        fold_index: int,
+        test_rows: Sequence[Row],
     ) -> tuple[list[Row], list[Row]]:
-        """A regra única de conferência das duas tabelas contra uma entrada (C8, C5-1).
+        """A regra única de conferência das duas tabelas contra uma entrada (C8, C5-1, C5-4).
 
-        Usada na retomada (`_reconfer`) e depois de gravar, antes do `completed`.
+        Usada na retomada (`_reconfer`) e depois de gravar, antes do `completed`. A entrada
+        é conferida contra as constantes do plano e o plano gerado; as linhas, contra a
+        entrada, o teste da 7.1 (contagem da identidade e decisões) e a partição (família
+        de cada variável da VSN).
         """
         permuted = self._attribution_rows(context.spec, _PERMUTED, run_id)
         vsn = self._attribution_rows(context.spec, _VSN, run_id)
-        counts: dict[tuple[str, int], int] = {}
-        for row in permuted:
-            key = (str(row["permuted_family"]), int(str(row["permutation_index"])))
-            counts[key] = counts.get(key, 0) + 1
-        identity = counts.get((_IDENTITY_FAMILY, 0), 0)
-        k_p = int(str(entry.get("k_p")))
-        expected = {(_IDENTITY_FAMILY, 0)} | {
-            (family, k) for family in context.partition for k in range(1, k_p + 1)
-        }
-        problems: list[str] = []
-        if identity == 0 or set(counts) != expected or any(counts[k] != identity for k in expected):
-            problems.append(f"permuted counts {dict(sorted(counts.items()))}")
-        plan = {
-            "permutation_seed": entry.get("permutation_seed"),
-            "permutation_algorithm": entry.get("permutation_algorithm"),
-            "partition_hash": entry.get("partition_hash"),
-        }
-        if entry.get("partition_hash") != context.partition_hash:
-            problems.append("manifest partition_hash differs from the command's partition")
-        for column, value in plan.items():
-            if any(row.get(column) != value for row in permuted):
-                problems.append(f"column {column} differs from the manifest")
+        problems = _entry_problems(context, entry, fold_index=fold_index, test_rows=test_rows)
+        problems += _permuted_problems(context, entry, permuted, test_rows=test_rows)
+        problems += _vsn_problems(context, vsn, test_rows=test_rows)
         if len(permuted) != entry.get("permuted_rows") or len(vsn) != entry.get("vsn_rows"):
             problems.append(
                 f"{len(permuted)} permuted / {len(vsn)} vsn rows, manifest "
@@ -638,7 +706,9 @@ class RunPermutationInference:
                 "left started (C5-1)"
             )
         # ADR 7.1.0004: o `completed` só depois de reler o silver pela regra do `_reconfer`
-        self._check_rows(context, run.run_id, completed)
+        self._check_rows(
+            context, run.run_id, completed, fold_index=run.fold_index, test_rows=test_rows
+        )
         self._manifest.record_run(context.cohort_id, run.run_id, completed)
         return AttributionRunOutcome(
             run_id=run.run_id,
