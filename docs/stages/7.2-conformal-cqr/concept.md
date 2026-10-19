@@ -720,6 +720,9 @@ profile_quantities = "nesting_crossing_seed_dispersion_tail_beta_reference_v1"
   volta com o status do `CalibrateConformal` (`undefined` ou `error`), e cada
   `error` soma 1 a `conformal_error_units`. Uma exceção do port (erro de
   comando, ou outra) propaga: é erro de programação, não de dado.
+  > ⚠️ Errata (2026-10-19): `conformal_error_units` conta unidades, não linhas. Cada
+  > unidade (fold, seed, horizonte) com `error` soma 1, como no CA15 (technical 7.2
+  > §7, `[decision]` C4-6).
 - **C10** Manifesto anterior a esta Stage (sem `conformal_parameters`) → não
   lê, como na 6.6 D6.
 
@@ -821,6 +824,12 @@ profile_quantities = "nesting_crossing_seed_dispersion_tail_beta_reference_v1"
   uma verificação única.
 - **Fonte:** instrução do orquestrador (prova só de geometria); precedente da
   Etapa E da 7.1. Sem ADR (reversível e sem efeito em contrato).
+
+> ⚠️ Errata (2026-10-19): além dos timestamps, das partições, dos fingerprints e do
+> manifesto, a Etapa G lê as features do painel do TFT, inclusive `close` e
+> `log_return_*` (preços e retornos passados). Elas servem para reproduzir o corte de
+> prefixo do `build_training_grid`. A prova nunca lê `value_*` nem `target_return`
+> (technical 7.2 §7, `[deviation]` C5-2).
 
 ### D9 — Onde a 7.4 obtém o intervalo conformal (A-C4)
 - **O quê:** o agrupamento calib/teste tem uma definição só, no
