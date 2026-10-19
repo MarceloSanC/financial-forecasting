@@ -36,6 +36,17 @@ def _check_int(value: object, *, field: str, minimum: int) -> None:
         )
 
 
+def _check_fold(fold_index: object) -> None:
+    """`0 <= fold_index < 1000`: com fold ≥ 1000, (semente s, fold 1000) e (s + 1, fold 0)
+    dariam o mesmo gerador (C4-2)."""
+    _check_int(fold_index, field="fold_index", minimum=0)
+    if isinstance(fold_index, int) and fold_index >= _FOLD_STRIDE:
+        raise ValueError(
+            f"FamilyPermutationPlan.fold_index must be < {_FOLD_STRIDE} (the generator seed is "
+            f"permutation_seed * {_FOLD_STRIDE} + fold_index), got {fold_index!r}"
+        )
+
+
 def _fisher_yates(rng: random.Random, n: int) -> tuple[int, ...]:
     positions = list(range(n))
     for i in range(n - 1, 0, -1):
@@ -57,7 +68,7 @@ class FamilyPermutationPlan:
     def __post_init__(self) -> None:
         _check_int(self.permutation_seed, field="permutation_seed", minimum=0)
         _check_int(self.k_p, field="k_p", minimum=1)
-        _check_int(self.fold_index, field="fold_index", minimum=0)
+        _check_fold(self.fold_index)
         _check_int(self.n_decisions, field="n_decisions", minimum=1)
         object.__setattr__(self, "permutations", tuple(tuple(p) for p in self.permutations))
         if len(self.permutations) != self.k_p:
@@ -80,7 +91,7 @@ class FamilyPermutationPlan:
         """O plano do fold pelo `fisher_yates_random_random_v1` (ver docstring do módulo)."""
         _check_int(permutation_seed, field="permutation_seed", minimum=0)
         _check_int(k_p, field="k_p", minimum=1)
-        _check_int(fold_index, field="fold_index", minimum=0)
+        _check_fold(fold_index)
         _check_int(n_decisions, field="n_decisions", minimum=1)
         rng = random.Random(
             permutation_seed * _FOLD_STRIDE + fold_index

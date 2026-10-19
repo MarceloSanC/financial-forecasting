@@ -128,3 +128,19 @@ def test_raw_construction_with_non_permutation_refused(
         FamilyPermutationPlan(
             permutation_seed=130, k_p=1, fold_index=0, n_decisions=5, permutations=permutations
         )
+
+
+@pytest.mark.parametrize("fold_index", [1000, 1001, 10**6])
+def test_fold_index_at_or_above_the_stride_refused(fold_index: int) -> None:
+    """C4-2: seed 130 fold 1000 e seed 131 fold 0 dariam o mesmo gerador."""
+    with pytest.raises(ValueError, match="fold_index must be < 1000"):
+        _plan(fold_index=fold_index)
+    with pytest.raises(ValueError, match="fold_index must be < 1000"):
+        FamilyPermutationPlan(
+            permutation_seed=130,
+            k_p=1,
+            fold_index=fold_index,
+            n_decisions=5,
+            permutations=((0, 1, 2, 3, 4),),
+        )
+    assert _plan(fold_index=999).fold_index == 999  # noqa: PLR2004
