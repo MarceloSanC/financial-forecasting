@@ -55,11 +55,16 @@ from financial_forecasting.features.inference.application.use_cases.run_inferenc
     InferenceEnvironmentError,
     ReproductionError,
     UnknownRunError,
+    check_normalizer_scale,
+    check_prediction,
+    environment_mode,
+    float_cell,
+    recorded_threads,
+    validate_justification,
 )
 from financial_forecasting.features.inference.domain.services.reproduction_policy import (
     ReproductionMode,
     compare_reproduction,
-    reproduction_mode,
 )
 from financial_forecasting.features.inference.domain.value_objects.permutation_plan import (
     K_P,
@@ -68,9 +73,7 @@ from financial_forecasting.features.inference.domain.value_objects.permutation_p
     FamilyPermutationPlan,
 )
 from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
-    CODE_KEYS,
     DIRTY_KEY,
-    THREADS_KEY,
 )
 from financial_forecasting.features.modeling.application.use_cases.predict_tft_attribution_from_checkpoints import (  # noqa: E501
     PredictTftAttributionCommand,
@@ -124,8 +127,6 @@ _TEST = "test"
 _IDENTITY_FAMILY = "none"
 _VERIFIED = "verified"
 _WRITTEN = "written"
-FINDING_TAG = "[finding]"
-_IGNORED_KEYS = frozenset({*CODE_KEYS, DIRTY_KEY})
 
 Row = Mapping[str, object]
 
@@ -169,36 +170,6 @@ class RunPermutationInferenceResult:
     cohort_id: str
     partition_hash: str
     outcomes: tuple[AttributionRunOutcome, ...]
-
-
-def _float(value: object) -> float:
-    # célula numérica do silver; `float(str(v))` mudaria um np.float32 e o |d| = 0 bit a bit
-    return float(value)  # type: ignore[arg-type]
-
-
-def _validate_justification(justification: str | None) -> str | None:
-    """A justificativa de `--cross-environment`, quando dada, cita o `[finding]`."""
-    if justification is None:
-        return None
-    if not justification.strip() or FINDING_TAG not in justification:
-        raise ValueError(
-            "--cross-environment needs a non-empty justification citing the diagnosed "
-            f"{FINDING_TAG}"
-        )
-    return justification
-
-
-def _recorded_threads(environment: Mapping[str, str], cohort_id: str) -> int:
-    value = environment.get(THREADS_KEY)
-    try:
-        threads = int(str(value))
-    except ValueError:
-        threads = 0
-    if threads < 1:
-        raise InferenceEnvironmentError(
-            f"cohort {cohort_id}: recorded {THREADS_KEY}={value!r} is not a positive integer"
-        )
-    return threads
 
 
 def variable_families(
@@ -258,7 +229,7 @@ class RunPermutationInference:
             raise CohortNotFrozenError(
                 f"cohort {spec.name!r} r{spec.revision} is not frozen — nothing to attribute"
             )
-        justification = _validate_justification(command.cross_environment_justification)
+        justification = validate_justification(command.cross_environment_justification)
         partition = {family: tuple(f) for family, f in command.family_partition.items()}
         partition_hash = FamilyPartitionHash.compute(
             hasher=self._hasher, feature_set_hash=spec.feature_set_hash, partition=partition
@@ -272,14 +243,15 @@ class RunPermutationInference:
             current = dict(self._probe.snapshot())
             if current.get(DIRTY_KEY) == "true":
                 raise InferenceEnvironmentError(
-                    "tracked uncommitted changes in src/, uv.lock or the cohort file — commit first"
+                    "tracked uncommitted changes in src/, uv.lock or the cohort file — "
+                    "commit first (C11)"
                 )
             recorded_environment = self._ledger.environment(cohort_id)
             if recorded_environment is None:
                 raise InferenceEnvironmentError(
-                    f"cohort {cohort_id} has no recorded environment — run the cohort first"
+                    f"cohort {cohort_id} has no recorded environment — run the cohort first (C11)"
                 )
-            _recorded_threads(recorded_environment, cohort_id)
+            recorded_threads(recorded_environment, cohort_id)
             outcomes: list[AttributionRunOutcome] = []
             for seed in spec.seeds:
                 context = _Context(
@@ -351,16 +323,14 @@ class RunPermutationInference:
                 spec=spec,
                 seed=context.seed,
                 allowed=allowed,
-                num_threads=_recorded_threads(context.cohort_environment, context.cohort_id),
+                num_threads=recorded_threads(context.cohort_environment, context.cohort_id),
                 donors_by_fold=donors_by_fold,
                 family_partition=context.partition,
             )
         )
-        returned = {run.run_id for run in prediction.runs}
-        if prediction.cohort_id != context.cohort_id or returned != set(allowed):
-            raise UnknownRunError(
-                f"predictor answered runs {sorted(returned)}; asked for {sorted(allowed)}"
-            )
+        check_prediction(
+            prediction, cohort_id=context.cohort_id, seed=context.seed, allowed=allowed
+        )  # C6/C10: seed, run_id repetido e sha256 por run
         written = [
             self._write_run(
                 context,
@@ -471,11 +441,8 @@ class RunPermutationInference:
     # -- escrita de um run -----------------------------------------------------------
 
     def _mode(self, context: _Context) -> ReproductionMode:
-        return reproduction_mode(
-            context.cohort_environment,
-            context.current_environment,
-            context.justification,
-            ignored_keys=_IGNORED_KEYS,
+        return environment_mode(
+            context.cohort_environment, context.current_environment, context.justification
         )
 
     def _write_run(  # noqa: PLR0913 — o run predito e o que a escrita precisa
@@ -495,13 +462,14 @@ class RunPermutationInference:
                 f"run {run.run_id}: predicted test decisions differ from the 7.1 silver "
                 f"({len(run.test_decisions)} vs {len(silver_decisions)}) (C3-4)"
             )
+        check_normalizer_scale(run.run_id, run.normalizer_scale)  # C7
         mode = self._mode(context)
         reference = {
             (
                 int(str(r["decision_idx"])),
                 int(str(r["horizon"])),
-                _float(r["quantile_level"]),
-            ): _float(r["value_raw"])
+                float_cell(r["quantile_level"]),
+            ): float_cell(r["value_raw"])
             for r in test_rows
         }
         predicted = {

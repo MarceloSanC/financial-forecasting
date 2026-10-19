@@ -29,7 +29,9 @@ from financial_forecasting.features.analytics_store.domain.value_objects.quantil
 )
 from financial_forecasting.features.inference.application.use_cases.run_inference import (
     ArtifactChangedError,
+    InferenceEnvironmentError,
     ReproductionError,
+    UnknownRunError,
 )
 from financial_forecasting.features.inference.application.use_cases.run_permutation_inference import (  # noqa: E501
     PartialAttributionError,
@@ -506,3 +508,47 @@ def test_artifact_changed_propagates() -> None:
     )
     with pytest.raises(ArtifactChangedError, match="C7"):
         harness.run()
+
+
+# -- regras compartilhadas com a 7.1 (C5-9) ------------------------------------------------
+
+
+def _with_runs(harness: _Harness, seed: int, change: Any) -> None:  # noqa: ANN401
+    result = harness.predictor._results[seed]
+    harness.predictor.set_result(seed, change(result))
+
+
+def test_normalizer_scale_zero_is_a_reproduction_error() -> None:
+    harness = _harness()
+    seed = harness.spec.seeds[0]
+    _with_runs(
+        harness,
+        seed,
+        lambda r: replace(r, runs=(replace(r.runs[0], normalizer_scale=0.0), *r.runs[1:])),
+    )
+    with pytest.raises(ReproductionError, match=r"normalizer scale 0\.0 unusable \(C7\)"):
+        harness.run()
+    assert harness.rows("fact_permuted_predictions") == []
+    assert harness.manifest.recorded(_cohort_id(harness.spec)) is None
+
+
+@pytest.mark.parametrize("damage", ["seed", "duplicated-run"])
+def test_prediction_is_checked_like_the_7_1(damage: str) -> None:
+    harness = _harness()
+    seed = harness.spec.seeds[0]
+    if damage == "seed":
+        _with_runs(harness, seed, lambda r: replace(r, seed=seed + 100))
+    else:
+        _with_runs(harness, seed, lambda r: replace(r, runs=(*r.runs, r.runs[0])))
+    with pytest.raises(UnknownRunError, match="C6"):
+        harness.run()
+    assert harness.rows("fact_permuted_predictions") == []
+
+
+def test_environment_errors_carry_the_7_1_codes() -> None:
+    harness = _harness()
+    harness.probe = InMemoryRuntimeEnvironmentProbe(torch_threads="4", code_dirty="true")
+    with pytest.raises(InferenceEnvironmentError, match="C11"):
+        harness.run()
+    with pytest.raises(ValueError, match="C13"):
+        _harness().run(cross_environment_justification="sem o marcador")

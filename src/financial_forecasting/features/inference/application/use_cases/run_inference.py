@@ -38,7 +38,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
     PersistPredictionsCommand,
@@ -93,7 +93,6 @@ if TYPE_CHECKING:
     from financial_forecasting.features.modeling.application.dtos.cohort_spec import CohortSpec
     from financial_forecasting.features.modeling.application.use_cases.predict_tft_from_checkpoints import (  # noqa: E501
         CheckpointRunPrediction,
-        PredictTftFromCheckpointsResult,
     )
     from financial_forecasting.features.modeling.application.use_cases.resolve_tft_checkpoints import (  # noqa: E501
         CheckpointResolution,
@@ -178,14 +177,17 @@ class RunInferenceResult:
     outcomes: tuple[InferenceRunOutcome, ...]
 
 
-def _mode(
+def environment_mode(
     reference: Mapping[str, str], current: Mapping[str, str], justification: str | None
 ) -> ReproductionMode:
-    """Modo do domain com as chaves de código e de sujeira ignoradas (I6)."""
+    """Modo do domain com as chaves de código e de sujeira ignoradas (I6).
+
+    Compartilhado com o `RunPermutationInference` (7.3): uma regra só de ambiente.
+    """
     return reproduction_mode(reference, current, justification, ignored_keys=_IGNORED_KEYS)
 
 
-def _validate_justification(justification: str | None) -> str | None:
+def validate_justification(justification: str | None) -> str | None:
     """C13: a justificativa, quando dada, é não vazia e cita o `[finding]` do diagnóstico."""
     if justification is None:
         return None
@@ -197,7 +199,7 @@ def _validate_justification(justification: str | None) -> str | None:
     return justification
 
 
-def _recorded_threads(environment: Mapping[str, str], cohort_id: str) -> int:
+def recorded_threads(environment: Mapping[str, str], cohort_id: str) -> int:
     """`torch_threads` gravado pelo cohort, inteiro >= 1; senão o ambiente é inválido (C11)."""
     value = environment.get(THREADS_KEY)
     try:
@@ -211,7 +213,31 @@ def _recorded_threads(environment: Mapping[str, str], cohort_id: str) -> int:
     return threads
 
 
-def _float(value: object) -> float:
+class _PredictedRun(Protocol):
+    @property
+    def run_id(self) -> str: ...
+    @property
+    def checkpoint_sha256(self) -> str: ...
+
+
+class PredictionLike(Protocol):
+    """O que `check_prediction` lê de um resultado de predição (7.1 ou atribuição 7.3)."""
+
+    @property
+    def cohort_id(self) -> str: ...
+    @property
+    def seed(self) -> int: ...
+    @property
+    def runs(self) -> Sequence[_PredictedRun]: ...
+
+
+def check_normalizer_scale(run_id: str, scale: float) -> None:
+    """C7: a escala do normalizador é finita e positiva (senão |d|/s não existe)."""
+    if not (math.isfinite(scale) and scale > 0):
+        raise ReproductionError(f"run {run_id}: normalizer scale {scale!r} unusable (C7)")
+
+
+def float_cell(value: object) -> float:
     # célula numérica do silver; `float(str(v))` mudaria um np.float32 e o |Δ| = 0 bit a bit
     return float(value)  # type: ignore[arg-type]
 
@@ -265,7 +291,7 @@ class RunInference:
             raise CohortNotFrozenError(
                 f"cohort {spec.name!r} r{spec.revision} is not frozen — nothing to infer (C1)"
             )
-        justification = _validate_justification(command.cross_environment_justification)
+        justification = validate_justification(command.cross_environment_justification)
         cohort_id = spec.cohort_id(
             CohortHash.compute(hasher=self._hasher, payload=spec.hash_payload())
         )
@@ -283,7 +309,7 @@ class RunInference:
                 raise InferenceEnvironmentError(
                     f"cohort {cohort_id} has no recorded environment — run the cohort first (C11)"
                 )
-            _recorded_threads(recorded_environment, cohort_id)  # C11 — antes do resolver
+            recorded_threads(recorded_environment, cohort_id)  # C11 — antes do resolver
             document = self._manifest.recorded(cohort_id) or {}
             runs = document.get("runs", {})
             recorded_runs: Mapping[str, Mapping[str, object]] = (
@@ -351,10 +377,10 @@ class RunInference:
                 seed=seed,
                 allowed=allowed,
                 partitions=_PARTITIONS,
-                num_threads=_recorded_threads(cohort_environment, cohort_id),
+                num_threads=recorded_threads(cohort_environment, cohort_id),
             )
         )
-        _check_prediction(prediction, cohort_id=cohort_id, seed=seed, allowed=allowed)
+        check_prediction(prediction, cohort_id=cohort_id, seed=seed, allowed=allowed)
         context = _SeedContext(
             spec=spec,
             cohort_id=cohort_id,
@@ -425,9 +451,8 @@ class RunInference:
     ) -> InferenceRunOutcome:
         spec = context.spec
         center, scale = run.normalizer_center, run.normalizer_scale
-        if not (math.isfinite(scale) and scale > 0):
-            raise ReproductionError(f"run {run.run_id}: normalizer scale {scale!r} unusable (C7)")
-        test_mode = _mode(
+        check_normalizer_scale(run.run_id, scale)
+        test_mode = environment_mode(
             context.cohort_environment, context.current_environment, context.justification
         )
         reproduction = _reproduce_test(
@@ -447,13 +472,15 @@ class RunInference:
             if isinstance(recorded_first, Mapping):
                 first_environment = {str(k): str(v) for k, v in recorded_first.items()}
             if entry.get("status") == STARTED:
-                differing = _mode(first_environment, context.current_environment, None)
+                differing = environment_mode(first_environment, context.current_environment, None)
                 if differing.name != STRICT:
                     raise InferenceEnvironmentError(
                         f"run {run.run_id} was started in another environment "
                         f"({differing.reason}) — resume it in the original environment (C11)"
                     )
-        calib_mode = _mode(first_environment, context.current_environment, context.justification)
+        calib_mode = environment_mode(
+            first_environment, context.current_environment, context.justification
+        )
         base_entry = self._entry(
             context,
             run=run,
@@ -599,8 +626,8 @@ class RunInference:
         )
 
 
-def _check_prediction(
-    prediction: PredictTftFromCheckpointsResult,
+def check_prediction(
+    prediction: PredictionLike,
     *,
     cohort_id: str,
     seed: int,
@@ -649,7 +676,7 @@ def _present_by_decision(
     by_decision: dict[int, dict[tuple[int, float], Row]] = {}
     for row in present:
         decision = _int(row["decision_idx"])
-        key = (_int(row["horizon"]), _float(row["quantile_level"]))
+        key = (_int(row["horizon"]), float_cell(row["quantile_level"]))
         rows = by_decision.setdefault(decision, {})
         if key in rows:
             raise ReproductionError(
@@ -676,7 +703,7 @@ def _reproduce_test(  # noqa: PLR0913 — o run, as linhas de referência e o cr
 ) -> ReproductionComparison:
     """C7: mesmas chaves `(decisão, horizonte, nível)` e valores dentro do modo (I5)."""
     reference: dict[_Key, float] = {
-        (_int(r["decision_idx"]), _int(r["horizon"]), _float(r["quantile_level"])): _float(
+        (_int(r["decision_idx"]), _int(r["horizon"]), float_cell(r["quantile_level"])): float_cell(
             r["value_raw"]
         )
         for r in reference_rows
@@ -745,7 +772,7 @@ def _verify_decision(  # noqa: PLR0913 — a linha inteira e o critério
                 problems.append("target_timestamp_utc")
             if not within_mode(
                 new=forecast.raw_values[position],
-                ref=_float(row["value_raw"]),
+                ref=float_cell(row["value_raw"]),
                 center=center,
                 scale=scale,
                 mode=mode,
@@ -753,7 +780,7 @@ def _verify_decision(  # noqa: PLR0913 — a linha inteira e o critério
                 problems.append("value_raw")
             if not within_mode(
                 new=forecast.guardrail_values[position],
-                ref=_float(row["value_guardrail"]),
+                ref=float_cell(row["value_guardrail"]),
                 center=center,
                 scale=scale,
                 mode=mode,
