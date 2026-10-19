@@ -134,11 +134,24 @@ def _fact(  # noqa: PLR0913 — a linha longa do silver
     }
 
 
-def _grids(
-    prereg: Preregistration, model: str, seed: int | None, h: int, d: int
+_DEGENERATE_EVERY = 23  # teste do candidato em d % 23 == 1: grade quase constante (TA-4)
+_DEGENERATE_STEP = 1e-14  # níveis distintos (não degenerado com tolerância 0) e dentro de 1e-12
+
+
+def _grids(  # noqa: PLR0913 — o ponto do silver
+    prereg: Preregistration, model: str, seed: int | None, h: int, d: int, split: str = "test"
 ) -> tuple[list[float], list[float]]:
-    """(grade crua, grade do guardrail) do ponto; crua cruzada no candidato em d % 3 == 0."""
+    """(grade crua, grade do guardrail) do ponto.
+
+    No candidato: crua cruzada em d % 3 == 0; no teste em d % 23 == 1, a grade é quase
+    constante (passos de 1e-14), degenerada pela tolerância do plano (1e-12) e não pela
+    tolerância zero (I14: o n conformal é o da máscara nativa).
+    """
     guardrail = _quantiles(model, seed, h, d + h)
+    if model == prereg.candidate and split == "test" and d % _DEGENERATE_EVERY == 1:
+        base = guardrail[3]
+        flat = [base + k * _DEGENERATE_STEP for k in range(len(guardrail))]
+        return flat, flat
     raw = list(guardrail)
     if model == prereg.candidate and d % _CROSSED_EVERY == 0:
         raw[1], raw[3] = raw[3], raw[1]  # o q0,10 cru acima do q0,5: grade cruzada
@@ -179,7 +192,7 @@ def _write_silver(
                 for fold, split, decision in points:
                     if (seed, horizon, decision) == drop and split == "test":
                         continue
-                    raw, guardrail = _grids(prereg, model, seed, horizon, decision)
+                    raw, guardrail = _grids(prereg, model, seed, horizon, decision, split)
                     run_id = f"{sweep}-{model}-s{seed}-{fold}"
                     applied = int(raw != guardrail)
                     facts.extend(
@@ -359,6 +372,8 @@ def test_conformal_n_evaluated_equals_native_n_observed(scenario: _Scenario) -> 
     assert rows
     for row in rows:
         assert row["n_evaluated"] == _native(scenario.r2, candidate, row)["n_observed"], row
+        # TA-4 (mutante RG03): há pontos degenerados pela tolerância do plano
+        assert row["n_evaluated"] < row["n_points"], row
     by_seed: dict[tuple[object, ...], list[float]] = {}
     for row in rows:
         key = (row["horizon"], row["variant"], row["kind"], row["lower_level"], row["band_level"])
@@ -477,7 +492,7 @@ def _calibration_set(
     realized = _realized()
     points = []
     for decision in _CALIB[fold]:
-        grid = _grids(plan, plan.candidate, seed, horizon, decision)[column]
+        grid = _grids(plan, plan.candidate, seed, horizon, decision, "calib")[column]
         points.append(
             CalibrationPoint(
                 decision_timestamp=_session(decision),
@@ -533,12 +548,13 @@ def test_real_use_case_through_the_composition_root(scenario: _Scenario) -> None
                 for tail in (expected.lower, expected.upper):
                     row = rows[tail.tail]
                     assert row["status"] == "ok"
-                    assert (row["n"], row["rank"], row["infinite"], row["tail_level"]) == (
+                    assert (row["n"], row["rank"], row["infinite"]) == (
                         tail.n,
                         tail.rank,
                         tail.infinite,
-                        tail.level,
                     )
+                    # TA-2 (mutante M11): o literal do par, não o objeto do calibrador
+                    assert row["tail_level"] == {"lower": 0.1, "upper": 0.9}[tail.tail]
                     assert math.isfinite(tail.correction)
                     assert row["correction"] == tail.correction
                 differs_from_raw += raw.lower.correction != expected.lower.correction
