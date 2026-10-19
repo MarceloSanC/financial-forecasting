@@ -784,7 +784,7 @@ class PfTftTrainer:
         horizons: Sequence[int],
         quantile_levels: Sequence[float],
         batch_size: int,
-        accelerator: str = "cpu",
+        accelerator: str,
     ) -> dict[int, dict[int, tuple[float, ...]]]:
         """Grade crua por (decisão x horizonte), recortada pelo decodificador real.
 

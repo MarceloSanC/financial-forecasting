@@ -202,3 +202,40 @@ def test_gpu_fit_smoke(tmp_path: Path) -> None:
     kwargs["params"] = replace(_PARAMS, max_epochs=1)
     result = PfTftTrainer(accelerator="gpu").train_and_predict(**kwargs)
     assert result.grids
+
+
+def test_gpu_instance_passes_gpu_in_every_attribution_pass(
+    trained: TrainedCheckpoint, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C3-1: raw, identidade e cada (família, k) predizem com o accelerator da instância."""
+    original = TemporalFusionTransformer.predict
+    seen: list[str] = []
+
+    def predict_spy(self: Any, *args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        seen.append(kwargs["trainer_kwargs"]["accelerator"])
+        kwargs["trainer_kwargs"] = {**kwargs["trainer_kwargs"], "accelerator": "cpu"}
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(TemporalFusionTransformer, "predict", predict_spy)
+    n = len(trained.calib_decisions)
+    donors = (tuple(reversed(range(n))), (*range(1, n), 0))
+    families = {"price": ("close_return",), "technical": ("rsi_14",)}
+    prediction = PfTftTrainer(accelerator="gpu").predict_attribution_from_checkpoint(
+        checkpoint_path=trained.path,
+        expected_sha256=trained.sha256,
+        feature_names=trained.feature_names,
+        known_feature_names=trained.known_feature_names,
+        rows=trained.rows,
+        target=trained.target,
+        decision_indices=trained.calib_decisions,
+        max_horizon=trained.max_horizon,
+        horizons=trained.horizons,
+        quantile_levels=trained.quantile_levels,
+        batch_size=trained.batch_size,
+        num_threads=trained.num_threads,
+        permuted_columns=families,
+        donors=donors,
+    )
+    # 1 raw + 1 identidade + 2 famílias x 2 permutações
+    assert seen == ["gpu"] * (2 + len(families) * len(donors))
+    assert prediction.settings["accelerator"] == "gpu"
