@@ -4,8 +4,9 @@ Reusa as funções donas do use case `CalibrateConformal` (`validate_command` e
 `calibration_set_for`, o padrão do `merge_run_entry` da 7.1): erros de comando e
 motivos de `undefined`/`error` são exatamente os do real. Não calibra: em toda unidade
 `ok`, as duas correções são **zero** e os limites são os quantis nativos do par
-(`grid[tau_lo]`, `grid[tau_hi]`). Não define nem importa o calibrador (guarda AST em
-`tests/architecture/test_stage_7_2_regression_guards.py`).
+(`grid[tau_lo]`, `grid[tau_hi]`). O posto é o do real: `split_conformal_rank(n,
+alpha)` na variante sem pesos, `None` no NexCP (paridade, TA-3). Não define nem
+importa o calibrador (guarda AST em `tests/architecture/test_stage_7_2_regression_guards.py`).
 
 Configuração: `force_status[(fold, seed, horizon)] = (status, reason)` força o status de
 uma unidade; `raises` faz a chamada erguer (a exceção do port que o `RefreshGold`
@@ -30,19 +31,20 @@ from financial_forecasting.features.inference.domain.services.conformal_calibrat
     ConformalVariant,
     TailCorrection,
     exact_level,
+    split_conformal_rank,
 )
 
 _NEXCP = ConformalVariant.NEXCP.value
 
 
-def _zero_tail(tail: str, level: float, n: int) -> TailCorrection:
+def _zero_tail(tail: str, level: float, n: int, variant: str) -> TailCorrection:
     alpha = exact_level(level) if tail == "lower" else 1 - exact_level(level)
     return TailCorrection(
         tail=tail,  # type: ignore[arg-type]
         level=level,
         alpha=alpha,
         n=n,
-        rank=None,
+        rank=None if variant == _NEXCP else split_conformal_rank(n, alpha),
         correction=0.0,
         infinite=False,
     )
@@ -96,8 +98,8 @@ class FakeConformalCalibration:
             rho=rho,
             status=UnitStatus.OK,
             reason=None,
-            lower=_zero_tail("lower", pair[0], n),
-            upper=_zero_tail("upper", pair[1], n),
+            lower=_zero_tail("lower", pair[0], n, variant),
+            upper=_zero_tail("upper", pair[1], n, variant),
             lower_beta=None,
             upper_beta=None,
             test_lower=tuple(point.grid[pair[0]] for point in unit.test),
