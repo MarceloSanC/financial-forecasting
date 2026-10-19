@@ -11,13 +11,16 @@ spec confirmatório de base, nunca do arquivo de ablação (I4).
 Antes de treinar qualquer coisa, na ordem:
 
 1. spec de ablação congelado (seeds e `torch_build`) e base congelada
-   (`CohortNotFrozenError`) — antes do lock e do probe (C3);
+   (`CohortNotFrozenError`), declarações da ablação contra a base e a registry
+   (`check_ablation_declarations`), partição da ablação diferente da confirmatória e
+   device do treinador injetado igual ao declarado (`AblationDeclarationError`) — tudo
+   antes do lock e do probe (C3);
 2. lock de escritor único (I12, liberado em `finally`);
 3. declarações da BASE (`check_cohort_declarations`, com o device da base: a base
    `cpu` passa com a ablação em `rocm`);
-4. guarda de hardware observado (I5, ADR 7.3.0004 item 3): fora do `cpu`, GPU
-   disponível e HIP não vazio; em qualquer device, a chave `torch` do probe igual ao
-   `torch_build` declarado (`EnvironmentMismatchError`);
+4. guarda de hardware observado (I5, ADR 7.3.0004 item 3): o `device` do probe igual
+   ao declarado; fora do `cpu`, GPU disponível e HIP não vazio; em qualquer device, a
+   chave `torch` do probe igual ao `torch_build` declarado (`EnvironmentMismatchError`);
 5. ambiente gravado na 1ª execução e igual nas seguintes (I5).
 
 A classificação por unidade (ledger, silver completo, parcial, ausente) é a da máquina
@@ -31,6 +34,9 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
+from financial_forecasting.features.modeling.application.dtos.ablation_cohort_spec import (
+    AblationDeclarationError,
+)
 from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
     CPU_DEVICE,
     GPU_KEYS,
@@ -49,6 +55,8 @@ from financial_forecasting.features.modeling.application.use_cases.cohort_unit_r
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     TrainTftCommand,
     TrainTftResult,
+    registry_family_partition,
+    tft_feature_set_hash,
 )
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import ScopeSpec
 from financial_forecasting.shared.domain.value_objects.cohort_hash import CohortHash
@@ -75,6 +83,7 @@ if TYPE_CHECKING:
     )
 
 _TORCH_KEY = "torch"
+_DEVICE_KEY = "device"
 
 
 def ablation_unit_key(configuration: str, seed: int) -> str:
@@ -89,6 +98,36 @@ def ablation_model_keys(spec: AblationCohortSpec) -> dict[str, tuple[tuple[str, 
         for configuration in spec.configurations
         for seed in spec.seeds
     }
+
+
+def check_ablation_declarations(
+    spec: AblationCohortSpec, *, base: CohortSpec, hasher: Hasher
+) -> None:
+    """C2: a base é a declarada (hash e id) e a partição e os subconjuntos são da registry."""
+    base_hash = CohortHash.compute(hasher=hasher, payload=base.hash_payload())
+    if base_hash.value != spec.base_cohort_hash:
+        raise AblationDeclarationError(
+            f"base cohort {spec.base_cohort_file} hashes to {base_hash.value}, but the "
+            f"ablation file declares {spec.base_cohort_hash} (C2)"
+        )
+    if base.cohort_id(base_hash) != spec.base_cohort_id:
+        raise AblationDeclarationError(
+            f"base cohort id is {base.cohort_id(base_hash)!r}, but the ablation file declares "
+            f"{spec.base_cohort_id!r} (C2)"
+        )
+    registry = registry_family_partition()
+    if dict(spec.family_partition) != registry:
+        raise AblationDeclarationError(
+            "the ablation [partition] differs from the registry family partition (C2)"
+        )
+    for configuration in spec.configurations:
+        expected = tft_feature_set_hash(configuration.excluded_family)
+        if configuration.feature_set_hash != expected:
+            raise AblationDeclarationError(
+                f"configurations.{configuration.name}.feature_set_hash is "
+                f"{configuration.feature_set_hash}, but the registry subset hashes to "
+                f"{expected} (C2)"
+            )
 
 
 @dataclass(frozen=True)
@@ -131,6 +170,7 @@ class RunAblationCohort:
         pipeline_version: str,
         schema_version: int,
         base_supported_device: str,
+        trainer_device: str,
     ) -> None:
         self._store = store
         self._hasher = hasher
@@ -144,6 +184,7 @@ class RunAblationCohort:
         self._pipeline_version = pipeline_version
         self._schema_version = schema_version
         self._base_supported_device = base_supported_device
+        self._trainer_device = trainer_device
 
     def __call__(self, command: RunAblationCohortCommand) -> RunAblationCohortResult:
         spec, base = command.spec, command.base
@@ -154,6 +195,20 @@ class RunAblationCohort:
             )
         if not base.is_frozen():
             raise CohortNotFrozenError(f"base cohort {base.name!r} is not frozen")
+        # C2: a base é a declarada e a partição é a da registry (C2-6: também aqui, não só
+        # no loader); I3: a partição da ablação nunca é a do confirmatório (C2-1); o
+        # treinador injetado roda no device declarado (C2-2). Tudo antes do lock.
+        check_ablation_declarations(spec, base=base, hasher=self._hasher)
+        if spec.feature_set_name == base.feature_set_name:
+            raise AblationDeclarationError(
+                f"ablation feature_set_name {spec.feature_set_name!r} equals the base's — the "
+                "LOCO rows would land in the confirmatory partition (I3)"
+            )
+        if spec.device != self._trainer_device:
+            raise AblationDeclarationError(
+                f"device {spec.device!r} declared, but the trainer runs on "
+                f"{self._trainer_device!r}"
+            )
         cohort_hash = CohortHash.compute(hasher=self._hasher, payload=spec.hash_payload())
         cohort_id = spec.cohort_id(cohort_hash)
         scope = ScopeSpec(
@@ -195,6 +250,11 @@ class RunAblationCohort:
         """I5: o hardware e o build OBSERVADOS são os declarados, antes de treinar."""
         snapshot = dict(self._probe.snapshot())
         problems: list[str] = []
+        if snapshot.get(_DEVICE_KEY) != spec.device:
+            problems.append(
+                f"probe device {snapshot.get(_DEVICE_KEY)!r} differs from the declared "
+                f"{spec.device!r}"
+            )
         if spec.device != CPU_DEVICE:
             available_key, _, hip_key = GPU_KEYS
             if snapshot.get(available_key) != "true":

@@ -20,12 +20,15 @@ class InMemoryCohortProgressLedger:
     def __init__(self, *, owner: str = "pid=1 host=fake") -> None:
         self._owner = owner
         self._locked = False
+        # Só do fake: quantas vezes o lock foi pedido (prova "recusado antes do lock").
+        self.acquire_count = 0
         self._units: dict[str, dict[str, dict[str, int]]] = {}
         self._environment: dict[str, dict[str, str]] = {}
         self._started_at: dict[str, str] = {}
         self._sweeps: dict[str, dict[str, dict[str, object]]] = {}
 
     def acquire_writer(self, *, break_stale: bool = False) -> None:
+        self.acquire_count += 1
         if self._locked and not break_stale:
             raise CohortRunLockedError(f"writer lock already held by {self._owner}")
         self._locked = True

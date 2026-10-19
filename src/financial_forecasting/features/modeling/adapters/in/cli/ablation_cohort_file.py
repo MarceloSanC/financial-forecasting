@@ -19,9 +19,9 @@ Qualquer outra chave, inclusive as do procedimento que vêm da base (`tft_params
 `pipeline_version` — I4), ergue `AblationFileError` com o caminho pontuado.
 
 Conferências contra a base e a registry (C2, `AblationDeclarationError`): o loader
-relê o arquivo da base, recalcula o `CohortHash` e exige o hash e o `cohort_id`
-declarados; a partição tem de ser a `registry_family_partition()` e cada
-`feature_set_hash` de configuração o `tft_feature_set_hash` do seu subconjunto.
+relê o arquivo da base e chama `check_ablation_declarations` (application,
+`run_ablation_cohort`; o executor chama a mesma antes do lock — achado C2-6): hash e
+`cohort_id` da base, partição da registry e `feature_set_hash` de cada subconjunto.
 """
 
 from __future__ import annotations
@@ -35,14 +35,11 @@ from financial_forecasting.features.modeling.application.dtos.ablation_cohort_sp
     ABLATION_CONFIGURATIONS,
     AblationCohortSpec,
     AblationConfiguration,
-    AblationDeclarationError,
 )
-from financial_forecasting.features.modeling.application.use_cases.train_tft import (
-    registry_family_partition,
-    tft_feature_set_hash,
+from financial_forecasting.features.modeling.application.use_cases.run_ablation_cohort import (
+    check_ablation_declarations,
 )
 from financial_forecasting.features.modeling.domain.services.loco_identity import TFT_FAMILIES
-from financial_forecasting.shared.domain.value_objects.cohort_hash import CohortHash
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -147,36 +144,6 @@ def parse_ablation_cohort(text: str) -> AblationCohortSpec:
         raise
     except ValueError as exc:
         raise AblationFileError(f"invalid ablation file: {exc}") from exc
-
-
-def check_ablation_declarations(
-    spec: AblationCohortSpec, *, base: CohortSpec, hasher: Hasher
-) -> None:
-    """C2: a base é a declarada (hash e id) e a partição e os subconjuntos são da registry."""
-    base_hash = CohortHash.compute(hasher=hasher, payload=base.hash_payload())
-    if base_hash.value != spec.base_cohort_hash:
-        raise AblationDeclarationError(
-            f"base cohort {spec.base_cohort_file} hashes to {base_hash.value}, but the "
-            f"ablation file declares {spec.base_cohort_hash} (C2)"
-        )
-    if base.cohort_id(base_hash) != spec.base_cohort_id:
-        raise AblationDeclarationError(
-            f"base cohort id is {base.cohort_id(base_hash)!r}, but the ablation file declares "
-            f"{spec.base_cohort_id!r} (C2)"
-        )
-    registry = registry_family_partition()
-    if dict(spec.family_partition) != registry:
-        raise AblationDeclarationError(
-            "the ablation [partition] differs from the registry family partition (C2)"
-        )
-    for configuration in spec.configurations:
-        expected = tft_feature_set_hash(configuration.excluded_family)
-        if configuration.feature_set_hash != expected:
-            raise AblationDeclarationError(
-                f"configurations.{configuration.name}.feature_set_hash is "
-                f"{configuration.feature_set_hash}, but the registry subset hashes to "
-                f"{expected} (C2)"
-            )
 
 
 def load_ablation_cohort(

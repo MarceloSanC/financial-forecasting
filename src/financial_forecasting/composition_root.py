@@ -1051,6 +1051,8 @@ def wire_dependencies(
             pipeline_version=PIPELINE_VERSION,
             schema_version=_SILVER_SCHEMA_VERSION,
             base_supported_device=_TRAINERS_DEVICE,
+            # o MESMO device com que o proxy do treinador foi montado (`tft_trainer_for`)
+            trainer_device=spec.device,
         )
 
     def measure_ablation_cost_for(path: Path) -> MeasureAblationCost:

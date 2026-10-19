@@ -18,6 +18,7 @@ from financial_forecasting.features.modeling.application.dtos.ablation_cohort_sp
     ABLATION_FEATURE_SET_NAME,
     AblationCohortSpec,
     AblationConfiguration,
+    AblationDeclarationError,
     excluded_family_of,
 )
 from financial_forecasting.features.modeling.application.pipeline_version import PIPELINE_VERSION
@@ -35,6 +36,7 @@ from financial_forecasting.features.modeling.application.use_cases.run_ablation_
     ablation_model_keys,
 )
 from financial_forecasting.features.modeling.application.use_cases.run_confirmatory_cohort import (
+    TFT_MODEL_VERSION,
     tft_train_command,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
@@ -72,6 +74,7 @@ from tests.unit.features.modeling.application.test_run_confirmatory_cohort impor
 pytestmark = pytest.mark.unit
 
 _TORCH = "2.13.0+rocm6.4"
+_SCHEMA_VERSION = 7  # diferente do default de qualquer fábrica: o valor chega ao comando
 _SEEDS = (1, 2)
 
 
@@ -123,6 +126,7 @@ class _Harness:
         store: Any = None,  # noqa: ANN401
         probe: InMemoryRuntimeEnvironmentProbe | None = None,
         fail_unit: str | None = None,
+        trainer_device: str = "rocm",
     ) -> None:
         self.ledger = InMemoryCohortProgressLedger()
         self.index = InMemoryCohortRunIndex()
@@ -140,8 +144,9 @@ class _Harness:
             modeling_columns=modeling_columns(),
             observed_feature_set_hash=_FEATURE_SET_HASH,
             pipeline_version=PIPELINE_VERSION,
-            schema_version=1,
+            schema_version=_SCHEMA_VERSION,
             base_supported_device="cpu",
+            trainer_device=trainer_device,
         )
 
     def persist(self, command: Any, *, folds: range | None = None) -> list[tuple[str, int, int]]:  # noqa: ANN401
@@ -210,7 +215,58 @@ def test_unfrozen_spec_refused_before_lock_and_probe() -> None:
         with pytest.raises(CohortNotFrozenError, match="ablation-freeze"):
             harness.run(spec)
     assert probe.calls == 0
-    assert not harness.ledger.is_locked
+    assert harness.ledger.acquire_count == 0
+    assert harness.commands == []
+
+
+def test_unfrozen_base_refused_before_lock_and_probe() -> None:
+    """C2-7: base não congelada → `CohortNotFrozenError`, sem probe nem lock."""
+    probe = _CountingProbe()
+    harness = _Harness(probe=probe)
+    with pytest.raises(CohortNotFrozenError, match="base cohort"):
+        harness.run(base=replace(_base(), provenance=None))
+    assert probe.calls == 0
+    assert harness.ledger.acquire_count == 0
+    assert harness.commands == []
+
+
+def test_base_hash_mismatch_refused_before_lock() -> None:
+    """C2-6: o executor também confere a base declarada (não só o loader)."""
+    probe = _CountingProbe()
+    harness = _Harness(probe=probe)
+    with pytest.raises(AblationDeclarationError, match="hashes to"):
+        harness.run(_ablation(base_cohort_hash="0" * 64))
+    assert probe.calls == 0
+    assert harness.ledger.acquire_count == 0
+
+
+def test_trainer_on_another_device_refused_before_lock() -> None:
+    """C2-2: spec `rocm` com o treinador montado em `cpu` → recusa, sem lock nem treino."""
+    harness = _Harness(trainer_device="cpu")
+    with pytest.raises(AblationDeclarationError, match="trainer runs on 'cpu'"):
+        harness.run()
+    assert harness.ledger.acquire_count == 0
+    assert harness.commands == []
+
+
+def test_probe_reporting_another_device_refused() -> None:
+    """C2-2: o `device` da foto do probe tem de ser o declarado."""
+    probe = InMemoryRuntimeEnvironmentProbe.with_gpu(
+        device="rocm-other", torch=_TORCH, hip="6.4.43482"
+    )
+    harness = _Harness(probe=probe)
+    with pytest.raises(EnvironmentMismatchError, match="probe device"):
+        harness.run()
+    assert harness.commands == []
+
+
+def test_wrong_fingerprint_and_missing_gpu_report_the_dataset() -> None:
+    """C2-8: as declarações da base vêm antes da guarda de hardware."""
+    rows = _rows()
+    rows[5]["close"] = 999.0
+    harness = _Harness(store=_store(rows), probe=_gpu_probe(available=False))
+    with pytest.raises(DatasetMismatchError):
+        harness.run()
     assert harness.commands == []
 
 
@@ -238,32 +294,18 @@ def test_each_unit_trains_with_its_configuration_identity() -> None:
 
 
 def test_command_equals_the_confirmatory_command_except_identity() -> None:
-    """O procedimento é o da base: só a identidade da configuração difere."""
+    """O procedimento é o da base: só a identidade da configuração difere (C2-4)."""
     harness = _Harness()
     harness.run()
     for command in harness.commands:
         confirmatory = tft_train_command(
-            _base(), scope=command.scope, seed=command.params.seed, schema_version=1
-        )
-        assert command.params == confirmatory.params
-        assert (command.horizons, command.quantile_levels) == (
-            confirmatory.horizons,
-            confirmatory.quantile_levels,
+            _base(),
+            scope=command.scope,
+            seed=command.params.seed,
+            schema_version=_SCHEMA_VERSION,
         )
         assert (
-            command.n_folds,
-            command.test_size,
-            command.val_size,
-            command.calib_size,
-            command.embargo,
-            command.schema_version,
-        ) == (
-            confirmatory.n_folds,
-            confirmatory.test_size,
-            confirmatory.val_size,
-            confirmatory.calib_size,
-            confirmatory.embargo,
-            confirmatory.schema_version,
+            replace(command, excluded_family=None, model_version=TFT_MODEL_VERSION) == confirmatory
         )
 
 
