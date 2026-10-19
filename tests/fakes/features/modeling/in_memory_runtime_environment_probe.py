@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
+    CPU_DEVICE,
     DIRTY_KEY,
     GPU_KEYS,
     REQUIRED_KEYS,
@@ -29,14 +30,24 @@ class InMemoryRuntimeEnvironmentProbe:
         cls,
         *,
         device: str = "rocm",
-        available: str = "true",
+        available: bool = True,
         name: str = "fake-gpu",
-        hip_version: str = "fake-hip",
+        hip: str | None = "fake-hip",
         **overrides: str,
     ) -> InMemoryRuntimeEnvironmentProbe:
-        """Foto de um device fora do `cpu`, com as chaves de GPU dadas."""
+        """Foto de um device fora do `cpu`, derivada como o probe real a derivaria.
+
+        `available` e `hip` são o que o torch veria (`torch.cuda.is_available()`,
+        `torch.version.hip`): sem GPU o nome fica `""`, e `hip=None` vira `""`.
+        """
+        if device == CPU_DEVICE:
+            raise ValueError("with_gpu needs a device other than cpu (cpu has no GPU keys)")
         available_key, name_key, hip_key = GPU_KEYS
-        gpu = {available_key: available, name_key: name, hip_key: hip_version}
+        gpu = {
+            available_key: "true" if available else "false",
+            name_key: name if available else "",
+            hip_key: "" if hip is None else hip,
+        }
         return cls(**{"device": device, **gpu, **overrides})
 
     def snapshot(self) -> Mapping[str, str]:

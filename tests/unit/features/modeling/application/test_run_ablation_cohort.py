@@ -108,9 +108,11 @@ def _cohort_id(spec: AblationCohortSpec) -> str:
     return spec.cohort_id(CohortHash.compute(hasher=_HASHER, payload=spec.hash_payload()))
 
 
-def _gpu_probe(**overrides: str) -> InMemoryRuntimeEnvironmentProbe:
+def _gpu_probe(
+    *, available: bool = True, hip: str | None = "6.4.43482", **overrides: str
+) -> InMemoryRuntimeEnvironmentProbe:
     return InMemoryRuntimeEnvironmentProbe.with_gpu(
-        **{"torch": _TORCH, "hip_version": "6.4.43482", **overrides}
+        available=available, hip=hip, **{"torch": _TORCH, **overrides}
     )
 
 
@@ -309,12 +311,12 @@ def test_base_declarations_checked_with_the_base_device() -> None:
 @pytest.mark.parametrize(
     ("overrides", "match"),
     [
-        pytest.param({"available": "false"}, "no GPU", id="gpu-unavailable"),
-        pytest.param({"hip_version": ""}, "no HIP", id="hip-empty"),
+        pytest.param({"available": False}, "no GPU", id="gpu-unavailable"),
+        pytest.param({"hip": None}, "no HIP", id="hip-absent"),
         pytest.param({"torch": "2.13.0+cpu"}, "torch_build", id="torch-differs"),
     ],
 )
-def test_probe_guard_refuses_before_training(overrides: dict[str, str], match: str) -> None:
+def test_probe_guard_refuses_before_training(overrides: dict[str, Any], match: str) -> None:
     harness = _Harness(probe=_gpu_probe(**overrides))
     with pytest.raises(EnvironmentMismatchError, match=match):
         harness.run()

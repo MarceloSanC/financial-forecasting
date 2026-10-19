@@ -231,11 +231,7 @@ def gpu_probe(
 ) -> _GpuProbeFactory:
     def build(available: bool, name: str, hip: str | None) -> RuntimeEnvironmentProbe:
         if request.param == "fake":
-            return InMemoryRuntimeEnvironmentProbe.with_gpu(
-                available="true" if available else "false",
-                name=name if available else "",
-                hip_version="" if hip is None else hip,
-            )
+            return InMemoryRuntimeEnvironmentProbe.with_gpu(available=available, name=name, hip=hip)
         monkeypatch.setattr(torch.cuda, "is_available", lambda: available)
         monkeypatch.setattr(torch.cuda, "get_device_name", lambda index=0: name)
         monkeypatch.setattr(torch.version, "hip", hip)
@@ -279,3 +275,10 @@ def test_absent_hip_is_empty_string(gpu_probe: _GpuProbeFactory) -> None:
 
     assert snapshot["gpu.hip_version"] == ""
     assert snapshot["gpu.available"] == "true"
+
+
+@pytest.mark.contract
+def test_fake_with_gpu_refuses_the_cpu_device() -> None:
+    """O fake não monta uma foto `cpu` com chaves de GPU (o real nunca a produz)."""
+    with pytest.raises(ValueError, match="other than cpu"):
+        InMemoryRuntimeEnvironmentProbe.with_gpu(device="cpu")
