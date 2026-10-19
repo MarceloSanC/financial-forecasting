@@ -2621,4 +2621,26 @@ orquestra. O backend chega por um `Protocol` local, com o mesmo contrato do `Mcs
 Testes: `test_without_one_method_no_bootstrap_runs`,
 `test_method_undefined_in_assembly_runs_no_bootstrap`.
 
+### 2026-10-19 — [measurement] C8-5 — pico do passo `_h3` com os builders, na geometria real — Claude (Opus 5.5)
+`test_h3_step_peak_bounded_and_flat_in_runs` roda `RefreshGold._h3` e os quatro builders
+de H3 num processo por tamanho. Geometria:
+- candidato com S seeds x 6 folds (T = 1 506), K_p = 10 e 59 variáveis da VSN;
+- ablação com 5 configurações x S seeds x 6 folds, 5·S runs por ano;
+- `FakeMcsBackend` com 1 000 x T índices.
+
+O pico é o RSS máximo menos o RSS antes do passo, medido com `--cpus 3`:
+
+| Runs do candidato | Pico acima da base |
+|---|---|
+| 30 (S = 5) | 263 MiB |
+| 60 (S = 10) | 291 MiB |
+
+Inclinação: (291 − 263) / 30 = 0,91 MiB por run.
+
+**Orçamento declarado:** pico <= 512 MiB e no máximo 2 MiB por run do candidato
+(`_PER_RUN_BUDGET`, o dobro do medido). O que cresce com os runs são as reduções
+permutadas guardadas até a montagem (41 x 2 séries de T/6 floats por run). A VSN é
+somada por decisão já na leitura (`VsnAccumulator`, C8-5a). Duração: ~5,5 min, marcado
+`slow`.
+
 <!-- END: post-execution -->
