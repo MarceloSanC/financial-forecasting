@@ -10,11 +10,11 @@ from financial_forecasting.features.analytics_store.application.use_cases.persis
     VsnDecisionEntry,
 )
 from financial_forecasting.shared.application.exceptions import DuplicateKeyError
-from tests.unit.features.analytics_store.application.test_persist_permuted_predictions import (
-    _CountingRepository,
+from tests.unit.features.analytics_store.application._silver_writers import (
+    TIMESTAMPS as _TIMESTAMPS,
 )
-from tests.unit.features.analytics_store.application.test_persist_predictions import (
-    _TIMESTAMPS,
+from tests.unit.features.analytics_store.application._silver_writers import (
+    CountingRepository as _CountingRepository,
 )
 
 pytestmark = pytest.mark.unit

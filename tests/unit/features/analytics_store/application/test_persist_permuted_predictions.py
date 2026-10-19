@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
 
 import pytest
 
@@ -23,25 +22,20 @@ from tests.fakes.features.analytics_store.in_memory_analytics_repository import 
     FakeAnalyticsRepository,
 )
 from tests.fakes.shared.in_memory_clock import FakeClock
-from tests.unit.features.analytics_store.application.test_persist_predictions import (
-    _LEVELS,
-    _TIMESTAMPS,
+from tests.unit.features.analytics_store.application._silver_writers import (
+    LEVELS as _LEVELS,
+)
+from tests.unit.features.analytics_store.application._silver_writers import (
+    TIMESTAMPS as _TIMESTAMPS,
+)
+from tests.unit.features.analytics_store.application._silver_writers import (
+    CountingRepository as _CountingRepository,
 )
 
 pytestmark = pytest.mark.unit
 
 _TABLE = "fact_permuted_predictions"
 _RUN = "a" * 64
-
-
-class _CountingRepository(FakeAnalyticsRepository):
-    def __init__(self) -> None:
-        super().__init__(clock=FakeClock())
-        self.writes: list[tuple[str, int]] = []
-
-    def write(self, *, layer: str, table: str, rows: Any, allow_upsert: bool = False) -> Any:  # noqa: ANN401
-        self.writes.append((table, len(rows)))
-        return super().write(layer=layer, table=table, rows=rows, allow_upsert=allow_upsert)
 
 
 def _forecast(shift: float = 0.0) -> QuantileForecast:
