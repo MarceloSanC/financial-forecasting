@@ -7,9 +7,9 @@ Duas pernas por port, tipadas pelo Protocol DO INFERENCE (o mypy prova a conform
   modeling e uma partição de referência SINTÉTICA (a mesma nas duas pernas, diferente da
   registry real). O fake é configurado com o que o real devolve no mesmo cohort;
 - `PermutedPredictionPersister`: `InMemoryPermutedPredictionPersister` /
-  `PersistPermutedPredictions` sobre o `FakeAnalyticsRepository`;
+  `PersistPermutedPredictions` sobre o `ParquetAnalyticsRepository` em `tmp_path`;
 - `VsnWeightPersister`: `InMemoryVsnWeightPersister` / `PersistVsnWeights` sobre o
-  `FakeAnalyticsRepository`.
+  mesmo `ParquetAnalyticsRepository` (ida e volta e filtro por `run_id`, C4-4).
 
 O `check_port_coverage.py` é cego a slice: `test_real_repo_attribution_ports_resolve`
 (arquitetura) amarra cada `("inference", nome)` a esta suíte.
@@ -24,6 +24,9 @@ from typing import Any
 
 import pytest
 
+from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
+    ParquetAnalyticsRepository,
+)
 from financial_forecasting.features.analytics_store.application.use_cases.persist_permuted_predictions import (  # noqa: E501
     PermutedDecisionEntry,
     PersistPermutedPredictions,
@@ -51,9 +54,6 @@ from financial_forecasting.features.modeling.application.use_cases.predict_tft_a
     PredictTftAttributionFromCheckpoints,
 )
 from financial_forecasting.shared.application.exceptions import ApplicationError
-from tests.fakes.features.analytics_store.in_memory_analytics_repository import (
-    FakeAnalyticsRepository,
-)
 from tests.fakes.features.inference.in_memory_checkpoint_attribution_predictor import (
     InMemoryCheckpointAttributionPredictor,
 )
@@ -151,9 +151,11 @@ def _forecasts() -> dict[int, QuantileForecast]:
     }
 
 
-def _permuted_command(entries: list[PermutedDecisionEntry]) -> PersistPermutedPredictionsCommand:
+def _permuted_command(
+    entries: list[PermutedDecisionEntry], run_id: str = "r" * 64
+) -> PersistPermutedPredictionsCommand:
     return PersistPermutedPredictionsCommand(
-        run_id="r" * 64,
+        run_id=run_id,
         model_version="tft_quantile",
         asset="AAPL",
         feature_set_name="fs_all",
@@ -166,6 +168,19 @@ def _permuted_command(entries: list[PermutedDecisionEntry]) -> PersistPermutedPr
     )
 
 
+def _vsn_command(run_id: str = "r" * 64) -> PersistVsnWeightsCommand:
+    return PersistVsnWeightsCommand(
+        run_id=run_id,
+        model_version="tft_quantile",
+        asset="AAPL",
+        feature_set_name="fs_all",
+        schema_version=1,
+        dataset_timestamps=_TIMESTAMPS,
+        variable_families={"close": "price", "day_of_week": "none"},
+        decisions=[VsnDecisionEntry(d, {"close": 0.7, "day_of_week": 0.3}) for d in (2, 3)],
+    )
+
+
 def _entries() -> list[PermutedDecisionEntry]:
     last = len(_TIMESTAMPS) - 1
     return [
@@ -175,47 +190,79 @@ def _entries() -> list[PermutedDecisionEntry]:
     ]
 
 
+_PERMUTED_KEY = (
+    "run_id",
+    "permuted_family",
+    "permutation_index",
+    "decision_idx",
+    "horizon",
+    "quantile_level",
+)
+_VSN_KEY = ("run_id", "decision_idx", "variable", "family")
+Keys = Callable[[str | None], set[tuple[Any, ...]]]
+
+
 @dataclass(frozen=True)
 class _PersisterLeg:
     permuted: PermutedPredictionPersister
     vsn: VsnWeightPersister
-    permuted_keys: Callable[[], set[tuple[Any, ...]]]
-    vsn_keys: Callable[[], set[tuple[Any, ...]]]
+    permuted_keys_of: Keys
+    vsn_keys_of: Keys
+
+    def permuted_keys(self) -> set[tuple[Any, ...]]:
+        return self.permuted_keys_of(None)
+
+    def vsn_keys(self) -> set[tuple[Any, ...]]:
+        return self.vsn_keys_of(None)
 
 
 @pytest.fixture(params=["fake", "real"])
-def persister_leg(request: pytest.FixtureRequest) -> _PersisterLeg:
+def persister_leg(request: pytest.FixtureRequest, tmp_path: Path) -> _PersisterLeg:
+    """Perna real: os use cases sobre o `ParquetAnalyticsRepository` em `tmp_path` (C4-4)."""
     if request.param == "fake":
         permuted_fake = InMemoryPermutedPredictionPersister()
         vsn_fake = InMemoryVsnWeightPersister()
         return _PersisterLeg(
             permuted=permuted_fake,
             vsn=vsn_fake,
-            permuted_keys=lambda: set(permuted_fake.keys),
-            vsn_keys=lambda: set(vsn_fake.keys),
+            permuted_keys_of=lambda run: {k for k in permuted_fake.keys if run in (None, k[0])},
+            vsn_keys_of=lambda run: {k for k in vsn_fake.keys if run in (None, k[0])},
         )
-    repo = FakeAnalyticsRepository(clock=FakeClock())
+    repo = ParquetAnalyticsRepository(data_root=tmp_path, clock=FakeClock())
 
-    def read(table: str, columns: tuple[str, ...]) -> set[tuple[Any, ...]]:
-        rows = repo.read(layer="silver", table=table, filters={"asset": "AAPL"})
+    def read(table: str, columns: tuple[str, ...], run: str | None) -> set[tuple[Any, ...]]:
+        filters: dict[str, object] = {"asset": "AAPL"}
+        if run is not None:
+            filters["run_id"] = run  # filtro por partição (run_id particiona as duas tabelas)
+        rows = repo.read(layer="silver", table=table, filters=filters)
         return {tuple(row[c] for c in columns) for row in rows}
 
     return _PersisterLeg(
         permuted=PersistPermutedPredictions(repository=repo),
         vsn=PersistVsnWeights(repository=repo),
-        permuted_keys=lambda: read(
-            "fact_permuted_predictions",
-            (
-                "run_id",
-                "permuted_family",
-                "permutation_index",
-                "decision_idx",
-                "horizon",
-                "quantile_level",
-            ),
-        ),
-        vsn_keys=lambda: read("fact_vsn_weights", ("run_id", "decision_idx", "variable", "family")),
+        permuted_keys_of=lambda run: read("fact_permuted_predictions", _PERMUTED_KEY, run),
+        vsn_keys_of=lambda run: read("fact_vsn_weights", _VSN_KEY, run),
     )
+
+
+def test_permuted_round_trip_filtered_by_run(persister_leg: _PersisterLeg) -> None:
+    """C4-4: dois runs gravados; a leitura de um run devolve só as linhas dele."""
+    for run in ("a" * 64, "b" * 64):
+        persister_leg.permuted(_permuted_command(_entries(), run_id=run))
+    only_a = persister_leg.permuted_keys_of("a" * 64)
+    assert only_a
+    assert {key[0] for key in only_a} == {"a" * 64}
+    assert len(persister_leg.permuted_keys()) == 2 * len(only_a)
+
+
+def test_vsn_round_trip_filtered_by_run(persister_leg: _PersisterLeg) -> None:
+    """C4-4: dois runs gravados; a leitura de um run devolve só os pesos dele."""
+    for run in ("a" * 64, "b" * 64):
+        persister_leg.vsn(_vsn_command(run))
+    only_b = persister_leg.vsn_keys_of("b" * 64)
+    assert {key[0] for key in only_b} == {"b" * 64}
+    assert len(only_b) == 4  # noqa: PLR2004 — 2 decisões x 2 variáveis
+    assert len(persister_leg.vsn_keys()) == 2 * len(only_b)
 
 
 def test_persisters_write_one_run_and_read_back(persister_leg: _PersisterLeg) -> None:
