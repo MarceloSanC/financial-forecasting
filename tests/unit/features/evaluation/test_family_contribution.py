@@ -122,14 +122,20 @@ def test_importance_share_and_delta() -> None:
     series[("technical", 1)] = (2.0, 2.0)
     series[("fundamental", 1)] = (0.0, 0.0)
     series[("price", 7)] = (2.0, 2.0)
-    series[("fundamental", 7)] = (0.0, 0.0)
+    series[("fundamental", 7)] = (2.0, 2.0)
 
     report = _evaluate(series, _identity_rows(2))
 
+    # TA-4: Σ_g I_g(1) = 1 + 2 + 1 + 0 = 4 e Σ_g I_g(7) = 2 + 1 + 1 + 2 = 6 — cada
+    # participação divide pelo total do seu horizonte
     assert report.importance[("technical", 1)] == 2.0  # noqa: PLR2004
     price = _share(report, "price")
-    assert (price.share_h1, price.share_h7, price.delta) == (0.25, 0.5, 0.25)  # type: ignore[attr-defined]
-    assert (price.lower, price.upper) == (0.25, 0.25)  # type: ignore[attr-defined]
+    # share_h1 = 1/4, share_h7 = 2/6 e Δ = 1/3 - 1/4 = 1/12
+    assert price.share_h1 == 0.25  # type: ignore[attr-defined]  # noqa: PLR2004
+    assert price.share_h7 == pytest.approx(1 / 3)  # type: ignore[attr-defined]
+    assert price.delta == pytest.approx(1 / 12)  # type: ignore[attr-defined]
+    assert price.lower == pytest.approx(1 / 12)  # type: ignore[attr-defined]
+    assert price.upper == pytest.approx(1 / 12)  # type: ignore[attr-defined]
     assert report.status == "ok"
     assert report.level == _LEVEL
 
