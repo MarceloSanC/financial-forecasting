@@ -56,7 +56,7 @@ def test_importance_rows_cell_by_cell() -> None:
         seed=None,
         permutation_index=None,
     )
-    assert (aggregated["importance"], aggregated["n_points"]) == (0.01, 3)
+    assert (aggregated["importance"], aggregated["n_points"]) == (0.02, 3)
     assert (aggregated["status"], aggregated["reason"]) == ("ok", None)
     by_seed = _one(H3ImportanceGoldBuilder, method="permutation", family="price", horizon=1, seed=2)
     assert by_seed["importance"] == 0.02  # noqa: PLR2004
@@ -113,7 +113,7 @@ def test_undefined_method_rows_carry_reason_and_null_measures() -> None:
     importance = _rows(H3ImportanceGoldBuilder, method="loco")
     assert len(importance) == 4 * 2  # só a agregada: a montagem do LOCO não tem perfis
     assert {row["status"] for row in importance} == {"undefined"}
-    assert {row["importance"] for row in importance} == {-0.01}
+    assert {row["importance"] for row in importance} == {-0.01}  # o LOCO da amostra
 
 
 def test_reading_single_row_with_label_and_counts() -> None:
@@ -154,3 +154,31 @@ def test_without_h3_inputs_all_four_tables_are_empty(builder: Any) -> None:  # n
     table = builder().build(completed_inputs_without_h3())
     assert table.rows == ()
     assert table.name == f"gold_{builder.name}"
+
+
+def test_sample_importances_match_the_shares() -> None:
+    """C7-12: na amostra, s_f(h) = I_f(h) / Σ_g I_g(h) nas linhas das duas tabelas."""
+    for family in ("price", "technical", "sentiment", "fundamental"):
+        share = _one(H3SharesGoldBuilder, method="permutation", family=family)
+        for horizon in (1, 7):
+            total = sum(
+                float(str(row["importance"]))
+                for row in _rows(
+                    H3ImportanceGoldBuilder,
+                    method="permutation",
+                    horizon=horizon,
+                    seed=None,
+                    permutation_index=None,
+                )
+            )
+            mine = _one(
+                H3ImportanceGoldBuilder,
+                method="permutation",
+                family=family,
+                horizon=horizon,
+                seed=None,
+                permutation_index=None,
+            )
+            assert float(str(mine["importance"])) / total == pytest.approx(
+                share[f"share_h{horizon}"]
+            )

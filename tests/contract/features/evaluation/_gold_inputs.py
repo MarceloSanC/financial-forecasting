@@ -622,6 +622,9 @@ def conformal_reports_of(inputs: GoldInputs) -> ConformalReports:
 # --- Stage 7.3: relatórios de H3 de teste ------------------------------------------------
 
 
+_H3_ORDER = ("price", "technical", "sentiment", "fundamental")
+
+
 def h3_reports_sample() -> H3Reports:
     """Relatórios de H3 sintéticos: permutação `ok` (uma família `undefined`, um limite
     infinito), LOCO `undefined`, a leitura `undefined` e um resumo da VSN."""
@@ -642,8 +645,11 @@ def h3_reports_sample() -> H3Reports:
         FamilyShare("sentiment", 0.2, 0.3, 0.1, -math.inf, 0.5, 1, False, "ok", None),
         FamilyShare("fundamental", 0.1, 0.2, 0.1, -0.2, math.inf, 1, False, "ok", None),
     )
+    # coerentes com as participações (C7-12): I(1) = 0,04/0,03/0,02/0,01 -> 0,4/0,3/0,2/0,1;
+    # I(7) = 0,02/0,03/0,03/0,02 -> 0,2/0,3/0,3/0,2
     importance = {
-        (f, h): 0.01 for f in ("price", "technical", "sentiment", "fundamental") for h in (1, 7)
+        **{(f, 1): i for f, i in zip(_H3_ORDER, (0.04, 0.03, 0.02, 0.01), strict=True)},
+        **{(f, 7): i for f, i in zip(_H3_ORDER, (0.02, 0.03, 0.03, 0.02), strict=True)},
     }
     permutation = FamilyContributionReport(
         method="permutation",
