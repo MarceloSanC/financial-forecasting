@@ -2393,4 +2393,38 @@ O construtor do `RunAblationCohort` ganha `trainer_device`, e a Task 10 já o pa
   o da família informativa.
 **Razão:** são escolhas reversíveis dentro da lista fechada da Task 11.
 
+### 2026-10-19 — [measurement] gates — ponto A (depois da Task 12 e dos fixes do Checkpoint C 05–08) — Claude (Opus 5.5)
+Container `ff-gate-186` (`--cpus 6 --memory 8g --memory-swap 8g`, volume
+`financial-forecasting_ff73-venv`), comando `uv lock --check && make check
+PYTEST_PAR='-n 4 --dist loadgroup'`.
+
+**1ª corrida (HEAD `d53bbc9`): vermelha.** `4 failed, 7441 passed, 26 skipped`, EXIT=2:
+- três testes de `tests/integration/features/modeling/test_pf_tft_prediction.py` (5.4)
+  chamam `PfTftTrainer._emit` sem `accelerator`, que a Task 03 tornou obrigatório
+  (`TypeError`);
+- a guarda I14 da 6.6 (`test_no_test_or_script_reads_the_real_cohort`) achou o
+  `cohort_id`/hash do r0 como literal em `test_stage_7_3_repo_files.py` e em
+  `test_ablation_cohort_spec.py`.
+
+**Fixes:**
+- `8e65e0f`: `fix(modeling): accelerator do _emit com default cpu [7.3/task-03-fix]`;
+- `28b8510`: `test(modeling): testes da 7.3 sem os literais do cohort real
+  [7.3/task-06-fix]`. Os testes de repo comparam com o `[cohort]` da r2 ancorada, e o
+  teste do spec usa um `cohort_id` sintético.
+
+Fica registrado para o §3: a linha `! grep … "aapl_confirmatory-r0-665f45d9169a"` do gate
+da fase Windows excluía `test_stage_7_3_repo_files`, mas a guarda da 6.6 não exclui. A
+regra que vale é a da guarda: nenhum teste da 7.3 cita o literal.
+
+**2ª corrida (HEAD `28b8510`): verde.** lint, mypy (364 arquivos), layout, import-linter
+(17 kept, 0 broken), fake-parity, port-coverage (1 no baseline), use_case_deps,
+domain_determinism, schema_literals e vo_invariants passaram. Últimas linhas:
+```
+Required test coverage of 90.0% reached. Total coverage: 98.97%
+========== 7445 passed, 26 skipped, 701 warnings in 875.60s (0:14:35) ==========
+EXIT=0
+```
+Sem "node down". A 2ª corrida é a repetição do ponto A depois do vermelho (ADR
+0.0.0059 item 7), e não um ponto novo do orçamento.
+
 <!-- END: post-execution -->
