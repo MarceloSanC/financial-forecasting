@@ -14,8 +14,11 @@ o splitter do composition root, sobre as sessões da grade. A grade é montada p
 reimplementado. O `cohort_id` vem do `CohortHash` do spec, nunca de um literal.
 
 Cegamento (I12): a leitura é por `pyarrow` com `columns=` explícito. As três tuplas
-de colunas não têm `value_*` nem `target_return`, então nenhuma previsão nem
-realizado é lido. Nada é escrito no `data_root` lido, e nenhum `gold/` é criado.
+de colunas não têm `value_*` nem `target_return`: nenhuma previsão e nenhum alvo é
+lido. A grade lê as features do painel do TFT, inclusive preços e retornos passados
+(`close`, `log_return_*`), só para reproduzir o corte de prefixo do
+`build_training_grid`; nenhum escore nem cobertura é calculado. Nada é escrito no
+`data_root` lido, e nenhum `gold/` é criado.
 
 O teste real é pulado sem `FF_REAL_COHORT_DATA_ROOT`. Se a variável aponta para um
 caminho inexistente, ele falha em vez de pular. Os testes sintéticos rodam sempre.
@@ -414,23 +417,47 @@ def test_checks_pass_on_a_consistent_synthetic_root(
     assert not (tmp_path / "gold").exists()
 
 
+_KINDS = {
+    "fingerprint": "split_fingerprint differs",
+    "decisions": "calib decisions != FoldSplit.calib",
+    "early_stop": "calib intersects early_stop",
+    "late": "calib targets at or after test[0]",
+    "manifest": "manifest has 3 completed entries, expected 4",
+}
+
+
+def _kinds(problems: tuple[str, ...]) -> list[str]:
+    """O tipo de cada problema (todo problema tem de ter um tipo conhecido)."""
+    kinds = []
+    for problem in problems:
+        [kind] = [k for k, text in _KINDS.items() if text in problem]
+        kinds.append(kind)
+    return sorted(kinds)
+
+
 @pytest.mark.parametrize(
     ("plant", "expected"),
     [
-        ("fingerprint", "split_fingerprint differs"),
-        ("outside_calib", "calib decisions != FoldSplit.calib"),
-        ("early_stop", "calib intersects early_stop"),
-        ("late_target", "calib targets at or after test[0]"),
-        ("manifest", "manifest has 3 completed entries, expected 4"),
+        ("fingerprint", ["fingerprint"]),
+        ("outside_calib", ["decisions", "decisions"]),  # h+1 e h+7
+        # A interseção com o early_stop é redundante como defesa: os blocos do
+        # FoldSplit são disjuntos, então uma decisão do early_stop no calib já faz o
+        # conjunto diferir do FoldSplit.calib. Fica como diagnóstico nomeado (C5-3).
+        ("early_stop", ["decisions", "decisions", "early_stop", "early_stop"]),
+        ("late_target", ["late"]),  # um problema por run, com os alvos de h+1 e h+7
+        ("manifest", ["manifest"]),
     ],
 )
 def test_checks_fail_on_a_planted_violation(
-    tmp_path: Path, splitter: WalkForwardSplitter, plant: str, expected: str
+    tmp_path: Path, splitter: WalkForwardSplitter, plant: str, expected: list[str]
 ) -> None:
+    """C5-3: cada violação plantada dá exatamente o conjunto de problemas esperado."""
     spec = _spec()
     _write_root(tmp_path, spec, splitter, plant)
     problems = check_geometry(tmp_path, spec, splitter).problems
-    assert any(expected in problem for problem in problems), problems
+    assert _kinds(problems) == sorted(expected), problems
+    first_run = f"-tft-s{spec.seeds[0]}-f0"
+    assert all(first_run in p for p in problems if not p.startswith("manifest")), problems
 
 
 def test_real_cohort_calib_geometry(splitter: WalkForwardSplitter) -> None:
