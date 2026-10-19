@@ -21,6 +21,19 @@ from pandera.errors import SchemaError
 from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
     ParquetAnalyticsRepository,
 )
+from financial_forecasting.features.analytics_store.application.use_cases.persist_permuted_predictions import (  # noqa: E501
+    PermutedDecisionEntry,
+    PersistPermutedPredictions,
+    PersistPermutedPredictionsCommand,
+)
+from financial_forecasting.features.analytics_store.application.use_cases.persist_vsn_weights import (  # noqa: E501
+    PersistVsnWeights,
+    PersistVsnWeightsCommand,
+    VsnDecisionEntry,
+)
+from financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast import (
+    QuantileForecast,
+)
 from financial_forecasting.shared.application.exceptions import DuplicateKeyError
 from tests.fakes.shared.in_memory_clock import FIXED_NOW, FakeClock
 
@@ -294,3 +307,87 @@ def test_real_append_only_accumulates_distinct_pks(tmp_path: Path) -> None:
 
     rows = repo.read(layer=_SILVER, table="fact_oos_predictions", filters={"asset": "AAPL"})
     assert len(rows) == _TWO_ROWS
+
+
+# -- Stage 7.3, Task 15: tabelas silver da atribuição, ida e volta em Parquet ---------
+
+
+def _permuted_command(run_id: str) -> PersistPermutedPredictionsCommand:
+    timestamps = tuple(f"2024-03-{day:02d}T00:00:00+00:00" for day in range(4, 16))
+    levels = (0.1, 0.5, 0.9)
+    entries = [
+        PermutedDecisionEntry(
+            permuted_family=family,
+            permutation_index=k,
+            decision_idx=decision,
+            forecasts={
+                h: QuantileForecast.from_raw(levels=levels, raw_values=(0.1 * k, 0.2, 0.3))
+                for h in (1, 2)
+            },
+        )
+        for family, k in (("none", 0), ("price", 1), ("price", 2))
+        for decision in (2, 3)
+    ]
+    return PersistPermutedPredictionsCommand(
+        run_id=run_id,
+        model_version="tft_quantile",
+        asset="AAPL",
+        feature_set_name="fs_all",
+        schema_version=1,
+        permutation_seed=130,
+        permutation_algorithm="fisher_yates_random_random_v1",
+        partition_hash="c" * 64,
+        dataset_timestamps=timestamps,
+        entries=entries,
+    )
+
+
+def test_permuted_round_trip_and_run_filter_pushdown(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    writer = PersistPermutedPredictions(repository=repo)
+    first = writer(_permuted_command("a" * 64))
+    writer(_permuted_command("b" * 64))
+
+    rows = repo.read(
+        layer=_SILVER,
+        table="fact_permuted_predictions",
+        filters={"asset": "AAPL", "run_id": "a" * 64},
+    )
+    assert len(rows) == first.rows_written
+    assert {row["run_id"] for row in rows} == {"a" * 64}
+    assert {(row["permuted_family"], row["permutation_index"]) for row in rows} == {
+        ("none", 0),
+        ("price", 1),
+        ("price", 2),
+    }
+    assert any(p.name == f"run_id={'a' * 64}" for p in tmp_path.rglob("run_id=*"))
+
+
+def test_vsn_round_trip_and_run_filter_pushdown(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    timestamps = tuple(f"2024-03-{day:02d}T00:00:00+00:00" for day in range(4, 10))
+    families = {"close": "price", "rsi_14": "technical", "target": "none"}
+    for run_id in ("a" * 64, "b" * 64):
+        PersistVsnWeights(repository=repo)(
+            PersistVsnWeightsCommand(
+                run_id=run_id,
+                model_version="tft_quantile",
+                asset="AAPL",
+                feature_set_name="fs_all",
+                schema_version=1,
+                dataset_timestamps=timestamps,
+                variable_families=families,
+                decisions=[
+                    VsnDecisionEntry(d, {"close": 0.6, "rsi_14": 0.3, "target": 0.1})
+                    for d in (1, 2)
+                ],
+            )
+        )
+
+    rows = repo.read(
+        layer=_SILVER, table="fact_vsn_weights", filters={"asset": "AAPL", "run_id": "b" * 64}
+    )
+    assert len(rows) == 2 * len(families)
+    assert {row["run_id"] for row in rows} == {"b" * 64}
+    assert {row["family"] for row in rows} == {"price", "technical", "none"}
+    assert sum(row["weight"] for row in rows if row["decision_idx"] == 1) == pytest.approx(1.0)
