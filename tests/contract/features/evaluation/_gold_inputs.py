@@ -100,6 +100,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.conformal_co
 from financial_forecasting.features.evaluation.domain.value_objects.conformal_parameters import (
     ConformalParameters,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
+    CoverageSeries,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
 )
@@ -385,6 +388,54 @@ def _lower_correction(seed: int, horizon: int, pair: tuple[float, float], varian
     return _CONFORMAL_CORRECTION
 
 
+def _pair_limits(
+    native: CoverageSeries,
+    pairs: tuple[tuple[float, float], ...],
+    *,
+    seed: int,
+    horizon: int,
+    variant: str,
+) -> list[ConformalPairLimits]:
+    limits = []
+    for pair in pairs:
+        k_lo = native.levels.index(pair[0])
+        k_hi = native.levels.index(pair[1])
+        q_lo = _lower_correction(seed, horizon, pair, variant)
+        limits.append(
+            ConformalPairLimits(
+                pair[0],
+                pair[1],
+                tuple(native.scored_values(i)[k_lo] - q_lo for i in range(native.n_points)),
+                tuple(
+                    native.scored_values(i)[k_hi] + _CONFORMAL_CORRECTION
+                    for i in range(native.n_points)
+                ),
+            )
+        )
+    return limits
+
+
+_CROSS_EVERY = 3
+_UNNEST_EVERY = 4
+
+
+def _varied(limits: list[ConformalPairLimits]) -> list[ConformalPairLimits]:
+    """Seed 2, h = 1: cruza o par de fora em i % 3 == 0 e desaninha o de dentro em i % 4 == 1."""
+    outer, inner = limits
+    outer_lower = tuple(
+        up + 0.01 if i % _CROSS_EVERY == 0 else low
+        for i, (low, up) in enumerate(zip(outer.lower, outer.upper, strict=True))
+    )
+    inner_lower = tuple(
+        outer.lower[i] - 0.05 if i % _UNNEST_EVERY == 1 else low
+        for i, low in enumerate(inner.lower)
+    )
+    return [
+        dataclasses.replace(outer, lower=outer_lower),
+        dataclasses.replace(inner, lower=inner_lower),
+    ]
+
+
 def conformal_reports_of(inputs: GoldInputs) -> ConformalReports:
     """Relatórios conformais coerentes com o cohort de `completed_inputs()`.
 
@@ -392,6 +443,11 @@ def conformal_reports_of(inputs: GoldInputs) -> ConformalReports:
     unidade `error` do port (fold 1, variante sem pesos) e uma unidade `undefined` da
     montagem (fold cru `"x"`), então a cobertura dela nos dois variantes é `undefined`
     e a média de h = 2 usa só a seed 1. Limites = quantis nativos corrigidos.
+
+    Em h = 1 as duas seeds entram na média com n, cruzamento e aninhamento DIFERENTES
+    (Checkpoint C das Tasks 16-19, C4-1): a série da seed 2 tem o 1º ponto degenerado
+    (a grade do `naive`, constante), cruza o par (0,1; 0,9) em todo ponto múltiplo de 3
+    e tira o par (0,25; 0,75) de dentro do de fora nos pontos ≡ 1 (mod 4).
     """
     parameters = inputs.parameters.conformal_parameters
     assert parameters is not None
@@ -407,6 +463,10 @@ def conformal_reports_of(inputs: GoldInputs) -> ConformalReports:
         if seed is not None
     }
     broken = (2, 2)
+    varied = (2, 1)
+    naive_first = {
+        samples.horizon: samples.full["naive"][0].forecasts[0] for samples in samples_of()
+    }
     for (seed, horizon), native in sorted(natives.items()):
         for fold in (0, 1):
             for pair in pairs:
@@ -489,27 +549,19 @@ def conformal_reports_of(inputs: GoldInputs) -> ConformalReports:
                     )
                 )
             continue
+        series = native
+        if (seed, horizon) == varied:
+            series = dataclasses.replace(
+                native, forecasts=(naive_first[horizon], *native.forecasts[1:])
+            )
         for variant in variants:
-            limits = []
-            for pair in pairs:
-                k_lo = native.levels.index(pair[0])
-                k_hi = native.levels.index(pair[1])
-                q_lo = _lower_correction(seed, horizon, pair, variant)
-                limits.append(
-                    ConformalPairLimits(
-                        pair[0],
-                        pair[1],
-                        tuple(native.scored_values(i)[k_lo] - q_lo for i in range(native.n_points)),
-                        tuple(
-                            native.scored_values(i)[k_hi] + _CONFORMAL_CORRECTION
-                            for i in range(native.n_points)
-                        ),
-                    )
-                )
+            limits = _pair_limits(series, pairs, seed=seed, horizon=horizon, variant=variant)
+            if (seed, horizon) == varied:
+                limits = _varied(limits)
             coverage.append(
                 ConformalCoverage.evaluate(
                     ConformalCoverageSeries(
-                        seed=seed, native=native, variant=variant, pairs=tuple(limits)
+                        seed=seed, native=series, variant=variant, pairs=tuple(limits)
                     ),
                     tolerance=inputs.parameters.degeneracy_tolerance,
                     band_levels=inputs.parameters.band_levels,
