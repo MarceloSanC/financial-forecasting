@@ -4,6 +4,8 @@ Foto do ambiente da corrida confirmatória:
 
 - versões das bibliotecas (`importlib.metadata`) e do Python;
 - device declarado do cohort, threads do torch e CPU;
+- com device diferente de `cpu` (Stage 7.3), a GPU OBSERVADA pelo torch: se há GPU,
+  o nome do dispositivo 0 e a versão do HIP do build (`GPU_KEYS` do port);
 - identidade do código: `git rev-parse HEAD:<caminho>` de `src`, `uv.lock` e do
   arquivo do cohort — hash de CONTEÚDO do que está commitado, então commits só
   de documentação não mudam a foto;
@@ -28,7 +30,9 @@ from importlib import metadata
 from pathlib import Path
 
 from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
+    CPU_DEVICE,
     DIRTY_KEY,
+    GPU_KEYS,
     LIBRARY_KEYS,
     THREADS_KEY,
 )
@@ -78,7 +82,24 @@ class GitRuntimeEnvironmentProbe:
             "status", "--porcelain", "--untracked-files=all", "--", *tracked.values()
         )
         snapshot[DIRTY_KEY] = "true" if status else "false"
+        if self._device != CPU_DEVICE:
+            snapshot.update(self._gpu())
         return snapshot
+
+    @staticmethod
+    def _gpu() -> dict[str, str]:
+        """A GPU que o torch vê neste processo — observada, nunca o device declarado."""
+        import torch  # noqa: PLC0415 — só quando a foto é tirada
+
+        available = bool(torch.cuda.is_available())
+        name = str(torch.cuda.get_device_name(0)) if available else ""
+        hip = torch.version.hip
+        available_key, name_key, hip_key = GPU_KEYS
+        return {
+            available_key: "true" if available else "false",
+            name_key: name,
+            hip_key: "" if hip is None else str(hip),
+        }
 
     @staticmethod
     def _version(distribution: str) -> str:

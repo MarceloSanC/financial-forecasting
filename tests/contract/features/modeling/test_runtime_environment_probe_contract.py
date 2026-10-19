@@ -3,20 +3,27 @@
 Nas duas pernas (a `real` entra na Task 23): a foto traz todas as
 `REQUIRED_KEYS` como texto e `code_dirty` é `"true"`/`"false"`; duas fotos do
 mesmo estado são iguais.
+
+Stage 7.3 (Task 04; CA5, I5): com `cpu`, a foto tem exatamente as chaves de hoje; com
+outro device, ganha as `GPU_KEYS` observadas. Na perna real, `torch.cuda.is_available`,
+`torch.cuda.get_device_name` e `torch.version.hip` vêm por `monkeypatch`.
 """
 
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+import torch
 
 from financial_forecasting.features.modeling.adapters.out.runtime.git_runtime_environment_probe import (  # noqa: E501
     GitRuntimeEnvironmentProbe,
 )
 from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
     DIRTY_KEY,
+    GPU_KEYS,
     REQUIRED_KEYS,
     RuntimeEnvironmentProbe,
 )
@@ -207,3 +214,68 @@ def test_real_tracked_change_in_the_cohort_file_marks_dirty_then_changes_identit
     assert after["code_dirty"] == "false"
     assert after["code.cohort_file"] != before["code.cohort_file"]
     assert after["code.src"] == before["code.src"]
+
+
+# -- Stage 7.3, Task 04: GPU e HIP observados fora do device cpu --------------------
+
+# (gpu disponível, nome do dispositivo 0, torch.version.hip) -> probe com device "rocm"
+_GpuProbeFactory = Callable[[bool, str, "str | None"], RuntimeEnvironmentProbe]
+
+
+@pytest.fixture(params=["fake", "real"])
+def gpu_probe(
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+    isolated_git: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> _GpuProbeFactory:
+    def build(available: bool, name: str, hip: str | None) -> RuntimeEnvironmentProbe:
+        if request.param == "fake":
+            return InMemoryRuntimeEnvironmentProbe.with_gpu(
+                available="true" if available else "false",
+                name=name if available else "",
+                hip_version="" if hip is None else hip,
+            )
+        monkeypatch.setattr(torch.cuda, "is_available", lambda: available)
+        monkeypatch.setattr(torch.cuda, "get_device_name", lambda index=0: name)
+        monkeypatch.setattr(torch.version, "hip", hip)
+        return GitRuntimeEnvironmentProbe(
+            repo_root=_repo(tmp_path), cohort_file=_COHORT_FILE, device="rocm"
+        )
+
+    return build
+
+
+@pytest.mark.contract
+def test_cpu_snapshot_has_exactly_todays_keys(probe: RuntimeEnvironmentProbe) -> None:
+    assert set(probe.snapshot()) == set(REQUIRED_KEYS)
+    assert not set(GPU_KEYS) & set(REQUIRED_KEYS)
+
+
+@pytest.mark.contract
+def test_non_cpu_snapshot_adds_the_observed_gpu_keys(gpu_probe: _GpuProbeFactory) -> None:
+    observed = gpu_probe(True, "AMD Radeon RX 7700 XT", "6.4.43482").snapshot()
+
+    assert set(observed) == {*REQUIRED_KEYS, *GPU_KEYS}
+    assert observed["device"] == "rocm"
+    assert observed["gpu.available"] == "true"
+    assert observed["gpu.name"] == "AMD Radeon RX 7700 XT"
+    assert observed["gpu.hip_version"] == "6.4.43482"
+
+
+@pytest.mark.contract
+def test_gpu_keys_are_observed_not_echoed(gpu_probe: _GpuProbeFactory) -> None:
+    """Device `rocm` declarado, GPU ausente: a foto diz o que o torch vê."""
+    snapshot = gpu_probe(False, "never-read", "6.4.43482").snapshot()
+
+    assert snapshot["device"] == "rocm"
+    assert snapshot["gpu.available"] == "false"
+    assert snapshot["gpu.name"] == ""
+
+
+@pytest.mark.contract
+def test_absent_hip_is_empty_string(gpu_probe: _GpuProbeFactory) -> None:
+    snapshot = gpu_probe(True, "some-gpu", None).snapshot()
+
+    assert snapshot["gpu.hip_version"] == ""
+    assert snapshot["gpu.available"] == "true"
