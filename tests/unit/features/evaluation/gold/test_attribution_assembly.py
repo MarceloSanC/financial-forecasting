@@ -196,6 +196,12 @@ def test_permutation_d_t_equals_the_hand_computed_value() -> None:
 
 
 def test_loco_d_t_is_seed_mean_minus_seed_mean() -> None:
+    """O valor de d_t do LOCO, à mão.
+
+    Não distingue a média das diferenças por seed pareada: com as mesmas seeds em toda
+    configuração (exigido pela montagem, I11) as duas fórmulas são iguais — mutante
+    equivalente, registrado na §7 do technical (C6-5).
+    """
     _, ablation = _defined(_assemble())
 
     # média nas seeds de L^{-price} (2.5, 3, 2) - média nas seeds de L^{full} (2, 2, 2)

@@ -2541,4 +2541,12 @@ make check PYTEST_PAR='-n 4 --dist loadgroup'`, HEAD `2e4cc516`. Verde na 1ª co
 `.importlinter` tem as 7 arestas novas da Stage (6 da Task 19 e 1 da Task 24) mais a
 aresta movida do `cohort_unit_runner`.
 
+### 2026-10-19 — [decision] Task 24 — o mutante "média das diferenças por seed pareada" é equivalente (C6-5) — Claude (Opus 5.5)
+A Task 24 previa que `test_loco_d_t_is_seed_mean_minus_seed_mean` matasse a variante
+"média nas seeds de (L^{-f}_s - L^{full}_s)". A montagem exige as mesmas seeds em toda
+configuração LOCO (I11, `configuration ... seed ... has no run` e `is not a declared
+seed`). Com isso, média de diferenças e diferença de médias são a mesma soma dividida
+pelo mesmo S, e o mutante é equivalente: nenhum teste o distingue. O teste confere só o
+valor à mão, e a docstring dele diz isso. A fórmula registrada continua a do I10.
+
 <!-- END: post-execution -->
