@@ -17,6 +17,7 @@ O `check_port_coverage.py` é cego a slice: `test_real_repo_attribution_ports_re
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,7 +54,10 @@ from financial_forecasting.features.modeling.application.use_cases.predict_tft_a
     PredictTftAttributionCommand,
     PredictTftAttributionFromCheckpoints,
 )
-from financial_forecasting.shared.application.exceptions import ApplicationError
+from financial_forecasting.shared.application.exceptions import (
+    ApplicationError,
+    DuplicateKeyError,
+)
 from tests.fakes.features.inference.in_memory_checkpoint_attribution_predictor import (
     InMemoryCheckpointAttributionPredictor,
 )
@@ -308,3 +312,28 @@ def test_persisters_refuse_identity_not_none_zero(
             _permuted_command([PermutedDecisionEntry(family, k, 2, _forecasts())])
         )
     assert persister_leg.permuted_keys() == set()
+
+
+# -- recusas do real que o fake reusa (TA-12) ------------------------------------------
+
+
+def test_vsn_variable_without_family_refused(persister_leg: _PersisterLeg) -> None:
+    orphan = dataclasses.replace(_vsn_command(), variable_families={"close": "price"})
+    with pytest.raises(ValueError, match="no declared family"):
+        persister_leg.vsn(orphan)
+    assert persister_leg.vsn_keys() == set()
+
+
+def test_permuted_family_outside_the_vocabulary_refused(persister_leg: _PersisterLeg) -> None:
+    entries = [PermutedDecisionEntry("volatility", 1, 2, _forecasts())]
+    with pytest.raises(Exception, match=r"permuted_family|volatility"):
+        persister_leg.permuted(_permuted_command(entries))
+    assert persister_leg.permuted_keys() == set()
+
+
+def test_same_run_written_twice_raises_duplicate_key(persister_leg: _PersisterLeg) -> None:
+    persister_leg.permuted(_permuted_command(_entries()))
+    written = persister_leg.permuted_keys()
+    with pytest.raises(DuplicateKeyError):
+        persister_leg.permuted(_permuted_command(_entries()))
+    assert persister_leg.permuted_keys() == written
