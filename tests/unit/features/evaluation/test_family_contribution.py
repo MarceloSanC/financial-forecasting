@@ -385,3 +385,18 @@ def test_replica_total_exactly_zero_counts_as_nonpositive() -> None:
 
     assert report.status == "ok"
     assert report.nonpositive_replicas[1] == 2  # noqa: PLR2004
+
+
+def test_zero_delta_with_a_strictly_positive_interval_is_undefined() -> None:
+    """C7-3: Δ̂ == 0 sem lado; intervalo que exclui 0 vira `undefined` "opposite"."""
+    series = _ones(2)
+    series[("price", 7)] = (0.0, 2.0)  # média 1: s_7 = s_1 = 1/4, Δ̂ = 0
+
+    report = _evaluate(series, _indices([[0, 0]] * 3), level=0.5)
+
+    price = _share(report, "price")
+    assert price.delta == 0.0  # type: ignore[attr-defined]
+    assert price.side == 0  # type: ignore[attr-defined]
+    assert price.lower > 0  # type: ignore[attr-defined]
+    assert price.status == "undefined"  # type: ignore[attr-defined]
+    assert "opposite" in str(price.reason)  # type: ignore[attr-defined]
