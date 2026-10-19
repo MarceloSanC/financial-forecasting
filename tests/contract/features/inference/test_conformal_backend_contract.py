@@ -38,12 +38,15 @@ from financial_forecasting.features.inference.domain.services.conformal_calibrat
     ConformalCalibrator,
     ConformalVariant,
     exact_level,
+    split_conformal_rank,
 )
 from financial_forecasting.features.inference.domain.value_objects.calibration_set import (
     CalibrationPoint,
     CalibrationSet,
 )
 from tests.contract.features.inference._coincidence_sizes import (
+    COINCIDENCE_COUNT,
+    DIVERGENT_SIZES,
     TAIL_ALPHAS,
     coincidence_sizes,
     divergent_sizes,
@@ -112,8 +115,11 @@ def _domain(
 def test_helper_sizes_include_252() -> None:
     sizes = coincidence_sizes()
     assert 252 in sizes  # noqa: PLR2004 — o tamanho do calib do cohort
-    assert len(sizes) >= 100  # noqa: PLR2004
     assert min(sizes) >= 50  # noqa: PLR2004 — piso do MAPIE (C5)
+    # TA-6: contagem e lista congeladas com ==
+    assert len(sizes) == COINCIDENCE_COUNT
+    assert divergent_sizes() == DIVERGENT_SIZES
+    assert sizes == tuple(n for n in range(50, 400) if n not in DIVERGENT_SIZES)
 
 
 def test_corrections_match_the_domain_at_coincidence_sizes(
@@ -243,3 +249,10 @@ def test_mapie_warns_without_n_features_in(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_mapie_is_silent_without_the_fitted_hook(monkeypatch: pytest.MonkeyPatch) -> None:
     assert _warnings_with(_WithoutFittedHook, monkeypatch) == []
+
+
+def test_integer_rank_of_the_helper_equals_the_domain_rank() -> None:
+    """TA-6: o posto por inteiros do helper (independente) confere com o do domain."""
+    for n in range(50, 400):
+        for alpha in TAIL_ALPHAS:
+            assert domain_rank(n, alpha) == split_conformal_rank(n, exact_level(alpha)), (n, alpha)
