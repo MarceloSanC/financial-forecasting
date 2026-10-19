@@ -656,7 +656,7 @@ def h3_reports_sample() -> H3Reports:
         importance=importance,
         shares=shares,
         level=0.9875,
-        nonpositive_replicas={1: 3, 7: 0},
+        nonpositive_replicas={1: 3, 7: 5},  # TA-6: 4 contagens distintas na amostra
         status="ok",
         reason=None,
         heterogeneous=True,
@@ -670,7 +670,7 @@ def h3_reports_sample() -> H3Reports:
             for s in shares
         ),
         level=0.9875,
-        nonpositive_replicas={1: 0, 7: 0},
+        nonpositive_replicas={1: 2, 7: 4},
         status="undefined",
         reason=reason,
         heterogeneous=None,

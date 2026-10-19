@@ -86,7 +86,7 @@ def test_shares_rows_cell_by_cell() -> None:
     assert (price["lower_infinite"], price["upper_infinite"]) == (False, False)
     assert (price["side"], price["excludes_zero"], price["level"]) == (-1, True, 0.9875)
     assert (price["status"], price["reason"]) == ("ok", None)
-    assert (price["nonpositive_replicas_h1"], price["nonpositive_replicas_h7"]) == (3, 0)
+    assert (price["nonpositive_replicas_h1"], price["nonpositive_replicas_h7"]) == (3, 5)
     assert (price["method_status"], price["method_reason"]) == ("ok", None)
     technical = _one(H3SharesGoldBuilder, method="permutation", family="technical")
     assert technical["status"] == "undefined"
@@ -110,6 +110,7 @@ def test_undefined_method_rows_carry_reason_and_null_measures() -> None:
         assert row["status"] == "undefined"
         for column in ("share_h1", "share_h7", "delta", "lower", "upper", "side"):
             assert row[column] is None, column
+        assert (row["nonpositive_replicas_h1"], row["nonpositive_replicas_h7"]) == (2, 4)
     importance = _rows(H3ImportanceGoldBuilder, method="loco")
     assert len(importance) == 4 * 2  # só a agregada: a montagem do LOCO não tem perfis
     assert {row["status"] for row in importance} == {"undefined"}
@@ -123,8 +124,9 @@ def test_reading_single_row_with_label_and_counts() -> None:
     assert (row["heterogeneous_permutation"], row["heterogeneous_ablation"]) == (True, None)
     assert (row["block_length"], row["max_block_estimate"], row["n_points"]) == (7, 5.25, 3)
     assert (row["reps"], row["bootstrap_seed"]) == (1000, 129)
-    assert (row["nonpositive_permutation_h1"], row["nonpositive_permutation_h7"]) == (3, 0)
-    assert (row["nonpositive_ablation_h1"], row["nonpositive_ablation_h7"]) == (0, 0)
+    # TA-6: quatro contagens distintas, cada coluna lida do seu método e horizonte
+    assert (row["nonpositive_permutation_h1"], row["nonpositive_permutation_h7"]) == (3, 5)
+    assert (row["nonpositive_ablation_h1"], row["nonpositive_ablation_h7"]) == (2, 4)
     assert row["ablation_cohort_id"] == "synthetic_ablation_r0_b2b2b2b2b2b2"
     assert row["label"] == "descritiva (sem claim causal)"
     assert row["status"] == "undefined"
