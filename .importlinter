@@ -618,7 +618,10 @@ ignore_imports =
     # medidos pelo gate `check_schema_literals`. São três `str`: dado, não
     # comportamento (ADR 0.0.0053 item 3). Uma aresta por use case que lê o dataset.
     financial_forecasting.features.modeling.application.use_cases.run_baselines -> financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract
-    financial_forecasting.features.modeling.application.use_cases.run_confirmatory_cohort -> financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract
+    # Stage 7.3 (Task 07): a leitura do grid saiu do `run_confirmatory_cohort` para a
+    # máquina compartilhada dos executores de cohort; a aresta mudou de módulo, a
+    # contagem não mudou (ADR 7.3.0003 item 3).
+    financial_forecasting.features.modeling.application.use_cases.cohort_unit_runner -> financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract
     financial_forecasting.features.modeling.application.use_cases.run_gbm_sweep -> financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract
     financial_forecasting.features.modeling.application.use_cases.run_tft_sweep -> financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract
     financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile -> financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract

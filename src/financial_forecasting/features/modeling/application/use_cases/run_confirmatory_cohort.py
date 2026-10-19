@@ -34,22 +34,36 @@ grid que a corrida — uma fonte só. Pelo mesmo motivo, `check_cohort_declarati
 (I4 + geometria) e `tft_train_command` (o `TrainTftCommand` de uma seed) são
 públicos para a predição a partir do checkpoint (Stage 7.1, ADR 7.1.0001 item 2)
 conferir as declarações e reconstruir a identidade do run sem recopiá-las.
+
+**Stage 7.3 (ADR 7.3.0003 item 3):** o lock, o ambiente, a classificação das
+unidades, as exceções, `load_training_grid`, `check_cohort_declarations` e
+`recorded_run_problems` moram em `cohort_unit_runner`, compartilhado com o executor
+de ablação. Este módulo os reexporta (os importadores da 5.5/7.1 ficam intocados) e
+define só a lista de unidades e as pré-condições do cohort confirmatório.
 """
 
 from __future__ import annotations
 
-import logging
-import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from financial_forecasting.features.feature_engineering.domain.services.dataset_tft_contract import (  # noqa: E501
-    DATASET_TFT_LAYER,
-    DATASET_TFT_TABLE,
-)
-from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
-    DIRTY_KEY,
+from financial_forecasting.features.modeling.application.use_cases.cohort_unit_runner import (
+    CohortDeclarationMismatchError,
+    CohortNotFrozenError,
+    CohortUnitOutcome,
+    CompletedUnitCorruptedError,
+    DatasetMismatchError,
+    EnvironmentMismatchError,
+    PartialCohortUnitError,
+    UnitOutputMismatchError,
+    UnitPlan,
+    check_cohort_declarations,
+    check_environment,
+    classify_and_run,
+    load_training_grid,
+    recorded_run_problems,
+    writer_lock,
 )
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselinesCommand,
@@ -61,7 +75,6 @@ from financial_forecasting.features.modeling.application.use_cases.train_gbm_qua
 from financial_forecasting.features.modeling.application.use_cases.train_gbm_quantile import (
     TrainGbmQuantileCommand,
     TrainGbmQuantileResult,
-    grid_fingerprint,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     MODEL_VERSION as TFT_USE_CASE_MODEL_VERSION,
@@ -70,11 +83,6 @@ from financial_forecasting.features.modeling.application.use_cases.train_tft imp
     TrainTftCommand,
     TrainTftResult,
 )
-from financial_forecasting.features.modeling.domain.services.training_grid import (
-    TrainingGrid,
-    build_training_grid,
-)
-from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.domain.value_objects.cohort_hash import CohortHash
 
 if TYPE_CHECKING:
@@ -96,43 +104,33 @@ if TYPE_CHECKING:
         MedallionStore,
     )
 
-_LOG = logging.getLogger(__name__)
+# Reexportados da máquina compartilhada (Stage 7.3): os importadores da 5.5/7.1 seguem
+# importando daqui.
+__all__ = [
+    "GBM_MODEL_VERSION",
+    "TFT_MODEL_VERSION",
+    "CohortDeclarationMismatchError",
+    "CohortNotFrozenError",
+    "CohortUnitOutcome",
+    "CompletedUnitCorruptedError",
+    "DatasetMismatchError",
+    "EnvironmentMismatchError",
+    "PartialCohortUnitError",
+    "RunConfirmatoryCohort",
+    "RunConfirmatoryCohortCommand",
+    "RunConfirmatoryCohortResult",
+    "UnitOutputMismatchError",
+    "check_cohort_declarations",
+    "cohort_model_keys",
+    "load_training_grid",
+    "recorded_run_problems",
+    "tft_train_command",
+]
+
 # `model_version` que o GBM e o TFT gravam — o dono é o use case de cada um; o dos
 # baselines vem de `BaselineSpec.model_version`.
 GBM_MODEL_VERSION = GBM_USE_CASE_MODEL_VERSION
 TFT_MODEL_VERSION = TFT_USE_CASE_MODEL_VERSION
-
-_RAN = "ran"
-_SKIPPED = "skipped_completed"
-_VERIFIED = "verified_completed"
-
-
-class CohortNotFrozenError(ApplicationError):
-    """O spec não está congelado (I1): falta HP, proveniência, dado ou seeds."""
-
-
-class DatasetMismatchError(ApplicationError):
-    """A impressão digital do dado lido difere da declarada no spec (I4)."""
-
-
-class CohortDeclarationMismatchError(ApplicationError):
-    """Declarado ≠ observado: proveniência dos sweeps, feature set ou versão do pipeline (I4)."""
-
-
-class EnvironmentMismatchError(ApplicationError):
-    """Árvore suja ou ambiente/código diferente do gravado na primeira execução (I5)."""
-
-
-class PartialCohortUnitError(ApplicationError):
-    """Unidade fora do ledger com gravação parcial no silver (I7-d); remediação: nova revisão."""
-
-
-class CompletedUnitCorruptedError(ApplicationError):
-    """Unidade marcada no ledger cujas contagens não batem mais com o silver (I6)."""
-
-
-class UnitOutputMismatchError(ApplicationError):
-    """A unidade rodou, mas o silver não tem os runs esperados — não é marcada."""
 
 
 @dataclass(frozen=True)
@@ -148,29 +146,12 @@ class RunConfirmatoryCohortCommand:
 
 
 @dataclass(frozen=True)
-class CohortUnitOutcome:
-    """DTO de saída — o que aconteceu com uma unidade."""
-
-    unit_key: str
-    status: str
-    run_ids: tuple[str, ...]
-    rows_written: int
-
-
-@dataclass(frozen=True)
 class RunConfirmatoryCohortResult:
     """DTO de saída — identidade do cohort e o desfecho de cada unidade."""
 
     cohort_id: str
     cohort_hash: str
     outcomes: tuple[CohortUnitOutcome, ...]
-
-
-@dataclass(frozen=True)
-class _Unit:
-    key: str
-    model_keys: tuple[tuple[str, int | None], ...]
-    execute: Callable[[], Mapping[str, int]]
 
 
 def _tft_unit(seed: int) -> str:
@@ -193,129 +174,6 @@ def cohort_model_keys(spec: CohortSpec) -> dict[str, tuple[tuple[str, int | None
     for seed in spec.seeds:
         keys[_tft_unit(seed)] = ((TFT_MODEL_VERSION, seed),)
     return keys
-
-
-def _fold_index(fold: str) -> int | None:
-    """Fold do índice como inteiro; vazio/ilegível (fold nulo no silver) → `None`."""
-    try:
-        return int(fold)
-    except ValueError:
-        return None
-
-
-def recorded_run_problems(
-    spec: CohortSpec,
-    model_keys: Sequence[tuple[str, int | None]],
-    recorded: Mapping[tuple[str, int | None], Mapping[str, RunSummary]],
-) -> list[str]:
-    """O que falta ou sobra nos runs gravados de `model_keys`; lista vazia = completo.
-
-    Fonte ÚNICA de "unidade completa" — usada pela classificação da corrida
-    (I7-c), pela conferência depois de executar uma unidade e pelo `verify`.
-    Por modelo: um run por fold (`0..n_folds-1`, nem falta nem repete), fold
-    legível, a contagem de linhas esperada do fold e todos os horizontes do
-    spec; run órfão (registrado sem nenhum fato, I7-b) é ignorado. Entre
-    modelos: no mesmo fold, os `target_timestamp` de cada horizonte são os
-    mesmos.
-    """
-    geometry = spec.geometry
-    n_levels = len(spec.quantile_levels)
-    expected_rows = {
-        fold: geometry.expected_prediction_rows(
-            fold_index=fold, horizons=spec.horizons, n_levels=n_levels
-        )
-        for fold in range(geometry.n_folds)
-    }
-    problems: list[str] = []
-    targets_by_fold: dict[int, set[tuple[tuple[int, frozenset[str]], ...]]] = {}
-    for model_version, seed in model_keys:
-        label = model_version if seed is None else f"{model_version} seed={seed}"
-        folds: list[int] = []
-        for run_id, (fold, rows, targets) in sorted(
-            recorded.get((model_version, seed), {}).items()
-        ):
-            if rows == 0:
-                continue  # órfão (registro sem fatos): não carrega predição, não conta
-            index = _fold_index(fold)
-            if index is None:
-                problems.append(f"{label}: run {run_id} has an unreadable fold {fold!r}")
-                continue
-            folds.append(index)
-            if rows != expected_rows.get(index):
-                problems.append(
-                    f"{label}: run {run_id} fold {index} has {rows} rows, "
-                    f"expected {expected_rows.get(index)}"
-                )
-            if set(targets) != set(spec.horizons):
-                problems.append(
-                    f"{label}: run {run_id} has horizons {sorted(targets)}, "
-                    f"expected {list(spec.horizons)}"
-                )
-            targets_by_fold.setdefault(index, set()).add(tuple(sorted(targets.items())))
-        if sorted(folds) != list(range(geometry.n_folds)):
-            problems.append(f"{label}: folds {sorted(folds)}, expected 0..{geometry.n_folds - 1}")
-    problems.extend(
-        f"fold {fold}: target_timestamp sets differ across models"
-        for fold, variants in sorted(targets_by_fold.items())
-        if len(variants) != 1
-    )
-    return problems
-
-
-def load_training_grid(
-    *, store: MedallionStore, asset_id: str, columns: Sequence[str]
-) -> TrainingGrid:
-    """O grid único do ativo, lido do dataset materializado (mesma leitura do treino)."""
-    rows = store.read(layer=DATASET_TFT_LAYER, table=DATASET_TFT_TABLE, filters={"asset": asset_id})
-    return build_training_grid(rows, columns=columns)
-
-
-def check_cohort_declarations(  # noqa: PLR0913 — as declarações conferidas, uma por argumento
-    spec: CohortSpec,
-    *,
-    store: MedallionStore,
-    hasher: Hasher,
-    modeling_columns: Sequence[str],
-    observed_feature_set_hash: str,
-    pipeline_version: str,
-    supported_device: str,
-) -> TrainingGrid:
-    """I4 + geometria: o dado e o código de agora são os que o spec declara.
-
-    Devolve o grid lido (o mesmo da corrida). Erros: `DatasetMismatchError`
-    (impressão digital do dado), `CohortDeclarationMismatchError` (proveniência
-    dos sweeps, `feature_set_hash`, device, `pipeline_version`) e o erro de
-    geometria do domínio.
-    """
-    grid = load_training_grid(store=store, asset_id=spec.asset_id, columns=modeling_columns)
-    observed = grid_fingerprint(grid, hasher=hasher, asset_id=spec.asset_id)
-    if observed != spec.dataset_fingerprint:
-        raise DatasetMismatchError(
-            f"dataset fingerprint {observed[:12]} != declared "
-            f"{str(spec.dataset_fingerprint)[:12]} — the materialized data changed"
-        )
-    provenance = spec.provenance
-    if provenance is None or provenance.dataset_fingerprint != spec.dataset_fingerprint:
-        raise CohortDeclarationMismatchError(
-            "sweeps ran on a different dataset than the one declared for the run"
-        )
-    if spec.feature_set_hash != observed_feature_set_hash:
-        raise CohortDeclarationMismatchError(
-            f"feature_set_hash {spec.feature_set_hash[:12]} != registry "
-            f"{observed_feature_set_hash[:12]}"
-        )
-    if spec.device != supported_device:
-        # O probe grava o device DECLARADO; sem esta igualdade, um spec com
-        # "rocm" rodaria em CPU e carimbaria "rocm" no hash e no ledger.
-        raise CohortDeclarationMismatchError(
-            f"device {spec.device!r} declared, but the trainers run on {supported_device!r}"
-        )
-    if spec.pipeline_version != pipeline_version:
-        raise CohortDeclarationMismatchError(
-            f"pipeline_version {spec.pipeline_version!r} != code {pipeline_version!r}"
-        )
-    spec.geometry.fits(n_sessions=len(grid.timestamps), max_horizon=spec.max_horizon)
-    return grid
 
 
 def tft_train_command(
@@ -391,15 +249,19 @@ class RunConfirmatoryCohort:
         cohort_id = spec.cohort_id(cohort_hash)
         scope = spec.scope(cohort_id)
 
-        self._ledger.acquire_writer(break_stale=command.break_stale_lock)
-        try:
+        with writer_lock(self._ledger, break_stale=command.break_stale_lock):
             self._check_declarations(spec)
-            self._check_environment(cohort_id)
+            check_environment(self._ledger, self._probe, cohort_id, clock=self._clock)
             outcomes = tuple(
-                self._run_unit(spec, scope, cohort_id, unit) for unit in self._units(spec, scope)
+                classify_and_run(
+                    unit,
+                    spec=spec,
+                    cohort_id=cohort_id,
+                    ledger=self._ledger,
+                    recorded=lambda: self._recorded(spec, cohort_id),
+                )
+                for unit in self._units(spec, scope)
             )
-        finally:
-            self._ledger.release_writer()
         return RunConfirmatoryCohortResult(
             cohort_id=cohort_id, cohort_hash=cohort_hash.value, outcomes=outcomes
         )
@@ -418,30 +280,9 @@ class RunConfirmatoryCohort:
             supported_device=self._supported_device,
         )
 
-    def _check_environment(self, cohort_id: str) -> None:
-        """I5: árvore limpa sempre; ambiente gravado na 1ª vez e igual nas seguintes."""
-        snapshot = dict(self._probe.snapshot())
-        if snapshot.get(DIRTY_KEY) == "true":
-            raise EnvironmentMismatchError(
-                "tracked uncommitted changes in src/, uv.lock or the cohort file — commit first"
-            )
-        recorded = self._ledger.environment(cohort_id)
-        if recorded is None:
-            self._ledger.record_environment(
-                cohort_id, snapshot, started_at=self._clock.now().isoformat()
-            )
-            return
-        differing = sorted(
-            key for key in set(recorded) | set(snapshot) if recorded.get(key) != snapshot.get(key)
-        )
-        if differing:
-            raise EnvironmentMismatchError(
-                f"environment differs from the first run on {differing} — resume refused"
-            )
-
     # -- unidades -----------------------------------------------------------------
 
-    def _units(self, spec: CohortSpec, scope: ScopeSpec) -> list[_Unit]:
+    def _units(self, spec: CohortSpec, scope: ScopeSpec) -> list[UnitPlan]:
         geometry = spec.geometry
         gbm_params = spec.gbm_params
         assert gbm_params is not None  # is_frozen garante
@@ -495,90 +336,18 @@ class RunConfirmatoryCohort:
             return execute
 
         units = [
-            _Unit(key="baselines", model_keys=model_keys["baselines"], execute=baselines),
-            _Unit(key="gbm", model_keys=model_keys["gbm"], execute=gbm),
+            UnitPlan(key="baselines", model_keys=model_keys["baselines"], execute=baselines),
+            UnitPlan(key="gbm", model_keys=model_keys["gbm"], execute=gbm),
         ]
         units += [
-            _Unit(key=_tft_unit(seed), model_keys=model_keys[_tft_unit(seed)], execute=tft(seed))
+            UnitPlan(key=_tft_unit(seed), model_keys=model_keys[_tft_unit(seed)], execute=tft(seed))
             for seed in spec.seeds
         ]
         return units
-
-    def _run_unit(
-        self, spec: CohortSpec, scope: ScopeSpec, cohort_id: str, unit: _Unit
-    ) -> CohortUnitOutcome:
-        started = time.monotonic()
-        _LOG.info("unit %s: start", unit.key)
-        outcome = self._classify_and_run(spec, cohort_id, unit)
-        _LOG.info(
-            "unit %s: %s (%d runs, %d rows written, %.1fs)",
-            unit.key,
-            outcome.status,
-            len(outcome.run_ids),
-            outcome.rows_written,
-            time.monotonic() - started,
-        )
-        return outcome
 
     def _recorded(
         self, spec: CohortSpec, cohort_id: str
     ) -> Mapping[tuple[str, int | None], Mapping[str, RunSummary]]:
         return self._run_index.recorded_runs(
             asset_id=spec.asset_id, feature_set_name=spec.feature_set_name, cohort_id=cohort_id
-        )
-
-    def _classify_and_run(self, spec: CohortSpec, cohort_id: str, unit: _Unit) -> CohortUnitOutcome:
-        recorded = self._recorded(spec, cohort_id)
-        runs = {
-            run_id: summary
-            for model_key in unit.model_keys
-            for run_id, summary in recorded.get(model_key, {}).items()
-        }
-        completed = self._ledger.completed_units(cohort_id)
-        if unit.key in completed:
-            marked = completed[unit.key]
-            for run_id, rows in marked.items():
-                if run_id not in runs or runs[run_id][1] != rows:
-                    raise CompletedUnitCorruptedError(
-                        f"unit {unit.key!r}: run {run_id} has "
-                        f"{runs[run_id][1] if run_id in runs else 'no'} rows in silver, "
-                        f"ledger says {rows}"
-                    )
-            return CohortUnitOutcome(
-                unit_key=unit.key,
-                status=_SKIPPED,
-                run_ids=tuple(sorted(marked)),
-                rows_written=0,
-            )
-
-        if runs and any(summary[1] > 0 for summary in runs.values()):
-            if not recorded_run_problems(spec, unit.model_keys, recorded):
-                rows_by_run = {run_id: summary[1] for run_id, summary in runs.items()}
-                self._ledger.mark_completed(cohort_id, unit.key, rows_by_run)
-                return CohortUnitOutcome(
-                    unit_key=unit.key,
-                    status=_VERIFIED,
-                    run_ids=tuple(sorted(rows_by_run)),
-                    rows_written=0,
-                )
-            raise PartialCohortUnitError(
-                f"unit {unit.key!r} of cohort {cohort_id} is partially persisted in silver "
-                "— start a new cohort revision (revision += 1)"
-            )
-
-        rows_by_run = dict(unit.execute())
-        # Só marca o que o silver confirma: um use case que devolvesse menos runs
-        # ou linhas sem erguer erro ficaria `skipped_completed` para sempre.
-        problems = recorded_run_problems(spec, unit.model_keys, self._recorded(spec, cohort_id))
-        if problems:
-            raise UnitOutputMismatchError(
-                f"unit {unit.key!r} ran but the silver does not hold the expected runs: "
-                + "; ".join(problems)
-            )
-        self._ledger.mark_completed(cohort_id, unit.key, rows_by_run)
-        return CohortUnitOutcome(
-            unit_key=unit.key,
-            status=_RAN,
-            run_ids=tuple(sorted(rows_by_run)),
-            rows_written=sum(rows_by_run.values()),
         )
