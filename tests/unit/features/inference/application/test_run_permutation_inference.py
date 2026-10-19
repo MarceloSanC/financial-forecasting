@@ -743,3 +743,48 @@ def test_vsn_write_failure_leaves_started_and_the_next_run_is_partial() -> None:
     failing.fail = False
     with pytest.raises(PartialAttributionError, match="C8"):
         harness.run()
+
+
+# -- retomada contra partição, famílias trocadas e colunas adulteradas (C5-3) ---------------
+
+
+def test_completed_with_another_partition_in_the_command_is_partial() -> None:
+    harness = _harness()
+    harness.run()
+    moved = {**_PARTITION, "price": ("close",), "technical": ("rsi_14", "volume")}
+    with pytest.raises(PartialAttributionError, match="partition_hash"):
+        harness.run(family_partition=moved)
+
+
+def test_rows_moved_between_families_with_the_same_total_are_partial() -> None:
+    harness = _harness()
+    harness.run()
+    moved, limit = {"done": 0}, 3
+
+    def relabel(row: dict[str, object]) -> dict[str, object]:
+        if (row["permuted_family"], row["permutation_index"]) == ("price", 1) and moved[
+            "done"
+        ] < limit:
+            moved["done"] += 1
+            return {**row, "permuted_family": "sentiment"}
+        return row
+
+    _edit_rows(harness, "fact_permuted_predictions", relabel)
+    assert moved["done"] == limit
+    with pytest.raises(PartialAttributionError, match="permuted counts"):
+        harness.run()
+
+
+@pytest.mark.parametrize(
+    ("column", "value"), [("partition_hash", "f" * 64), ("permutation_seed", PERMUTATION_SEED + 1)]
+)
+def test_one_tampered_row_column_is_partial(column: str, value: object) -> None:
+    harness = _harness()
+    harness.run()
+    for key, rows in harness.repo._partitions.items():
+        if key[1] == "fact_permuted_predictions":
+            mine = [i for i, r in enumerate(rows) if r["run_id"] == _run_id(11, 0)]
+            if mine:
+                rows[mine[-1]] = {**rows[mine[-1]], column: value}
+    with pytest.raises(PartialAttributionError, match=rf"column {column} differs"):
+        harness.run()
