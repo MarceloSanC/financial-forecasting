@@ -2643,4 +2643,23 @@ permutadas guardadas até a montagem (41 x 2 séries de T/6 floats por run). A V
 somada por decisão já na leitura (`VsnAccumulator`, C8-5a). Duração: ~5,5 min, marcado
 `slow`.
 
+### 2026-10-19 — [decision] C8 — filtro de split duplicado e itens para o handoff da Task 33 — Claude (Opus 5.5)
+**Filtro de `split`.** As linhas da ablação são filtradas por `split == "test"` duas
+vezes: na leitura por ano do `RefreshGold`, para não guardar linhas inúteis no bloco do
+ano, e no `reduce_ablation_run`, dono da regra. Cada filtro sozinho é mutante
+equivalente. `test_ablation_rows_outside_test_are_ignored` (C8-9) mata o mutante sem os
+dois.
+
+**Para o `[handoff]` da Task 33** (achados C8-6, C8-13 e a lista do orquestrador):
+- **L0:** `gh auth status` e `make setup` (o hook `commit-msg`).
+- **L6b:** declara o arquivamento ou o backup dos checkpoints da ablação
+  (`artifacts/tft`).
+- **L7:**
+  - cita `test_filled_r3_differs_from_draft_only_in_h3_ablation`, que agora confere id,
+    hash e seeds contra o spec congelado;
+  - confere por comando que a tag `cohort/<id da ablação>` é anterior à
+    `preregistration/<ref r3>`;
+  - reescreve o cabeçalho "RASCUNHO" do arquivo ao ancorar (só comentários).
+- **Etapa W:** o `[handoff]` registra o estado dela (CA15).
+
 <!-- END: post-execution -->
