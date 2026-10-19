@@ -10,9 +10,9 @@ superconjunto da partição pedida, como o adapter. Nenhum dado real.
 - `test_h3_step_peak_bounded_and_flat_in_runs` (C8-5b): o `RefreshGold._h3` inteiro e os
   quatro builders de H3, na geometria real — 10 seeds x 6 folds (T ≈ 1 506), 50 runs de
   ablação por ano, K_p = 10 e um bootstrap de 1 000 x T. Cada tamanho roda num processo
-  próprio; o pico é o RSS máximo menos o RSS antes da etapa (o `tracemalloc` deixaria o
-  teste ~3x mais lento). Teto de 512 MiB e inclinação (pico(60) - pico(30)) / 30 dentro
-  do orçamento por run declarado na §7 do technical.
+  próprio; o pico é o VmHWM zerado no começo da etapa menos o RSS de então (o
+  `tracemalloc` deixaria o teste ~3x mais lento). Teto de 512 MiB e inclinação
+  (pico(60) - pico(30)) / 30 dentro do orçamento por run declarado na §7 do technical.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from __future__ import annotations
 import json
 import math
 import random
-import resource
 import subprocess
 import sys
 import tracemalloc
@@ -291,11 +290,21 @@ def test_ablation_partition_read_once_per_year_at_real_size() -> None:
 # --- C8-5b: o passo `_h3` inteiro, com os builders, por processo -------------------------
 
 
-def _rss_now() -> int:
+def _status(field: str) -> int:
     for line in Path("/proc/self/status").read_text(encoding="utf-8").splitlines():
-        if line.startswith("VmRSS:"):
+        if line.startswith(f"{field}:"):
             return int(line.split()[1]) * 1024
-    raise AssertionError("no VmRSS")  # pragma: no cover — só Linux (o container de teste)
+    raise AssertionError(f"no {field}")  # pragma: no cover — só Linux (o container de teste)
+
+
+def _reset_peak() -> None:
+    """Zera o VmHWM do processo (`clear_refs` = 5): o pico passa a ser o da etapa.
+
+    Sem isso, o pico do processo inteiro (o dos imports) menos um RSS-base que o kernel
+    encolheu ao recuperar páginas sob pressão do cgroup infla a diferença — foi o que
+    deu 1,18 GiB no `make check` com -n 4 (TA, Ponto C) para 264 MiB isolado.
+    """
+    Path("/proc/self/clear_refs").write_text("5", encoding="ascii")
 
 
 def probe(seeds: int) -> dict[str, object]:
@@ -362,7 +371,8 @@ def probe(seeds: int) -> dict[str, object]:
         H3ReadingGoldBuilder(),
         H3VsnGoldBuilder(),
     )
-    before = _rss_now()
+    _reset_peak()
+    before = _status("VmRSS")
     reports = use_case._h3(
         partition=_PARTITION,
         runs=candidate,
@@ -373,7 +383,7 @@ def probe(seeds: int) -> dict[str, object]:
     )
     inputs = dataclasses.replace(base_inputs, parameters=parameters, h3_reports=reports)
     tables = [builder.build(inputs) for builder in builders]
-    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024
+    peak = _status("VmHWM")
     return {
         "peak": peak - before,
         "permutation": reports.permutation.status if reports.permutation else None,
