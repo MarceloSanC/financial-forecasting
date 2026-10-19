@@ -132,6 +132,10 @@ _WRITTEN = "written"
 Row = Mapping[str, object]
 
 
+class AblationBaseMismatchError(ApplicationError):
+    """A partição veio de um arquivo de ablação cuja base não é o cohort do comando."""
+
+
 class PartialAttributionError(ApplicationError):
     """Run com linhas de atribuição no silver sem `completed`, ou incompleto (C8)."""
 
@@ -174,10 +178,15 @@ def check_attribution_coverage(
 
 @dataclass(frozen=True)
 class RunPermutationInferenceCommand:
-    """DTO de entrada — o spec congelado, a partição de famílias, o lock e a justificativa."""
+    """DTO de entrada — o spec congelado, a partição de famílias, o lock e a justificativa.
+
+    `base_cohort_hash` é o hash da base declarada pelo arquivo de ablação, de onde veio a
+    partição: tem de ser o do `spec` (C6-8; o CLI só traduz a recusa em exit 2).
+    """
 
     spec: CohortSpec
     family_partition: Mapping[str, tuple[str, ...]]
+    base_cohort_hash: str
     break_stale_lock: bool = False
     cross_environment_justification: str | None = None
 
@@ -358,9 +367,14 @@ class RunPermutationInference:
         partition_hash = FamilyPartitionHash.compute(
             hasher=self._hasher, feature_set_hash=spec.feature_set_hash, partition=partition
         ).value
-        cohort_id = spec.cohort_id(
-            CohortHash.compute(hasher=self._hasher, payload=spec.hash_payload())
-        )
+        cohort_hash = CohortHash.compute(hasher=self._hasher, payload=spec.hash_payload())
+        if command.base_cohort_hash != cohort_hash.value:  # C6-8 — antes do lock
+            raise AblationBaseMismatchError(
+                f"the ablation cohort declares base cohort_hash {command.base_cohort_hash[:12]}, "
+                f"but the cohort {spec.name!r} r{spec.revision} has {cohort_hash.value[:12]} — "
+                "attribute the base of the ablation cohort"
+            )
+        cohort_id = spec.cohort_id(cohort_hash)
 
         self._ledger.acquire_writer(break_stale=command.break_stale_lock)
         try:

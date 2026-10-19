@@ -89,6 +89,7 @@ def attribute(  # noqa: PLR0913 — opções coesas do subcomando
     spec: CohortSpec,
     cohort_path: Path,
     family_partition: Mapping[str, tuple[str, ...]],
+    base_cohort_hash: str,
     *,
     out: TextIO,
     break_stale_lock: bool = False,
@@ -100,6 +101,7 @@ def attribute(  # noqa: PLR0913 — opções coesas do subcomando
         RunPermutationInferenceCommand(
             spec=spec,
             family_partition=family_partition,
+            base_cohort_hash=base_cohort_hash,
             break_stale_lock=break_stale_lock,
             cross_environment_justification=cross_environment,
         )

@@ -55,7 +55,6 @@ from financial_forecasting.features.market_data.application.use_cases.ingest_new
 )
 from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.domain.exceptions.base import DomainError
-from financial_forecasting.shared.domain.value_objects.cohort_hash import CohortHash
 from financial_forecasting.shared.infrastructure.config.settings import Settings
 
 if TYPE_CHECKING:
@@ -288,21 +287,14 @@ def _dispatch_inference_command(
             cross_environment=args.cross_environment,
         )
     else:
-        spec = cohort_file.load(args.cohort)
         ablation_spec, _ = deps.load_ablation_spec(args.ablation_cohort)
-        observed = CohortHash.compute(hasher=deps.hasher, payload=spec.hash_payload()).value
-        if ablation_spec.base_cohort_hash != observed:
-            # C5-10: o `[partition]` só vale para a base que o arquivo de ablação declara
-            raise ValueError(
-                f"--ablation-cohort {args.ablation_cohort} declares base cohort_hash "
-                f"{ablation_spec.base_cohort_hash[:12]}, but --cohort {args.cohort} has "
-                f"{observed[:12]} — attribute the base of the ablation cohort"
-            )
+        # C6-8: o use case confere a base; a recusa (ApplicationError) vira exit 2 no `main`
         exit_code = commands.attribute(
             deps.permutation_inference_for,
-            spec,
+            cohort_file.load(args.cohort),
             args.cohort,
             ablation_spec.family_partition,
+            ablation_spec.base_cohort_hash,
             out=out,
             break_stale_lock=args.break_stale_lock,
             cross_environment=args.cross_environment,

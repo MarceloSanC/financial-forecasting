@@ -34,6 +34,7 @@ from financial_forecasting.features.inference.application.use_cases.run_inferenc
     UnknownRunError,
 )
 from financial_forecasting.features.inference.application.use_cases.run_permutation_inference import (  # noqa: E501
+    AblationBaseMismatchError,
     IncompleteAttributionError,
     PartialAttributionError,
     RunPermutationInference,
@@ -98,6 +99,10 @@ def _spec_frozen() -> Any:  # noqa: ANN401
     return _spec()
 
 
+def _cohort_hash(spec: Any) -> str:  # noqa: ANN401
+    return CohortHash.compute(hasher=_HASHER, payload=spec.hash_payload()).value
+
+
 def _cohort_id(spec: Any) -> str:  # noqa: ANN401
     return spec.cohort_id(CohortHash.compute(hasher=_HASHER, payload=spec.hash_payload()))
 
@@ -145,7 +150,11 @@ class _Harness:
         )
 
     def run(self, **command: Any) -> Any:  # noqa: ANN401
-        fields: dict[str, Any] = {"spec": self.spec, "family_partition": _PARTITION}
+        fields: dict[str, Any] = {
+            "spec": self.spec,
+            "family_partition": _PARTITION,
+            "base_cohort_hash": _cohort_hash(self.spec),
+        }
         fields.update(command)
         return self.use_case()(RunPermutationInferenceCommand(**fields))
 
@@ -865,9 +874,23 @@ def test_wrong_rows_written_leaves_the_run_started() -> None:
     harness = _harness()
     use_case = harness.use_case()
     use_case._permuted_persister = _MiscountingPersister(harness.repo)
-    command = RunPermutationInferenceCommand(spec=harness.spec, family_partition=_PARTITION)
+    command = RunPermutationInferenceCommand(
+        spec=harness.spec, family_partition=_PARTITION, base_cohort_hash=_cohort_hash(harness.spec)
+    )
     with pytest.raises(PartialAttributionError, match="left started"):
         use_case(command)
     document = harness.manifest.recorded(_cohort_id(harness.spec))
     assert document is not None
     assert document["runs"][_run_id(11, 0)]["status"] == "started"  # type: ignore[index]
+
+
+# -- a base do arquivo de ablação é conferida no use case (C6-8) ----------------------------
+
+
+def test_ablation_base_other_than_the_spec_is_refused_before_the_lock() -> None:
+    harness = _harness()
+    with pytest.raises(AblationBaseMismatchError, match="declares base cohort_hash"):
+        harness.run(base_cohort_hash="e" * 64)
+    assert not harness.ledger.is_locked
+    assert harness.manifest.recorded(_cohort_id(harness.spec)) is None
+    assert harness.predictor.calls == []

@@ -618,9 +618,9 @@ def test_attribute_dispatches_the_base_spec_and_the_partition(
     seen: dict[str, Any] = {}
 
     def fake_attribute(
-        factory: object, spec: object, path: Path, partition: object, **kw: object
+        factory: object, spec: object, path: Path, partition: object, base: object, **kw: object
     ) -> int:
-        seen.update(factory=factory, spec=spec, path=path, partition=partition, **kw)
+        seen.update(factory=factory, spec=spec, path=path, partition=partition, base=base, **kw)
         return 0
 
     monkeypatch.setattr(commands, "attribute", fake_attribute)
@@ -632,6 +632,7 @@ def test_attribute_dispatches_the_base_spec_and_the_partition(
     assert code == 0
     assert seen["path"] == base
     assert set(seen["partition"]) == {"price", "technical", "sentiment", "fundamental"}
+    assert len(seen["base"]) == 64  # noqa: PLR2004 — o base_cohort_hash do arquivo de ablação
     assert seen["break_stale_lock"] is False
     assert seen["cross_environment"] is None
 
