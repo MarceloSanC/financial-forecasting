@@ -97,6 +97,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
 from financial_forecasting.features.evaluation.domain.value_objects.conformal_parameters import (
     ConformalParameters,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.family_loss_differentials import (  # noqa: E501
+    FamilyLossDifferentials,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.h3_parameters import (
     H3Parameters,
 )
@@ -1003,12 +1006,34 @@ EMPTY_CONFORMAL_REPORTS: Final = ConformalReports(
 _H3_METHODS: Final = {"permutation": "permutation", "ablation": "loco"}
 
 
+def _check_h3_method(name: str, method: str, report: object, differentials: object) -> None:
+    """O relatório e as séries d_t de um método: tipos e o nome do método."""
+    if report is not None:
+        if not isinstance(report, FamilyContributionReport):
+            raise ValueError(f"{name} must be a FamilyContributionReport, got {report!r}")
+        if report.method != method:
+            raise ValueError(f"{name} must be the {method} report, got {report.method!r}")
+    if differentials is not None:
+        if not isinstance(differentials, FamilyLossDifferentials):
+            raise ValueError(
+                f"{name}_differentials must be a FamilyLossDifferentials, got {differentials!r}"
+            )
+        if differentials.method != method:
+            raise ValueError(
+                f"{name}_differentials must be the {method} series, got "
+                f"{differentials.method!r}"
+            )
+
+
 @dataclass(frozen=True, kw_only=True)
 class H3Reports:
     """O que os builders de H3 mapeiam (Stage 7.3) — só tipos do `evaluation`.
 
     Campos:
         permutation, ablation: o relatório de cada método (`None` se não calculado).
+        permutation_differentials, ablation_differentials: as séries d_t de cada método
+            com os perfis por seed e por k (`gold_h3_importance`); `None` se a montagem
+            do método foi `undefined`.
         reading: a leitura de H3 sobre os dois métodos.
         vsn: o resumo dos pesos da VSN.
         block_length, max_block_estimate, n_points: o bloco do bootstrap conjunto, o maior
@@ -1020,6 +1045,8 @@ class H3Reports:
 
     permutation: FamilyContributionReport | None
     ablation: FamilyContributionReport | None
+    permutation_differentials: FamilyLossDifferentials | None
+    ablation_differentials: FamilyLossDifferentials | None
     reading: H3Reading | None
     vsn: VsnSummaryReport | None
     block_length: int | None
@@ -1029,13 +1056,12 @@ class H3Reports:
     def __post_init__(self) -> None:
         """Tipos, o método de cada relatório e os números do bootstrap."""
         for name, method in _H3_METHODS.items():
-            report = getattr(self, name)
-            if report is None:
-                continue
-            if not isinstance(report, FamilyContributionReport):
-                raise ValueError(f"{name} must be a FamilyContributionReport, got {report!r}")
-            if report.method != method:
-                raise ValueError(f"{name} must be the {method} report, got {report.method!r}")
+            _check_h3_method(
+                name,
+                method,
+                getattr(self, name),
+                getattr(self, f"{name}_differentials"),
+            )
         if self.reading is not None and not isinstance(self.reading, H3Reading):
             raise ValueError(f"reading must be a H3Reading, got {self.reading!r}")
         if self.vsn is not None and not isinstance(self.vsn, VsnSummaryReport):
@@ -1056,6 +1082,8 @@ class H3Reports:
             for name in (
                 "permutation",
                 "ablation",
+                "permutation_differentials",
+                "ablation_differentials",
                 "reading",
                 "vsn",
                 "block_length",
@@ -1068,6 +1096,8 @@ class H3Reports:
 EMPTY_H3_REPORTS: Final = H3Reports(
     permutation=None,
     ablation=None,
+    permutation_differentials=None,
+    ablation_differentials=None,
     reading=None,
     vsn=None,
     block_length=None,

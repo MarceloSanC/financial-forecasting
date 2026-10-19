@@ -48,6 +48,18 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_seed_fraction import (  # noqa: E501
     DmSeedFractionGoldBuilder,
 )
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_importance import (  # noqa: E501
+    H3ImportanceGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_reading import (
+    H3ReadingGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_shares import (
+    H3SharesGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_vsn import (
+    H3VsnGoldBuilder,
+)
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.loss_differentials import (  # noqa: E501
     LossDifferentialsGoldBuilder,
 )
@@ -109,6 +121,10 @@ BUILDERS: dict[str, Callable[[], GoldBuilder]] = {
     "loss_differentials": LossDifferentialsGoldBuilder,
     "conformal_corrections": ConformalCorrectionsGoldBuilder,  # Stage 7.2
     "conformal_coverage": ConformalCoverageGoldBuilder,
+    "h3_importance": H3ImportanceGoldBuilder,  # Stage 7.3
+    "h3_shares": H3SharesGoldBuilder,
+    "h3_reading": H3ReadingGoldBuilder,
+    "h3_vsn": H3VsnGoldBuilder,
 }
 
 

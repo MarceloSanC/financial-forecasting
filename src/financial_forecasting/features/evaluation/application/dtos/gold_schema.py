@@ -254,6 +254,64 @@ GOLD_CONFORMAL_COVERAGE: Final = GoldTableSchema(
     ),
 )
 
+# --- Stage 7.3: leitura de H3 (ADR 7.3.0001 item 4; technical 7.3 §1) ------------------
+
+GOLD_H3_IMPORTANCE: Final = GoldTableSchema(
+    name="gold_h3_importance",
+    key=("method", "family", "horizon", "seed", "permutation_index"),
+    read_columns=("importance", "n_points", "status", "reason"),
+)
+GOLD_H3_SHARES: Final = GoldTableSchema(
+    name="gold_h3_shares",
+    key=("method", "family"),
+    read_columns=(
+        "share_h1",
+        "share_h7",
+        "delta",
+        "lower",
+        "upper",
+        "lower_infinite",
+        "upper_infinite",
+        "level",
+        "side",
+        "excludes_zero",
+        "status",
+        "reason",
+        "nonpositive_replicas_h1",
+        "nonpositive_replicas_h7",
+        "method_status",
+        "method_reason",
+    ),
+)
+GOLD_H3_READING: Final = GoldTableSchema(
+    name="gold_h3_reading",
+    key=("reading_rule",),
+    read_columns=(
+        "heterogeneous_permutation",
+        "heterogeneous_ablation",
+        "sustained",
+        "agreeing_families",
+        "block_length",
+        "max_block_estimate",
+        "reps",
+        "bootstrap_seed",
+        "n_points",
+        "nonpositive_permutation_h1",
+        "nonpositive_permutation_h7",
+        "nonpositive_ablation_h1",
+        "nonpositive_ablation_h7",
+        "ablation_cohort_id",
+        "label",
+        "status",
+        "reason",
+    ),
+)
+GOLD_H3_VSN: Final = GoldTableSchema(
+    name="gold_h3_vsn",
+    key=("kind", "name"),
+    read_columns=("family", "p10", "p50", "p90", "n_decisions", "label", "status", "reason"),
+)
+
 GOLD_SCHEMAS: Final[Mapping[str, GoldTableSchema]] = MappingProxyType(
     {
         schema.name: schema
@@ -273,10 +331,14 @@ GOLD_SCHEMAS: Final[Mapping[str, GoldTableSchema]] = MappingProxyType(
             GOLD_LOSS_DIFFERENTIALS,
             GOLD_CONFORMAL_CORRECTIONS,
             GOLD_CONFORMAL_COVERAGE,
+            GOLD_H3_IMPORTANCE,
+            GOLD_H3_SHARES,
+            GOLD_H3_READING,
+            GOLD_H3_VSN,
         )
     }
 )
-"""As tabelas pelo nome (as cinco da 6.4, as de perfil da 6.6 e as conformais da 7.2)."""
+"""As tabelas pelo nome (6.4, perfis da 6.6, conformais da 7.2 e as de H3 da 7.3)."""
 
 CONFIRMATORY_TABLES: Final[tuple[str, ...]] = (
     GOLD_METRICS_BY_RUN.name,
@@ -293,5 +355,9 @@ CONFIRMATORY_TABLES: Final[tuple[str, ...]] = (
     GOLD_LOSS_DIFFERENTIALS.name,
     GOLD_CONFORMAL_CORRECTIONS.name,
     GOLD_CONFORMAL_COVERAGE.name,
+    GOLD_H3_IMPORTANCE.name,
+    GOLD_H3_SHARES.name,
+    GOLD_H3_READING.name,
+    GOLD_H3_VSN.name,
 )
 """As tabelas que carregam `preregistration_ref` (ADR 6.4.0006 item 4)."""

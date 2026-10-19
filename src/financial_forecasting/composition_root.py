@@ -123,6 +123,18 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_seed_fraction import (  # noqa: E501
     DmSeedFractionGoldBuilder,
 )
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_importance import (  # noqa: E501
+    H3ImportanceGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_reading import (
+    H3ReadingGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_shares import (
+    H3SharesGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_vsn import (
+    H3VsnGoldBuilder,
+)
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.loss_differentials import (  # noqa: E501
     LossDifferentialsGoldBuilder,
 )
@@ -1206,6 +1218,11 @@ def wire_dependencies(
             LossDifferentialsGoldBuilder(),
             ConformalCorrectionsGoldBuilder(),
             ConformalCoverageGoldBuilder(),
+            # leitura de H3 (Stage 7.3; vazia sem bloco [h3] — ADR 7.3.0001 item 4)
+            H3ImportanceGoldBuilder(),
+            H3SharesGoldBuilder(),
+            H3ReadingGoldBuilder(),
+            H3VsnGoldBuilder(),
         ),
         # Stage 7.2 (ADR 7.2.0003 item 3): o real do port do consumidor
         # `ConformalCalibration` é o use case `CalibrateConformal` do inference, puro

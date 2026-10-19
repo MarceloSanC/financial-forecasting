@@ -599,6 +599,10 @@ def test_wire_dependencies_wires_refresh_gold(tmp_path: Path) -> None:
         "dm_profiles",
         "dm_results",
         "dm_seed_fraction",
+        "h3_importance",  # Stage 7.3
+        "h3_reading",
+        "h3_shares",
+        "h3_vsn",
         "loss_differentials",
         "mcs_block_sensitivity",
         "mcs_results",

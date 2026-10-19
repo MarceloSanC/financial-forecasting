@@ -456,6 +456,10 @@ def test_schema_tables_complete() -> None:
         "gold_loss_differentials",
         "gold_conformal_corrections",  # Stage 7.2
         "gold_conformal_coverage",
+        "gold_h3_importance",  # Stage 7.3
+        "gold_h3_shares",
+        "gold_h3_reading",
+        "gold_h3_vsn",
     }
     assert set(CONFIRMATORY_TABLES) == set(GOLD_SCHEMAS) - {"gold_quality_checks"}
     for name, schema in GOLD_SCHEMAS.items():
@@ -1028,5 +1032,5 @@ def test_completed_inputs_accept_h3_reports() -> None:
     assert inputs.h3_reports.reading.status == "undefined"  # o LOCO da amostra é undefined
     without = completed_inputs_without_h3()
     assert without.h3_reports.is_empty
-    with pytest.raises(ValueError, match="without a \[h3\] block"):
+    with pytest.raises(ValueError, match=r"without a \[h3\] block"):
         dataclasses.replace(without, h3_reports=inputs.h3_reports)

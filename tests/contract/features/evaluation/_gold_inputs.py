@@ -117,6 +117,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.conformal_pa
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.family_loss_differentials import (  # noqa: E501
+    FamilyLossDifferentials,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
 )
@@ -675,12 +678,33 @@ def h3_reports_sample() -> H3Reports:
         status="ok",
         reason=None,
     )
+    families = ("price", "technical", "sentiment", "fundamental")
+    differentials = FamilyLossDifferentials(
+        method="permutation",
+        families=families,
+        horizons=(1, 7),
+        decision_timestamps=H3_DECISIONS,
+        differentials={(f, h): (0.01, 0.02, 0.0) for f in families for h in (1, 7)},
+        seed_importances={(f, h, s): 0.01 * s for f in families for h in (1, 7) for s in (1, 2)},
+        permutation_importances={
+            (f, h, k): 0.001 * k for f in families for h in (1, 7) for k in (1, 2)
+        },
+    )
     return H3Reports(
         permutation=permutation,
         ablation=ablation,
+        permutation_differentials=differentials,
+        ablation_differentials=None,
         reading=ContributionAgreement.read(permutation, ablation),
         vsn=vsn,
         block_length=7,
         max_block_estimate=5.25,
-        n_points=40,
+        n_points=len(H3_DECISIONS),
     )
+
+
+H3_DECISIONS = (
+    "2024-01-02T00:00:00+00:00",
+    "2024-01-03T00:00:00+00:00",
+    "2024-01-04T00:00:00+00:00",
+)
