@@ -24,13 +24,19 @@ do cohort (`CohortRun`) e o realizado do dataset (`RealizedReturns`) e devolve u
   **nunca achado**: o pareamento é por alvo e não depende do fold, que só serve ao perfil
   "DM por fold" (Stage 6.6, ADR `6_6_0003`; um perfil não bloqueia o veredito).
 
-As regras de alinhamento por ponto (duplicata, índices de sessão e realizado, níveis da
-grade, níveis fora da grade, flag do guardrail) são funções públicas deste módulo
-(`duplicate_levels`, `index_violations`, `missing_levels`, `extra_levels`,
-`guardrail_flag_mismatch`) que devolvem `RuleViolation`: o `SeriesAssembly` as converte
-em `AlignmentFinding`, a `ConformalAssembly` da Stage 7.2 as aplica ao calib (ADR
-7.2.0003 item 4) e a `AttributionAssembly` da 7.3 às linhas de atribuição. Uma definição
-só por regra; `GRID_DIVERGENT` é sempre "níveis além da grade esperada".
+As regras de alinhamento por ponto são funções públicas deste módulo, uma definição só
+por regra:
+
+- `duplicate_levels`, `index_violations`, `missing_levels` e `guardrail_flag_mismatch`
+  devolvem `RuleViolation` (o tipo e o detalhe);
+- `extra_levels` devolve os DADOS — os níveis além da grade esperada — e cada montagem
+  formata o seu `GRID_DIVERGENT` (C7-10): aqui, uma vez por horizonte, com as grades por
+  modelo (`"grids by model: …"`, o texto que a 6.4 grava no gold); na
+  `AttributionAssembly` da 7.3, por alvo, contra a grade do comando.
+
+O `SeriesAssembly` converte as violações em `AlignmentFinding`, a `ConformalAssembly` da
+Stage 7.2 as aplica ao calib (ADR 7.2.0003 item 4) e a `AttributionAssembly` da 7.3 às
+linhas de atribuição.
 
 `ValueError` só para erro de CHAMADA (entradas estruturais: `horizons`,
 `window_deficits`, `required_models`, run duplicado, fato fora dos runs — a leitura já
