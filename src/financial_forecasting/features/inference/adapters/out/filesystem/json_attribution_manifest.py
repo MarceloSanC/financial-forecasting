@@ -11,6 +11,7 @@ proveniências nunca compartilhem um documento.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import ClassVar
 
 from financial_forecasting.features.inference.adapters.out.filesystem.json_inference_manifest import (  # noqa: E501
     JsonInferenceManifest,
@@ -22,6 +23,9 @@ _FILE = "attribution_manifest.json"
 
 class JsonAttributionManifest(JsonInferenceManifest):
     """Manifesto da atribuição de um cohort em JSON, com escrita atômica."""
+
+    _label: ClassVar[str] = "attribution manifest"
+    _command: ClassVar[str] = "attribute"
 
     def path(self, cohort_id: str) -> Path:
         """Caminho do manifesto da atribuição de `cohort_id` sob o `data_root`."""

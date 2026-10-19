@@ -17,7 +17,7 @@ import json
 import os
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from financial_forecasting.features.inference.application.ports.out.inference_manifest import (
     apply_run_entry,
@@ -30,6 +30,10 @@ _FILE = "manifest.json"
 
 class JsonInferenceManifest:
     """Manifesto da inferência de um cohort em JSON, com escrita atômica."""
+
+    # rótulo e comando das mensagens de recusa (o manifesto da atribuição os troca, 7.3)
+    _label: ClassVar[str] = "inference manifest"
+    _command: ClassVar[str] = "inference"
 
     def __init__(self, *, data_root: Path) -> None:
         self._data_root = Path(data_root)
@@ -46,19 +50,19 @@ class JsonInferenceManifest:
             loaded: Any = json.loads(path.read_text(encoding="utf-8"))
         except ValueError as exc:
             raise ValueError(
-                f"inference manifest {path} is unreadable (empty or corrupted) — inspect it "
-                "before running inference again"
+                f"{self._label} {path} is unreadable (empty or corrupted) — inspect it "
+                f"before running {self._command} again"
             ) from exc
         if not isinstance(loaded, dict):
             raise ValueError(
-                f"inference manifest {path} is unreadable (top-level {type(loaded).__name__}, "
-                "expected an object) — inspect it before running inference again"
+                f"{self._label} {path} is unreadable (top-level {type(loaded).__name__}, "
+                f"expected an object) — inspect it before running {self._command} again"
             )
         problem = runs_shape_problem(loaded)
         if problem is not None:
             raise ValueError(
-                f"inference manifest {path} is unreadable ({problem}) — inspect it before "
-                "running inference again"
+                f"{self._label} {path} is unreadable ({problem}) — inspect it before "
+                f"running {self._command} again"
             )
         return loaded
 

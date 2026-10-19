@@ -21,6 +21,9 @@ import pytest
 from financial_forecasting.features.inference.adapters.out.filesystem.json_attribution_manifest import (  # noqa: E501
     JsonAttributionManifest,
 )
+from financial_forecasting.features.inference.adapters.out.filesystem.json_inference_manifest import (  # noqa: E501
+    JsonInferenceManifest,
+)
 from financial_forecasting.features.inference.application.ports.out.attribution_manifest import (
     ATTRIBUTION_ENTRY_FIELDS,
     AttributionManifest,
@@ -161,3 +164,19 @@ def test_file_path_is_attribution_manifest_json(tmp_path: Path) -> None:
     assert expected.exists()
     assert not (tmp_path / "inference" / _COHORT / "manifest.json").exists()
     assert JsonAttributionManifest(data_root=tmp_path).recorded(_COHORT) is not None
+
+
+def test_unreadable_message_names_the_attribution_manifest(tmp_path: Path) -> None:
+    """C5-11: a recusa nomeia o manifesto e o comando da atribuição, não os da 7.1."""
+    manifest = JsonAttributionManifest(data_root=tmp_path)
+    path = manifest.path(_COHORT)
+    path.parent.mkdir(parents=True)
+    path.write_text("", encoding="utf-8")
+    with pytest.raises(
+        ValueError, match=r"^attribution manifest .* before running attribute again"
+    ):
+        manifest.recorded(_COHORT)
+    inference = JsonInferenceManifest(data_root=tmp_path)
+    inference.path(_COHORT).write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"^inference manifest .* running inference again"):
+        inference.recorded(_COHORT)
