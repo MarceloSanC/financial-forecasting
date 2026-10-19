@@ -320,6 +320,8 @@ def test_manifest_started_before_first_write_with_plan_identity() -> None:
     harness.run()
     first_run = _run_id(11, 0)
     assert spy.statuses_at_write[0] == [(first_run, "started")]
+    # C5-2: a escrita da VSN (a 2ª) ainda vê o run em `started` — o `completed` vem depois
+    assert spy.statuses_at_write[1][-1] == (first_run, "started")
     document = harness.manifest.recorded(_cohort_id(harness.spec))
     assert document is not None
     entry = document["runs"][first_run]  # type: ignore[index]
@@ -709,4 +711,35 @@ def test_reconfer_checks_the_vsn_family_and_decisions() -> None:
         lambda r: {**r, "family": "price"} if r["variable"] == "rsi_14" else r,
     )
     with pytest.raises(PartialAttributionError, match="vsn family differs"):
+        harness.run()
+
+
+# -- falha entre as duas escritas deixa o run `started` (C5-2) ------------------------------
+
+
+class _FailingVsnRepository(FakeAnalyticsRepository):
+    def __init__(self) -> None:
+        super().__init__(clock=FakeClock())
+        self.fail = True
+
+    def write(self, *, layer: str, table: str, rows: Any, allow_upsert: bool = False) -> Any:  # noqa: ANN401
+        if table == "fact_vsn_weights" and self.fail:
+            raise OSError("disk full while writing fact_vsn_weights")
+        return super().write(layer=layer, table=table, rows=rows, allow_upsert=allow_upsert)
+
+
+def test_vsn_write_failure_leaves_started_and_the_next_run_is_partial() -> None:
+    harness = _harness()
+    failing = _FailingVsnRepository()
+    for row in harness.rows("fact_oos_predictions"):
+        failing.write(layer="silver", table="fact_oos_predictions", rows=[row])
+    harness.repo = failing
+    with pytest.raises(OSError, match="disk full"):
+        harness.run()
+    document = harness.manifest.recorded(_cohort_id(harness.spec))
+    assert document is not None
+    assert document["runs"][_run_id(11, 0)]["status"] == "started"  # type: ignore[index]
+    assert [r for r in harness.rows("fact_permuted_predictions") if r["run_id"] == _run_id(11, 0)]
+    failing.fail = False
+    with pytest.raises(PartialAttributionError, match="C8"):
         harness.run()
