@@ -2335,4 +2335,62 @@ contrário) e reformatando o repo num commit só de formato, fora desta Stage. A
 7.3 formata só os arquivos tocados com `uvx ruff@0.6.9` (`[decision] ambiente` acima).
 Achado C1-6 do Checkpoint C 01–04.
 
+### 2026-10-19 — [finding] tooling — correção do achado anterior: o ruff 0.6.9 também reformata arquivos commitados — Claude (Opus 5.5)
+**Contexto:** a entrada anterior diz que o ruff 0.6.9 do hook "aceita os mesmos
+arquivos". Isso não confere. Uma chamada acidental de `uvx ruff@0.6.9 format` sem
+argumentos (lista de arquivos vazia) formatou o repo inteiro e mudou **38 arquivos**:
+34 anteriores à Stage, em `scripts/`, `.claude/hooks/`, `src/` e `tests/`, mais os desta
+Stage. A mudança foi revertida por `git checkout` antes de qualquer commit, e nada
+dela entrou na branch.
+**O que muda:** a deriva é dos dois lados. Nem o 0.15.20 nem o 0.6.9 deixam o repo
+como está. A direção da #198 continua: um pin só e um commit só de formato. A regra
+da 7.3 também continua: formatar só os arquivos tocados. A partir de agora, todo
+comando de format é guardado por `[ -n "$F" ] || exit 1`.
+
+### 2026-10-19 — [deviation] Task 07 — logger da máquina compartilhada com o nome do próprio módulo (C2-11) — Claude (Opus 5.5)
+O `cohort_unit_runner` loga em `logging.getLogger(__name__)`, e não mais no logger
+`…run_confirmatory_cohort`. As mensagens por unidade são as mesmas, e o
+`test_each_unit_logs_its_start_and_outcome` da 5.5 segue verde sem mudança. Achado
+C2-11 do Checkpoint C 05–08, aceito pelo orquestrador.
+
+### 2026-10-19 — [deviation] Tasks 06 e 08 — `check_ablation_declarations` mora na application (C2-6) — Claude (Opus 5.5)
+**Contexto:** a Task 06 pôs a conferência da base e da registry
+(`check_ablation_declarations`) no loader (`adapters/in/cli/ablation_cohort_file.py`).
+Assim, só quem carregava o arquivo por ali estava protegido. O Checkpoint C 05–08
+(C2-6) pediu que o executor também conferisse.
+**O que mudou:**
+- a função foi para `modeling/application/use_cases/run_ablation_cohort.py`;
+- o loader continua chamando a função, agora importada de lá;
+- o `RunAblationCohort` também chama a função, antes do lock e do probe, e recalcula
+  o `CohortHash` da base contra `spec.base_cohort_hash`.
+
+Também antes do lock, o executor passou a recusar duas coisas: `feature_set_name` igual
+ao da base (C2-1) e um `trainer_device` injetado diferente do `device` declarado (C2-2).
+A guarda de hardware passou a comparar também o `device` da foto do probe. O composition
+root passa como `trainer_device` o mesmo device com que montou o proxy do treinador. O
+`device = "cuda"`, fora do mapa, já é recusado pela fábrica sem importar torch
+(`test_ablation_factory_refuses_device_outside_the_map_without_importing_torch`, CA3).
+**Razão:** é defesa em profundidade pedida pela revisão. Nenhum contrato publicado muda.
+O construtor do `RunAblationCohort` ganha `trainer_device`, e a Task 10 já o passa.
+
+### 2026-10-19 — [decision] Task 11 — forma da predição de atribuição no adapter — Claude (Opus 5.5)
+**O que foi decidido** (escolhas locais que o §1 não fixa):
+- **Uma passagem `mode="raw"` com `return_x`** produz os blocos doadores e os pesos da
+  VSN de uma vez. Ela é seguida da identidade, pelo `_emit` sobre o dataloader que o
+  `predict` montaria (`to_dataloader(train=False, batch_size, num_workers=0)`), e de
+  uma passagem por (família, k). O `_emit` não mudou de assinatura: recebe o dataloader
+  pelo parâmetro de sempre, e o caminho da 7.1 segue passando o dataset.
+- **Decisão sem amostra de predição** (a última decisão de um fold que encosta no fim do
+  painel, sem nenhum horizonte) não pode doar nem receber: o adapter ergue `ValueError`.
+  O fornecedor da Task 12 passa só as decisões de teste que têm emissão, as mesmas do
+  silver da 7.1, que formam uma faixa contígua.
+- **Regras compartilhadas, sem cópia:** a carga com sha256 e entradas declaradas
+  (`_load_checked_checkpoint`), a seleção da amostra de decodificador mais longo
+  (`_best_sample_by_decision`) e os `settings` são as mesmas funções da 7.1.
+  `check_donors` mora no módulo do port, para o real e o fake usarem a mesma regra.
+- **Verificação:** os goldens da 7.1 seguem sem diferença contra `$BASE`. O mutante
+  "doador = a própria posição" (`blocks[p]`) reprova o teste do doador em outro lote e
+  o da família informativa.
+**Razão:** são escolhas reversíveis dentro da lista fechada da Task 11.
+
 <!-- END: post-execution -->
