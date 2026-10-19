@@ -845,3 +845,29 @@ def test_mixed_seed_verifies_the_completed_run_and_writes_the_other_once() -> No
     assert len(harness.predictor.calls) == calls + 1  # só a seed 11, uma vez
     after = [r for r in harness.rows("fact_permuted_predictions") if r["run_id"] == done]
     assert len(after) == len(before)  # o run completed não foi regravado
+
+
+# -- persister que relata rows_written errado deixa o run `started` (C6-7) ------------------
+
+
+class _MiscountingPersister:
+    """Grava pelo escritor real e relata uma linha a menos."""
+
+    def __init__(self, repository: FakeAnalyticsRepository) -> None:
+        self._real = PersistPermutedPredictions(repository=repository)
+
+    def __call__(self, command: Any) -> Any:  # noqa: ANN401
+        result = self._real(command)
+        return replace(result, rows_written=result.rows_written - 1)
+
+
+def test_wrong_rows_written_leaves_the_run_started() -> None:
+    harness = _harness()
+    use_case = harness.use_case()
+    use_case._permuted_persister = _MiscountingPersister(harness.repo)
+    command = RunPermutationInferenceCommand(spec=harness.spec, family_partition=_PARTITION)
+    with pytest.raises(PartialAttributionError, match="left started"):
+        use_case(command)
+    document = harness.manifest.recorded(_cohort_id(harness.spec))
+    assert document is not None
+    assert document["runs"][_run_id(11, 0)]["status"] == "started"  # type: ignore[index]
