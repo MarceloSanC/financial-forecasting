@@ -600,3 +600,64 @@ def test_attribute_help(capsys: pytest.CaptureFixture[str]) -> None:
         "--break-stale-lock",
     ):
         assert flag in text, flag
+
+
+def _ablation_with_base(tmp_path: Path) -> tuple[Path, Path]:
+    """Base sintética congelada e arquivo de ablação que a declara (sob `repo_root`)."""
+    from tests.unit.shared.test_composition_root import _ablation_files  # noqa: PLC0415
+
+    ablation = _ablation_files(tmp_path, device="rocm")
+    return tmp_path / "config" / "cohorts" / "base.toml", ablation
+
+
+@pytest.mark.unit
+def test_attribute_dispatches_the_base_spec_and_the_partition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commands: Any = cli.importlib.import_module(_INFERENCE_COMMANDS)
+    seen: dict[str, Any] = {}
+
+    def fake_attribute(
+        factory: object, spec: object, path: Path, partition: object, **kw: object
+    ) -> int:
+        seen.update(factory=factory, spec=spec, path=path, partition=partition, **kw)
+        return 0
+
+    monkeypatch.setattr(commands, "attribute", fake_attribute)
+    base, ablation = _ablation_with_base(tmp_path)
+    argv = ["attribute", "--data-root", str(tmp_path / "d"), "--cohort", str(base)]
+
+    code = cli.main([*argv, "--ablation-cohort", str(ablation)], wiring=_wiring(tmp_path))
+
+    assert code == 0
+    assert seen["path"] == base
+    assert set(seen["partition"]) == {"price", "technical", "sentiment", "fundamental"}
+    assert seen["break_stale_lock"] is False
+    assert seen["cross_environment"] is None
+
+
+@pytest.mark.unit
+def test_attribute_refuses_a_cohort_other_than_the_ablation_base(tmp_path: Path) -> None:
+    """C5-10: o `--cohort` tem de ser a base declarada pelo arquivo de ablação."""
+    _, ablation = _ablation_with_base(tmp_path)
+    other = _cohort(tmp_path, frozen=True)
+    err = io.StringIO()
+
+    code = cli.main(
+        [
+            "attribute",
+            "--data-root",
+            str(tmp_path / "d"),
+            "--cohort",
+            str(other),
+            "--ablation-cohort",
+            str(ablation),
+        ],
+        wiring=_wiring(tmp_path),
+        out=io.StringIO(),
+        err=err,
+    )
+
+    assert code == _EXIT_ERROR
+    assert "declares base cohort_hash" in err.getvalue()
+    assert not (tmp_path / "d" / ".writer.lock").exists()
