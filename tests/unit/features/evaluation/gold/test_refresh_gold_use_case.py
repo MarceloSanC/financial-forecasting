@@ -59,7 +59,6 @@ from financial_forecasting.features.evaluation.domain.services.joint_contributio
 )
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     ModelConfidenceSet,
-    block_length_rule,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
     is_constant,
@@ -1651,7 +1650,7 @@ def test_one_bootstrap_indices_call_serves_both_methods() -> None:
     assert call["seed"] == 129  # noqa: PLR2004
     assert call["scheme"] is BootstrapScheme.STATIONARY
     assert len(harness.backend.block_series) - before == 16  # noqa: PLR2004
-    assert call["block_size"] == block_length_rule(horizon=7, max_estimate=_BLOCK)
+    assert call["block_size"] == 7  # noqa: PLR2004 — max(7, ⌈2,5⌉), o piso
     assert inputs.h3_reports.block_length == call["block_size"]
     assert inputs.h3_reports.max_block_estimate == _BLOCK
 
@@ -1823,7 +1822,12 @@ def test_candidate_run_without_vsn_rows_makes_the_vsn_undefined() -> None:
 
 
 class _CountingAfter(_SpyBackend):
-    """Depois das `ok` chamadas da 6.4, devolve b̂ = 1, 2, …, 16 (o máximo numa série LOCO)."""
+    """Depois das `ok` chamadas da 6.4, um b̂ distinto por série de H3 (TA-2).
+
+    A i-ésima série (1..16) recebe i/2 (0,5 … 8,0), menos a 11ª (LOCO), que recebe 9,3:
+    o máximo não é a primeira nem a última série e passa de 7, então ⌈·⌉ e o piso 7
+    contam.
+    """
 
     def __init__(self, log: _Log, *, ok: int) -> None:
         super().__init__(log)
@@ -1832,22 +1836,24 @@ class _CountingAfter(_SpyBackend):
     def optimal_block_length(self, *, series: Sequence[float]) -> float:
         value = super().optimal_block_length(series=series)
         index = len(self.block_series) - self._ok
-        return float(index) if index > 0 else value
+        if index <= 0:
+            return value
+        return 9.3 if index == 11 else index / 2  # noqa: PLR2004
 
 
 @pytest.mark.unit
 def test_block_is_the_joint_max_over_the_16_series() -> None:
-    """C8-3: b̂ distinto por série; o máximo (16.0) é da última série, da LOCO."""
+    """C8-3/TA-2: b̂ distinto por série; o máximo (9,3) é da 11ª, uma série da LOCO."""
     before = _calls_without_h3()
     harness = _h3_harness()
     harness.use_case._mcs_backend = _CountingAfter(harness.log, ok=before)
     inputs = _h3_run(harness)
     backend = harness.use_case._mcs_backend
     assert len(backend.block_series) - before == 16  # noqa: PLR2004
-    assert inputs.h3_reports.max_block_estimate == 16.0  # noqa: PLR2004
-    assert inputs.h3_reports.block_length == block_length_rule(horizon=7, max_estimate=16.0)
+    assert inputs.h3_reports.max_block_estimate == 9.3  # noqa: PLR2004
+    assert inputs.h3_reports.block_length == 10  # noqa: PLR2004 — max(7, ⌈9,3⌉)
     [call] = [c for c in backend.index_calls if c["reps"] == 1000]  # noqa: PLR2004
-    assert call["block_size"] == 16  # noqa: PLR2004
+    assert call["block_size"] == 10  # noqa: PLR2004
 
 
 @pytest.mark.unit
