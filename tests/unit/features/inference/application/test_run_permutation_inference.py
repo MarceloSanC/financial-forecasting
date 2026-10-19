@@ -788,3 +788,16 @@ def test_one_tampered_row_column_is_partial(column: str, value: object) -> None:
                 rows[mine[-1]] = {**rows[mine[-1]], column: value}
     with pytest.raises(PartialAttributionError, match=rf"column {column} differs"):
         harness.run()
+
+
+# -- identidade 1e-12 fora do strict, dentro do tolerance (C5-5) ----------------------------
+
+
+def test_tiny_identity_shift_fails_strict_and_passes_with_justification() -> None:
+    with pytest.raises(ReproductionError, match=r"\(strict\).*C6"):
+        _harness(identity_shift=1e-12).run()
+    harness = _harness(identity_shift=1e-12)
+    result = harness.run(cross_environment_justification="ver [finding] do diagnóstico")
+    assert {o.reproduction_mode for o in result.outcomes} == {"tolerance"}
+    assert all(0 < o.max_abs_diff < 1e-9 for o in result.outcomes)  # noqa: PLR2004
+    assert {o.status for o in result.outcomes} == {"written"}
