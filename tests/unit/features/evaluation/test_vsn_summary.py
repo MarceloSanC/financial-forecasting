@@ -101,16 +101,37 @@ def test_non_family_variables_reported_apart() -> None:
 
 @pytest.mark.parametrize(
     ("damage", "message"),
-    [("missing-seed", "seed 2 has no vsn weights"), ("other-decisions", "decisions differ")],
+    [
+        ("missing-seed", "seed 2 has no vsn weights"),
+        ("other-decisions", "decisions differ"),
+        ("overlapping-folds", "in two folds"),
+        ("extra-seed", "seed 3 is not a seed of the candidate"),
+        ("other-variables", "variables differ"),
+    ],
 )
 def test_incoherent_reductions_are_undefined(damage: str, message: str) -> None:
+    """C7-4: overlap de folds, seed extra e variáveis divergentes também (V5, V6, V7)."""
     reductions = _reductions()
     if damage == "missing-seed":
         reductions = [r for r in reductions if r.seed != 2]  # noqa: PLR2004
-    else:
+    elif damage == "other-decisions":
         reductions[-1] = VsnRunWeights(
             run_id="r21", seed=2, fold_index=1, weights=_weights(2, _D[3:5])
         )
+    elif damage == "overlapping-folds":
+        reductions[-1] = VsnRunWeights(
+            run_id="r21", seed=2, fold_index=1, weights=_weights(2, _D[2:])
+        )
+    elif damage == "extra-seed":
+        reductions.append(
+            VsnRunWeights(run_id="r30", seed=3, fold_index=0, weights=_weights(3, _D))
+        )
+    else:
+        renamed = {
+            d: {("other" if v == "macd" else v): w for v, w in row.items()}
+            for d, row in _weights(2, _D[3:]).items()
+        }
+        reductions[-1] = VsnRunWeights(run_id="r21", seed=2, fold_index=1, weights=renamed)
     report = _summary(reductions)
     assert report.status == "undefined"
     assert message in str(report.reason)
