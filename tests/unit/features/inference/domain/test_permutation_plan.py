@@ -144,3 +144,22 @@ def test_fold_index_at_or_above_the_stride_refused(fold_index: int) -> None:
             permutations=((0, 1, 2, 3, 4),),
         )
     assert _plan(fold_index=999).fold_index == 999  # noqa: PLR2004
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [{"fold_index": -1}, {"permutation_seed": -1}],
+    ids=str,
+)
+def test_raw_construction_with_negative_seed_or_fold_refused(overrides: dict[str, int]) -> None:
+    """C4-5: o construtor direto também recusa semente e fold negativos (mutantes M8/M9)."""
+    fields: dict[str, object] = {
+        "permutation_seed": 130,
+        "k_p": 1,
+        "fold_index": 0,
+        "n_decisions": 5,
+        "permutations": ((0, 1, 2, 3, 4),),
+    }
+    fields.update(overrides)
+    with pytest.raises(ValueError, match="FamilyPermutationPlan"):
+        FamilyPermutationPlan(**fields)  # type: ignore[arg-type]

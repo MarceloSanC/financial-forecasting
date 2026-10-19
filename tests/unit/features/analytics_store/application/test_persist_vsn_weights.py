@@ -108,3 +108,11 @@ def test_second_write_of_same_run_raises_duplicate_key() -> None:
     with pytest.raises(DuplicateKeyError):
         writer(_command([VsnDecisionEntry(4, _weights())]))
     assert len(repo.read(layer="silver", table=_TABLE)) == before
+
+
+def test_negative_decision_refused() -> None:
+    """C4-5: decisão negativa não indexa a grade pelo fim (mutante M18)."""
+    repo = _CountingRepository()
+    with pytest.raises(ValueError, match="outside the dataset grid"):
+        PersistVsnWeights(repository=repo)(_command([VsnDecisionEntry(-1, _weights())]))
+    assert repo.writes == []
