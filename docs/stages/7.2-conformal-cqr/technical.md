@@ -2217,4 +2217,24 @@ Os 4 achados major e os 9 minor foram aplicados como task-NN-fix.
 **Mutantes conferidos, um a um, com o arquivo restaurado depois:** X01, X02, M11 (split e
 NexCP), F01, F02, F03, RG03, R06, S05, CV01, RG02 e S03. Todos morrem.
 
+### 2026-10-19 — [decision] saída do ponto C, rebase e âncora (plano de gates da ADR 0.0.0059) — Claude (Opus 5.5)
+- **Rebase antes da âncora:** o `develop` andou (#157, #159, #183, #164). A branch foi
+  rebaseada em `origin/develop` **antes** da tag, porque depois da tag só cabe merge
+  (Task 23).
+  - Conflitos: a contagem de arestas do `bc-independence` no `.importlinter` e no
+    LAYOUT §7. A #159 trouxe 6 arestas e a 7.2 trouxe 1, então o total é **34** (a
+    contagem do bloco confere).
+  - Depois do rebase, rodei de novo a Etapa G (geometria só): 10 passed, nenhum
+    SKIPPED, `runs_checked=60/60`, `problems=0`, data_root inalterado.
+- **Task 23:**
+  - Tag `preregistration/aapl_confirmatory-r2-f32ef5ebbbb8` no commit `25edda90`, o
+    último que tocou o TOML da r2, depois do rebase.
+  - Comentário <https://github.com/MarceloSanC/financial-forecasting/issues/158#issuecomment-6258545893>
+    com `created_at` 2026-10-19T02:45:31Z, lido pela API. O corpo foi conferido campo
+    a campo: ref, hash completo, tag, commit, `cohort_id` e hash do cohort.
+  - O TOML da r2 não mudou desde a tag, e o commit marcado está no histórico.
+- **Ponto C** (`uv lock --check && make check PYTEST_PAR='-n 4 --dist loadgroup'`,
+  ff-gate-158, `--cpus 6 --memory 8g`, HEAD `a81332f5`): `7198 passed, 25 skipped`,
+  cobertura 99,10 % (mínimo 90 %), `EXIT=0`.
+
 <!-- END: post-execution -->

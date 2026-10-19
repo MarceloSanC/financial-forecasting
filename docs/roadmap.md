@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-10-17
-last_reviewed_at: 2026-10-12
+updated_at: 2026-10-19
+last_reviewed_at: 2026-10-19
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -106,7 +106,7 @@ graph LR
 | `6.5-preregistration-and-scorecard` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.4, 5.5 |
 | `6.6-scorecard-profiles` | evaluation | multi (domain + application + adapters/out) | vertical | done | 6.5 |
 | `7.1-inference-engine` | inference | multi (application + adapters/out) | vertical | done | 5.4, 4.3 |
-| `7.2-conformal-cqr` | inference | multi (domain + application + adapters/out; + evaluation) | vertical | draft | 7.1, 5.1 |
+| `7.2-conformal-cqr` | inference | multi (domain + application + adapters/out; + evaluation) | vertical | done | 7.1, 5.1 |
 | `7.3-explainability` | inference | multi (domain + adapters/out; + modeling) | vertical | draft | 7.1, 6.1 |
 | `7.4-inference-api` | inference | adapters/in/http | vertical | draft | 7.2, 7.3 |
 | `8.1-confirmatory-run` | evaluation | application (orquestração) | vertical | draft | 6.5, 6.6, 7.1, 7.2, 7.3 |
@@ -1247,6 +1247,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 | 2026-10-06 | Stage `6.6-scorecard-profiles` `done`; Step 6 `done`; DoD da 6.6 reescrito pelo D5 (pares adjacentes pela função do dono, não serviço novo) e pela r1 cega; a 8.1 julga pela r1 | Fechamento da Stage 6.6 (issue #129; ADRs 6.6.0001–0003; r1 ancorada) |
 | 2026-10-12 | Stage `7.1-inference-engine` `done`; Step 7 `in_progress`. Execução real sobre o cohort `aapl_confirmatory` r0: 60 runs `strict` com max \|Δ\| = 0, 211.680 linhas `split = "calib"` em `fact_oos_predictions`, manifesto com 60 entradas `completed`, `verify` verde, sem `gold/` | Fechamento da Stage 7.1 (issue #153; ADRs 7.1.0001–7.1.0004; technical 7.1 §7) |
 | 2026-10-17 | Stage 7.2 refinada: ADRs na pasta única `docs/adr/` (não `docs/stages/7.2-conformal-cqr/adrs/`); camada, arquivos e contratos (calibrador e política de reprodução no domain do inference, `CalibrateConformal`, cobertura conformal e bloco `[conformal]` no evaluation, revisão r2); integração do conformal no gold (port do consumidor, montagem no `RefreshGold`, duas tabelas gold) na própria 7.2, e a 8.1 só executa; a 8.1 julga pela revisão ancorada mais recente da cadeia (r2; r3 se a 7.3 emendar), não mais "pela r1"; a 7.4 lê `gold_conformal_corrections` (não recalibra) e a 8.1 consome as tabelas conformais do refresh | Concept 7.2 (issue #158; ADRs 7.2.0001–7.2.0005) |
+| 2026-10-19 | Stage `7.2-conformal-cqr` `done`; Step 7 segue `in_progress`. Revisão r2 ancorada (`aapl_confirmatory-r2-f32ef5ebbbb8`, tag `preregistration/aapl_confirmatory-r2-f32ef5ebbbb8`, comentário na #158); prova de geometria real (Etapa G) verde, só de geometria: 60/60 runs (6 folds × 10 seeds), manifesto com 60 `completed`, sem métrica nem `gold/` | Fechamento da Stage 7.2 (issue #158; ADRs 7.2.0001–7.2.0005; technical 7.2 §7) |
 
 ## Próxima revisão de roadmap
 
