@@ -73,6 +73,22 @@ def test_opposite_signs_not_sustained_status_ok() -> None:
     assert reading.agreeing_families == ()
 
 
+def test_heterogeneity_flags_are_per_method() -> None:
+    """TA-3: permutação heterogênea e LOCO não (nenhuma família exclui 0) ⇒ (True, False)."""
+    reading = ContributionAgreement.read(
+        _report("permutation", _share("price", excludes=True)),
+        _report("loco"),
+    )
+    assert reading.status == "ok"
+    assert reading.sustained is False
+    assert (reading.heterogeneous_permutation, reading.heterogeneous_ablation) == (True, False)
+    swapped = ContributionAgreement.read(
+        _report("permutation"),
+        _report("loco", _share("price", excludes=True)),
+    )
+    assert (swapped.heterogeneous_permutation, swapped.heterogeneous_ablation) == (False, True)
+
+
 def test_different_families_not_sustained() -> None:
     reading = ContributionAgreement.read(
         _report("permutation", _share("price", excludes=True)),

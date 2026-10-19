@@ -425,6 +425,9 @@ def test_opposite_sides_between_methods_not_sustained_ok(scenario: _Scenario) ->
         if r["family"] == "sentiment"
     }
     assert sides == {"permutation": 1, "loco": -1}
+    # TA-3: as duas flags de heterogeneidade, uma por método, gravadas na leitura
+    assert reading["heterogeneous_permutation"] is True
+    assert reading["heterogeneous_ablation"] is True
 
 
 def test_undefined_method_gives_undefined_reading_with_reason(scenario: _Scenario) -> None:
