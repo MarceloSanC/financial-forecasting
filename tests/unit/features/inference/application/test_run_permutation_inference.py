@@ -801,3 +801,22 @@ def test_tiny_identity_shift_fails_strict_and_passes_with_justification() -> Non
     assert {o.reproduction_mode for o in result.outcomes} == {"tolerance"}
     assert all(0 < o.max_abs_diff < 1e-9 for o in result.outcomes)  # noqa: PLR2004
     assert {o.status for o in result.outcomes} == {"written"}
+
+
+# -- decisões de mesmo tamanho e valores diferentes (C5-6) ----------------------------------
+
+
+def test_same_size_but_different_test_decisions_are_refused() -> None:
+    harness = _harness()
+    seed = harness.spec.seeds[0]
+    shifted = tuple(d + 1 for d in _DECISIONS[0])
+    _with_runs(
+        harness,
+        seed,
+        lambda r: replace(r, runs=(replace(r.runs[0], test_decisions=shifted), *r.runs[1:])),
+    )
+    with pytest.raises(ReproductionError, match="C3-4"):
+        harness.run()
+    assert len(harness.predictor.calls) == 1  # a recusa vem depois da predição
+    assert harness.rows("fact_permuted_predictions") == []
+    assert harness.manifest.recorded(_cohort_id(harness.spec)) is None
