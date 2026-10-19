@@ -285,9 +285,7 @@ def test_real_repo_violations_are_exactly_the_declared_baseline(gate: ModuleType
     ports = gate.inventory()
     violating = sorted(port.name for port in ports if port.violation is not None)
 
-    # ADR 6.1.0005: baseline transitório entre o port `AttributionManifest` (Task 17 da
-    # Stage 7.3) e o seu adapter JSON (Task 18, que volta esta lista a ["Hasher"]).
-    assert violating == ["AttributionManifest", "Hasher"]
+    assert violating == ["Hasher"]
     # piso do inventário: 28 ports-out hoje (a Stage 6.4 somou quatro ports do gold e a
     # 6.5 somou PreregistrationSource e GoldGenerationReader)
     assert len(ports) >= 28  # noqa: PLR2004
@@ -506,3 +504,21 @@ def test_real_repo_attribution_ports_resolve(gate: ModuleType) -> None:
         # nenhum homônimo noutro slice (o gate é cego a slice)
         assert ("modeling", name) not in ports
         assert ("evaluation", name) not in ports
+
+
+def test_real_repo_attribution_manifest_resolves(gate: ModuleType) -> None:
+    """Stage 7.3 (Task 18): o port do manifesto da atribuição tem o adapter JSON e contrato."""
+    ports: dict[tuple[str, str], Any] = _by_slice_and_name(gate)
+    port = ports[("inference", "AttributionManifest")]
+    assert "JsonAttributionManifest" in port.adapters
+    assert port.violation is None
+    contract = (
+        gate.CONTRACT_ROOT / "features" / "inference" / "test_attribution_manifest_contract.py"
+    )
+    assert port.contract is not None
+    assert port.contract.name == contract.name
+    assert _contract_satisfies(
+        gate, contract, "InMemoryAttributionManifest", "JsonAttributionManifest"
+    )
+    assert ("modeling", "AttributionManifest") not in ports
+    assert ("evaluation", "AttributionManifest") not in ports

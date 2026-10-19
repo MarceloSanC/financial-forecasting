@@ -22,11 +22,6 @@ key = "Hasher"
 motivo = "Implementação única por desenho (issue #70): o FakeHasher era cópia byte a byte do CanonicalJsonHasher e foi removido; o contrato roda só no adapter real + golden, e os testes de domínio/use case injetam o adapter real (stdlib, determinístico). Um fake aqui seria uma segunda definição de identidade — o oposto do que reprodutibilidade exige."
 issue = 70
 
-[[port_coverage.allow]]
-key = "AttributionManifest"
-motivo = "Baseline transitório entre o port e o primeiro adapter (ADR 6.1.0005): o port nasce na Task 17 da Stage 7.3 com a perna fake do contrato; o JsonAttributionManifest e a perna real entram na Task 18, que remove esta entrada."
-issue = 186
-
 # ---------------------------------------------------------------------------
 # check_schema_literals.py — literal "processed"/"dataset_tft"/"target_return" em código de
 # features/modeling/application/. Chave = '<arquivo rel>::"<literal>"'. VAZIO desde a #159:

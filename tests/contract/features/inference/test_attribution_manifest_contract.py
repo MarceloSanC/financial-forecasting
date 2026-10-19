@@ -1,7 +1,7 @@
 """Contrato do port `AttributionManifest` do `inference` (Stage 7.3, Tasks 17-18; CA9).
 
-Perna `fake` (`InMemoryAttributionManifest`); a perna real (o adapter JSON) entra na
-Task 18. As duas mesclam pela MESMA `apply_run_entry` do manifesto da inferência. A
+Pernas `fake` (`InMemoryAttributionManifest`) e `real` (`JsonAttributionManifest` sob
+`tmp_path`, Task 18). As duas mesclam pela MESMA `apply_run_entry` do manifesto da inferência. A
 suíte prova o comportamento observável: sem manifesto → `None`; os campos de primeira
 escrita (`checkpoint_sha256`, `first_write_environment`) nunca são sobrescritos; a
 entrada guarda a identidade do plano e a partição; `runs` com forma inválida é
@@ -10,11 +10,17 @@ ilegível.
 
 from __future__ import annotations
 
+import json
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
+from financial_forecasting.features.inference.adapters.out.filesystem.json_attribution_manifest import (  # noqa: E501
+    JsonAttributionManifest,
+)
 from financial_forecasting.features.inference.application.ports.out.attribution_manifest import (
     ATTRIBUTION_ENTRY_FIELDS,
     AttributionManifest,
@@ -42,9 +48,21 @@ def _fake_leg() -> _Leg:
     )
 
 
-@pytest.fixture(params=["fake"])
-def leg(request: pytest.FixtureRequest) -> _Leg:
-    return _fake_leg()
+def _json_leg(root: Path) -> _Leg:
+    def malformed() -> AttributionManifest:
+        manifest = JsonAttributionManifest(data_root=root / "malformed")
+        manifest.path(_COHORT).parent.mkdir(parents=True)
+        manifest.path(_COHORT).write_text(json.dumps({"runs": ["x"]}), encoding="utf-8")
+        return manifest
+
+    return _Leg(
+        open=lambda: JsonAttributionManifest(data_root=root / "data"), with_malformed_runs=malformed
+    )
+
+
+@pytest.fixture(params=["fake", "json"])
+def leg(request: pytest.FixtureRequest, tmp_path: Path) -> _Leg:
+    return _fake_leg() if request.param == "fake" else _json_leg(tmp_path)
 
 
 def _entry(**overrides: object) -> dict[str, object]:
@@ -111,5 +129,35 @@ def test_entry_has_the_plan_identity_and_partition(leg: _Leg) -> None:
 
 
 def test_runs_shape_problem_is_unreadable(leg: _Leg) -> None:
-    with pytest.raises(ValueError, match="malformed"):
+    with pytest.raises(ValueError, match=r"malformed|unreadable"):
         leg.with_malformed_runs().record_run(_COHORT, "run-1", _entry())
+
+
+# -- só a perna real ----------------------------------------------------------------
+
+
+def test_write_is_atomic_by_replace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    manifest = JsonAttributionManifest(data_root=tmp_path)
+    manifest.record_run(_COHORT, "run-1", _entry())
+    before = manifest.path(_COHORT).read_bytes()
+
+    def crash(src: object, dst: object) -> None:
+        raise OSError("simulated crash before replace")
+
+    monkeypatch.setattr(os, "replace", crash)
+    with pytest.raises(OSError, match="simulated crash"):
+        manifest.record_run(_COHORT, "run-2", _entry())
+    assert manifest.path(_COHORT).read_bytes() == before
+    assert sorted(p.name for p in manifest.path(_COHORT).parent.iterdir()) == [
+        "attribution_manifest.json"
+    ]
+
+
+def test_file_path_is_attribution_manifest_json(tmp_path: Path) -> None:
+    manifest = JsonAttributionManifest(data_root=tmp_path)
+    manifest.record_run(_COHORT, "run-1", _entry())
+    expected = tmp_path / "inference" / _COHORT / "attribution_manifest.json"
+    assert manifest.path(_COHORT) == expected
+    assert expected.exists()
+    assert not (tmp_path / "inference" / _COHORT / "manifest.json").exists()
+    assert JsonAttributionManifest(data_root=tmp_path).recorded(_COHORT) is not None
