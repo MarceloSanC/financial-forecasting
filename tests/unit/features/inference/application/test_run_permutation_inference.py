@@ -808,6 +808,18 @@ def test_tiny_identity_shift_fails_strict_and_passes_with_justification() -> Non
     assert {o.reproduction_mode for o in result.outcomes} == {"tolerance"}
     assert all(0 < o.max_abs_diff < 1e-9 for o in result.outcomes)  # noqa: PLR2004
     assert {o.status for o in result.outcomes} == {"written"}
+    # TA-8: o max|Δ| de cada run vai ao manifesto (evidência da CA19 e da L6) e volta no
+    # `verified` da retomada, igual ao que foi medido
+    document = harness.manifest.recorded(_cohort_id(harness.spec))
+    assert document is not None
+    measured = {o.run_id: o.max_abs_diff for o in result.outcomes}
+    for run_id, value in measured.items():
+        recorded = document["runs"][run_id]["max_abs_diff"]  # type: ignore[index]
+        assert recorded == value
+        assert recorded == pytest.approx(1e-12, rel=1e-3)
+    again = harness.run(cross_environment_justification="ver [finding] do diagnóstico")
+    assert {o.status for o in again.outcomes} == {"verified"}
+    assert {o.run_id: o.max_abs_diff for o in again.outcomes} == measured
 
 
 # -- decisões de mesmo tamanho e valores diferentes (C5-6) ----------------------------------
