@@ -240,6 +240,7 @@ from financial_forecasting.features.modeling.application.ports.out.quantile_mode
     QuantileTrainingResult,
 )
 from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
+    CPU_DEVICE,
     RuntimeEnvironmentProbe,
 )
 from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (
@@ -351,13 +352,13 @@ _SILVER_SCHEMA_VERSION = 1
 
 # Device em que os trainers rodam: o adapter do TFT fixa `accelerator="cpu"` e o
 # LightGBM roda em CPU. O cohort que declarar outro device é recusado (I4).
-_TRAINERS_DEVICE = "cpu"
+_TRAINERS_DEVICE = CPU_DEVICE
 
 # Device declarado no cohort → `accelerator` do Lightning do `PfTftTrainer` (Stage 7.3,
 # ADR 7.3.0004 item 2). `rocm` é o device do cohort de ablação no Linux (o build ROCm do
 # torch expõe a GPU pela API `cuda`, e o Lightning a chama de `"gpu"`). Device fora do
 # mapa é recusado aqui, antes de qualquer import de torch.
-_SUPPORTED_DEVICES: Mapping[str, str] = MappingProxyType({"cpu": "cpu", "rocm": "gpu"})
+_SUPPORTED_DEVICES: Mapping[str, str] = MappingProxyType({CPU_DEVICE: "cpu", "rocm": "gpu"})
 
 
 def _accelerator_for(device: str) -> str:
