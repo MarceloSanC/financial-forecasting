@@ -16,6 +16,7 @@ import pytest
 
 from financial_forecasting.features.modeling.application.pipeline_version import PIPELINE_VERSION
 from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (
+    ArtifactChangedError,
     FamilyFeatureKnownError,
     TftAttributionPrediction,
 )
@@ -246,3 +247,12 @@ def test_emission_outside_request_raises(tmp_path: Path) -> None:
     setup = _Setup(tmp_path, predictor=_LeakingAttributionPredictor())
     with pytest.raises(ValueError, match="outside the requested test range"):
         _predict(setup)
+
+
+def test_located_sha256_must_be_the_allowed_one(tmp_path: Path) -> None:
+    """C3-5 (C7): sha256 localizado diferente do permitido ergue antes de predizer."""
+    setup = _Setup(tmp_path)
+    allowed = {run_id: "0" * 64 for run_id in setup.allowed}
+    with pytest.raises(ArtifactChangedError, match="C10"):
+        _predict(setup, allowed=allowed)
+    assert _attribution_calls(setup) == []
