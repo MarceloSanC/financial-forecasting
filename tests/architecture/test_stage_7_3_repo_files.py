@@ -202,12 +202,47 @@ def test_r3_k_p_seed_algorithm_equal_the_inference_plan() -> None:
     )
 
 
+def _frozen_ablation_values(spec: Any) -> dict[str, object]:  # noqa: ANN401
+    """O que a r3 tem de declarar do cohort de ablação CONGELADO: id, hash e seeds (C8-6)."""
+    assert spec.is_frozen(), "the ablation spec must be frozen (L4) before the r3 (L7)"
+    digest = CohortHash.compute(hasher=CanonicalJsonHasher(), payload=spec.hash_payload())
+    return {
+        "cohort_id": spec.cohort_id(digest),
+        "cohort_hash": digest.value,
+        "seeds": list(spec.seeds),
+    }
+
+
+def test_frozen_ablation_values_come_from_the_spec_hash() -> None:
+    """A regra da L7 sobre um spec congelado sintético (o real só existe depois da L4)."""
+    from tests.unit.features.modeling.adapters.in_.test_ablation_cohort_file import (  # noqa: PLC0415
+        _draft,
+    )
+
+    spec = _draft().with_freeze(seeds=(1, 2, 3), torch_build="2.5.1+rocm6.2")
+    values = _frozen_ablation_values(spec)
+    digest = CohortHash.compute(hasher=CanonicalJsonHasher(), payload=spec.hash_payload())
+    assert values == {
+        "cohort_id": f"aapl_ablation-r0-{digest.value[:12]}",
+        "cohort_hash": digest.value,
+        "seeds": [1, 2, 3],
+    }
+    with pytest.raises(AssertionError, match="must be frozen"):
+        _frozen_ablation_values(_draft())
+
+
 @pytest.mark.skipif(not _FILLED.exists(), reason="a r3 preenchida só existe no Linux (L7)")
 def test_filled_r3_differs_from_draft_only_in_h3_ablation() -> None:
     draft, filled = _toml(_DRAFT), _toml(_FILLED)
     draft_ablation = dict(draft["h3"].pop("ablation"))
     filled_ablation = dict(filled["h3"].pop("ablation"))
     assert filled == draft
+    # C8-6: os três valores são os do spec congelado pelo loader, com o hash recalculado
+    spec = ablation_file.load_ablation_cohort(
+        _ABLATION, hasher=CanonicalJsonHasher(), load_base=_load_base
+    )
+    expected = _frozen_ablation_values(spec)
+    assert {field: filled_ablation[field] for field in _FILLED_FIELDS} == expected
     for field in _FILLED_FIELDS:
         draft_ablation.pop(field)
         assert filled_ablation.pop(field) != _SENTINEL, field
