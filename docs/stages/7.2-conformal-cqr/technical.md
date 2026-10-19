@@ -2034,7 +2034,7 @@ inteiro do fold, então `"01"` e `"1"` colidiam.
 - **C4-6:** `conformal_error_units` = número de unidades `(fold, seed, h)` distintas
   com alguma linha `error`, seguindo o CA15 ao pé da letra. O código, os testes da
   Task 19 e da Task 20 e o comentário do `RefreshGoldResult` foram ajustados.
-  - No plano da Task 20, onde vale "Cada `error` soma 1 a `conformal_error_units`",
+  - No plano da Task 19 / concept C9, onde vale "Cada `error` soma 1 a `conformal_error_units`",
     leia "cada unidade com `error` soma 1".
   - Essa correção do plano fica registrada aqui, e não no texto da Task: o
     `check_technical_postexec.py` só aceita edição dentro da §7 durante a execução.
@@ -2094,8 +2094,10 @@ builder publicaria com célula nula.
 ### 2026-10-18 — [deviation] etapa-g — prova de geometria do calib sobre o cohort real: verde, sem métrica — Claude (Opus 5.5)
 **Contexto:** a Etapa G (concept D8, CA10) roda o `test_conformal_geometry_real_cohort.py`
 sobre o `data/cohorts/aapl` do checkout principal, montado somente leitura. O HEAD é
-`6867f18`, com a árvore limpa. Ela lê só timestamps, partições, fingerprints e o
-manifesto, e nenhuma coluna `value_*` nem `target_return` (I12).
+`6867f18`, com a árvore limpa. Ela lê timestamps, as features do painel do TFT
+(inclusive preços e retornos passados, para reproduzir o corte do
+`build_training_grid`), partições, fingerprints e o manifesto. Não lê nenhuma coluna
+de previsão (`value_*`) nem o `target_return` (I12; corrigido pelo C5-2, ver abaixo).
 
 **G0** (host): `git status --short` vazio e nenhum container no ar. `ls -a
 data/cohorts/aapl` → `. .. bronze inference processed raw silver` (sem `gold/` nem
@@ -2120,10 +2122,62 @@ O spec tem 6 folds x 10 seeds = 60 runs TFT.
 **G2:** `ls -a` igual ao do G0 (`DATA_ROOT_UNCHANGED`, sem `gold/`) e `find -newer
 g0-marker | wc -l` = 0.
 
-**Desvio do plano:** a linha-resumo tem outra forma da escrita no plano. Ela dá a
+**Desvio do plano:** a linha-resumo tem outra forma da escrita no plano, que é
+`geometry aapl_confirmatory-r0-665f45d9169a: 60 runs (6 folds x 10 seeds); fingerprint ok 60/60; calib = FoldSplit.calib 60/60 (h1, h7); calib ∩ early_stop = 0; max calib target < test[0] 60/60; manifest completed 60/60; calib rows 211680`. Ela dá a
 contagem de runs conferidos e de problemas, mas não o total de linhas de calib (211.680).
 O teste confere o conjunto de decisões de calib por run e horizonte, não a contagem de
 linhas por nível. A cobertura dos 7 níveis por decisão é regra da montagem
 (`missing_levels`) no refresh, não da geometria.
+
+### 2026-10-18 — [deviation] task-21-fix / task-22-fix — a Etapa G lê as features do painel, inclusive preços e retornos passados (Checkpoint C, C5-2) — Claude (Opus 5.5)
+**Adendo ao `[deviation] Task 21`:** a frase "as features não são previsão nem
+realizado" está errada.
+- As 57 features do painel do TFT incluem `close` e `log_return_*`, ou seja, o
+  realizado passado. A grade da Etapa G as lê para reproduzir o corte de prefixo do
+  `build_training_grid`.
+- O que a prova não lê é nenhuma coluna de previsão (`value_*`) e nenhum
+  `target_return`.
+- Nenhum escore, Q̂ ou cobertura é calculado. O I12 proíbe funções de previsão ×
+  realizado, e a prova não junta uma coisa com a outra.
+
+**Correções:**
+- **Espelho:** a declaração de cegamento da r2 passa a dizer "lê timestamps, as
+  features do painel do TFT (inclusive preços e retornos passados, para reproduzir o
+  corte do `build_training_grid`), partições, fingerprints e o manifesto; nenhuma
+  coluna de previsão (`value_*`) nem o `target_return`".
+- **Docstring do teste:** corrigida no mesmo sentido.
+- **`[deviation] etapa-g`:** corrigido na própria entrada.
+- **TOML da r2:** a `justification` não descreve a Etapa G, então ficou como estava.
+  O hash da r2 continua `f32ef5ebbbb8e08a3bcc09c0cd2ea438be229cd20bffcaa03ff5bbc5b5b1d4a9`,
+  e o teste de consistência confere r0 e r1 intactos.
+
+**Textos congelados que repetem a frase antiga:** são a nota do topo deste technical
+("A Etapa G lê só timestamps, partições, fingerprints e o manifesto") e o concept D8
+("os timestamps da grade de treino"). O que vale é esta entrada; os textos são
+alinhados depois do merge.
+
+### 2026-10-18 — [decision] task-21-fix / task-19-fix — teste exato das violações, guarda de tipo estrita e unidade duplicada (Checkpoint C, C5-3, C5-5, C5-6) — Claude (Opus 5.5)
+- **C5-3:** cada violação plantada afirma o conjunto exato de problemas, todos do
+  primeiro run. A checagem de interseção com o `early_stop` é declarada redundante
+  como defesa: os blocos do `FoldSplit` são disjuntos, então uma decisão do
+  `early_stop` já faz o conjunto diferir do `FoldSplit.calib`. Ela fica como
+  diagnóstico nomeado.
+- **C5-5:** só o `body` de `if TYPE_CHECKING:` ou `if typing.TYPE_CHECKING:` conta
+  como tipo; `else:` e `if not TYPE_CHECKING:` são runtime. `import <supplier> as cc`
+  é recusado. A regra vale para `_supplier_names` e para `_inference_imports`.
+- **C5-6:** a montagem também manda para `undefined` a mesma `(fold_raw, seed, h)` que
+  aparece em mais de um run (`unit fold '<raw>' appears in N runs`). Isso vem antes do
+  teste do inteiro repetido.
+
+### 2026-10-18 — [decision] cobertura do C10 e do NexCP nos testes unit (Checkpoint C, C5-8) — Claude (Opus 5.5)
+O e2e da Task 20 não repete dois casos, porque eles já estão cobertos no unit:
+- **C10 (manifesto anterior à Stage, sem `conformal_parameters`, não é lido):**
+  `tests/unit/features/evaluation/gold/test_refresh_gold_dtos.py::test_manifest_without_conformal_parameters_is_corrupt`
+  e `tests/unit/features/evaluation/test_scorecard_evidence_mapper.py::test_check_manifest_refuses_a_divergent_conformal_block`.
+- **NexCP:** `tests/unit/features/inference/domain/test_nexcp_weighted_threshold.py`
+  (ρ = 1 = posto sem pesos, normalização com o peso do ponto de teste, massa
+  insuficiente → +∞, n = 252 com cauda 0,02, empates, pesos geométricos exatos, sem
+  posto e sem Beta) e a fixture dos autores em
+  `tests/integration/features/inference/test_nexcp_oracle_fixture.py`.
 
 <!-- END: post-execution -->
