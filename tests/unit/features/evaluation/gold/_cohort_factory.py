@@ -337,12 +337,14 @@ def with_permuted(  # noqa: PLR0913 — um parâmetro por coluna de proveniênci
     partition_hash: str = PARTITION_HASH,
     permutation_seed: int = PERMUTATION_SEED,
     permutation_algorithm: str = PERMUTATION_ALGORITHM,
+    shift: float = 0.0,
 ) -> Cohort:
     """Linhas de `fact_permuted_predictions` para cada run do `model`: identidade e (f, k).
 
     Os valores vêm de um `random.Random` semeado por (run, família, k, h, decisão), com
     `value_guardrail = value_raw` (grade monótona): a identidade NÃO repete o
-    `fact_oos_predictions` do mesmo ponto.
+    `fact_oos_predictions` do mesmo ponto. `shift` desloca a grade de cada família
+    permutada (mais para as famílias seguintes) — a permutação piora a previsão.
     """
     levels = sorted({r.quantile_level for r in cohort.records})
     labels = [(IDENTITY_FAMILY, 0), *((f, k) for f in families for k in range(1, k_p + 1))]
@@ -355,7 +357,9 @@ def with_permuted(  # noqa: PLR0913 — um parâmetro por coluna de proveniênci
                 rng = random.Random(
                     f"perm|{run.run_id}|{family}|{k}|{point.horizon}|{point.decision_idx}"
                 )
+                offset = 0.0 if family == IDENTITY_FAMILY else shift * (1 + families.index(family))
                 for level, value in zip(levels, _values(rng), strict=False):
+                    value += offset  # noqa: PLW2901
                     extra.append(
                         PermutedForecastRecord(
                             run_id=run.run_id,
@@ -385,10 +389,14 @@ def ablation_models(families: tuple[str, ...] = H3_FAMILIES) -> tuple[str, ...]:
     return (LOCO_REFERENCE_MODEL, *(loco_model_of(family) for family in families))
 
 
-def with_ablation(cohort: Cohort, *, model: str = "tft", seeds: tuple[int, ...] = (1, 2)) -> Cohort:
+def with_ablation(
+    cohort: Cohort, *, model: str = "tft", seeds: tuple[int, ...] = (1, 2), shift: float = 0.0
+) -> Cohort:
     """Runs e linhas de teste LOCO nas MESMAS decisões do candidato, por fold e seed.
 
-    O fold do run é o inteiro em texto (`"0"`, `"1"`), o formato do `dim_run`.
+    O fold do run é o inteiro em texto (`"0"`, `"1"`), o formato do `dim_run`. `shift`
+    desloca a grade das configurações LOCO (mais para as seguintes) — tirar uma família
+    piora a previsão.
     """
     levels = sorted({r.quantile_level for r in cohort.records})
     reference = next(run for run in cohort.runs if run.model == model)
@@ -399,7 +407,7 @@ def with_ablation(cohort: Cohort, *, model: str = "tft", seeds: tuple[int, ...] 
     }
     runs: list[CohortRun] = []
     records: list[ForecastRecord] = []
-    for configuration in ablation_models():
+    for position, configuration in enumerate(ablation_models()):
         for seed in seeds:
             for fold in sorted(by_fold):
                 index = fold_index_of(cohort, fold)
@@ -417,6 +425,7 @@ def with_ablation(cohort: Cohort, *, model: str = "tft", seeds: tuple[int, ...] 
                         f"loco|{configuration}|{seed}|{point.horizon}|{point.decision_idx}"
                     )
                     for level, value in zip(levels, _values(rng), strict=False):
+                        value += shift * position  # noqa: PLW2901
                         records.append(
                             dataclasses.replace(
                                 point,

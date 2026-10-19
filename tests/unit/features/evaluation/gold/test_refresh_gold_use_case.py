@@ -15,12 +15,14 @@ mínimo (`_StubHasher`) só para o `DatasetContentFingerprint`.
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import logging
 import math
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from typing import Any
 
 import pytest
 
@@ -54,6 +56,7 @@ from financial_forecasting.features.evaluation.domain.services.diebold_mariano i
 from financial_forecasting.features.evaluation.domain.services.horizon_reports import SampleKind
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     ModelConfidenceSet,
+    block_length_rule,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._paired_inputs import (
     is_constant,
@@ -74,6 +77,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.coverage_ser
 )
 from financial_forecasting.features.evaluation.domain.value_objects.forecast_record import (
     ForecastRecord,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.h3_parameters import (
+    H3Parameters,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
@@ -112,7 +118,10 @@ from tests.unit.features.evaluation.gold._cohort_factory import (
     make_cohort,
     replace_records,
     targets_of,
+    with_ablation,
     with_calib,
+    with_permuted,
+    with_vsn,
 )
 
 _ASSET = "AAPL"
@@ -1445,3 +1454,301 @@ def test_assembly_undefined_reason_names_the_raw_fold() -> None:
     reasons = [u.reason for u in inputs.conformal_reports.undefined_coverage]
     assert reasons
     assert all(r.startswith("assembly unit fold '1': unit has no calib point") for r in reasons)
+
+
+# --- Stage 7.3 Task 30: a etapa h3 -------------------------------------------------------
+
+_H3_HORIZONS = (1, 7)
+
+
+def _h3_parameters_for_test() -> H3Parameters:
+    from tests.unit.features.evaluation._h3_parameters import h3_block  # noqa: PLC0415
+
+    block: dict[str, Any] = copy.deepcopy(h3_block())
+    block["k_p"] = 2
+    block["ablation"]["seeds"] = [1, 2]
+    return H3Parameters.from_mapping(block)
+
+
+_H3_PARAMETERS = dataclasses.replace(_PARAMETERS, h3_parameters=_h3_parameters_for_test())
+
+
+def _h3_cohort() -> Cohort:
+    from tests.unit.features.evaluation._h3_parameters import (  # noqa: PLC0415
+        SYNTHETIC_PARTITION,
+    )
+
+    variables = {f: family for family, features in SYNTHETIC_PARTITION.items() for f in features}
+    variables["relative_time_idx"] = "none"
+    base = make_cohort(
+        folds=("0", "1"), seeds={"gbm": (None,), "tft": (1, 2)}, horizons=_H3_HORIZONS
+    )
+    permuted = with_permuted(base, shift=0.01)
+    return with_vsn(with_ablation(permuted, seeds=(1, 2), shift=0.01), variables=variables)
+
+
+def _h3_silver(cohort: Cohort) -> dict[str, list[dict[str, object]]]:
+    silver = _silver(cohort)
+    ablation_id = _h3_parameters_for_test().ablation_cohort_id
+    silver["dim_run"] += [
+        {
+            "run_id": run.run_id,
+            "asset": _ASSET,
+            "parent_sweep_id": ablation_id,
+            "feature_set_name": run.feature_set_name,
+            "config_signature": run.config_signature,
+            "fold": run.fold,
+            "seed": run.seed,
+            "model_version": run.model,
+        }
+        for run in cohort.ablation_runs
+    ]
+    silver["fact_oos_predictions"] += [
+        {
+            "run_id": r.run_id,
+            "model_version": r.model,
+            "asset": _ASSET,
+            "feature_set_name": "fs_all_ablation",
+            "split": r.split,
+            "horizon": r.horizon,
+            "decision_idx": r.decision_idx,
+            "timestamp_utc": r.decision_timestamp,
+            "target_timestamp_utc": r.target_timestamp,
+            "quantile_level": r.quantile_level,
+            "value_raw": r.value_raw,
+            "value_guardrail": r.value_guardrail,
+            "guardrail_applied": int(r.guardrail_applied),
+            "year": int(r.decision_timestamp[:4]),
+        }
+        for r in cohort.ablation_records
+    ]
+    feature_set = {run.run_id: run.feature_set_name for run in cohort.runs}
+    silver["fact_permuted_predictions"] = [
+        {
+            "run_id": r.run_id,
+            "model_version": r.model,
+            "asset": _ASSET,
+            "feature_set_name": feature_set[r.run_id],
+            "permuted_family": r.permuted_family,
+            "permutation_index": r.permutation_index,
+            "permutation_seed": r.permutation_seed,
+            "permutation_algorithm": r.permutation_algorithm,
+            "partition_hash": r.partition_hash,
+            "horizon": r.horizon,
+            "decision_idx": r.decision_idx,
+            "timestamp_utc": r.decision_timestamp,
+            "target_timestamp_utc": r.target_timestamp,
+            "quantile_level": r.quantile_level,
+            "value_raw": r.value_raw,
+            "value_guardrail": r.value_guardrail,
+            "guardrail_applied": int(r.guardrail_applied),
+            "year": int(r.decision_timestamp[:4]),
+        }
+        for r in cohort.permuted
+    ]
+    silver["fact_vsn_weights"] = [
+        {
+            "run_id": r.run_id,
+            "model_version": r.model,
+            "asset": _ASSET,
+            "feature_set_name": feature_set[r.run_id],
+            "decision_idx": r.decision_idx,
+            "timestamp_utc": r.decision_timestamp,
+            "variable": r.variable,
+            "family": r.family,
+            "weight": r.weight,
+            "year": int(r.decision_timestamp[:4]),
+        }
+        for r in cohort.vsn
+    ]
+    return silver
+
+
+class _FailAfter(_SpyBackend):
+    """Backend que só falha nas chamadas de b̂ depois das `ok` primeiras (as da 6.4)."""
+
+    def __init__(self, log: _Log, *, ok: int, error: BaseException) -> None:
+        super().__init__(log)
+        self._ok = ok
+        self._error = error
+
+    def optimal_block_length(self, *, series: Sequence[float]) -> float:
+        if len(self.block_series) >= self._ok:
+            self.block_series.append(tuple(series))
+            raise self._error
+        return super().optimal_block_length(series=series)
+
+
+def _h3_harness() -> _Harness:
+    cohort = _h3_cohort()
+    return _harness(cohort, silver=_h3_silver(cohort))
+
+
+def _h3_run(harness: _Harness, parameters: RefreshParameters = _H3_PARAMETERS) -> GoldInputs:
+    return _inputs_of(harness, parameters=parameters, horizons=_H3_HORIZONS)
+
+
+def _reads(harness: _Harness, table: str) -> list[dict[str, object]]:
+    return [filters for _, name, filters in harness.reader.reads if name == table]
+
+
+def _calls_without_h3() -> int:
+    """Quantas estimativas de b̂ a 6.4 pede neste cohort (as do H3 vêm depois)."""
+    probe = _h3_harness()
+    _h3_run(probe, _PARAMETERS)
+    return len(probe.backend.block_series)
+
+
+@pytest.mark.unit
+def test_permuted_and_vsn_read_one_run_per_call_with_run_id_filter() -> None:
+    harness = _h3_harness()
+    inputs = _h3_run(harness)
+    candidate = sorted(r.run_id for r in _h3_cohort().runs if r.model == "tft")
+    for table in ("fact_permuted_predictions", "fact_vsn_weights"):
+        reads = _reads(harness, table)
+        assert sorted(str(f["run_id"]) for f in reads) == candidate, table
+    assert inputs.h3_reports.permutation is not None
+    assert inputs.h3_reports.permutation.status == "ok"
+
+
+@pytest.mark.unit
+def test_ablation_partition_read_once_per_year_never_without_year() -> None:
+    harness = _h3_harness()
+    _h3_run(harness)
+    ablation_reads = [
+        f
+        for f in _reads(harness, "fact_oos_predictions")
+        if f["feature_set_name"] == "fs_all_ablation"
+    ]
+    assert ablation_reads == [
+        {"asset": _ASSET, "feature_set_name": "fs_all_ablation", "year": 2024}
+    ]
+
+
+@pytest.mark.unit
+def test_confirmatory_records_never_read_fs_all_ablation() -> None:
+    harness = _h3_harness()
+    inputs = _h3_run(harness)
+    confirmatory = [f for f in _reads(harness, "fact_oos_predictions") if "year" not in f]
+    assert confirmatory
+    assert all(f["feature_set_name"] != "fs_all_ablation" for f in confirmatory)
+    assert inputs.h3_reports.ablation is not None
+    assert inputs.h3_reports.ablation.status == "ok"
+
+
+@pytest.mark.unit
+def test_one_bootstrap_indices_call_serves_both_methods() -> None:
+    before = _calls_without_h3()
+    harness = _h3_harness()
+    inputs = _h3_run(harness)
+    h3_calls = [c for c in harness.backend.index_calls if c["reps"] == 1000]  # noqa: PLR2004
+    assert len(h3_calls) == 1
+    [call] = h3_calls
+    assert call["seed"] == 129  # noqa: PLR2004
+    assert call["scheme"] is BootstrapScheme.STATIONARY
+    assert len(harness.backend.block_series) - before == 16  # noqa: PLR2004
+    assert call["block_size"] == block_length_rule(horizon=7, max_estimate=_BLOCK)
+    assert inputs.h3_reports.block_length == call["block_size"]
+    assert inputs.h3_reports.max_block_estimate == _BLOCK
+
+
+def _failing_h3(error: BaseException) -> GoldInputs:
+    before = _calls_without_h3()
+    harness = _h3_harness()
+    harness.use_case._mcs_backend = _FailAfter(harness.log, ok=before, error=error)
+    return _h3_run(harness)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("error", [ArithmeticError("singular"), ZeroDivisionError("zero")])
+def test_invalid_series_or_arithmetic_error_gives_undefined_reading(error: Exception) -> None:
+    inputs = _failing_h3(error)
+    reading = inputs.h3_reports.reading
+    assert reading is not None
+    assert reading.status == "undefined"
+    assert reading.sustained is False
+    assert "bootstrap undefined" in str(reading.reason)
+    assert inputs.status is RefreshStatus.COMPLETED
+
+
+@pytest.mark.unit
+def test_constant_series_gives_undefined_reading(monkeypatch: pytest.MonkeyPatch) -> None:
+    from financial_forecasting.features.evaluation.application.use_cases import (  # noqa: PLC0415
+        refresh_gold as module,
+    )
+
+    def invalid(series: Sequence[float]) -> None:
+        raise ValueError("optimal_block_length needs a non-constant series")
+
+    monkeypatch.setattr(module, "validate_block_length_request", invalid)
+    reading = _h3_run(_h3_harness()).h3_reports.reading
+    assert reading is not None
+    assert reading.status == "undefined"
+    assert "invalid series" in str(reading.reason)
+
+
+@pytest.mark.unit
+def test_h3_failure_never_changes_other_tables() -> None:
+    reference = _h3_run(_h3_harness(), _PARAMETERS)
+    failing = _failing_h3(ArithmeticError("x"))
+    for name in ("horizon_reports", "mcs_reports", "profile_reports", "check_results"):
+        assert getattr(failing, name) == getattr(reference, name), name
+    assert reference.h3_reports.is_empty
+    assert not failing.h3_reports.is_empty
+
+
+@pytest.mark.unit
+def test_without_h3_block_no_h3_read() -> None:
+    harness = _h3_harness()
+    inputs = _h3_run(harness, _PARAMETERS)
+    assert _reads(harness, "fact_permuted_predictions") == []
+    assert _reads(harness, "fact_vsn_weights") == []
+    assert all("year" not in f for f in _reads(harness, "fact_oos_predictions"))
+    assert inputs.h3_reports.is_empty
+
+
+@pytest.mark.unit
+def test_blocked_generation_has_no_h3() -> None:
+    cohort = _h3_cohort()
+    gap = targets_of(cohort, "tft", 1, 1)[10]
+    cohort = drop_records(cohort, at_point("tft", 1, 1, gap))
+    harness = _harness(cohort, silver=_h3_silver(cohort))
+    inputs = _h3_run(harness)
+    assert inputs.status is RefreshStatus.BLOCKED
+    assert inputs.h3_reports.is_empty
+    assert _reads(harness, "fact_permuted_predictions") == []
+
+
+@pytest.mark.unit
+def test_unexpected_exception_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
+    from financial_forecasting.features.evaluation.application.use_cases import (  # noqa: PLC0415
+        refresh_gold as module,
+    )
+
+    def broken(**kwargs: object) -> object:
+        raise RuntimeError("bug in the assembly")
+
+    monkeypatch.setattr(module.AttributionAssembly, "assemble", staticmethod(broken))
+    harness = _h3_harness()
+    with pytest.raises(RuntimeError, match="bug in the assembly"):
+        harness(parameters=_H3_PARAMETERS, horizons=_H3_HORIZONS)
+    assert "publish" not in harness.log.events
+
+
+@pytest.mark.unit
+def test_contribution_receives_the_bonferroni_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    from financial_forecasting.features.evaluation.application.use_cases import (  # noqa: PLC0415
+        refresh_gold as module,
+    )
+
+    levels: list[float] = []
+    real = module.FamilyContribution.evaluate
+
+    def spy(differentials: Any, *, bootstrap: Any, level: float) -> Any:  # noqa: ANN401
+        levels.append(level)
+        return real(differentials, bootstrap=bootstrap, level=level)
+
+    monkeypatch.setattr(module.FamilyContribution, "evaluate", staticmethod(spy))
+    _h3_run(_h3_harness())
+    assert levels == [0.9875, 0.9875]
+    assert _h3_parameters_for_test().interval_level == 0.9875  # noqa: PLR2004

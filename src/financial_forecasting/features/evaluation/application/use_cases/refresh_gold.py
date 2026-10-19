@@ -60,6 +60,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     GoldManifest,
     GoldPartition,
     GoldTable,
+    H3Reports,
     McsBlockRun,
     RefreshGoldCommand,
     RefreshGoldResult,
@@ -86,6 +87,13 @@ from financial_forecasting.features.evaluation.application.ports.out.silver_tabl
 from financial_forecasting.features.evaluation.application.ports.out.training_grid_reader import (
     TrainingGridReader,
 )
+from financial_forecasting.features.evaluation.domain.services.attribution_assembly import (
+    AttributionAssembly,
+    UndefinedRunReduction,
+    merge_ablation_run,
+    reduce_ablation_run,
+    reduce_permuted_run,
+)
 from financial_forecasting.features.evaluation.domain.services.conformal_assembly import (
     ConformalAssembly,
     ConformalAssemblyResult,
@@ -94,6 +102,15 @@ from financial_forecasting.features.evaluation.domain.services.conformal_assembl
 from financial_forecasting.features.evaluation.domain.services.conformal_coverage import (
     ConformalCoverage,
     ConformalCoverageReport,
+)
+from financial_forecasting.features.evaluation.domain.services.contribution_agreement import (
+    ContributionAgreement,
+)
+from financial_forecasting.features.evaluation.domain.services.family_contribution import (
+    UNDEFINED,
+    FamilyContribution,
+    FamilyContributionReport,
+    FamilyShare,
 )
 from financial_forecasting.features.evaluation.domain.services.gold_build_order import (
     gold_build_order,
@@ -105,6 +122,7 @@ from financial_forecasting.features.evaluation.domain.services.horizon_reports i
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     McsReport,
     ModelConfidenceSet,
+    block_length_rule,
     block_sensitivity_length,
 )
 from financial_forecasting.features.evaluation.domain.services.paired_pinball_losses import (
@@ -135,12 +153,25 @@ from financial_forecasting.features.evaluation.domain.services.quality_checks.st
 from financial_forecasting.features.evaluation.domain.services.series_assembly import (
     SeriesAssembly,
 )
+from financial_forecasting.features.evaluation.domain.services.vsn_summary import (
+    VsnSummary,
+    VsnSummaryReport,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.ablation_run_losses import (
+    AblationRunLosses,
+    AblationRunPart,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
     AssembledCohort,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.block_estimate import (
     BlockEstimate,
     UndefinedReason,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
+    BootstrapIndices,
+    BootstrapScheme,
+    validate_block_length_request,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.cohort_run import CohortRun
 from financial_forecasting.features.evaluation.domain.value_objects.conformal_coverage_series import (  # noqa: E501
@@ -153,15 +184,38 @@ from financial_forecasting.features.evaluation.domain.value_objects.conformal_pa
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.family_loss_differentials import (  # noqa: E501
+    H3_HORIZONS,
+    LOCO,
+    PERMUTATION,
+    FamilyLossDifferentials,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.forecast_record import (
     ForecastRecord,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.h3_parameters import (
+    H3_FAMILIES,
+    H3Parameters,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
     models_suffice,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.permuted_forecast_record import (  # noqa: E501
+    PermutedForecastRecord,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.permuted_run_losses import (
+    PermutedRunLosses,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.realized_returns import (
     RealizedReturns,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.vsn_run_weights import (
+    VsnRunWeights,
+    reduce_vsn_run,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.vsn_weight_record import (
+    VsnWeightRecord,
 )
 from financial_forecasting.features.inference.application.use_cases.calibrate_conformal import (
     CalibrateConformalCommand,
@@ -322,6 +376,7 @@ class RefreshGold:
         blocks: tuple[McsBlockRun, ...] = ()
         conformal: ConformalReports = EMPTY_CONFORMAL_REPORTS
         conformal_errors = 0
+        h3: H3Reports = EMPTY_H3_REPORTS
         if not blocked:
             reports = _timed(
                 "reports",
@@ -356,6 +411,21 @@ class RefreshGold:
                     ),
                     lambda result: len(result[0].units),
                 )
+            h3_block = parameters.h3_parameters
+            if h3_block is not None:
+                h3 = _timed(
+                    "h3",
+                    len(runs),
+                    lambda: self._h3(
+                        partition=partition,
+                        runs=runs,
+                        records=records,
+                        realized=realized,
+                        parameters=parameters,
+                        h3=h3_block,
+                    ),
+                    lambda reports: 0 if reports.n_points is None else reports.n_points,
+                )
         inputs = GoldInputs(
             partition=partition,
             parameters=parameters,
@@ -367,8 +437,7 @@ class RefreshGold:
             profile_reports=profiles,
             mcs_block_reports=blocks,
             conformal_reports=conformal,
-            # Stage 7.3: o cálculo de H3 entra na Task 30; até lá, vazio
-            h3_reports=EMPTY_H3_REPORTS,
+            h3_reports=h3,
         )
         builders = [b for b in self._builders if not blocked or b.runs_when_blocked]
         tables = _timed("build", len(builders), lambda: [b.build(inputs) for b in builders], len)
@@ -410,6 +479,13 @@ class RefreshGold:
     # -- leituras --------------------------------------------------------------------
 
     def _read_runs(self, partition: GoldPartition) -> tuple[CohortRun, ...]:
+        runs = self._read_dim_run(partition)
+        if not runs:
+            raise ValueError(f"cohort {partition} has no dim_run rows (C4)")
+        return runs
+
+    def _read_dim_run(self, partition: GoldPartition) -> tuple[CohortRun, ...]:
+        """O `dim_run` de um `parent_sweep_id`, ordenado (vazio se não houver)."""
         rows = self._silver_reader.read(
             layer=SILVER_LAYER,
             table="dim_run",
@@ -428,8 +504,6 @@ class RefreshGold:
             if (row.get("asset"), row.get("parent_sweep_id"))
             == (partition.asset, partition.parent_sweep_id)
         )
-        if not runs:
-            raise ValueError(f"cohort {partition} has no dim_run rows (C4)")
         return tuple(sorted(runs, key=lambda run: run.run_id))
 
     def _read_records(
@@ -577,6 +651,216 @@ class RefreshGold:
             )
             for samples in assembled.horizons
         )
+
+    # -- leitura de H3 (Stage 7.3) ----------------------------------------------------
+
+    def _h3(  # noqa: PLR0913 — o que a leitura de H3 junta do refresh
+        self,
+        *,
+        partition: GoldPartition,
+        runs: Sequence[CohortRun],
+        records: Sequence[ForecastRecord],
+        parameters: RefreshParameters,
+        realized: RealizedReturns,
+        h3: H3Parameters,
+    ) -> H3Reports:
+        """Leitura por run → montagem → um bootstrap → dois relatórios → leitura e VSN.
+
+        Dado inválido vira `undefined` com o motivo (C9); nada aborta o refresh. Exceção
+        fora das esperadas (erro de programação) propaga.
+        """
+        candidate_runs = tuple(run for run in runs if run.model == parameters.candidate)
+        candidate_ids = {run.run_id for run in candidate_runs}
+        seeds = tuple(sorted({run.seed for run in candidate_runs if run.seed is not None}))
+        test = [r for r in records if r.run_id in candidate_ids and r.split == _TEST_SPLIT]
+        levels = tuple(sorted({r.quantile_level for r in test}))
+        years = tuple(sorted({int(r.decision_timestamp[:4]) for r in test}))
+        permuted, vsn = self._attribution_reductions(partition, candidate_runs, realized, levels)
+        ablation_runs = self._ablation_runs(partition, h3)
+        ablation = self._ablation_reductions(partition, ablation_runs, years, realized, levels)
+        assembly = AttributionAssembly.assemble(
+            candidate_runs=candidate_runs,
+            permuted=permuted,
+            ablation_runs=ablation_runs,
+            ablation_losses=ablation,
+            parameters=h3,
+            candidate=parameters.candidate,
+            candidate_seeds=seeds,
+            horizons=H3_HORIZONS,
+        )
+        try:
+            vsn_report = VsnSummary.summarize(vsn, parameters=h3, seeds=seeds)
+        except ValueError as exc:  # VSN incoerente é dado, não erro de programação
+            vsn_report = VsnSummaryReport(entries=(), status=UNDEFINED, reason=str(exc))
+        level = h3.interval_level
+        series = {
+            PERMUTATION: (assembly.permutation, assembly.permutation_reason),
+            LOCO: (assembly.ablation, assembly.ablation_reason),
+        }
+        defined = [d for d, _ in series.values() if d is not None]
+        block: int | None = None
+        max_estimate: float | None = None
+        bootstrap: BootstrapIndices | None = None
+        bootstrap_reason: str | None = None
+        if defined:
+            try:
+                max_estimate = self._h3_max_block_estimate(defined)
+                block = block_length_rule(horizon=max(H3_HORIZONS), max_estimate=max_estimate)
+                bootstrap = self._mcs_backend.bootstrap_indices(
+                    n_obs=len(defined[0].decision_timestamps),
+                    block_size=block,
+                    reps=h3.reps,
+                    seed=h3.bootstrap_seed,
+                    scheme=BootstrapScheme.STATIONARY,
+                )
+            except _H3BootstrapUndefined as exc:
+                bootstrap_reason = exc.reason
+                max_estimate, block = None, None
+        reports: dict[str, FamilyContributionReport] = {}
+        for method, (differentials, reason) in series.items():
+            if differentials is None:
+                reports[method] = _undefined_report(method, str(reason), level)
+            elif bootstrap is None:
+                reports[method] = _undefined_report(
+                    method, f"bootstrap undefined: {bootstrap_reason}", level
+                )
+            else:
+                reports[method] = FamilyContribution.evaluate(
+                    differentials, bootstrap=bootstrap, level=level
+                )
+        return H3Reports(
+            permutation=reports[PERMUTATION],
+            ablation=reports[LOCO],
+            permutation_differentials=assembly.permutation,
+            ablation_differentials=assembly.ablation,
+            reading=ContributionAgreement.read(reports[PERMUTATION], reports[LOCO]),
+            vsn=vsn_report,
+            block_length=block,
+            max_block_estimate=max_estimate,
+            n_points=len(defined[0].decision_timestamps) if defined else None,
+        )
+
+    def _h3_max_block_estimate(self, defined: Sequence[FamilyLossDifferentials]) -> float:
+        """O maior b̂ de Politis-White das séries d_t (16 com os dois métodos, I12)."""
+        estimates: list[float] = []
+        for differentials in defined:
+            for key, values in differentials.differentials.items():
+                try:
+                    validate_block_length_request(values)
+                except ValueError as exc:
+                    raise _H3BootstrapUndefined(
+                        f"{differentials.method} {key}: invalid series ({exc})"
+                    ) from None
+                try:
+                    estimates.append(self._mcs_backend.optimal_block_length(series=values))
+                except ArithmeticError as exc:
+                    raise _H3BootstrapUndefined(
+                        f"{differentials.method} {key}: {type(exc).__name__}: {exc}"
+                    ) from None
+        return max(estimates)
+
+    def _attribution_reductions(
+        self,
+        partition: GoldPartition,
+        candidate_runs: Sequence[CohortRun],
+        realized: RealizedReturns,
+        levels: tuple[float, ...],
+    ) -> tuple[list[PermutedRunLosses | UndefinedRunReduction], list[VsnRunWeights]]:
+        """Um run por chamada, filtrado por `run_id` (CA14b); os registros são descartados."""
+        permuted: list[PermutedRunLosses | UndefinedRunReduction] = []
+        vsn: list[VsnRunWeights] = []
+        for run in candidate_runs:
+            fold = _fold_index(run)
+            if fold is None or run.seed is None:
+                permuted.append(
+                    UndefinedRunReduction(run.run_id, f"run {run.run_id}: fold or seed unusable")
+                )
+                continue
+            filters = {
+                "asset": partition.asset,
+                "feature_set_name": run.feature_set_name,
+                "run_id": run.run_id,
+            }
+            rows = [
+                row
+                for row in self._silver_reader.read(
+                    layer=SILVER_LAYER, table=_PERMUTED_TABLE, filters=filters
+                )
+                if row.get("run_id") == run.run_id and row.get("asset") == partition.asset
+            ]
+            if not rows:
+                permuted.append(
+                    UndefinedRunReduction(run.run_id, f"run {run.run_id}: no attribution rows")
+                )
+            else:
+                permuted.append(
+                    reduce_permuted_run(
+                        [_permuted_record(row, run, fold) for row in rows],
+                        realized=realized,
+                        levels=levels,
+                    )
+                )
+            weights = [
+                row
+                for row in self._silver_reader.read(
+                    layer=SILVER_LAYER, table=_VSN_TABLE, filters=filters
+                )
+                if row.get("run_id") == run.run_id and row.get("asset") == partition.asset
+            ]
+            if weights:
+                vsn.append(reduce_vsn_run([_vsn_record(row, run, fold) for row in weights]))
+        return permuted, vsn
+
+    def _ablation_runs(self, partition: GoldPartition, h3: H3Parameters) -> tuple[CohortRun, ...]:
+        """O `dim_run` da ablação pelo `cohort_id` do bloco `[h3]`."""
+        return self._read_dim_run(GoldPartition(partition.asset, h3.ablation_cohort_id))
+
+    def _ablation_reductions(
+        self,
+        partition: GoldPartition,
+        ablation_runs: Sequence[CohortRun],
+        years: Sequence[int],
+        realized: RealizedReturns,
+        levels: tuple[float, ...],
+    ) -> list[AblationRunLosses | UndefinedRunReduction]:
+        """A partição da ablação lida UMA vez por `year` (I19), reduzida por run e unida."""
+        by_id = {run.run_id: run for run in ablation_runs}
+        parts: dict[str, list[AblationRunPart | UndefinedRunReduction]] = {
+            run_id: [] for run_id in by_id
+        }
+        for feature_set in sorted({run.feature_set_name for run in ablation_runs}):
+            for year in years:
+                block: dict[str, list[ForecastRecord]] = {}
+                for row in self._silver_reader.read(
+                    layer=SILVER_LAYER,
+                    table=_FACT_TABLE,
+                    filters={
+                        "asset": partition.asset,
+                        "feature_set_name": feature_set,
+                        "year": year,
+                    },
+                ):
+                    run = by_id.get(str(row["run_id"]))
+                    if (
+                        run is None
+                        or row.get("asset") != partition.asset
+                        or row.get("year") != year
+                        or row.get("split") != _TEST_SPLIT
+                    ):
+                        continue
+                    block.setdefault(run.run_id, []).append(_record(row, run))
+                for run_id, rows in block.items():
+                    parts[run_id].append(
+                        reduce_ablation_run(
+                            rows, run=by_id[run_id], realized=realized, levels=levels
+                        )
+                    )
+        return [
+            merge_ablation_run(parts[run_id])
+            if parts[run_id]
+            else UndefinedRunReduction(run_id, f"run {run_id}: no ablation test rows")
+            for run_id in sorted(parts)
+        ]
 
     # -- manifesto -------------------------------------------------------------------
 
@@ -971,3 +1255,84 @@ def _undefined_reason(  # noqa: PLR0913 — os motivos possíveis, na ordem
             if str(row.status) != _OK:
                 return f"unit fold {unit.fold_raw!r} pair {list(pair)}: {row.status}: {row.reason}"
     return None
+
+
+# --- Stage 7.3: leitura de H3 (ADR 7.3.0001 itens 2-3; concept 7.3 §1 item 8) -----------
+
+_PERMUTED_TABLE: Final = "fact_permuted_predictions"
+_VSN_TABLE: Final = "fact_vsn_weights"
+_FACT_TABLE: Final = "fact_oos_predictions"
+_TEST_SPLIT: Final = "test"
+
+
+class _H3BootstrapUndefined(Exception):
+    """O b̂ ou a série de alguma d_t não serve ao bootstrap (I12): a leitura sai `undefined`."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _fold_index(run: CohortRun) -> int | None:
+    try:
+        return int(str(run.fold))
+    except ValueError:
+        return None
+
+
+def _undefined_report(method: str, reason: str, level: float) -> FamilyContributionReport:
+    """O relatório de um método que não foi calculado: 4 famílias `undefined` com o motivo."""
+    return FamilyContributionReport(
+        method=method,
+        importance={},
+        shares=tuple(
+            FamilyShare(f, None, None, None, None, None, None, None, UNDEFINED, reason)
+            for f in H3_FAMILIES
+        ),
+        level=level,
+        nonpositive_replicas={},
+        status=UNDEFINED,
+        reason=reason,
+        heterogeneous=None,
+    )
+
+
+def _permuted_record(
+    row: Mapping[str, object], run: CohortRun, fold: int
+) -> PermutedForecastRecord:
+    flag = row["guardrail_applied"]
+    if isinstance(flag, bool) or flag not in _GUARDRAIL_FLAGS:
+        raise ValueError(f"guardrail_applied must be the int 0 or 1, got {flag!r}")
+    return PermutedForecastRecord(
+        run_id=run.run_id,
+        model=str(row["model_version"]),
+        seed=run.seed,  # type: ignore[arg-type]
+        fold_index=fold,
+        permuted_family=str(row["permuted_family"]),
+        permutation_index=row["permutation_index"],  # type: ignore[arg-type]
+        permutation_seed=row["permutation_seed"],  # type: ignore[arg-type]
+        permutation_algorithm=str(row["permutation_algorithm"]),
+        partition_hash=str(row["partition_hash"]),
+        horizon=row["horizon"],  # type: ignore[arg-type]
+        decision_idx=row["decision_idx"],  # type: ignore[arg-type]
+        decision_timestamp=str(row["timestamp_utc"]),
+        target_timestamp=str(row["target_timestamp_utc"]),
+        quantile_level=row["quantile_level"],  # type: ignore[arg-type]
+        value_raw=row["value_raw"],  # type: ignore[arg-type]
+        value_guardrail=row["value_guardrail"],  # type: ignore[arg-type]
+        guardrail_applied=_GUARDRAIL_FLAGS[flag],
+    )
+
+
+def _vsn_record(row: Mapping[str, object], run: CohortRun, fold: int) -> VsnWeightRecord:
+    return VsnWeightRecord(
+        run_id=run.run_id,
+        model=str(row["model_version"]),
+        seed=run.seed,  # type: ignore[arg-type]
+        fold_index=fold,
+        decision_idx=row["decision_idx"],  # type: ignore[arg-type]
+        decision_timestamp=str(row["timestamp_utc"]),
+        variable=str(row["variable"]),
+        family=str(row["family"]),
+        weight=row["weight"],  # type: ignore[arg-type]
+    )
