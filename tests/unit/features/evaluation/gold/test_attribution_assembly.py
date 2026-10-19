@@ -830,6 +830,18 @@ def _e25() -> str:
     return str(_assembled(permuted).permutation_reason)
 
 
+def _e26() -> str:
+    """C7-6: redução de um run fora dos `candidate_runs`."""
+    permuted = _hand_permuted()
+    extra = dataclasses.replace(permuted[0], run_id="tft-s9-0")
+    return str(_assembled([*permuted, extra]).permutation_reason)
+
+
+def _e27() -> str:
+    """C7-6: seed do cohort fora das `candidate_seeds` declaradas."""
+    return str(_assemble(seeds=(1,)).permutation_reason)
+
+
 @pytest.mark.parametrize(
     ("case", "build", "reason"),
     [
@@ -846,6 +858,8 @@ def _e25() -> str:
         pytest.param("E21", _e21, "reduction identity differs from the dim_run", id="E21"),
         pytest.param("E24", _e24, "identity horizons [1] != [1, 7]", id="E24"),
         pytest.param("E25", _e25, "decision sets differ between seeds or configurations", id="E25"),
+        pytest.param("E26", _e26, "reduction of run tft-s9-0 is not a run of the cohort", id="E26"),
+        pytest.param("E27", _e27, "seed 2 is not a seed of the candidate", id="E27"),
     ],
 )
 def test_extra_or_mixed_inputs_are_undefined(case: str, build: Any, reason: str) -> None:  # noqa: ANN401
