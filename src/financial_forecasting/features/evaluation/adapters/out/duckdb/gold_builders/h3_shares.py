@@ -33,7 +33,7 @@ Row = dict[str, object]
 
 def _bound(value: float | None) -> tuple[float | None, bool | None]:
     """(valor finito ou nulo, flag de infinito) — nulo e flag nula sem limite."""
-    if value is None:
+    if value is None or math.isnan(value):  # C8-12: NaN vira nulo, nunca aborta
         return None, None
     if math.isinf(value):
         return None, True

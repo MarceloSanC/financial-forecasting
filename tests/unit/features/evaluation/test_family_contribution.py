@@ -357,6 +357,7 @@ def test_a_nan_bound_is_never_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     for share in report.shares:
         assert share.status == "undefined"
         assert "NaN" in str(share.reason)
+        assert (share.lower, share.upper) == (None, None)  # C8-12: nulo, nunca NaN
     assert report.heterogeneous is False
 
 

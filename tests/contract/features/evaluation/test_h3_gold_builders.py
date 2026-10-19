@@ -195,3 +195,26 @@ def test_n_points_is_per_method_and_null_without_series() -> None:
     rows = H3ImportanceGoldBuilder().build(other).rows
     assert {r["n_points"] for r in rows if r["method"] == "permutation"} == {3}
     assert {r["n_points"] for r in rows if r["method"] == "loco"} == {None}
+
+
+def test_nan_bound_maps_to_null_and_never_aborts() -> None:
+    """C8-12: um limite NaN (defesa) vira nulo sem flag de infinito; o build não aborta."""
+    import dataclasses  # noqa: PLC0415
+    import math  # noqa: PLC0415
+
+    inputs = completed_inputs()
+    permutation = inputs.h3_reports.permutation
+    assert permutation is not None
+    shares = list(permutation.shares)
+    shares[0] = dataclasses.replace(shares[0], lower=math.nan, upper=math.nan)
+    reports = dataclasses.replace(
+        inputs.h3_reports, permutation=dataclasses.replace(permutation, shares=tuple(shares))
+    )
+    table = H3SharesGoldBuilder().build(dataclasses.replace(inputs, h3_reports=reports))
+    [row] = [r for r in table.rows if (r["method"], r["family"]) == ("permutation", "price")]
+    assert (row["lower"], row["lower_infinite"], row["upper"], row["upper_infinite"]) == (
+        None,
+        None,
+        None,
+        None,
+    )

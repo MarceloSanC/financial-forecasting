@@ -134,13 +134,17 @@ def _read(  # noqa: PLR0913 — os campos de uma família já calculados
             reason = "the interval excludes 0 on the side opposite to delta"
     if reason is not None:
         excludes = None
+
+    def finite_or_none(value: float) -> float | None:  # C8-12: NaN nunca chega ao gold
+        return None if math.isnan(value) else value
+
     return FamilyShare(
         family=family,
         share_h1=share_h1,
         share_h7=share_h7,
-        delta=delta,
-        lower=lower,
-        upper=upper,
+        delta=finite_or_none(delta),
+        lower=finite_or_none(lower),
+        upper=finite_or_none(upper),
         side=side,
         excludes_zero=excludes,
         status=OK if reason is None else UNDEFINED,
