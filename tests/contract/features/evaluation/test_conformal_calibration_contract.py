@@ -26,6 +26,10 @@ from financial_forecasting.features.inference.application.use_cases.calibrate_co
     ConformalUnitInput,
     UnitStatus,
 )
+from financial_forecasting.features.inference.domain.services.conformal_calibrator import (
+    exact_level,
+    split_conformal_rank,
+)
 from tests.fakes.features.evaluation.fake_conformal_calibration import FakeConformalCalibration
 
 pytestmark = pytest.mark.contract
@@ -73,8 +77,9 @@ def _command(
     *,
     variants: tuple[str, ...] = (_SPLIT, _NEXCP),
     rho: float | None = 0.99,
+    pairs: tuple[tuple[float, float], ...] = _PAIRS,
 ) -> CalibrateConformalCommand:
-    return CalibrateConformalCommand(units=units, pairs=_PAIRS, variants=variants, nexcp_rho=rho)
+    return CalibrateConformalCommand(units=units, pairs=pairs, variants=variants, nexcp_rho=rho)
 
 
 def test_ok_unit_returns_one_result_per_pair_tail_variant_in_order(
@@ -89,6 +94,14 @@ def test_ok_unit_returns_one_result_per_pair_tail_variant_in_order(
         assert row.upper is not None
         assert (row.lower.tail, row.upper.tail) == ("lower", "upper")
         assert row.rho == (0.99 if row.variant == _NEXCP else None)
+        # TA-3 (mutantes F01-F03): nível, alfa exato, n e posto de cada cauda
+        pair = (row.lower_level, row.upper_level)
+        assert (row.lower.level, row.upper.level) == pair
+        alpha = exact_level(pair[0])
+        assert row.lower.alpha == row.upper.alpha == alpha
+        assert row.lower.n == row.upper.n == len(_unit(row.fold_index).calib)
+        rank = None if row.variant == _NEXCP else split_conformal_rank(row.lower.n, alpha)
+        assert row.lower.rank == row.upper.rank == rank
 
 
 def test_incomplete_input_unit_is_undefined(port: ConformalCalibration) -> None:
@@ -119,24 +132,43 @@ def test_embargo_violation_unit_is_error_and_neighbours_ok(port: ConformalCalibr
     assert by_fold[2] is UnitStatus.OK
 
 
+_OK_PAIRS = ((0.1, 0.9),)
+
+
 @pytest.mark.parametrize(
-    ("units", "variants", "rho", "message"),
+    ("units", "variants", "rho", "pairs", "message"),
     [
-        ((0, 0), (_SPLIT,), None, "^units:"),
-        ((0,), (_SPLIT, "aci"), 0.99, "^variants:"),
-        ((0,), (_NEXCP,), None, "^nexcp_rho:"),
+        ((0, 0), (_SPLIT,), None, _OK_PAIRS, "^units: duplicate unit"),
+        ((0,), (_SPLIT, "aci"), 0.99, _OK_PAIRS, "^variants: unknown"),
+        ((0,), (_SPLIT, _SPLIT), None, _OK_PAIRS, "^variants: duplicated"),
+        ((0,), (_NEXCP,), None, _OK_PAIRS, "^nexcp_rho: required"),
+        ((0,), (_NEXCP,), 1.5, _OK_PAIRS, r"^nexcp_rho: .* is not in \(0, 1\]"),
+        ((0,), (_SPLIT,), None, ((0.1, 0.8),), "^pairs: .* is not a symmetric pair"),
+        ((0,), (_SPLIT,), None, ((0.6, 0.4),), r"^pairs: lower level .* is not in \(0, 0\.5\)"),
+        ((0,), (_SPLIT,), None, ((0.1, 0.9), (0.1, 0.9)), "^pairs: duplicated pair"),
     ],
-    ids=["duplicate-unit", "unknown-variant", "rho-missing-for-nexcp"],
+    ids=[
+        "duplicate-unit",
+        "unknown-variant",
+        "duplicated-variant",
+        "rho-missing-for-nexcp",
+        "rho-out-of-range",
+        "non-symmetric-pair",
+        "lower-level-out-of-range",
+        "duplicated-pair",
+    ],
 )
-def test_command_errors_raise(
+def test_command_errors_raise(  # noqa: PLR0913 — um parâmetro por campo do comando
     port: ConformalCalibration,
     units: tuple[int, ...],
     variants: tuple[str, ...],
     rho: float | None,
+    pairs: tuple[tuple[float, float], ...],
     message: str,
 ) -> None:
+    """TA-12: os 8 erros de comando do C3 erguem nas duas pernas, antes de qualquer unidade."""
     with pytest.raises(ValueError, match=message):
-        port(_command(tuple(_unit(f) for f in units), variants=variants, rho=rho))
+        port(_command(tuple(_unit(f) for f in units), variants=variants, rho=rho, pairs=pairs))
 
 
 def test_non_ok_fields_are_none(port: ConformalCalibration) -> None:
