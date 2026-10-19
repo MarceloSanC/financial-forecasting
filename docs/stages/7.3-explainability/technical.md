@@ -2269,4 +2269,28 @@ simples dentro de `sh -c "…"`.
 **Razão:** ADR 0.0.0059 itens 1–6. O orçamento fica em 3, e cada ponto do meio fecha um
 grupo cuja quebra invalidaria as Tasks seguintes.
 
+### 2026-10-19 — [decision] Task 07 — lista fechada ajustada pelo G4 (aprovação do orquestrador) — Claude (Opus 5.5)
+**Contexto:** o G4 do `[deviation] gap-7.2` ficou como pergunta, porque mexe numa lista
+fechada. O orquestrador aprovou a proposta recomendada em 2026-10-19, junto com o plano
+de gates.
+**O que foi decidido:**
+- **Task 07, lista fechada:** saem `scripts/arch_baseline.toml` e `train_tft.py`, e entra
+  `.importlinter`. Lá, a linha `…use_cases.run_confirmatory_cohort ->
+  …feature_engineering.domain.services.dataset_tft_contract` vira `…use_cases.cohort_unit_runner
+  -> …dataset_tft_contract`. O `cohort_unit_runner` importa `DATASET_TFT_LAYER` e
+  `DATASET_TFT_TABLE` do `dataset_tft_contract`. A contagem de arestas de runtime
+  continua 34, e o LAYOUT §7 não muda.
+- **Verificação da Task 07:** `lint-imports` + `pytest tests/architecture/test_import_contracts.py`
+  + `python scripts/check_schema_literals.py` + `git diff --exit-code "$BASE" --
+  scripts/arch_baseline.toml`.
+- **§3 e Task 18:** o `scripts/arch_baseline.toml` não pode ter **nenhuma** diferença contra
+  `$BASE` (`git diff --exit-code "$BASE" -- scripts/arch_baseline.toml`). Não sobra a
+  remoção das chaves de `[schema_literals]`, porque elas não existem mais.
+- **Lock do índice:** se um `index.lock` órfão aparecer de novo, ele é removido só sem
+  processo git nem container ativo, e a ocorrência vira `[finding]` apontando a #199. Os
+  containers desta Stage rodam com `GIT_OPTIONAL_LOCKS=0`.
+**Razão:** aprovação explícita do orquestrador. A troca mantém o débito medido igual: a
+aresta muda de módulo dentro do mesmo slice, e o `unmatched_ignore_imports_alerting =
+error` continua cobrando a lista.
+
 <!-- END: post-execution -->
