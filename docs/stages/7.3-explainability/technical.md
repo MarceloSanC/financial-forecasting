@@ -2181,4 +2181,92 @@ container alheio nunca é tocado. A função `run()` do §1 fica com
 mudou. G6–G9 cabem nas listas fechadas. Só G4 mexe numa lista fechada, por isso fica
 como pergunta antes da Task 07 (§1, "sem mudar a lista fechada sem perguntar").
 
+### 2026-10-19 — [decision] gates — plano de gates da fase Windows pela ADR 0.0.0059 (Tasks 01–33) — Claude (Opus 5.5)
+**Contexto:** este technical foi escrito sob a ADR 0.0.0055 e roda `make check` por Task
+em 06, 07, 08, 16, 17, 18, 19, 24, 29, 32 e 33, `make check-block` em 01, 03, 10, 11 e
+20, `check-task` nas demais e `check-block` em cada Checkpoint C. O develop agora segue
+a [ADR 0.0.0059](../../adr/0_0_0059-planned-full-gate-budget-per-stage.md) (fonte
+operacional: [RUNBOOK §Gates em camadas](../../RUNBOOK-STAGE-LIFECYCLE.md#gates-em-camadas)):
+por Task, só os testes da Task, e de 1 a 3 `make check` por Stage, a saída incluída. O
+plano entra aqui porque o §1–§6 está congelado. **Esta entrada prevalece** sobre as
+linhas `make check-task …`, `make check-block …`, `make check $PAR` e "Checkpoint C (T2
+…)" das Verificações das Tasks 01–33. As demais linhas das Verificações (`git diff`,
+`grep`, `test`, `scripts/check_*.py` citados) continuam, com os ajustes G1–G4 do
+`[deviation] gap-7.2`.
+**Pergunta:** onde rodam os `make check` da fase Windows?
+**Opções:**
+- A — manter o plano aprovado: mais de 25 gates de suíte, muito acima do orçamento.
+- B — três pontos (depois da 12, depois da 24 e na saída, antes da Task 33). Por Task,
+  só os testes da Task e os gates específicos que ela toca. ✅ recomendada.
+**Decisão:** B.
+
+**Por Task (T1).** Antes de todo commit roda `run sh -c "$PRE; uv run --no-sync pytest
+<arquivos de teste que a Task escreveu ou alterou> -q --no-cov"`. Também rodam
+`uv run --no-sync ruff format --check src tests`, `uv run --no-sync ruff check src tests`
+e `uv run --no-sync mypy src/`, à mão e no container, porque a worktree só tem o hook
+`commit-msg` e não o pre-commit. Teste vermelho bloqueia o commit. Os extras abaixo
+rodam só quando a Task toca o que eles guardam. São scripts e testes de segundos, sem
+`make`:
+
+| Task toca… | Roda também | Tasks |
+|---|---|---|
+| VO novo ou alterado em `domain/value_objects/` | `python scripts/check_vo_invariants.py` | 01, 13, 21, 22, 23, 24 |
+| módulo de `*/domain/` | `python scripts/check_domain_determinism.py` | 01, 13, 21–26 |
+| `shared/domain/value_objects/` com hasher, ou `docs/LAYOUT.md` | `python scripts/check_layout.py` | 01, 19, 24 |
+| `__init__` de use case novo ou alterado | `python scripts/check_use_case_deps.py` | 07, 08, 09, 12, 15, 19 |
+| `application/` do modeling que lê o dataset | `python scripts/check_schema_literals.py` | 02, 07, 08, 09, 12 |
+| `.importlinter` | `uv run --no-sync lint-imports` + `pytest tests/architecture/test_import_contracts.py --no-cov` + a contagem G2 | 07 (se o G4 for aprovado), 19, 24 |
+| port, fake de port ou `[port_coverage]` do baseline | `python scripts/check_port_coverage.py --list` + `pytest tests/architecture/test_port_coverage_gate.py --no-cov` | 04, 11, 16, 17, 18 |
+| fake novo ou alterado em `tests/fakes/` | `python scripts/check_fake_parity.py` | 04, 11, 14, 16, 17, 19 |
+| `src/` do evaluation | `pytest tests/architecture/test_evaluation_validation_single_owner.py --no-cov` | 21–30 |
+| `tests/unit/features/evaluation/` | `pytest tests/architecture/test_unit_evaluation_purity.py --no-cov` | 21–30 |
+| `refresh_gold.py`, DTOs, builders ou domain do evaluation | `pytest tests/architecture/test_stage_7_2_regression_guards.py --no-cov` | 21–30 |
+| composition root, ou `SILVER_REGISTRY` lido por ele | `pytest tests/unit/shared/test_composition_root.py --no-cov` (inteiro) | 03, 10, 11, 14, 20, 29 |
+| `docs/LAYOUT.md` ou a §7 deste technical | `python scripts/check_technical_postexec.py docs/stages/7.3-explainability/technical.md` + `python scripts/check_docs_pointers.py` | 01, 19, 24, 33 e todo commit `[7.3/--]` |
+
+Os `python scripts/…` rodam como `uv run --no-sync python scripts/…` no container, porque
+os de arquitetura importam a lib AST do repo. Os testes de `tests/architecture/` que a
+própria Task cria (06, 08, 16–18, 29, 32, 33) já estão nos testes da Task. Esses extras
+não são gate completo: cobrem o ponto cego do T1, que não roda `tests/architecture/`,
+só para o gate que a Task pode quebrar. `check-task` e `check-block` saem da rotina.
+`check-task` só roda com motivo concreto registrado aqui.
+
+**Gates completos (`make check $PAR`, T3): 3 pontos, a saída incluída.**
+
+| # | Depois de | Por quê |
+|---|---|---|
+| A | Task 12 | Fecha o grupo **modeling + shared**: o VO de `shared/` e o LAYOUT (01), o composition root e o CLI (03, 10, 11), a extração do executor com a rede da 5.5 e a aresta trocada (07, G4), a guarda AST nova (08) e a extensão do Protocol `TftCheckpointPredictor` com o fornecedor (11, 12). É também o primeiro gate completo depois do rebase sobre a 7.2 e no volume novo. Esperar o ponto B deixaria as Tasks 13–24 construídas sobre uma base possivelmente quebrada, entre elas o contrato `[fake, real]` da Task 16, que importa o fornecedor da 12, e as suítes da 5.5/7.1 |
+| B | Task 24 | Fecha o grupo **contratos entre slices e config de gate**: o `SILVER_REGISTRY` lido pelo teste do composition root (14), o par do ADR 6.1.0005 no `arch_baseline.toml` e no `test_port_coverage_gate.py` (17 → 18), `tests/architecture/` (16–19), as arestas 1–6 e 7 no `.importlinter`/LAYOUT §7 (19, 24), o wiring e o CLI do `attribute` (20) e o `Preregistration` com `[h3]` (22), lido pelo refresh (27) e pelo rascunho da r3 (32). As duas edições do `.importlinter` ficam sob um ponto só. Nada em 21–24 depende do wiring da 20, porque o evaluation não importa o inference. Por isso um defeito em 19–20 se corrige no lugar, sem refazer Tasks, e o ponto não precisa vir depois da 20 |
+| C | saída da fase Windows (§3) | Depois da Task 32, do Checkpoint C 29–32 e da auditoria de testes, **antes da Etapa W e da Task 33**. É o "Gate da fase Windows" do §3, com as conferências de lá: cobertura ≥ 90 % por arquivo tocado, port-coverage, `arch_baseline.toml` sem diferença contra `$BASE` (G4), `["Hasher"]`, `check_technical_postexec` e `NO_R3_BEFORE_LINUX`. Cobre 25–32: o refresh mecânico (27), o `gold_schema` com o composition root e a guarda (29), o `RefreshGold` (30), o e2e (31) e o rascunho (32). É a pré-condição "`make check` verde no HEAD" da Etapa W |
+
+**Ordem do fecho Windows.** A sequência fica Task 32 → Checkpoint C 29–32 → auditoria
+de testes, com os seus `fix` → **ponto C** → Etapa W → commit de evidência (só §7) →
+Task 33. Isso troca a ordem do §2 entre a Etapa W e a auditoria. A Etapa W não produz
+código, e auditar antes deixa o ponto C como o último. Entre o ponto C e a Task 33 só
+entram commits de §7, conferidos por `check_technical_postexec` e
+`run sh -c "$PRE; make docs-check"`. O X do handoff é o HEAD antes da Task 33: o do
+ponto C ou um descendente dele que só muda a §7. A Task 33 roda o T1 (o seu teste,
+`check_technical_postexec` e `make docs-check`), e o CI do PR (T4) é o gate completo
+do commit dela. Se alguma mudança em `src/` ou `tests/` entrar depois do ponto C (falha
+da Etapa W que peça correção, por exemplo), o ponto C roda de novo e isso vira
+`[deviation]` de 4º ponto, com a justificativa.
+
+A saída de cada ponto é colada nesta §7. Ponto vermelho → commit
+`fix(<escopo>): … [7.3/task-NN-fix]` antes da próxima Task.
+
+**Checkpoint C** (revisão do diff do bloco por subagente de contexto zerado, **sem** gate
+de suíte), em blocos de 3 a 5 Tasks: **01–04**, **05–08**, **09–12** (depois do ponto A),
+**13–15**, **16–20**, **21–24** (depois do ponto B), **25–28** e **29–32**. O último bloco
+inclui a revisão do conjunto contra o concept. O plano tinha um bloco só para a 32, e
+ele foi unido ao 29–31 para ficar na faixa de 3 a 5.
+
+**Fase Linux (L0–L8):** fora deste plano. Valem os gates da tabela do §2: os testes de
+repo da L7 e o `make check` da L8, num venv travado sem o torch ROCm, ou o CI do PR.
+
+**Ambiente:** o do `[deviation] gap-7.2`. Gate completo como `--name ff-gate-186`, um
+por vez, volume `financial-forecasting_ff73-venv`, log em arquivo montado, só aspas
+simples dentro de `sh -c "…"`.
+**Razão:** ADR 0.0.0059 itens 1–6. O orçamento fica em 3, e cada ponto do meio fecha um
+grupo cuja quebra invalidaria as Tasks seguintes.
+
 <!-- END: post-execution -->
