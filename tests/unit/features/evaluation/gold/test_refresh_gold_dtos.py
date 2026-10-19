@@ -19,6 +19,7 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     EMPTY_CONFORMAL_REPORTS,
+    EMPTY_H3_REPORTS,
     ConformalReports,
     ConformalTailRecord,
     ConformalUndefinedCoverage,
@@ -30,6 +31,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     GoldManifest,
     GoldPartition,
     GoldTable,
+    H3Reports,
     RefreshGoldCommand,
     RefreshParameters,
     RefreshStatus,
@@ -363,6 +365,7 @@ def test_gold_inputs_status_coherence() -> None:
         profile_reports=(),
         mcs_block_reports=(),
         conformal_reports=EMPTY_CONFORMAL_REPORTS,
+        h3_reports=EMPTY_H3_REPORTS,
     )
     assert blocked.preregistration_ref == _PREREG
     with pytest.raises(ValueError, match="BLOCKED generation has no"):
@@ -905,6 +908,7 @@ def _blocked_inputs() -> GoldInputs:
         profile_reports=(),
         mcs_block_reports=(),
         conformal_reports=EMPTY_CONFORMAL_REPORTS,
+        h3_reports=EMPTY_H3_REPORTS,
     )
 
 
@@ -969,3 +973,60 @@ def test_as_mapping_round_trip_with_h3() -> None:
     assert RefreshParameters.from_mapping(mapping) == parameters
     assert RefreshParameters.from_mapping(json.loads(json.dumps(mapping))) == parameters
     assert _PARAMETERS.as_mapping()["h3_parameters"] is None
+
+
+# --- Stage 7.3 Task 28: relatórios de H3 nos insumos ---------------------------------------
+
+
+@pytest.mark.unit
+def test_h3_reports_validate_their_fields() -> None:
+    from tests.contract.features.evaluation._gold_inputs import (  # noqa: PLC0415
+        h3_reports_sample,
+    )
+
+    sample = h3_reports_sample()
+    assert not sample.is_empty
+    assert EMPTY_H3_REPORTS.is_empty
+    for changes, message in (
+        ({"permutation": sample.ablation}, "permutation must be the permutation report"),
+        ({"ablation": sample.permutation}, "ablation must be the loco report"),
+        ({"reading": "sustained"}, "reading must be a H3Reading"),
+        ({"vsn": ()}, "vsn must be a VsnSummaryReport"),
+        ({"block_length": 0}, "block_length must be an int >= 1"),
+        ({"n_points": True}, "n_points must be an int >= 1"),
+        ({"max_block_estimate": float("nan")}, "max_block_estimate must be a finite number"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            dataclasses.replace(sample, **changes)
+
+
+@pytest.mark.unit
+def test_blocked_inputs_have_no_h3_reports() -> None:
+    from tests.contract.features.evaluation._gold_inputs import (  # noqa: PLC0415
+        h3_reports_sample,
+    )
+
+    blocked = _blocked_inputs()
+    assert blocked.h3_reports.is_empty
+    with pytest.raises(ValueError, match="h3_reports must be empty in a BLOCKED generation"):
+        dataclasses.replace(blocked, h3_reports=h3_reports_sample())
+    with pytest.raises(ValueError, match="h3_reports must be a H3Reports"):
+        dataclasses.replace(blocked, h3_reports=None)
+
+
+@pytest.mark.unit
+def test_completed_inputs_accept_h3_reports() -> None:
+    from tests.contract.features.evaluation._gold_inputs import (  # noqa: PLC0415
+        completed_inputs,
+        completed_inputs_without_h3,
+    )
+
+    inputs = completed_inputs()
+    assert inputs.parameters.h3_parameters is not None
+    assert isinstance(inputs.h3_reports, H3Reports)
+    assert inputs.h3_reports.reading is not None
+    assert inputs.h3_reports.reading.status == "undefined"  # o LOCO da amostra é undefined
+    without = completed_inputs_without_h3()
+    assert without.h3_reports.is_empty
+    with pytest.raises(ValueError, match="without a \[h3\] block"):
+        dataclasses.replace(without, h3_reports=inputs.h3_reports)

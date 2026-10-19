@@ -45,11 +45,17 @@ from financial_forecasting.features.evaluation.domain.services.conformal_coverag
     ConformalCoverageReport,
     ConformalSeedMeanCoverage,
 )
+from financial_forecasting.features.evaluation.domain.services.contribution_agreement import (
+    H3Reading,
+)
 from financial_forecasting.features.evaluation.domain.services.count_input_validation import (
     validate_rate,
 )
 from financial_forecasting.features.evaluation.domain.services.diebold_mariano import (
     DmVarianceEstimator,
+)
+from financial_forecasting.features.evaluation.domain.services.family_contribution import (
+    FamilyContributionReport,
 )
 from financial_forecasting.features.evaluation.domain.services.horizon_reports import (
     HorizonReport,
@@ -66,6 +72,9 @@ from financial_forecasting.features.evaluation.domain.services.profile_reports i
     HorizonProfileReport,
     ProfileSettings,
     UnitStatus,
+)
+from financial_forecasting.features.evaluation.domain.services.vsn_summary import (
+    VsnSummaryReport,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
@@ -991,6 +1000,82 @@ EMPTY_CONFORMAL_REPORTS: Final = ConformalReports(
 )
 
 
+_H3_METHODS: Final = {"permutation": "permutation", "ablation": "loco"}
+
+
+@dataclass(frozen=True, kw_only=True)
+class H3Reports:
+    """O que os builders de H3 mapeiam (Stage 7.3) — só tipos do `evaluation`.
+
+    Campos:
+        permutation, ablation: o relatório de cada método (`None` se não calculado).
+        reading: a leitura de H3 sobre os dois métodos.
+        vsn: o resumo dos pesos da VSN.
+        block_length, max_block_estimate, n_points: o bloco do bootstrap conjunto, o maior
+            b̂ das 16 séries e o T das séries d_t (`None` quando o bootstrap não rodou).
+
+    Raises:
+        ValueError: campo com tipo errado, método trocado ou número inválido.
+    """
+
+    permutation: FamilyContributionReport | None
+    ablation: FamilyContributionReport | None
+    reading: H3Reading | None
+    vsn: VsnSummaryReport | None
+    block_length: int | None
+    max_block_estimate: float | None
+    n_points: int | None
+
+    def __post_init__(self) -> None:
+        """Tipos, o método de cada relatório e os números do bootstrap."""
+        for name, method in _H3_METHODS.items():
+            report = getattr(self, name)
+            if report is None:
+                continue
+            if not isinstance(report, FamilyContributionReport):
+                raise ValueError(f"{name} must be a FamilyContributionReport, got {report!r}")
+            if report.method != method:
+                raise ValueError(f"{name} must be the {method} report, got {report.method!r}")
+        if self.reading is not None and not isinstance(self.reading, H3Reading):
+            raise ValueError(f"reading must be a H3Reading, got {self.reading!r}")
+        if self.vsn is not None and not isinstance(self.vsn, VsnSummaryReport):
+            raise ValueError(f"vsn must be a VsnSummaryReport, got {self.vsn!r}")
+        for name in ("block_length", "n_points"):
+            value = getattr(self, name)
+            if value is not None:
+                validate_int_at_least(value, minimum=1, field=name)
+        estimate = self.max_block_estimate
+        if estimate is not None and not is_finite_number(estimate):
+            raise ValueError(f"max_block_estimate must be a finite number, got {estimate!r}")
+
+    @property
+    def is_empty(self) -> bool:
+        """Nenhum relatório nem número do bootstrap."""
+        return all(
+            getattr(self, name) is None
+            for name in (
+                "permutation",
+                "ablation",
+                "reading",
+                "vsn",
+                "block_length",
+                "max_block_estimate",
+                "n_points",
+            )
+        )
+
+
+EMPTY_H3_REPORTS: Final = H3Reports(
+    permutation=None,
+    ablation=None,
+    reading=None,
+    vsn=None,
+    block_length=None,
+    max_block_estimate=None,
+    n_points=None,
+)
+
+
 @dataclass(frozen=True, kw_only=True)
 class GoldInputs:
     """O que os builders mapeiam — resultados prontos, nenhum a recomputar.
@@ -1007,6 +1092,8 @@ class GoldInputs:
             `BLOCKED` ou sem regras de perfil na revisão).
         conformal_reports: unidades, coberturas e médias conformais (Stage 7.2;
             `EMPTY_CONFORMAL_REPORTS` se `BLOCKED` ou sem bloco `[conformal]`).
+        h3_reports: os relatórios de H3 (Stage 7.3; `EMPTY_H3_REPORTS` se `BLOCKED` ou
+            sem bloco `[h3]`, I16).
 
     Raises:
         ValueError: `BLOCKED` com relatórios ou sem resultado bloqueante; `COMPLETED`
@@ -1023,6 +1110,7 @@ class GoldInputs:
     profile_reports: tuple[HorizonProfileReport, ...]
     mcs_block_reports: tuple[McsBlockRun, ...]
     conformal_reports: ConformalReports
+    h3_reports: H3Reports
 
     def __post_init__(self) -> None:
         """Coerência status x conteúdo; mapa como cópia somente-leitura."""
@@ -1053,6 +1141,14 @@ class GoldInputs:
             raise ValueError(
                 "conformal_reports must be empty in a BLOCKED generation or without a "
                 "[conformal] block"
+            )
+        if not isinstance(self.h3_reports, H3Reports):
+            raise ValueError(f"h3_reports must be a H3Reports, got {self.h3_reports!r}")
+        if not self.h3_reports.is_empty and (
+            self.status is RefreshStatus.BLOCKED or self.parameters.h3_parameters is None
+        ):
+            raise ValueError(
+                "h3_reports must be empty in a BLOCKED generation or without a [h3] block"
             )
 
     @property

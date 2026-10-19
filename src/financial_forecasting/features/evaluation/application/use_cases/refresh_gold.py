@@ -51,6 +51,7 @@ from typing import TYPE_CHECKING, Final
 
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     EMPTY_CONFORMAL_REPORTS,
+    EMPTY_H3_REPORTS,
     ConformalReports,
     ConformalTailRecord,
     ConformalUndefinedCoverage,
@@ -366,6 +367,8 @@ class RefreshGold:
             profile_reports=profiles,
             mcs_block_reports=blocks,
             conformal_reports=conformal,
+            # Stage 7.3: o cálculo de H3 entra na Task 30; até lá, vazio
+            h3_reports=EMPTY_H3_REPORTS,
         )
         builders = [b for b in self._builders if not blocked or b.runs_when_blocked]
         tables = _timed("build", len(builders), lambda: [b.build(inputs) for b in builders], len)
