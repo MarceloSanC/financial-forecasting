@@ -53,7 +53,10 @@ from financial_forecasting.features.evaluation.domain.services.series_assembly i
     missing_levels,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.ablation_run_losses import (
+    AblationMergeError,
     AblationRunLosses,
+    AblationRunPart,
+    merge_ablation_parts,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
     AlignmentKind,
@@ -305,8 +308,11 @@ def reduce_ablation_run(
     run: CohortRun,
     realized: RealizedReturns,
     levels: tuple[float, ...],
-) -> AblationRunLosses | UndefinedRunReduction:
-    """As perdas por decisão de UM run da ablação (só `split = "test"`).
+) -> AblationRunPart | UndefinedRunReduction:
+    """As perdas por (horizonte, decisão) de UM run da ablação num bloco (só `"test"`).
+
+    SEM a interseção dos horizontes: a cauda de um fold num ano novo pode ter só h+1; a
+    interseção H3-PAIR é do `merge_ablation_run`, depois de unir os blocos (C6-1).
 
     Raises:
         ValueError: linha de outro run (erro de chamada).
@@ -341,17 +347,38 @@ def reduce_ablation_run(
                 )
             except _Undefined as exc:
                 raise _Undefined(f"run {run.run_id} h={horizon}: {exc.reason}") from None
-        decisions = _common_decisions(by_horizon, run_id=run.run_id)
-        return AblationRunLosses(
+        return AblationRunPart(
             run_id=run.run_id,
             model_version=run.model,
             seed=run.seed,
             fold_index=fold_index,
-            decision_timestamps=decisions,
-            losses={h: tuple(by_horizon[h][t] for t in decisions) for h in by_horizon},
+            losses=by_horizon,
         )
     except _Undefined as exc:
         return UndefinedRunReduction(run_id=run.run_id, reason=exc.reason)
+
+
+def merge_ablation_run(
+    parts: Sequence[AblationRunPart | UndefinedRunReduction],
+) -> AblationRunLosses | UndefinedRunReduction:
+    """Une os blocos anuais de UM run e aplica a interseção H3-PAIR (C6-1).
+
+    Um bloco indefinido, partes que não se unem (sobreposição, identidade) ou nenhuma
+    decisão com todos os horizontes devolvem `UndefinedRunReduction` com o motivo.
+
+    Raises:
+        ValueError: nenhuma parte (erro de chamada).
+    """
+    if not parts:
+        raise ValueError("merge_ablation_run needs the parts of one run")
+    undefined = [part for part in parts if isinstance(part, UndefinedRunReduction)]
+    if undefined:
+        return undefined[0]
+    reduced = [part for part in parts if isinstance(part, AblationRunPart)]
+    try:
+        return merge_ablation_parts(reduced)
+    except AblationMergeError as exc:
+        return UndefinedRunReduction(run_id=reduced[0].run_id, reason=str(exc))
 
 
 # --- 2. montagem ------------------------------------------------------------------------
@@ -404,10 +431,17 @@ def _concatenate(
 
 
 def _same_decisions(by_unit: Mapping[object, tuple[str, ...]], *, what: str) -> tuple[str, ...]:
-    decision_sets = set(by_unit.values())
-    if len(decision_sets) != 1:
-        raise _Undefined(f"{what}: decision sets differ between seeds or configurations")
-    return next(iter(decision_sets))
+    """Um conjunto de decisões só; o motivo nomeia a primeira unidade que diverge."""
+    units = sorted(by_unit, key=str)
+    reference = by_unit[units[0]]
+    for unit in units[1:]:
+        if by_unit[unit] != reference:
+            raise _Undefined(
+                f"{what}: decision sets differ between seeds or configurations — {unit} has "
+                f"{len(by_unit[unit])} decisions, {units[0]} has {len(reference)} (a missing "
+                "or extra yearly part)"
+            )
+    return reference
 
 
 def _check_permuted(

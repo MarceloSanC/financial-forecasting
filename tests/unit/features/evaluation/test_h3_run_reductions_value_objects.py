@@ -13,7 +13,9 @@ from typing import Any
 import pytest
 
 from financial_forecasting.features.evaluation.domain.value_objects.ablation_run_losses import (
+    AblationMergeError,
     AblationRunLosses,
+    AblationRunPart,
     OverlappingAblationPartsError,
     merge_ablation_parts,
 )
@@ -197,23 +199,47 @@ def test_reduce_vsn_run_refuses_duplicate_variable() -> None:
         reduce_vsn_run([_vsn_record(), _vsn_record(decision_timestamp=_T[1], variable="macd")])
 
 
+def _part(losses: dict[int, dict[str, float]], **changes: Any) -> AblationRunPart:  # noqa: ANN401
+    fields: dict[str, Any] = {
+        "run_id": "run-b",
+        "model_version": "tft_quantile_loco_minus_price",
+        "seed": 1,
+        "fold_index": 0,
+        "losses": losses,
+    }
+    fields.update(changes)
+    return AblationRunPart(**fields)
+
+
 def test_ablation_losses_merge_disjoint_parts() -> None:
-    december = _ablation((_T[0],), (0.1,))
-    january = _ablation((_T[1], _T[2]), (0.2, 0.3))
+    december = _part({1: {_T[0]: 0.1}, 7: {_T[0]: 0.2}})
+    january = _part({1: {_T[1]: 0.2, _T[2]: 0.3}, 7: {_T[1]: 0.4, _T[2]: 0.6}})
 
     merged = merge_ablation_parts([january, december])
 
     assert merged.decision_timestamps == _T
     assert merged.losses[1] == (0.1, 0.2, 0.3)
     assert merged.losses[7] == (0.2, 0.4, 0.6)
-    assert merge_ablation_parts([december]) == december
+
+
+def test_a_part_with_only_h1_merges_by_horizon_then_intersects() -> None:
+    """C6-1: a cauda de janeiro só com h+1 entra no h+1 e sai na interseção."""
+    december = _part({1: {_T[0]: 0.1, _T[1]: 0.2}, 7: {_T[0]: 0.2, _T[1]: 0.4}})
+    january = _part({1: {_T[2]: 0.3}})
+
+    merged = merge_ablation_parts([december, january])
+
+    assert merged.decision_timestamps == _T[:2]
+    assert merged.losses == {1: (0.1, 0.2), 7: (0.2, 0.4)}
+    with pytest.raises(AblationMergeError, match="no decision has every horizon"):
+        merge_ablation_parts([_part({1: {_T[0]: 0.1}, 7: {_T[1]: 0.2}})])
 
 
 def test_overlapping_parts_refused() -> None:
     with pytest.raises(OverlappingAblationPartsError, match="is in two parts"):
-        merge_ablation_parts([_ablation(_T[:2], (0.1, 0.2)), _ablation(_T[1:], (0.2, 0.3))])
-    with pytest.raises(ValueError, match="different runs"):
-        merge_ablation_parts([_ablation(_T[:1], (0.1,)), _ablation(_T[1:], (0.2, 0.3), seed=2)])
+        merge_ablation_parts([_part({1: {_T[0]: 0.1}}), _part({1: {_T[0]: 0.2}})])
+    with pytest.raises(AblationMergeError, match="different runs"):
+        merge_ablation_parts([_part({1: {_T[0]: 0.1}}), _part({1: {_T[1]: 0.2}}, seed=2)])
     with pytest.raises(ValueError, match="at least one part"):
         merge_ablation_parts([])
 
@@ -231,6 +257,8 @@ def test_overlapping_parts_refused() -> None:
         (_permuted_losses, "permuted", {("price", 1, 1): (0.1, float("nan"), 0.3)}),
         (lambda **c: _ablation(_T, (0.1, 0.2, 0.3), **c), "model_version", ""),
         (lambda **c: _ablation(_T, (0.1, 0.2, 0.3), **c), "losses", {0: (0.1, 0.2, 0.3)}),
+        (lambda **c: _part({1: {_T[0]: 0.1}}, **c), "losses", {1: {}}),
+        (lambda **c: _part({1: {_T[0]: 0.1}}, **c), "losses", {1: {_T[0]: float("nan")}}),
     ],
 )
 def test_raw_construction_refused(build: Any, field: str, value: object) -> None:  # noqa: ANN401

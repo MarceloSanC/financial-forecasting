@@ -19,12 +19,14 @@ from financial_forecasting.features.evaluation.domain.services.attribution_assem
     AttributionAssembly,
     AttributionAssemblyResult,
     UndefinedRunReduction,
+    merge_ablation_run,
     reduce_ablation_run,
     reduce_permuted_run,
 )
 from financial_forecasting.features.evaluation.domain.services.pinball_score import pinball_loss
 from financial_forecasting.features.evaluation.domain.value_objects.ablation_run_losses import (
     AblationRunLosses,
+    AblationRunPart,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
     AlignmentFinding,
@@ -347,11 +349,15 @@ def _permuted_reductions(
 
 def _ablation_reductions(cohort: Cohort) -> list[Any]:
     return [
-        reduce_ablation_run(
-            [r for r in cohort.ablation_records if r.run_id == run.run_id],
-            run=run,
-            realized=cohort.realized,
-            levels=GOLD_LEVELS,
+        merge_ablation_run(
+            [
+                reduce_ablation_run(
+                    [r for r in cohort.ablation_records if r.run_id == run.run_id],
+                    run=run,
+                    realized=cohort.realized,
+                    levels=GOLD_LEVELS,
+                )
+            ]
         )
         for run in cohort.ablation_runs
     ]
@@ -527,7 +533,7 @@ def test_reduce_ablation_run_reads_only_test_rows_of_its_run() -> None:
     plain = reduce_ablation_run(rows, run=run, realized=cohort.realized, levels=GOLD_LEVELS)
 
     assert reduced == plain
-    assert isinstance(reduced, AblationRunLosses)
+    assert isinstance(reduced, AblationRunPart)
     assert reduced.model_version == run.model
     with pytest.raises(ValueError, match="takes the records of"):
         reduce_ablation_run(
@@ -560,3 +566,90 @@ def test_extra_levels_and_guardrail_flag_are_the_series_assembly_rules() -> None
     flag = series_assembly.guardrail_flag_mismatch((True, False), target_timestamp="x")
     assert flag is not None and flag.kind.value == "guardrail_flag_mismatch"
     assert series_assembly.guardrail_flag_mismatch((True, True), target_timestamp="x") is None
+
+
+# --- blocos anuais da ablação (C6-1) -----------------------------------------------------
+
+
+def _split_years(cohort: Cohort, run_id: str, boundary: int) -> tuple[list[Any], list[Any]]:
+    """Simula o corte por `year` da decisão: o 2º bloco perde as linhas de h+7."""
+    rows = [r for r in cohort.ablation_records if r.run_id == run_id]
+    first = [r for r in rows if r.decision_idx < boundary]
+    second = [r for r in rows if r.decision_idx >= boundary and r.horizon == 1]
+    return first, second
+
+
+def test_a_yearly_part_with_only_h1_merges_to_the_intersection() -> None:
+    cohort = _cohort()
+    run = cohort.ablation_runs[-1]  # o último fold: a cauda sem h+7 cai no "ano novo"
+    rows = [r for r in cohort.ablation_records if r.run_id == run.run_id]
+    with_h7 = sorted({r.decision_idx for r in rows if r.horizon == 7})  # noqa: PLR2004
+    boundary = with_h7[-1] + 1  # o 2º bloco só tem decisões sem h+7
+    first, second = _split_years(cohort, run.run_id, boundary)
+    assert second and {r.horizon for r in second} == {1}
+
+    parts = [
+        reduce_ablation_run(block, run=run, realized=cohort.realized, levels=GOLD_LEVELS)
+        for block in (first, second)
+    ]
+    merged = merge_ablation_run(parts)
+    whole = merge_ablation_run(
+        [reduce_ablation_run(rows, run=run, realized=cohort.realized, levels=GOLD_LEVELS)]
+    )
+
+    assert isinstance(merged, AblationRunLosses)
+    assert merged == whole
+    assert set(merged.decision_timestamps) == {
+        r.decision_timestamp for r in rows if r.decision_idx in with_h7
+    }
+
+
+def test_a_missing_yearly_part_is_undefined_with_an_explicit_reason() -> None:
+    cohort = _cohort()
+    run = next(r for r in cohort.ablation_runs if r.model.endswith("minus_price") and r.seed == 1)
+    rows = [r for r in cohort.ablation_records if r.run_id == run.run_id]
+    boundary = sorted({r.decision_idx for r in rows})[len(rows) // 14 // 2]
+    first = [r for r in rows if r.decision_idx < boundary]  # o bloco seguinte faltou
+
+    losses = [
+        merge_ablation_run(
+            [
+                reduce_ablation_run(
+                    first
+                    if r.run_id == run.run_id
+                    else [x for x in cohort.ablation_records if x.run_id == r.run_id],
+                    run=r,
+                    realized=cohort.realized,
+                    levels=GOLD_LEVELS,
+                )
+            ]
+        )
+        for r in cohort.ablation_runs
+    ]
+    result = AttributionAssembly.assemble(
+        candidate_runs=cohort.runs,
+        permuted=_permuted_reductions(cohort),
+        ablation_runs=cohort.ablation_runs,
+        ablation_losses=losses,
+        parameters=_params(),
+        candidate="tft",
+        candidate_seeds=_SEEDS,
+        horizons=_HORIZONS,
+    )
+
+    assert result.ablation is None
+    reason = str(result.ablation_reason)
+    assert "decision sets differ" in reason
+    assert "missing or extra yearly part" in reason
+
+
+def test_overlapping_yearly_parts_are_undefined_not_value_error() -> None:
+    cohort = _cohort()
+    run = cohort.ablation_runs[0]
+    rows = [r for r in cohort.ablation_records if r.run_id == run.run_id]
+    part = reduce_ablation_run(rows, run=run, realized=cohort.realized, levels=GOLD_LEVELS)
+
+    merged = merge_ablation_run([part, part])
+
+    assert isinstance(merged, UndefinedRunReduction)
+    assert "is in two parts" in merged.reason
