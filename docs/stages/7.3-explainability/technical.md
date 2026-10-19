@@ -2427,4 +2427,23 @@ EXIT=0
 Sem "node down". A 2ª corrida é a repetição do ponto A depois do vermelho (ADR
 0.0.0059 item 7), e não um ponto novo do orçamento.
 
+### 2026-10-19 — [deviation] Task 14 — registry com 4 tabelas e docstrings do repositório sem mudança — Claude (Opus 5.5)
+**Observado:** o `SILVER_REGISTRY` do develop tem **2** tabelas (`dim_run`,
+`fact_oos_predictions`), porque a #164 tirou as 3 que não tinham escritor. Com as duas
+novas, ficam **4**, e não as 7 que a Task 14 supõe
+(`test_registry_has_seven_tables`). O teste da Task se chama
+`test_registry_has_four_tables_with_the_stage_7_3_pair`.
+
+As docstrings de `analytics_repository.py` e `parquet_analytics_repository.py` já
+descrevem a partição de forma genérica ("quantos níveis o `partition_by` declarar",
+"N níveis"), sem o "1..3" que a Task mandava trocar. Por isso não foram editadas, e os
+dois arquivos ficaram de fora do commit. O adapter monta o glob e os predicados a partir
+de `partition_by`, sem profundidade fixa. A ida e volta com 4 níveis em Parquet real
+(`run_id=…` no caminho) é coberta pelos testes de integração da Task 15.
+
+**Também:** o vocabulário de famílias dos schemas (`price`, `technical`, `sentiment`,
+`fundamental`, `none`) é literal no `analytics_store`, que é o dono do schema e não
+importa o `modeling`. A partição real fica travada pela conferência do `partition_hash`
+(I17).
+
 <!-- END: post-execution -->
