@@ -89,6 +89,9 @@ class AblationCommandDeps:
         [Path], Callable[[MeasureAblationCostCommand], AblationCostReport]
     ]
     runtime_probe_for: Callable[[Path, str], RuntimeEnvironmentProbe]
+    # Devices que o composition root sabe montar (`_SUPPORTED_DEVICES`): o `freeze`
+    # recusa um device fora deles antes de abrir o probe e de escrever (C3-6).
+    supported_devices: frozenset[str]
 
 
 def _cohort_id(hasher: Hasher, spec: AblationCohortSpec) -> tuple[str, str]:
@@ -201,6 +204,11 @@ def freeze(deps: AblationCommandDeps, path: Path, *, out: TextIO, seeds: Sequenc
         raise AblationCommandError(
             f"ablation cohort {spec.name!r} r{spec.revision} is already frozen — "
             "a new revision is needed to change it"
+        )
+    if spec.device not in deps.supported_devices:
+        raise AblationCommandError(
+            f"device {spec.device!r} is not supported; expected one of "
+            f"{sorted(deps.supported_devices)} — nothing was frozen"
         )
     torch_build = deps.runtime_probe_for(path, spec.device).snapshot().get(_TORCH_KEY)
     if not torch_build:

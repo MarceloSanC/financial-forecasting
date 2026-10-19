@@ -828,6 +828,8 @@ class ApplicationDependencies:
     dump_ablation_spec: Callable[["AblationCohortSpec"], str]
     ablation_cohort_for: Callable[[Path], RunAblationCohort]
     measure_ablation_cost_for: Callable[[Path], MeasureAblationCost]
+    # os devices que as fábricas de ablação sabem montar (chaves de `_SUPPORTED_DEVICES`)
+    supported_devices: frozenset[str]
 
 
 def wire_dependencies(
@@ -1191,4 +1193,5 @@ def wire_dependencies(
         dump_ablation_spec=dump_ablation_spec,
         ablation_cohort_for=ablation_cohort_for,
         measure_ablation_cost_for=measure_ablation_cost_for,
+        supported_devices=frozenset(_SUPPORTED_DEVICES),
     )

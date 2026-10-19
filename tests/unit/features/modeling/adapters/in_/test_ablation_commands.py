@@ -11,6 +11,7 @@ import importlib
 import io
 import os
 import re
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +67,9 @@ def _report() -> AblationCostReport:
 def _deps(path: Path, harness: _Harness | None = None, *, torch: str = _TORCH) -> Any:  # noqa: ANN401
     harness = harness or _Harness()
 
+    def probe_for(file: Path, device: str) -> InMemoryRuntimeEnvironmentProbe:
+        return InMemoryRuntimeEnvironmentProbe.with_gpu(device=device, torch=torch)
+
     def load_spec(file: Path) -> Any:  # noqa: ANN401
         return ablation_file.parse_ablation_cohort(file.read_text(encoding="utf-8")), _base()
 
@@ -77,9 +81,8 @@ def _deps(path: Path, harness: _Harness | None = None, *, torch: str = _TORCH) -
         dump_spec=ablation_file.dump_ablation_cohort,
         ablation_cohort_for=lambda file: harness.use_case,
         measure_ablation_cost_for=lambda file: lambda command: _report(),
-        runtime_probe_for=lambda file, device: InMemoryRuntimeEnvironmentProbe.with_gpu(
-            device=device, torch=torch
-        ),
+        runtime_probe_for=probe_for,
+        supported_devices=frozenset({"cpu", "rocm"}),
     )
 
 
@@ -195,3 +198,18 @@ def test_freeze_refuses_when_already_frozen(tmp_path: Path) -> None:
     with pytest.raises(commands.AblationCommandError, match="already frozen"):
         commands.freeze(_deps(path), path, out=io.StringIO(), seeds=(4,))
     assert path.read_text(encoding="utf-8") == before
+
+
+def test_freeze_refuses_a_device_outside_the_supported_ones(tmp_path: Path) -> None:
+    """C3-6: device fora do mapa recusado antes do probe e da escrita."""
+    path = _file(tmp_path, _ablation(seeds=(), torch_build=None, device="cuda"))
+    before = path.read_text(encoding="utf-8")
+
+    def never(file: Path, device: str) -> Any:  # noqa: ANN401
+        raise AssertionError("the probe must not be opened")
+
+    deps = replace(_deps(path), runtime_probe_for=never)
+    with pytest.raises(commands.AblationCommandError, match="not supported"):
+        commands.freeze(deps, path, out=io.StringIO(), seeds=(1, 2))
+    assert path.read_text(encoding="utf-8") == before
+    assert list(path.parent.iterdir()) == [path]

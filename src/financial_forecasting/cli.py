@@ -272,6 +272,7 @@ def _dispatch_ablation_command(
         ablation_cohort_for=deps.ablation_cohort_for,
         measure_ablation_cost_for=deps.measure_ablation_cost_for,
         runtime_probe_for=deps.runtime_probe_for,
+        supported_devices=deps.supported_devices,
     )
     exit_code: int
     if args.command == "ablation-pilot":
