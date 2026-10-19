@@ -2080,4 +2080,37 @@ fecho:      32 (após 22, 06) ─► [Etapa W] (após 20 e 32) ─► (auditoria
 **Razão:** o número esperado das Etapas tem de bater com o silver real, e a ordem de
 grandeza do concept (memória, CA14b) continua a mesma.
 
+### 2026-10-19 — [decision] rebase — branch rebaseada sobre a 7.2 mergeada (P1) — Claude (Opus 5.5)
+**Contexto:** a premissa P1 do §1 pede a 7.2 mergeada e esta branch rebaseada sobre ela.
+A 7.2 entrou em `develop` pelo PR #196 (merge `0f461e1`). Antes do rebase, nenhum
+artefato fora deste technical citava hash da branch, e não havia tag.
+**O que foi feito:** `git fetch origin` e `git rebase origin/develop`. Houve conflito só
+em `docs/roadmap.md`, no commit do roadmap do concept, em cinco trechos:
+- tabela de Stages: a linha da 7.2 ficou como o develop deixou (`done`, `+ evaluation`) e
+  a da 7.3 como o concept deixou (camadas, fases Windows + Linux, depende de 7.2);
+- bloco da 7.4: o comentário do D9 da 7.2 continua. `contratos_introduzidos` junta o
+  port do consumidor da 7.2 com as tabelas gold de H3 (um port do inference e um leitor
+  no evaluation, padrão do D9). `contratos_consumidos` mantém o item conformal da 7.2 e
+  troca `explainability (7.3)` pelas três tabelas gold de H3;
+- bloco da 8.1: mantém "tabelas gold conformais do RefreshGold e revisão r2 (7.2)" e põe
+  os itens da 7.3 no lugar de `PermutationImportance…`;
+- lacunas: a da variante do CQR ficou como o develop deixou, e a do pré-registro de H3
+  como o concept deixou ("decidido");
+- histórico: as linhas de 2026-10-17 e 2026-10-19 do develop continuam, e a de
+  2026-10-18 da 7.3 entrou entre elas, em ordem de data.
+
+HEAD novo: `1507e5a` (`stage 7.3: technical approved`). `$BASE` = `0f461e1`.
+**Mapeamento de hashes (antigo → novo):**
+
+| Commit | Antes | Depois |
+|---|---|---|
+| `stage 7.3: conceptual draft` | `4008871` | `61f95a5` |
+| `docs(roadmap): alinha a 7.3 ao concept…` | `58e70aa` | `8292d88` |
+| `stage 7.3: conceptual approved` | `be50d72` | `5341530` |
+| `stage 7.3: technical approved` | `3204d62` | `1507e5a` |
+
+As citações `be50d72` (§1, Pré-condições) e `58e70aa` (§1 e CA17) devem ser lidas como
+`5341530` e `8292d88`. O §1 não é editado (`check_technical_postexec`).
+**Razão:** é a P1 do plano. O mapeamento fica aqui porque o §1–§6 está congelado.
+
 <!-- END: post-execution -->
