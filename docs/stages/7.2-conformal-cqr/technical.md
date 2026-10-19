@@ -2091,4 +2091,39 @@ explicitamente.
 **Razão:** a média sem o aninhamento era um objeto aplicável incompleto que o
 builder publicaria com célula nula.
 
+### 2026-10-18 — [deviation] etapa-g — prova de geometria do calib sobre o cohort real: verde, sem métrica — Claude (Opus 5.5)
+**Contexto:** a Etapa G (concept D8, CA10) roda o `test_conformal_geometry_real_cohort.py`
+sobre o `data/cohorts/aapl` do checkout principal, montado somente leitura. O HEAD é
+`6867f18`, com a árvore limpa. Ela lê só timestamps, partições, fingerprints e o
+manifesto, e nenhuma coluna `value_*` nem `target_return` (I12).
+
+**G0** (host): `git status --short` vazio e nenhum container no ar. `ls -a
+data/cohorts/aapl` → `. .. bronze inference processed raw silver` (sem `gold/` nem
+`.writer.lock`). `inference/aapl_confirmatory-r0-665f45d9169a/` → `manifest.json`.
+
+**G1** (comando):
+```bash
+MSYS_NO_PATHCONV=1 docker run --name ff-gate-158 --rm -d --cpus 6 --memory 8g --memory-swap 8g   -v $WTD:/app -v $MAIND/.git:/main.git:ro   -v C:/Users/Marcelo/Documents/Code/financial-forecasting/data/cohorts/aapl:/real/aapl:ro   -v financial-forecasting_ff72-venv:/app/.venv -v "$SCRATCH/logs:/logs"   -e GIT_DIR=/main.git/worktrees/$WT -e GIT_WORK_TREE=/app -e GIT_OPTIONAL_LOCKS=0   -e FF_REAL_COHORT_DATA_ROOT=/real/aapl -w /app financial_forecasting-app:dev   sh -c "$PRE; uv run --no-sync pytest tests/integration/features/inference/test_conformal_geometry_real_cohort.py -v -s -rs -p no:cacheprovider --no-cov > /logs/geometry.log 2>&1; echo EXIT=\$? >> /logs/geometry.log"
+```
+O `-d` com log em arquivo montado é o padrão `gatelog` da sessão; a forma do plano
+é com `tee`.
+
+**Saída:** os 10 testes `PASSED`, nenhum `SKIPPED` (o `test_real_cohort_calib_geometry`
+incluído), `10 passed, 9 warnings in 4.27s`, `EXIT=0`. A linha-resumo:
+`geometry cohort=aapl_confirmatory-r0-665f45d9169a runs_checked=60/60 horizons=[1, 7] calib_size=252 problems=0`.
+O spec tem 6 folds x 10 seeds = 60 runs TFT.
+- Os 60 runs foram conferidos sem nenhum problema: fingerprint recomposto =
+  `dim_run.split_fingerprint`; decisões de calib = `FoldSplit.calib` em h+1 e h+7;
+  calib sem `early_stop`; todo alvo de calib < `test[0]`.
+- O manifesto tem as 60 entradas `completed` esperadas.
+
+**G2:** `ls -a` igual ao do G0 (`DATA_ROOT_UNCHANGED`, sem `gold/`) e `find -newer
+g0-marker | wc -l` = 0.
+
+**Desvio do plano:** a linha-resumo tem outra forma da escrita no plano. Ela dá a
+contagem de runs conferidos e de problemas, mas não o total de linhas de calib (211.680).
+O teste confere o conjunto de decisões de calib por run e horizonte, não a contagem de
+linhas por nível. A cobertura dos 7 níveis por decisão é regra da montagem
+(`missing_levels`) no refresh, não da geometria.
+
 <!-- END: post-execution -->
