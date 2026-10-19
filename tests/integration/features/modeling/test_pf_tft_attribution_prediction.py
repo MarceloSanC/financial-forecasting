@@ -258,3 +258,48 @@ def test_settings_report_the_accelerator(trained: TrainedCheckpoint) -> None:
     attribution = _attribute(trained)
     assert attribution.settings["accelerator"] == "cpu"
     assert attribution.settings["batch_size"] == str(_BATCH)
+
+
+def _independent_raw(trained: TrainedCheckpoint) -> tuple[Any, Any, dict[int, int]]:
+    """`predict(mode="raw")` feito pelo teste, com a amostra de decodificador mais longo."""
+    model = TemporalFusionTransformer.load_from_checkpoint(
+        io.BytesIO(Path(trained.path).read_bytes())
+    )
+    frame = PfTftTrainer._panel_frame(trained.feature_names, trained.rows, trained.target)
+    dataset = module._prediction_dataset(
+        dict(model.dataset_parameters),
+        frame,
+        decision_indices=trained.calib_decisions,
+        max_horizon=trained.max_horizon,
+    )
+    raw = model.predict(
+        dataset.to_dataloader(train=False, batch_size=_BATCH, num_workers=0),
+        mode="raw",
+        return_x=True,
+        return_index=True,
+        return_decoder_lengths=True,
+        trainer_kwargs={"logger": False, "accelerator": "cpu", "devices": 1},
+    )
+    best: dict[int, tuple[int, int]] = {}
+    for sample, (time_idx, length) in enumerate(
+        zip(raw.index["time_idx"].tolist(), raw.decoder_lengths.tolist(), strict=True)
+    ):
+        decision = int(time_idx) - 1
+        if decision in trained.calib_decisions and (
+            decision not in best or int(length) > best[decision][1]
+        ):
+            best[decision] = (sample, int(length))
+    return model, raw, {d: s for d, (s, _) in best.items()}
+
+
+def test_vsn_weights_equal_an_independent_interpretation(trained: TrainedCheckpoint) -> None:
+    """C3-2: o peso de d é o da amostra de decodificador mais longo de d, não o da 1ª."""
+    attribution = _attribute(trained)
+    model, raw, best = _independent_raw(trained)
+    reference = model.interpret_output(raw.output, reduction="none")["encoder_variables"]
+    names = list(model.encoder_variables)
+    for decision, sample in best.items():
+        expected = {name: float(reference[sample, j]) for j, name in enumerate(names)}
+        assert attribution.encoder_weights[decision] == pytest.approx(expected, abs=1e-7)
+    distinct = {tuple(sorted(w.items())) for w in attribution.encoder_weights.values()}
+    assert len(distinct) >= 2  # noqa: PLR2004 — duas decisões com pesos diferentes
