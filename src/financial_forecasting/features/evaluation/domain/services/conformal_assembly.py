@@ -157,17 +157,29 @@ def _unit_order(unit: ConformalUnitAssembly) -> tuple[bool, int, str, tuple[int,
 
 
 def _without_fold_collisions(units: list[ConformalUnitAssembly]) -> list[ConformalUnitAssembly]:
-    """Unidades `ok` com o mesmo inteiro de fold e folds crus distintos viram `undefined`."""
+    """Unidades `ok` ambíguas viram `undefined` (C4-8, C5-6).
+
+    - a mesma `(fold_raw, seed, h)` em mais de um run (unidade duplicada);
+    - folds crus distintos com o mesmo inteiro na mesma seed e horizonte.
+    """
+    counts: dict[tuple[str, int | None, int], int] = defaultdict(int)
     raws: dict[tuple[int | None, int | None, int], set[str]] = defaultdict(set)
     for unit in units:
         if unit.status == OK:
+            counts[(unit.fold_raw, unit.seed, unit.horizon)] += 1
             raws[(unit.fold_index, unit.seed, unit.horizon)].add(unit.fold_raw)
     result = []
     for unit in units:
-        same = raws.get((unit.fold_index, unit.seed, unit.horizon), set())
-        if unit.status == OK and len(same) > 1:
-            reason = f"folds {sorted(same)} map to the same integer fold {unit.fold_index}"
-            unit = replace(unit, status=UNDEFINED, reason=reason)  # noqa: PLW2901
+        if unit.status == OK:
+            count = counts[(unit.fold_raw, unit.seed, unit.horizon)]
+            same = raws[(unit.fold_index, unit.seed, unit.horizon)]
+            reason = None
+            if count > 1:
+                reason = f"unit fold {unit.fold_raw!r} appears in {count} runs"
+            elif len(same) > 1:
+                reason = f"folds {sorted(same)} map to the same integer fold {unit.fold_index}"
+            if reason is not None:
+                unit = replace(unit, status=UNDEFINED, reason=reason)  # noqa: PLW2901
         result.append(unit)
     return result
 
