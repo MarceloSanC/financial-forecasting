@@ -240,3 +240,19 @@ def test_rank_and_beta_refuse_invalid_alpha(alpha: object) -> None:
         split_conformal_rank(10, alpha)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="alpha"):
         beta_reference(10, alpha)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("variant", "rho"), [(ConformalVariant.SPLIT_CQR, None), (ConformalVariant.NEXCP, 0.99)]
+)
+@pytest.mark.parametrize("pair", [(0.1, 0.9), (0.25, 0.75)])
+def test_each_tail_carries_its_own_level_and_alpha(
+    variant: ConformalVariant, rho: float | None, pair: tuple[float, float]
+) -> None:
+    """TA-2 (mutante M11): a cauda inferior leva tau_lo, a superior tau_hi."""
+    triples = [(-0.01 * i, 0.01 * i, 0.001 * i) for i in range(1, 21)]
+    result = ConformalCalibrator.calibrate(_calib(triples, pair=pair), variant=variant, rho=rho)
+    assert (result.lower.tail, result.upper.tail) == ("lower", "upper")
+    assert (result.lower.level, result.upper.level) == pair
+    assert result.lower.alpha == result.upper.alpha == exact_level(pair[0])
+    assert result.lower.n == result.upper.n == len(triples)
