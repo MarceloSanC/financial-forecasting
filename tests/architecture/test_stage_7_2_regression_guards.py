@@ -159,13 +159,26 @@ _EVALUATION = _SRC / "financial_forecasting/features/evaluation"
 _INFERENCE = "financial_forecasting.features.inference"
 
 
+def _typing_only_ids(tree: ast.AST) -> set[int]:
+    """Nós no `body` de um `if TYPE_CHECKING:` / `if typing.TYPE_CHECKING:` (C5-5).
+
+    Só o teste exato conta: `if not TYPE_CHECKING:` e o `else:` são runtime.
+    """
+    ids: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If) and ast.unparse(node.test) in (
+            "TYPE_CHECKING",
+            "typing.TYPE_CHECKING",
+        ):
+            for statement in node.body:
+                ids.update(id(child) for child in ast.walk(statement))
+    return ids
+
+
 def _inference_imports(source: str) -> list[tuple[str, bool]]:
     """(módulo da `inference` importado, se está sob `if TYPE_CHECKING:`)."""
     tree = ast.parse(source)
-    typing_only: set[int] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.If) and ast.unparse(node.test).endswith("TYPE_CHECKING"):
-            typing_only.update(id(child) for child in ast.walk(node))
+    typing_only = _typing_only_ids(tree)
     found: list[tuple[str, bool]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
@@ -213,14 +226,16 @@ def test_refresh_gold_imports_only_calibrate_conformal_from_inference() -> None:
 def _supplier_names(source: str) -> dict[bool, set[str]]:
     """Nomes importados do `calibrate_conformal`, por `typing_only` (C4-12)."""
     tree = ast.parse(source)
-    typing_only: set[int] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.If) and ast.unparse(node.test).endswith("TYPE_CHECKING"):
-            typing_only.update(id(child) for child in ast.walk(node))
+    typing_only = _typing_only_ids(tree)
     names: dict[bool, set[str]] = {False: set(), True: set()}
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module == _SUPPLIER:
             names[id(node) in typing_only].update(alias.name for alias in node.names)
+        elif isinstance(node, ast.Import):
+            # `import <supplier> as cc` daria acesso a todo o módulo: nunca é aceito
+            names[id(node) in typing_only].update(
+                f"import {alias.name}" for alias in node.names if alias.name == _SUPPLIER
+            )
     return names
 
 
@@ -259,4 +274,57 @@ def test_inference_import_helper_sees_typing_blocks_and_plain_imports() -> None:
     assert _inference_imports(source) == [
         ("financial_forecasting.features.inference.domain", False),
         ("financial_forecasting.features.inference.application", True),
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (
+            f"import {_SUPPLIER} as cc\n",
+            {False: {f"import {_SUPPLIER}"}, True: set()},
+        ),
+        (
+            "from typing import TYPE_CHECKING\n"
+            "if TYPE_CHECKING:\n"
+            "    pass\n"
+            "else:\n"
+            f"    from {_SUPPLIER} import ConformalUnitResult\n",
+            {False: {"ConformalUnitResult"}, True: set()},
+        ),
+        (
+            "from typing import TYPE_CHECKING\n"
+            "if not TYPE_CHECKING:\n"
+            f"    from {_SUPPLIER} import ConformalUnitResult\n",
+            {False: {"ConformalUnitResult"}, True: set()},
+        ),
+        (
+            "import typing\n"
+            "if typing.TYPE_CHECKING:\n"
+            f"    from {_SUPPLIER} import ConformalUnitResult\n",
+            {False: set(), True: {"ConformalUnitResult"}},
+        ),
+    ],
+    ids=["import-as", "else-branch", "if-not", "typing-attribute"],
+)
+def test_supplier_names_helper_edge_cases(source: str, expected: dict[bool, set[str]]) -> None:
+    """C5-5: só o `body` do `if TYPE_CHECKING` exato é tipo; `import ... as` é recusado."""
+    assert _supplier_names(source) == expected
+
+
+@pytest.mark.unit
+def test_inference_import_helper_uses_the_same_typing_rule() -> None:
+    source = (
+        "from typing import TYPE_CHECKING\n"
+        "if not TYPE_CHECKING:\n"
+        "    from financial_forecasting.features.inference.application import x\n"
+        "if TYPE_CHECKING:\n"
+        "    pass\n"
+        "else:\n"
+        "    from financial_forecasting.features.inference.domain import y\n"
+    )
+    assert _inference_imports(source) == [
+        ("financial_forecasting.features.inference.application", False),
+        ("financial_forecasting.features.inference.domain", False),
     ]

@@ -837,7 +837,9 @@ def conformal_reports_from(  # noqa: PLR0913 — as entradas da etapa conformal
     )
     ok_units: dict[_UnitKey, ConformalUnitAssembly] = {}
     inputs: list[ConformalUnitInput] = []
-    raw_of: dict[_PortKey, str] = {}  # único: a montagem já recusou o inteiro repetido
+    # chaves únicas: a montagem já mandou para `undefined` a unidade duplicada e o
+    # inteiro de fold repetido (C4-8, C5-6)
+    raw_of: dict[_PortKey, str] = {}
     for unit in assembly.units:
         if unit.status == _OK and unit.fold_index is not None and unit.seed is not None:
             ok_units[(unit.fold_raw, unit.seed, unit.horizon)] = unit

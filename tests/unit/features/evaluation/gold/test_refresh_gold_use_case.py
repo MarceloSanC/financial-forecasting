@@ -1414,3 +1414,23 @@ def test_folds_with_the_same_integer_never_reach_the_port() -> None:
     assert inputs.conformal_reports.coverage == ()
     assert {u.fold_raw for u in inputs.conformal_reports.units} == {"01", "1"}
     assert all("same integer fold" in (u.reason or "") for u in inputs.conformal_reports.units)
+
+
+# --- Checkpoint C das Tasks 20-22 (task-19-fix, C5-1) ----------------------------------
+
+
+@pytest.mark.unit
+def test_port_rows_map_back_to_the_raw_fold() -> None:
+    """C5-1: o port devolve o inteiro 1; o registro volta com o fold cru "01"."""
+    cohort = _cohort_with_folds(("01", "2"), {"01": (0, 1, 2), "2": (14, 15, 16, 17)})
+    harness = _conformal_harness(cohort)
+    inputs = _inputs_of(harness, parameters=_C_PARAMETERS)
+    [command] = harness.conformal.calls
+    assert {u.fold_index for u in command.units} == {1, 2}
+    records = inputs.conformal_reports.units
+    assert {(u.fold_raw, u.fold_index) for u in records} == {("01", 1), ("2", 2)}
+    assert {u.status for u in records} == {"ok"}
+    assert inputs.conformal_reports.undefined_coverage == ()
+    assert {(r.seed, r.horizon) for r in inputs.conformal_reports.coverage} == {
+        (seed, h) for seed in (1, 2) for h in _HORIZONS
+    }

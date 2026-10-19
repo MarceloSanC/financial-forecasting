@@ -400,3 +400,25 @@ def test_undefined_unit_with_test_points_leaves_them_uncovered() -> None:
     uncovered = set(result.uncovered_targets[(1, 1)])
     assert {point[1] for point in unit.test} <= uncovered
     assert set(_native(cohort)[(1, 1)].target_timestamps) == uncovered
+
+
+# --- Checkpoint C das Tasks 20-22 (task-19-fix, C5-6) ----------------------------------
+
+
+def test_same_unit_in_two_runs_is_undefined() -> None:
+    """C5-6: a mesma (fold_raw, seed, h) em dois runs não chega ao port como duas unidades."""
+    cohort = _cohort()
+    original = run_id("tft", 1, "0")
+    [run] = [r for r in cohort.runs if r.run_id == original]
+    twin = dataclasses.replace(run, run_id=f"{original}-twin")
+    copies = tuple(
+        dataclasses.replace(r, run_id=twin.run_id) for r in cohort.records if r.run_id == original
+    )
+    cohort = dataclasses.replace(add_records(cohort, *copies), runs=(*cohort.runs, twin))
+    result = _assemble(cohort, _native(_cohort()))
+    twins = [u for u in result.units if (u.fold_raw, u.seed) == ("0", 1)]
+    assert len(twins) == 2 * len(_HORIZONS)
+    assert {u.status for u in twins} == {UNDEFINED}
+    assert all("appears in 2 runs" in (u.reason or "") for u in twins)
+    others = [u for u in result.units if (u.fold_raw, u.seed) != ("0", 1)]
+    assert {u.status for u in others} == {OK}
