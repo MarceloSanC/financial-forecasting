@@ -517,3 +517,29 @@ def test_real_use_cases_through_the_composition_root(scenario: _Scenario) -> Non
     assert seeds == {None, *_SEEDS}
     ks = {r["permutation_index"] for r in importance if r["method"] == "permutation"}
     assert ks == {None, 1, 2}
+
+
+def test_vsn_summary_ok_with_label_and_a_known_p50(scenario: _Scenario) -> None:
+    """C8-4: a VSN sai `ok`, com o rótulo exato e o p50 da família price conhecido."""
+    from financial_forecasting.features.evaluation.domain.services.family_contribution import (  # noqa: PLC0415
+        linear_quantile,
+    )
+
+    rows = _rows(scenario.sustained, GOLD_H3_VSN.name)
+    assert {r["status"] for r in rows} == {"ok"}
+    assert {r["label"] for r in rows} == {
+        "horizonte-invariante; descreve quanto o modelo usa cada família"
+    }
+    share = 1.0 / len(_VARIABLES)
+    decisions = sorted({d for _, d in _test_points()})
+
+    def weight(decision: int, seed: int) -> float:
+        return share * (1 + 0.01 * ((decision + seed) % 3)) / 1.01
+
+    members = [f for f, family in _VARIABLES.items() if family == "price"]
+    sums = [
+        sum(sum(weight(d, s) for s in _SEEDS) / len(_SEEDS) for _ in members) for d in decisions
+    ]
+    [price] = [r for r in rows if (r["kind"], r["name"]) == ("family", "price")]
+    assert price["p50"] == pytest.approx(linear_quantile(sums, 0.5))
+    assert price["n_decisions"] == len(decisions)
