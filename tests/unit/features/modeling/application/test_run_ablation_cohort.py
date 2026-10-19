@@ -366,6 +366,29 @@ def test_probe_guard_refuses_before_training(overrides: dict[str, Any], match: s
     assert harness.ledger.environment(_cohort_id(_ablation())) is None
 
 
+@pytest.mark.parametrize(
+    ("installed", "refused"),
+    [
+        pytest.param("2.13.0+cpu", False, id="same-build"),
+        pytest.param("2.12.0+cpu", True, id="other"),
+    ],
+)
+def test_cpu_device_still_checks_the_torch_build(installed: str, refused: bool) -> None:
+    """TA-11: com `device = "cpu"` o build do torch também é conferido (I5, qualquer device)."""
+    spec = _ablation(device="cpu", torch_build="2.13.0+cpu")
+    harness = _Harness(
+        probe=InMemoryRuntimeEnvironmentProbe(device="cpu", torch=installed),
+        trainer_device="cpu",
+    )
+    if not refused:
+        assert harness.run(spec).outcomes
+        return
+    with pytest.raises(EnvironmentMismatchError, match="torch_build"):
+        harness.run(spec)
+    assert harness.commands == []
+    assert harness.ledger.environment(_cohort_id(spec)) is None
+
+
 def test_probe_guard_accepts_gpu_hip_and_build() -> None:
     harness = _Harness()
     harness.run()
