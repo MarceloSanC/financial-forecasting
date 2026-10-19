@@ -67,6 +67,12 @@ def test_rho_one_accepted() -> None:
     assert ConformalParameters.from_mapping(_with(nexcp_rho=1)).nexcp_rho == 1.0
 
 
+def test_central_level_pair_refused() -> None:
+    """C4-3: (0,5; 0,5) é simétrico, mas não é intervalo (tau_lo tem de ficar em (0; 0,5))."""
+    with pytest.raises(ValueError, match=r"conformal\.pairs\[0\]"):
+        ConformalParameters.from_mapping(_with(pairs=[[0.5, 0.5]], primary_pair=[0.5, 0.5]))
+
+
 def test_non_symmetric_pair_refused() -> None:
     with pytest.raises(ValueError, match=r"conformal\.pairs\[1\] \[0\.1, 0\.8\] is not symmetric"):
         ConformalParameters.from_mapping(_with(pairs=[[0.02, 0.98], [0.1, 0.8]]))
