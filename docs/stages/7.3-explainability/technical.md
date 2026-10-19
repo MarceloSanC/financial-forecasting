@@ -2482,4 +2482,19 @@ colunas de partição e de filtros da docstring de `analytics_repository.py`, co
 ADR 7.3.0002 item 4. A docstring foi editada (1 a 4 níveis hoje). A docstring do
 `ParquetAnalyticsRepository` ("N níveis") continua sem mudança.
 
+### 2026-10-19 — [measurement] gates — check-block extra no HEAD da Task 20 — Claude (Opus 5.5)
+Container `ff-gate-186` (`--cpus 3 --memory 8g --memory-swap 8g`, volume
+`financial-forecasting_ff73-venv`; `--cpus 3` porque a revisão `ff-review-186` podia
+estar rodando), comando `make check-block PYTEST_PAR='-n 4 --dist loadgroup'`, na árvore
+que virou o `d90ae18` (Task 20). Verde: `7565 passed, 26 skipped`, EXIT=0, 689 s. Não
+substitui o ponto B (depois da Task 24).
+
+### 2026-10-19 — [deviation] Task 15 — testes de ida e volta renomeados (C4-7) — Claude (Opus 5.5)
+O `36f9b2c` renomeou `test_permuted_round_trip_and_run_filter_pushdown` para
+`test_permuted_round_trip_and_run_filter` e `test_vsn_round_trip_and_run_filter_pushdown`
+para `test_vsn_round_trip_and_run_filter`: o teste confere o filtro por run, não o
+pushdown. A Task 15 e a linha CA10 da matriz de rastreabilidade (acima, congeladas)
+seguem com os nomes antigos. Os nomes válidos são os novos. Achado C4-7 do
+Checkpoint C 13–15.
+
 <!-- END: post-execution -->
