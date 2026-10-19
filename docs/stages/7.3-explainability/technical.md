@@ -2446,4 +2446,33 @@ de `partition_by`, sem profundidade fixa. A ida e volta com 4 níveis em Parquet
 importa o `modeling`. A partição real fica travada pela conferência do `partition_hash`
 (I17).
 
+### 2026-10-19 — [deviation] Task 11 — a VSN sai de uma passagem raw separada (C3-3) — Claude (Opus 5.5)
+Reclassifica a escolha da `[decision] Task 11` acima, sem apagá-la. O §1 ("VSN: uma
+passagem extra do dataloader de identidade com `mode="raw"`") e o D2 do concept dizem
+que a VSN vem "da mesma passagem". O adapter faz assim:
+1. uma passagem `mode="raw"` separada, de onde saem os pesos e os blocos doadores;
+2. a identidade, pelo `_emit`, numa passagem própria.
+
+Isso é desvio, não escolha livre. A equivalência é testada:
+- `test_raw_pass_quantiles_equal_the_identity_grid`: os quantis da passagem raw, nas
+  amostras escolhidas, são iguais à grade de identidade;
+- `test_vsn_weights_equal_an_independent_interpretation`: o peso de cada decisão é o da
+  amostra de decodificador mais longo, numa interpretação refeita pelo teste.
+
+Achados C3-2 e C3-3 do Checkpoint C 09–12. (Por erro de edição, este registro entrou
+num commit `[7.3/--]` separado, e não no `1005a98`, cujo corpo o cita.)
+
+### 2026-10-19 — [deviation] Task 03 / ADR 7.3.0004 item 1 — os testes da 5.4 mudam só na chamada (C3-1) — Claude (Opus 5.5)
+O ADR 7.3.0004 item 1 diz que os testes da 5.4 e da 7.1 ficam sem mudança. O `_emit`
+voltou a exigir `accelerator` (reverte o default `"cpu"` do `8e65e0f`), e por isso os
+três testes de `test_pf_tft_prediction.py` que o chamam direto (L249, L286, L450)
+passaram a passar `accelerator="cpu"`. Nenhuma asserção e nenhum contrato de port
+mudaram. Achado C3-1 do Checkpoint C 09–12, opção (a).
+
+### 2026-10-19 — [deviation] processo — o commit agregado `5006eee` (C3-7) — Claude (Opus 5.5)
+O commit `fix(modeling): pré-condições do executor de ablação antes do lock
+[7.3/task-08-fix]` (`5006eee`) juntou sete achados do Checkpoint C 05–08: C2-1 (lado do
+executor), C2-2, C2-3, C2-4, C2-6, C2-7 e C2-8. Eles estão listados um a um no corpo do
+commit. A partir do C3, cada achado tem o seu commit.
+
 <!-- END: post-execution -->
