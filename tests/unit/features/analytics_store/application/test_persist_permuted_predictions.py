@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 import pytest
 
 from financial_forecasting.features.analytics_store.application.use_cases.persist_permuted_predictions import (  # noqa: E501
