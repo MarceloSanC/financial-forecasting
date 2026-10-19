@@ -182,3 +182,16 @@ def test_sample_importances_match_the_shares() -> None:
             assert float(str(mine["importance"])) / total == pytest.approx(
                 share[f"share_h{horizon}"]
             )
+
+
+def test_n_points_is_per_method_and_null_without_series() -> None:
+    """C8-11: o T de cada método vem das suas séries d_t, não do T do refresh."""
+    import dataclasses  # noqa: PLC0415
+
+    inputs = completed_inputs()
+    other = dataclasses.replace(
+        inputs, h3_reports=dataclasses.replace(inputs.h3_reports, n_points=99)
+    )
+    rows = H3ImportanceGoldBuilder().build(other).rows
+    assert {r["n_points"] for r in rows if r["method"] == "permutation"} == {3}
+    assert {r["n_points"] for r in rows if r["method"] == "loco"} == {None}

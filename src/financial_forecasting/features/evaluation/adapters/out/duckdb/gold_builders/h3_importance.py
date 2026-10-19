@@ -8,7 +8,7 @@ das tabelas gold"). Chave `(method, family, horizon, seed, permutation_index)`:
   importância calculada, nula);
 - o perfil por seed `(s, nulo)` e, só na permutação, o perfil por permutação `(nulo, k)`,
   das séries d_t do método (ausentes quando a montagem foi `undefined`);
-- `n_points` = T, o número de decisões das séries d_t.
+- `n_points` = T, o número de decisões das séries d_t DO MÉTODO (nulo sem elas).
 
 Sem bloco `[h3]` → zero linhas.
 """
@@ -107,5 +107,7 @@ class H3ImportanceGoldBuilder:
             (reports.ablation, reports.ablation_differentials),
         ):
             if report is not None:
-                rows += _method_rows(base, report, differentials, reports.n_points)
+                # n_points do PRÓPRIO método (C8-11): o T das suas séries d_t, nulo sem elas
+                n_points = None if differentials is None else len(differentials.decision_timestamps)
+                rows += _method_rows(base, report, differentials, n_points)
         return GoldTable.sorted_by_key(GOLD_H3_IMPORTANCE.name, GOLD_H3_IMPORTANCE.key, rows)
