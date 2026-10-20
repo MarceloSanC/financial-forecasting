@@ -2868,4 +2868,15 @@ Pendência CA16 (ADR [7.3.0006](../../adr/7_3_0006-stage-split-windows-linux-wit
 - Comentário de handoff (issue #186, id `6278999689`, criado em 2026-10-19T22:44:32Z): <https://github.com/MarceloSanC/financial-forecasting/issues/186#issuecomment-6278999689>
 - PR da Stage 7.3 (aberto, `Refs #186`): <https://github.com/MarceloSanC/financial-forecasting/pull/200>
 
+### 2026-10-19 — [deviation] L0 — chegada no Linux: worktree, leitura in-place do Windows montado, `TRANSFER_OK` substituído — Claude (Opus 4.8)
+A L0 rodou com três desvios de forma em relação ao roteiro do `[handoff]`, todos com a mesma saída esperada (ou mais forte):
+
+- **Push por worktree (desvia do §1.1 do PROMPT).** O checkout principal é a worktree primária; o hook `publish_guard` recusa `git push` de lá (política "principal fica em `develop`, trabalho em worktree" — GIT-WORKFLOW §"Branches em voo"). A fase Linux roda numa worktree dedicada criada por `scripts/worktree-new.py feat/186-7-3-explainability --no-setup --no-vscode` (`../financial-forecasting-worktrees/feat-186-7-3-explainability`); o principal voltou a `develop`.
+- **Leitura in-place em vez do `transfer-in.tar`.** O pacote do Windows não pôde ser trazido pelo caminho planejado. Máquina dual-boot: montei a partição Windows C: (`/dev/nvme0n1p2`, NTFS) **read-only** em `/mnt/win` e li os artefatos congelados no lugar. Copiei para a worktree (ext4, graváveis) `data/cohorts/aapl` (160 MiB) e `artifacts/cohorts` (36 KiB); os 60 checkpoints de `artifacts/tft` (1,6 GiB) entraram como **symlinks** para o mount RO, poupando o ext4.
+- **`TRANSFER_OK` substituído pela conferência mais forte que já existe.** Sem transferência de `.tar`, não há sha do pacote a conferir; no lugar: `verify` → `rows expected 337792, observed 337792` + `OK`; `attribute` → `60 runs (60 strict, 0 tolerance); permuted rows written 0, verified 8655920; vsn rows written 0, verified 891490`, todos com `max|d| 0.000e+00`. A re-conferência saiu **strict** (o `[handoff]` admitia `tolerance` por ambiente ≠ 7.1), confirmando reprodução bit-idêntica Windows→Linux.
+
+Ambiente: `uv` 0.11.25 → **0.11.28** (o do CI) pelo instalador astral; `gh` autenticado; `make setup` OK (`torch 2.13.0+cpu`); hooks `pre-commit`/`commit-msg` instalados. `X = git rev-parse "$T33^" = 55bfd2927f1efa39d25297dcf2792d04469384f9` (confere), e o diff da Task 33 traz `technical.md` + `test_stage_7_3_handoff_commands.py`.
+
+**Restrição de disco (entra na L3).** `/` (ext4) com ~9 GiB livres. Os symlinks mantêm os 1,6 GiB do confirmatório fora do ext4, mas o torch ROCm (L1) e os checkpoints novos da ablação (L5, 30·S) ainda apertam; o tamanho de um checkpoint medido no piloto (L2) entra como teto do `S` na decisão da L3.
+
 <!-- END: post-execution -->
