@@ -2862,4 +2862,10 @@ docstring do teste novo), corrigido antes do commit. O `check_technical_postexec
 recusou o título `[handoff]` (fora do vocabulário, G9); a entrada usa `[decision]
 handoff`, e o teste a localiza assim (`7 passed` de novo, `ruff` e o `postexec` verdes).
 
+### 2026-10-19 — [decision] handoff — URL do comentário de handoff e do PR na §7 (CA16) — Claude (Opus 4.8)
+Pendência CA16 (ADR [7.3.0006](../../adr/7_3_0006-stage-split-windows-linux-with-in-repo-handoff.md) itens 2 e 5): a §7 ainda não citava a URL do comentário de handoff da Task 33. Este é o primeiro commit da fase Linux e fecha a pendência:
+
+- Comentário de handoff (issue #186, id `6278999689`, criado em 2026-10-19T22:44:32Z): <https://github.com/MarceloSanC/financial-forecasting/issues/186#issuecomment-6278999689>
+- PR da Stage 7.3 (aberto, `Refs #186`): <https://github.com/MarceloSanC/financial-forecasting/pull/200>
+
 <!-- END: post-execution -->
