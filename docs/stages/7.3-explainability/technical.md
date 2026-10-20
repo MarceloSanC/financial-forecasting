@@ -2879,4 +2879,20 @@ Ambiente: `uv` 0.11.25 → **0.11.28** (o do CI) pelo instalador astral; `gh` au
 
 **Restrição de disco (entra na L3).** `/` (ext4) com ~9 GiB livres. Os symlinks mantêm os 1,6 GiB do confirmatório fora do ext4, mas o torch ROCm (L1) e os checkpoints novos da ablação (L5, 30·S) ainda apertam; o tamanho de um checkpoint medido no piloto (L2) entra como teto do `S` na decisão da L3.
 
+### 2026-10-20 — [decision] C12 — determinismo na GPU resolvido: interpolação linear por `gather` (não `warn_only`) — Claude (Opus 4.8)
+O piloto da L2 abortou no backward do treino com `upsample_linear1d_backward_out_cuda does not have a deterministic implementation ... use_deterministic_algorithms(True)` — o **C12** que o concept §6 e o ADR 7.3.0004 item 5 previram (HALT, `[decision]` antes do freeze). A GPU inicializou normal; o bloqueio é um kernel sem caminho determinístico, não falha do ROCm.
+
+**Pesquisa ampla (4 agentes, fontes primárias + medição no alvo):**
+- **torch:** nenhuma versão (2.13/`main`/nightly) tem kernel determinístico para `upsample_linear1d_backward`; os PRs abertos cobrem só 2D/3D e são CUDA-only (`#ifndef USE_ROCM`). A doc de `use_deterministic_algorithms` lista `interpolate(linear/…)` como op que **lança erro**.
+- **ROCm/MIOpen/rocBLAS/HIP:** nenhuma flag de ambiente cobre o op — é kernel nativo do ATen com `atomicAdd`; MIOpen/rocBLAS governam convolução/BLAS; não há modo global de atomics determinísticos no HIP.
+- **Saídas reais:** (A) `warn_only` — roda, mas o op segue não-determinístico (perde reprodução bit-exata); (B) CPU — determinística, mas ~95 h (ADR Alt. D, já rejeitada); (C) **substituir o op** por interpolação equivalente determinística.
+
+**Decisão: (C).** O `TimeDistributedInterpolation` do TFT (VSN/GRN) usa `F.interpolate(mode="linear")` num único ponto; trocado por combinação linear dos 2 vizinhos via `index_select` (mesma função; backward determinístico), **só no acelerador `gpu`** — a CPU (confirmatório/7.1) fica byte-idêntica. Escolhida sobre (A) por preservar o padrão de reprodução bit-exata do projeto, e sobre (B) pelo custo. Commit `96d585e` (`fix(modeling): …`), com teste; patch scoped no `fit`, restaurado no `finally`.
+
+**Evidência medida (RX 7700 XT, ROCm 7.1, torch 2.13.0+rocm7.1):** `gather` vs `F.interpolate` `max|d|` ~2,4e-7 (1 ULP fp32); bit-idêntico entre execuções (`torch.equal` em forward e gradiente, no teste e no `test_gpu_fit_smoke`). O re-piloto completou na GPU sob `deterministic=True` **sem erro** (logo todas as ops tiveram caminho determinístico → treino bit-reprodutível) e **sem 2º op não-determinístico**; 79 testes de regressão verdes.
+
+**Relatório de custo (piloto; fold 5 = teto):** `full seed 1 fold 5: wall 182,4 s, 17 épocas (best 8, max 50), 10,73 s/época`. Por S (teto sem early-stop | estimativa real): S1 4,5 h|1,5 h · S2 8,9|3,0 · S3 13,4|4,6 · S4 17,9|6,1 · S5 22,4|7,6 · S6 26,8|9,1 · S7 31,3|10,6 · S8 35,8|12,2 · S9 40,2|13,7 · S10 44,7|15,2. Checkpoint ~27 MiB (medida do confirmatório); 30·S × 27 MiB (S=5 ≈ 4 GiB).
+
+**Tooling:** commit com `SKIP=ruff,mypy` — os hooks derivados reprovariam por motivo conhecido (`[finding] tooling` acima): o ruff 0.6.9 do hook removeria `# noqa: PLC0415` que o venv exige, e o mypy isolado (sem `lightning`) dá falso-positivo em `class _LossHistory(Callback)`. `ruff check` e `mypy` do venv passam (gate autoritativo de `make check`).
+
 <!-- END: post-execution -->
