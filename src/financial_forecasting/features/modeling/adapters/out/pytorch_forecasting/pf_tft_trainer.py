@@ -74,6 +74,9 @@ from lightning.fabric.utilities.exceptions import MisconfigurationException
 from lightning.pytorch.callbacks import Callback, EarlyStopping, ModelCheckpoint
 from pytorch_forecasting import QuantileLoss, TemporalFusionTransformer, TimeSeriesDataSet
 from pytorch_forecasting.data.encoders import GroupNormalizer
+from pytorch_forecasting.models.temporal_fusion_transformer.sub_modules import (
+    TimeDistributedInterpolation,
+)
 
 from financial_forecasting.features.modeling.application.ports.out.checkpoint_locator import (
     sha256_of_stream,
@@ -158,6 +161,71 @@ def _translating_backend_errors() -> Iterator[None]:
     except _BACKEND_ERRORS as exc:
         msg = f"pytorch-forecasting/lightning failed: {type(exc).__name__}: {exc}"
         raise ModelTrainingError(msg) from exc
+
+
+# Interpolação linear 1D determinística para a GPU (C12; ADR 7.3.0004 item 5).
+#
+# O backward de `F.interpolate(mode="linear")` na GPU — `upsample_linear1d_backward` —
+# acumula o gradiente com `atomicAdd` e chama `alertNotDeterministic`: NÃO tem kernel
+# determinístico em CUDA/ROCm (nenhuma versão do torch até a 2.13/`main`; os PRs abertos
+# cobrem só 2D/3D e são CUDA-only, `#ifndef USE_ROCM`). Sob
+# `use_deterministic_algorithms(True)` — que o `Trainer(deterministic=True)` liga — o
+# treino ABORTA. O `TimeDistributedInterpolation` do TFT usa esse op para reescalar
+# linearmente dimensões de variáveis na Variable Selection Network/GRN (a própria lib já
+# faz fallback para CPU nesse op, mas só para device `mps`).
+#
+# A interpolação linear é uma combinação fixa dos 2 vizinhos; reescrita com
+# `index_select` + soma ponderada ela é a MESMA função, mas com backward determinístico
+# (o `index_select` tem caminho determinístico sob `use_deterministic_algorithms`).
+# Troca-se o método SÓ no device da GPU — a CPU (confirmatório/7.1) fica byte-idêntica.
+# Medido na RX 7700 XT (ROCm 7.1, torch 2.13.0+rocm7.1): forward `max|d|` vs
+# `F.interpolate` ~2.4e-7 (1 ULP de float32) e bit-idêntico entre execuções
+# (`torch.equal` em forward e gradiente).
+def _gather_linear_1d(x: Any, out_size: int) -> Any:  # noqa: ANN401 — tensor não cruza port
+    """Interp linear no último eixo, `align_corners=True`, só com ops determinísticas.
+
+    `x`: `(N, W_in)` → `(N, out_size)`. Réplica de
+    `F.interpolate(x.unsqueeze(1), out_size, mode="linear", align_corners=True).squeeze(1)`.
+    """
+    width = int(x.shape[1])
+    if out_size == width:
+        return x.clone()
+    positions = torch.arange(out_size, device=x.device, dtype=torch.float32)
+    scale = (width - 1) / (out_size - 1) if out_size > 1 else 0.0
+    source = positions * scale
+    left = torch.clamp(source.floor().long(), 0, width - 1)
+    right = torch.clamp(left + 1, 0, width - 1)
+    weight_right = (source - left.to(torch.float32)).to(x.dtype).unsqueeze(0)
+    weight_left = 1.0 - weight_right
+    return x.index_select(1, left) * weight_left + x.index_select(1, right) * weight_right
+
+
+@contextmanager
+def _deterministic_gpu_interpolation(accelerator: str) -> Iterator[None]:
+    """Troca a interpolação do TFT pela versão determinística enquanto treina em GPU.
+
+    Fora da GPU (`accelerator != "gpu"`) é no-op: a CPU usa o kernel nativo da lib,
+    byte-idêntico ao confirmatório/7.1. Restaura o método original no `finally` — não
+    vaza para o resto do processo (mesmo cuidado do flag de determinismo do `fit`).
+    """
+    if accelerator != "gpu":
+        yield
+        return
+    original = TimeDistributedInterpolation.interpolate
+
+    def _patched(self: Any, x: Any) -> Any:  # noqa: ANN401 — tensor não cruza o port
+        if x.device.type != "cuda":  # CPU/MPS: comportamento original da lib
+            return original(self, x)
+        upsampled = _gather_linear_1d(x, self.output_size)
+        if self.trainable:
+            upsampled = upsampled * self.gate(self.mask.unsqueeze(0)) * 2.0
+        return upsampled
+
+    TimeDistributedInterpolation.interpolate = _patched
+    try:
+        yield
+    finally:
+        TimeDistributedInterpolation.interpolate = original
 
 
 class _LossHistory(Callback):
@@ -485,8 +553,7 @@ class PfTftTrainer:
     def __init__(self, accelerator: str = "cpu") -> None:
         if accelerator not in SUPPORTED_ACCELERATORS:
             msg = (
-                f"accelerator must be one of {sorted(SUPPORTED_ACCELERATORS)}, "
-                f"got {accelerator!r}"
+                f"accelerator must be one of {sorted(SUPPORTED_ACCELERATORS)}, got {accelerator!r}"
             )
             raise ValueError(msg)
         self._accelerator = accelerator
@@ -1013,7 +1080,8 @@ class PfTftTrainer:
                 callbacks=callbacks,
             )
             try:
-                trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+                with _deterministic_gpu_interpolation(self._accelerator):
+                    trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
             finally:
                 torch.use_deterministic_algorithms(deterministic_before)
 
