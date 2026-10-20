@@ -1,14 +1,9 @@
-# Cohort de ablação LOCO — RASCUNHO (Stage 7.3; ADRs 7.3.0003 e 7.3.0004).
-# Referencia o cohort confirmatório pelo arquivo, id e hash; o procedimento (geometria,
-# tft_params, horizontes, grade, dataset_fingerprint, pipeline_version) vem da base.
-# `seeds` vazio e `torch_build` ausente até o freeze no Linux (L4, `ablation-freeze`).
-# A partição e os feature_set_hash das configurações são os da registry (o loader confere).
-
 name = "aapl_ablation"
 revision = 0
 feature_set_name = "fs_all_ablation"
 device = "rocm"
-seeds = []
+seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+torch_build = "2.13.0+rocm7.1"
 
 [base]
 cohort_file = "config/cohorts/aapl_confirmatory.toml"
