@@ -1128,13 +1128,13 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 
 #### Stage 7.4 — `7.4-inference-api`
 
-**Descrição humana:** API fina FastAPI (adapter de entrada) servindo previsão (quantis nativos + intervalo conformal rotulado "cobertura empírica") e payload de explicabilidade (rotulado descritivo), com schema versionado definido no technical da Stage, mapeando exceções de domínio para HTTP. Sem lógica de negócio no router. O `app.py` já existe (ADR 1.1.0001) e só ganha o router.
+**Descrição humana:** API fina FastAPI (adapter de entrada) servindo previsão (quantis nativos + intervalo conformal rotulado "cobertura empírica") e payload de explicabilidade (rotulado descritivo), com schema versionado definido no technical da Stage, mapeando exceções de domínio para HTTP. Sem lógica de negócio no router. Serve as predições de teste já gravadas (não roda o modelo) e lê o gold por um port do consumidor com leitor no evaluation. O `app.py` já existe (ADR 1.1.0001) e ganha o router e o cohort servido por configuração; o `error_handlers.py` ganha o handler de `ApplicationError`; settings e composition root ganham a fábrica do use case.
 
 **Descrição para IA:**
 ```yaml
 stage_id: 7.4-inference-api
 bounded_context: inference
-camada_alvo: multi (inference application + adapters/in/http; evaluation application; shared/infrastructure/http)
+camada_alvo: multi (inference domain + application + adapters/in/http; evaluation application; shared/infrastructure/http)
 arquivos_a_criar:  # + os __init__.py dos pacotes novos (concept 7.4 §1)
   - src/financial_forecasting/features/inference/domain/exceptions/serving.py
   - src/financial_forecasting/features/inference/application/dtos/serving_gold.py
@@ -1144,9 +1144,13 @@ arquivos_a_criar:  # + os __init__.py dos pacotes novos (concept 7.4 §1)
   - src/financial_forecasting/features/inference/adapters/in/http/inference_router.py
   - src/financial_forecasting/features/inference/adapters/in/http/schemas/inference_schemas.py
   - tests/fakes/features/inference/in_memory_serving_gold_reader.py
+  - tests/unit/features/inference/application/test_serving_gold_dtos.py
+  - tests/unit/features/inference/application/test_serve_inference.py
+  - tests/unit/features/evaluation/test_read_serving_gold.py
   - tests/contract/features/inference/test_serving_gold_reader_contract.py
   - tests/integration/features/inference/adapters/in_/http/test_inference_router.py  # `in_`: keyword (precedente da 5.5)
   - tests/e2e/features/inference/test_inference_api_e2e.py
+  - tests/e2e/features/inference/test_inference_api_no_deep_learning.py
 arquivos_a_modificar:
   - src/financial_forecasting/shared/infrastructure/http/app.py
   - src/financial_forecasting/shared/infrastructure/http/error_handlers.py
@@ -1154,6 +1158,11 @@ arquivos_a_modificar:
   - src/financial_forecasting/composition_root.py
   - .importlinter
   - tests/architecture/test_import_contracts.py
+  - docs/LAYOUT.md
+  - docs/adr/0_0_0053-slices-as-modules-of-one-context-consumer-owned-ports.md
+  - docs/adr/7_1_0001-checkpoint-prediction-supplied-by-modeling-through-consumer-port.md
+  - docs/stages/7.1-inference-engine/concept.md
+  - docs/overview.md
 # Da 7.2 (concept 7.2 D9): a 7.4 lê as correções conformais do gold por um port do
 # consumidor no inference (DTO/VO do inference), satisfeito por um leitor do evaluation
 # (gold_schema dono único); direção de produção só evaluation → inference.
