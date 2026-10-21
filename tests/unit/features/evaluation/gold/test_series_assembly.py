@@ -755,3 +755,17 @@ def test_diverging_fold_in_a_single_level_is_seen(level_index: int) -> None:
     result = _assemble(cohort)
     assert result.alignment.findings == ()
     assert result.horizons[0].common_folds is None
+
+
+@pytest.mark.unit
+def test_grid_divergent_detail_lists_the_grids_by_model() -> None:
+    """C7-10: o texto persistido no gold da 6.4 não muda com a regra pública da 7.3."""
+    cohort = drop_records(
+        make_cohort(),
+        lambda r: of_series("gbm", None, 2)(r) and r.quantile_level in (0.05, 0.95),
+    )
+    [finding] = _only(_assemble(cohort), AlignmentKind.GRID_DIVERGENT)
+    assert finding.detail == (
+        "grids by model: gbm=[0.1, 0.25, 0.5, 0.75, 0.9]; "
+        "tft=[0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95]"
+    )

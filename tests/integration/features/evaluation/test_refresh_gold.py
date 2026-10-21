@@ -127,7 +127,13 @@ _CONFORMAL_TABLES = (  # Stage 7.2: sem bloco [conformal] neste cenário, as dua
     "gold_conformal_corrections",
     "gold_conformal_coverage",
 )
-_ALL_TABLES = _TABLES + _PROFILE_TABLES + _CONFORMAL_TABLES
+_H3_TABLES = (  # Stage 7.3: sem bloco [h3] neste cenário, as quatro vazias
+    "gold_h3_importance",
+    "gold_h3_shares",
+    "gold_h3_reading",
+    "gold_h3_vsn",
+)
+_ALL_TABLES = _TABLES + _PROFILE_TABLES + _CONFORMAL_TABLES + _H3_TABLES
 _K = len(_SEEDS)
 _ESTIMATORS = (DmVarianceEstimator.RECTANGULAR, DmVarianceEstimator.BARTLETT)
 _SCHEMES = (BootstrapScheme.STATIONARY, BootstrapScheme.MOVING_BLOCK)
@@ -149,6 +155,7 @@ _PARAMETERS = RefreshParameters(
     mcs_block_sensitivities=("h", "sqrt_T"),
     profile_parameters=profile_parameters(),
     conformal_parameters=None,
+    h3_parameters=None,
 )
 
 Rows = list[tuple[object, ...]]
@@ -458,6 +465,8 @@ def test_e2e_completed_all_tables(scenario: _Scenario) -> None:
     assert all(generation.tables[name] for name in _TABLES + _PROFILE_TABLES)
     # sem bloco [conformal], as duas tabelas conformais existem com zero linhas
     assert all(generation.tables[name] == [] for name in _CONFORMAL_TABLES)
+    # sem bloco [h3], as quatro tabelas de H3 existem com zero linhas (I16)
+    assert all(generation.tables[name] == [] for name in _H3_TABLES)
     assert generation.result.profile_error_units == 0
 
 

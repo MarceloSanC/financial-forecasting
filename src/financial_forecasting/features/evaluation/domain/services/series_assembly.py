@@ -24,11 +24,19 @@ do cohort (`CohortRun`) e o realizado do dataset (`RealizedReturns`) e devolve u
   **nunca achado**: o pareamento é por alvo e não depende do fold, que só serve ao perfil
   "DM por fold" (Stage 6.6, ADR `6_6_0003`; um perfil não bloqueia o veredito).
 
-As regras de alinhamento por ponto (duplicata, índices de sessão e realizado, níveis da
-grade) são funções públicas deste módulo (`duplicate_levels`, `index_violations`,
-`missing_levels`) que devolvem `RuleViolation`: o `SeriesAssembly` as converte em
-`AlignmentFinding`, e a `ConformalAssembly` da Stage 7.2 as aplica ao calib (ADR
-7.2.0003 item 4). Uma definição só por regra.
+As regras de alinhamento por ponto são funções públicas deste módulo, uma definição só
+por regra:
+
+- `duplicate_levels`, `index_violations`, `missing_levels` e `guardrail_flag_mismatch`
+  devolvem `RuleViolation` (o tipo e o detalhe);
+- `extra_levels` devolve os DADOS — os níveis além da grade esperada — e cada montagem
+  formata o seu `GRID_DIVERGENT` (C7-10): aqui, uma vez por horizonte, com as grades por
+  modelo (`"grids by model: …"`, o texto que a 6.4 grava no gold); na
+  `AttributionAssembly` da 7.3, por alvo, contra a grade do comando.
+
+O `SeriesAssembly` converte as violações em `AlignmentFinding`, a `ConformalAssembly` da
+Stage 7.2 as aplica ao calib (ADR 7.2.0003 item 4) e a `AttributionAssembly` da 7.3 às
+linhas de atribuição.
 
 `ValueError` só para erro de CHAMADA (entradas estruturais: `horizons`,
 `window_deficits`, `required_models`, run duplicado, fato fora dos runs — a leitura já
@@ -198,6 +206,28 @@ def missing_levels(
         return None
     return RuleViolation(
         AlignmentKind.GRID_INCOMPLETE, f"target {target_timestamp!r}: missing levels {missing}"
+    )
+
+
+def extra_levels(*, present: Iterable[float], expected: Iterable[float]) -> tuple[float, ...]:
+    """I6: os níveis presentes além da grade esperada, ordenados (vazio se nenhum).
+
+    A regra devolve os dados; cada montagem formata o seu `GRID_DIVERGENT` (C7-10): na
+    6.4 a grade esperada é a comum aos modelos do horizonte e o detalhe lista as grades
+    por modelo; na 7.3 é a grade declarada no comando e o detalhe nomeia o alvo.
+    """
+    return tuple(sorted(set(present) - set(expected)))
+
+
+def guardrail_flag_mismatch(
+    flags: Iterable[bool], *, target_timestamp: str
+) -> RuleViolation | None:
+    """I6: um `guardrail_applied` só por ponto (é um atributo do vetor, não do nível)."""
+    if len(set(flags)) <= 1:
+        return None
+    return RuleViolation(
+        AlignmentKind.GUARDRAIL_FLAG_MISMATCH,
+        f"target {target_timestamp!r}: guardrail_applied differs between levels",
     )
 
 
@@ -438,18 +468,16 @@ def _check_grids(points: Points, findings: _Findings) -> dict[int, tuple[float, 
                     findings.add(
                         violation.kind, violation.detail, horizon=horizon, model=model, seed=seed
                     )
-                flags = {row.guardrail_applied for row in _all_rows(point)}
-                if len(flags) > 1:
-                    findings.add(
-                        AlignmentKind.GUARDRAIL_FLAG_MISMATCH,
-                        f"target {point.target_timestamp!r}: guardrail_applied differs "
-                        "between levels",
-                        horizon=horizon,
-                        model=model,
-                        seed=seed,
-                    )
+                flag = guardrail_flag_mismatch(
+                    (row.guardrail_applied for row in _all_rows(point)),
+                    target_timestamp=point.target_timestamp,
+                )
+                if flag is not None:
+                    findings.add(flag.kind, flag.detail, horizon=horizon, model=model, seed=seed)
         distinct = {tuple(sorted(grid)) for grid in by_model.values()}
-        if len(distinct) > 1:
+        if by_model and extra_levels(
+            present=set().union(*by_model.values()), expected=set.intersection(*by_model.values())
+        ):
             findings.add(
                 AlignmentKind.GRID_DIVERGENT,
                 "grids by model: "

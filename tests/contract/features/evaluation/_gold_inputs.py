@@ -26,16 +26,19 @@ produzir entradas realistas e coerentes para o mapeamento dos builders.
 from __future__ import annotations
 
 import dataclasses
+import math
 from functools import cache
 
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     EMPTY_CONFORMAL_REPORTS,
+    EMPTY_H3_REPORTS,
     ConformalReports,
     ConformalTailRecord,
     ConformalUndefinedCoverage,
     ConformalUnitRecord,
     GoldInputs,
     GoldPartition,
+    H3Reports,
     RefreshParameters,
     RefreshStatus,
     profile_settings_from,
@@ -47,8 +50,15 @@ from financial_forecasting.features.evaluation.domain.services.conformal_coverag
     ConformalCoverage,
     ConformalCoverageReport,
 )
+from financial_forecasting.features.evaluation.domain.services.contribution_agreement import (
+    ContributionAgreement,
+)
 from financial_forecasting.features.evaluation.domain.services.diebold_mariano import (
     DmVarianceEstimator,
+)
+from financial_forecasting.features.evaluation.domain.services.family_contribution import (
+    FamilyContributionReport,
+    FamilyShare,
 )
 from financial_forecasting.features.evaluation.domain.services.horizon_reports import (
     HorizonReports,
@@ -83,6 +93,10 @@ from financial_forecasting.features.evaluation.domain.services.quality_checks.st
 from financial_forecasting.features.evaluation.domain.services.series_assembly import (
     SeriesAssembly,
 )
+from financial_forecasting.features.evaluation.domain.services.vsn_summary import (
+    VsnEntry,
+    VsnSummaryReport,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
     AssembledCohort,
     HorizonSamples,
@@ -103,6 +117,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.conformal_pa
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.family_loss_differentials import (  # noqa: E501
+    FamilyLossDifferentials,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
 )
@@ -111,6 +128,7 @@ from financial_forecasting.shared.domain.value_objects.dataset_content_fingerpri
 )
 from tests.fakes.features.evaluation.fake_mcs_backend import FakeMcsBackend
 from tests.unit.features.evaluation._conformal_parameters import conformal_block
+from tests.unit.features.evaluation._h3_parameters import h3_parameters
 from tests.unit.features.evaluation._profile_parameters import profile_parameters
 from tests.unit.features.evaluation.gold._cohort_factory import (
     Cohort,
@@ -142,6 +160,7 @@ PARAMETERS = RefreshParameters(
     mcs_block_sensitivities=("h", "sqrt_T"),
     profile_parameters=profile_parameters(),  # forma da r1: todo builder de perfil com linhas
     conformal_parameters=None,
+    h3_parameters=None,
 )
 FINGERPRINT = DatasetContentFingerprint(value="e3" * 32)
 GRID_TRIMMED_PREFIX = 3
@@ -216,8 +235,20 @@ def samples_of() -> tuple[HorizonSamples, ...]:
 def completed_inputs() -> GoldInputs:
     """`GoldInputs` de um refresh `COMPLETED` (sem achado, pré-condições ok), forma da r1.
 
-    Com o bloco `[conformal]` e relatórios conformais cheios (Stage 7.2).
+    Com os blocos `[conformal]` e `[h3]` e os relatórios cheios (Stages 7.2 e 7.3).
     """
+    parameters = dataclasses.replace(
+        PARAMETERS, conformal_parameters=CONFORMAL_PARAMETERS, h3_parameters=h3_parameters()
+    )
+    inputs = _completed(parameters)
+    return dataclasses.replace(
+        inputs, conformal_reports=conformal_reports_of(inputs), h3_reports=h3_reports_sample()
+    )
+
+
+@cache
+def completed_inputs_without_h3() -> GoldInputs:
+    """O refresh `COMPLETED` com `[conformal]` e sem `[h3]`: relatórios de H3 vazios."""
     parameters = dataclasses.replace(PARAMETERS, conformal_parameters=CONFORMAL_PARAMETERS)
     inputs = _completed(parameters)
     return dataclasses.replace(inputs, conformal_reports=conformal_reports_of(inputs))
@@ -306,6 +337,7 @@ def _completed(parameters: RefreshParameters) -> GoldInputs:
         profile_reports=profiles,
         mcs_block_reports=mcs_block_runs(paired, parameters, backend),
         conformal_reports=EMPTY_CONFORMAL_REPORTS,
+        h3_reports=EMPTY_H3_REPORTS,
     )
 
 
@@ -338,6 +370,7 @@ def blocked_inputs() -> GoldInputs:
         profile_reports=(),
         mcs_block_reports=(),
         conformal_reports=EMPTY_CONFORMAL_REPORTS,
+        h3_reports=EMPTY_H3_REPORTS,
     )
 
 
@@ -584,3 +617,100 @@ def conformal_reports_of(inputs: GoldInputs) -> ConformalReports:
         undefined_coverage=tuple(undefined),
         seed_means=seed_means,
     )
+
+
+# --- Stage 7.3: relatórios de H3 de teste ------------------------------------------------
+
+
+_H3_ORDER = ("price", "technical", "sentiment", "fundamental")
+
+
+def h3_reports_sample() -> H3Reports:
+    """Relatórios de H3 sintéticos: permutação `ok` (uma família `undefined`, um limite
+    infinito), LOCO `undefined`, a leitura `undefined` e um resumo da VSN."""
+    shares = (
+        FamilyShare("price", 0.4, 0.2, -0.2, -0.3, -0.1, -1, True, "ok", None),
+        FamilyShare(
+            "technical",
+            0.3,
+            0.3,
+            0.0,
+            0.0,
+            0.0,
+            0,
+            None,
+            "undefined",
+            "a bound of the interval is exactly 0",
+        ),
+        FamilyShare("sentiment", 0.2, 0.3, 0.1, -math.inf, 0.5, 1, False, "ok", None),
+        FamilyShare("fundamental", 0.1, 0.2, 0.1, -0.2, math.inf, 1, False, "ok", None),
+    )
+    # coerentes com as participações (C7-12): I(1) = 0,04/0,03/0,02/0,01 -> 0,4/0,3/0,2/0,1;
+    # I(7) = 0,02/0,03/0,03/0,02 -> 0,2/0,3/0,3/0,2
+    importance = {
+        **{(f, 1): i for f, i in zip(_H3_ORDER, (0.04, 0.03, 0.02, 0.01), strict=True)},
+        **{(f, 7): i for f, i in zip(_H3_ORDER, (0.02, 0.03, 0.03, 0.02), strict=True)},
+    }
+    permutation = FamilyContributionReport(
+        method="permutation",
+        importance=importance,
+        shares=shares,
+        level=0.975,  # TA-14 (B7): ≠ 0,9875, o builder tem de ler o nível do relatório
+        nonpositive_replicas={1: 3, 7: 5},  # TA-6: 4 contagens distintas na amostra
+        status="ok",
+        reason=None,
+        heterogeneous=True,
+    )
+    reason = "the point total of importances is <= 0 at h=1 or h=7 (H3-NEG)"
+    ablation = FamilyContributionReport(
+        method="loco",
+        importance={key: -0.01 for key in importance},
+        shares=tuple(
+            FamilyShare(s.family, None, None, None, None, None, None, None, "undefined", reason)
+            for s in shares
+        ),
+        level=0.975,
+        nonpositive_replicas={1: 2, 7: 4},
+        status="undefined",
+        reason=reason,
+        heterogeneous=None,
+    )
+    vsn = VsnSummaryReport(
+        entries=(
+            VsnEntry("variable", "log_return", "price", 0.1, 0.2, 0.3, 40),
+            VsnEntry("variable", "relative_time_idx", "none", 0.0, 0.05, 0.1, 40),
+            VsnEntry("family", "price", "price", 0.2, 0.3, 0.4, 40),
+        ),
+        status="ok",
+        reason=None,
+    )
+    families = ("price", "technical", "sentiment", "fundamental")
+    differentials = FamilyLossDifferentials(
+        method="permutation",
+        families=families,
+        horizons=(1, 7),
+        decision_timestamps=H3_DECISIONS,
+        differentials={(f, h): (0.01, 0.02, 0.0) for f in families for h in (1, 7)},
+        seed_importances={(f, h, s): 0.01 * s for f in families for h in (1, 7) for s in (1, 2)},
+        permutation_importances={
+            (f, h, k): 0.001 * k for f in families for h in (1, 7) for k in (1, 2)
+        },
+    )
+    return H3Reports(
+        permutation=permutation,
+        ablation=ablation,
+        permutation_differentials=differentials,
+        ablation_differentials=None,
+        reading=ContributionAgreement.read(permutation, ablation),
+        vsn=vsn,
+        block_length=7,
+        max_block_estimate=5.25,
+        n_points=len(H3_DECISIONS),
+    )
+
+
+H3_DECISIONS = (
+    "2024-01-02T00:00:00+00:00",
+    "2024-01-03T00:00:00+00:00",
+    "2024-01-04T00:00:00+00:00",
+)

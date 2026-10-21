@@ -97,6 +97,7 @@ def test_command_parameters_from_plan() -> None:
         "mcs_block_sensitivities": ["h", "sqrt_T"],
         "profile_parameters": None,
         "conformal_parameters": None,
+        "h3_parameters": None,
     }
 
 
@@ -180,3 +181,33 @@ def test_plan_with_block_derives_the_block() -> None:
     parameters = refresh_command_from(r2, "test_plan-r2-0123456789ab").parameters
     assert parameters.conformal_parameters == conformal_parameters()
     assert parameters.conformal_parameters is r2.conformal
+
+
+# --- Stage 7.3 Task 27: bloco `[h3]` na derivação única ------------------------------------
+
+
+@pytest.mark.unit
+def test_r0_to_r2_derive_no_h3_parameters() -> None:
+    from tests.unit.features.evaluation._preregistration_payload import (  # noqa: PLC0415
+        r2_payload,
+    )
+
+    assert _COMMAND.parameters.h3_parameters is None
+    for payload, ref in ((r1_payload(), "r1"), (r2_payload(), "r2")):
+        plan = Preregistration.from_mapping(payload)
+        command = refresh_command_from(plan, f"test_plan-{ref}-0123456789ab")
+        assert command.parameters.h3_parameters is None
+
+
+@pytest.mark.unit
+def test_plan_with_h3_derives_the_block() -> None:
+    from tests.unit.features.evaluation._h3_parameters import h3_parameters  # noqa: PLC0415
+    from tests.unit.features.evaluation._preregistration_payload import (  # noqa: PLC0415
+        r3_payload,
+    )
+
+    r3 = Preregistration.from_mapping(r3_payload())
+    parameters = refresh_command_from(r3, "test_plan-r3-0123456789ab").parameters
+    assert parameters.h3_parameters == h3_parameters()
+    assert parameters.h3_parameters is r3.h3
+    assert parameters.conformal_parameters is r3.conformal

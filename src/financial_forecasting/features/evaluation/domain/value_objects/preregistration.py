@@ -8,7 +8,8 @@ adapter e entregue aqui como mapeamento; `Preregistration.from_mapping`:
 1. recusa chave desconhecida e chave ausente, nomeando o caminho pontuado (as
    chaves opcionais são `blinding_statement`, o bloco `profile_parameters` —
    Stage 6.6, conferido pelo seu VO, ADR 6.6.0001 item 5 — e o bloco `conformal` —
-   Stage 7.2, conferido pelo `ConformalParameters`, ADR 7.2.0001; os três campos de emenda
+   Stage 7.2, conferido pelo `ConformalParameters`, ADR 7.2.0001 — e o bloco `h3` —
+   Stage 7.3, conferido pelo `H3Parameters`, ADR 7.3.0005; os três campos de emenda
    são proibidos em r0 e obrigatórios em r ≥ 1 — ADR 6.5.0002);
 2. coage cada número ao tipo declarado — `float` aceita `int`/`float` não-`bool`
    e guarda `float` (`0` e `0.0` são o mesmo plano); `int` aceita só `int`
@@ -89,6 +90,9 @@ from financial_forecasting.features.evaluation.domain.value_objects.conformal_pa
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     is_symmetric_pair,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.h3_parameters import (
+    H3Parameters,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.profile_parameters import (
     ProfileParameters,
@@ -584,7 +588,7 @@ _SCHEMA: Final[Mapping[str, object]] = {
     "backtests": {"min_violations": _LEAF, "monte_carlo": {"draws": _LEAF, "seed": _LEAF}},
     "profiles": {"declared": _LEAF},
 }
-_OPTIONAL_KEYS: Final = frozenset({"blinding_statement", "profile_parameters", "conformal"})
+_OPTIONAL_KEYS: Final = frozenset({"blinding_statement", "profile_parameters", "conformal", "h3"})
 _AMENDMENT_KEYS: Final = ("amends", "justification", "blind_status")
 
 
@@ -731,6 +735,7 @@ class Preregistration:
     amendment: Amendment | None
     profile_parameters: ProfileParameters | None
     conformal: ConformalParameters | None = None  # Stage 7.2; ausente nas revisões antigas
+    h3: H3Parameters | None = None  # Stage 7.3; ausente nas revisões antigas
 
     def __post_init__(self) -> None:
         """Forma dos campos de topo pelos donos e as regras cruzadas (C1)."""
@@ -769,6 +774,7 @@ class Preregistration:
         self._check_not_evaluated()
         self._check_amendment()
         self._check_conformal()
+        self._check_h3()
 
     def _check_grid(self) -> None:
         if not isinstance(self.horizons, tuple) or not self.horizons:
@@ -854,6 +860,27 @@ class Preregistration:
                 f"{list(gate_pair)}"
             )
 
+    def _check_h3(self) -> None:
+        """C11: o bloco de H3 é tipado, proibido no r0 e com modelos LOCO fora do plano."""
+        block = self.h3
+        if block is None:
+            return
+        if not isinstance(block, H3Parameters):
+            raise ValueError(f"h3 must be a H3Parameters, got {block!r}")
+        if self.revision == 0:
+            raise ValueError(
+                "h3 is forbidden in revision 0 (the H3 reading enters by a blinded amendment, "
+                "ADR 7.3.0005)"
+            )
+        # as 4 famílias do ADR 0.0.0016 e a partição disjunta são do `H3Parameters` (dono)
+        ablation = (block.ablation_reference_model, *block.ablation_models.values())
+        clash = [model for model in ablation if model in self.models]
+        if clash:
+            raise ValueError(
+                f"h3.ablation model {clash[0]!r} must be distinct from the candidate and the "
+                "comparators (the LOCO runs live in their own partition, I3)"
+            )
+
     # --- leitura ----------------------------------------------------------------------
 
     @property
@@ -932,6 +959,7 @@ class Preregistration:
                 if "conformal" in mapping
                 else None
             ),
+            h3=H3Parameters.from_mapping(mapping["h3"]) if "h3" in mapping else None,
         )
 
     def as_payload(self) -> dict[str, object]:
@@ -995,6 +1023,8 @@ class Preregistration:
             payload["profile_parameters"] = self.profile_parameters.as_payload()
         if self.conformal is not None:
             payload["conformal"] = self.conformal.as_payload()
+        if self.h3 is not None:
+            payload["h3"] = self.h3.as_payload()
         return payload
 
     def _rules_payload(self) -> dict[str, object]:

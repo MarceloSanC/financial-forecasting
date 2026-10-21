@@ -58,12 +58,21 @@ e `PredictTftFromCheckpoints` do `modeling` (mesmo splitter, store, hasher,
 direto (stdlib, fora do proxy lazy do TFT), o `PersistPredictions` e o repositório
 silver, o ledger do cohort e o `JsonInferenceManifest` sob `data_root`. O probe vem
 de `runtime_probe_for`, como no `confirmatory_cohort_for`.
+
+Stage 7.3 (Task 20): a fábrica `permutation_inference_for(cohort_path)` monta o
+`RunPermutationInference` com o MESMO resolvedor da 7.1, o
+`PredictTftAttributionFromCheckpoints` sobre o proxy do treinador de `cpu` (a partição da
+registry como referência), os dois escritores do silver de atribuição sobre o MESMO
+repositório, o ledger do cohort e o `JsonAttributionManifest` sob `data_root`. Nada de
+`evaluation` (I9).
 """
 
+import importlib
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
@@ -75,11 +84,17 @@ from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet
 from financial_forecasting.features.analytics_store.application.ports.out.analytics_repository import (  # noqa: E501
     AnalyticsRepository,
 )
+from financial_forecasting.features.analytics_store.application.use_cases.persist_permuted_predictions import (  # noqa: E501
+    PersistPermutedPredictions,
+)
 from financial_forecasting.features.analytics_store.application.use_cases.persist_predictions import (  # noqa: E501
     PersistPredictions,
 )
 from financial_forecasting.features.analytics_store.application.use_cases.persist_run_record import (  # noqa: E501
     PersistRunRecord,
+)
+from financial_forecasting.features.analytics_store.application.use_cases.persist_vsn_weights import (  # noqa: E501
+    PersistVsnWeights,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.calibration_table import (  # noqa: E501
     CalibrationTableGoldBuilder,
@@ -107,6 +122,18 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.dm_seed_fraction import (  # noqa: E501
     DmSeedFractionGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_importance import (  # noqa: E501
+    H3ImportanceGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_reading import (
+    H3ReadingGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_shares import (
+    H3SharesGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_vsn import (
+    H3VsnGoldBuilder,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.loss_differentials import (  # noqa: E501
     LossDifferentialsGoldBuilder,
@@ -178,6 +205,9 @@ from financial_forecasting.features.feature_engineering.domain.services.dataset_
 from financial_forecasting.features.feature_engineering.domain.services.feature_registry import (
     feature_set_hash,
 )
+from financial_forecasting.features.inference.adapters.out.filesystem.json_attribution_manifest import (  # noqa: E501
+    JsonAttributionManifest,
+)
 from financial_forecasting.features.inference.adapters.out.filesystem.json_inference_manifest import (  # noqa: E501
     JsonInferenceManifest,
 )
@@ -186,6 +216,9 @@ from financial_forecasting.features.inference.application.use_cases.calibrate_co
 )
 from financial_forecasting.features.inference.application.use_cases.run_inference import (
     RunInference,
+)
+from financial_forecasting.features.inference.application.use_cases.run_permutation_inference import (  # noqa: E501
+    RunPermutationInference,
 )
 from financial_forecasting.features.market_data.adapters.out.parquet.parquet_fundamental_fetcher import (  # noqa: E501
     ParquetFundamentalFetcher,
@@ -239,14 +272,22 @@ from financial_forecasting.features.modeling.application.ports.out.quantile_mode
     QuantileTrainingResult,
 )
 from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
+    CPU_DEVICE,
     RuntimeEnvironmentProbe,
 )
 from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (
+    TftAttributionPrediction,
     TftCheckpointPrediction,
 )
 from financial_forecasting.features.modeling.application.ports.out.tft_trainer import (
     TftTrainingParams,
     TftTrainingResult,
+)
+from financial_forecasting.features.modeling.application.use_cases.measure_ablation_cost import (
+    MeasureAblationCost,
+)
+from financial_forecasting.features.modeling.application.use_cases.predict_tft_attribution_from_checkpoints import (  # noqa: E501
+    PredictTftAttributionFromCheckpoints,
 )
 from financial_forecasting.features.modeling.application.use_cases.predict_tft_from_checkpoints import (  # noqa: E501
     PredictTftFromCheckpoints,
@@ -256,6 +297,9 @@ from financial_forecasting.features.modeling.application.use_cases.read_training
 )
 from financial_forecasting.features.modeling.application.use_cases.resolve_tft_checkpoints import (
     ResolveTftCheckpoints,
+)
+from financial_forecasting.features.modeling.application.use_cases.run_ablation_cohort import (
+    RunAblationCohort,
 )
 from financial_forecasting.features.modeling.application.use_cases.run_baselines import (
     RunBaselines,
@@ -275,6 +319,7 @@ from financial_forecasting.features.modeling.application.use_cases.train_gbm_qua
 )
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     TrainTft,
+    registry_family_partition,
 )
 from financial_forecasting.features.modeling.domain.services.walk_forward_splitter import (
     WalkForwardSplitter,
@@ -310,6 +355,10 @@ if TYPE_CHECKING:
     from financial_forecasting.features.modeling.adapters.out.pytorch_forecasting.pf_tft_trainer import (  # noqa: E501
         PfTftTrainer,
     )
+    from financial_forecasting.features.modeling.application.dtos.ablation_cohort_spec import (
+        AblationCohortSpec,
+    )
+    from financial_forecasting.features.modeling.application.dtos.cohort_spec import CohortSpec
 
 # Revisão pinada do FinBERT (espelha o default do adapter; ADR 0.0.0017).
 _FINBERT_PINNED_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
@@ -350,7 +399,23 @@ _SILVER_SCHEMA_VERSION = 1
 
 # Device em que os trainers rodam: o adapter do TFT fixa `accelerator="cpu"` e o
 # LightGBM roda em CPU. O cohort que declarar outro device é recusado (I4).
-_TRAINERS_DEVICE = "cpu"
+_TRAINERS_DEVICE = CPU_DEVICE
+
+# Device declarado no cohort → `accelerator` do Lightning do `PfTftTrainer` (Stage 7.3,
+# ADR 7.3.0004 item 2). `rocm` é o device do cohort de ablação no Linux (o build ROCm do
+# torch expõe a GPU pela API `cuda`, e o Lightning a chama de `"gpu"`). Device fora do
+# mapa é recusado aqui, antes de qualquer import de torch.
+_SUPPORTED_DEVICES: Mapping[str, str] = MappingProxyType({CPU_DEVICE: "cpu", "rocm": "gpu"})
+
+
+def _accelerator_for(device: str) -> str:
+    """O `accelerator` do Lightning para o device do cohort (C1: fora do mapa ergue)."""
+    if device not in _SUPPORTED_DEVICES:
+        raise ValueError(
+            f"device {device!r} is not supported; expected one of {sorted(_SUPPORTED_DEVICES)}"
+        )
+    return _SUPPORTED_DEVICES[device]
+
 
 # Fábrica do probe de ambiente: (caminho do arquivo do cohort, device) → probe.
 RuntimeProbeFactory = Callable[[Path, str], RuntimeEnvironmentProbe]
@@ -443,7 +508,9 @@ class _LazyPfTftTrainer:
     7.1) passa pelo mesmo proxy: a mesma instância do adapter treina e prediz.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, accelerator: str = "cpu") -> None:
+        # Stage 7.3: o accelerator é da instância do adapter (ADR 7.3.0004 item 1).
+        self._accelerator = accelerator
         self._delegate: PfTftTrainer | None = None
 
     def _ensure(self) -> "PfTftTrainer":
@@ -453,7 +520,7 @@ class _LazyPfTftTrainer:
                 PfTftTrainer,
             )
 
-            self._delegate = PfTftTrainer()
+            self._delegate = PfTftTrainer(accelerator=self._accelerator)
         return self._delegate
 
     def train_and_predict(  # noqa: PLR0913 — assinatura do port (parâmetros coesos)
@@ -524,6 +591,94 @@ class _LazyPfTftTrainer:
             batch_size=batch_size,
             num_threads=num_threads,
         )
+
+    def predict_attribution_from_checkpoint(  # noqa: PLR0913 — assinatura do port
+        self,
+        *,
+        checkpoint_path: str,
+        expected_sha256: str,
+        feature_names: Sequence[str],
+        known_feature_names: Sequence[str],
+        rows: Sequence[Sequence[float]],
+        target: Sequence[float],
+        decision_indices: Sequence[int],
+        max_horizon: int,
+        horizons: Sequence[int],
+        quantile_levels: Sequence[float],
+        batch_size: int,
+        num_threads: int,
+        permuted_columns: Mapping[str, Sequence[str]],
+        donors: Sequence[Sequence[int]],
+    ) -> TftAttributionPrediction:
+        """Delega ao adapter real (Stage 7.3), com a assinatura do port campo a campo."""
+        return self._ensure().predict_attribution_from_checkpoint(
+            checkpoint_path=checkpoint_path,
+            expected_sha256=expected_sha256,
+            feature_names=feature_names,
+            known_feature_names=known_feature_names,
+            rows=rows,
+            target=target,
+            decision_indices=decision_indices,
+            max_horizon=max_horizon,
+            horizons=horizons,
+            quantile_levels=quantile_levels,
+            batch_size=batch_size,
+            num_threads=num_threads,
+            permuted_columns=permuted_columns,
+            donors=donors,
+        )
+
+
+_MODELING_CLI = "financial_forecasting.features.modeling.adapters.in.cli"
+
+
+def ablation_spec_loader(
+    repo_root: Path, hasher: Hasher
+) -> Callable[[Path], "tuple[AblationCohortSpec, CohortSpec]"]:
+    """Lê o arquivo de ablação e a base que ele declara (caminho relativo ao `repo_root`).
+
+    Os módulos de `adapters/in` são carregados por `importlib` (`in` é keyword, LAYOUT
+    §8). O loader confere a base e a registry (C2) antes de devolver.
+    """
+    cohort_file = importlib.import_module(f"{_MODELING_CLI}.cohort_file")
+    ablation_file = importlib.import_module(f"{_MODELING_CLI}.ablation_cohort_file")
+
+    def load(path: Path) -> "tuple[AblationCohortSpec, CohortSpec]":
+        bases: dict[str, CohortSpec] = {}
+
+        def load_base(declared: str) -> "CohortSpec":
+            bases[declared] = cohort_file.load(repo_root / declared)
+            return bases[declared]
+
+        spec = ablation_file.load_ablation_cohort(path, hasher=hasher, load_base=load_base)
+        return spec, bases[spec.base_cohort_file]
+
+    return load
+
+
+def dump_ablation_spec(spec: "AblationCohortSpec") -> str:
+    """O TOML do spec de ablação (`ablation_cohort_file.dump_ablation_cohort`)."""
+    ablation_file = importlib.import_module(f"{_MODELING_CLI}.ablation_cohort_file")
+    text: str = ablation_file.dump_ablation_cohort(spec)
+    return text
+
+
+def _tft_trainer_factory() -> Callable[[str], _LazyPfTftTrainer]:
+    """Um proxy lazy do `PfTftTrainer` por device, criado na primeira vez (Stage 7.3).
+
+    O mesmo device devolve sempre a mesma instância (treino e predição a partir do
+    checkpoint seguem compartilhando o adapter, Stage 7.1). Device fora de
+    `_SUPPORTED_DEVICES` ergue `ValueError` sem importar torch.
+    """
+    proxies: dict[str, _LazyPfTftTrainer] = {}
+
+    def trainer_for(device: str) -> _LazyPfTftTrainer:
+        accelerator = _accelerator_for(device)
+        if device not in proxies:
+            proxies[device] = _LazyPfTftTrainer(accelerator)
+        return proxies[device]
+
+    return trainer_for
 
 
 class _LazyOptunaSearch:
@@ -702,6 +857,17 @@ class ApplicationDependencies:
     # BC inference (Stage 7.1, Task 11): a inferência de um cohort, por arquivo e device
     # (o probe depende do caminho do cohort, como em `confirmatory_cohort_for`).
     run_inference_for: Callable[[Path, str], RunInference]
+    # BC modeling (Stage 7.3, Task 10): o cohort de ablação, por arquivo; o device vem do
+    # spec (`_SUPPORTED_DEVICES`) e o treinador é o proxy desse device.
+    load_ablation_spec: Callable[[Path], "tuple[AblationCohortSpec, CohortSpec]"]
+    dump_ablation_spec: Callable[["AblationCohortSpec"], str]
+    ablation_cohort_for: Callable[[Path], RunAblationCohort]
+    measure_ablation_cost_for: Callable[[Path], MeasureAblationCost]
+    # os devices que as fábricas de ablação sabem montar (chaves de `_SUPPORTED_DEVICES`)
+    supported_devices: frozenset[str]
+    # BC inference (Stage 7.3, Task 20): a atribuição do candidato, por arquivo do cohort
+    # confirmatório (o probe depende do caminho); predição sempre no treinador de `cpu`.
+    permutation_inference_for: Callable[[Path], RunPermutationInference]
 
 
 def wire_dependencies(
@@ -820,7 +986,10 @@ def wire_dependencies(
     # emissão comuns. A varredura recebe o mesmo trainer e o mesmo store (para
     # LER o dataset), mas NENHUMA porta de persistência de resultados: o
     # isolamento exploratório/confirmatório é estrutural (ADR 5.4.0005).
-    tft_trainer = _LazyPfTftTrainer()
+    # Stage 7.3: um proxy por device; o candidato, a varredura e a inferência usam o
+    # de `cpu` (o caminho confirmatório da 5.4/7.1, intacto).
+    tft_trainer_for = _tft_trainer_factory()
+    tft_trainer = tft_trainer_for(_TRAINERS_DEVICE)
     train_tft = TrainTft(
         store=store,
         splitter=splitter,
@@ -889,6 +1058,55 @@ def wire_dependencies(
             supported_device=_TRAINERS_DEVICE,
         )
 
+    # BC modeling (Stage 7.3, Task 10): cohort de ablação e piloto. O device é LIDO do
+    # spec: o proxy do treinador é o do device (fora do mapa ⇒ `ValueError`, sem torch);
+    # a base confirmatória é conferida com o device dos treinadores de hoje (`cpu`).
+    load_ablation_spec = ablation_spec_loader(cfg.repo_root, hasher)
+
+    def ablation_train_tft(device: str) -> TrainTft:
+        return TrainTft(
+            store=store,
+            splitter=splitter,
+            trainer=tft_trainer_for(device),
+            persist_predictions=PersistPredictions(repository=analytics_repository),
+            persist_run_record=PersistRunRecord(repository=analytics_repository),
+            tracker=tracker,
+            hasher=hasher,
+            artifacts_root=cfg.artifacts_root,
+        )
+
+    def ablation_cohort_for(path: Path) -> RunAblationCohort:
+        spec, _ = load_ablation_spec(path)
+        train = ablation_train_tft(spec.device)
+        return RunAblationCohort(
+            store=store,
+            hasher=hasher,
+            clock=SystemClock(),
+            ledger=cohort_ledger,
+            run_index=cohort_run_index,
+            probe=runtime_probe_for(path, spec.device),
+            train_tft=train,
+            modeling_columns=columns,
+            observed_feature_set_hash=observed_feature_set_hash,
+            pipeline_version=PIPELINE_VERSION,
+            schema_version=_SILVER_SCHEMA_VERSION,
+            base_supported_device=_TRAINERS_DEVICE,
+            # o MESMO device com que o proxy do treinador foi montado (`tft_trainer_for`)
+            trainer_device=spec.device,
+        )
+
+    def measure_ablation_cost_for(path: Path) -> MeasureAblationCost:
+        spec, _ = load_ablation_spec(path)
+        trainer = tft_trainer_for(spec.device)
+        return MeasureAblationCost(
+            store=store,
+            splitter=splitter,
+            trainer=trainer,
+            probe=runtime_probe_for(path, spec.device),
+            clock=SystemClock(),
+            hasher=hasher,
+        )
+
     # BC inference (Stage 7.1, Task 11): resolução e predição a partir do checkpoint com
     # o MESMO splitter, store, hasher, `artifacts_root`, colunas e declarações do cohort
     # (o `run_id` derivado tem de ser o que o treino gravou). O locator é stdlib e entra
@@ -934,6 +1152,40 @@ def wire_dependencies(
             clock=SystemClock(),
         )
 
+    # BC inference (Stage 7.3, Task 20): a atribuição reusa o resolvedor da 7.1 e prediz
+    # com o MESMO proxy de `cpu` do treino e da inferência (o cohort confirmatório é
+    # `cpu`, ADR 7.3.0004 item 2), contra a partição da registry (C4 do fornecedor). Os
+    # dois escritores do silver de atribuição escrevem no MESMO repositório que o
+    # `RunPermutationInference` lê; o manifesto é o da atribuição, ao lado do da 7.1.
+    # Nada de `evaluation` entra aqui (I9).
+    predict_tft_attribution = PredictTftAttributionFromCheckpoints(
+        store=store,
+        hasher=hasher,
+        splitter=splitter,
+        locator=checkpoint_locator,
+        predictor=tft_trainer,
+        artifacts_root=cfg.artifacts_root,
+        modeling_columns=columns,
+        observed_feature_set_hash=observed_feature_set_hash,
+        pipeline_version=PIPELINE_VERSION,
+        supported_device=_TRAINERS_DEVICE,
+        registry_partition=registry_family_partition(),
+    )
+
+    def permutation_inference_for(cohort_path: Path) -> RunPermutationInference:
+        return RunPermutationInference(
+            resolver=resolve_tft_checkpoints,
+            predictor=predict_tft_attribution,
+            probe=runtime_probe_for(cohort_path, _TRAINERS_DEVICE),
+            permuted_persister=PersistPermutedPredictions(repository=analytics_repository),
+            vsn_persister=PersistVsnWeights(repository=analytics_repository),
+            silver=analytics_repository,
+            ledger=cohort_ledger,
+            manifest=JsonAttributionManifest(data_root=cfg.data_root),
+            hasher=hasher,
+            clock=SystemClock(),
+        )
+
     # BC evaluation (Stage 6.4, Tasks 12/15): `RefreshGold` sobre o MESMO repositório
     # silver (como `SilverTableReader`, ADR 0.0.0053/6.4.0004); o
     # realizado vem da grade de treino da 5.5 — `ReadTrainingGrid` (real do port
@@ -966,6 +1218,11 @@ def wire_dependencies(
             LossDifferentialsGoldBuilder(),
             ConformalCorrectionsGoldBuilder(),
             ConformalCoverageGoldBuilder(),
+            # leitura de H3 (Stage 7.3; vazia sem bloco [h3] — ADR 7.3.0001 item 4)
+            H3ImportanceGoldBuilder(),
+            H3SharesGoldBuilder(),
+            H3ReadingGoldBuilder(),
+            H3VsnGoldBuilder(),
         ),
         # Stage 7.2 (ADR 7.2.0003 item 3): o real do port do consumidor
         # `ConformalCalibration` é o use case `CalibrateConformal` do inference, puro
@@ -1009,4 +1266,10 @@ def wire_dependencies(
         refresh_gold=refresh_gold,
         build_confirmatory_scorecard=build_confirmatory_scorecard,
         run_inference_for=run_inference_for,
+        load_ablation_spec=load_ablation_spec,
+        dump_ablation_spec=dump_ablation_spec,
+        ablation_cohort_for=ablation_cohort_for,
+        measure_ablation_cost_for=measure_ablation_cost_for,
+        supported_devices=frozenset(_SUPPORTED_DEVICES),
+        permutation_inference_for=permutation_inference_for,
     )

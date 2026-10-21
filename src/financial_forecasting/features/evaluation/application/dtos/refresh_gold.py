@@ -45,11 +45,17 @@ from financial_forecasting.features.evaluation.domain.services.conformal_coverag
     ConformalCoverageReport,
     ConformalSeedMeanCoverage,
 )
+from financial_forecasting.features.evaluation.domain.services.contribution_agreement import (
+    H3Reading,
+)
 from financial_forecasting.features.evaluation.domain.services.count_input_validation import (
     validate_rate,
 )
 from financial_forecasting.features.evaluation.domain.services.diebold_mariano import (
     DmVarianceEstimator,
+)
+from financial_forecasting.features.evaluation.domain.services.family_contribution import (
+    FamilyContributionReport,
 )
 from financial_forecasting.features.evaluation.domain.services.horizon_reports import (
     HorizonReport,
@@ -66,6 +72,9 @@ from financial_forecasting.features.evaluation.domain.services.profile_reports i
     HorizonProfileReport,
     ProfileSettings,
     UnitStatus,
+)
+from financial_forecasting.features.evaluation.domain.services.vsn_summary import (
+    VsnSummaryReport,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_finite_number,
@@ -87,6 +96,12 @@ from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_in
 )
 from financial_forecasting.features.evaluation.domain.value_objects.conformal_parameters import (
     ConformalParameters,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.family_loss_differentials import (  # noqa: E501
+    FamilyLossDifferentials,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.h3_parameters import (
+    H3Parameters,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.profile_parameters import (
     ProfileParameters,
@@ -174,6 +189,7 @@ class RefreshParameters:
     mcs_block_sensitivities: tuple[str, ...]
     profile_parameters: ProfileParameters | None
     conformal_parameters: ConformalParameters | None  # Stage 7.2; None sem bloco [conformal]
+    h3_parameters: H3Parameters | None  # Stage 7.3; None sem bloco [h3] (chave obrigatória)
 
     def __post_init__(self) -> None:
         """Presença, estrutura e os validadores públicos donos (ADR `6_4_0006` item 2)."""
@@ -215,6 +231,10 @@ class RefreshParameters:
                 f"conformal_parameters must be a ConformalParameters or None, got "
                 f"{self.conformal_parameters!r}"
             )
+        if self.h3_parameters is not None and not isinstance(self.h3_parameters, H3Parameters):
+            raise ValueError(
+                f"h3_parameters must be a H3Parameters or None, got {self.h3_parameters!r}"
+            )
 
     def as_mapping(self) -> dict[str, object]:
         """Os parâmetros em forma JSON-safe (enums pelo valor, tuplas como listas)."""
@@ -240,6 +260,9 @@ class RefreshParameters:
                 None
                 if self.conformal_parameters is None
                 else self.conformal_parameters.as_payload()
+            ),
+            "h3_parameters": (
+                None if self.h3_parameters is None else self.h3_parameters.as_payload()
             ),
         }
 
@@ -284,6 +307,11 @@ class RefreshParameters:
                 if fields["conformal_parameters"] is None
                 else ConformalParameters.from_mapping(fields["conformal_parameters"])
             ),
+            h3_parameters=(
+                None
+                if fields["h3_parameters"] is None
+                else H3Parameters.from_mapping(fields["h3_parameters"])
+            ),
         )
 
 
@@ -304,6 +332,7 @@ _PARAMETER_KEYS = (
     "mcs_block_sensitivities",
     "profile_parameters",
     "conformal_parameters",
+    "h3_parameters",
 )
 
 
@@ -974,6 +1003,109 @@ EMPTY_CONFORMAL_REPORTS: Final = ConformalReports(
 )
 
 
+_H3_METHODS: Final = {"permutation": "permutation", "ablation": "loco"}
+
+
+def _check_h3_method(name: str, method: str, report: object, differentials: object) -> None:
+    """O relatório e as séries d_t de um método: tipos e o nome do método."""
+    if report is not None:
+        if not isinstance(report, FamilyContributionReport):
+            raise ValueError(f"{name} must be a FamilyContributionReport, got {report!r}")
+        if report.method != method:
+            raise ValueError(f"{name} must be the {method} report, got {report.method!r}")
+    if differentials is not None:
+        if not isinstance(differentials, FamilyLossDifferentials):
+            raise ValueError(
+                f"{name}_differentials must be a FamilyLossDifferentials, got {differentials!r}"
+            )
+        if differentials.method != method:
+            raise ValueError(
+                f"{name}_differentials must be the {method} series, got "
+                f"{differentials.method!r}"
+            )
+
+
+@dataclass(frozen=True, kw_only=True)
+class H3Reports:
+    """O que os builders de H3 mapeiam (Stage 7.3) — só tipos do `evaluation`.
+
+    Campos:
+        permutation, ablation: o relatório de cada método (`None` se não calculado).
+        permutation_differentials, ablation_differentials: as séries d_t de cada método
+            com os perfis por seed e por k (`gold_h3_importance`); `None` se a montagem
+            do método foi `undefined`.
+        reading: a leitura de H3 sobre os dois métodos.
+        vsn: o resumo dos pesos da VSN.
+        block_length, max_block_estimate, n_points: o bloco do bootstrap conjunto, o maior
+            b̂ das 16 séries e o T das séries d_t (`None` quando o bootstrap não rodou).
+
+    Raises:
+        ValueError: campo com tipo errado, método trocado ou número inválido.
+    """
+
+    permutation: FamilyContributionReport | None
+    ablation: FamilyContributionReport | None
+    permutation_differentials: FamilyLossDifferentials | None
+    ablation_differentials: FamilyLossDifferentials | None
+    reading: H3Reading | None
+    vsn: VsnSummaryReport | None
+    block_length: int | None
+    max_block_estimate: float | None
+    n_points: int | None
+
+    def __post_init__(self) -> None:
+        """Tipos, o método de cada relatório e os números do bootstrap."""
+        for name, method in _H3_METHODS.items():
+            _check_h3_method(
+                name,
+                method,
+                getattr(self, name),
+                getattr(self, f"{name}_differentials"),
+            )
+        if self.reading is not None and not isinstance(self.reading, H3Reading):
+            raise ValueError(f"reading must be a H3Reading, got {self.reading!r}")
+        if self.vsn is not None and not isinstance(self.vsn, VsnSummaryReport):
+            raise ValueError(f"vsn must be a VsnSummaryReport, got {self.vsn!r}")
+        for name in ("block_length", "n_points"):
+            value = getattr(self, name)
+            if value is not None:
+                validate_int_at_least(value, minimum=1, field=name)
+        estimate = self.max_block_estimate
+        if estimate is not None and not is_finite_number(estimate):
+            raise ValueError(f"max_block_estimate must be a finite number, got {estimate!r}")
+
+    @property
+    def is_empty(self) -> bool:
+        """Nenhum relatório nem número do bootstrap."""
+        return all(
+            getattr(self, name) is None
+            for name in (
+                "permutation",
+                "ablation",
+                "permutation_differentials",
+                "ablation_differentials",
+                "reading",
+                "vsn",
+                "block_length",
+                "max_block_estimate",
+                "n_points",
+            )
+        )
+
+
+EMPTY_H3_REPORTS: Final = H3Reports(
+    permutation=None,
+    ablation=None,
+    permutation_differentials=None,
+    ablation_differentials=None,
+    reading=None,
+    vsn=None,
+    block_length=None,
+    max_block_estimate=None,
+    n_points=None,
+)
+
+
 @dataclass(frozen=True, kw_only=True)
 class GoldInputs:
     """O que os builders mapeiam — resultados prontos, nenhum a recomputar.
@@ -990,6 +1122,8 @@ class GoldInputs:
             `BLOCKED` ou sem regras de perfil na revisão).
         conformal_reports: unidades, coberturas e médias conformais (Stage 7.2;
             `EMPTY_CONFORMAL_REPORTS` se `BLOCKED` ou sem bloco `[conformal]`).
+        h3_reports: os relatórios de H3 (Stage 7.3; `EMPTY_H3_REPORTS` se `BLOCKED` ou
+            sem bloco `[h3]`, I16).
 
     Raises:
         ValueError: `BLOCKED` com relatórios ou sem resultado bloqueante; `COMPLETED`
@@ -1006,6 +1140,7 @@ class GoldInputs:
     profile_reports: tuple[HorizonProfileReport, ...]
     mcs_block_reports: tuple[McsBlockRun, ...]
     conformal_reports: ConformalReports
+    h3_reports: H3Reports
 
     def __post_init__(self) -> None:
         """Coerência status x conteúdo; mapa como cópia somente-leitura."""
@@ -1036,6 +1171,14 @@ class GoldInputs:
             raise ValueError(
                 "conformal_reports must be empty in a BLOCKED generation or without a "
                 "[conformal] block"
+            )
+        if not isinstance(self.h3_reports, H3Reports):
+            raise ValueError(f"h3_reports must be a H3Reports, got {self.h3_reports!r}")
+        if not self.h3_reports.is_empty and (
+            self.status is RefreshStatus.BLOCKED or self.parameters.h3_parameters is None
+        ):
+            raise ValueError(
+                "h3_reports must be empty in a BLOCKED generation or without a [h3] block"
             )
 
     @property

@@ -257,3 +257,50 @@ partições, fingerprints e o manifesto da inferência; nenhuma coluna de previs
   hash). A conferência é por conteúdo: o arquivo do plano na tag é igual, byte a
   byte, ao de HEAD.
 
+## Revisão r3 (emenda cega, Stage 7.3)
+
+- **Arquivo:** `config/preregistration/aapl_confirmatory-r3.toml`
+- **`preregistration_ref`:** `aapl_confirmatory-r3-00fd83d9cd39`
+- **Hash completo (sha256, floats codificados exatamente):**
+  `00fd83d9cd3992b09a162e5e6fe87659d4468be2d73d4cefd54d57b4ac4d82fd`
+- **Emenda de:** `aapl_confirmatory-r2-f32ef5ebbbb8` (`blind_status = "blinded"`).
+
+### O que muda
+
+Só o bloco `[h3]`, que congela as regras da leitura de H3 (contribuição por família ao
+longo do horizonte) que a r2 não nomeia (ADRs 7.3.0001-0006). Todo outro campo é igual ao
+da r2, e um teste confere isso campo a campo. A leitura de H3 é descritiva: o veredito de
+H1 e H2 não lê as tabelas de H3 e permanece o mesmo.
+
+- **Partição por família:** listas da registry (price, technical, sentiment, fundamental),
+  por `feature_set_hash`.
+- **Permutação:** a janela inteira do encoder trocada entre as decisões de teste do fold,
+  K_p = 10, semente 130.
+- **Ablação LOCO:** por referência ao cohort confirmatório; spec congelado
+  `aapl_ablation-r0-8a2d1de2dd8c` (hash
+  `8a2d1de2dd8c74558e32c80538b35ee2d57158ebb689ee210628967c9c61ce6d`), seeds `[1..10]`,
+  `torch_build = 2.13.0+rocm7.1`, congelado pelo `ablation-freeze` (L4) e treinado na L5.
+- **Estatística:** diferença de pinball médio na grade pareada por decisão na interseção
+  de h+1 e h+7; bootstrap estacionário conjunto (B = 1000, semente 129); intervalo básico
+  no nível de Bonferroni 1 − 0,05/4; regra de total não positivo; leitura por concordância
+  de lado; resumo da VSN.
+
+### Declaração de cegamento da emenda
+
+As regras acima vieram da literatura e das ADRs 7.3.0001-0006, sem nenhum valor de
+desempenho à vista. Os testes da Stage usam silver sintético; o cohort de ablação foi
+treinado e congelado antes desta âncora. A emenda é ancorada antes da Stage 8.1, que
+pontua H3 pela r3.
+
+### Âncora r3 (ADR 6.5.0003)
+
+- **Tag:** `preregistration/aapl_confirmatory-r3-00fd83d9cd39` (commit
+  `ad6a4e0d3fef8a2cebf90fb4ef50fe7d8c598d16`).
+- **Comentário na #186:**
+  <https://github.com/MarceloSanC/financial-forecasting/issues/186#issuecomment-6322547951>,
+  criado pelo servidor em **2026-10-21T17:41:23Z**, depois da âncora da r2
+  (2026-10-19T02:45:31Z) e da tag do cohort de ablação (L4).
+- **Registro:** `config/preregistration/aapl_confirmatory-r3.anchor.toml` (fora do
+  hash). A conferência é por conteúdo: o arquivo do plano na tag é igual, byte a
+  byte, ao de HEAD.
+

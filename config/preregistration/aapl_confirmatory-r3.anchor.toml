@@ -1,0 +1,6 @@
+# Âncora da revisão r3 (ADR 6.5.0003 item 2; ADR 7.3.0005): fora do hash por construção.
+# Valores lidos da API do GitHub depois do comentário na #186 (created_at do servidor).
+tag = "preregistration/aapl_confirmatory-r3-00fd83d9cd39"
+commit = "ad6a4e0d3fef8a2cebf90fb4ef50fe7d8c598d16"
+comment_url = "https://github.com/MarceloSanC/financial-forecasting/issues/186#issuecomment-6322547951"
+anchored_at = 2026-10-21T17:41:23Z

@@ -476,3 +476,49 @@ def test_protocol_outside_application_ports_out_is_not_a_port(
     _write(src, "features/x/application/ports/out/probe_fetcher.py", _PORT)
 
     assert [name for name, _ in gate.find_ports(src)] == ["ProbeFetcher"]
+
+
+def test_real_repo_attribution_ports_resolve(gate: ModuleType) -> None:
+    """Stage 7.3: os ports do consumidor da atribuição, com o real pela regra #93."""
+    ports: dict[tuple[str, str], Any] = _by_slice_and_name(gate)
+    contract = gate.CONTRACT_ROOT / "features" / "inference" / "test_attribution_ports_contract.py"
+    for name, fake, real in (
+        (
+            "CheckpointAttributionPredictor",
+            "InMemoryCheckpointAttributionPredictor",
+            "PredictTftAttributionFromCheckpoints",
+        ),
+        (
+            "PermutedPredictionPersister",
+            "InMemoryPermutedPredictionPersister",
+            "PersistPermutedPredictions",
+        ),
+        ("VsnWeightPersister", "InMemoryVsnWeightPersister", "PersistVsnWeights"),
+    ):
+        port = ports[("inference", name)]
+        assert port.adapters == (real,)
+        assert port.violation is None
+        assert port.contract is not None
+        assert port.contract.name == contract.name
+        assert _contract_satisfies(gate, contract, fake, real)
+        # nenhum homônimo noutro slice (o gate é cego a slice)
+        assert ("modeling", name) not in ports
+        assert ("evaluation", name) not in ports
+
+
+def test_real_repo_attribution_manifest_resolves(gate: ModuleType) -> None:
+    """Stage 7.3 (Task 18): o port do manifesto da atribuição tem o adapter JSON e contrato."""
+    ports: dict[tuple[str, str], Any] = _by_slice_and_name(gate)
+    port = ports[("inference", "AttributionManifest")]
+    assert "JsonAttributionManifest" in port.adapters
+    assert port.violation is None
+    contract = (
+        gate.CONTRACT_ROOT / "features" / "inference" / "test_attribution_manifest_contract.py"
+    )
+    assert port.contract is not None
+    assert port.contract.name == contract.name
+    assert _contract_satisfies(
+        gate, contract, "InMemoryAttributionManifest", "JsonAttributionManifest"
+    )
+    assert ("modeling", "AttributionManifest") not in ports
+    assert ("evaluation", "AttributionManifest") not in ports

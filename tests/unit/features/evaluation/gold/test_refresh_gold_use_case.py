@@ -15,12 +15,14 @@ mínimo (`_StubHasher`) só para o `DatasetContentFingerprint`.
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import logging
 import math
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from typing import Any
 
 import pytest
 
@@ -52,6 +54,9 @@ from financial_forecasting.features.evaluation.domain.services.diebold_mariano i
     DmVarianceEstimator,
 )
 from financial_forecasting.features.evaluation.domain.services.horizon_reports import SampleKind
+from financial_forecasting.features.evaluation.domain.services.joint_contribution import (
+    JOINT_BLOCK_NEEDS_BOTH,
+)
 from financial_forecasting.features.evaluation.domain.services.model_confidence_set import (
     ModelConfidenceSet,
 )
@@ -74,6 +79,10 @@ from financial_forecasting.features.evaluation.domain.value_objects.coverage_ser
 )
 from financial_forecasting.features.evaluation.domain.value_objects.forecast_record import (
     ForecastRecord,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.h3_parameters import (
+    H3Parameters,
+    loco_model_of,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.paired_loss_series import (
     PairedLossSeries,
@@ -112,7 +121,10 @@ from tests.unit.features.evaluation.gold._cohort_factory import (
     make_cohort,
     replace_records,
     targets_of,
+    with_ablation,
     with_calib,
+    with_permuted,
+    with_vsn,
 )
 
 _ASSET = "AAPL"
@@ -139,6 +151,7 @@ _PARAMETERS = RefreshParameters(
     mcs_block_sensitivities=("h", "sqrt_T"),
     profile_parameters=None,
     conformal_parameters=None,
+    h3_parameters=None,
 )
 _R1_PARAMETERS = dataclasses.replace(_PARAMETERS, profile_parameters=profile_parameters())
 _WARMUP = 3  # linhas de aquecimento com NaN numa feature, aparadas pela grade
@@ -1444,3 +1457,467 @@ def test_assembly_undefined_reason_names_the_raw_fold() -> None:
     reasons = [u.reason for u in inputs.conformal_reports.undefined_coverage]
     assert reasons
     assert all(r.startswith("assembly unit fold '1': unit has no calib point") for r in reasons)
+
+
+# --- Stage 7.3 Task 30: a etapa h3 -------------------------------------------------------
+
+_H3_HORIZONS = (1, 7)
+
+
+_H3_REPS = 37
+_H3_BOOTSTRAP_SEED = 7
+
+
+def _h3_parameters_for_test() -> H3Parameters:
+    from tests.unit.features.evaluation._h3_parameters import h3_block  # noqa: PLC0415
+
+    block: dict[str, Any] = copy.deepcopy(h3_block())
+    block["k_p"] = 2
+    block["ablation"]["seeds"] = [1, 2]
+    # TA-10: B e semente do bootstrap ≠ os de produção (1000, 129), para que o repasse do
+    # plano ao `bootstrap_indices` seja distinguível de um literal
+    block["reps"] = _H3_REPS
+    block["bootstrap_seed"] = _H3_BOOTSTRAP_SEED
+    return H3Parameters.from_mapping(block)
+
+
+_H3_PARAMETERS = dataclasses.replace(_PARAMETERS, h3_parameters=_h3_parameters_for_test())
+
+
+def _h3_cohort() -> Cohort:
+    from tests.unit.features.evaluation._h3_parameters import (  # noqa: PLC0415
+        SYNTHETIC_PARTITION,
+    )
+
+    variables = {f: family for family, features in SYNTHETIC_PARTITION.items() for f in features}
+    variables["relative_time_idx"] = "none"
+    base = make_cohort(
+        folds=("0", "1"), seeds={"gbm": (None,), "tft": (1, 2)}, horizons=_H3_HORIZONS
+    )
+    permuted = with_permuted(base, shift=0.01)
+    return with_vsn(with_ablation(permuted, seeds=(1, 2), shift=0.01), variables=variables)
+
+
+def _h3_silver(cohort: Cohort) -> dict[str, list[dict[str, object]]]:
+    silver = _silver(cohort)
+    ablation_id = _h3_parameters_for_test().ablation_cohort_id
+    silver["dim_run"] += [
+        {
+            "run_id": run.run_id,
+            "asset": _ASSET,
+            "parent_sweep_id": ablation_id,
+            "feature_set_name": run.feature_set_name,
+            "config_signature": run.config_signature,
+            "fold": run.fold,
+            "seed": run.seed,
+            "model_version": run.model,
+        }
+        for run in cohort.ablation_runs
+    ]
+    silver["fact_oos_predictions"] += [
+        {
+            "run_id": r.run_id,
+            "model_version": r.model,
+            "asset": _ASSET,
+            "feature_set_name": "fs_all_ablation",
+            "split": r.split,
+            "horizon": r.horizon,
+            "decision_idx": r.decision_idx,
+            "timestamp_utc": r.decision_timestamp,
+            "target_timestamp_utc": r.target_timestamp,
+            "quantile_level": r.quantile_level,
+            "value_raw": r.value_raw,
+            "value_guardrail": r.value_guardrail,
+            "guardrail_applied": int(r.guardrail_applied),
+            "year": int(r.decision_timestamp[:4]),
+        }
+        for r in cohort.ablation_records
+    ]
+    feature_set = {run.run_id: run.feature_set_name for run in cohort.runs}
+    silver["fact_permuted_predictions"] = [
+        {
+            "run_id": r.run_id,
+            "model_version": r.model,
+            "asset": _ASSET,
+            "feature_set_name": feature_set[r.run_id],
+            "permuted_family": r.permuted_family,
+            "permutation_index": r.permutation_index,
+            "permutation_seed": r.permutation_seed,
+            "permutation_algorithm": r.permutation_algorithm,
+            "partition_hash": r.partition_hash,
+            "horizon": r.horizon,
+            "decision_idx": r.decision_idx,
+            "timestamp_utc": r.decision_timestamp,
+            "target_timestamp_utc": r.target_timestamp,
+            "quantile_level": r.quantile_level,
+            "value_raw": r.value_raw,
+            "value_guardrail": r.value_guardrail,
+            "guardrail_applied": int(r.guardrail_applied),
+            "year": int(r.decision_timestamp[:4]),
+        }
+        for r in cohort.permuted
+    ]
+    silver["fact_vsn_weights"] = [
+        {
+            "run_id": r.run_id,
+            "model_version": r.model,
+            "asset": _ASSET,
+            "feature_set_name": feature_set[r.run_id],
+            "decision_idx": r.decision_idx,
+            "timestamp_utc": r.decision_timestamp,
+            "variable": r.variable,
+            "family": r.family,
+            "weight": r.weight,
+            "year": int(r.decision_timestamp[:4]),
+        }
+        for r in cohort.vsn
+    ]
+    return silver
+
+
+class _FailAfter(_SpyBackend):
+    """Backend que só falha nas chamadas de b̂ depois das `ok` primeiras (as da 6.4)."""
+
+    def __init__(self, log: _Log, *, ok: int, error: BaseException) -> None:
+        super().__init__(log)
+        self._ok = ok
+        self._error = error
+
+    def optimal_block_length(self, *, series: Sequence[float]) -> float:
+        if len(self.block_series) >= self._ok:
+            self.block_series.append(tuple(series))
+            raise self._error
+        return super().optimal_block_length(series=series)
+
+
+def _h3_harness() -> _Harness:
+    cohort = _h3_cohort()
+    return _harness(cohort, silver=_h3_silver(cohort))
+
+
+def _h3_run(harness: _Harness, parameters: RefreshParameters = _H3_PARAMETERS) -> GoldInputs:
+    return _inputs_of(harness, parameters=parameters, horizons=_H3_HORIZONS)
+
+
+def _reads(harness: _Harness, table: str) -> list[dict[str, object]]:
+    return [filters for _, name, filters in harness.reader.reads if name == table]
+
+
+def _calls_without_h3() -> int:
+    """Quantas estimativas de b̂ a 6.4 pede neste cohort (as do H3 vêm depois)."""
+    probe = _h3_harness()
+    _h3_run(probe, _PARAMETERS)
+    return len(probe.backend.block_series)
+
+
+@pytest.mark.unit
+def test_permuted_and_vsn_read_one_run_per_call_with_run_id_filter() -> None:
+    harness = _h3_harness()
+    inputs = _h3_run(harness)
+    candidate = sorted(r.run_id for r in _h3_cohort().runs if r.model == "tft")
+    for table in ("fact_permuted_predictions", "fact_vsn_weights"):
+        reads = _reads(harness, table)
+        assert sorted(str(f["run_id"]) for f in reads) == candidate, table
+    assert inputs.h3_reports.permutation is not None
+    assert inputs.h3_reports.permutation.status == "ok"
+
+
+@pytest.mark.unit
+def test_ablation_partition_read_once_per_year_never_without_year() -> None:
+    harness = _h3_harness()
+    _h3_run(harness)
+    ablation_reads = [
+        f
+        for f in _reads(harness, "fact_oos_predictions")
+        if f["feature_set_name"] == "fs_all_ablation"
+    ]
+    assert ablation_reads == [
+        {"asset": _ASSET, "feature_set_name": "fs_all_ablation", "year": 2024}
+    ]
+
+
+@pytest.mark.unit
+def test_confirmatory_records_never_read_fs_all_ablation() -> None:
+    harness = _h3_harness()
+    inputs = _h3_run(harness)
+    confirmatory = [f for f in _reads(harness, "fact_oos_predictions") if "year" not in f]
+    assert confirmatory
+    assert all(f["feature_set_name"] != "fs_all_ablation" for f in confirmatory)
+    assert inputs.h3_reports.ablation is not None
+    assert inputs.h3_reports.ablation.status == "ok"
+
+
+@pytest.mark.unit
+def test_one_bootstrap_indices_call_serves_both_methods() -> None:
+    before = _calls_without_h3()
+    harness = _h3_harness()
+    inputs = _h3_run(harness)
+    h3_calls = [c for c in harness.backend.index_calls if c["reps"] == _H3_REPS]
+    assert len(h3_calls) == 1
+    [call] = h3_calls
+    assert (call["reps"], call["seed"]) == (_H3_REPS, _H3_BOOTSTRAP_SEED)
+    assert call["scheme"] is BootstrapScheme.STATIONARY
+    assert len(harness.backend.block_series) - before == 16  # noqa: PLR2004
+    assert call["block_size"] == 7  # noqa: PLR2004 — max(7, ⌈2,5⌉), o piso
+    assert inputs.h3_reports.block_length == call["block_size"]
+    assert inputs.h3_reports.max_block_estimate == _BLOCK
+
+
+def _failing_h3(error: BaseException) -> GoldInputs:
+    before = _calls_without_h3()
+    harness = _h3_harness()
+    harness.use_case._mcs_backend = _FailAfter(harness.log, ok=before, error=error)
+    return _h3_run(harness)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("error", [ArithmeticError("singular"), ZeroDivisionError("zero")])
+def test_invalid_series_or_arithmetic_error_gives_undefined_reading(error: Exception) -> None:
+    inputs = _failing_h3(error)
+    reading = inputs.h3_reports.reading
+    assert reading is not None
+    assert reading.status == "undefined"
+    assert reading.sustained is False
+    assert "bootstrap undefined" in str(reading.reason)
+    assert inputs.status is RefreshStatus.COMPLETED
+    # TA-14 (R6): sem bootstrap, nem bloco nem b̂ máximo
+    assert inputs.h3_reports.block_length is None
+    assert inputs.h3_reports.max_block_estimate is None
+
+
+@pytest.mark.unit
+def test_constant_series_gives_undefined_reading(monkeypatch: pytest.MonkeyPatch) -> None:
+    from financial_forecasting.features.evaluation.domain.services import (  # noqa: PLC0415
+        joint_contribution as module,
+    )
+
+    def invalid(series: Sequence[float]) -> None:
+        raise ValueError("optimal_block_length needs a non-constant series")
+
+    monkeypatch.setattr(module, "validate_block_length_request", invalid)
+    reading = _h3_run(_h3_harness()).h3_reports.reading
+    assert reading is not None
+    assert reading.status == "undefined"
+    assert "invalid series" in str(reading.reason)
+
+
+@pytest.mark.unit
+def test_h3_failure_never_changes_other_tables() -> None:
+    reference = _h3_run(_h3_harness(), _PARAMETERS)
+    failing = _failing_h3(ArithmeticError("x"))
+    for name in ("horizon_reports", "mcs_reports", "profile_reports", "check_results"):
+        assert getattr(failing, name) == getattr(reference, name), name
+    assert reference.h3_reports.is_empty
+    assert not failing.h3_reports.is_empty
+
+
+@pytest.mark.unit
+def test_without_h3_block_no_h3_read() -> None:
+    harness = _h3_harness()
+    inputs = _h3_run(harness, _PARAMETERS)
+    assert _reads(harness, "fact_permuted_predictions") == []
+    assert _reads(harness, "fact_vsn_weights") == []
+    assert all("year" not in f for f in _reads(harness, "fact_oos_predictions"))
+    assert inputs.h3_reports.is_empty
+
+
+@pytest.mark.unit
+def test_blocked_generation_has_no_h3() -> None:
+    cohort = _h3_cohort()
+    gap = targets_of(cohort, "tft", 1, 1)[10]
+    cohort = drop_records(cohort, at_point("tft", 1, 1, gap))
+    harness = _harness(cohort, silver=_h3_silver(cohort))
+    inputs = _h3_run(harness)
+    assert inputs.status is RefreshStatus.BLOCKED
+    assert inputs.h3_reports.is_empty
+    assert _reads(harness, "fact_permuted_predictions") == []
+
+
+@pytest.mark.unit
+def test_unexpected_exception_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
+    from financial_forecasting.features.evaluation.application.use_cases import (  # noqa: PLC0415
+        refresh_gold as module,
+    )
+
+    def broken(**kwargs: object) -> object:
+        raise RuntimeError("bug in the assembly")
+
+    monkeypatch.setattr(module.AttributionAssembly, "assemble", staticmethod(broken))
+    harness = _h3_harness()
+    with pytest.raises(RuntimeError, match="bug in the assembly"):
+        harness(parameters=_H3_PARAMETERS, horizons=_H3_HORIZONS)
+    assert "publish" not in harness.log.events
+
+
+@pytest.mark.unit
+def test_contribution_receives_the_bonferroni_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    from financial_forecasting.features.evaluation.domain.services import (  # noqa: PLC0415
+        joint_contribution as module,
+    )
+
+    levels: list[float] = []
+    real = module.FamilyContribution.evaluate
+
+    def spy(differentials: Any, *, bootstrap: Any, level: float) -> Any:  # noqa: ANN401
+        levels.append(level)
+        return real(differentials, bootstrap=bootstrap, level=level)
+
+    monkeypatch.setattr(module.FamilyContribution, "evaluate", staticmethod(spy))
+    _h3_run(_h3_harness())
+    assert levels == [0.9875, 0.9875]
+    assert _h3_parameters_for_test().interval_level == 0.9875  # noqa: PLR2004
+
+
+@pytest.mark.unit
+def test_method_undefined_in_assembly_runs_no_bootstrap() -> None:
+    """C8-1: com a LOCO indefinida, nenhum b̂ nem índice de H3 (o bloco é das 16 séries)."""
+    before = _calls_without_h3()
+    cohort = _h3_cohort()
+    silver = _h3_silver(cohort)
+    missing = loco_model_of("fundamental")
+    silver["dim_run"] = [row for row in silver["dim_run"] if row["model_version"] != missing]
+    harness = _harness(cohort, silver=silver)
+    inputs = _h3_run(harness)
+    assert len(harness.backend.block_series) == before
+    assert [c for c in harness.backend.index_calls if c["reps"] == _H3_REPS] == []
+    reports = inputs.h3_reports
+    assert reports.permutation is not None and reports.ablation is not None
+    assert reports.permutation.reason == JOINT_BLOCK_NEEDS_BOTH
+    assert "has no run" in str(reports.ablation.reason)
+    assert reports.block_length is None
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("table", "damage", "report", "reason"),
+    [
+        ("fact_vsn_weights", {"weight": 1.5}, "vsn", "weight must be a finite float in [0, 1]"),
+        ("fact_vsn_weights", {"weight": math.inf}, "vsn", "weight must be a finite float"),
+        ("fact_vsn_weights", "duplicate", "vsn", "twice at decision"),
+        ("fact_permuted_predictions", {"value_guardrail": math.inf}, "permutation", "h="),
+    ],
+    ids=["vsn-weight-1.5", "vsn-weight-inf", "vsn-duplicate", "permuted-inf"],
+)
+def test_bad_attribution_row_is_undefined_never_aborts(
+    table: str, damage: object, report: str, reason: str
+) -> None:
+    """C8-2: ValueError de registro ou redução vira `undefined` com o motivo (I16)."""
+    cohort = _h3_cohort()
+    silver = _h3_silver(cohort)
+    rows = silver[table]
+    if damage == "duplicate":
+        rows.append(dict(rows[0]))
+    else:
+        rows[0] = {**rows[0], **damage}  # type: ignore[dict-item]
+    harness = _harness(cohort, silver=silver)
+    inputs = _h3_run(harness)
+    assert inputs.status is RefreshStatus.COMPLETED
+    target = getattr(inputs.h3_reports, report)
+    assert target is not None
+    assert target.status == "undefined"
+    assert reason in str(target.reason), target.reason
+
+
+@pytest.mark.unit
+def test_candidate_run_without_vsn_rows_makes_the_vsn_undefined() -> None:
+    """C8-10: um run do candidato sem linhas de VSN deixa o resumo undefined com o motivo."""
+    cohort = _h3_cohort()
+    silver = _h3_silver(cohort)
+    run_id = sorted(r.run_id for r in cohort.runs if r.model == "tft")[0]
+    silver["fact_vsn_weights"] = [r for r in silver["fact_vsn_weights"] if r["run_id"] != run_id]
+    inputs = _h3_run(_harness(cohort, silver=silver))
+    vsn = inputs.h3_reports.vsn
+    assert vsn is not None
+    assert vsn.status == "undefined"
+    assert f"run {run_id}: no vsn rows" in str(vsn.reason)
+
+
+class _CountingAfter(_SpyBackend):
+    """Depois das `ok` chamadas da 6.4, um b̂ distinto por série de H3 (TA-2).
+
+    A i-ésima série (1..16) recebe i/2 (0,5 … 8,0), menos a 11ª (LOCO), que recebe 9,3:
+    o máximo não é a primeira nem a última série e passa de 7, então ⌈·⌉ e o piso 7
+    contam.
+    """
+
+    def __init__(self, log: _Log, *, ok: int) -> None:
+        super().__init__(log)
+        self._ok = ok
+
+    def optimal_block_length(self, *, series: Sequence[float]) -> float:
+        value = super().optimal_block_length(series=series)
+        index = len(self.block_series) - self._ok
+        if index <= 0:
+            return value
+        return 9.3 if index == 11 else index / 2  # noqa: PLR2004
+
+
+@pytest.mark.unit
+def test_block_is_the_joint_max_over_the_16_series() -> None:
+    """C8-3/TA-2: b̂ distinto por série; o máximo (9,3) é da 11ª, uma série da LOCO."""
+    before = _calls_without_h3()
+    harness = _h3_harness()
+    harness.use_case._mcs_backend = _CountingAfter(harness.log, ok=before)
+    inputs = _h3_run(harness)
+    backend = harness.use_case._mcs_backend
+    assert len(backend.block_series) - before == 16  # noqa: PLR2004
+    assert inputs.h3_reports.max_block_estimate == 9.3  # noqa: PLR2004
+    assert inputs.h3_reports.block_length == 10  # noqa: PLR2004 — max(7, ⌈9,3⌉)
+    [call] = [c for c in backend.index_calls if c["reps"] == _H3_REPS]
+    assert call["block_size"] == 10  # noqa: PLR2004
+
+
+@pytest.mark.unit
+def test_level_follows_family_alpha_of_the_plan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """C8-7: family_alpha = 0,1 ⇒ nível 1 - 0,1/4 = 0,975 (mata o 0,9875 literal, M2)."""
+    from financial_forecasting.features.evaluation.domain.services import (  # noqa: PLC0415
+        joint_contribution as module,
+    )
+
+    levels: list[float] = []
+    real = module.FamilyContribution.evaluate
+
+    def spy(differentials: Any, *, bootstrap: Any, level: float) -> Any:  # noqa: ANN401
+        levels.append(level)
+        return real(differentials, bootstrap=bootstrap, level=level)
+
+    monkeypatch.setattr(module.FamilyContribution, "evaluate", staticmethod(spy))
+    block = _h3_parameters_for_test().as_payload()
+    block["family_alpha"] = 0.1
+    parameters = dataclasses.replace(_PARAMETERS, h3_parameters=H3Parameters.from_mapping(block))
+    inputs = _h3_run(_h3_harness(), parameters)
+    assert levels == [0.975, 0.975]
+    assert inputs.h3_reports.permutation is not None
+    assert inputs.h3_reports.permutation.level == 0.975  # noqa: PLR2004
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("split", ["val", "calib"])
+def test_ablation_rows_outside_test_are_ignored(
+    split: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C8-9/TA-14 (R8): linhas `val` ou `calib` da ablação (valores absurdos) não entram
+    nas perdas da LOCO, e o refresh nem as entrega à redução (só `test` é materializado,
+    I19 — a redução também filtra, então o resultado sozinho não distingue os filtros)."""
+    real_reduce = refresh_gold_module.reduce_ablation_run
+    splits: set[str] = set()
+
+    def spy(records: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        splits.update(record.split for record in records)
+        return real_reduce(records, **kwargs)
+
+    cohort = _h3_cohort()
+    clean = _h3_run(_harness(cohort, silver=_h3_silver(cohort)))
+    silver = _h3_silver(cohort)
+    validation = [
+        {**row, "split": split, "value_raw": 9.0, "value_guardrail": 9.0}
+        for row in silver["fact_oos_predictions"]
+        if row["feature_set_name"] == "fs_all_ablation"
+    ]
+    silver["fact_oos_predictions"] += validation
+    monkeypatch.setattr(refresh_gold_module, "reduce_ablation_run", spy)
+    noisy = _h3_run(_harness(cohort, silver=silver))
+    assert validation
+    assert splits == {"test"}
+    assert noisy.h3_reports.ablation == clean.h3_reports.ablation
+    assert noisy.h3_reports.ablation_differentials == clean.h3_reports.ablation_differentials

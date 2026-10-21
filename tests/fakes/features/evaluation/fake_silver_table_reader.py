@@ -17,6 +17,9 @@ from financial_forecasting.shared.application.exceptions import ApplicationError
 SILVER_PARTITIONS: Mapping[str, tuple[str, ...]] = {
     "dim_run": ("asset", "parent_sweep_id"),
     "fact_oos_predictions": ("asset", "feature_set_name", "year"),
+    # Stage 7.3 (ADR 7.3.0002 item 4): o `run_id` particiona as tabelas de atribuição.
+    "fact_permuted_predictions": ("asset", "feature_set_name", "run_id", "year"),
+    "fact_vsn_weights": ("asset", "feature_set_name", "run_id", "year"),
 }
 
 

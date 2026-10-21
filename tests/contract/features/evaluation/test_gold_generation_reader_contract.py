@@ -83,6 +83,7 @@ _PARAMETERS = RefreshParameters(
     mcs_block_sensitivities=("h", "sqrt_T"),
     profile_parameters=None,
     conformal_parameters=None,
+    h3_parameters=None,
 )
 _NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 

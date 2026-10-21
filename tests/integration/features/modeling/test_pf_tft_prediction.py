@@ -253,6 +253,7 @@ class TestAlignment:
             horizons=_HORIZONS,
             quantile_levels=_LEVELS,
             batch_size=8,
+            accelerator="cpu",
         )
 
         # A amostra 1 (comprimento 2) tem de vencer, apesar de chegar DEPOIS.
@@ -290,6 +291,7 @@ class TestBestCheckpointIsUsed:
             horizons=_HORIZONS,
             quantile_levels=_LEVELS,
             batch_size=_PARAMS.batch_size,
+            accelerator="cpu",
         )
 
         assert replayed == result.grids
@@ -454,6 +456,7 @@ class TestRestoredWeightsAreUsed:
             horizons=_HORIZONS,
             quantile_levels=_LEVELS,
             batch_size=self._INTERIOR.batch_size,
+            accelerator="cpu",
         )
 
         assert from_checkpoint == result.grids

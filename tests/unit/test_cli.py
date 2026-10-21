@@ -507,3 +507,158 @@ def test_infer_cross_environment_without_finding_exits_2(tmp_path: Path) -> None
     assert "error: ValueError" in err.getvalue()
     assert "[finding]" in err.getvalue()
     assert not (tmp_path / "d" / ".writer.lock").exists()
+
+
+# -- Stage 7.3, Task 10: subcomandos do cohort de ablação -------------------------------
+
+_ABLATION_SUBCOMMANDS = ("ablation-pilot", "ablation-run", "ablation-verify", "ablation-freeze")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("command", _ABLATION_SUBCOMMANDS)
+def test_ablation_subcommands_have_help(command: str, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main([command, "--help"])
+
+    assert exc.value.code == 0
+    text = capsys.readouterr().out
+    assert "--data-root" in text
+    assert "--cohort" in text
+    if command == "ablation-freeze":
+        assert "--seeds" in text
+
+
+@pytest.mark.unit
+def test_ablation_freeze_parses_the_seed_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commands: Any = cli.importlib.import_module(f"{cli._CLI_PACKAGE}.ablation_commands")
+    seen: dict[str, Any] = {}
+
+    def fake_freeze(deps: object, path: Path, **kwargs: object) -> int:
+        seen.update(deps=deps, path=path, **kwargs)
+        return 0
+
+    monkeypatch.setattr(commands, "freeze", fake_freeze)
+    ablation = tmp_path / "ablation.toml"
+
+    code = cli.main(
+        [
+            "ablation-freeze",
+            "--data-root",
+            str(tmp_path / "d"),
+            "--cohort",
+            str(ablation),
+            "--seeds",
+            "1,2,3",
+        ],
+        wiring=_wiring(tmp_path),
+    )
+
+    assert code == 0
+    assert seen["path"] == ablation
+    assert seen["seeds"] == (1, 2, 3)
+    assert seen["deps"].ledger._lock_path == tmp_path / "d" / ".writer.lock"
+
+
+@pytest.mark.unit
+def test_ablation_freeze_refuses_a_malformed_seed_list(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(
+            [
+                "ablation-freeze",
+                "--data-root",
+                str(tmp_path),
+                "--cohort",
+                "a.toml",
+                "--seeds",
+                "1,x",
+            ]
+        )
+
+    assert exc.value.code == _EXIT_ERROR
+    assert "seeds must be integers" in capsys.readouterr().err
+
+
+# -- Stage 7.3, Task 20: subcomando `attribute` -----------------------------------------
+
+
+@pytest.mark.unit
+def test_attribute_help(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["attribute", "--help"])
+
+    assert exc.value.code == 0
+    text = capsys.readouterr().out
+    for flag in (
+        "--data-root",
+        "--cohort",
+        "--ablation-cohort",
+        "--cross-environment",
+        "--break-stale-lock",
+    ):
+        assert flag in text, flag
+
+
+def _ablation_with_base(tmp_path: Path) -> tuple[Path, Path]:
+    """Base sintética congelada e arquivo de ablação que a declara (sob `repo_root`)."""
+    from tests.unit.shared.test_composition_root import _ablation_files  # noqa: PLC0415
+
+    ablation = _ablation_files(tmp_path, device="rocm")
+    return tmp_path / "config" / "cohorts" / "base.toml", ablation
+
+
+@pytest.mark.unit
+def test_attribute_dispatches_the_base_spec_and_the_partition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    commands: Any = cli.importlib.import_module(_INFERENCE_COMMANDS)
+    seen: dict[str, Any] = {}
+
+    def fake_attribute(
+        factory: object, spec: object, path: Path, partition: object, base: object, **kw: object
+    ) -> int:
+        seen.update(factory=factory, spec=spec, path=path, partition=partition, base=base, **kw)
+        return 0
+
+    monkeypatch.setattr(commands, "attribute", fake_attribute)
+    base, ablation = _ablation_with_base(tmp_path)
+    argv = ["attribute", "--data-root", str(tmp_path / "d"), "--cohort", str(base)]
+
+    code = cli.main([*argv, "--ablation-cohort", str(ablation)], wiring=_wiring(tmp_path))
+
+    assert code == 0
+    assert seen["path"] == base
+    assert set(seen["partition"]) == {"price", "technical", "sentiment", "fundamental"}
+    assert len(seen["base"]) == 64  # noqa: PLR2004 — o base_cohort_hash do arquivo de ablação
+    assert seen["break_stale_lock"] is False
+    assert seen["cross_environment"] is None
+
+
+@pytest.mark.unit
+def test_attribute_refuses_a_cohort_other_than_the_ablation_base(tmp_path: Path) -> None:
+    """C5-10: o `--cohort` tem de ser a base declarada pelo arquivo de ablação."""
+    _, ablation = _ablation_with_base(tmp_path)
+    other = _cohort(tmp_path, frozen=True)
+    err = io.StringIO()
+
+    code = cli.main(
+        [
+            "attribute",
+            "--data-root",
+            str(tmp_path / "d"),
+            "--cohort",
+            str(other),
+            "--ablation-cohort",
+            str(ablation),
+        ],
+        wiring=_wiring(tmp_path),
+        out=io.StringIO(),
+        err=err,
+    )
+
+    assert code == _EXIT_ERROR
+    assert "declares base cohort_hash" in err.getvalue()
+    assert not (tmp_path / "d" / ".writer.lock").exists()

@@ -290,8 +290,9 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
 - **Identidade só pelos VOs de `shared/domain/value_objects/`.** `RunId`, `ConfigSignature`,
   `SplitFingerprint`, `CohortHash` (hash do spec do cohort
   confirmatório, ADR 5.5.0001), `DatasetContentFingerprint` (conteúdo do grid de
-  treino, ADR 5.5.0004) e `PreregistrationHash` (hash do pré-registro
-  confirmatório, floats codificados exatamente, ADR 6.5.0001) são o único caminho de hash; fora deles ninguém
+  treino, ADR 5.5.0004), `PreregistrationHash` (hash do pré-registro
+  confirmatório, floats codificados exatamente, ADR 6.5.0001) e `FamilyPartitionHash`
+  (partição de famílias + `feature_set_hash` de H3, ADR 7.3.0002) são o único caminho de hash; fora deles ninguém
   chama `hasher.hash_mapping`/`hash_text` (payload hand-rolled num use case é uma segunda
   definição de "o mesmo run" — ADR 5.2.0004). Gate: regra 6 do `scripts/check_layout.py`.
 - **Features não importam comportamento de outras features.** Cada slice é uma unidade
@@ -308,7 +309,7 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   mantém `torch`/`lightning`/`pytorch_forecasting` fora da application/domain do
   slice, ADR 7.1.0001 item 4; desde a Stage 7.2, o `inference-no-mapie-leak` mantém
   `mapie`/`numpy`/`sklearn`/`scipy` fora dela — só o adapter
-  `inference/adapters/out/mapie/` os importa, ADR 7.2.0002 item 1). As 34 arestas de runtime existentes
+  `inference/adapters/out/mapie/` os importa, ADR 7.2.0002 item 1). As 41 arestas de runtime existentes
   estão declaradas UMA A UMA como exceção comentada (débito medido, não
   permissão) — as 8 `feature_engineering → market_data.domain.entities`
   (`Candle`, `NewsArticle`, `FundamentalReport`, #95), as seis
@@ -322,7 +323,13 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   as chaves `CODE_KEYS`/`DIRTY_KEY`/`THREADS_KEY` do port do probe do `modeling`, o
   `PersistPredictionsCommand` e o VO `QuantileForecast`) e a do
   `evaluation.application.use_cases.refresh_gold → inference.application.use_cases.calibrate_conformal`
-  (Stage 7.2: os DTOs de comando do `CalibrateConformal`, ADR 7.2.0003 item 3) são dados, pela regra da ADR
+  (Stage 7.2: os DTOs de comando do `CalibrateConformal`, ADR 7.2.0003 item 3) e as seis do
+  `inference.application.use_cases.run_permutation_inference` (Stage 7.3: os DTOs de comando de
+  `ResolveTftCheckpoints`/`PredictTftAttributionFromCheckpoints` e dos escritores
+  `PersistPermutedPredictions`/`PersistVsnWeights`, as chaves do port do probe e o VO
+  `QuantileForecast`, ADR 7.3.0002) e a do `evaluation.domain.services.attribution_assembly`
+  (Stage 7.3: o VO `QuantileForecast` construído com os valores persistidos do silver de
+  atribuição, ADR 7.3.0001 item 1) são dados, pela regra da ADR
   0.0.0053 — e **uma aresta nova reprova o build**. O que o gate não vê:
 
   - **Arestas sob `if TYPE_CHECKING:` são invisíveis ao contrato**
