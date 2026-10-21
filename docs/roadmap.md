@@ -108,7 +108,7 @@ graph LR
 | `7.1-inference-engine` | inference | multi (application + adapters/out) | vertical | done | 5.4, 4.3 |
 | `7.2-conformal-cqr` | inference | multi (domain + application + adapters/out; + evaluation) | vertical | done | 7.1, 5.1 |
 | `7.3-explainability` | inference | multi (modeling + inference + analytics_store + evaluation; Windows + Linux) | vertical | done | 7.1, 6.1, 7.2 |
-| `7.4-inference-api` | inference | multi (application + adapters/in/http; + evaluation application; shared http) | vertical | draft | 7.2, 7.3 |
+| `7.4-inference-api` | inference | multi (domain + application + adapters/in/http; + evaluation application; shared http) | vertical | draft | 7.2, 7.3 |
 | `8.1-confirmatory-run` | evaluation | application (orquestração) | vertical | draft | 6.5, 6.6, 7.1, 7.2, 7.3 |
 | `8.2-equivalence-audit` | evaluation | application + tests | vertical | draft | 8.1 |
 | `8.3-plots-and-final-report` | evaluation | adapters/out + docs | vertical | draft | 8.2 |
