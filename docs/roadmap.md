@@ -108,7 +108,7 @@ graph LR
 | `7.1-inference-engine` | inference | multi (application + adapters/out) | vertical | done | 5.4, 4.3 |
 | `7.2-conformal-cqr` | inference | multi (domain + application + adapters/out; + evaluation) | vertical | done | 7.1, 5.1 |
 | `7.3-explainability` | inference | multi (modeling + inference + analytics_store + evaluation; Windows + Linux) | vertical | done | 7.1, 6.1, 7.2 |
-| `7.4-inference-api` | inference | adapters/in/http | vertical | draft | 7.2, 7.3 |
+| `7.4-inference-api` | inference | multi (application + adapters/in/http; + evaluation application; shared http) | vertical | draft | 7.2, 7.3 |
 | `8.1-confirmatory-run` | evaluation | application (orquestração) | vertical | draft | 6.5, 6.6, 7.1, 7.2, 7.3 |
 | `8.2-equivalence-audit` | evaluation | application + tests | vertical | draft | 8.1 |
 | `8.3-plots-and-final-report` | evaluation | adapters/out + docs | vertical | draft | 8.2 |
@@ -1134,23 +1134,38 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 ```yaml
 stage_id: 7.4-inference-api
 bounded_context: inference
-camada_alvo: adapters/in/http
-arquivos_a_criar:
+camada_alvo: multi (inference application + adapters/in/http; evaluation application; shared/infrastructure/http)
+arquivos_a_criar:  # + os __init__.py dos pacotes novos (concept 7.4 §1)
+  - src/financial_forecasting/features/inference/domain/exceptions/serving.py
+  - src/financial_forecasting/features/inference/application/dtos/serving_gold.py
+  - src/financial_forecasting/features/inference/application/ports/out/serving_gold_reader.py
+  - src/financial_forecasting/features/inference/application/use_cases/serve_inference.py
+  - src/financial_forecasting/features/evaluation/application/use_cases/read_serving_gold.py
   - src/financial_forecasting/features/inference/adapters/in/http/inference_router.py
   - src/financial_forecasting/features/inference/adapters/in/http/schemas/inference_schemas.py
-  - tests/integration/features/inference/adapters/in/http/test_inference_router.py
+  - tests/fakes/features/inference/in_memory_serving_gold_reader.py
+  - tests/contract/features/inference/test_serving_gold_reader_contract.py
+  - tests/integration/features/inference/adapters/in_/http/test_inference_router.py  # `in_`: keyword (precedente da 5.5)
   - tests/e2e/features/inference/test_inference_api_e2e.py
 arquivos_a_modificar:
   - src/financial_forecasting/shared/infrastructure/http/app.py
+  - src/financial_forecasting/shared/infrastructure/http/error_handlers.py
+  - src/financial_forecasting/shared/infrastructure/config/settings.py
+  - src/financial_forecasting/composition_root.py
+  - .importlinter
+  - tests/architecture/test_import_contracts.py
 # Da 7.2 (concept 7.2 D9): a 7.4 lê as correções conformais do gold por um port do
 # consumidor no inference (DTO/VO do inference), satisfeito por um leitor do evaluation
 # (gold_schema dono único); direção de produção só evaluation → inference.
-contratos_introduzidos: [RunInferencePort (port-in via FastAPI Depends), port-out do inference para ler gold_conformal_corrections e as tabelas gold de H3 + leitor no evaluation que o satisfaz (padrão do D9 da 7.2)]
-contratos_consumidos: [ports de predição a partir do checkpoint e predições persistidas test/calib (7.1), gold_conformal_corrections da geração current/ aplicada aos quantis nativos por PairCorrection.limits (7.2; a API não recalibra, doc de domínio inference §6), tabelas gold de H3 — gold_h3_shares, gold_h3_reading, gold_h3_vsn — lidas da geração current/, sem calcular atribuição (7.3, ADR 7.3.0001)]
+# Da 7.4 (concept 7.4 D1/D5/D8; ADRs 7.4.0001–7.4.0002): a API serve as predições de
+# teste gravadas (sem checkpoint nem torch); o port-in é o use case ServeInference; a
+# aresta evaluation → inference é exceção declarada aos itens 2–3 do ADR 0.0.0053.
+contratos_introduzidos: [ServeInference (use case = port-in via FastAPI Depends; POST /inference/run, payload com schema_version), ServingGoldReader (port-out do inference) + DTOs ServingGold, satisfeito por ReadServingGold no evaluation sobre o GoldGenerationReader (padrão do D9 da 7.2), NoServedDataError (404), handler ApplicationError → 500]
+contratos_consumidos: [predições split = "test" do candidato em fact_oos_predictions e dim_run, lidas pelo SilverTableReader do inference (gravadas pelo treinador da 5.5, reprodução provada pela 7.1), gold_conformal_corrections da geração current/ aplicada aos quantis nativos por PairCorrection.limits (7.2; a API não recalibra, doc de domínio inference §6), tabelas gold de H3 — gold_h3_shares, gold_h3_reading, gold_h3_vsn — lidas da geração current/, sem calcular atribuição (7.3, ADR 7.3.0001)]
 definition_of_done: "`POST /inference/run` retorna quantis nativos + intervalo conformal + explicabilidade (payload com schema versionado; rótulos 'cobertura empírica' e 'descritiva'); router é fino (sem regra); exceções de domínio viram HTTP; e2e verde."
-non_goals: [autenticação, servir treino, streaming]
+non_goals: [autenticação, servir treino, streaming, predição online a partir do checkpoint, atualização contínua (job agendado — issue própria)]
 complexidade_estimada: M
-gate_mode: batch
+gate_mode: batch  # justificado no concept 7.4 D13
 skills_hint: [fastapi-thin-adapter, hex-arch-python, dmls-ch06-deployment-and-inference-decisions]
 ```
 
@@ -1270,6 +1285,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 | 2026-10-17 | Stage 7.2 refinada: ADRs na pasta única `docs/adr/` (não `docs/stages/7.2-conformal-cqr/adrs/`); camada, arquivos e contratos (calibrador e política de reprodução no domain do inference, `CalibrateConformal`, cobertura conformal e bloco `[conformal]` no evaluation, revisão r2); integração do conformal no gold (port do consumidor, montagem no `RefreshGold`, duas tabelas gold) na própria 7.2, e a 8.1 só executa; a 8.1 julga pela revisão ancorada mais recente da cadeia (r2; r3 se a 7.3 emendar), não mais "pela r1"; a 7.4 lê `gold_conformal_corrections` (não recalibra) e a 8.1 consome as tabelas conformais do refresh | Concept 7.2 (issue #158; ADRs 7.2.0001–7.2.0005) |
 | 2026-10-18 | Bloco da 7.3 refinado: estatística de H3 no domain do evaluation e gold pelo `RefreshGold` (não no domain do inference), predições permutadas e VSN pelo port do modeling em duas tabelas silver novas (sem adapter de VSN no inference), cohort de ablação por referência ao confirmatório com identidade por configuração, device por instância do treinador, r3 única ancorada no Linux, fases Windows/Linux; `contratos_consumidos` de 7.4 e 8.1 passam a nomear as tabelas gold de H3; lacuna do pré-registro de H3 fechada | Concept 7.3 (issue #186; ADRs 7.3.0001–7.3.0006) |
 | 2026-10-19 | Stage `7.2-conformal-cqr` `done`; Step 7 segue `in_progress`. Revisão r2 ancorada (`aapl_confirmatory-r2-f32ef5ebbbb8`, tag `preregistration/aapl_confirmatory-r2-f32ef5ebbbb8`, comentário na #158); prova de geometria real (Etapa G) verde, só de geometria: 60/60 runs (6 folds × 10 seeds), manifesto com 60 `completed`, sem métrica nem `gold/` | Fechamento da Stage 7.2 (issue #158; ADRs 7.2.0001–7.2.0005; technical 7.2 §7) |
+| 2026-10-21 | Bloco da 7.4 alinhado ao concept: serve as predições de teste gravadas (sem ports de checkpoint nem partição `calib`), `ServeInference` no lugar de `RunInferencePort`, port `ServingGoldReader` com leitor `ReadServingGold` no evaluation (aresta evaluation → inference como exceção declarada ao ADR 0.0.0053), handler `ApplicationError → 500`; camada multi e arquivos completos; `gate_mode: batch` justificado; atualização contínua fora (job agendado) | Concept 7.4 (issue #201; ADRs 7.4.0001–7.4.0002) |
 
 ## Próxima revisão de roadmap
 
