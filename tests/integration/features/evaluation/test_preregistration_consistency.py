@@ -200,6 +200,7 @@ def test_every_revision_hash_quoted() -> None:
         "aapl_confirmatory-r0.toml",
         "aapl_confirmatory-r1.toml",
         "aapl_confirmatory-r2.toml",
+        "aapl_confirmatory-r3.toml",
     ]
     for path in revisions:
         match = _REVISION_FILE.match(path.name)

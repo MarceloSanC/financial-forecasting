@@ -2,8 +2,8 @@
 
 Fica em `tests/architecture/` porque lê arquivos do repo (`config/cohorts/`), o que os
 testes unitários não fazem (technical 7.3 §1, premissas). CA1 (hash do TOML
-confirmatório inalterado) e CA3 (o rascunho real carrega, sem congelar, com a
-partição da registry).
+confirmatório inalterado) e CA3 (o spec de ablação carrega, congelado pelo
+`ablation-freeze` da L4, com a partição da registry).
 
 O id e o hash do cohort confirmatório não são escritos aqui como literal (guarda I14 da
 6.6, `test_no_test_or_script_reads_the_real_cohort`): a referência é o bloco `[cohort]`
@@ -64,9 +64,9 @@ def test_ablation_draft_loads_unfrozen_with_registry_partition() -> None:
         _ABLATION, hasher=CanonicalJsonHasher(), load_base=_load_base
     )
 
-    assert not spec.is_frozen()
-    assert spec.seeds == ()
-    assert spec.torch_build is None
+    assert spec.is_frozen()  # congelado pelo `ablation-freeze` (L4)
+    assert spec.seeds == (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    assert spec.torch_build == "2.13.0+rocm7.1"
     assert spec.device == "rocm"
     assert spec.feature_set_name == ABLATION_FEATURE_SET_NAME
     assert spec.base_cohort_file == _CONFIRMATORY
