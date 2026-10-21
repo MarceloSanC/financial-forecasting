@@ -2895,4 +2895,13 @@ O piloto da L2 abortou no backward do treino com `upsample_linear1d_backward_out
 
 **Tooling:** commit com `SKIP=ruff,mypy` — os hooks derivados reprovariam por motivo conhecido (`[finding] tooling` acima): o ruff 0.6.9 do hook removeria `# noqa: PLC0415` que o venv exige, e o mypy isolado (sem `lightning`) dá falso-positivo em `class _LossHistory(Callback)`. `ruff check` e `mypy` do venv passam (gate autoritativo de `make check`).
 
+### 2026-10-21 — [deviation] L5 — pausa mid-unit, unidade parcial (C3/C4) e limpeza cirúrgica do silver; cohort r0 completo — Claude (Opus 4.8)
+A L5 (`ablation-run` do cohort congelado `aapl_ablation-r0-8a2d1de2dd8c`) rodou retomável em GPU. Fechou **300/300** e o `ablation-verify` deu `5 configurations x 6 folds x 10 seeds = 300 runs; rows expected 1055600, observed 1055600` + `OK`.
+
+**Incidente (C3/C4).** A corrida foi pausada a pedido do humano matando o processo **no meio** da unidade `tft:minus_sentiment:seed=10`, que ficou **parcialmente persistida no silver** (4 de 6 folds). A retomada ergueu `PartialCohortUnitError` (a unidade é atômica; o design proíbe editar o silver e manda `revision += 1`). A forma de pausar foi o erro: o ponto de corte retomável é **entre unidades**, não mid-unit.
+
+**Decisão (autorizada pelo humano): limpeza cirúrgica + manter r0**, em vez da nova revisão r1 (que custaria ~10 h de recomputo determinístico sob novo `cohort_id`, sem ganho científico). Justificativa: a cirurgia removeu **só lixo abortado** (os 4 `run_id` incompletos de `minus_sentiment:seed=10`, nunca válidos/ancorados/lidos a jusante); os 234 runs válidos e o confirmatório ficaram intactos; `seed=10` foi re-treinado limpo (determinístico ⇒ idêntico ao de uma corrida ininterrupta); e a edição tocou o **silver (saída)**, não o **spec congelado** — o `cohort_hash`/identidade (que a r3 ancora) permanece inalterado, logo o freeze/tag r0 e o comentário #186 seguem válidos.
+
+**Cirurgia (reproduzível).** Backup da partição de ablação do silver antes de tudo (14 MiB, scratchpad). `run_id` removidos (`minus_sentiment:seed=10`): `a9b2d0ab…`, `411a33a5…`, `7dc34fb3…`, `b74c9236…`. Reescrevi sem essas linhas, preservando o resto: `dim_run` da ablação 238→234; `fact_oos_predictions` sob `feature_set_name=fs_all_ablation` (5 year-files) −11 676 linhas. `fact_permuted_predictions`/`fact_vsn_weights` (confirmatório, `fs_all`) intocados. Pós-cirurgia: `seed=10` ausente (0 runs), 0 linhas-lixo. Retomada com `--break-stale-lock` (processo morto): pulou os 39 units completos, re-fez `seed=10` e treinou `minus_fundamental`, fechando 300/300.
+
 <!-- END: post-execution -->
