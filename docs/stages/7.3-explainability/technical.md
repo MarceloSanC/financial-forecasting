@@ -2904,4 +2904,9 @@ A L5 (`ablation-run` do cohort congelado `aapl_ablation-r0-8a2d1de2dd8c`) rodou 
 
 **Cirurgia (reproduzível).** Backup da partição de ablação do silver antes de tudo (14 MiB, scratchpad). `run_id` removidos (`minus_sentiment:seed=10`): `a9b2d0ab…`, `411a33a5…`, `7dc34fb3…`, `b74c9236…`. Reescrevi sem essas linhas, preservando o resto: `dim_run` da ablação 238→234; `fact_oos_predictions` sob `feature_set_name=fs_all_ablation` (5 year-files) −11 676 linhas. `fact_permuted_predictions`/`fact_vsn_weights` (confirmatório, `fs_all`) intocados. Pós-cirurgia: `seed=10` ausente (0 runs), 0 linhas-lixo. Retomada com `--break-stale-lock` (processo morto): pulou os 39 units completos, re-fez `seed=10` e treinou `minus_fundamental`, fechando 300/300.
 
+### 2026-10-21 — [decision] L6b — N/A: a 8.1 roda no próprio Linux (nada a transferir) — Claude (Opus 4.8)
+A L6b (transferência Linux → 8.1) é **N/A**. A Stage `8.1-confirmatory-run` é orquestração de evaluation/application (build do gold por DuckDB + serviços estatísticos e scorecard) — trabalho de **CPU**, sem GPU — e lê o **silver**, que já está neste checkout Linux (confirmatório + ablação + atribuição). O handoff fixa que os checkpoints "ficam no Linux e não vão para a 8.1 (o gold lê só o silver)", então mesmo um futuro deslocamento da 8.1 moveria só o silver (~150 MiB), de forma reversível. Decisão conforme a tabela L0–L8 ("N/A por `[decision]` se a 8.1 rodar no próprio Linux").
+
+**Arquivamento dos checkpoints (ressalva de segurança):** `artifacts/tft` (60 do confirmatório, via symlink para o mount RO, + 300 da ablação como dirs reais) **não** é arquivado agora porque a máquina segue em uso para a 8.1. Antes de qualquer limpeza/repurpose da máquina, arquivar `artifacts/tft` fora da árvore com conferência `sha256sum` (handoff, "Checkpoints da ablação (L6b, C8)") — pendência de operação, não bloqueante para o fecho da 7.3.
+
 <!-- END: post-execution -->
