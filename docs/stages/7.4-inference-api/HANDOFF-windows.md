@@ -117,11 +117,19 @@ nos "Critério de aceite" de cada Task).
   e `artifacts/cohorts/` (ledgers com o ambiente gravado). Transferir por fora do
   git, conferir `sha256sum -c ff-data-7.4.sha`, extrair na raiz do repo e usar
   `DATA_ROOT=data/cohorts/aapl` na verificação CA12 (§3 do technical). Serve
-  também à 8.1/8.2/8.3. Os checkpoints (`artifacts/tft`, 7,9 GB, 360 dirs) **não**
-  entram no pacote: a 7.4 não os usa; a 8.1 só os usa na verificação `infer`.
+  também à 8.1/8.2/8.3.
+- Checkpoints: `~/ff-checkpoints-tft.tar` (7,9 GB sem compressão, `artifacts/tft`
+  com os 360 dirs = 60 do confirmatório + 300 da ablação; 306 arquivos `.ckpt`; sha256
+  `271e7cb808669ac36a8d3dfffa0b5b2831f4b5304a49ddfc71a6040aa540e961`, em
+  `~/ff-checkpoints-tft.sha`). A 7.4 não os usa; a 8.1 usa os 60 do confirmatório
+  na verificação `infer`. Extrair na raiz do repo (`ARTIFACTS_ROOT=artifacts`).
+  **A máquina Linux não volta ao projeto**: este tar é a única cópia a partir
+  daqui — a pendência de arquivamento da 7.3 fecha com ele.
+- `.env`: cópia em `~/ff-dot-env` (4 chaves de API ausentes do `.env.example`:
+  ALPHAVANTAGE, BENZINGA, FINNHUB, HUGGING_FACE). Levar por fora do git.
 
 ## 7. Pendências fora da 7.4 (registrar/decidir depois)
 
-- Arquivar `artifacts/tft` do Linux (60 + 300 checkpoints) com `sha256sum` antes de limpar a máquina (pendência da 7.3).
+- ~~Arquivar `artifacts/tft`~~ — feito: `~/ff-checkpoints-tft.tar` + sha (ver §6); conferir no Windows antes de descartar o Linux.
 - Issues a abrir na Task 10: job agendado (D10) e "contratos da 7.1/7.3 afirmam prova por mypy que não roda sobre tests/".
 - Issue #199 (hooks ausentes em worktrees) e #198 (pin do ruff) continuam abertas.
