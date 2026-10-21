@@ -111,7 +111,14 @@ nos "Critério de aceite" de cada Task).
 - `make check` só na saída (plano de gates); T1 por Task = pytest dos testes da Task `--no-cov` + hooks.
 - Worktree no Windows: criar com `python scripts/worktree-new.py feat/201-7-4-inference-api --no-setup --no-vscode`
   **não** — a branch já existe no remoto: `git fetch` e `git worktree add ../financial-forecasting-worktrees/feat-201-7-4-inference-api feat/201-7-4-inference-api` (ou checkout em worktree pelo script se ele aceitar branch existente), depois `make setup`.
-- Dados: no Windows, `DATA_ROOT` precisa apontar para a cópia do silver de `data/cohorts/aapl` (≈150 MiB; copiar `silver/` + `inference/`) para a verificação CA12 do §3 do technical. Os checkpoints (`artifacts/tft`) **não** são necessários para a 7.4.
+- Dados: pacote gerado no Linux em `~/ff-data-7.4.tar.gz` (136 MB, 779 entradas;
+  sha256 `91d243f5e182167342fc0f4b1497531f054cb2ff5ac1ec9ec59848b2114889ff`, em
+  `~/ff-data-7.4.sha`), com `data/cohorts/aapl/{bronze,raw,processed,silver,inference}`
+  e `artifacts/cohorts/` (ledgers com o ambiente gravado). Transferir por fora do
+  git, conferir `sha256sum -c ff-data-7.4.sha`, extrair na raiz do repo e usar
+  `DATA_ROOT=data/cohorts/aapl` na verificação CA12 (§3 do technical). Serve
+  também à 8.1/8.2/8.3. Os checkpoints (`artifacts/tft`, 7,9 GB, 360 dirs) **não**
+  entram no pacote: a 7.4 não os usa; a 8.1 só os usa na verificação `infer`.
 
 ## 7. Pendências fora da 7.4 (registrar/decidir depois)
 
