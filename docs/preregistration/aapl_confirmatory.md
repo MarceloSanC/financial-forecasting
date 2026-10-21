@@ -292,3 +292,15 @@ desempenho à vista. Os testes da Stage usam silver sintético; o cohort de abla
 treinado e congelado antes desta âncora. A emenda é ancorada antes da Stage 8.1, que
 pontua H3 pela r3.
 
+### Âncora r3 (ADR 6.5.0003)
+
+- **Tag:** `preregistration/aapl_confirmatory-r3-00fd83d9cd39` (commit
+  `ad6a4e0d3fef8a2cebf90fb4ef50fe7d8c598d16`).
+- **Comentário na #186:**
+  <https://github.com/MarceloSanC/financial-forecasting/issues/186#issuecomment-6322547951>,
+  criado pelo servidor em **2026-10-21T17:41:23Z**, depois da âncora da r2
+  (2026-10-19T02:45:31Z) e da tag do cohort de ablação (L4).
+- **Registro:** `config/preregistration/aapl_confirmatory-r3.anchor.toml` (fora do
+  hash). A conferência é por conteúdo: o arquivo do plano na tag é igual, byte a
+  byte, ao de HEAD.
+
