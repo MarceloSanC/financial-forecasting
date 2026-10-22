@@ -1208,7 +1208,7 @@ arquivos_a_criar:
   # concept 8.1 (ADRs 8.1.0001–8.1.0003); caminhos exatos de DTOs, fakes, adapters e testes: technical 8.1
   - src/financial_forecasting/shared/domain/value_objects/silver_content_hash.py
   - src/financial_forecasting/features/evaluation/application/ports/out/{judged_generation_store.py, evaluation_environment.py, evaluation_writer_lock.py}
-  - src/financial_forecasting/features/evaluation/adapters/out/  # adapter de sistema de arquivos do JudgedGenerationStore e real do EvaluationEnvironment
+  - src/financial_forecasting/features/evaluation/adapters/out/  # real do EvaluationEnvironment (o JudgedGenerationStore é satisfeito pelo ParquetGoldStore, em arquivos_a_modificar)
   - src/financial_forecasting/features/evaluation/adapters/in/cli/  # comando `evaluate`
   - config/preregistration/aapl_confirmatory-r3.judged.toml  # registro de atestação, na corrida real
 arquivos_a_modificar:
@@ -1219,7 +1219,7 @@ arquivos_a_modificar:
   - src/financial_forecasting/features/evaluation/application/ports/out/{silver_table_reader.py, preregistration_source.py}  # columns(); judged_records()
   - src/financial_forecasting/features/evaluation/adapters/out/toml/toml_preregistration_source.py
   - src/financial_forecasting/features/analytics_store/adapters/out/parquet/parquet_analytics_repository.py  # columns() pelo SilverTable
-  - src/financial_forecasting/features/inference/adapters/in/cli/inference_commands.py  # infer devolve o resumo
+  - src/financial_forecasting/features/inference/adapters/in/cli/inference_commands.py  # função nova infer_with_summary; infer inalterado
   - docs/LAYOUT.md  # §7: SilverContentHash entre os VOs de identidade
 contratos_introduzidos: [RunConfirmatoryEvaluation (use case; status JUDGED/BLOCKED/ALREADY_JUDGED, uma geração julgada por partição — ADR 8.1.0001), resolve_judged_revision (extraído do BuildConfirmatoryScorecard), SilverContentHash (VO de identidade em shared, floats exatos, linhas consumidas pelo RefreshGold — ADR 8.1.0002) e GoldManifest.silver_content, JudgedGenerationStore (port-out satisfeito pelo ParquetGoldStore; cópia selada em judged/<preregistration_ref>/ com CONTENTS.sha256 — ADR 8.1.0003; registro write-ahead de tentativas e .judged.toml commitado como verdade cruzada — ADR 8.1.0004), EvaluationEnvironment e EvaluationWriterLock (ports do consumidor), subcomando `evaluate` (infer da 7.1 encadeado antes do use case), registro <nome>-r<rev>.judged.toml]
 contratos_consumidos: [BuildConfirmatoryScorecard e refresh_command_from (6.5), RefreshGold (6.4), RunInference / subcomando `infer` idempotente (7.1), tabelas gold conformais do RefreshGold e revisão r2 (7.2), tabelas gold de H3 publicadas pelo RefreshGold derivado da revisão ancorada mais recente, com o bloco [h3] da r3 (7.3, ADR 7.3.0001), predições permutadas e pesos da VSN no silver (`attribute` completo) e cohort de ablação congelado e treinado (7.3), tabelas de perfil (6.6)]
