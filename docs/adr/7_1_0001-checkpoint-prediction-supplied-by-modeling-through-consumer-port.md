@@ -14,7 +14,7 @@ bounded_context: inference
 
 # ADR 7.1.0001 — Checkpoint prediction supplied by modeling through a consumer-owned port
 
-> ⚠️ **Errata (2026-10-22):** "ch. 6" → cap. 7 "Model Deployment and Prediction Service" (Huyen 2022, *Designing Machine Learning Systems*; the "two pipelines"/batch-vs-online discussion lives there, ch. 6 is "Model Development and Offline Evaluation") — ver Stage 7.4 (technical 7.4 §7, Checkpoint C3-3).
+> ⚠️ **Errata (2026-10-22):** "ch. 6" → cap. 7 "Model Deployment and Prediction Service" (Huyen 2022, *Designing Machine Learning Systems*; the "two pipelines"/batch-vs-online discussion lives there, ch. 6 is "Model Development and Offline Evaluation") — ver Stage 7.4 (technical 7.4 §7, Checkpoint C3-4).
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
