@@ -14,6 +14,7 @@ import pytest
 
 from financial_forecasting.features.inference.application.dtos.serving_gold import (
     AVAILABLE,
+    BLOCKED,
     LOWER,
     OK,
     UNAVAILABLE,
@@ -325,6 +326,27 @@ def test_unpublished_gold_carries_no_generation_fields(field: str) -> None:
 def test_published_gold_carries_every_generation_field(field: str) -> None:
     with pytest.raises(ValueError, match="published gold carries every generation field"):
         _published(**{field: None})
+
+
+@pytest.mark.parametrize("status", ["RUNNING", "completed", ""])
+def test_published_gold_status_outside_the_catalogue_is_refused(status: str) -> None:
+    with pytest.raises(ValueError, match="generation_status must be one of"):
+        _published(generation_status=status)
+
+
+@pytest.mark.parametrize("block", ["conformal", "explainability"])
+def test_blocked_generation_has_no_available_block(block: str) -> None:
+    other = "explainability" if block == "conformal" else "conformal"
+    records = {
+        "conformal": {"corrections": ()},
+        "explainability": {"shares": (), "reading": None, "vsn": ()},
+    }
+    with pytest.raises(ValueError, match="BLOCKED generation has no available block"):
+        _published(
+            generation_status=BLOCKED,
+            **{f"{other}_status": UNAVAILABLE, f"{other}_reason": "geração gold BLOCKED"},
+            **records[other],
+        )
 
 
 @pytest.mark.parametrize("label", ["conformal_label", "h3_label", "vsn_label"])

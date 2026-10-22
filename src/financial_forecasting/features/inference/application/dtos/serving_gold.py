@@ -28,6 +28,12 @@ UNAVAILABLE: Final = "unavailable"
 OK: Final = "ok"
 LOWER: Final = "lower"
 UPPER: Final = "upper"
+# Status de uma geração gold publicada: os valores do `RefreshStatus` do `evaluation`,
+# repetidos aqui porque o `inference` não o importa; a paridade é presa por
+# `tests/architecture/test_serving_gold_status_parity.py` (Checkpoint C1-4).
+COMPLETED: Final = "COMPLETED"
+BLOCKED: Final = "BLOCKED"
+GENERATION_STATUSES: Final = frozenset({COMPLETED, BLOCKED})
 
 _BLOCK_STATUSES: Final = frozenset({AVAILABLE, UNAVAILABLE})
 _UNIT_STATUSES: Final = frozenset({OK, "undefined", "error"})
@@ -202,6 +208,16 @@ class ServingGold:
                 raise ValueError("an unpublished gold carries no generation fields")
         elif any(value is None for value in generation):
             raise ValueError("a published gold carries every generation field")
+        elif self.generation_status not in GENERATION_STATUSES:
+            raise ValueError(
+                f"generation_status must be one of {sorted(GENERATION_STATUSES)}, "
+                f"got {self.generation_status!r}"
+            )
+        elif self.generation_status == BLOCKED and AVAILABLE in (
+            self.conformal_status,
+            self.explainability_status,
+        ):
+            raise ValueError("a BLOCKED generation has no available block")
         for label in (self.conformal_label, self.h3_label, self.vsn_label):
             if not label:
                 raise ValueError("labels must not be empty")

@@ -33,6 +33,7 @@ from typing import Final, Literal
 
 from financial_forecasting.features.inference.application.dtos.serving_gold import (
     AVAILABLE,
+    COMPLETED,
     LOWER,
     OK,
     UNAVAILABLE,
@@ -67,7 +68,6 @@ _SILVER: Final = "silver"
 _DIM_RUN: Final = "dim_run"
 _FACT: Final = "fact_oos_predictions"
 _TEST: Final = "test"
-_COMPLETED: Final = "COMPLETED"  # `RefreshStatus.COMPLETED` do evaluation, sem importá-lo
 _VARIANT: Final = ConformalVariant.SPLIT_CQR
 _UNIT_MISSING: Final = "unidade ausente na geração gold"
 _OTHER_CANDIDATE: Final = "geração gold de outro candidato"
@@ -511,7 +511,7 @@ class ServeInference:
         explainability = (gold.explainability_status, gold.explainability_reason)
         if (
             gold.published
-            and gold.generation_status == _COMPLETED
+            and gold.generation_status == COMPLETED
             and gold.candidate != scope.model_version
         ):
             reason = f"{_OTHER_CANDIDATE}: {gold.candidate} (servido: {scope.model_version})"
