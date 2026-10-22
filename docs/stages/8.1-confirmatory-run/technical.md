@@ -152,6 +152,9 @@ nenhuma pede ADR novo.
   `ALREADY_JUDGED` é reconstruído da cópia selada (ADR 8.1.0003 item 7), e o do
   `JUDGED` sai do `JudgedGeneration` que o `preserve` devolve — a mesma função
   sobre a mesma entrada dá o mesmo texto (A5, A15).
+- **Uma tentativa = duas linhas no `ATTEMPTS.jsonl`** (`started` antes do E1 e
+  `input_read` logo depois); "uma entrada" no A9 e "tentativa" no A5/A13/A15
+  contam tentativas (`attempt_id`), não linhas.
 - **Tentativas (ADR 8.1.0004 item 1).** `JudgedAttempt` com `phase`
   (`started` | `input_read`) e `attempt_id` (= `started_at` ISO da linha
   `started`); a linha `input_read` (com `silver_content` e
@@ -759,7 +762,7 @@ tests/
   `--deviation` conferido sempre que vier) → `ALREADY_JUDGED` ou registro
   `started` → E1 `refresh_gold(refresh_command_from(plan, ref))` → registro
   `input_read` → conferências 2b(i)(ii) → E2 só com `COMPLETED` → `run_record`
-  (snapshot, `inference_summary`, `deviation`, todas as tentativas da partição,
+  (`environment` = o snapshot, com `environment.commit`; `inference_summary`, `deviation`, todas as tentativas da partição,
   resumo do refresh, `failed_checks` quando `BLOCKED`, referência às seeds) →
   E3 `preserve(expected_manifest=result.manifest)` (com scorecard,
   `manifest_read == result.manifest` antes, I8) → resultado com
@@ -929,7 +932,10 @@ verde e a árvore limpa; entre o commit verde do ponto 2 (`GATE2`) e o
 
 **Sessão que executa.** Cada chamada de shell é um processo novo (variáveis não
 persistem) e tem teto de 10 min. Por isso: (i) todo valor calculado vai para
-`$SCRATCH/etapa-r.env` e cada passo começa com `source "$SCRATCH/etapa-r.env"`;
+`$SCRATCH/etapa-r.env`, e **todo** bloco começa com
+`set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-r.env" || exit 1` (com o caminho
+literal repetido: numa chamada nova `$SCRATCH` não existe, e sem `set -e` um
+`test` falho não para nada);
 (ii) os passos longos (`evaluate`) rodam num container **destacado**
 `ff81-eval-<n>`, esperado por `docker wait` em segundo plano
 (`run_in_background`, com notificação ao sair), com conferência por `docker ps`
@@ -945,7 +951,8 @@ cópia: o tempo medido pela perna "hash ligado" da Task 17, anotado na intençã
 
 **R0 — Variáveis (host, Git Bash; uma vez).**
 ```bash
-SCRATCH=<scratchpad da sessão, caminho absoluto, fora do repo>
+set -eu
+SCRATCH=<scratchpad da sessão, caminho absoluto literal, fora do repo>
 WT=feat-211-8-1-confirmatory-run
 IMAGE_ID=$(docker image inspect --format '{{.Id}}' financial_forecasting-app:dev); test -n "$IMAGE_ID"
 cat > "$SCRATCH/etapa-r.env" <<EOF
@@ -978,7 +985,7 @@ muda chave de ambiente. Prefixar todo `docker run` com `MSYS_NO_PATHCONV=1`.
 
 **R1 — Pré-condições (A12, sem escrita).**
 ```bash
-source "$SCRATCH/etapa-r.env"
+set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-r.env" || exit 1
 git -C "$WTH" status --short                                            # vazio
 test -z "$(git -C "$WTH" diff --name-only "$GATE2"..HEAD | grep -v '^docs/stages/8.1-confirmatory-run/technical.md$')" && echo ONLY_DOCS_SINCE_GATE2
 test "$(docker image inspect --format '{{.Id}}' financial_forecasting-app:dev)" = "$IMAGE_ID" && echo SAME_IMAGE
@@ -995,7 +1002,7 @@ na intenção; com container vivo → esperar.
 **Pré-voo de ambiente** (Etapa E3 da 7.1 adaptada ao `$RUN_REAL`; imprime o que
 a intenção do R3 registra):
 ```bash
-source "$SCRATCH/etapa-r.env"
+set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-r.env" || exit 1
 MSYS_NO_PATHCONV=1 $RUN_REAL sh -c "$PRE; git status --short; git rev-parse HEAD; uv run --no-sync python -c \"import json, pathlib, platform, torch; from financial_forecasting.features.modeling.adapters.out.runtime.git_runtime_environment_probe import GitRuntimeEnvironmentProbe as P; from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import CODE_KEYS, DIRTY_KEY; cur = dict(P(repo_root=pathlib.Path('/app'), cohort_file=pathlib.Path('config/cohorts/aapl_confirmatory.toml').resolve(), device='cpu').snapshot()); ref = json.load(open('artifacts/cohorts/aapl_confirmatory-r0-665f45d9169a/progress.json'))['environment']; skip = set(CODE_KEYS) | {DIRTY_KEY}; print('dirty', cur[DIRTY_KEY]); print('non-code diff', sorted(k for k in set(cur) | set(ref) if k not in skip and cur.get(k) != ref.get(k))); print('code.src', cur['code.src']); print('code.uv_lock', cur['code.uv_lock']); print('platform', platform.platform()); print('cpu_capability', torch.backends.cpu.get_cpu_capability())\"" | tee "$SCRATCH/preflight.txt"
 ```
 Esperado: `git status` vazio, `dirty false`, `non-code diff []`; as linhas
@@ -1005,22 +1012,32 @@ o que diverge (primeiro `$RES`, registrando `[deviation]`), repetir o pré-voo.
 
 Resolução da r3 sem efeito:
 ```bash
-source "$SCRATCH/etapa-r.env"
+set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-r.env" || exit 1
 MSYS_NO_PATHCONV=1 $RUN_REAL sh -c "$PRE; uv run --no-sync python -c \"from pathlib import Path; from financial_forecasting.features.evaluation.adapters.out.toml.toml_preregistration_source import TomlPreregistrationSource as S; from financial_forecasting.features.evaluation.application.use_cases.judged_revision import resolve_judged_revision as r; from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import CanonicalJsonHasher as H; v = r(source=S(root=Path('config/preregistration')), hasher=H(), name='aapl_confirmatory', revision=3, preregistration_ref='$REF'); print(v.reference, v.anchor.anchored_at.isoformat())\""
 ```
 Esperado: `aapl_confirmatory-r3-00fd83d9cd39 2026-10-21T17:41:23+00:00`.
 Qualquer divergência em R1 → **não** seguir.
 
-**R2 — Backup do `data_root` (D10; entrada congelada da 8.2).**
+**R2 — `infer` avulso e backup do `data_root` (D10; entrada congelada da 8.2).**
+Antes do backup, um `infer` avulso (idempotente; a E5 da 7.1 deu `calib rows written 0`),
+para que o `infer` de dentro do `evaluate` não tenha o que escrever. Destacado como o R4
+(`ff81-infer`, `docker wait` em segundo plano):
 ```bash
-source "$SCRATCH/etapa-r.env"
+set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-r.env" || exit 1
+MSYS_NO_PATHCONV=1 docker run -d --name ff81-infer $RES $MOUNTS $ENVS "$IMAGE_ID" sh -c "$PRE; uv run --no-sync python -m financial_forecasting.cli infer --data-root data/cohorts/aapl --cohort config/cohorts/aapl_confirmatory.toml"
+# ao sair: docker logs ff81-infer > "$SCRATCH/infer-0.out" 2> "$SCRATCH/infer-0.err"; docker rm ff81-infer
+grep "^inference " "$SCRATCH/infer-0.out"     # 60 runs; registrar written/verified em §7
+```
+Depois dele, o backup:
+```bash
+set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-r.env" || exit 1
 BK="$MAINH/data/backups/aapl-pre-8.1-$STAMP"
 mkdir -p "$BK" && cp -a "$MAINH/data/cohorts/aapl/." "$BK/"
 (cd "$BK" && find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum) > "$BK.sha256sum"
 (cd "$MAINH/data/cohorts/aapl" && sha256sum -c --quiet "$BK.sha256sum") && echo BACKUP_OK
 printf 'BK=%s\nINPUT_BACKUP_SHA=%s\n' "$BK" "$(sha256sum "$BK.sha256sum" | cut -d' ' -f1)" >> "$SCRATCH/etapa-r.env"
 ```
-O backup só é a entrada do refresh se o `infer` não escrever nada (R4).
+O backup só é a entrada do refresh se o `infer` do `evaluate` não escrever nada (R4).
 
 **R3 — Intenção da tentativa commitada (A12, D12; antes de CADA `evaluate`).**
 Entrada `### <data> — [measurement] etapa-r — intenção da tentativa <n> da
@@ -1034,7 +1051,7 @@ por `git -C "$WTH" commit -F <arquivo UTF-8 sem BOM>`.
 
 **R4 — Corrida (A13), destacada.**
 ```bash
-source "$SCRATCH/etapa-r.env"; N=1
+set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-r.env" || exit 1; N=1
 test -z "$(docker ps -a --filter name=ff81-eval-$N -q)"
 MSYS_NO_PATHCONV=1 docker run -d --name ff81-eval-$N $RES $MOUNTS $ENVS "$IMAGE_ID" sh -c "$PRE; $EVAL"
 ```
@@ -1042,7 +1059,7 @@ Em segundo plano (`run_in_background`), esperar o fim:
 `docker wait ff81-eval-1 > "$SCRATCH/eval-1.exit"`. Enquanto roda:
 `docker ps --filter name=ff81` e `docker logs --tail 5 ff81-eval-1`. Ao sair:
 ```bash
-source "$SCRATCH/etapa-r.env"; N=1
+set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-r.env" || exit 1; N=1
 docker logs ff81-eval-$N > "$SCRATCH/eval-$N.out" 2> "$SCRATCH/eval-$N.err"; cat "$SCRATCH/eval-$N.exit"   # 0
 docker rm ff81-eval-$N
 grep "^inference " "$SCRATCH/eval-$N.out"     # ...: 60 runs (...); calib rows written 0, verified 211680
@@ -1050,9 +1067,9 @@ grep "^evaluation " "$SCRATCH/eval-$N.out"
 printf 'DIGEST=%s\n' "$(grep -o 'generation_digest [0-9a-f]\{64\}' "$SCRATCH/eval-$N.out" | cut -d' ' -f2)" >> "$SCRATCH/etapa-r.env"
 ```
 Esperado: exit `0`; 60 linhas de run do `infer` (modo e max |Δ| registrados) e
-`calib rows written 0, verified 211680` — **written > 0** → `[finding]`: o backup
-do R2 deixou de ser a entrada congelada da 8.2 (refazer o R2 e anotar antes de
-qualquer outra coisa); `evaluation aapl_confirmatory-r3-00fd83d9cd39:
+`calib rows written 0, verified 211680` — **written > 0** → `[finding]` e
+**PARADA** (o backup do R2 deixou de ser a entrada congelada da 8.2; decisão
+humana, sem refazer backup); `evaluation aapl_confirmatory-r3-00fd83d9cd39:
 JUDGED|BLOCKED generation_digest <hex> partition AAPL/aapl_confirmatory-r0-665f45d9169a`;
 `$P/judged/$REF/` com `CONTENTS.sha256`; `$P/judged/ATTEMPTS.jsonl` com duas
 linhas. Conferências (sem ler valor do gold além do que o scorecard publica):
@@ -1069,7 +1086,7 @@ cumprido. Não re-rodar.**
 
 **R5 — Integridade de fora do código (A14).**
 ```bash
-source "$SCRATCH/etapa-r.env"
+set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-r.env" || exit 1
 (cd "$P/judged/$REF" && sha256sum -c --quiet CONTENTS.sha256) && echo CONTENTS_OK
 test "$(sha256sum "$P/judged/$REF/CONTENTS.sha256" | cut -d' ' -f1)" = "$DIGEST" && echo DIGEST_OK
 ```
@@ -1077,14 +1094,14 @@ Falhou → `[finding]` e **parar** (ainda não há backup da cópia: o R7 vem de
 
 **R6 — Replay (A15).** R3 (intenção da tentativa 2, replay) e:
 ```bash
-source "$SCRATCH/etapa-r.env"; N=2
+set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-r.env" || exit 1; N=2
 printf 'MAN1=%s\nATT1=%s\n' "$(sha256sum "$P/current/MANIFEST.json" | cut -d' ' -f1)" "$(wc -l < "$P/judged/ATTEMPTS.jsonl")" >> "$SCRATCH/etapa-r.env"
 MSYS_NO_PATHCONV=1 docker run -d --name ff81-eval-$N $RES $MOUNTS $ENVS "$IMAGE_ID" sh -c "$PRE; $EVAL"
 ```
 Esperar (`docker wait ff81-eval-2 > "$SCRATCH/eval-2.exit"`, em segundo plano),
 coletar como no R4 e:
 ```bash
-source "$SCRATCH/etapa-r.env"
+set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-r.env" || exit 1
 grep "^evaluation " "$SCRATCH/eval-2.out" | grep -q "ALREADY_JUDGED generation_digest $DIGEST" && echo REPLAY_OK
 diff <(sed -n '/^--- attestation ---$/,$p' "$SCRATCH/eval-1.out") <(sed -n '/^--- attestation ---$/,$p' "$SCRATCH/eval-2.out") && echo BODY_SAME
 test "$(sha256sum "$P/current/MANIFEST.json" | cut -d' ' -f1)" = "$MAN1" && test "$(wc -l < "$P/judged/ATTEMPTS.jsonl")" = "$ATT1" && echo NO_NEW_EFFECT
@@ -1092,7 +1109,7 @@ test "$(sha256sum "$P/current/MANIFEST.json" | cut -d' ' -f1)" = "$MAN1" && test
 
 **R7 — Backup da cópia selada (ADR 8.1.0003 item 6c).**
 ```bash
-source "$SCRATCH/etapa-r.env"
+set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-r.env" || exit 1
 JB="$MAINH/data/backups/judged-$REF-$STAMP"
 mkdir -p "$JB" && cp -a "$P/judged/$REF/." "$JB/"
 (cd "$JB" && find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum) > "$JB.sha256sum"
@@ -1102,8 +1119,8 @@ printf 'JB=%s\nJUDGED_BACKUP_SHA=%s\n' "$JB" "$(sha256sum "$JB.sha256sum" | cut 
 
 **R8 — Tag e comentário (A16; ADR 8.1.0003 item 7), idempotente.**
 ```bash
-source "$SCRATCH/etapa-r.env"
-COMMIT=$(grep -o '"commit": "[0-9a-f]\{40\}"' "$P/judged/$REF/run_record.json" | head -1 | grep -o '[0-9a-f]\{40\}'); test -n "$COMMIT"
+set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-r.env" || exit 1
+COMMIT=$(python -c "import json, sys; print(json.load(open(sys.argv[1], encoding='utf-8'))['environment']['commit'])" "$P/judged/$REF/run_record.json"); test ${#COMMIT} -eq 40
 TAG="confirmatory-run/$REF"
 printf 'COMMIT=%s\nTAG=%s\n' "$COMMIT" "$TAG" >> "$SCRATCH/etapa-r.env"
 git -C "$WTH" push origin feat/211-8-1-confirmatory-run
@@ -1161,12 +1178,12 @@ apagar `gold/`):
 | R1 com `non-code diff`, `dirty true`, `SAME_IMAGE` ausente ou checkpoint faltando | não rodar; corrigir ambiente/árvore, reconstruir nada sem anotar, ou restaurar checkpoints do `data/backups/tft-pre-7.4-20261022-030008/` (R1 do concept); repetir R1 |
 | `.writer.lock` presente no R1 | `docker ps --filter name=ff81 -q` vazio e nenhum outro container no `data_root` → `--break-stale-lock` anotado na intenção; senão esperar |
 | `infer` com erro (`CheckpointNotFoundError`, `ReproductionError`…) | exit 2 antes do use case, nada de gold; tabela "Se falhar" da Etapa E da 7.1 |
-| `infer` com `calib rows written` > 0 | `[finding]`; refazer o backup do R2 depois do `infer` e registrar que a entrada congelada é o novo backup |
+| `infer` do `evaluate` com `calib rows written` > 0 | `[finding]` e **parar** (o R2 já rodou um `infer` avulso; escrita aqui é anomalia); decisão humana, sem refazer backup |
 | G1–G4 recusam (`Preregistration*Error`, `DirtyCodeError`, `JudgedGeneration*Error`, `PriorAttempt*Error`) | zero efeito; ler a mensagem, `[finding]` se não for erro de operação; nunca `--deviation` sem decisão registrada |
 | `CohortRunLockedError` | `docker ps --filter name=ff81 -q`; só com ele vazio, `--break-stale-lock` |
 | Exit 137 / OOM do Docker (SIGKILL, sem traceback) | `docker inspect ff81-eval-<n> --format '{{.State.OOMKilled}}'`; container removido e lock conferido; a tentativa ficou registrada; re-rodar com mais `--memory` (memória não é chave do I13), nova intenção commitada e `[deviation]` com o motivo |
 | Queda ou erro entre E1 e E3 (`OSError`, `MemoryError`…) | a tentativa ficou registrada; diagnosticar; re-rodar **só** com o mesmo código, a mesma imagem e a mesma entrada (I13), com nova intenção commitada (R3); o use case confere a geração nova contra a viva |
-| Correção de código necessária antes do selo (ex.: plano B de memória) | `[deviation]` commitado, `fix` + `make check` extra (justificado no §7), e a nova tentativa só com `--deviation "<justificativa com [deviation]>"` (I13) |
+| Correção de código necessária antes do selo (ex.: plano B de memória) | `[deviation]` commitado, `fix` + `make check` extra (justificado no §7), `GATE2` atualizado no `etapa-r.env` para o commit verde novo, pré-voo do R1 refeito (`code.src` novo na intenção), e a nova tentativa só com `--deviation "<justificativa com [deviation]>"` (I13) |
 | `PriorAttemptInputChangedError` / `PriorAttemptDivergenceError` | **parar**: `[finding]` (R-BIT), diagnóstico humano; nada selado |
 | `BLOCKED` | I5: selar, atestar, `[finding]`, parar (R4) |
 | R5 falha (`CONTENTS` não confere) | `[finding]` e **parar**: o backup da cópia (R7) ainda não existe; diagnóstico humano |
@@ -1271,7 +1288,7 @@ python scripts/check_technical_postexec.py docs/stages/8.1-confirmatory-run/tech
 | A2 | `silver_content` estável, muda só a unidade alterada, não muda com linha descartada, `seed` nulo/não nulo, tabelas gold idênticas, `manifest` = publicado | 02, 03, 04, 05 | `test_silver_table_reader_contract.py::test_fake_columns_equal_real_columns`; `test_silver_content_accumulator.py`; `test_refresh_gold_use_case.py::{test_result_manifest_equals_published_manifest, test_rows_discarded_by_post_filters_do_not_change_digest, test_gold_tables_identical_with_and_without_hashing}`; `test_silver_content_refresh.py` (leitor real) |
 | A3 | `resolve_judged_revision` extraído; testes do scorecard sem alteração | 06 | `test_judged_revision.py`; `git diff --exit-code` dos testes do scorecard |
 | A4 | Guardas com zero efeito; conferências pós-E1 | 07, 10, 13 | `test_run_confirmatory_evaluation.py::{test_guard_refuses_with_zero_effect[*], test_guards_run_in_order, test_input_changed_raises_and_seals_nothing, test_divergent_generation_with_equal_code_env_input_raises_and_seals_nothing}` |
-| A5 | Replay e tentativas | 13, 14 | `test_run_confirmatory_evaluation.py::{test_sealed_intact_is_already_judged_without_refresh_or_scorecard, test_crash_between_e1_and_e3_leaves_attempt_and_no_seal, test_rerun_same_code_env_input_completes_with_two_attempts_in_run_record, test_rerun_with_changed_code_and_valid_deviation_records_it}`; integração `test_second_call_already_judged_with_same_digest_and_body`; contrato `test_preserve_removes_staging_leftover` |
+| A5 | Replay e tentativas | 13, 14 | `test_run_confirmatory_evaluation.py::{test_sealed_intact_is_already_judged_without_refresh_or_scorecard, test_crash_between_e1_and_e3_leaves_attempt_and_no_seal, test_rerun_same_code_env_input_completes_with_two_attempts_in_run_record, test_rerun_with_changed_code_and_valid_deviation_records_it, test_committed_record_of_this_revision_with_same_digest_is_already_judged, test_scorecard_error_propagates_with_attempt_recorded_and_nothing_sealed}`; integração `test_committed_judged_toml_with_first_digest_is_already_judged`, `test_committed_judged_toml_with_other_digest_is_tampered`; contrato `test_write_failure_during_preserve_seals_nothing`, `test_contents_written_last`; integração `test_second_call_already_judged_with_same_digest_and_body`; contrato `test_preserve_removes_staging_leftover` |
 | A6 | `JudgedGenerationStore` `[fake, real]` | 08, 09 | `test_judged_generation_store_contract.py` (lista da Task 09); `test_judged_generation_dtos.py` |
 | A6b | `manifest_read` ≠ publicado → mismatch | 13 | `test_run_confirmatory_evaluation.py::test_scorecard_manifest_read_differs_raises_mismatch_nothing_sealed` |
 | A7 | Caminho `BLOCKED` | 04, 13, 14 | `test_refresh_gold_use_case.py::test_blocked_hashes_exactly_dim_run_facts_and_realized`; `test_run_confirmatory_evaluation.py::{test_blocked_preserves_without_scorecard_and_with_failed_checks, test_blocked_second_call_is_already_judged}`; integração `test_blocked_world_seals_without_scorecard_then_already_judged` |
