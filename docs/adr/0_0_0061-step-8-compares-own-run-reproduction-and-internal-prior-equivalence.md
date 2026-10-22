@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-22
 updated_at: 2026-10-22
 adr_id: 0.0.0061
-decision: Stage 8.2 makes both comparisons — (i) it re-executes the silver → gold → scorecard chain of 8.1 from the persisted cohort and compares it with the judged generation (bit for bit in the same pinned environment, per class across environments), which is the reproduction claim cited in the TCC; and (ii) it audits the official pipeline against the prior confirmatory evidence restricted to the common intersection (pinball at τ ∈ {0.1, 0.5, 0.9}, PICP/MPIW of the 80 % pair, DM against the common baselines, direction of the verdict), with the prior evidence frozen by content hash before it serves as oracle, as an internal audit recorded only in the repository; the TCC text does not mention the prior project.
+decision: Stage 8.2 makes both comparisons — (i) it re-executes the silver → gold → scorecard chain of 8.1 from the persisted cohort and compares it with the judged generation (bit for bit in the same pinned environment, per class across environments), which is the reproduction claim cited in the TCC; and (ii) it audits the official pipeline against the prior confirmatory evidence restricted to the common intersection (pinball at τ ∈ {0.1, 0.5, 0.9}, PICP/MPIW of the 80 % pair, DM against the common baselines as each side reported it, direction of the verdict), with the declared tolerance on the realized target and the metric code, the model numbers compared descriptively, the prior evidence frozen by content hash before it serves as oracle, as an internal audit recorded only in the repository; the TCC text does not mention the prior project.
 context_stage: 0.0-global
 bounded_context: evaluation
 ---
@@ -51,17 +51,21 @@ the Step delivers and what the TCC claims), so it went to the human
 
 1. **(i) Reproduction of the own run — the citable claim.** Re-execute the
    silver → gold → scorecard chain of 8.1 from the persisted artifacts, without
-   retraining, and compare it with the judged generation: bit for bit in the
-   same pinned environment (random steps included, seeds recorded); per class
-   of quantity across environments. Theory: domain doc §4.
+   retraining, in a separate destination, and compare it with the judged
+   generation preserved by 8.1: bit for bit in the same pinned environment
+   (random steps included, seeds recorded); per class of quantity across
+   environments. Theory: domain doc §4.
 2. **(ii) Official × prior confirmatory evidence — an internal audit.**
    Restricted to the **common intersection**: pinball per level at
    τ ∈ {0.1, 0.5, 0.9}; PICP and MPIW of the 80 % pair (0.1, 0.9); DM against
-   the common baselines; the direction of the verdict (sign of the loss
-   differential and DM rejection per common comparator and horizon). The prior
-   evidence is **frozen by content hash** before it serves as oracle. The audit
-   satisfies ASSUM-4 / R-REPRO-1 and is recorded only in the repository.
-   Theory (alignment, tolerance, explanation, scaffolding): domain doc §5.
+   the common baselines, compared as each side reported it (never recomputed);
+   the direction of the verdict (sign of the loss differential and DM
+   rejection per common comparator and horizon). The prior evidence is
+   **frozen by content hash** before it serves as oracle. The declared
+   tolerance of ASSUM-4 applies to the realized target and the metric code;
+   the model numbers are compared descriptively. The audit satisfies ASSUM-4 /
+   R-REPRO-1 and is recorded only in the repository. Theory (alignment,
+   tolerance, explanation, scaffolding): domain doc §5.
 3. **Editorial boundary:** the TCC text uses (i); (ii) is not mentioned.
 
 ## Alternatives considered
@@ -114,11 +118,20 @@ the Step delivers and what the TCC claims), so it went to the human
 ### Negative
 - The audit cannot become a continuous regression test (its oracle is not
   version-controlled); its durable record is the report with the hashes
-  (domain doc §5.8).
+  (domain doc §5.7); the equivalence test is skipped without the hashed oracle
+  and is not a CI gate.
+- 8.1 gains two obligations: preserve the judged generation (copy + hash)
+  before any other refresh, and record a content hash of the silver it read
+  (domain doc §4.5).
 
 ### Neutral / trade-offs accepted
-- The roadmap text of 8.2 ("comparar … com a evidência anterior") is read as
-  part (ii); the DoD's "relatório de equivalência commitado" covers both parts.
+- **Roadmap amended** in the same PR, anchored on this decision (roadmap >
+  domain, so the domain doc could not contradict it): the 8.2 description and
+  DoD now name (i) the reproduction of the 8.1 run from persisted artifacts and
+  (ii) the internal equivalence audit; `non_goals` reads "bit-identical vs
+  evidência anterior" (the own-run reproduction is bit for bit in the recorded
+  environment); a reproduction report joins `arquivos_a_criar`; ROADMAP-5 is
+  restated accordingly; a line in the roadmap history records it.
 
 ## References
 

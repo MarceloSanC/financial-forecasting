@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-22
 updated_at: 2026-10-22
 adr_id: 0.0.0060
-decision: The Step 8 domain gate is satisfied by a single doc, docs/domain/evaluation/reproduction-equivalence-and-reporting.md, with pointers only for 8.1, new theory for 8.2 (reproduction of the own run from persisted artifacts — the citable claim — and an internal equivalence audit against the prior confirmatory evidence on the common intersection, with a declared tolerance in units of between-seed dispersion and a closed catalog of theory-backed explanations) and for 8.3 (status label of each canonical plot and the minimum content of the traceability dossier per Sandve et al. 2013); it consumes the evaluation and inference docs by pointer only, defers implementation to the Stages' technical.md, and keeps the prior-evidence audit out of the TCC text.
+decision: The Step 8 domain gate is satisfied by a single doc, docs/domain/evaluation/reproduction-equivalence-and-reporting.md, with pointers only for 8.1, new theory for 8.2 (reproduction of the own run from persisted artifacts — the citable claim — and an internal equivalence audit against the prior confirmatory evidence on the common intersection, with the declared tolerance on the realized target and the metric code, a descriptive comparison of the model numbers and a closed catalog of theory-backed explanations) and for 8.3 (status label of each canonical plot and the minimum content of the traceability dossier per Sandve et al. 2013); it consumes the evaluation and inference docs by pointer only, defers implementation to the Stages' technical.md, and keeps the prior-evidence audit out of the TCC text.
 context_stage: 0.0-global
 bounded_context: evaluation
 ---
@@ -62,22 +62,33 @@ roadmap). Its scope:
   anchored preregistration chain → complete inputs → one gold generation after
   the anchor → per-horizon verdict H1 → H2 → winner; H3 descriptive and
   separate; conformal descriptive; "≥ 1 horizon"), each step pointing to its
-  source; plus the record 8.1 must carry so that 8.2 can reproduce it.
+  source; plus what 8.1 must record and preserve so that 8.2 can reproduce it
+  (a preserved copy + hash of the judged generation, a content hash of the
+  silver it read).
 - **8.2 (i) — reproduction of the own run** (doc §4): bit for bit in the same
-  pinned environment, random steps included (evidence); across environments,
+  pinned environment and computation path, random steps included (evidence);
+  a later commit keeps the bitwise criterion if its diff does not touch the
+  computation path, otherwise it is a recorded deviation; across environments,
   per class of quantity (discrete exact; continuous deterministic within a
-  declared float64 tolerance; random-dependent bitwise only with the same
-  generator, otherwise reported in Monte Carlo errors); a same-environment
-  failure is a stop, never a switch to tolerance; the reproduction never
-  replaces the judged generation.
+  declared float64 tolerance scaled by the quantity's natural unit;
+  random-dependent bitwise only with the same generator, otherwise reported);
+  a same-environment failure is a stop, never a switch to tolerance; the
+  reproduction runs in a separate destination and never replaces the judged
+  generation.
 - **8.2 (ii) — internal equivalence audit** (doc §5): the prior evidence is a
   regression oracle, never an authority; it is frozen by content hash before
   any value is read; the comparison is restricted to the common intersection
   (common models by definition, alignment by `target_timestamp`, common grid
-  levels without interpolation); a metric-code × prediction decomposition; a
-  tolerance in units of between-seed dispersion (deterministic models: none);
-  descriptive, no TOST; a closed catalog of theory-backed explanations; a rule
-  for retiring interim scaffolding.
+  levels without interpolation); the declared tolerance applies where both
+  sides compute the same thing — the realized target (prior storage
+  precision) and the metric code (new code on prior predictions vs the prior
+  stored number); the model numbers, which differ in features, data and
+  hyperparameters, are compared descriptively (material divergence = a change
+  of sign, side of nominal or DM direction), with no TOST and no seed-scale
+  tolerance; the DM is compared only as each side reported it; a closed
+  catalog of theory-backed explanations with identifiable direction;
+  unexplained divergences are reported, not blocking; a rule for retiring
+  interim scaffolding and keeping the equivalence test out of CI.
 - **8.3** (doc §6–§7): a three-way status label (confirmatory / descriptive /
   exploratory) applied per element; a catalog of the canonical plots with what
   each represents, its source and its mandatory label; the minimum content of
@@ -131,8 +142,11 @@ the P fork (B1) was decided by the human (ADR 0.0.0061).
 
 ### Negative
 - One more long doc; mitigated by the consumption map and by pointers.
-- The tolerance threshold (|z| > 2) and the float64 reproduction tolerance are
-  conventions without a primary source for the exact number (recorded as such).
+- The float64 reproduction tolerance and the definition of a "material"
+  divergence are conventions without a primary source for the exact form
+  (recorded as such).
+- The roadmap block of 8.2 was amended in the same PR (anchored on the human
+  decision of ADR 0.0.0061).
 
 ### Neutral / trade-offs accepted
 - The equivalence audit produces no claim for the TCC text; its value is
