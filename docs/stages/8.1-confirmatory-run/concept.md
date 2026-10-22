@@ -50,7 +50,7 @@ depends_on: [6.5-preregistration-and-scorecard, 6.6-scorecard-profiles, 7.1-infe
   contra o `data_root` git-ignorado**: registro write-ahead de tentativas
   antes do refresh, conferência da geração viva (`current/`) e do registro
   commitado `.judged.toml` como verdade cruzada; re-execução depois de uma
-  tentativa sem selo só com o mesmo código ou com desvio registrado (D12;
+  tentativa sem selo só com mesmo código, mesmo ambiente e mesma entrada (I13), senão só com `--deviation` (D12;
   ADR 8.1.0004).
 - **Geração julgada preservada**: port-out `JudgedGenerationStore`, satisfeito
   pelo próprio `ParquetGoldStore` (dono único do layout do gold) — cópia da geração (`current/` inteiro) + scorecard +
@@ -474,6 +474,7 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
 | Partição já tem geração julgada, tentativa, geração viva ou `.judged.toml` de outra revisão | G4 | `JudgedGenerationExistsError`; zero efeito |
 | `.judged.toml` desta revisão sem cópia selada ou com digest diferente; geração viva desta revisão sem tentativa registrada | G4 | `JudgedGenerationTamperedError`; zero efeito |
 | Tentativa sem selo desta revisão com outro `code.src`/`code.uv_lock` e sem `--deviation` | G4 | `PriorAttemptCodeChangedError`; zero efeito |
+| Tentativa sem selo desta revisão com outro ambiente (id da imagem, plataforma, capacidade de CPU, versões) e sem `--deviation` | G4 | `PriorAttemptEnvironmentChangedError`; zero efeito |
 | `--deviation` sem `[deviation]` | G4 | `InvalidDeviationError`; zero efeito |
 | Geração julgada selada e íntegra | G4 | `ALREADY_JUDGED`, devolve o registro; sem refresh, scorecard nem escrita |
 | Geração julgada com digest divergente ou arquivo faltando | G4 | `JudgedGenerationTamperedError`; zero efeito; diagnóstico humano |
@@ -539,12 +540,14 @@ commita no technical §7 a intenção da tentativa (D12).
 
 - **O quê:** três status (`JUDGED`, `BLOCKED`, `ALREADY_JUDGED`); falha é
   exceção. Replay: geração julgada selada e íntegra → no-op; digest divergente
-  → recusa; sem selo → corrida completa (sobras descartadas). Não há flag para
-  re-julgar.
+  → recusa; sem selo → nova tentativa só com mesmo código, mesmo ambiente e mesma entrada (I13), senão só com `--deviation`
+  (sobras de staging descartadas). Não há flag para re-julgar.
 - **Por quê:** uma vez que o veredito (ou o `BLOCKED`) existe, rodar de novo
   com outra escolha é o *garden of forking paths* que o pré-registro existe
-  para impedir; antes do selo, como nada foi gravado como julgado e a cadeia é
-  determinística, re-executar não muda o resultado. Decidir por hash, não por
+  para impedir; antes do selo os números já existem (desde o E1), então a
+  nova tentativa só é aceita nas condições em que o R-BIT garante o mesmo
+  resultado, e o use case confere isso contra a geração viva anterior (I13).
+  Decidir por hash, não por
   timestamp (contraparte GNU make, issue #211).
 - **Fonte:** skill `evidence-resolution` §1 (Gelman & Loken 2014; Nosek et al.
   2018, via evaluation §8.3); doc de domínio §4.2 (R-BIT) e §4.6; ADR 6.4.0005
@@ -819,8 +822,8 @@ ficam no manifesto.
 |---|---|---|---|
 | R1 — Checkpoints fora do `ARTIFACTS_ROOT` | B | M | o `infer` falha antes de qualquer escrita (`CheckpointNotFoundError`); restaurar do backup `tft-pre-7.4-…`; pré-condição conferida na Task real (60/60) |
 | R2 — `infer` sai em `tolerance` (ambiente ≠ o gravado no cohort) | M | B | política da 7.1 (ADR 7.1.0003): passa se dentro da tolerância e fica registrado no manifesto de inferência e no `inference_summary`; não bloqueia a 8.1 |
-| R3 — Custo do hash do silver (≈ 11 M linhas consumidas) | M | M | digest por unidade (memória limitada a uma unidade); gate de custo em sintético na escala real **antes** da corrida (D11, A17); se reprovar, revisão do technical antes de qualquer tentativa real |
-| R4 — Corrida interrompida | M | B | nada selado ⇒ re-execução completa, determinística; sobras de staging removidas |
+| R3 — Custo do hash do silver (≈ 11 M linhas consumidas) | M | M | digest por unidade (memória limitada a uma unidade); gate de custo em sintético na escala real **antes** da corrida (D11, A17); se reprovar também no plano B, `[finding]` e revisão do concept (onde o limiar mora) antes de qualquer tentativa real |
+| R4 — Corrida interrompida | M | B | nada selado; tentativa registrada; nova tentativa só com mesmo código, mesmo ambiente e mesma entrada (I13), senão só com `--deviation`, conferida contra a geração viva anterior; sobras de staging removidas |
 | R5 — Rename de diretório no bind mount do Windows | B | M | selo = `CONTENTS.sha256` por último; `find` confere o digest; residual do ADR 6.4.0005 |
 | R6 — Desfecho `BLOCKED` no real | B | A | é resultado confirmatório (I5): selado, atestado e relatado; o DoD de veredito fica não cumprido e a Stage para com `[finding]`; qualquer correção vira desvio decidido pelo humano em issue própria |
 | R7 — Defeito descoberto depois do selo | B | A | desvio do plano (doc de domínio §4.6): a geração julgada não é trocada; nova issue; listado no dossiê |
