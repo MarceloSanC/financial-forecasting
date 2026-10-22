@@ -301,8 +301,10 @@ não carrega fastapi por ali.
   `SplitFingerprint`, `CohortHash` (hash do spec do cohort
   confirmatório, ADR 5.5.0001), `DatasetContentFingerprint` (conteúdo do grid de
   treino, ADR 5.5.0004), `PreregistrationHash` (hash do pré-registro
-  confirmatório, floats codificados exatamente, ADR 6.5.0001) e `FamilyPartitionHash`
-  (partição de famílias + `feature_set_hash` de H3, ADR 7.3.0002) são o único caminho de hash; fora deles ninguém
+  confirmatório, floats codificados exatamente, ADR 6.5.0001), `FamilyPartitionHash`
+  (partição de famílias + `feature_set_hash` de H3, ADR 7.3.0002) e `SilverContentHash`
+  (conteúdo do silver consumido pelo refresh do gold, por unidade, floats exatos e tipos
+  declarados, ADR 8.1.0002) são o único caminho de hash; fora deles ninguém
   chama `hasher.hash_mapping`/`hash_text` (payload hand-rolled num use case é uma segunda
   definição de "o mesmo run" — ADR 5.2.0004). Gate: regra 6 do `scripts/check_layout.py`.
 - **Features não importam comportamento de outras features.** Cada slice é uma unidade
