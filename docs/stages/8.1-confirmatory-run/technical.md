@@ -21,7 +21,7 @@ tasks_count: 17
 
 > **Como usar este documento (para code assistant):**
 > 1. Ler §1 inteiro antes da Task 01 (decisões de forma fixadas aqui e a
->    pendência G1).
+>    regra de não-finito no hash).
 > 2. Executar as Tasks na ordem de §2. **1 Task = 1 commit.** A lista de
 >    arquivos de cada Task é **fechada**: tocar arquivo fora dela = parar e
 >    perguntar (RUNBOOK Passo 8, "Escopo estrito"). Arquivos `__init__.py`
@@ -96,30 +96,16 @@ adapter (08→09, 10→11). As Tasks 02 e 07 **estendem** ports existentes com u
 método: port, fake, real e contrato vão juntos porque o contrato `[fake, real]`
 é o que prova que o fake espelha o real (exceção declarada; nenhum port novo).
 
-### Pendência G1 — não-finito nas tabelas de atribuição (gap no concept, escalado)
+### Não-finito no hash do silver (gap da Fase 3B, resolvido no concept)
 
-O concept fixa que o `SilverContentHash` recusa NaN/±inf com `ValueError`
-(A1; ADR 8.1.0002 item 1) e que o hash é calculado **dentro** do `RefreshGold`
-sobre as linhas consumidas (D4). A Stage 7.3 fixou (I16, C8-2) que uma linha
-inválida de `fact_permuted_predictions`/`fact_vsn_weights` **nunca aborta** o
-refresh — vira `undefined` com o motivo —, e os testes
-`test_refresh_gold_use_case.py::test_bad_attribution_row_is_undefined_never_aborts[vsn-weight-inf]`
-e `[permuted-inf]` provam isso com `math.inf`. Com as duas regras, essas linhas
-passam a abortar o refresh no hash, contra o A2(d) ("testes da 6.4–7.3
-verdes"). A disposição muda critério de aceite (A1 ou A2(d)) e foi **escalada à
-sessão mestra** antes do Checkpoint B; o concept não foi editado aqui.
-
-- **Opção recomendada (a):** o `SilverContentHash` codifica não-finitos como
-  fichas próprias (`float:inf`, `float:-inf`, `float:nan`) em coluna float — a
-  identidade continua distinguindo a entrada consumida, e o refresh mantém o
-  `undefined` da 7.3; `None` em coluna não-nula segue `ValueError`. Muda o
-  texto do A1 e do ADR 8.1.0002 item 1.
-- Opção (b): manter a recusa e emendar o I16 da 7.3 (linha não-finita de
-  atribuição passa a abortar) — muda A2(d) e um invariante herdado.
-
-As Tasks 01 e 04 abaixo estão escritas para a opção (a) e marcam com **[G1]**
-as linhas que mudam se a decisão for (b). Nenhuma Task começa antes da
-disposição registrada (concept re-aprovado ou `[decision]` da sessão mestra).
+A Fase 3B achou que recusar NaN/±inf no `SilverContentHash` faria abortar o
+refresh nas linhas não-finitas de `fact_permuted_predictions`/`fact_vsn_weights`
+que a 7.3 transforma em `undefined` (I16, C8-2). O concept foi regredido e
+re-aprovado (`47e46d1d`, `f7081d67`, `230de794`, `c467027b`; ADR 8.1.0002): em
+coluna float, não-finito vira ficha própria (`float:inf`, `float:-inf`,
+`float:nan`); `None` em coluna não-nula continua `ValueError`. As Tasks 01 e 04
+seguem essa regra, e o `test_bad_attribution_row_is_undefined_never_aborts` da
+7.3 fica sem edição.
 
 ### Decisões de forma fixadas aqui (o concept §13 e os ADRs deixaram para a Fase 3B)
 
@@ -236,9 +222,9 @@ resultado: parar e rodar de novo.
 
 ### Pré-condições
 
-- Concept `done` (`e4dde3bb`) e ADRs 8.1.0001–0004 `accepted`; 6.5, 6.6, 7.1,
-  7.2, 7.3 e 7.4 em `develop`; gate de domínio do Step 8 (#208) mergeado.
-- **Pendência G1 disposta** (acima).
+- Concept `done` (`c467027b`, re-aprovado depois do gap de não-finito) e ADRs
+  8.1.0001–0004 `accepted`; 6.5, 6.6, 7.1, 7.2, 7.3 e 7.4 em `develop`; gate de
+  domínio do Step 8 (#208) mergeado.
 - Imagem `financial_forecasting-app:dev` e volume `financial-forecasting_app-venv`.
 - Etapa R: `data/cohorts/aapl/` e `artifacts/` no checkout principal, fora do
   git; 60 checkpoints do confirmatório em `artifacts/tft` (concept §3); sem
@@ -270,7 +256,7 @@ resultado: parar e rodar de novo.
 | # | Depois da Task | Por quê |
 |---|---|---|
 | 1 | 11 | Fecha o grupo que muda contrato consumido fora do use case: VO novo em `shared/` (regra 6 do `check_layout`, LAYOUT §7), campo obrigatório do `GoldManifest` lido pelo `inference` (7.4), método novo no port do leitor com real no `analytics_store`, três ports novos (port-coverage, fake-parity) e docstring do ledger do `modeling`. O T1 não roda `tests/architecture/` nem os scripts de gate; as Tasks 12–16 constroem o use case sobre esses contratos, e um port-coverage ou import-linter vermelho descoberto só no ponto 2 obrigaria retrabalho em cinco Tasks. |
-| 2 | 17 | Pré-corrida: o commit que roda o julgamento confirmatório tem de estar verde como o CI (A11 antes do A12). As Tasks 14–16 mudam composition root, `Settings` e `cli.py`; uma correção de código **depois** do selo seria desvio do plano (doc de domínio §4.6), não um `fix`. |
+| 2 | 17 (depois do Checkpoint C final e da auditoria de testes com mutação real) | Pré-corrida: o commit que roda o julgamento confirmatório tem de estar verde como o CI (A11 antes do A12). As Tasks 14–16 mudam composition root, `Settings` e `cli.py`; uma correção de código **depois** do selo seria desvio do plano (doc de domínio §4.6), não um `fix`. Vermelho aqui → `fix` e um 4º `make check` (justificativa: só o commit verde pode ser o da corrida); o R1 da Etapa R confere que depois dele só entrou o technical. |
 | 3 | saída (depois da Etapa R) | Gate de saída (Passo 10): a Etapa R commita `config/preregistration/aapl_confirmatory-r3.judged.toml` (lido pelo `TomlPreregistrationSource` e por testes de arquitetura que leem `config/preregistration/`) e o §7. |
 
 Nas demais Tasks o gate de commit é o T1 da Task. `make check-task` só com
@@ -337,11 +323,11 @@ tests/
   (`3` e `3.0` → mesmo hash); `test_int_column_rejects_fractional_float`
   (`3.5` → `ValueError`); `test_none_in_non_nullable_column_raises`;
   `test_none_in_nullable_column_accepted`; `test_undeclared_column_raises`;
-  `test_missing_declared_column_raises`; `test_str_preserved` (`"1"` ≠ `1`);
+  `test_absent_column_and_null_hash_differently` (linha sem a coluna ≠ linha com
+  `None`; ausência não é erro — o leitor real projeta o schema inteiro); `test_str_preserved` (`"1"` ≠ `1`);
   `test_created_at_utc_does_not_change_hash`;
-  `test_non_finite_floats_encoded_as_distinct_tokens` **[G1]** (`inf`, `-inf`,
-  `nan` dão hashes distintos entre si e de qualquer finito; sob a opção (b):
-  `test_nan_and_inf_raise`); `test_numpy_scalars_normalized` (`numpy.int64`,
+  `test_non_finite_floats_encoded_as_distinct_tokens` (`inf`, `-inf`,
+  `nan` dão hashes distintos entre si e de qualquer finito); `test_numpy_scalars_normalized` (`numpy.int64`,
   `numpy.float64` iguais a `int`/`float`); `test_combine_depends_on_keys_and_digests`;
   `test_raw_constructor_validates_sha256_hex`.
 - **O que fazer:** mover `_encode_floats`/`_encode_mapping` para
@@ -353,7 +339,7 @@ tests/
   constantes `KIND_INT/FLOAT/STR/BOOL`, `WRITE_PROVENANCE_COLUMNS`. Canonização
   pelo tipo declarado (§1 "Forma do VO"): int → `int(v)` se integral
   (`numbers.Integral` sem `bool`, ou float integral), float → `float(v)` com a
-  codificação exata (**[G1]** não-finito → ficha), str → `str` exigido, bool →
+  codificação exata (não-finito → ficha), str → `str` exigido, bool →
   `bool` exigido, `None` só em coluna nula. Stdlib só (`json`, `numbers`).
 - **Critério de aceite:** A1 inteiro; `test_preregistration_hash.py` verde sem
   edição; LAYOUT §7 cita o VO.
@@ -372,6 +358,9 @@ tests/
   - `tests/fakes/features/evaluation/fake_silver_table_reader.py`
   - `src/financial_forecasting/features/analytics_store/adapters/out/parquet/parquet_analytics_repository.py`
   - `tests/contract/features/evaluation/test_silver_table_reader_contract.py`
+  - `tests/integration/features/evaluation/test_h3_refresh_memory.py` (`_GeneratingReader.columns`
+    delegando ao `SILVER_COLUMNS` do fake: sem ele o leitor deixa de satisfazer o Protocol e o
+    mypy do commit fica vermelho; os demais leitores de teste herdam do `FakeSilverTableReader`)
 - **Testes primeiro** (contrato `[fake, real]`):
   `test_columns_declares_every_schema_column_with_kind_and_nullability` (as
   quatro tabelas do refresh; `seed` → `("int", True)`, `year` → `("int",
@@ -431,8 +420,8 @@ tests/
   - `tests/unit/features/evaluation/gold/test_refresh_gold_use_case.py`
   - `tests/unit/features/evaluation/gold/test_refresh_gold_dtos.py`
 - **Arquivos do ripple mecânico** (campo obrigatório `silver_content` e
-  colaborador `hasher` / `columns` nos leitores de teste — uma linha ou um
-  helper por arquivo, sem mudança de asserção):
+  colaborador `hasher` — uma linha ou um helper por arquivo, sem mudança de
+  asserção; linha de fixture sem coluna do schema é aceita, CB-1):
   - `tests/unit/features/evaluation/_silver_content.py` *(novo: `SAMPLE_SILVER_CONTENT`)*
   - `tests/unit/features/evaluation/_scorecard_factory.py`
   - `tests/unit/features/evaluation/_serving_gold_rows.py`
@@ -440,7 +429,7 @@ tests/
   - `tests/contract/features/evaluation/test_gold_generation_reader_contract.py`
   - `tests/contract/features/inference/test_serving_gold_reader_contract.py`
   - `tests/integration/features/evaluation/test_conformal_refresh_end_to_end.py`
-  - `tests/integration/features/evaluation/test_h3_refresh_memory.py` (`_GeneratingReader.columns`)
+  - `tests/integration/features/evaluation/test_h3_refresh_memory.py` (`RefreshGold(..., hasher=...)`)
 
   Acima de 5 arquivos por ser ripple de campo obrigatório (PIPELINE §4.3 item
   2): o commit não compila sem eles e a lógica está nos três primeiros.
@@ -451,10 +440,11 @@ tests/
   `test_rows_discarded_by_post_filters_do_not_change_digest` (outro
   `parent_sweep_id`, `calib` da ablação, run de fold/seed inutilizável);
   `test_gold_tables_identical_with_and_without_hashing` (mesmas `GoldTable`s
-  com o hash de unidade trocado por constante — "nenhum número muda");
-  `test_bad_attribution_row_is_undefined_never_aborts` **inalterado** **[G1]**
-  (sob a opção (b): os casos `vsn-weight-inf` e `permuted-inf` passam a esperar
-  `ValueError`). Em `test_refresh_gold_dtos.py`:
+  com o hash de unidade trocado por constante — "nenhum número muda" — e as
+  linhas devolvidas pelo leitor iguais a um `deepcopy` tirado antes: o hash não
+  muta a entrada);
+  `test_bad_attribution_row_is_undefined_never_aborts` **inalterado** (os casos
+  `vsn-weight-inf` e `permuted-inf` seguem `undefined`: não-finito vira ficha). Em `test_refresh_gold_dtos.py`:
   `test_manifest_round_trip_with_silver_content`;
   `test_manifest_without_silver_content_is_unreadable` (`from_mapping` →
   `ValueError`, precedente `test_manifest_before_this_stage_is_unreadable`).
@@ -469,7 +459,7 @@ tests/
   e seed utilizáveis), `_ablation_reductions` (linhas `test` mantidas por ano) —
   e `silver_content=acc.result()` no `_manifest`. Nenhuma tabela gold muda.
 - **Critério de aceite:** A2(a)(b)(c) com fakes, A2(d), A7 (parte do
-  manifesto), D4, I6, I7, I10; testes da 6.4–7.3 verdes (salvo **[G1]** (b)).
+  manifesto), D4, I6, I7, I10; testes da 6.4–7.3 verdes sem edição de asserção.
 - **Verificação (T1):**
   ```bash
   MSYS_NO_PATHCONV=1 $RUN sh -c "$PRE; uv run --no-sync pytest tests/unit/features/evaluation tests/contract/features/evaluation tests/contract/features/inference/test_serving_gold_reader_contract.py tests/unit/features/inference tests/integration/features/evaluation/test_conformal_refresh_end_to_end.py tests/integration/features/evaluation/test_h3_refresh_end_to_end.py tests/integration/features/evaluation/test_build_confirmatory_scorecard.py tests/integration/features/evaluation/test_profiles_end_to_end.py tests/integration/features/evaluation/test_refresh_gold.py -q --no-cov"
@@ -491,8 +481,11 @@ tests/
   no mesmo diretório); `test_one_consumed_row_changed_changes_its_unit_table_and_total`
   parametrizado por origem — `dim_run` do cohort, `dim_run` da ablação,
   `fact_oos_predictions` `test` e `calib` do cohort, `fact_oos_predictions`
-  `test` da ablação, `fact_permuted_predictions`, `fact_vsn_weights`, realizado
-  (via grade do mundo) — conferindo que nenhuma outra unidade muda;
+  `test` da ablação, `fact_permuted_predictions`, `fact_vsn_weights`, realizado — conferindo que nenhuma outra unidade muda.
+  O caso do realizado muda um retorno da grade por `math.nextafter` (|Δ| < 1e-10):
+  o `DatasetContentFingerprint` (10 casas) fica **igual** — senão o refresh para
+  em `GridFingerprintMismatchError` (C10) — e o digest de `realized|<asset>` muda;
+  o teste afirma as duas coisas;
   `test_read_and_discarded_rows_do_not_change_digest` parametrizado — outro
   `parent_sweep_id` na mesma partição, linha `calib` da ablação, ano da ablação
   fora dos `years`, permutada/VSN de run não candidato, run com fold ou seed
@@ -609,6 +602,12 @@ tests/
   `test_preserve_with_other_manifest_raises_mismatch_and_seals_nothing`;
   `test_preserve_over_sealed_raises_exists_and_touches_nothing`;
   `test_preserve_removes_staging_leftover`;
+  `test_write_failure_during_preserve_seals_nothing` (falha injetada na escrita do
+  documento e, noutro caso, do `CONTENTS.sha256` → `OSError` propaga, `find` →
+  `None`, sem `judged/<ref>/`; o `preserve` seguinte limpa o staging e sela — I9 e
+  §6 do concept, E3); `test_contents_written_last` (perna real: o `mtime_ns` e a
+  ordem de escrita registrada por um `open` instrumentado põem o `CONTENTS.sha256`
+  depois de todo outro arquivo);
   `test_record_attempt_appends_and_attempts_reads_in_order`;
   `test_judged_refs_lists_sealed_refs_only` (ignora `.staging`, `ATTEMPTS.jsonl`);
   perna real: `test_sha256sum_check_passes_on_sealed_copy` (`sha256sum -c` em
@@ -737,13 +736,18 @@ tests/
     de G4). Pós-E1: `test_input_changed_raises_and_seals_nothing`;
     `test_divergent_generation_with_equal_code_env_input_raises_and_seals_nothing`.
   - **A5** — `test_sealed_intact_is_already_judged_without_refresh_or_scorecard`
-    (corpo igual ao do `JUDGED`); `test_crash_between_e1_and_e3_leaves_attempt_and_no_seal`;
+    (corpo igual ao do `JUDGED`; zero `refresh`, zero scorecard, zero `preserve` e
+    `recorded == 0`); `test_committed_record_of_this_revision_with_same_digest_is_already_judged`
+    (`add_judged` com o digest da cópia → `ALREADY_JUDGED`, `recorded == 0`); `test_crash_between_e1_and_e3_leaves_attempt_and_no_seal`;
     `test_rerun_same_code_env_input_completes_with_two_attempts_in_run_record`;
     `test_rerun_with_changed_code_and_valid_deviation_records_it`;
     `test_staging_leftover_removed` (pelo store).
   - **A6b** — `test_scorecard_manifest_read_differs_raises_mismatch_nothing_sealed`.
   - **A7** — `test_blocked_preserves_without_scorecard_and_with_failed_checks`;
     `test_blocked_second_call_is_already_judged`.
+  - `test_scorecard_error_propagates_with_attempt_recorded_and_nothing_sealed`
+    (`FakeScorecardBuilder` erguendo `GoldGenerationCorruptError`: zero `preserve`,
+    tentativa registrada, lock liberado — §6 do concept, E2).
   - `test_attempt_recorded_before_refresh` (I13);
     `test_lock_released_on_any_exception_after_g3`;
     `test_judged_returns_scorecard_digest_and_body`.
@@ -778,7 +782,9 @@ tests/
   - `tests/integration/features/evaluation/test_run_confirmatory_evaluation.py`
 - **Testes primeiro:** composition root —
   `test_run_confirmatory_evaluation_for_wires_the_same_gold_store_source_and_ledger`;
-  `test_cpu_capability_is_lazy` (montar a fábrica não importa `torch`); settings —
+  `test_cpu_capability_is_lazy` (em **subprocesso** limpo: montar a fábrica não
+  põe `torch` em `sys.modules` — no processo do xdist o `torch` já pode estar
+  importado e o teste seria vácuo); settings —
   `test_image_id_from_env`. Integração (mundo sintético do
   `test_h3_refresh_end_to_end.py`, `ParquetAnalyticsRepository`,
   `ParquetGoldStore` e `TomlPreregistrationSource` reais, ambiente fake,
@@ -788,7 +794,11 @@ tests/
   byte as de `current/`; manifesto da cópia com `silver_content`; `started_at`
   ≥ `anchored_at` da revisão de teste; `ATTEMPTS.jsonl` com uma entrada
   `started` e uma `input_read`); **A7** — `test_blocked_world_seals_without_scorecard_then_already_judged`;
-  **A5** real — `test_second_call_already_judged_with_same_digest_and_body`.
+  **A5** real — `test_second_call_already_judged_with_same_digest_and_body`;
+  **G4(a)** real — `test_committed_judged_toml_with_first_digest_is_already_judged`
+  (`.judged.toml` gravado no `config/preregistration/` temporário com o digest da 1ª
+  chamada → `ALREADY_JUDGED`, `ATTEMPTS.jsonl` inalterado) e
+  `test_committed_judged_toml_with_other_digest_is_tampered`.
 - **O que fazer:** `run_confirmatory_evaluation_for(cohort_path: Path, device:
   str) -> RunConfirmatoryEvaluation` em `ApplicationDependencies`, montado com o
   **mesmo** `TomlPreregistrationSource`, `hasher`, `refresh_gold`,
@@ -891,7 +901,19 @@ tests/
   MSYS_NO_PATHCONV=1 $RUN sh -c "$PRE; MEASURE_SILVER_HASH_COST=1 uv run --no-sync pytest tests/integration/features/evaluation/test_silver_hash_cost_measurement.py -s -q --no-cov"
   ```
   (o `$RUN` já traz `--memory 8g --memory-swap 8g`; saída bruta colada em §7.)
-- **Gate T3 — ponto 2 do plano:** `make check` (comando literal do §1), depois do commit.
+- **Antes do ponto 2 — Checkpoint C final e auditoria de testes.** Revisão do
+  bloco 12–17 por subagente e a **auditoria de testes** (PROMPT-stage
+  §AUDITORIA DE TESTES; subagente que não escreveu os testes) com **mutação
+  real** — ordem das guardas G1–G4 no use case, chave de unidade no
+  acumulador, comparação de digest no `find` —, editando, rodando o T1 dos
+  arquivos afetados e revertendo, saída colada em §7. Achado → Task
+  `test(<escopo>): cobrir <X> [8.1/task-NN-extra]` **antes** do ponto 2: o selo
+  da Etapa R depende do código final, e um achado depois dele seria correção
+  pós-selo (doc de domínio §4.6).
+- **Gate T3 — ponto 2 do plano:** `make check` (comando literal do §1), depois
+  do último commit de código. Vermelho → `fix(<escopo>): … [8.1/task-NN-fix]` e
+  novo `make check` (4º ponto, justificado: o commit da corrida tem de ser o
+  verde, ver plano de gates).
 - **Commit:** `test(evaluation): gate de custo do hash do silver em escala sintética [8.1/task-17]`
 
 ---
@@ -900,180 +922,267 @@ tests/
 
 Não é Task numerada: não produz código; produz commits de runbook (§7 e o
 registro de atestação). Roda **depois** da Task 17 com o ponto 2 do plano
-verde, a árvore limpa e o HEAD contendo só commits de docs depois do ponto 2.
-Toda tentativa e todo resultado vão para §7 (`[measurement]`; `[finding]` quando
-o I5/I13 manda parar).
+verde e a árvore limpa; entre o commit verde do ponto 2 (`GATE2`) e o
+`evaluate` só entram commits de `docs/stages/8.1-confirmatory-run/technical.md`
+(conferido mecanicamente no R1). Toda tentativa e todo resultado vão para §7
+(`[measurement]`; `[finding]` quando o I5/I13 manda parar).
 
-**R0 — Variáveis (host, Git Bash).**
+**Sessão que executa.** Cada chamada de shell é um processo novo (variáveis não
+persistem) e tem teto de 10 min. Por isso: (i) todo valor calculado vai para
+`$SCRATCH/etapa-r.env` e cada passo começa com `source "$SCRATCH/etapa-r.env"`;
+(ii) os passos longos (`evaluate`) rodam num container **destacado**
+`ff81-eval-<n>`, esperado por `docker wait` em segundo plano
+(`run_in_background`, com notificação ao sair), com conferência por `docker ps`
+e `docker logs --tail`; (iii) **nunca** `--break-stale-lock` enquanto
+`docker ps --filter name=ff81 -q` não estiver vazio.
+
+**Tempo esperado.** `infer`: ≈ 20 min (7.1 §7, segunda execução: 60 runs
+`strict`, escreve 0 e verifica 211.680 linhas `calib`). Refresh + scorecard +
+cópia: o tempo medido pela perna "hash ligado" da Task 17, anotado na intenção
+(R3). Mais que 3× o esperado sem progresso no `docker logs` → conferir
+`docker stats ff81-eval-<n>` e registrar; não matar o container sem
+`[finding]`.
+
+**R0 — Variáveis (host, Git Bash; uma vez).**
 ```bash
+SCRATCH=<scratchpad da sessão, caminho absoluto, fora do repo>
 WT=feat-211-8-1-confirmatory-run
+IMAGE_ID=$(docker image inspect --format '{{.Id}}' financial_forecasting-app:dev); test -n "$IMAGE_ID"
+cat > "$SCRATCH/etapa-r.env" <<EOF
+SCRATCH=$SCRATCH
+WT=$WT
 WTH=/c/Users/Marcelo/Documents/Code/financial-forecasting-worktrees/$WT
 MAINH=/c/Users/Marcelo/Documents/Code/financial-forecasting
 WTD=C:/Users/Marcelo/Documents/Code/financial-forecasting-worktrees/$WT
 MAIND=C:/Users/Marcelo/Documents/Code/financial-forecasting
-SCRATCH=<scratchpad da sessão, caminho absoluto, fora do repo>
 REF=aapl_confirmatory-r3-00fd83d9cd39
-P="$MAINH/data/cohorts/aapl/gold/asset=AAPL/parent_sweep_id=aapl_confirmatory-r0-665f45d9169a"
-IMAGE_ID=$(docker image inspect --format '{{.Id}}' financial_forecasting-app:dev); test -n "$IMAGE_ID"
-RUN_REAL="docker run --rm --cpus 6 --memory 8g --memory-swap 8g \
-  -v $WTD:/app -v $MAIND/.git:/main.git:ro \
-  -v $MAIND/data/cohorts/aapl:/app/data/cohorts/aapl \
-  -v $MAIND/artifacts:/app/artifacts:ro \
-  -v financial-forecasting_app-venv:/app/.venv \
-  -w /app -e GIT_DIR=/main.git/worktrees/$WT -e GIT_WORK_TREE=/app -e GIT_OPTIONAL_LOCKS=0 \
-  -e IMAGE_ID=$IMAGE_ID -e MLFLOW_TRACKING_URI=sqlite:////tmp/mlruns.db financial_forecasting-app:dev"
-CLI="uv run --no-sync python -m financial_forecasting.cli"
-EVAL="$CLI evaluate --data-root data/cohorts/aapl --cohort config/cohorts/aapl_confirmatory.toml --preregistration aapl_confirmatory --revision 3 --preregistration-ref $REF"
+P=/c/Users/Marcelo/Documents/Code/financial-forecasting/data/cohorts/aapl/gold/asset=AAPL/parent_sweep_id=aapl_confirmatory-r0-665f45d9169a
+IMAGE_ID=$IMAGE_ID
+GATE2=<sha do commit verde do ponto 2>
+STAMP=$(date -u +%Y%m%d-%H%M%S)
+EOF
+cat >> "$SCRATCH/etapa-r.env" <<'EOF'
+MOUNTS="-v $WTD:/app -v $MAIND/.git:/main.git:ro -v $MAIND/data/cohorts/aapl:/app/data/cohorts/aapl -v $MAIND/artifacts:/app/artifacts:ro -v financial-forecasting_app-venv:/app/.venv"
+ENVS="-w /app -e GIT_DIR=/main.git/worktrees/$WT -e GIT_WORK_TREE=/app -e GIT_OPTIONAL_LOCKS=0 -e IMAGE_ID=$IMAGE_ID -e MLFLOW_TRACKING_URI=sqlite:////tmp/mlruns.db"
+RES="--cpus 6 --memory 8g --memory-swap 8g"
+RUN_REAL="docker run --rm $RES $MOUNTS $ENVS $IMAGE_ID"
 PRE="git config --global --add safe.directory '*'"
+EVAL="uv run --no-sync python -m financial_forecasting.cli evaluate --data-root data/cohorts/aapl --cohort config/cohorts/aapl_confirmatory.toml --preregistration aapl_confirmatory --revision 3 --preregistration-ref $REF"
+EOF
 ```
-(Mounts da Etapa E da 7.1: `.git` só leitura, `artifacts/` só leitura,
-`data_root` real em leitura e escrita. Prefixar cada `$RUN_REAL` com
-`MSYS_NO_PATHCONV=1`.)
+O container roda pelo **id** da imagem, não pela tag `:dev` (mutável: outra
+worktree pode reconstruí-la). Mounts da Etapa E da 7.1 (`.git` e `artifacts/`
+só leitura, `data_root` real em leitura e escrita) mais `$RES` (o limite de
+recursos do projeto, o mesmo da Task 17); o pré-voo do R1 prova que `$RES` não
+muda chave de ambiente. Prefixar todo `docker run` com `MSYS_NO_PATHCONV=1`.
 
 **R1 — Pré-condições (A12, sem escrita).**
 ```bash
-git -C "$WTH" status --short                                  # vazio
-docker ps --format '{{.Names}} {{.Mounts}}'                   # nenhum container no data/cohorts/aapl
-ls -a "$MAINH/data/cohorts/aapl"                              # sem gold/ e sem .writer.lock (R9)
-grep -c "\[measurement\] task-17" "$WTH/docs/stages/8.1-confirmatory-run/technical.md"   # >= 1, A17 aprovado
-MSYS_NO_PATHCONV=1 $RUN_REAL sh -c "$PRE; uv run --no-sync python -c \"import json, pathlib; m = json.load(open('data/cohorts/aapl/inference/aapl_confirmatory-r0-665f45d9169a/manifest.json')); ids = sorted(m['runs']) if isinstance(m['runs'], dict) else sorted(r['run_id'] for r in m['runs']); found = {i: len(list(pathlib.Path('artifacts/tft', i).rglob('*.ckpt'))) for i in ids}; print(len(ids), sum(1 for n in found.values() if n == 1), [i for i, n in found.items() if n != 1])\""
+source "$SCRATCH/etapa-r.env"
+git -C "$WTH" status --short                                            # vazio
+test -z "$(git -C "$WTH" diff --name-only "$GATE2"..HEAD | grep -v '^docs/stages/8.1-confirmatory-run/technical.md$')" && echo ONLY_DOCS_SINCE_GATE2
+test "$(docker image inspect --format '{{.Id}}' financial_forecasting-app:dev)" = "$IMAGE_ID" && echo SAME_IMAGE
+docker ps --format '{{.Names}} {{.Mounts}}'                             # nenhum container no data/cohorts/aapl
+ls -a "$MAINH/data/cohorts/aapl"                                        # sem gold/ (R9 do concept) e sem .writer.lock
+grep -c "\[measurement\] task-17" "$WTH/docs/stages/8.1-confirmatory-run/technical.md"   # >= 1 (A17 aprovado)
+MSYS_NO_PATHCONV=1 $RUN_REAL sh -c "$PRE; uv run --no-sync python -c \"import json, pathlib; ids = sorted(json.load(open('data/cohorts/aapl/inference/aapl_confirmatory-r0-665f45d9169a/manifest.json'))['runs']); found = {i: len(list(pathlib.Path('artifacts/tft', i).rglob('*.ckpt'))) for i in ids}; print(len(ids), sum(1 for n in found.values() if n == 1), [i for i, n in found.items() if n != 1])\""
 ```
-Esperado: `60 60 []` (60/60 checkpoints, um `.ckpt` cada). O pré-voo de
-ambiente da Etapa E3 da 7.1 (`non-code diff []`, `dirty false`) e a resolução
-da r3 sem efeito:
+Esperado: `ONLY_DOCS_SINCE_GATE2`, `SAME_IMAGE`, `60 60 []`. Um
+`.writer.lock` presente com nenhum container vivo → registrar em §7 e usar
+`--break-stale-lock` **só** no `infer`/`evaluate` da tentativa, decisão anotada
+na intenção; com container vivo → esperar.
+
+**Pré-voo de ambiente** (Etapa E3 da 7.1 adaptada ao `$RUN_REAL`; imprime o que
+a intenção do R3 registra):
 ```bash
+source "$SCRATCH/etapa-r.env"
+MSYS_NO_PATHCONV=1 $RUN_REAL sh -c "$PRE; git status --short; git rev-parse HEAD; uv run --no-sync python -c \"import json, pathlib, platform, torch; from financial_forecasting.features.modeling.adapters.out.runtime.git_runtime_environment_probe import GitRuntimeEnvironmentProbe as P; from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import CODE_KEYS, DIRTY_KEY; cur = dict(P(repo_root=pathlib.Path('/app'), cohort_file=pathlib.Path('config/cohorts/aapl_confirmatory.toml').resolve(), device='cpu').snapshot()); ref = json.load(open('artifacts/cohorts/aapl_confirmatory-r0-665f45d9169a/progress.json'))['environment']; skip = set(CODE_KEYS) | {DIRTY_KEY}; print('dirty', cur[DIRTY_KEY]); print('non-code diff', sorted(k for k in set(cur) | set(ref) if k not in skip and cur.get(k) != ref.get(k))); print('code.src', cur['code.src']); print('code.uv_lock', cur['code.uv_lock']); print('platform', platform.platform()); print('cpu_capability', torch.backends.cpu.get_cpu_capability())\"" | tee "$SCRATCH/preflight.txt"
+```
+Esperado: `git status` vazio, `dirty false`, `non-code diff []`; as linhas
+`code.src`, `code.uv_lock`, `platform` e `cpu_capability` vão para a intenção.
+`non-code diff` não vazio (inclusive por causa de `$RES`) → **não** rodar; tirar
+o que diverge (primeiro `$RES`, registrando `[deviation]`), repetir o pré-voo.
+
+Resolução da r3 sem efeito:
+```bash
+source "$SCRATCH/etapa-r.env"
 MSYS_NO_PATHCONV=1 $RUN_REAL sh -c "$PRE; uv run --no-sync python -c \"from pathlib import Path; from financial_forecasting.features.evaluation.adapters.out.toml.toml_preregistration_source import TomlPreregistrationSource as S; from financial_forecasting.features.evaluation.application.use_cases.judged_revision import resolve_judged_revision as r; from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import CanonicalJsonHasher as H; v = r(source=S(root=Path('config/preregistration')), hasher=H(), name='aapl_confirmatory', revision=3, preregistration_ref='$REF'); print(v.reference, v.anchor.anchored_at.isoformat())\""
 ```
 Esperado: `aapl_confirmatory-r3-00fd83d9cd39 2026-10-21T17:41:23+00:00`.
-Qualquer divergência → **não** seguir.
+Qualquer divergência em R1 → **não** seguir.
 
 **R2 — Backup do `data_root` (D10; entrada congelada da 8.2).**
 ```bash
-STAMP=$(date -u +%Y%m%d-%H%M%S)
+source "$SCRATCH/etapa-r.env"
 BK="$MAINH/data/backups/aapl-pre-8.1-$STAMP"
 mkdir -p "$BK" && cp -a "$MAINH/data/cohorts/aapl/." "$BK/"
 (cd "$BK" && find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum) > "$BK.sha256sum"
 (cd "$MAINH/data/cohorts/aapl" && sha256sum -c --quiet "$BK.sha256sum") && echo BACKUP_OK
-INPUT_BACKUP_SHA=$(sha256sum "$BK.sha256sum" | cut -d' ' -f1); echo "$BK $INPUT_BACKUP_SHA"
+printf 'BK=%s\nINPUT_BACKUP_SHA=%s\n' "$BK" "$(sha256sum "$BK.sha256sum" | cut -d' ' -f1)" >> "$SCRATCH/etapa-r.env"
 ```
+O backup só é a entrada do refresh se o `infer` não escrever nada (R4).
 
 **R3 — Intenção da tentativa commitada (A12, D12; antes de CADA `evaluate`).**
 Entrada `### <data> — [measurement] etapa-r — intenção da tentativa <n> da
-corrida confirmatória — <autor>` em §7 com: HEAD atual, `code.src` e
-`code.uv_lock` (do pré-voo), `IMAGE_ID`, plataforma, capacidade de CPU, hora
-UTC, se é 1ª execução, replay (A15) ou pós-registro (A16), e o `--deviation`
-(nenhum, salvo decisão registrada). Commit
+corrida confirmatória — <autor>` em §7 com: HEAD atual, `code.src`,
+`code.uv_lock`, `platform` e `cpu_capability` (de `$SCRATCH/preflight.txt`),
+`IMAGE_ID`, hora UTC, tempo esperado, se é 1ª execução, replay (A15) ou
+pós-registro (A16), uso de `--break-stale-lock` e `--deviation` (nenhum, salvo
+decisão registrada). Commit
 `docs(evaluation): intenção da tentativa <n> da corrida confirmatória [8.1/--]`
 por `git -C "$WTH" commit -F <arquivo UTF-8 sem BOM>`.
 
-**R4 — Corrida (A13).**
+**R4 — Corrida (A13), destacada.**
 ```bash
-MSYS_NO_PATHCONV=1 $RUN_REAL sh -c "$PRE; $EVAL" > "$SCRATCH/eval-1.out" 2> "$SCRATCH/eval-1.err"; echo "EXIT=$?"
-tail -n 2 "$SCRATCH/eval-1.out"; grep -n "^evaluation \|refresh_gold" "$SCRATCH/eval-1.out" "$SCRATCH/eval-1.err"
+source "$SCRATCH/etapa-r.env"; N=1
+test -z "$(docker ps -a --filter name=ff81-eval-$N -q)"
+MSYS_NO_PATHCONV=1 docker run -d --name ff81-eval-$N $RES $MOUNTS $ENVS "$IMAGE_ID" sh -c "$PRE; $EVAL"
 ```
-Esperado: `EXIT=0`; 60 linhas de run do `infer` (modo e max |Δ| registrados) e a
-linha `inference …: 60 runs (…)`; `evaluation aapl_confirmatory-r3-00fd83d9cd39:
+Em segundo plano (`run_in_background`), esperar o fim:
+`docker wait ff81-eval-1 > "$SCRATCH/eval-1.exit"`. Enquanto roda:
+`docker ps --filter name=ff81` e `docker logs --tail 5 ff81-eval-1`. Ao sair:
+```bash
+source "$SCRATCH/etapa-r.env"; N=1
+docker logs ff81-eval-$N > "$SCRATCH/eval-$N.out" 2> "$SCRATCH/eval-$N.err"; cat "$SCRATCH/eval-$N.exit"   # 0
+docker rm ff81-eval-$N
+grep "^inference " "$SCRATCH/eval-$N.out"     # ...: 60 runs (...); calib rows written 0, verified 211680
+grep "^evaluation " "$SCRATCH/eval-$N.out"
+printf 'DIGEST=%s\n' "$(grep -o 'generation_digest [0-9a-f]\{64\}' "$SCRATCH/eval-$N.out" | cut -d' ' -f2)" >> "$SCRATCH/etapa-r.env"
+```
+Esperado: exit `0`; 60 linhas de run do `infer` (modo e max |Δ| registrados) e
+`calib rows written 0, verified 211680` — **written > 0** → `[finding]`: o backup
+do R2 deixou de ser a entrada congelada da 8.2 (refazer o R2 e anotar antes de
+qualquer outra coisa); `evaluation aapl_confirmatory-r3-00fd83d9cd39:
 JUDGED|BLOCKED generation_digest <hex> partition AAPL/aapl_confirmatory-r0-665f45d9169a`;
 `$P/judged/$REF/` com `CONTENTS.sha256`; `$P/judged/ATTEMPTS.jsonl` com duas
-linhas. Conferências (sem ler valor do gold além do que o scorecard já
-publicou): manifesto `started_at` > `2026-10-21T17:41:23Z`; `silver_content.tables`
-com `dim_run`, `fact_oos_predictions`, `fact_permuted_predictions`,
+linhas. Conferências (sem ler valor do gold além do que o scorecard publica):
+manifesto `started_at` > `2026-10-21T17:41:23Z`; `silver_content.tables` com
+`dim_run`, `fact_oos_predictions`, `fact_permuted_predictions`,
 `fact_vsn_weights` e `realized` (`JUDGED`) ou só `dim_run`,
 `fact_oos_predictions` e `realized` (`BLOCKED`); com `JUDGED`, o JSON do
 scorecard com `preregistration_ref` = `$REF`, veredito por horizonte,
 `academic_decision_ready` e razões; `rows_by_table` de `gold_h3_reading` e das
-tabelas conformais > 0. Tempos por etapa: linhas `refresh_gold`/`_timed` do
-`.err`.
-**`BLOCKED` → seguir R5–R9 (selar, conferir o replay e atestar), registrar `[finding]` e parar
-para decisão humana (I5); o DoD de veredito fica não cumprido. Não re-rodar.**
+tabelas conformais > 0. Tempos por etapa: linhas `_timed` do `.err`.
+**`BLOCKED` → seguir R5–R9 (selar, conferir o replay e atestar), registrar
+`[finding]` e parar para decisão humana (I5); o DoD de veredito fica não
+cumprido. Não re-rodar.**
 
 **R5 — Integridade de fora do código (A14).**
 ```bash
-cd "$P/judged/$REF" && sha256sum -c --quiet CONTENTS.sha256 && echo CONTENTS_OK
-DIGEST=$(sha256sum CONTENTS.sha256 | cut -d' ' -f1); grep -c "generation_digest $DIGEST" "$SCRATCH/eval-1.out"   # 1
+source "$SCRATCH/etapa-r.env"
+(cd "$P/judged/$REF" && sha256sum -c --quiet CONTENTS.sha256) && echo CONTENTS_OK
+test "$(sha256sum "$P/judged/$REF/CONTENTS.sha256" | cut -d' ' -f1)" = "$DIGEST" && echo DIGEST_OK
 ```
+Falhou → `[finding]` e **parar** (ainda não há backup da cópia: o R7 vem depois).
 
 **R6 — Replay (A15).** R3 (intenção da tentativa 2, replay) e:
 ```bash
-MAN1=$(sha256sum "$P/current/MANIFEST.json" | cut -d' ' -f1); ATT1=$(wc -l < "$P/judged/ATTEMPTS.jsonl")
-MSYS_NO_PATHCONV=1 $RUN_REAL sh -c "$PRE; $EVAL" > "$SCRATCH/eval-2.out" 2> "$SCRATCH/eval-2.err"; echo "EXIT=$?"
-grep "^evaluation " "$SCRATCH/eval-2.out"                     # ALREADY_JUDGED, mesmo digest
+source "$SCRATCH/etapa-r.env"; N=2
+printf 'MAN1=%s\nATT1=%s\n' "$(sha256sum "$P/current/MANIFEST.json" | cut -d' ' -f1)" "$(wc -l < "$P/judged/ATTEMPTS.jsonl")" >> "$SCRATCH/etapa-r.env"
+MSYS_NO_PATHCONV=1 docker run -d --name ff81-eval-$N $RES $MOUNTS $ENVS "$IMAGE_ID" sh -c "$PRE; $EVAL"
+```
+Esperar (`docker wait ff81-eval-2 > "$SCRATCH/eval-2.exit"`, em segundo plano),
+coletar como no R4 e:
+```bash
+source "$SCRATCH/etapa-r.env"
+grep "^evaluation " "$SCRATCH/eval-2.out" | grep -q "ALREADY_JUDGED generation_digest $DIGEST" && echo REPLAY_OK
 diff <(sed -n '/^--- attestation ---$/,$p' "$SCRATCH/eval-1.out") <(sed -n '/^--- attestation ---$/,$p' "$SCRATCH/eval-2.out") && echo BODY_SAME
 test "$(sha256sum "$P/current/MANIFEST.json" | cut -d' ' -f1)" = "$MAN1" && test "$(wc -l < "$P/judged/ATTEMPTS.jsonl")" = "$ATT1" && echo NO_NEW_EFFECT
 ```
 
 **R7 — Backup da cópia selada (ADR 8.1.0003 item 6c).**
 ```bash
+source "$SCRATCH/etapa-r.env"
 JB="$MAINH/data/backups/judged-$REF-$STAMP"
 mkdir -p "$JB" && cp -a "$P/judged/$REF/." "$JB/"
 (cd "$JB" && find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum) > "$JB.sha256sum"
 (cd "$JB" && sha256sum -c --quiet "$JB.sha256sum") && echo JUDGED_BACKUP_OK
-JUDGED_BACKUP_SHA=$(sha256sum "$JB.sha256sum" | cut -d' ' -f1)
+printf 'JB=%s\nJUDGED_BACKUP_SHA=%s\n' "$JB" "$(sha256sum "$JB.sha256sum" | cut -d' ' -f1)" >> "$SCRATCH/etapa-r.env"
 ```
 
-**R8 — Tag e comentário (A16; ADR 8.1.0003 item 7).**
+**R8 — Tag e comentário (A16; ADR 8.1.0003 item 7), idempotente.**
 ```bash
-COMMIT=$(grep -o '"commit": "[0-9a-f]\{40\}"' "$P/judged/$REF/run_record.json" | head -1 | grep -o '[0-9a-f]\{40\}')
+source "$SCRATCH/etapa-r.env"
+COMMIT=$(grep -o '"commit": "[0-9a-f]\{40\}"' "$P/judged/$REF/run_record.json" | head -1 | grep -o '[0-9a-f]\{40\}'); test -n "$COMMIT"
 TAG="confirmatory-run/$REF"
-git -C "$WTH" rev-parse -q --verify "refs/tags/$TAG" && { echo "FAIL: tag já existe"; exit 1; }
+printf 'COMMIT=%s\nTAG=%s\n' "$COMMIT" "$TAG" >> "$SCRATCH/etapa-r.env"
 git -C "$WTH" push origin feat/211-8-1-confirmatory-run
-git -C "$WTH" tag "$TAG" "$COMMIT" && git -C "$WTH" push origin "refs/tags/$TAG"
+if git -C "$WTH" rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
+  test "$(git -C "$WTH" rev-parse "$TAG^{commit}")" = "$COMMIT" || { echo "FAIL: tag aponta para outro commit"; exit 1; }
+else
+  git -C "$WTH" tag "$TAG" "$COMMIT"
+fi
+git -C "$WTH" ls-remote --tags origin "$TAG" | grep -qF "$COMMIT" || git -C "$WTH" push origin "refs/tags/$TAG"
 git -C "$WTH" ls-remote --tags origin "$TAG" | grep -qF "$COMMIT" && echo TAG_OK
-gh api --paginate repos/{owner}/{repo}/issues/211/comments --jq '.[] | select(.body | contains("'"$DIGEST"'")) | .html_url'   # vazio (R11 do concept)
-sed -n '/^--- attestation ---$/,$p' "$SCRATCH/eval-1.out" | tail -n +2 > "$SCRATCH/attestation.md"; test -s "$SCRATCH/attestation.md"
-gh issue comment 211 --body-file "$SCRATCH/attestation.md"
 gh api --paginate repos/{owner}/{repo}/issues/211/comments --jq '.[] | select(.body | contains("'"$DIGEST"'")) | "\(.created_at) \(.html_url)"' > "$SCRATCH/comment.txt"
-test "$(wc -l < "$SCRATCH/comment.txt")" -eq 1; TS=$(cut -d' ' -f1 "$SCRATCH/comment.txt"); URL=$(cut -d' ' -f2 "$SCRATCH/comment.txt")
+if test ! -s "$SCRATCH/comment.txt"; then
+  sed -n '/^--- attestation ---$/,$p' "$SCRATCH/eval-1.out" | tail -n +2 > "$SCRATCH/attestation.md"; test -s "$SCRATCH/attestation.md"
+  gh issue comment 211 --body-file "$SCRATCH/attestation.md"
+  gh api --paginate repos/{owner}/{repo}/issues/211/comments --jq '.[] | select(.body | contains("'"$DIGEST"'")) | "\(.created_at) \(.html_url)"' > "$SCRATCH/comment.txt"
+fi
+test "$(wc -l < "$SCRATCH/comment.txt")" -eq 1 || { echo "FAIL: zero ou mais de um comentário com o digest"; exit 1; }
+TS=$(cut -d' ' -f1 "$SCRATCH/comment.txt"); URL=$(cut -d' ' -f2 "$SCRATCH/comment.txt")
 [[ "$TS" > "2026-10-21T17:41:23Z" ]] && echo COMMENT_AFTER_ANCHOR
+printf 'TS=%s\nURL=%s\n' "$TS" "$URL" >> "$SCRATCH/etapa-r.env"
 ```
-(Rede ou permissão falhou → não gravar o `.judged.toml`; repetir o passo.)
+Re-executar o R8 depois de uma falha parcial é seguro: tag existente no commit
+certo é aceita, e um comentário já postado com o digest não é repetido — só o
+`created_at`/`html_url` é relido. Rede ou permissão falhou → não gravar o
+`.judged.toml`; repetir o R8.
 
 **R9 — Registro de atestação (A16; I14).** Gravar
 `config/preregistration/aapl_confirmatory-r3.judged.toml` com
 `preregistration_ref`, `generation_digest` (`$DIGEST`), `refresh_status`,
-`commit` (`$COMMIT`), `tag`, `comment_url` (`$URL`), `commented_at` (`$TS`,
-offset date-time TOML), `input_backup` (`$BK`, relativo ao checkout principal),
-`input_backup_sha256`, `judged_backup` (`$JB`, relativo),
-`judged_backup_sha256`; conferir com o leitor real
-(`TomlPreregistrationSource.judged_records`) no container; commit
+`commit` (`$COMMIT`), `tag` (`$TAG`), `comment_url` (`$URL`), `commented_at`
+(`$TS`, offset date-time TOML), `input_backup` (`$BK`, relativo ao checkout
+principal), `input_backup_sha256` (`$INPUT_BACKUP_SHA`), `judged_backup` (`$JB`,
+relativo), `judged_backup_sha256` (`$JUDGED_BACKUP_SHA`); conferir com o leitor
+real (`TomlPreregistrationSource(...).judged_records(name='aapl_confirmatory')`
+no `$RUN_REAL`); commit
 `chore(evaluation): registro de atestação da corrida confirmatória r3 [8.1/--]`.
-Depois, R3 (intenção da tentativa 3, pós-registro) e terceira execução:
-```bash
-MSYS_NO_PATHCONV=1 $RUN_REAL sh -c "$PRE; $EVAL" > "$SCRATCH/eval-3.out" 2> "$SCRATCH/eval-3.err"; echo "EXIT=$?"
-grep "^evaluation " "$SCRATCH/eval-3.out"                     # ALREADY_JUDGED, mesmo digest (G4 leu o registro commitado)
-```
+Depois, R3 (intenção da tentativa 3, pós-registro) e terceira execução,
+destacada como no R6 (`N=3`), com
+`grep "^evaluation " "$SCRATCH/eval-3.out" | grep -q "ALREADY_JUDGED generation_digest $DIGEST" && echo RECORD_REPLAY_OK`
+(o G4 leu o registro commitado).
 
-**R10 — Evidência em §7.** Uma entrada `[measurement] etapa-r` com: R1 (saídas),
-R2 (`$BK`, sha), as últimas linhas de cada `.out`, a linha `evaluation` das três
-execuções, tempos por etapa do refresh (do `.err`), `ATTEMPTS.jsonl` inteiro,
-R5, R6, R7 e R8 (tag, URL, `created_at`). Com `BLOCKED`: `[finding]` com os
-checks que falharam e "parada para decisão humana". Commit
-`docs(evaluation): evidência da corrida confirmatória real [8.1/--]`. Depois, o
-**ponto 3** do plano (`make check`).
+**R10 — Evidência em §7.** Uma entrada `[measurement] etapa-r` com: R1 (saídas
+e `preflight.txt`), R2 (`$BK`, sha), as linhas `inference` e `evaluation` das
+três execuções e os exits, tempos por etapa do refresh (do `.err`),
+`ATTEMPTS.jsonl` inteiro, R5, R6, R7 e R8 (tag, URL, `created_at`). Com
+`BLOCKED`: `[finding]` com os checks que falharam e "parada para decisão
+humana". Commit `docs(evaluation): evidência da corrida confirmatória real [8.1/--]`.
+Depois, o **ponto 3** do plano (`make check`).
 
 **Se falhar** (nunca editar silver, gold ou `ATTEMPTS.jsonl` à mão; nunca
 apagar `gold/`):
 
 | Sintoma | Ação |
 |---|---|
-| R1 com `non-code diff` ou `dirty true`; checkpoint faltando | não rodar; corrigir ambiente/árvore ou restaurar checkpoints do `data/backups/tft-pre-7.4-20261022-030008/` (R1 do concept); repetir R1 |
+| R1 com `non-code diff`, `dirty true`, `SAME_IMAGE` ausente ou checkpoint faltando | não rodar; corrigir ambiente/árvore, reconstruir nada sem anotar, ou restaurar checkpoints do `data/backups/tft-pre-7.4-20261022-030008/` (R1 do concept); repetir R1 |
+| `.writer.lock` presente no R1 | `docker ps --filter name=ff81 -q` vazio e nenhum outro container no `data_root` → `--break-stale-lock` anotado na intenção; senão esperar |
 | `infer` com erro (`CheckpointNotFoundError`, `ReproductionError`…) | exit 2 antes do use case, nada de gold; tabela "Se falhar" da Etapa E da 7.1 |
+| `infer` com `calib rows written` > 0 | `[finding]`; refazer o backup do R2 depois do `infer` e registrar que a entrada congelada é o novo backup |
 | G1–G4 recusam (`Preregistration*Error`, `DirtyCodeError`, `JudgedGeneration*Error`, `PriorAttempt*Error`) | zero efeito; ler a mensagem, `[finding]` se não for erro de operação; nunca `--deviation` sem decisão registrada |
-| `CohortRunLockedError` | conferir `docker ps`; só então `--break-stale-lock` |
-| Queda ou erro entre E1 e E3 (`MemoryError`, `OSError`…) | a tentativa ficou registrada; diagnosticar; re-rodar **só** com o mesmo código, a mesma imagem e a mesma entrada (I13), com nova intenção commitada (R3); o use case confere a geração nova contra a viva |
+| `CohortRunLockedError` | `docker ps --filter name=ff81 -q`; só com ele vazio, `--break-stale-lock` |
+| Exit 137 / OOM do Docker (SIGKILL, sem traceback) | `docker inspect ff81-eval-<n> --format '{{.State.OOMKilled}}'`; container removido e lock conferido; a tentativa ficou registrada; re-rodar com mais `--memory` (memória não é chave do I13), nova intenção commitada e `[deviation]` com o motivo |
+| Queda ou erro entre E1 e E3 (`OSError`, `MemoryError`…) | a tentativa ficou registrada; diagnosticar; re-rodar **só** com o mesmo código, a mesma imagem e a mesma entrada (I13), com nova intenção commitada (R3); o use case confere a geração nova contra a viva |
+| Correção de código necessária antes do selo (ex.: plano B de memória) | `[deviation]` commitado, `fix` + `make check` extra (justificado no §7), e a nova tentativa só com `--deviation "<justificativa com [deviation]>"` (I13) |
 | `PriorAttemptInputChangedError` / `PriorAttemptDivergenceError` | **parar**: `[finding]` (R-BIT), diagnóstico humano; nada selado |
 | `BLOCKED` | I5: selar, atestar, `[finding]`, parar (R4) |
-| Cópia julgada adulterada ou perdida depois do selo | `[deviation]` commitado + restauração do `$JB` conferida por `sha256sum -c` (I14); nunca re-julgar |
+| R5 falha (`CONTENTS` não confere) | `[finding]` e **parar**: o backup da cópia (R7) ainda não existe; diagnóstico humano |
+| Cópia julgada adulterada ou perdida depois do R7 | `[deviation]` commitado + restauração do `$JB` conferida por `sha256sum -c` (I14); nunca re-julgar |
 
 ## 3. Gate de saída da Stage
 
 ### Verificações automatizadas
+
+Tudo no container (nada de suíte no host; ADR 0.0.0059):
 ```bash
-make check                                     # ponto 3 do plano (comando literal do §1)
-uv run --no-sync pytest tests/ --cov=src/financial_forecasting --cov-report=term-missing   # cada arquivo de src/ tocado >= 90%
-uv run --no-sync python scripts/check_port_coverage.py --list | grep -E "JudgedGenerationStore|EvaluationEnvironment|EvaluationWriterLock"
-git diff --exit-code origin/develop...HEAD -- scripts/arch_baseline.toml      # nenhuma entrada nova de baseline
-python scripts/check_technical_postexec.py docs/stages/8.1-confirmatory-run/technical.md
+make check                                     # ponto 3 do plano (comando literal do §1); cobertura por arquivo
+                                               # lida da tabela term-missing desta MESMA saída (cada arquivo de src/ tocado >= 90%)
+MSYS_NO_PATHCONV=1 $RUN sh -c "$PRE; uv run --no-sync python scripts/check_port_coverage.py --list | grep -E 'JudgedGenerationStore|EvaluationEnvironment|EvaluationWriterLock'"
+git diff --exit-code origin/develop...HEAD -- scripts/arch_baseline.toml      # nenhuma entrada nova de baseline (git no host)
+python scripts/check_technical_postexec.py docs/stages/8.1-confirmatory-run/technical.md   # script stdlib, sem suíte
 ```
 
 ### Verificações funcionais
@@ -1087,10 +1196,10 @@ python scripts/check_technical_postexec.py docs/stages/8.1-confirmatory-run/tech
 ### Checklist de fechamento
 - [ ] 17 Tasks commitadas, cada uma com o seu T1 verde; Checkpoints C nas
       fronteiras do §4 com disposições registradas
-- [ ] Auditoria de testes (subagente que não escreveu os testes) com todos os
-      itens "sim"; mutação real no use case (ordem das guardas), no acumulador
-      (unidade) e no `find` (comparação de digest)
-- [ ] Três `make check` do plano verdes, saídas coladas no relatório
+- [ ] Auditoria de testes com mutação real feita **antes do ponto 2** (Task 17),
+      todos os itens "sim", saídas em §7
+- [ ] Três `make check` do plano verdes (quatro se o ponto 2 precisou de `fix`),
+      saídas coladas no relatório
 - [ ] `docs/roadmap.md`: 8.1 `done`, `updated_at` e `last_reviewed_at` de hoje;
       commit `stage 8.1: complete`
 - [ ] ADRs 8.1.0001–0004 `accepted`
@@ -1115,13 +1224,13 @@ python scripts/check_technical_postexec.py docs/stages/8.1-confirmatory-run/tech
   de 13; 13 antes de 14; 15 antes de 16; 16 antes de 17 (a medição usa o wiring
   final); 17 antes da Etapa R (A17 antes do A12).
 - **Checkpoint C** (revisão do bloco por subagente, sem gate de suíte) depois
-  de 05, 09, 11, 13 e 16.
+  de 05, 09, 11, 13 e 17; a **auditoria de testes** com mutação real fecha
+  antes do ponto 2 (Task 17), nunca depois do selo.
 
 ## 5. Riscos de execução e fallbacks
 
 | Risco | Fallback |
 |---|---|
-| G1 sem disposição | nenhuma Task começa; escalado à sessão mestra |
 | Ripple da Task 04 maior que a lista (outro fixture monta `GoldManifest`) | parar, `[deviation]` com o arquivo, acrescentar só a linha do campo |
 | `check_port_coverage` não reconhece o ledger como real do `EvaluationWriterLock` | alinhar o docstring e as anotações do port às do ledger; nunca entrada no baseline |
 | `ParquetGoldStore` passa de ~400 linhas | helpers privados em `judged_generation_files.py` no mesmo diretório (previsto na Task 09) |
@@ -1158,7 +1267,7 @@ python scripts/check_technical_postexec.py docs/stages/8.1-confirmatory-run/tech
 
 | # | Critério de aceite | Task(s) | Teste / evidência |
 |---|---|---|---|
-| A1 | `SilverContentHash`: golden, ordem, floats exatos, tipo declarado, proveniência, não-finito **[G1]**, construtor cru | 01 | `test_silver_content_hash.py` (todos os casos da Task 01) |
+| A1 | `SilverContentHash`: golden, ordem, floats exatos, tipo declarado, proveniência, não-finito como ficha, construtor cru | 01 | `test_silver_content_hash.py` (todos os casos da Task 01) |
 | A2 | `silver_content` estável, muda só a unidade alterada, não muda com linha descartada, `seed` nulo/não nulo, tabelas gold idênticas, `manifest` = publicado | 02, 03, 04, 05 | `test_silver_table_reader_contract.py::test_fake_columns_equal_real_columns`; `test_silver_content_accumulator.py`; `test_refresh_gold_use_case.py::{test_result_manifest_equals_published_manifest, test_rows_discarded_by_post_filters_do_not_change_digest, test_gold_tables_identical_with_and_without_hashing}`; `test_silver_content_refresh.py` (leitor real) |
 | A3 | `resolve_judged_revision` extraído; testes do scorecard sem alteração | 06 | `test_judged_revision.py`; `git diff --exit-code` dos testes do scorecard |
 | A4 | Guardas com zero efeito; conferências pós-E1 | 07, 10, 13 | `test_run_confirmatory_evaluation.py::{test_guard_refuses_with_zero_effect[*], test_guards_run_in_order, test_input_changed_raises_and_seals_nothing, test_divergent_generation_with_equal_code_env_input_raises_and_seals_nothing}` |
