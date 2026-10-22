@@ -397,3 +397,26 @@ def test_infinite_flag_with_a_stored_correction_is_corruption() -> None:
     rows = {**complete_rows(), GOLD_CONFORMAL_CORRECTIONS.name: bad}
     with pytest.raises(GoldGenerationCorruptError, match=r"infinite = true with correction 0.5"):
         _read(_reader(rows=rows))
+
+
+class _OnlyReadGeneration:
+    """Expõe só `read_generation` e registra as chamadas: outro método seria AttributeError."""
+
+    def __init__(self, inner: InMemoryGoldGenerationReader) -> None:
+        self._inner = inner
+        self.calls: list[GoldPartition] = []
+
+    def read_generation(self, *, partition: GoldPartition) -> GoldGeneration:
+        self.calls.append(partition)
+        return self._inner.read_generation(partition=partition)
+
+
+def test_reader_only_calls_read_generation_once_per_request() -> None:
+    """Só leitura (I1; auditoria TA-8): uma `read_generation` da partição pedida."""
+    store = InMemoryGoldStore()
+    tables, manifest = generation(rows=complete_rows())
+    store.publish(partition=PARTITION, tables=tables, manifest=manifest)
+    spy = _OnlyReadGeneration(InMemoryGoldGenerationReader(store))
+    gold = ReadServingGold(gold_reader=spy).read(asset=ASSET, cohort_id=COHORT)
+    assert gold.published
+    assert spy.calls == [PARTITION]

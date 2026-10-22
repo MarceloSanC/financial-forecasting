@@ -51,6 +51,7 @@ from tests.e2e.features.inference._scenario import (
 )
 from tests.unit.features.evaluation._serving_gold_rows import (
     generation,
+    refresh_parameters,
 )
 
 pytestmark = pytest.mark.e2e
@@ -261,6 +262,19 @@ def test_without_gold_the_grid_is_served_and_both_blocks_are_unavailable(api: _P
         "finished_at": None,
     }
     assert body["forecasts"][0]["members"][0]["quantiles"][3] == 0.002197265625  # noqa: PLR2004
+
+
+def test_gold_without_conformal_and_h3_blocks(api: _Post, tmp_path: Path) -> None:
+    # CA3 pela app completa (auditoria TA-8): COMPLETED sem [conformal] e sem [h3]
+    publish(tmp_path, parameters=refresh_parameters(conformal=False, h3=False))
+    status, body = api(_request())
+    assert status == 200  # noqa: PLR2004
+    assert _blocks(body) == (
+        {("unavailable", "geração sem bloco [conformal]")},
+        ("unavailable", "geração sem bloco [h3]"),
+    )
+    assert _labels(body) == {EMPIRICAL_COVERAGE_LABEL, H3_LABEL, VSN_LABEL}
+    assert body["gold"]["generation_status"] == "COMPLETED"
 
 
 def test_blocked_gold_makes_both_blocks_unavailable(api: _Post, tmp_path: Path) -> None:

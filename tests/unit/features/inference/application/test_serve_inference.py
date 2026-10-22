@@ -798,6 +798,13 @@ def test_two_equal_requests_give_equal_payloads() -> None:
     assert use_case(_query()) == use_case(_query())
 
 
+def test_payload_does_not_depend_on_the_order_of_the_silver_rows() -> None:
+    # determinismo (I11; auditoria TA-8): a ordem das linhas lidas não chega ao payload
+    rows = _silver_rows()
+    shuffled = {table: list(reversed(table_rows)) for table, table_rows in rows.items()}
+    assert _serve(rows=shuffled)[0](_query()) == _serve(rows=rows)[0](_query())
+
+
 def test_baseline_rows_in_the_same_cohort_are_not_served() -> None:
     payload = _serve()[0](_query())
     assert "gbm0" not in {m.run_id for f in payload.forecasts for m in f.members}
