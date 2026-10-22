@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-22
 updated_at: 2026-10-22
 adr_id: 8.1.0002
-decision: A new identity VO `SilverContentHash` in `shared/domain/value_objects/` hashes, through the canonical `Hasher`, the rows `RefreshGold` actually consumes after its post-filters — one digest per content-defined unit ((table, parent_sweep_id) for `dim_run`, (table, run_id, year) for fact tables, year read from the row), combined per table and overall — with columns keyed by name, rows in canonical order, floats encoded exactly by `repr` and `None` as null; `RefreshGold` computes it while reading and records it in a new `GoldManifest.silver_content` field, so the hash depends only on the multiset of rows consumed, never on file layout, read order, reader typing or Parquet bytes.
+decision: A new identity VO `SilverContentHash` in `shared/domain/value_objects/` hashes, through the canonical `Hasher`, the rows `RefreshGold` actually consumes after its post-filters — one digest per content-defined unit ((table, parent_sweep_id) for `dim_run`, (table, run_id, year) for fact tables, year read from the row), combined per table and overall — with columns keyed by name, values canonicalized by the column's declared type in the silver schema (exposed by the reader port), write-provenance columns excluded, the realized series as one more unit, rows in canonical order, floats encoded exactly by `repr` and `None` as null only where declared nullable; `RefreshGold` computes it while reading and records it in a new `GoldManifest.silver_content` field, so the hash depends only on the multiset of rows consumed, never on file layout, read order, reader typing or Parquet bytes.
 context_stage: 8.1-confirmatory-run
 bounded_context: evaluation
 ---
@@ -18,7 +18,8 @@ bounded_context: evaluation
 
 ## Status
 
-`accepted`
+`accepted` — item 2b (types by declared schema) and the H3 record
+revised after Checkpoint A, round 1 (before any run).
 
 ## Context
 
@@ -60,7 +61,7 @@ Facts that constrain the form:
 [decision:E] 8.1-H1 — new VO or generalize DatasetContentFingerprint
 Escolha: new shared VO `SilverContentHash` · Alternativas: generalize `DatasetContentFingerprint` to rows; hash outside a VO
 Base: LAYOUT §7 + check_layout rule 6 (identity only through shared VOs); ADR 6.4.0005 item 9 "it would need a new shared identity VO"; DatasetContentFingerprint's value is frozen in the cohort and in r0–r3 — changing its encoding changes an anchored identity (code fact read in this session)
-Verificado: não verificado (§4.2) — internal sources
+Verificado: não aplicável (§4.2) — the evidence is the project's own code and ADRs, read in this session (no external source)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim (before the 8.1 run)
 
 [decision:E] 8.1-H2 — exact floats or the hasher's 10-decimal rounding
@@ -68,10 +69,10 @@ Escolha: exact (`repr`, as `PreregistrationHash`) · Alternativas: canonical rou
 Base: ADR 1.4.0001 (rounding to 10 decimals); float32 spacing 2⁻²³·|x| < 10⁻¹⁰ for |x| < ≈ 8.4·10⁻⁴ ⇒ distinct float32 inputs collide under rounding (derivation); an identity that does not distinguish inputs fails R-CAMADAS; ADR 6.5.0001 precedent for exact encoding
 Verificado: derivation · Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
-[decision:E] 8.1-H3 — canonical rows or Parquet bytes
-Escolha: canonical rows (columns by name, canonical row order, typed values as the reader delivers them) · Alternativas: sha256 of the Parquet files (DVC style)
-Base: Apache Parquet `parquet.thrift` FileMetaData `created_by` ("String for application that wrote this file") — the bytes carry the writer version; measured: `year` int64 in files × int32 under hive inference; ADR 5.5.0004 (content, not Parquet bytes); issue #211 (DVC hashes bytes — counterpart)
-Verificado: não verificado (§4.2) — the spec field is cited by name; the measurement was taken in this session
+[decision:C] 8.1-H3 — canonical rows or Parquet bytes
+Escolha: canonical rows (columns by name, canonical row order, values canonicalized by the column's DECLARED type in the silver schema) · Alternativas: sha256 of the Parquet files (DVC style); values typed as the reader delivers them at runtime · Degrau (C): 1 (ADR 5.5.0004: identify by content, not by Parquet bytes; LAYOUT §7: schema knowledge has a single owner)
+Base: Apache Parquet `src/main/thrift/parquet.thrift` (apache/parquet-format master, struct FileMetaData, L1435–1439) "String for application that wrote this file.  This should be in the format <Application> version <App Version> (build <App Build Hash>)" — an optional field identifying the writer, so bytes may differ across writers when it is filled; measured: `year` int64 in files × int32 under pyarrow hive inference; real reader DuckDB → pandas → `_restore_value` turns NaN into None and nullable ints may arrive as float (parquet_analytics_repository.py `_restore_value`, `read`); issue #211 (DVC hashes bytes — counterpart)
+Verificado: parcial→corrigido (zero-context verifier, 2026-10-22: the field is `optional` and its format a recommendation; the claim was narrowed to "may differ"; the decision rests on rung 1, not on the quote)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:E] 8.1-H4 — rows consumed or partitions read
@@ -113,12 +114,24 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
    (it is the anchored identity of the cohort). With a `BLOCKED` refresh,
    only what was read before the checks is hashed (`dim_run`, the cohort's
    `fact_oos_predictions`, the realized).
-2b. **Types.** The VO normalizes numeric scalars before encoding (numpy/pandas
-   integers → `int`, floats → `float`, `bool` kept, `None` → null) and refuses
-   any other type with `ValueError`: the real reader goes DuckDB → pandas
-   (e.g. nullable `Int64` for `seed`), and the measured int64/int32 split of
-   `year` came from pyarrow hive inference, so the identity must not depend
-   on the reader's numeric dtype.
+2b. **Types by declared schema (Checkpoint A, CA-4/DT-5).** Values are
+   canonicalized by the column's **declared** type and nullability in the
+   silver schema, never by the runtime type the reader returns: the real reader
+   goes DuckDB → pandas, turns NaN into `None` (`_restore_value`) and may
+   deliver a nullable integer (`seed`, `Int64`) as `3.0`; another pandas or
+   DuckDB version could change runtime types without changing content. The
+   declared schema has one owner (the `analytics_store` pandera schemas), so
+   the consumer port `SilverTableReader` gains
+   `columns(layer=..., table=...) -> Mapping[str, ColumnKind]` (kind ∈
+   int/float/str/bool plus `nullable`), satisfied by the
+   `ParquetAnalyticsRepository` from its `SilverTable` metadata; the fake
+   declares the same for its tables (contract `[fake, real]`). The VO
+   receives the kinds with the rows: int → `int(v)` only if integral (`3.0` →
+   `3`, `3.5` → `ValueError`); float → exact encoding; str → `str`; `None`
+   only where nullable — a `None` in a non-nullable column (which is what a
+   NaN becomes through the real reader) → `ValueError`; a column not declared
+   → `ValueError`. Write-provenance columns are excluded by name from a list
+   owned next to the kinds.
 3. **Units.** `(table, parent_sweep_id)` for `dim_run`; `(table, run_id, year)`
    for fact tables, with `year` taken from the row (so a run read in one pass
    or year by year hashes the same). The exact key format and whether the
@@ -201,9 +214,9 @@ and the gap of ADR 6.4.0005 item 9 stays open.
 ### Neutral / trade-offs accepted
 - The hash identifies what the gold read; it does not bind a checkpoint to its
   training data (the `RunId` gap of issue #163 stays there).
-- Typed values as the reader delivers them: a reader change that alters a
-  value's Python type would change the hash; that is an identity difference to
-  diagnose, not to hide.
+- Canonicalizing by the declared schema makes the hash independent of the
+  reader's runtime dtypes; a change of the declared schema itself changes the
+  hash, which is an identity difference to diagnose, not to hide.
 
 ## Implementation notes
 

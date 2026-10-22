@@ -18,7 +18,9 @@ bounded_context: evaluation
 
 ## Status
 
-`accepted`
+`accepted` — items 3 and 5 (G4, replay) amended by
+[ADR 8.1.0004](./8_1_0004-single-judgment-attempt-log-committed-record-deviation.md)
+(attempt log, live generation, committed record, deviation).
 
 ## Context
 
@@ -116,9 +118,13 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
    would choose the result after seeing it. A correction after the seal is a
    deviation of the plan, decided by the human in its own issue (domain doc
    reproduction §4.6); this Stage adds no switch for it.
-6. **`infer` before the use case.** The `evaluate` subcommand loads the cohort
-   spec, runs the 7.1 `infer` command (which takes and releases its own lock),
-   and only if it raised nothing builds the command — with an inference
+6. **`infer` before the use case.** The chaining lives in `cli.py` (the
+   process root that already dispatches three slices), not in the evaluation
+   CLI module, so `evaluation/adapters/in/cli/` never imports inference
+   (Checkpoint A, CA-5). `cli.py` loads the cohort spec, runs the 7.1 `infer`
+   command (which takes and releases its own lock; the command is changed to
+   return the `RunInferenceResult` summary instead of only `0` — DT-8), and
+   only if it raised nothing builds the command — with an inference
    summary as plain data (runs, strict/tolerance counts, max |Δ|, calib rows
    verified) — and calls the use case. No import edge from evaluation to
    inference is added.

@@ -1,5 +1,5 @@
 ---
-title: ADR 8.1.0003 — The judged generation is preserved as a sealed copy under `judged/<preregistration_ref>/` (byte-for-byte copy of `current/`, scorecard, run record, `CONTENTS.json` with per-file sha256 written last), attested by a versioned record, a tag and one issue comment
+title: ADR 8.1.0003 — The judged generation is preserved as a sealed copy under `judged/<preregistration_ref>/` (byte-for-byte copy of `current/`, scorecard, run record, `CONTENTS.sha256` with per-file sha256 written last), attested by a versioned record, a tag and one issue comment
 description: Architecture Decision Record
 when-use: Reference before writing, moving or reading the judged generation; when the 8.2 reproduction or the 8.3 dossier needs the judged copy, its digest, the run environment or the attestation; before adding a code path that posts to GitHub
 keywords: [adr, evaluation, judged-generation, preservation, immutability, content-addressed, sha256, seal, manifest, scorecard, run-record, environment, commit, seeds, attestation, tag, issue-comment, anchor]
@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-22
 updated_at: 2026-10-22
 adr_id: 8.1.0003
-decision: After the confirmatory refresh and the scorecard, a port-out `JudgedGenerationStore` (filesystem adapter next to `ParquetGoldStore`) copies the partition's `current/` byte for byte into `gold/asset=<a>/parent_sweep_id=<p>/judged/<preregistration_ref>/generation/`, checks the copied manifest equals the published one, writes `gold_model_comparison_confirmatory_scorecard.json` (absent if BLOCKED) and `run_record.json` (commit, clean tree, environment keys, gold-path library versions, inference summary; seeds by reference to the manifest), writes `CONTENTS.json` (sha256 of every file and a generation digest over the sorted list) last and renames staging into place; the copy is never overwritten and every read re-checks the digest; the run is attested, by runbook, with a committed `<name>-r<rev>.judged.toml`, a `confirmatory-run/<ref>` tag and one comment on the Stage issue.
+decision: After the confirmatory refresh and the scorecard, a port-out `JudgedGenerationStore` (filesystem adapter next to `ParquetGoldStore`) copies the partition's `current/` byte for byte into `gold/asset=<a>/parent_sweep_id=<p>/judged/<preregistration_ref>/generation/`, checks the copied manifest equals the published one, writes `gold_model_comparison_confirmatory_scorecard.json` (absent if BLOCKED) and `run_record.json` (commit, clean tree, environment keys, gold-path library versions, inference summary; seeds by reference to the manifest), writes `CONTENTS.sha256` (sha256 of every file and a generation digest over the sorted list) last and renames staging into place; the copy is never overwritten and every read re-checks the digest; the run is attested, by runbook, with a committed `<name>-r<rev>.judged.toml`, a `confirmatory-run/<ref>` tag and one comment on the Stage issue.
 context_stage: 8.1-confirmatory-run
 bounded_context: evaluation
 ---
@@ -18,7 +18,10 @@ bounded_context: evaluation
 
 ## Status
 
-`accepted`
+`accepted` — item 4 (`find`) extended by
+[ADR 8.1.0004](./8_1_0004-single-judgment-attempt-log-committed-record-deviation.md)
+(committed record as cross truth, attempt log); items 1, 5b, 6, 6b revised after
+Checkpoint A, round 1 (before any run).
 
 ## Context
 
@@ -60,9 +63,9 @@ Facts:
 
 ```
 [decision:C] 8.1-J1 — what the judged copy's hash is
-Escolha: sha256 of the stored bytes of every file of the copy + generation digest over the sorted (path, sha256) list, in `CONTENTS.json` · Alternativas: canonical-row content hash of the gold tables; no hash (trust the filesystem) · Degrau (C): 1 (ADR 7.1.0004 item 1, byte hash for integrity of a stored artifact) and 5
-Base: Sandve et al. 2013 Rule 5 "archive any intermediate result files"; the copy's role is integrity of an archive — field-by-field comparison is the 8.2's job (domain doc §4.6); Chacon & Straub, Pro Git 2nd ed. §10.2 "Git Objects" (content-addressable storage: an object is checked by its hash)
-Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
+Escolha: sha256 of the stored bytes of every file of the copy + generation digest over the sorted (path, sha256) list, in `CONTENTS.sha256` · Alternativas: canonical-row content hash of the gold tables; no hash (trust the filesystem) · Degrau (C): 1 (ADR 7.1.0004 item 1, byte hash for integrity of a stored artifact) and 5
+Base: Sandve et al. 2013 Rule 5 "archive any intermediate result files"; the copy's role is integrity of an archive — field-by-field comparison is the 8.2's job (domain doc §4.6); Chacon & Straub, Pro Git 2nd ed. §10.2 "Git Objects": "Git is a content-addressable filesystem" … "a single file per piece of content, named with the SHA-1 checksum of the content and its header"
+Verificado: parcial→corrigido (zero-context verifier, 2026-10-22: the key is the hash of content plus header; the second quote was added) · Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:C] 8.1-J2 — where the copy lives and what names it
 Escolha: `gold/asset=<a>/parent_sweep_id=<p>/judged/<preregistration_ref>/` (one per cohort partition, ADR 8.1.0001), outside `current/`, with the digest inside · Alternativas: directory named by the digest (git-object style); `scorecard/<preregistration_ref>/` holding only the scorecard (roadmap text); outside `gold/` · Degrau (C): 1 (ADR 8.1.0001: one judged generation per partition) and 5
@@ -82,41 +85,70 @@ Verificado: herdado · Sensibilidade pré-registrada: nenhuma · Reversível: si
 
 1. **Port.** `JudgedGenerationStore` in
    `evaluation/application/ports/out/judged_generation_store.py`:
-   `find(partition, preregistration_ref) -> JudgedGeneration | None` and
-   `preserve(partition, preregistration_ref, expected_manifest, documents) -> JudgedGeneration`.
-   Real: a filesystem adapter in `evaluation/adapters/out/` next to
-   `ParquetGoldStore` (same data root, `validate_path_identifier` on every
-   path segment); fake in `tests/fakes/features/evaluation/`; contract suite
-   `[fake, real]`.
+   `find(partition, preregistration_ref) -> JudgedGeneration | None`,
+   `preserve(partition, preregistration_ref, expected_manifest, documents) -> JudgedGeneration`,
+   `judged_refs(partition)`, `record_attempt(partition, attempt)`,
+   `attempts(partition)` and `live_manifest(partition) -> GoldManifest | None`
+   (ADR 8.1.0004). Real: **`ParquetGoldStore` itself** — it already satisfies
+   `GoldStore` and `GoldGenerationReader` and is the single owner of the gold
+   layout (`current/`, staging, `MANIFEST.json`), so no second adapter
+   re-declares the layout or imports another adapter (LAYOUT §3; Checkpoint
+   A, CA-7); `validate_path_identifier` on every path segment; fake in
+   `tests/fakes/features/evaluation/`; contract suite `[fake, real]`.
 2. **Layout.** `judged/<preregistration_ref>/generation/` (byte copy of
    `current/`: tables and `MANIFEST.json`),
    `gold_model_comparison_confirmatory_scorecard.json`
    (`ScorecardResult.as_mapping()`, written with sorted keys; absent when
-   `BLOCKED`), `run_record.json`, `CONTENTS.json`.
+   `BLOCKED`), `run_record.json`, `CONTENTS.sha256`.
 3. **Protocol of `preserve`.** Remove a leftover staging directory → copy
    `current/` into staging → parse the copied manifest and compare it with
    `expected_manifest` (the manifest the refresh returned; and, by the use
    case, the scorecard's `manifest_read`) — different →
    `JudgedGenerationMismatchError`, staging removed → write the documents →
    compute the sha256 of every file and the generation digest → write
-   `CONTENTS.json` **last** → rename staging to `judged/<ref>/`. An existing
+   `CONTENTS.sha256` **last** → rename staging to `judged/<ref>/`. An existing
    `judged/<ref>/` → `JudgedGenerationExistsError` before anything is written.
 4. **Protocol of `find`.** No directory → `None`. Otherwise read
-   `CONTENTS.json`, recompute every file's sha256 and the digest; any
+   `CONTENTS.sha256`, recompute every file's sha256 and the digest; any
    mismatch, missing or extra file → `JudgedGenerationTamperedError`.
 5. **Immutability.** No code path overwrites, moves or deletes a judged copy.
    File permissions are not relied on (Windows bind mount); integrity is the
    digest checked on every read, and the external attestation (item 7).
+5b. **Digest serialization (fixed, Checkpoint A DT-7).** `CONTENTS.sha256` is
+   the `sha256sum` listing of every file of the copy except itself — lines
+   `<64 hex>  <path>\n`, paths relative to `judged/<ref>/`, POSIX separators,
+   sorted by path bytes, UTF-8, LF — and `generation_digest` is the sha256 of
+   that file's bytes. Anyone can check it with `sha256sum -c CONTENTS.sha256`
+   and `sha256sum CONTENTS.sha256`. `find` refuses a missing file, an extra
+   file, a listing whose digest differs from the committed `.judged.toml`
+   (ADR 8.1.0004), and an empty `generation/`.
 6. **Run record.** The keys of decision 8.1-J3, from the consumer port
    `EvaluationEnvironment` (real composed in the composition root from the 5.5
    probe — whose keys are not changed — plus `importlib.metadata` versions of
-   the gold-path libraries and `git rev-parse HEAD`). The exact library list
-   and how the image id reaches the container are fixed in the technical.
+   the gold-path libraries and `git rev-parse HEAD`). The evaluation port
+   **owns its key names**; the modeling probe's key constants are passed to
+   the real adapter by the composition root, so evaluation does not import
+   modeling (Checkpoint A, CA-5). The **image id is mandatory** (the `:dev`
+   tag is mutable): the runbook passes `docker image inspect` id as an
+   environment variable and the real adapter refuses to snapshot without it
+   (DT-3). The exact library list is fixed in the technical.
+6b. **Input backup for the 8.2.** The silver is upsert-able and issues #163/#58
+   will change silver and grid after the 8.1. The pre-run backup of the data
+   root (concept D10) is declared the frozen input of the 8.2 reproduction:
+   its path and the sha256 of its archive are recorded in the `.judged.toml`;
+   the 8.2 checks `silver_content` against the live silver and restores from
+   the backup when they differ (Checkpoint A, DT-3).
 7. **Attestation.** Runbook step after the seal (decision 8.1-J4). The CLI
    prints a deterministic comment body: preregistration ref, generation
    digest, status, commit, tag, manifest `started_at`/`finished_at`,
    `academic_decision_ready` with its reasons and the per-horizon verdict. The
-   record file mirrors `.anchor.toml` and is committed.
+   record file mirrors `.anchor.toml`, adds `input_backup` and
+   `input_backup_sha256`, and is committed; it is the cross truth checked by
+   G4 (ADR 8.1.0004). With `ALREADY_JUDGED` the CLI prints the same body,
+   rebuilt from the sealed copy. The body names the H3 reading (labelled
+   descriptive) and the conformal tables (labelled "cobertura empírica (não
+   garantida)") by table and row count from the manifest — the use case reads
+   no gold value itself.
 
 ## Alternatives considered
 
@@ -169,7 +201,7 @@ to reproduce against.
 ### Positive
 - The judged generation survives any later refresh and is self-describing
   (tables, manifest with silver identity, scorecard, environment, commit).
-- Integrity is checkable by anyone with `sha256sum` against `CONTENTS.json`
+- Integrity is checkable by anyone with `sha256sum` against `CONTENTS.sha256`
   and the committed digest.
 
 ### Negative
@@ -187,7 +219,7 @@ to reproduce against.
 - Share the copy/rename helpers with `ParquetGoldStore` only through a
   domain-free module of the same adapter package (no adapter-to-adapter import
   across slices).
-- `CONTENTS.json` lists paths relative to `judged/<ref>/`, POSIX separators,
+- `CONTENTS.sha256` lists paths relative to `judged/<ref>/`, POSIX separators,
   sorted.
 
 ## References
