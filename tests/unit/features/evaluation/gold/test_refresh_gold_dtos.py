@@ -61,6 +61,7 @@ from tests.unit.features.evaluation._profile_parameters import (
     profile_block,
     profile_parameters,
 )
+from tests.unit.features.evaluation._silver_content import SAMPLE_SILVER_CONTENT
 
 _PREREG = "prereg-test-0001"  # literal declarado até a 6.5 fornecer o hash congelado
 _VALID: dict[str, object] = {
@@ -278,6 +279,7 @@ def _manifest(**changes: object) -> GoldManifest:
         "build_order": ("quality_checks", "dm_results"),
         "started_at": _NOW,
         "finished_at": _NOW,
+        "silver_content": SAMPLE_SILVER_CONTENT,
     }
     kwargs.update(changes)
     return GoldManifest(**kwargs)  # type: ignore[arg-type]
@@ -1038,3 +1040,28 @@ def test_completed_inputs_accept_h3_reports() -> None:
     assert without.h3_reports.is_empty
     with pytest.raises(ValueError, match=r"without a \[h3\] block"):
         dataclasses.replace(without, h3_reports=inputs.h3_reports)
+
+
+# --- Stage 8.1: `silver_content` obrigatório no manifesto (ADR 8.1.0002 item 4) --------
+
+
+@pytest.mark.unit
+def test_manifest_round_trip_with_silver_content() -> None:
+    manifest = _manifest()
+    mapping = manifest.as_mapping()
+
+    assert mapping["silver_content"] == SAMPLE_SILVER_CONTENT.as_mapping()
+    decoded = GoldManifest.from_mapping(json.loads(json.dumps(mapping, sort_keys=True)))
+    assert decoded == manifest
+    assert decoded.silver_content == SAMPLE_SILVER_CONTENT
+
+
+@pytest.mark.unit
+def test_manifest_without_silver_content_is_unreadable() -> None:
+    """Manifesto anterior à 8.1 não lê (nenhum gold real foi publicado antes)."""
+    mapping = {k: v for k, v in _manifest().as_mapping().items() if k != "silver_content"}
+
+    with pytest.raises(ValueError, match=r"manifest misses the keys \['silver_content'\]"):
+        GoldManifest.from_mapping(mapping)
+    with pytest.raises(ValueError, match="silver_content must be a SilverContent"):
+        _manifest(silver_content=SAMPLE_SILVER_CONTENT.as_mapping())

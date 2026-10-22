@@ -243,6 +243,7 @@ def _use_case(reader: _GeneratingReader, builders: Sequence[object] = ()) -> Ref
         gold_store=InMemoryGoldStore(),
         builders=list(builders),  # type: ignore[arg-type]
         conformal_calibration=FakeConformalCalibration(),
+        hasher=CanonicalJsonHasher(),
     )
 
 

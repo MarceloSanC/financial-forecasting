@@ -648,4 +648,15 @@ def test_refresh_gold_identical_with_and_without_calib_rows(
     for name, rows in plain.tables.items():
         assert _same(rows, with_calib.tables[name]), name
     changed = {k for k in plain.manifest if plain.manifest[k] != with_calib.manifest.get(k)}
-    assert changed <= {"started_at", "finished_at"}
+    # Stage 8.1 (concept A2(b)): a linha `calib` do cohort é consumida, então o hash do
+    # silver muda, e só nas unidades de fatos do cohort; as tabelas gold seguem idênticas.
+    assert changed <= {"started_at", "finished_at", "silver_content"}
+    before = plain.manifest["silver_content"]
+    after = with_calib.manifest["silver_content"]
+    assert isinstance(before, dict)
+    assert isinstance(after, dict)
+    units = {k for k in before["units"] if before["units"][k] != after["units"].get(k)}
+    assert units
+    assert all(key.startswith("fact_oos_predictions|") for key in units)
+    tables = {k for k in before["tables"] if before["tables"][k] != after["tables"].get(k)}
+    assert tables == {"fact_oos_predictions"}

@@ -36,6 +36,15 @@ de efeitos):
    efeito colateral, por último (nada é gravado antes; exceção antes dele não toca o
    store).
 
+Identidade do silver consumido (Stage 8.1, ADR `8_1_0002`; concept 8.1 D4, I6): cada
+leitura entrega a um `SilverContentAccumulator` **da chamada** as linhas que mantém
+**depois** do seu pós-filtro, com os tipos declarados pelo leitor (`columns`, uma vez por
+tabela por chamada) — `dim_run` do cohort e da ablação, `fact_oos_predictions` do cohort
+(os dois splits) e da ablação (`test`, por ano), o realizado, e as permutadas e a VSN de
+cada run do candidato com fold e seed utilizáveis. O resultado vai em
+`GoldManifest.silver_content`; nenhuma tabela gold muda. Com `BLOCKED`, só o lido antes
+dos checks entra (`dim_run`, fatos do cohort, realizado).
+
 Uma linha `INFO` por etapa (`step=<nome> duration_s=<s> in=<n> out=<n>`) e uma final
 com o `status`.
 """
@@ -69,6 +78,9 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     failed_checks_of,
     profile_settings_from,
 )
+from financial_forecasting.features.evaluation.application.dtos.silver_content import (
+    SilverContent,
+)
 from financial_forecasting.features.evaluation.application.ports.out.conformal_calibration import (
     ConformalCalibration,
 )
@@ -86,6 +98,9 @@ from financial_forecasting.features.evaluation.application.ports.out.silver_tabl
 )
 from financial_forecasting.features.evaluation.application.ports.out.training_grid_reader import (
     TrainingGridReader,
+)
+from financial_forecasting.features.evaluation.application.use_cases.silver_content_accumulator import (  # noqa: E501
+    SilverContentAccumulator,
 )
 from financial_forecasting.features.evaluation.domain.services.attribution_assembly import (
     AttributionAssembly,
@@ -214,6 +229,7 @@ from financial_forecasting.features.inference.application.use_cases.calibrate_co
 )
 from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.application.ports.out.clock import Clock
+from financial_forecasting.shared.application.ports.out.hasher import Hasher
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
     DatasetContentFingerprint,
 )
@@ -256,10 +272,42 @@ class GridFingerprintMismatchError(ApplicationError):
     """
 
 
+class _ConsumedSilver:
+    """Por chamada: o acumulador do hash do silver e os tipos declarados por tabela.
+
+    Os tipos vêm do leitor uma vez por tabela por chamada; cada `add_*` recebe as linhas
+    que a leitura manteve depois do pós-filtro (ADR 8.1.0002 item 2).
+    """
+
+    def __init__(self, reader: SilverTableReader, hasher: Hasher) -> None:
+        self._reader = reader
+        self._accumulator = SilverContentAccumulator(hasher=hasher)
+        self._columns: dict[str, Mapping[str, tuple[str, bool]]] = {}
+
+    def _declared(self, table: str) -> Mapping[str, tuple[str, bool]]:
+        if table not in self._columns:
+            self._columns[table] = self._reader.columns(layer=SILVER_LAYER, table=table)
+        return self._columns[table]
+
+    def dim_run(self, parent_sweep_id: str, rows: Sequence[Mapping[str, object]]) -> None:
+        self._accumulator.add_dim_run(
+            columns=self._declared(_DIM_RUN_TABLE), parent_sweep_id=parent_sweep_id, rows=rows
+        )
+
+    def facts(self, table: str, rows: Sequence[Mapping[str, object]]) -> None:
+        self._accumulator.add_facts(table=table, columns=self._declared(table), rows=rows)
+
+    def realized(self, asset: str, realized: RealizedReturns) -> None:
+        self._accumulator.add_realized(asset=asset, realized=realized)
+
+    def result(self) -> SilverContent:
+        return self._accumulator.result()
+
+
 class RefreshGold:
     """Regenera por inteiro a geração gold de um cohort (ADR `6_4_0005`)."""
 
-    def __init__(  # noqa: PLR0913 — 7 colaboradores (concept 6.4 §4 sem o Hasher, #128; 7.2)
+    def __init__(  # noqa: PLR0913 — 8 colaboradores (concept 6.4 §4, #128; 7.2; 8.1)
         self,
         *,
         silver_reader: SilverTableReader,
@@ -269,6 +317,7 @@ class RefreshGold:
         gold_store: GoldStore,
         builders: Sequence[GoldBuilder],
         conformal_calibration: ConformalCalibration,
+        hasher: Hasher,
     ) -> None:
         """Valida a ordem dos builders já no wiring (C1) e guarda os colaboradores.
 
@@ -285,6 +334,7 @@ class RefreshGold:
         self._mcs_backend = mcs_backend
         self._gold_store = gold_store
         self._conformal_calibration = conformal_calibration
+        self._hasher = hasher
         self._registry = QualityCheckRegistry(
             [
                 AlignmentCheck(),
@@ -310,17 +360,18 @@ class RefreshGold:
         """
         started_at = self._clock.now()
         partition, parameters = command.partition, command.parameters
-        runs = _timed("read_runs", 0, lambda: self._read_runs(partition), len)
+        consumed = _ConsumedSilver(self._silver_reader, self._hasher)
+        runs = _timed("read_runs", 0, lambda: self._read_runs(partition, consumed), len)
         records = _timed(
             "read_facts",
             len(runs),
-            lambda: self._read_records(partition, runs),
+            lambda: self._read_records(partition, runs, consumed),
             len,
         )
         realized, fingerprint, trimmed_prefix = _timed(
             "read_realized",
             0,
-            lambda: self._read_realized(partition.asset, command.dataset_fingerprint),
+            lambda: self._read_realized(partition.asset, command.dataset_fingerprint, consumed),
             lambda r: len(r[0].timestamps),
         )
         assembled = _timed(
@@ -413,6 +464,7 @@ class RefreshGold:
                         realized=realized,
                         parameters=parameters,
                         h3=h3_block,
+                        consumed=consumed,
                     ),
                     lambda reports: 0 if reports.n_points is None else reports.n_points,
                 )
@@ -441,6 +493,7 @@ class RefreshGold:
             fingerprint=fingerprint,
             grid_trimmed_prefix=trimmed_prefix,
             started_at=started_at,
+            silver_content=consumed.result(),
         )
         _timed(
             "publish",
@@ -464,23 +517,34 @@ class RefreshGold:
             failed_checks=failed_checks_of(results),
             profile_error_units=error_units,
             conformal_error_units=conformal_errors,
+            manifest=manifest,
         )
 
     # -- leituras --------------------------------------------------------------------
 
-    def _read_runs(self, partition: GoldPartition) -> tuple[CohortRun, ...]:
-        runs = self._read_dim_run(partition)
+    def _read_runs(
+        self, partition: GoldPartition, consumed: _ConsumedSilver
+    ) -> tuple[CohortRun, ...]:
+        runs = self._read_dim_run(partition, consumed)
         if not runs:
             raise ValueError(f"cohort {partition} has no dim_run rows (C4)")
         return runs
 
-    def _read_dim_run(self, partition: GoldPartition) -> tuple[CohortRun, ...]:
+    def _read_dim_run(
+        self, partition: GoldPartition, consumed: _ConsumedSilver
+    ) -> tuple[CohortRun, ...]:
         """O `dim_run` de um `parent_sweep_id`, ordenado (vazio se não houver)."""
-        rows = self._silver_reader.read(
-            layer=SILVER_LAYER,
-            table="dim_run",
-            filters={"asset": partition.asset, "parent_sweep_id": partition.parent_sweep_id},
-        )
+        rows = [
+            row
+            for row in self._silver_reader.read(
+                layer=SILVER_LAYER,
+                table=_DIM_RUN_TABLE,
+                filters={"asset": partition.asset, "parent_sweep_id": partition.parent_sweep_id},
+            )
+            if (row.get("asset"), row.get("parent_sweep_id"))
+            == (partition.asset, partition.parent_sweep_id)
+        ]
+        consumed.dim_run(partition.parent_sweep_id, rows)
         runs = tuple(
             CohortRun(
                 run_id=str(row["run_id"]),
@@ -491,13 +555,11 @@ class RefreshGold:
                 config_signature=str(row["config_signature"]),
             )
             for row in rows
-            if (row.get("asset"), row.get("parent_sweep_id"))
-            == (partition.asset, partition.parent_sweep_id)
         )
         return tuple(sorted(runs, key=lambda run: run.run_id))
 
     def _read_records(
-        self, partition: GoldPartition, runs: Sequence[CohortRun]
+        self, partition: GoldPartition, runs: Sequence[CohortRun], consumed: _ConsumedSilver
     ) -> tuple[ForecastRecord, ...]:
         by_id = {run.run_id: run for run in runs}
         records: list[ForecastRecord] = []
@@ -507,15 +569,18 @@ class RefreshGold:
                 table="fact_oos_predictions",
                 filters={"asset": partition.asset, "feature_set_name": feature_set},
             )
+            kept: list[Mapping[str, object]] = []
             for row in rows:
                 run = by_id.get(str(row["run_id"]))
                 if row.get("asset") != partition.asset or run is None:
                     continue  # fora do cohort: descartado na leitura (ADR 6.4.0004 item 2)
+                kept.append(row)
                 records.append(_record(row, run))
+            consumed.facts(_FACT_TABLE, kept)
         return tuple(records)
 
     def _read_realized(
-        self, asset: str, expected: str
+        self, asset: str, expected: str, consumed: _ConsumedSilver
     ) -> tuple[RealizedReturns, DatasetContentFingerprint, int]:
         """Realizado = a grade de treino do ativo, conferida contra o cohort (ADR 6.4.0009).
 
@@ -532,6 +597,7 @@ class RefreshGold:
                 f"{expected[:_FINGERPRINT_SHOWN]}… (C10)"
             )
         realized = RealizedReturns(timestamps=timestamps, returns=grid.column(_TARGET))
+        consumed.realized(asset, realized)
         return realized, fingerprint, grid.trimmed_prefix
 
     # -- pré-condições, relatórios e MCS ------------------------------------------------
@@ -653,6 +719,7 @@ class RefreshGold:
         parameters: RefreshParameters,
         realized: RealizedReturns,
         h3: H3Parameters,
+        consumed: _ConsumedSilver,
     ) -> H3Reports:
         """Leitura por run → montagem → `JointContribution` → leitura e VSN (orquestra).
 
@@ -666,10 +733,12 @@ class RefreshGold:
         levels = tuple(sorted({r.quantile_level for r in test}))
         years = tuple(sorted({int(r.decision_timestamp[:4]) for r in test}))
         permuted, vsn, vsn_failure = self._attribution_reductions(
-            partition, candidate_runs, realized, levels
+            partition, candidate_runs, realized, levels, consumed
         )
-        ablation_runs = self._ablation_runs(partition, h3)
-        ablation = self._ablation_reductions(partition, ablation_runs, years, realized, levels)
+        ablation_runs = self._ablation_runs(partition, h3, consumed)
+        ablation = self._ablation_reductions(
+            partition, ablation_runs, years, realized, levels, consumed
+        )
         assembly = AttributionAssembly.assemble(
             candidate_runs=candidate_runs,
             permuted=permuted,
@@ -716,6 +785,7 @@ class RefreshGold:
         candidate_runs: Sequence[CohortRun],
         realized: RealizedReturns,
         levels: tuple[float, ...],
+        consumed: _ConsumedSilver,
     ) -> tuple[list[PermutedRunLosses | UndefinedRunReduction], VsnAccumulator, str | None]:
         """Um run por chamada, filtrado por `run_id` (CA14b); os registros são descartados."""
         permuted: list[PermutedRunLosses | UndefinedRunReduction] = []
@@ -740,6 +810,7 @@ class RefreshGold:
                 )
                 if row.get("run_id") == run.run_id and row.get("asset") == partition.asset
             ]
+            consumed.facts(_PERMUTED_TABLE, rows)
             if not rows:
                 permuted.append(
                     UndefinedRunReduction(run.run_id, f"run {run.run_id}: no attribution rows")
@@ -758,6 +829,7 @@ class RefreshGold:
                 )
                 if row.get("run_id") == run.run_id and row.get("asset") == partition.asset
             ]
+            consumed.facts(_VSN_TABLE, weights)
             if weights:
                 try:  # C8-2: peso inválido ou variável repetida deixa a VSN undefined
                     vsn.add(reduce_vsn_run([_vsn_record(row, run, fold) for row in weights]))
@@ -767,17 +839,20 @@ class RefreshGold:
                 vsn_failure = vsn_failure or f"run {run.run_id}: no vsn rows"
         return permuted, vsn, vsn_failure
 
-    def _ablation_runs(self, partition: GoldPartition, h3: H3Parameters) -> tuple[CohortRun, ...]:
+    def _ablation_runs(
+        self, partition: GoldPartition, h3: H3Parameters, consumed: _ConsumedSilver
+    ) -> tuple[CohortRun, ...]:
         """O `dim_run` da ablação pelo `cohort_id` do bloco `[h3]`."""
-        return self._read_dim_run(GoldPartition(partition.asset, h3.ablation_cohort_id))
+        return self._read_dim_run(GoldPartition(partition.asset, h3.ablation_cohort_id), consumed)
 
-    def _ablation_reductions(
+    def _ablation_reductions(  # noqa: PLR0913 — as entradas da leitura por ano
         self,
         partition: GoldPartition,
         ablation_runs: Sequence[CohortRun],
         years: Sequence[int],
         realized: RealizedReturns,
         levels: tuple[float, ...],
+        consumed: _ConsumedSilver,
     ) -> list[AblationRunLosses | UndefinedRunReduction]:
         """A partição da ablação lida UMA vez por `year` (I19), reduzida por run e unida."""
         by_id = {run.run_id: run for run in ablation_runs}
@@ -787,6 +862,7 @@ class RefreshGold:
         for feature_set in sorted({run.feature_set_name for run in ablation_runs}):
             for year in years:
                 block: dict[str, list[ForecastRecord]] = {}
+                kept: list[Mapping[str, object]] = []
                 for row in self._silver_reader.read(
                     layer=SILVER_LAYER,
                     table=_FACT_TABLE,
@@ -804,7 +880,9 @@ class RefreshGold:
                         or row.get("split") != _TEST_SPLIT
                     ):
                         continue
+                    kept.append(row)
                     block.setdefault(run.run_id, []).append(_record(row, run))
+                consumed.facts(_FACT_TABLE, kept)
                 for run_id, rows in block.items():
                     parts[run_id].append(
                         reduce_ablation_run(
@@ -831,6 +909,7 @@ class RefreshGold:
         fingerprint: DatasetContentFingerprint,
         grid_trimmed_prefix: int,
         started_at: datetime,
+        silver_content: SilverContent,
     ) -> GoldManifest:
         return GoldManifest(
             status=status,
@@ -849,6 +928,7 @@ class RefreshGold:
             build_order=self._build_order,
             started_at=started_at,
             finished_at=self._clock.now(),
+            silver_content=silver_content,
         )
 
 
@@ -1218,6 +1298,7 @@ def _undefined_reason(  # noqa: PLR0913 — os motivos possíveis, na ordem
 _PERMUTED_TABLE: Final = "fact_permuted_predictions"
 _VSN_TABLE: Final = "fact_vsn_weights"
 _FACT_TABLE: Final = "fact_oos_predictions"
+_DIM_RUN_TABLE: Final = "dim_run"
 _TEST_SPLIT: Final = "test"
 
 

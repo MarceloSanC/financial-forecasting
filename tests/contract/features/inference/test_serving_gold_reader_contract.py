@@ -97,6 +97,7 @@ from tests.unit.features.evaluation._serving_gold_rows import (
     refresh_parameters,
     vsn_row,
 )
+from tests.unit.features.evaluation._silver_content import SAMPLE_SILVER_CONTENT
 
 pytestmark = pytest.mark.contract
 
@@ -453,6 +454,7 @@ def _publish_real_builders(root: Path, inputs: GoldInputs) -> None:
         build_order=tuple(table.name.removeprefix("gold_") for table in tables),
         started_at=now,
         finished_at=now,
+        silver_content=SAMPLE_SILVER_CONTENT,
     )
     ParquetGoldStore(root).publish(partition=inputs.partition, tables=tables, manifest=manifest)
 

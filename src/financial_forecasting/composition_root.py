@@ -1290,6 +1290,8 @@ def wire_dependencies(
         # Stage 7.2 (ADR 7.2.0003 item 3): o real do port do consumidor
         # `ConformalCalibration` é o use case `CalibrateConformal` do inference, puro
         conformal_calibration=CalibrateConformal(),
+        # Stage 8.1 (ADR 8.1.0002): o MESMO hasher calcula o hash do silver consumido
+        hasher=hasher,
     )
 
     # BC evaluation (Stage 6.5, Task 11): o scorecard confirmatório lê a geração viva

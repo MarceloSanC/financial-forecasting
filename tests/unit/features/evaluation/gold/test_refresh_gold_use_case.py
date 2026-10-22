@@ -35,8 +35,15 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     RefreshParameters,
     RefreshStatus,
 )
+from financial_forecasting.features.evaluation.application.dtos.silver_content import (
+    SilverContent,
+    unit_key,
+)
 from financial_forecasting.features.evaluation.application.use_cases import (
     refresh_gold as refresh_gold_module,
+)
+from financial_forecasting.features.evaluation.application.use_cases import (
+    silver_content_accumulator as accumulator_module,
 )
 from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
     GridFingerprintMismatchError,
@@ -102,13 +109,22 @@ from financial_forecasting.features.modeling.domain.services.training_grid impor
     TrainingGrid,
     build_training_grid,
 )
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
     DatasetContentFingerprint,
+)
+from financial_forecasting.shared.domain.value_objects.silver_content_hash import (
+    SilverContentHash,
 )
 from tests.fakes.features.evaluation.fake_conformal_calibration import FakeConformalCalibration
 from tests.fakes.features.evaluation.fake_gold_builder import FakeGoldBuilder
 from tests.fakes.features.evaluation.fake_mcs_backend import FakeMcsBackend
-from tests.fakes.features.evaluation.fake_silver_table_reader import FakeSilverTableReader
+from tests.fakes.features.evaluation.fake_silver_table_reader import (
+    SILVER_PARTITIONS,
+    FakeSilverTableReader,
+)
 from tests.fakes.features.evaluation.fake_training_grid_reader import FakeTrainingGridReader
 from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
 from tests.fakes.shared.in_memory_clock import FakeClock
@@ -417,6 +433,7 @@ def _harness(  # noqa: PLR0913 — um parâmetro por colaborador trocável (keyw
         gold_store=gold,
         builders=builders(log),
         conformal_calibration=port,
+        hasher=CanonicalJsonHasher(),
     )
     return _Harness(use_case, reader, grid, backend, gold, log, _fingerprint(cohort), port)
 
@@ -457,6 +474,7 @@ def test_graph_checked_before_read() -> None:
             gold_store=_SpyStoreGold(log),
             builders=cyclic(log),
             conformal_calibration=FakeConformalCalibration(),
+            hasher=CanonicalJsonHasher(),
         )
     assert log.events == []
     assert _harness().use_case.build_order[0] == _QUALITY
@@ -1921,3 +1939,193 @@ def test_ablation_rows_outside_test_are_ignored(
     assert splits == {"test"}
     assert noisy.h3_reports.ablation == clean.h3_reports.ablation
     assert noisy.h3_reports.ablation_differentials == clean.h3_reports.ablation_differentials
+
+
+# --- Stage 8.1: identidade do silver consumido (A2 com fakes, A7, D4, I6, I7) ----------
+
+
+def _silver_content_of(harness: _Harness, **changes: object) -> SilverContent:
+    return harness(**changes).manifest.silver_content
+
+
+def _h3_content(
+    silver: Mapping[str, Sequence[Mapping[str, object]]],
+    *,
+    cohort: Cohort | None = None,
+    partition_keys: Mapping[str, tuple[str, ...]] | None = None,
+) -> SilverContent:
+    harness = _harness(
+        _h3_cohort() if cohort is None else cohort, silver=silver, partition_keys=partition_keys
+    )
+    return _silver_content_of(harness, parameters=_H3_PARAMETERS, horizons=_H3_HORIZONS)
+
+
+def _prefixed(content: SilverContent, table: str) -> set[str]:
+    return {key for key in content.units if key.split("|")[0] == table}
+
+
+@pytest.mark.unit
+def test_manifest_carries_silver_content() -> None:
+    cohort = make_cohort()
+    harness = _harness(cohort)
+    result = harness()
+    manifest, _ = _published(harness)
+
+    content = SilverContent.from_mapping(manifest["silver_content"])  # type: ignore[arg-type]
+    assert content == result.manifest.silver_content
+    assert set(content.tables) == {"dim_run", "fact_oos_predictions", "realized"}
+    assert _prefixed(content, "dim_run") == {f"dim_run|{_SWEEP}"}
+    assert _prefixed(content, "realized") == {f"realized|{_ASSET}"}
+    assert _prefixed(content, "fact_oos_predictions") == {
+        unit_key("fact_oos_predictions", record.run_id, 2024) for record in cohort.records
+    }
+
+
+@pytest.mark.unit
+def test_result_manifest_equals_published_manifest() -> None:
+    harness = _harness()
+    result = harness()
+    manifest, _ = _published(harness)
+
+    assert result.manifest.as_mapping() == manifest
+
+
+@pytest.mark.unit
+def test_blocked_hashes_exactly_dim_run_facts_and_realized() -> None:
+    """A7: com `BLOCKED`, só o lido antes dos checks entra (nada da leitura de H3)."""
+    cohort = _h3_cohort()
+    gap = targets_of(cohort, "tft", 1, 1)[10]
+    cohort = drop_records(cohort, at_point("tft", 1, 1, gap))
+    harness = _harness(cohort, silver=_h3_silver(cohort))
+    result = harness(parameters=_H3_PARAMETERS, horizons=_H3_HORIZONS)
+
+    assert result.status is RefreshStatus.BLOCKED
+    content = result.manifest.silver_content
+    assert set(content.tables) == {"dim_run", "fact_oos_predictions", "realized"}
+    assert _prefixed(content, "dim_run") == {f"dim_run|{_SWEEP}"}
+
+
+@pytest.mark.unit
+def test_completed_with_h3_hashes_the_five_tables() -> None:
+    cohort = _h3_cohort()
+    harness = _harness(cohort, silver=_h3_silver(cohort))
+    result = harness(parameters=_H3_PARAMETERS, horizons=_H3_HORIZONS)
+
+    assert result.status is RefreshStatus.COMPLETED
+    content = result.manifest.silver_content
+    assert set(content.tables) == {
+        "dim_run",
+        "fact_oos_predictions",
+        "fact_permuted_predictions",
+        "fact_vsn_weights",
+        "realized",
+    }
+    ablation_id = _h3_parameters_for_test().ablation_cohort_id
+    assert _prefixed(content, "dim_run") == {f"dim_run|{_SWEEP}", f"dim_run|{ablation_id}"}
+    ablation_units = {
+        unit_key("fact_oos_predictions", r.run_id, int(r.decision_timestamp[:4]))
+        for r in cohort.ablation_records
+        if r.split == "test"
+    }
+    assert ablation_units <= _prefixed(content, "fact_oos_predictions")
+    tft_runs = {run.run_id for run in cohort.runs if run.model == "tft"}
+    assert {key.split("|")[1] for key in _prefixed(content, "fact_permuted_predictions")} == (
+        tft_runs
+    )
+
+
+def _discard_case(case: str, silver: dict[str, list[dict[str, object]]], cohort: Cohort) -> None:
+    """Acrescenta ao silver linhas que o refresh lê ou nem pede, e descarta (A2(c))."""
+    gbm = next(run for run in cohort.runs if run.model == "gbm")
+    if case == "other-sweep":
+        silver["dim_run"].append(
+            {**silver["dim_run"][0], "run_id": "alien", "parent_sweep_id": "x"}
+        )
+    elif case == "ablation-calib":
+        silver["fact_oos_predictions"] += [
+            {**row, "split": "calib", "value_raw": 9.0}
+            for row in silver["fact_oos_predictions"]
+            if row["feature_set_name"] == "fs_all_ablation"
+        ]
+    elif case == "ablation-year-outside":
+        silver["fact_oos_predictions"] += [
+            {**row, "year": 1999}
+            for row in silver["fact_oos_predictions"]
+            if row["feature_set_name"] == "fs_all_ablation"
+        ]
+    else:  # "non-candidate-attribution"
+        for table in ("fact_permuted_predictions", "fact_vsn_weights"):
+            silver[table] += [
+                {**row, "run_id": gbm.run_id, "model_version": gbm.model}
+                for row in silver[table][:5]
+            ]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "case", ["other-sweep", "ablation-calib", "ablation-year-outside", "non-candidate-attribution"]
+)
+def test_rows_discarded_by_post_filters_do_not_change_digest(case: str) -> None:
+    cohort = _h3_cohort()
+    # `dim_run` só por `asset`: o leitor devolve o superconjunto e o use case pós-filtra
+    keys = {**SILVER_PARTITIONS, "dim_run": ("asset",)}
+    baseline = _h3_content(_h3_silver(cohort), cohort=cohort, partition_keys=keys)
+    silver = _h3_silver(cohort)
+    _discard_case(case, silver, cohort)
+
+    assert _h3_content(silver, cohort=cohort, partition_keys=keys) == baseline
+
+
+@pytest.mark.unit
+def test_rows_of_a_run_with_unusable_fold_do_not_change_digest() -> None:
+    """Run do candidato com fold inutilizável vira `undefined`: suas atribuições não são lidas."""
+    cohort = _h3_cohort()
+    run = sorted(r.run_id for r in cohort.runs if r.model == "tft")[0]
+
+    def silver_with_unusable_fold(value_raw: float | None) -> dict[str, list[dict[str, object]]]:
+        silver = _h3_silver(cohort)
+        silver["dim_run"] = [
+            {**row, "fold": "fold-x"} if row["run_id"] == run else row for row in silver["dim_run"]
+        ]
+        if value_raw is not None:
+            silver["fact_permuted_predictions"] = [
+                {**row, "value_raw": value_raw} if row["run_id"] == run else row
+                for row in silver["fact_permuted_predictions"]
+            ]
+        return silver
+
+    baseline = _h3_content(silver_with_unusable_fold(None), cohort=cohort)
+    changed = _h3_content(silver_with_unusable_fold(9.0), cohort=cohort)
+
+    assert changed == baseline
+    assert run not in {
+        key.split("|")[1] for key in _prefixed(baseline, "fact_permuted_predictions")
+    }
+
+
+@pytest.mark.unit
+def test_gold_tables_identical_with_and_without_hashing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nenhum número muda com o hash, e o hash não muta as linhas devolvidas pelo leitor."""
+    cohort = _h3_cohort()
+    hashed = _harness(cohort, silver=_h3_silver(cohort))
+    returned: list[tuple[Sequence[Mapping[str, object]], object]] = []
+    real_read = hashed.reader.read
+
+    def snapshot(**kwargs: object) -> Sequence[Mapping[str, object]]:
+        rows = real_read(**kwargs)
+        returned.append((rows, copy.deepcopy(rows)))
+        return rows
+
+    hashed.reader.read = snapshot  # type: ignore[method-assign]
+    hashed(parameters=_H3_PARAMETERS, horizons=_H3_HORIZONS)
+
+    constant = SilverContentHash(value="0" * 64)
+    monkeypatch.setattr(
+        accumulator_module.SilverContentHash, "of_unit", classmethod(lambda cls, **_: constant)
+    )
+    unhashed = _harness(cohort, silver=_h3_silver(cohort))
+    unhashed(parameters=_H3_PARAMETERS, horizons=_H3_HORIZONS)
+
+    assert _published(unhashed)[1] == _published(hashed)[1]
+    assert returned
+    assert all(rows == before for rows, before in returned)

@@ -43,6 +43,7 @@ from financial_forecasting.shared.domain.value_objects.dataset_content_fingerpri
 )
 from tests.unit.features.evaluation._conformal_parameters import conformal_parameters
 from tests.unit.features.evaluation._h3_parameters import h3_parameters
+from tests.unit.features.evaluation._silver_content import SAMPLE_SILVER_CONTENT
 
 ASSET = "AAPL"
 COHORT = "aapl_confirmatory-r0-abc"
@@ -300,5 +301,6 @@ def generation(
         build_order=tuple(table.name.removeprefix("gold_") for table in tables),
         started_at=NOW,
         finished_at=NOW,
+        silver_content=SAMPLE_SILVER_CONTENT,
     )
     return tables, manifest

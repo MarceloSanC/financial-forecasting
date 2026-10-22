@@ -1347,4 +1347,30 @@ erros em linhas que a Task não editou: `tests/contract/features/evaluation/test
 para a issue #204 (mypy não roda sobre `tests/`), que mede erros do mesmo tipo e decide entre
 pôr `tests/` no mypy e zerar ou trocar a prova afirmada nos docstrings.
 
+### 2026-10-22 — [decision:C] Task 04 — `RefreshGoldResult.manifest` fora da igualdade — Claude (sessão Windows)
+**Contexto:** o campo novo `RefreshGoldResult.manifest` carrega `started_at`/`finished_at`
+do `Clock`; com ele na igualdade, `test_rerun_identical` (6.4, I16: "mesmas entradas →
+mesmo resultado; no manifesto só os timestamps mudam") quebrava na asserção
+`first_result == second_result`.
+**Pergunta:** como acrescentar o manifesto ao resultado sem editar asserção da 6.4?
+**Opções:**
+- A — editar `test_rerun_identical` para comparar o resultado sem o manifesto
+- B — `manifest: GoldManifest = field(compare=False)` ✅ recomendada
+**Decisão:** B
+**Razão:** a igualdade do resultado é a do desfecho (status, linhas, checks, contagens);
+quem precisa do manifesto (o orquestrador da Task 13, I8) o compara explicitamente
+contra a cópia, e o `test_result_manifest_equals_published_manifest` o confere. Reversível.
+
+### 2026-10-22 — [deviation] Task 04 — asserção do teste de linhas `calib` da 6.4 — Claude (sessão Windows)
+**Contexto:** `tests/integration/features/evaluation/test_refresh_gold.py::test_refresh_gold_identical_with_and_without_calib_rows`
+afirmava que, com linhas `calib` do cohort acrescentadas, o manifesto só muda nos
+timestamps. O refresh consome os dois splits do cohort, então o `silver_content` muda —
+o que o concept A2(b) exige ("`fact_oos_predictions` `test` e `calib` do cohort … muda o
+digest"). O technical dizia "testes da 6.4–7.3 verdes sem edição de asserção" e não
+listava o arquivo.
+**Razão:** hierarquia concept > technical; autorizado pelo coordenador. A asserção passa a
+aceitar `silver_content` no conjunto mudado e afirma que só unidades
+`fact_oos_predictions|…` e a tabela `fact_oos_predictions` mudam (nem `dim_run` nem
+`realized`); as tabelas gold seguem idênticas, que é o que o teste protege.
+
 <!-- END: post-execution -->
