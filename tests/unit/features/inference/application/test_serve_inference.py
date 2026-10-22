@@ -211,6 +211,8 @@ _LITERAL_OVERRIDES: dict[_Key, dict[str, object]] = {
     ("0", 1, 1, (0.25, 0.75), LOWER): {"correction": -0.0234375},
     ("0", 1, 1, (0.25, 0.75), UPPER): {"correction": -0.015625},
     ("0", 2, 1, (0.1, 0.9), UPPER): {"correction": math.inf, "n": 10, "rank": 11},
+    # fold "1" com Q̂ próprio: a chave da unidade tem de incluir o fold (C1-3)
+    ("1", 1, 1, (0.1, 0.9), LOWER): {"correction": 0.0625},
 }
 
 
@@ -448,6 +450,15 @@ def test_last_sessions_have_no_h7_but_h1_alone_is_served() -> None:
     payload = use_case(_query(_LAST, horizons=(1,)))
     assert [f.horizon for f in payload.forecasts] == [1]
     assert {m.fold for m in payload.forecasts[0].members} == {"1"}
+
+
+def test_member_of_fold_1_uses_the_unit_of_fold_1() -> None:
+    payload = _serve()[0](_query(_LAST, horizons=(1,)))
+    member = _member(payload, 1, 1)
+    assert (member.fold, member.run_id) == ("1", "f1s1")
+    outer = member.conformal.intervals[0]
+    # seed 1, h+1, fold 1: base = 1/512 + 1/4096 + 1/8192; Q_lo = 2^-4, Q_hi = 2^-9
+    assert (outer.status, outer.lower, outer.upper) == (OK, -0.0914306640625, 0.0355224609375)
 
 
 # --- CA2: 404 com o que faltou ---------------------------------------------------------
