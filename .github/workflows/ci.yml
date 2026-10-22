@@ -33,7 +33,11 @@ jobs:
     # suíte do adapter do TFT faz da ordem de vinte treinos reais em CPU. Subir
     # o teto junto com a dependência evita que o job morra por timeout antes de
     # alguém ler a medição de R1/R2.
-    timeout-minutes: 30
+    # 60 min (era 30, #206): depois da 7.3 (e2e e memória de H3, piloto da
+    # ablação) e da 7.4 (e2e da API), o job foi cancelado a 99 % do pytest nos
+    # runs 39665942703 (develop) e 39743444111 (PR #205); localmente o
+    # `make check` leva 22-26 min com `-n 4`, e o runner tem menos CPU.
+    timeout-minutes: 60
     # `issues: read` habilita o `gh issue view` do check_stage_issue.py
     # (docs-check) — sem ele o script cai no caminho best-effort e o gate
     # issue-first passa sem verificar nada.
