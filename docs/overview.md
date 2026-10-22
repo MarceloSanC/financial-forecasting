@@ -29,7 +29,7 @@ Existe uma implementação anterior funcional deste estudo, mas que degradou em 
 Reconstruir o estudo do zero, repensando **criticamente cada decisão** (não reaproveitando escolhas por inércia) e impondo arquitetura limpa **verificada por ferramenta**. Isso entrega simultaneamente rigor acadêmico (evidência rastreável e reproduzível) e velocidade (uso intensivo de bibliotecas confiáveis no lugar de cálculo artesanal). A estrutura de trabalho por Stages permite que cada decisão seja pesquisada e fundamentada em sua própria sessão.
 
 ### Estado atual
-O alvo é uma reconstrução greenfield. Apenas os **dados brutos** (candles, news, fundamentals de AAPL) de uma coleta anterior são considerados insumo reaproveitável (camada bronze imutável); tudo a jusante é re-derivado e o modelo é **re-treinado** em código novo. Resultados confirmatórios anteriores servem apenas como **oráculo de equivalência/regressão**, com tolerância declarada — nunca como autoridade de decisão.
+O alvo é uma reconstrução greenfield. Apenas os **dados brutos** (candles, news, fundamentals de AAPL) de uma coleta anterior são considerados insumo reaproveitável (camada bronze imutável); tudo a jusante é re-derivado e o modelo é **re-treinado** em código novo. Resultados confirmatórios anteriores servem apenas como **oráculo de equivalência/regressão** — nunca como autoridade de decisão: com **tolerância numérica declarada** onde a igualdade é esperada (alvo realizado e código de métrica) e, nos números do modelo re-treinado, com o **sentido** como tolerância (mesmo sinal da vantagem candidato − baseline comum, mesmo lado do nominal no PICP 80 %, mesmo sentido do DM), deltas quantitativos documentados ([doc de domínio de reprodução e equivalência](domain/evaluation/reproduction-equivalence-and-reporting.md) §5; [ADR 0.0.0062](adr/0_0_0062-equivalence-tolerance-numeric-where-equality-expected-direction-for-model-numbers.md)).
 
 ## 3. Escopo
 
@@ -55,7 +55,7 @@ O alvo é uma reconstrução greenfield. Apenas os **dados brutos** (candles, ne
 - **ASSUM-2:** o ambiente AMD ROCm permite re-treinar o TFT com custo aceitável para o cohort confirmatório de AAPL.
   - *Nota (2026-09-27, Stage 5.5):* o cohort confirmatório roda em **CPU**, não em ROCm. O custo foi medido no dado real antes do congelamento: um trial do TFT leva de 75 s a 806 s, e o cohort inteiro (sweeps de 60 trials, 10 seeds × 6 folds) cabe em CPU. Com esse número, o humano decidiu por CPU. A premissa perde o objeto, mas não é violada: o ROCm deixou de ser necessário. Registro: technical 5.5 §7; ADR 5.4.0003, nota da Task 37.
 - **ASSUM-3:** chaves de API (Alpha Vantage) seguem disponíveis para re-ingestão pontual de bronze, se necessário.
-- **ASSUM-4:** equivalência com evidências anteriores é aferida com **tolerância declarada** (não bit-identical), por ser re-treino com nova stack numérica.
+- **ASSUM-4:** equivalência com evidências anteriores é aferida com **tolerância declarada** (não bit-identical), por ser re-treino com nova stack numérica: **numérica** onde a igualdade é esperada (alvo realizado; código de métrica sobre as predições anteriores) e de **sentido** nos números do modelo (sinal de candidato − baseline comum, lado do nominal no PICP 80 %, sentido do DM), com deltas documentados e divergência de sentido sem explicação registrada como `[finding]` (ADR 0.0.0062; emenda de redação de 2026-10-22, decisão B2 do humano).
 - **ASSUM-5:** orientador/banca aceitam refutação como resultado científico válido.
 
 ## 4. Objetivos
@@ -110,7 +110,7 @@ A disciplina anti-p-hacking é estrutural: **pré-registro imutável hasheado** 
 
 | Cód | Risco | Prob | Impacto | Mitigação inicial |
 |---|---|---|---|---|
-| **R-REPRO-1** | Re-treino não reproduz evidência anterior (nova stack numérica) | Média | médio | Equivalência por **tolerância declarada** (ASSUM-4), não bit-identical; deltas documentados |
+| **R-REPRO-1** | Re-treino não reproduz evidência anterior (nova stack numérica) | Média | médio | Equivalência por **tolerância declarada** (ASSUM-4), não bit-identical: numérica no alvo e no código de métrica, de sentido nos números do modelo; deltas documentados; divergência de sentido sem explicação → `[finding]` (ADR 0.0.0062) |
 | **R-LIBS-1** | Libs de nicho frágeis (DM, Christoffersen, Kupiec) | Média | médio | Implementação própria no domínio + **oráculo R** em fixtures versionadas + pin de versão + ADR de proveniência (ADR 0.0.0056) |
 | **R-CONFORMAL-1** | Conformal frágil em série temporal (permutabilidade violada) | Alta | médio | Reportar cobertura **empírica** (não "garantida") + 4 invariantes (calib set dedicado, por fold/horizonte, embargo, linguagem) |
 | **R-SUPPLY-1** | `pandas-ta` com fonte apagada / sem manutenção | Alta | alto | Migrar para `pandas-ta-classic`/TA-Lib + **validar cada indicador contra o paper** + teste de leakage |
