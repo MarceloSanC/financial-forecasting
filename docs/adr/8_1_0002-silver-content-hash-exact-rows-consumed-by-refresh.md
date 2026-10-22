@@ -85,6 +85,11 @@ Escolha: inside `RefreshGold`, over the same rows it consumes, recorded in `Gold
 Base: refresh_gold.py read paths (post-filters, year-by-year ablation reads, one candidate run at a time) — a second reader would be a second definition of "what the refresh reads"
 Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
+[decision:C] 8.1-H7 — non-finite floats in the silver hash
+Escolha: encode as distinct tokens (`float:inf`, `float:-inf`, `float:nan`); never refuse; `None` in a non-nullable column is still `ValueError` · Alternativas: (b) refuse NaN/±inf with `ValueError` (first version of this ADR) and amend I16/C8-2 of Stage 7.3 · Degrau (C): 1 (coherence with the ratified 7.3: an invalid attribution row becomes an `undefined` unit and never aborts the refresh — tests `test_bad_attribution_row_is_undefined_never_aborts[permuted-inf]` and `[vsn-weight-inf]`; the hash computed inside the refresh over the consumed rows (8.1-H5) would otherwise abort it)
+Base: Stage 7.3 I16/C8-2; the hash identifies exact content (R-BIT), and a token per non-finite value keeps distinct inputs distinct; alternative (b) reopens a `done` Stage
+Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim (before the 8.1 run)
+
 [decision:C] 8.1-H6 — granularity
 Escolha: one digest per content-defined unit — (table, parent_sweep_id) for dim_run, (table, run_id, year) for fact tables with year read from the row — combined per table and overall (DVC `.dir`-like map of hashes) · Alternativas: one hash per table over all rows; one hash per row · Degrau (C): 5, with the unit defined by content so the hash does not depend on how the code chunks its reads
 Base: issue #211 (DVC: per-file hash + `.dir` map; MLflow: dataset digest); memory bound — RefreshGold already reduces attribution one run at a time and the ablation one year at a time
@@ -95,9 +100,11 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
    `shared/domain/value_objects/silver_content_hash.py`, frozen, validated by
    `validate_sha256_hex`; factories `of_unit(hasher, table, rows)` and
    `combine(hasher, digests)`. Payload per unit: the table name and the rows,
-   each row a mapping column → value with every `float` replaced by its exact
-   encoding (the `PreregistrationHash` rule — shared, not copied), `None` kept
-   as null, NaN/±inf refused with `ValueError`; rows in a canonical order
+   each row a mapping column → value with every finite `float` replaced by its
+   exact encoding (the `PreregistrationHash` rule — shared, not copied) and
+   every non-finite one by a distinct token (`float:inf`, `float:-inf`,
+   `float:nan`), `None` kept as null where declared nullable (decision
+   8.1-H7, revised after the Stage 8.1 technical); rows in a canonical order
    independent of read order. The combined digest hashes the mapping unit key
    → digest. LAYOUT §7 lists the new VO.
 2. **Scope.** Exactly the rows `RefreshGold` consumes after its post-filters,
