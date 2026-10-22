@@ -1336,4 +1336,15 @@ python scripts/check_technical_postexec.py docs/stages/8.1-confirmatory-run/tech
 Vocabulário fechado (CONVENTIONS §3.4): `decision` (ou `decision:E` /
 `decision:C`), `finding`, `deviation`, `measurement`.
 
+### 2026-10-22 — [finding] Task 02 — erros de mypy pré-existentes em `tests/` — Claude (sessão Windows)
+**Contexto:** o mypy strict pontual da Task 02 sobre os arquivos de teste tocados acusou 3
+erros em linhas que a Task não editou: `tests/contract/features/evaluation/test_silver_table_reader_contract.py:103`
+(`_ids` devolve `list[str]` anotado `list[object]`), `tests/integration/features/evaluation/test_h3_refresh_memory.py:341`
+(`"object" has no attribute "update"`) e `tests/unit/features/evaluation/gold/_cohort_factory.py:285`
+(índice `str | None` num `Mapping[str, ...]`). Os arquivos de `src/` tocados estão limpos; o
+`make typecheck` e o hook `mirrors-mypy` cobrem só `src/`, então nenhum gate os vê.
+**Razão:** fora do escopo da 8.1 (nenhum muda comportamento nem contrato da Stage); escalado
+para a issue #204 (mypy não roda sobre `tests/`), que mede erros do mesmo tipo e decide entre
+pôr `tests/` no mypy e zerar ou trocar a prova afirmada nos docstrings.
+
 <!-- END: post-execution -->
