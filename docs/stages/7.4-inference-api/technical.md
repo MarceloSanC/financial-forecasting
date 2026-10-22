@@ -985,4 +985,74 @@ registrado, antes de o handoff sumir, onde mora cada conjunto de checkpoints. A 
 de devolver os 60 do backup a `artifacts/tft` (ou apontar o `ARTIFACTS_ROOT` para ele)
 antes do `infer`. A 7.4 não usa checkpoints.
 
+### 2026-10-22 — [deviation] Checkpoint C3-8 — CA12 e D15 pelo caminho Windows/Docker — Claude (sessão Windows)
+**Contexto:** o §3 escreve as duas verificações funcionais com caminhos do Linux
+(`DATA_ROOT=/home/marcelo/…`, `uvicorn … &` + `curl` no host). Nesta máquina tudo roda
+por Docker (o venv do host está quebrado), e o dado real foi extraído no checkout
+principal do Windows.
+**Razão:** as duas rodaram num `docker run` avulso (`--cpus 3 --memory 6g`, imagem
+`financial_forecasting-app:dev`, volume `financial-forecasting_ff74-venv`), com a
+worktree em `/app` e `PYTHONPATH=/app/src:/app`. O dado real foi montado só leitura:
+`-v C:/Users/Marcelo/Documents/Code/financial-forecasting/data/cohorts/aapl:/data/aapl:ro`,
+com `DATA_ROOT=/data/aapl` (o `data/cohorts/aapl` do checkout principal). O
+`curl` foi trocado por `httpx` dentro do mesmo container, e o `uvicorn` sobe como
+subprocesso do script. A conferência dos quantis lê o Parquet por DuckDB, só colunas de
+predição (`run_id`, `seed`, `fold`, `split`, `horizon`, `timestamp_utc`,
+`quantile_level`, `value_guardrail`). Nenhuma métrica foi calculada, e o realizado não
+foi lido (cegamento). Scripts: `ca12.py` e `d15.py` no scratchpad da sessão
+(`…\scratchpad\verify\`).
+
+### 2026-10-22 — [measurement] CA12 — a API real sobre o cohort real — Claude (sessão Windows)
+**Contexto:** §3, "Execução real (CA12)": a app sobe com o cohort real e um pedido a uma
+data de teste devolve a grade gravada, com os blocos do gold indisponíveis.
+**Medição:** `python /verify/ca12.py /data/aapl` (container acima; `uvicorn
+financial_forecasting.main:app --port 8077` com `DATA_ROOT=/data/aapl` e
+`SERVING_COHORT_FILE=config/cohorts/aapl_confirmatory.toml`). Saída bruta, truncada:
+```
+[startup] 14.04s
+[2024-03-15] status=200 time=1.456s
+horizons: [1, 7]
+seeds per horizon: [[1..10], [1..10]]
+target_dates: ['2024-03-18', '2024-03-26']
+grade == value_guardrail gravado (DuckDB): 20/20 membros
+gold: {"published": false, "generation_status": null, "preregistration_ref": null, "candidate": null, "finished_at": null}
+conformal por membro: {('unavailable', 'gold não publicado para o cohort aapl_confirmatory-r0-665f45d9169a')}
+explainability: unavailable | gold não publicado para o cohort aapl_confirmatory-r0-665f45d9169a
+rótulos: {'cobertura empírica (não garantida)'} | descritiva (sem claim causal) | horizonte-invariante; descreve quanto o modelo usa cada família
+schema_version: 1
+[2026-01-05 {}] status=404 time=0.290s -> não há dados para o pedido solicitado: decisão 2026-01-05 sem linha de teste para (seed 1, h+1), …, (seed 10, h+7)
+[2025-12-30 {}] status=404 time=0.848s -> não há dados para o pedido solicitado: decisão 2025-12-30 sem linha de teste para (seed 1, h+7), …, (seed 10, h+7)
+[2025-12-30 {'horizons': [1]}] status=200 time=0.849s -> 1 horizonte(s), 10 membros
+```
+**Razão:** prova o CA12 pelo entrypoint real.
+- 200 com 2 horizontes × 10 seeds; os 20 membros são iguais, valor a valor e com o
+  mesmo `run_id`, ao `value_guardrail` gravado, conferido de forma independente do
+  adapter.
+- Os blocos vêm `unavailable` com "gold não publicado" e os rótulos presentes.
+- Uma data fora do teste dá 404 com a frase. A última sessão (2025-12-30) dá 404 no
+  pedido padrão, por faltar h+7, e 200 pedindo só h+1.
+- O pedido leva 1,46 s, abaixo dos 5 s. A subida da app leva 14 s, uma vez por processo
+  (§5, aceitável).
+
+### 2026-10-22 — [measurement] D15 — tempo de um pedido com gold do tamanho do real — Claude (sessão Windows)
+**Contexto:** §3, "Tempo de um pedido com gold de tamanho real (D15)": acima de 5 s no
+total, entra a Task extra de cache por manifesto.
+**Medição:** `python /verify/d15.py /data/aapl` (container acima). O `ServeInference`
+vem de `serve_inference_factory` sobre o `ParquetAnalyticsRepository` do silver real
+(`:ro`) e o `ReadServingGold` sobre um `ParquetGoldStore` em diretório temporário, com
+uma geração COMPLETED sintética de 19 tabelas. Saída bruta:
+```
+[gold sintético] 19 tabelas, 93123 linhas, publicado em 1.20s
+   {'quality_checks': 60, 'metrics_by_run': 2640, 'calibration_table': 7920, 'dm_results': 24, 'mcs_results': 28, 'dm_profiles': 6480, 'dm_seed_fraction': 12, 'mcs_block_sensitivity': 28, 'christoffersen_monte_carlo': 5280, 'partial_degeneracy': 2640, 'differential_acf': 840, 'differential_breaks': 42, 'loss_differentials': 63336, 'conformal_corrections': 1440, 'conformal_coverage': 720, 'h3_importance': 1600, 'h3_shares': 8, 'h3_reading': 1, 'h3_vsn': 24}
+[pedido 1] total 2.514s | membros=20 intervalos=60 conformal=available explicabilidade=available
+[pedido 2] total 2.268s | membros=20 intervalos=60 conformal=available explicabilidade=available
+[pedido 3] total 2.453s | membros=20 intervalos=60 conformal=available explicabilidade=available
+```
+As correções seguem o §3 (6 folds × 10 seeds × 2 horizontes × 3 pares × 2 variantes × 2
+caudas = 1440). As demais tabelas têm contagens da ordem do cohort: 7 modelos, 10
+seeds, 2 horizontes e ~1508 decisões, com `loss_differentials` = 2 × 21 pares × 1508.
+**Razão:** o tempo total de um pedido (silver real + gold inteiro + montagem) fica entre
+2,27 s e 2,51 s, abaixo do limiar de 5 s do D15. A Task extra de cache por manifesto
+não entra.
+
 <!-- END: post-execution -->
