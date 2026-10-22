@@ -544,9 +544,23 @@ gh pr view <num-pr> --json mergeable,mergeStateStatus   # MERGEABLE + CLEAN
 gh pr view <num-pr> --json headRefOid -q .headRefOid    # o mesmo HEAD que passou no passo 4
 gh pr merge <num-pr> --merge --match-head-commit <sha>
 
-# 7. Limpeza, a partir do checkout principal (nunca de dentro da worktree)
+# 7. Limpeza, a partir do checkout principal (nunca de dentro da worktree). O
+#    --delete-remote vai JÁ nesta primeira chamada: depois que a worktree some, o
+#    publish_guard recusa apagar a remota pelo checkout principal (todo push dele é recusado)
 python scripts/worktree-rm.py <branch> --no-docker --delete-remote
-git ls-remote --heads origin <branch>                   # vazio; senão: git push origin --delete <branch>
+git ls-remote --heads origin <branch>                   # vazio = fim; senão, fallback 7a–7c
+
+# 7a. (fallback) A remota sobrou: confirmar que o conteúdo dela já está em develop
+git fetch --prune origin
+git merge-base --is-ancestor <sha-remoto> origin/develop   # <sha-remoto> = 1ª coluna do ls-remote
+#    exit ≠ 0 → a remota tem commit fora de develop: NÃO apaga, PARA e reporta
+# 7b. Recriar uma worktree temporária da branch (sai de origin/<branch> com tracking; se a
+#     branch local sobrou, reusa ela)
+python scripts/worktree-new.py <branch> --no-setup --no-vscode --no-env --no-port-assign
+# 7c. Apagar worktree, branch local e remota de uma vez (o push sai do script, não do shell)
+python scripts/worktree-rm.py <branch> --no-docker --delete-remote
+git ls-remote --heads origin <branch>                   # agora vazio
+#    nunca `git push origin --delete <branch>` do checkout principal: o publish_guard recusa
 
 # 8. Sincronizar o develop local sem criar merge commit
 git fetch --prune origin && git merge --ff-only origin/develop
@@ -715,13 +729,16 @@ Se adicionar um serviço novo ao compose com porta exposta no host
 dentro de `scripts/worktree-new.py` para entrar na rotação de
 auto-atribuição.
 
-Quando o PR daquela worktree mergear, remover worktree + branch local:
+Quando o PR daquela worktree mergear, remover worktree + branch local + remota de uma vez, a
+partir do checkout principal (passo 7 do §"Fechamento autônomo pela auditoria"):
 
 ```bash
-python scripts/worktree-rm.py <branch>      # remove worktree + branch local (--dry-run mostra o que faria; --force pula o check de sync)
-# ou, manualmente:
-git worktree remove ../<repo>-worktrees/<branch>
+python scripts/worktree-rm.py <branch> --no-docker --delete-remote   # --dry-run mostra o que faria; --force pula o check de sync
 ```
+
+O `--delete-remote` vai já nessa chamada: sem ele a remota fica de pé, e depois que a worktree
+some o `publish_guard` recusa apagá-la pelo checkout principal (resta o fallback 7a–7c).
+`git worktree remove` manual tem o mesmo problema; não usar para fechar branch mergeada.
 
 Detalhes e todas as flags: `python scripts/worktree-new.py --help` e
 `python scripts/worktree-rm.py --help`.
