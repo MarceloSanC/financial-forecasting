@@ -26,6 +26,9 @@ from typing import Final, Protocol
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     RefreshStatus,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._integer import (
+    validate_int_at_least,
+)
 from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.domain.services.git_commit import validate_git_commit_sha
 from financial_forecasting.shared.domain.services.sha256_hex import validate_sha256_hex
@@ -134,10 +137,7 @@ class JudgedRecord:
 
     def __post_init__(self) -> None:
         """Forma de cada campo; a tag é a da própria referência."""
-        if isinstance(self.revision, bool) or not isinstance(self.revision, int):
-            raise ValueError(f"judged revision must be an int, got {self.revision!r}")
-        if self.revision < 0:
-            raise ValueError(f"judged revision must be >= 0, got {self.revision}")
+        validate_int_at_least(self.revision, minimum=0, field="judged revision")
         for name in ("preregistration_ref", "comment_url", "input_backup", "judged_backup"):
             value = getattr(self, name)
             if not isinstance(value, str) or not value:
