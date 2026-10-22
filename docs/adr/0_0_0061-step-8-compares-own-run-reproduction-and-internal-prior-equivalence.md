@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-22
 updated_at: 2026-10-22
 adr_id: 0.0.0061
-decision: Stage 8.2 makes both comparisons — (i) it re-executes the silver → gold → scorecard chain of 8.1 from the persisted cohort and compares it with the judged generation (bit for bit in the same pinned environment, per class across environments), which is the reproduction claim cited in the TCC; and (ii) it audits the official pipeline against the prior confirmatory evidence restricted to the common intersection (pinball at τ ∈ {0.1, 0.5, 0.9}, PICP/MPIW of the 80 % pair, DM against the common baselines as each side reported it, direction of the verdict), with the declared tolerance on the realized target and the metric code, the model numbers compared descriptively, the prior evidence frozen by content hash before it serves as oracle, as an internal audit recorded only in the repository; the TCC text does not mention the prior project.
+decision: Stage 8.2 makes both comparisons — (i) it re-executes the silver → gold → scorecard chain of 8.1 from the persisted cohort and compares it with the judged generation (bit for bit in the same pinned environment, per class across environments), which is the reproduction claim cited in the TCC; and (ii) it audits the official pipeline against the prior confirmatory evidence restricted to the common intersection (pinball at τ ∈ {0.1, 0.5, 0.9}, PICP/MPIW of the 80 % pair, DM against the common baselines as each side reported it, direction of the verdict), with the prior evidence frozen by content hash before it serves as oracle, as an internal audit recorded only in the repository; the TCC text does not mention the prior project.
 context_stage: 0.0-global
 bounded_context: evaluation
 ---
@@ -61,9 +61,11 @@ the Step delivers and what the TCC claims), so it went to the human
    the common baselines, compared as each side reported it (never recomputed);
    the direction of the verdict (sign of the loss differential and DM
    rejection per common comparator and horizon). The prior evidence is
-   **frozen by content hash** before it serves as oracle. The declared
-   tolerance of ASSUM-4 applies to the realized target and the metric code;
-   the model numbers are compared descriptively. The audit satisfies ASSUM-4 /
+   **frozen by content hash** before it serves as oracle. How the declared
+   tolerance of ASSUM-4 applies (numeric on the realized target and the metric
+   code, direction on the model numbers) is a separate human decision, B2 —
+   [ADR 0.0.0062](./0_0_0062-equivalence-tolerance-numeric-where-equality-expected-direction-for-model-numbers.md),
+   not part of B1. The audit satisfies ASSUM-4 /
    R-REPRO-1 and is recorded only in the repository. Theory (alignment,
    tolerance, explanation, scaffolding): domain doc §5.
 3. **Editorial boundary:** the TCC text uses (i); (ii) is not mentioned.
