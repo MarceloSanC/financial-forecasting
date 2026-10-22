@@ -929,4 +929,23 @@ os contratos do `evaluation` usam `tests/unit/features/evaluation/_conformal_par
 e `_h3_parameters.py`). Uma fonte única das linhas do gold servido para o unit, o contrato
 e o e2e é o que mantém as três suítes lendo a mesma geração.
 
+### 2026-10-22 — [finding] Checkpoint C3-4 — as skills `dmls-chNN` numeram os capítulos com 1 a menos que o livro — Claude (sessão Windows)
+**Contexto:** a errata de localizador da Task 10 ("ch. 6" → cap. 7) tem causa: o ADR
+7.1.0001 e o concept 7.1 tiraram o número do capítulo do nome da skill
+`dmls-ch06-deployment-and-inference-decisions`. No sumário de Huyen (2022), *Designing
+Machine Learning Systems* (O'Reilly), os capítulos são: 3 "Data Engineering
+Fundamentals", 4 "Training Data", 5 "Feature Engineering", 6 "Model Development and
+Offline Evaluation", 7 "Model Deployment and Prediction Service". Conferi o assunto de
+cada skill: `ch02` (infraestrutura de dados) é o cap. 3, `ch03` (dados de treino) o 4,
+`ch04` (features) o 5, `ch05` (desenvolvimento e avaliação) o 6 e `ch06` (deployment e
+inferência) o 7.
+**Direção sugerida:** a linha "Chapter N" de
+`.claude/skills/dmls-ch0{2..6}-*/references/chapter-content.md` foi corrigida nesta Stage
+(commit `docs(skills)`), sem renomear as skills, porque os nomes são referenciados em
+`skills_hint`, ADRs e concepts. Ficaram como estão: os títulos `# DMLS Ch. N`, as
+referências cruzadas internas entre skills ("Chapter 2 left off…", na numeração das
+skills) e a `ch01`, que não foi conferida (pode cobrir os caps. 1–2). Quem citar o livro a
+partir de uma skill confere o capítulo pela linha "Chapter N". Renomear as skills, se um
+dia valer a pena, é issue própria de tooling; não há Stage candidata.
+
 <!-- END: post-execution -->

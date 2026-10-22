@@ -10,7 +10,7 @@
 - [Appendix A: Background Context (not task-critical)](#appendix-a-background-context-not-task-critical)
 - [Appendix B: Cross-chapter connections](#appendix-b-cross-chapter-connections)
 
-Task-oriented notes from Chip Huyen's *Designing Machine Learning Systems*, Chapter 5. Organized around the decisions you make when developing, training, and evaluating ML models before deployment.
+Task-oriented notes from Chip Huyen's *Designing Machine Learning Systems*, Chapter 6 "Model Development and Offline Evaluation" (the skill keeps its `ch05` name; erratum 2026-10-22). Organized around the decisions you make when developing, training, and evaluating ML models before deployment.
 
 <!--
 METADATA (for hybrid spine-skill assembly)

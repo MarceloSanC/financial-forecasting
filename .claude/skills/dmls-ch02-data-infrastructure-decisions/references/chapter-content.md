@@ -9,7 +9,7 @@
 - [Appendix A: Background Context (not task-critical)](#appendix-a-background-context-not-task-critical)
 - [Appendix B: Cross-chapter connections](#appendix-b-cross-chapter-connections)
 
-Task-oriented notes from Chip Huyen's *Designing Machine Learning Systems*, Chapter 2. Organized around the architectural decisions this chapter supports, not the book's narrative order.
+Task-oriented notes from Chip Huyen's *Designing Machine Learning Systems*, Chapter 3 "Data Engineering Fundamentals" (the skill keeps its `ch02` name; erratum 2026-10-22). Organized around the architectural decisions this chapter supports, not the book's narrative order.
 
 <!--
 METADATA (for hybrid spine-skill assembly)
