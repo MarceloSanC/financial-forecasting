@@ -1,6 +1,6 @@
 ---
 title: Reprodução, equivalência e relatório — teoria do Step 8 (corrida confirmatória, reprodução da corrida, auditoria de equivalência, plots canônicos e dossiê)
-description: Teoria canônica do subdomínio reproduction-equivalence-and-reporting — o que a corrida confirmatória executa (por ponteiro), o que significa reproduzi-la a partir dos artefatos persistidos (bit a bit no mesmo ambiente, por classe entre ambientes), como se audita a equivalência com a evidência confirmatória anterior (tolerância declarada no alvo e no código de métrica; comparação descritiva dos números do modelo, com divergências explicadas por mecanismo ou registradas), que estatuto e rótulo cada plot canônico carrega e o conteúdo mínimo do dossiê de rastreabilidade
+description: Teoria canônica do subdomínio reproduction-equivalence-and-reporting — o que a corrida confirmatória executa (por ponteiro), o que significa reproduzi-la a partir dos artefatos persistidos (bit a bit no mesmo ambiente, por classe entre ambientes), como se audita a equivalência com a evidência confirmatória anterior (tolerância numérica declarada no alvo e no código de métrica; nos números do modelo a tolerância é o sentido, com deltas documentados e divergência de sentido sem explicação registrada como finding), que estatuto e rótulo cada plot canônico carrega e o conteúdo mínimo do dossiê de rastreabilidade
 when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 8 (8.1–8.3), ao questionar o que a reprodução da corrida promete, qual tolerância vale entre ambientes, como comparar a pipeline oficial com a evidência anterior, que rótulo um gráfico do relatório leva, ou o que o dossiê final tem de listar
 keywords: [domain, evaluation, reproducibility, reproduction, bitwise, tolerance, floating-point, ieee-754, rng-stream, equivalence-audit, prior-evidence, regression-oracle, storage-precision, metric-code-regression, tost, explained-divergence, scaffold-retirement, plots, reliability-diagram, quantile-score-plot, sharpness-diagram, picp-mpiw, dm-table, fan-chart, h3, conformal, traceability-dossier, sandve, per-horizon, editorial-policy]
 status: accepted
@@ -14,6 +14,7 @@ references:
   - ../modeling/quantile-model-training.md
   - ../../adr/0_0_0060-reproduction-equivalence-reporting-domain-doc-scope-and-boundary.md
   - ../../adr/0_0_0061-step-8-compares-own-run-reproduction-and-internal-prior-equivalence.md
+  - ../../adr/0_0_0062-equivalence-tolerance-numeric-where-equality-expected-direction-for-model-numbers.md
   - ../../adr/0_0_0011-preregistration-invariants-and-h1-gate.md
   - ../../adr/6_4_0005-gold-full-refresh-per-cohort-partition.md
   - ../../adr/6_5_0003-anchor-by-tag-and-issue-comment-and-order-check.md
@@ -450,7 +451,7 @@ hiperparâmetros (overview §2–§3). Uma tolerância estatística sobre os
 **números do modelo** não mediria a equivalência de nada — os modelos são
 outros. A tolerância declarada da ASSUM-4 faz sentido **onde a mesma coisa é
 calculada dos dois lados**: o **alvo** e o **código de métrica** (§5.4). Os
-números do modelo são comparados de forma **descritiva** (§5.5).
+números do modelo têm o **sentido** como tolerância, com os deltas documentados (§5.5; decisão B2 do humano, ADR 0.0.0062).
 
 Pela política editorial (§1), o resultado desta auditoria fica no repositório;
 o texto do TCC não a menciona.
@@ -588,27 +589,30 @@ telescópica m_novo − m_ant = (m_novo − m_A) + (m_A − m_ant) — o primeir
 
 ### 5.5 O que se espera que difira: os números do modelo (EQ-DESC)
 
-**Convenção (EQ-DESC, classe C, §9.1).** Os números do modelo — m_novo
-contra m_A na interseção (os dois pelo código novo), ou, sem predições por
-ponto, só o sentido (§5.3 item 5) — são comparados de forma **descritiva**:
-deltas por horizonte, com sinal, sem limiar de aceitação. Uma divergência é
-**material** quando muda uma leitura qualitativa:
+**Decisão do humano (B2, ADR 0.0.0062) e convenção (EQ-DESC, classe C,
+§9.1).** Nos números do modelo — m_novo contra m_A na interseção (os dois pelo
+código novo), ou, sem predições por ponto, os valores reportados (§5.3 item
+5) — a **tolerância declarada é o sentido**; os deltas quantitativos são
+documentados por horizonte, com sinal, sem limiar numérico. Há **divergência
+de sentido** quando muda:
 
-- o **sinal** de (candidato − baseline comum) na pinball de um nível comum;
+- o **sinal** da vantagem (candidato − baseline comum) na pinball de um nível
+  comum;
 - o **lado do nominal** do PICP do par de 80 % (abaixo, dentro ou acima da
-  banda de Wilson 95 % do lado novo, no T∩).
+  banda de Wilson 95 % do lado novo, no T∩);
+- o **sentido** do DM reportado contra um baseline comum (sinal de d̄ ou
+  rejeição — §5.3).
 
-Toda divergência material é explicada por §5.6 ou registrada como **não
-explicada**. Os deltas não materiais são reportados sem exigência de
-explicação.
+Toda divergência de sentido é explicada por §5.6 ou registrada como
+`[finding]` **não explicado** no relatório. Os deltas sem mudança de sentido
+são reportados sem exigência de explicação.
 
-**DM e grandezas só agregadas: registro descritivo.** A comparação do DM
-(§5.3) e das grandezas de que o anterior guardou só o agregado (§5.3 item 5)
-é feita sobre **amostras, losses e famílias diferentes por construção**: as
-categorias "janela/folds/T" e "grade" valem sempre, e a localização da §5.6
-(c) não se aplica, porque não há m_A. Uma diferença de sentido aí é
-**registrada descritivamente** — nem "explicada" nem `[finding]` —, com as
-diferenças declaradas que a acompanham.
+**DM e grandezas só agregadas.** Essas comparações são feitas sobre
+**amostras, losses e famílias diferentes por construção**, então "janela/folds/T"
+e "grade" são sempre verdade e **não** explicam uma divergência sozinhas, e a
+localização da §5.6 (c) não se aplica (não há m_A): nelas a explicação exige só
+(a) e (b) da §5.6, e as diferenças declaradas entram como contexto do
+`[finding]`.
 
 **Não há teste de equivalência.** O TOST (Schuirmann 1987
 `[CITAÇÃO-NÃO-ACESSADA]`) exige uma margem fixada por razão substantiva: "An
@@ -638,8 +642,7 @@ normal. Para o GBM e os baselines (sem seed) a escala nem existe.
 ### 5.6 Divergência explicada pela teoria (EQ-EXPL)
 
 **Convenção (EQ-EXPL, classe C, §9.1).** Uma divergência — A1 ou A2 fora da
-tolerância, ou divergência material de modelo (§5.5; o DM e as grandezas só
-agregadas são registro descritivo e ficam fora) — conta como **explicada**
+tolerância, ou divergência material de modelo (§5.5) — conta como **explicada**
 se, e só se, as três condições valem:
 
 - **(a) diferença declarada** — é atribuída a uma diferença concreta e
@@ -654,7 +657,7 @@ se, e só se, as três condições valem:
 
   "Grade", "janela/folds/T" e "estimador do DM" não estão no catálogo de
   explicação: na interseção a grade é a comum e a amostra é a mesma, e fora
-  dela (DM, grandezas só agregadas) a comparação já é registro descritivo
+  dela (DM, grandezas só agregadas) são sempre verdade e viram contexto
   (§5.5).
 
   **Aplicabilidade por comparação — fixada aqui, antes da 8.1.** Qual
@@ -670,7 +673,7 @@ se, e só se, as três condições valem:
   | A2 — MPIW do par 80 % | bruto × rearranjado; amostra; defeito referenciado |
   | modelo — sinal de (candidato − baseline comum) na pinball por nível | alvo (se A1 falhou); agregação de seeds do candidato; defeito referenciado do modelo ou da pipeline anterior |
   | modelo — lado do nominal do PICP 80 % | alvo (se A1 falhou); agregação de seeds do candidato; defeito referenciado |
-  | DM; grandezas só agregadas | — (registro descritivo, §5.5) |
+  | DM e grandezas só agregadas — sentido | agregação de seeds do candidato; defeito referenciado (condição (c) dispensada, §5.5) |
 
   "Features, dataset re-derivado ou hiperparâmetros diferentes" é sempre
   verdade e não prevê sentido: **não** explica uma divergência material
@@ -853,7 +856,7 @@ convenção sem vencedor, fechada pelo degrau indicado; todas em §9.1.
 | 8 | Evidência anterior congelada por hash de conteúdo, registro versionado, precisão de armazenamento lida do schema; regras fixadas antes da 8.1 | Sandve Rules 1, 4; Nosek 2018 | [C] EQ-HASH, degraus 1/3 | 8.2 |
 | 9 | Interseção: baseline comum por definição, candidato pareado por papel; `target_timestamp` (fold não é chave); níveis comuns sem reinterpolar; só agregado ⇒ só sentido; DM só o reportado, sem recomputar nem cruzar Holm | evaluation §2.2, §3.1, §6.7, §8.3; GR 2007 §1 | [C] EQ-INTER, degrau 1 | 8.2 |
 | 10 | Deve coincidir: alvo (precisão de armazenamento do anterior) e código de métrica (m_A × m_ant em max(R2, armazenamento)), com tabela de definições de métrica | ASSUM-4; derivação | [C] EQ-MUST, degraus 1/5 | 8.2 |
-| 11 | Números do modelo: comparação descritiva; divergência material = muda o sinal de (candidato − baseline) ou o lado do nominal; DM e grandezas só agregadas = registro descritivo; sem TOST; sem tolerância em unidades de seed | ICH E9 §3.3.2; evaluation §6.10, §8.5; Bouthillier 2021 §7 | [C] EQ-DESC, degrau 1 | 8.2 |
+| 11 | Números do modelo: tolerância = sentido (sinal de candidato − baseline comum, lado do nominal do PICP 80 %, sentido do DM); deltas documentados; divergência de sentido sem explicação → `[finding]`; sem limiar \|Δ\| ≤ X %, sem TOST, sem tolerância em unidades de seed | ICH E9 §3.3.2; evaluation §6.10, §8.5; Bouthillier 2021 §7 | [P] B2 (ADR 0.0.0062) + [C] EQ-DESC, degrau 1 | 8.2 |
 | 12 | Divergência explicada = catálogo fechado com sentido identificável + compatibilidade + localização, com a aplicabilidade por comparação fixada na §5.6; features/dados/hiperparâmetros não explicam sozinhos; pilha numérica não explica modelo; defeito só com referência; não explicada → `[finding]` no relatório, não bloqueia | roadmap 8.2 DoD; overview §2 | [C] EQ-EXPL, degrau 1 | 8.2 |
 | 13 | Andaime aposentado com comparações registradas + nenhuma dependência oficial + motivo; teste de equivalência pulado sem oráculo, falha com hash divergente, fora do CI | roadmap 8.2; overview §4; Sandve Rule 4 | [C] EQ-ANDAIME, degraus 1/5 | 8.2 |
 | 14 | Rótulos confirmatório / descritivo / exploratório; confirmatório só onde a árvore se aplica (H2 só onde H1 passa); por elemento quando misturado | ICH E9 §5.1; Wagenmakers 2012 p. 632; ADRs 6.5.0006–6.5.0008 | [E] P8-ROT | 8.3 |
@@ -876,6 +879,11 @@ o trecho ou o localizador só parcialmente fiel e o texto foi corrigido (§9.2).
 Escolha: as duas comparações — (i) reprodução da própria corrida a partir dos artefatos persistidos (claim citável no TCC) e (ii) oficial × confirmatório anterior na interseção comum (pinball τ ∈ {0,1; 0,5; 0,9}, PICP/MPIW do par 80 %, DM contra baselines comuns, sentido do veredito) como auditoria interna · Alternativas: A — só (i); B — só (ii) (texto literal do roadmap) · Decisor: humano (issue #208, 2026-10-22)
 Base: overview ASSUM-4 e R-REPRO-1 (equivalência com tolerância declarada); overview §2 (oráculo, nunca autoridade); política editorial do TCC
 Sensibilidade pré-registrada: nenhuma · Reversível: sim (ADR 0.0.0061; roadmap 8.2 emendado)
+
+[decision:P] B2 — o que é "tolerância declarada" (ASSUM-4) na comparação com o anterior
+Escolha: opção 1 — tolerância numérica onde a igualdade é esperada (alvo realizado; código de métrica sobre as predições anteriores); nos números do modelo, a tolerância é o sentido (sinal de candidato − baseline comum, lado do nominal do PICP 80 %, sentido do DM), com deltas documentados; divergência de sentido sem explicação → [finding] · Alternativas: limiar |Δ| ≤ X % nos números do modelo; comparação só descritiva sem tolerância · Decisor: humano (issue #208, 2026-10-22)
+Base: ICH E9 §3.3.2 (p. 18 da versão EMA) "The choice of equivalence margins should be justified clinically" [verificado] — não há fonte para X; overview ASSUM-4, R-REPRO-1 e §2 emendados na redação
+Sensibilidade pré-registrada: nenhuma · Reversível: sim, até a 8.1 rodar (ADR 0.0.0062)
 
 [decision:P] P-EDIT — política editorial do TCC
 Escolha: o texto do TCC não menciona o projeto anterior; a parte (ii) fica só no repositório · Alternativas: citar a equivalência no texto · Decisor: humano (política editorial anterior a este gate, reafirmada na issue #208)
@@ -928,7 +936,7 @@ Base: identidade telescópica (derivação); evaluation §2.2, §2.3, §3.1, §4
 Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim, até a 8.1 rodar
 
 [decision:C] EQ-DESC — números do modelo
-Escolha: descritivo — deltas por horizonte com sinal; divergência material = muda o sinal de (candidato − baseline) num nível comum, ou o lado do nominal do PICP 80 %; DM e grandezas só agregadas = registro descritivo, nem explicada nem [finding] · Alternativas: TOST com margem; z em unidades de dispersão entre seeds com |z| > 2 (versão anterior deste doc); tolerância absoluta ou relativa · Degrau: 1 (evaluation §6.10 conv. 15; §8.5 B2)
+Escolha (mecânica de B2): deltas por horizonte com sinal; divergência de sentido = muda o sinal de (candidato − baseline) num nível comum, o lado do nominal do PICP 80 % ou o sentido do DM; sem explicação → [finding]; no DM e nas grandezas só agregadas a condição (c) é dispensada · Alternativas: TOST com margem; z em unidades de dispersão entre seeds com |z| > 2 (versão anterior deste doc); tolerância absoluta ou relativa · Degrau: 1 (evaluation §6.10 conv. 15; §8.5 B2)
 Base: ICH E9 §3.3.2 (p. 18 da versão EMA CPMP/ICH/363/96; p. 15 impressa da versão ICH) "An equivalence margin should be specified in the protocol … The choice of equivalence margins should be justified clinically"; "two simultaneous one-sided tests"; Bouthillier et al. 2021 §7 "much smaller than the variance due to perturbing the split of the data in train and test sets" (a escala de seed não discrimina modelos diferentes); P(|t₉| > 2) ≈ 0,077 com 10 seeds (derivação)
 Verificado: parcial→corrigido (paginação do ICH; localizador e leitura de Bouthillier)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até a 8.1 rodar
@@ -997,10 +1005,10 @@ o lock de dependências é ambiente, não caminho de cálculo; a capacidade de C
 entra na definição de mesmo ambiente (o ADR 7.1.0003 a registra sem usá-la
 como chave) e uma diferença diagnosticada cai nas classes da §4.3; u_q
 redefinida por grandeza na sua escala natural (σ_y² dava 1–4 % para
-var(d̄)); o DM e as grandezas só agregadas viraram registro descritivo; a
+var(d̄)); o DM e as grandezas só agregadas tiveram a localização dispensada; a
 aplicabilidade das categorias por comparação foi fixada na §5.6; o candidato é
 pareado por papel. A relação entre a tolerância da ASSUM-4 e os números do
-modelo está com o humano (achado N1 da re-revisão).
+modelo foi decidida pelo humano em seguida (B2, ADR 0.0.0062): numérica onde a igualdade é esperada, sentido nos números do modelo, divergência de sentido sem explicação → `[finding]`.
 
 ## 10. Referências
 
