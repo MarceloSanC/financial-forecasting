@@ -234,9 +234,12 @@ O non-goal "bit-identical" do roadmap refere-se à comparação com a evidência
 
 **Decisão (R-BIT, classe E, §9.1).** Com a mesma entrada (camada de
 identidade igual), o **mesmo caminho de cálculo** (abaixo) e o **mesmo
-ambiente pinado** (mesma imagem, mesmas versões de interpretador e
-bibliotecas, mesma capacidade de CPU — as chaves não-código do ADR 7.1.0003),
-**todo** campo da camada "resultado" tem de sair **igual bit a bit**, inclusive
+ambiente pinado** — as chaves não-código do ambiente registradas pelo ADR
+7.1.0003 (imagem, versões de interpretador e bibliotecas, plataforma,
+`machine/cpu_count`), **mais** a mesma capacidade de CPU, que aquele ADR
+registra mas não usa como chave (ADR 7.1.0003, contexto e item 2) e que aqui
+entra porque o NumPy só promete o fluxo aleatório "on the same machine"
+(abaixo) —, **todo** campo da camada "resultado" tem de sair **igual bit a bit**, inclusive
 os que dependem de números aleatórios. As fontes:
 
 - **Aritmética.** "The IEEE standard requires that the result of addition,
@@ -280,21 +283,28 @@ código ficam fora da escolha do modo), o commit não decide o critério; decide
 o **diff** entre o commit da geração julgada e o da reprodução:
 
 - se o diff **não toca** o caminho de cálculo da cadeia silver → gold →
-  scorecard (o código executado do refresh e do scorecard, e as dependências
-  travadas), o critério continua **bit a bit**;
+  scorecard (o código-fonte do projeto executado pelo refresh e pelo
+  scorecard), o critério continua **bit a bit**;
 - se o diff **toca** esse caminho, a reprodução é registrada como
   `[deviation]` com o diff, e a diferença, se houver, é diagnosticada; o
   claim do TCC só vale para a reprodução feita com o caminho de cálculo da
-  geração julgada (o que pode exigir re-executar no commit dela). Uma mudança
-  no lock de dependências é mudança de **ambiente** (§4.3).
+  geração julgada (o que pode exigir re-executar no commit dela). As
+  dependências de terceiros **não** fazem parte do caminho de cálculo: uma
+  mudança no lock é mudança de **ambiente** e cai em §4.3, coerente com o ADR
+  7.1.0003 (versões de biblioteca são chaves de ambiente, não de código).
 
-**Falha no mesmo ambiente é parada, não troca de critério.** Se algum campo
-de resultado difere com as condições acima satisfeitas, algo que as chaves
-não capturam mudou: registra-se um `[finding]` e diagnostica-se antes de
-qualquer uso da geração reproduzida. Nunca se passa ao critério por tolerância
-para "salvar" a reprodução (ADR 7.1.0003 item 6 e alternativa H), porque "a
-tolerance hides a reconstruction bug … whose effect is below it" (ADR 7.1.0003,
-alternativa A).
+**Falha no mesmo ambiente é parada para diagnóstico, não troca de critério.**
+Se algum campo de resultado difere com as condições acima satisfeitas, algo
+que as chaves não capturam mudou: registra-se um `[finding]` e diagnostica-se
+antes de qualquer uso da geração reproduzida. Uma tolerância **não** é usada
+para "salvar" uma falha não diagnosticada (ADR 7.1.0003 item 6 e alternativa
+H), porque "a tolerance hides a reconstruction bug … whose effect is below it"
+(ADR 7.1.0003, alternativa A). Como no item 3 daquele ADR
+(`--cross-environment`), **depois** do diagnóstico, se o `[finding]` mostrar
+uma diferença numérica de ambiente que as chaves não capturam (ex.: outra
+capacidade de CPU), a reprodução pode ser julgada pelas classes da §4.3,
+citando o `[finding]`; ela passa então a sustentar só o claim (c) da §4.7, não
+o (a). Um diagnóstico que aponte defeito de código é desvio (§4.6).
 
 ### 4.3 Entre ambientes: por classe de grandeza (R-ENV — convenção)
 
@@ -322,16 +332,22 @@ declarada **por classe** de grandeza:
   the two values are the same within about 9 decimal digits" (Python 3.12,
   `library/math`). **u_q** é a **unidade natural** da grandeza, que dá a escala
   perto de zero (a tolerância só relativa falha em ≈ 0: "isclose(x, 0) … is
-  False for any nonzero x", mesma página): u_q = 1 para grandezas
-  adimensionais (probabilidades, coberturas, p-valores, estatísticas de
-  teste, participações); u_q = σ_y^k para grandezas em unidade de y^k, com σ_y
-  o desvio-padrão do realizado do horizonte na amostra (pinball, MPIW, IS, d̄
-  em k = 1; variâncias de d̄ em k = 2). É a mesma ideia do ADR 7.1.0003 —
-  medir no espaço normalizado pela escala do alvo —, que evita a tolerância
-  absoluta cega à escala (alternativa E daquele ADR): um piso fixo em unidades
-  naturais seria do tamanho do próprio valor para uma variância de d̄ de ordem
-  10⁻¹¹. `[SEM-FONTE-PRIMÁRIA]` para o par como critério de reprodução —
-  convenção (degraus 2 e 1).
+  False for any nonzero x", mesma página). Ela é definida **por grandeza, na
+  sua própria escala**: u_q é **a mesma estatística calculada com os termos em
+  valor absoluto**, com a mesma normalização — para uma média ou soma (pinball,
+  MPIW, IS, d̄), a média de |termo| (para d̄, a média de |d_t|); para uma
+  variância de d̄, a média de d_t² com a mesma normalização do estimador (≈
+  (1/T)·média de d_t², a escala de var(d̄)); para grandezas adimensionais
+  limitadas (probabilidades, coberturas, p-valores, participações), u_q = 1;
+  para estatísticas de teste, a escala dos seus componentes (|d̄| e √var̂(d̄)).
+  Assim a tolerância fica na escala em que o arredondamento acontece — uma
+  soma tem erro proporcional à soma dos valores absolutos dos termos, não ao
+  valor da soma, que pode cancelar perto de zero (**derivação**) — e nunca é
+  do tamanho do próprio valor (o defeito de um piso fixo, ou de σ_y² para uma
+  variância de d̄ de ordem 10⁻¹¹). É a mesma ideia do ADR 7.1.0003 — medir na
+  escala do próprio cálculo — que evita a tolerância absoluta cega à escala
+  (alternativa E daquele ADR). `[SEM-FONTE-PRIMÁRIA]` para o par como
+  critério de reprodução — convenção (degraus 2 e 1).
 - **R3.** Com o fluxo aleatório diferente, as estimativas de Monte Carlo
   mudam por erro de Monte Carlo. A diferença é reportada; como **ordem de
   grandeza**, uma proporção estimada com B réplicas tem desvio-padrão
@@ -402,7 +418,8 @@ scorecard reproduz a geração julgada **bit a bit**, inclusive as etapas
 aleatórias, porque as seeds estão registradas; (b) as predições de teste
 reproduzem a partir dos checkpoints bit a bit (7.1); (c) em outro ambiente,
 contagens e decisões são iguais e as grandezas contínuas coincidem a menos de
-arredondamento de float64 (classe R2), com as etapas aleatórias reprodutíveis
+10⁻⁹ relativo à escala natural de cada uma (classe R2), com as etapas
+aleatórias reprodutíveis
 na medida da garantia do gerador (R3). O item (c) só é afirmado se tiver sido
 de fato executado; o TCC não promete reprodução que não foi feita.
 
@@ -487,6 +504,15 @@ Regras de alinhamento (convenção **EQ-INTER**, classe C, §9.1):
    as duas definições (estimador, janela, parâmetros) forem declaradas
    equivalentes; mesmo nome com definição diferente fica fora (ou entra só no
    nível de código de métrica, §5.4, que não depende de o modelo ser comum).
+   **O candidato é pareado por papel**, não por definição: o candidato do lado
+   novo (o TFT do cohort, seeds pela média — B-SEEDS) contra o candidato do
+   lado anterior, sabendo que diferem em features, dados e hiperparâmetros.
+   Ele entra na pinball por nível, no PICP e no MPIW como "candidato novo ×
+   candidato anterior" (comparação de modelo, §5.5) e em "candidato − baseline
+   comum" como a diferença **dentro de cada lado** (candidato do lado contra o
+   baseline comum do mesmo lado), comparando-se os dois sinais; no nível de
+   código de métrica (A2) as predições do candidato anterior entram como as de
+   qualquer modelo.
 2. **Alinhamento por `target_timestamp` e horizonte, na interseção exata dos
    pontos presentes nas duas evidências** — o mesmo princípio do pareamento
    estrito (evaluation §6.7, conv. 17). **Fold não é chave:** os cortes de fold
@@ -570,12 +596,19 @@ deltas por horizonte, com sinal, sem limiar de aceitação. Uma divergência é
 
 - o **sinal** de (candidato − baseline comum) na pinball de um nível comum;
 - o **lado do nominal** do PICP do par de 80 % (abaixo, dentro ou acima da
-  banda de Wilson 95 % do lado novo, no T∩);
-- o **sentido** do DM reportado (sinal de d̄ ou rejeição — §5.3).
+  banda de Wilson 95 % do lado novo, no T∩).
 
 Toda divergência material é explicada por §5.6 ou registrada como **não
 explicada**. Os deltas não materiais são reportados sem exigência de
 explicação.
+
+**DM e grandezas só agregadas: registro descritivo.** A comparação do DM
+(§5.3) e das grandezas de que o anterior guardou só o agregado (§5.3 item 5)
+é feita sobre **amostras, losses e famílias diferentes por construção**: as
+categorias "janela/folds/T" e "grade" valem sempre, e a localização da §5.6
+(c) não se aplica, porque não há m_A. Uma diferença de sentido aí é
+**registrada descritivamente** — nem "explicada" nem `[finding]` —, com as
+diferenças declaradas que a acompanham.
 
 **Não há teste de equivalência.** O TOST (Schuirmann 1987
 `[CITAÇÃO-NÃO-ACESSADA]`) exige uma margem fixada por razão substantiva: "An
@@ -605,8 +638,9 @@ normal. Para o GBM e os baselines (sem seed) a escala nem existe.
 ### 5.6 Divergência explicada pela teoria (EQ-EXPL)
 
 **Convenção (EQ-EXPL, classe C, §9.1).** Uma divergência — A1 ou A2 fora da
-tolerância, ou divergência material de modelo (§5.5) — conta como
-**explicada** se, e só se, as três condições valem:
+tolerância, ou divergência material de modelo (§5.5; o DM e as grandezas só
+agregadas são registro descritivo e ficam fora) — conta como **explicada**
+se, e só se, as três condições valem:
 
 - **(a) diferença declarada** — é atribuída a uma diferença concreta e
   registrada entre as duas pipelines, de um catálogo fechado:
@@ -615,11 +649,28 @@ tolerância, ou divergência material de modelo (§5.5) — conta como
   |---|---|---|
   | alvo (definição do retorno, ajuste de preço) | A1 falha; toda métrica muda | §5.4; ADR 3.5.0001 |
   | definição de métrica (tabela da §5.4) | exata ou de sentido, por linha | §5.4 |
-  | grade (níveis, número de níveis) | P̄_G e d̄ mudam de definição; só o sentido do DM é comparável | evaluation §3.1; §5.3 |
-  | janela, folds, T | amostra diferente; fora da interseção não se compara | §5.3; evaluation §6.7–§6.8 |
-  | agregação de seeds (média das perdas × ensemble) | ensemble tem perda ≤ média das perdas (Jensen) | evaluation §6.9 (B-SEEDS) |
-  | estimador do DM (lag, kernel, HLN, fallback de variância) | mesma d̄, estatística e p diferentes; sentido de d̄ inalterado | evaluation §6.1–§6.3 (conv. 14, 14b) |
+  | agregação de seeds do candidato (média das perdas × ensemble) | ensemble tem perda ≤ média das perdas (Jensen): pinball do candidato anterior menor se ele era ensemble | evaluation §6.9 (B-SEEDS) |
   | defeito do anterior **identificado com referência** (issue, commit ou doc que descreve o defeito e o seu efeito) | o efeito descrito na referência | overview §2 (Problema) + a referência |
+
+  "Grade", "janela/folds/T" e "estimador do DM" não estão no catálogo de
+  explicação: na interseção a grade é a comum e a amostra é a mesma, e fora
+  dela (DM, grandezas só agregadas) a comparação já é registro descritivo
+  (§5.5).
+
+  **Aplicabilidade por comparação — fixada aqui, antes da 8.1.** Qual
+  categoria pode explicar qual comparação sai **mecanicamente** desta tabela;
+  o `technical.md` da 8.2 não a amplia nem a escolhe depois de ver os números
+  (§5.2):
+
+  | Comparação | Categorias que podem explicá-la |
+  |---|---|
+  | A1 — realizado | alvo |
+  | A2 — pinball por nível | escala (fator 2); bruto × rearranjado; amostra; pesos na grade (se o anterior gravou só P̄_G); defeito referenciado |
+  | A2 — PICP do par 80 % | convenção de empate; bruto × rearranjado; amostra; defeito referenciado |
+  | A2 — MPIW do par 80 % | bruto × rearranjado; amostra; defeito referenciado |
+  | modelo — sinal de (candidato − baseline comum) na pinball por nível | alvo (se A1 falhou); agregação de seeds do candidato; defeito referenciado do modelo ou da pipeline anterior |
+  | modelo — lado do nominal do PICP 80 % | alvo (se A1 falhou); agregação de seeds do candidato; defeito referenciado |
+  | DM; grandezas só agregadas | — (registro descritivo, §5.5) |
 
   "Features, dataset re-derivado ou hiperparâmetros diferentes" é sempre
   verdade e não prevê sentido: **não** explica uma divergência material
@@ -772,8 +823,9 @@ Detail to Be Inspected").
 Onde e como a reprodução re-executa (destino separado) e compara; onde fica a
 cópia preservada da geração julgada e como se calcula o hash de conteúdo do
 silver; o formato do registro de hashes da evidência anterior e do relatório
-de equivalência; os leitores da evidência anterior; a lista concreta das
-categorias de explicação que se aplicam a cada grandeza; a forma do dossiê; a
+de equivalência; os leitores da evidência anterior; a forma do dossiê (a
+aplicabilidade das categorias de explicação por comparação **não** fica para
+o technical: está fixada na §5.6); a
 biblioteca e o estilo dos gráficos; quais gráficos exploratórios extras
 existem.
 
@@ -797,12 +849,12 @@ convenção sem vencedor, fechada pelo degrau indicado; todas em §9.1.
 | 4 | Mesmo ambiente e mesmo caminho de cálculo → bit a bit em todo campo de resultado, inclusive aleatório; falha = parada, nunca troca para tolerância | Goldberg 1991; NumPy 2.5.0 compat. policy; Python 3.12 random; Sandve Rule 6; ADR 7.1.0003 | [E] R-BIT | 8.2 |
 | 5 | Commit posterior: diff que não toca o caminho de cálculo → bit a bit; diff que toca → `[deviation]` + diagnóstico | ADR 7.1.0003 (chaves de código fora do modo) | [C] R-BIT-COMMIT, degrau 1 | 8.2 |
 | 6 | A 8.1 preserva a geração julgada (cópia + hash) e registra a identidade completa; a reprodução roda em destino separado | ADR 6.4.0005 itens 4–5, 9; Sandve Rules 1, 3–6 | [C] R-PRESERVA, degrau 1 | 8.1, 8.2 |
-| 7 | Entre ambientes, por classe: R1 discreta exata; R2 \|Δ\| ≤ 1e-9·max(\|a\|,\|b\|,u_q), u_q = unidade natural; R3 bit a bit só com o mesmo gerador, senão reportada | Python 3.12 math.isclose; ADR 7.1.0003 (espaço normalizado); Goldberg 1991 | [C] R-ENV, degraus 2/1 | 8.2 |
+| 7 | Entre ambientes, por classe: R1 discreta exata; R2 \|Δ\| ≤ 1e-9·max(\|a\|,\|b\|,u_q), u_q = a mesma estatística com termos em valor absoluto (escala natural por grandeza); R3 bit a bit só com o mesmo gerador, senão reportada | Python 3.12 math.isclose; ADR 7.1.0003 (escala do próprio cálculo); Goldberg 1991 | [C] R-ENV, degraus 2/1 | 8.2 |
 | 8 | Evidência anterior congelada por hash de conteúdo, registro versionado, precisão de armazenamento lida do schema; regras fixadas antes da 8.1 | Sandve Rules 1, 4; Nosek 2018 | [C] EQ-HASH, degraus 1/3 | 8.2 |
-| 9 | Interseção: modelo comum por definição; `target_timestamp` (fold não é chave); níveis comuns sem reinterpolar; só agregado ⇒ só sentido; DM só o reportado, sem recomputar nem cruzar Holm | evaluation §2.2, §3.1, §6.7, §8.3; GR 2007 §1 | [C] EQ-INTER, degrau 1 | 8.2 |
+| 9 | Interseção: baseline comum por definição, candidato pareado por papel; `target_timestamp` (fold não é chave); níveis comuns sem reinterpolar; só agregado ⇒ só sentido; DM só o reportado, sem recomputar nem cruzar Holm | evaluation §2.2, §3.1, §6.7, §8.3; GR 2007 §1 | [C] EQ-INTER, degrau 1 | 8.2 |
 | 10 | Deve coincidir: alvo (precisão de armazenamento do anterior) e código de métrica (m_A × m_ant em max(R2, armazenamento)), com tabela de definições de métrica | ASSUM-4; derivação | [C] EQ-MUST, degraus 1/5 | 8.2 |
-| 11 | Números do modelo: comparação descritiva; divergência material = muda sinal, lado do nominal ou sentido do DM; sem TOST; sem tolerância em unidades de seed | ICH E9 §3.3.2; evaluation §6.10, §8.5; Bouthillier 2021 §7 | [C] EQ-DESC, degrau 1 | 8.2 |
-| 12 | Divergência explicada = catálogo fechado com sentido identificável + compatibilidade + localização; features/dados/hiperparâmetros não explicam sozinhos; pilha numérica não explica modelo; defeito só com referência; não explicada → `[finding]` no relatório, não bloqueia | roadmap 8.2 DoD; overview §2 | [C] EQ-EXPL, degrau 1 | 8.2 |
+| 11 | Números do modelo: comparação descritiva; divergência material = muda o sinal de (candidato − baseline) ou o lado do nominal; DM e grandezas só agregadas = registro descritivo; sem TOST; sem tolerância em unidades de seed | ICH E9 §3.3.2; evaluation §6.10, §8.5; Bouthillier 2021 §7 | [C] EQ-DESC, degrau 1 | 8.2 |
+| 12 | Divergência explicada = catálogo fechado com sentido identificável + compatibilidade + localização, com a aplicabilidade por comparação fixada na §5.6; features/dados/hiperparâmetros não explicam sozinhos; pilha numérica não explica modelo; defeito só com referência; não explicada → `[finding]` no relatório, não bloqueia | roadmap 8.2 DoD; overview §2 | [C] EQ-EXPL, degrau 1 | 8.2 |
 | 13 | Andaime aposentado com comparações registradas + nenhuma dependência oficial + motivo; teste de equivalência pulado sem oráculo, falha com hash divergente, fora do CI | roadmap 8.2; overview §4; Sandve Rule 4 | [C] EQ-ANDAIME, degraus 1/5 | 8.2 |
 | 14 | Rótulos confirmatório / descritivo / exploratório; confirmatório só onde a árvore se aplica (H2 só onde H1 passa); por elemento quando misturado | ICH E9 §5.1; Wagenmakers 2012 p. 632; ADRs 6.5.0006–6.5.0008 | [E] P8-ROT | 8.3 |
 | 15 | DM no relatório = candidato × comparadores, p bruto + Holm, estimador retangular; confirmatório só onde H1 passa; sem células comparador × comparador | ADR 6.5.0006; evaluation §6.4 | [E] (parte de P8-ROT) | 8.3 |
@@ -837,7 +889,7 @@ Verificado: sustenta (Rule 1)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:E] R-BIT — reprodução no mesmo ambiente
-Escolha: bit a bit em todo campo de resultado, inclusive etapas aleatórias; falha = parada para diagnóstico · Alternativas: tolerância também no mesmo ambiente
+Escolha: bit a bit em todo campo de resultado, inclusive etapas aleatórias, no mesmo ambiente (chaves não-código do ADR 7.1.0003 + capacidade de CPU, pelo "same machine" do NumPy); falha = parada para diagnóstico; só depois de um [finding] que mostre diferença de ambiente não capturada pelas chaves a reprodução é julgada pelas classes de R-ENV, e sustenta só o claim (c) (como o --cross-environment do ADR 7.1.0003 item 3) · Alternativas: tolerância também no mesmo ambiente; tolerância sem diagnóstico
 Base: Goldberg 1991 §The IEEE Standard (Operations) "The IEEE standard requires that the result of addition, subtraction, multiplication and division be exactly rounded"; "the IEEE standard also specifies that square root, remainder, and conversion between integer and floating-point be correctly rounded"; NumPy 2.5.0 doc/source/reference/random/compatibility.rst "on the same build of numpy, in the same environment, on the same machine, you should get the same stream of numbers"; Python 3.12 Doc/library/random.rst §Notes on Reproducibility "By reusing a seed value, the same sequence should be reproducible from run to run as long as multiple threads are not running"; Sandve et al. 2013 Rule 6 "given the same initial seed, all random numbers used in an analysis will be equal"; transcendentais do domínio via `math` (stdlib; ADRs 0.0.0020, 0.0.0056, 6.4.0008) — mesma chamada do mesmo binário = derivação
 Verificado: parcial→corrigido (localizador da raiz quadrada; base das transcendentais)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
@@ -853,7 +905,7 @@ Base: ADR 6.4.0005 itens 4–5 (o refresh troca current/ e apaga a geração ant
 Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:C] R-ENV — reprodução entre ambientes
-Escolha: por classe — R1 discreta exata; R2 contínua |Δ| ≤ 1e-9·max(|a|,|b|,u_q), u_q = 1 (adimensional) ou σ_y^k (unidade y^k); R3 aleatória bit a bit com o mesmo gerador, senão diferença reportada (ordem de grandeza √(p(1−p)/B)) · Alternativas: par do torch.testing.assert_close; só relativa; piso absoluto fixo 1e-12 em unidades naturais (versão anterior deste doc — cego à escala); bit a bit sempre · Degrau: 2 (default de math.isclose, a linguagem do domínio) e 1 (escala normalizada pelo alvo, como o ADR 7.1.0003)
+Escolha: por classe — R1 discreta exata; R2 contínua |Δ| ≤ 1e-9·max(|a|,|b|,u_q), u_q = a mesma estatística calculada com os termos em valor absoluto e a mesma normalização (1 para probabilidades/coberturas/p-valores; escala dos componentes para estatísticas de teste); R3 aleatória bit a bit com o mesmo gerador, senão diferença reportada (ordem de grandeza √(p(1−p)/B)) · Alternativas: par do torch.testing.assert_close; só relativa; piso absoluto fixo 1e-12 em unidades naturais (1ª versão — cego à escala); u_q = σ_y^k (2ª versão — tolerância de 1–4 % para var(d̄)); bit a bit sempre · Degrau: 2 (default de math.isclose, a linguagem do domínio) e 1 (escala do próprio cálculo, como o ADR 7.1.0003)
 Base: Python 3.12 Doc/library/math.rst isclose "The default tolerance is 1e-09, which assures that the two values are the same within about 9 decimal digits"; mesma página, impl-detail "The math module consists mostly of thin wrappers around the platform C math library functions"; Goldberg 1991 "The IEEE standard does not require transcendental functions to be exactly rounded"; Python 3.12 Doc/whatsnew/3.12.rst §Other Language Changes "sum() now uses Neumaier summation"; NumPy 2.5.0 compatibility.rst "different CPUs implement floating point arithmetic differently"; [SEM-FONTE-PRIMÁRIA] para o par como critério de reprodução
 Verificado: sustenta (trechos); a forma é convenção
 Sensibilidade pré-registrada: nenhuma (nenhum valor nessa faixa muda decisão; a exceção de fronteira é reportada) · Reversível: sim
@@ -865,7 +917,7 @@ Verificado: sustenta (Rule 4)
 Sensibilidade pré-registrada: nenhuma · Reversível: não depois de lidos os valores (é o objetivo)
 
 [decision:C] EQ-INTER — alinhamento na interseção e DM
-Escolha: modelo comum por definição; interseção exata por target_timestamp e horizonte, fold não é chave; só níveis comuns, sem interpolação; grandeza só agregada entra só no sentido; DM: só o sentido e a significância reportados por cada lado, sem recomputar sobre perdas anteriores nem cruzar Holm; do lado novo, o DM do gold com o estimador retangular, também onde H1 reprova (perfil) · Alternativas: comparar por fold; interpolar a grade anterior; recomputar o DM do anterior na interseção (teste novo; interseção possivelmente não contígua) · Degrau: 1
+Escolha: baseline comum por definição; candidato pareado por papel (candidato novo × candidato anterior; candidato − baseline comum dentro de cada lado); interseção exata por target_timestamp e horizonte, fold não é chave; só níveis comuns, sem interpolação; grandeza só agregada entra só no sentido; DM: só o sentido e a significância reportados por cada lado, sem recomputar sobre perdas anteriores nem cruzar Holm; do lado novo, o DM do gold com o estimador retangular, também onde H1 reprova (perfil) · Alternativas: comparar por fold; interpolar a grade anterior; recomputar o DM do anterior na interseção (teste novo; interseção possivelmente não contígua) · Degrau: 1
 Base: evaluation §6.7 (conv. 17 e 1.21b — interseção exata e contígua); evaluation §2.2 razão 1 via Gneiting & Raftery 2007 §1 (o score é da previsão quotada); evaluation §8.3 (só o pré-declarado é confirmatório); ADR 6.5.0006 (estimador primário)
 Verificado: herdado de evaluation
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
@@ -876,13 +928,13 @@ Base: identidade telescópica (derivação); evaluation §2.2, §2.3, §3.1, §4
 Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim, até a 8.1 rodar
 
 [decision:C] EQ-DESC — números do modelo
-Escolha: descritivo — deltas por horizonte com sinal; divergência material = muda o sinal de (candidato − baseline) num nível comum, o lado do nominal do PICP 80 % ou o sentido do DM reportado · Alternativas: TOST com margem; z em unidades de dispersão entre seeds com |z| > 2 (versão anterior deste doc); tolerância absoluta ou relativa · Degrau: 1 (evaluation §6.10 conv. 15; §8.5 B2)
+Escolha: descritivo — deltas por horizonte com sinal; divergência material = muda o sinal de (candidato − baseline) num nível comum, ou o lado do nominal do PICP 80 %; DM e grandezas só agregadas = registro descritivo, nem explicada nem [finding] · Alternativas: TOST com margem; z em unidades de dispersão entre seeds com |z| > 2 (versão anterior deste doc); tolerância absoluta ou relativa · Degrau: 1 (evaluation §6.10 conv. 15; §8.5 B2)
 Base: ICH E9 §3.3.2 (p. 18 da versão EMA CPMP/ICH/363/96; p. 15 impressa da versão ICH) "An equivalence margin should be specified in the protocol … The choice of equivalence margins should be justified clinically"; "two simultaneous one-sided tests"; Bouthillier et al. 2021 §7 "much smaller than the variance due to perturbing the split of the data in train and test sets" (a escala de seed não discrimina modelos diferentes); P(|t₉| > 2) ≈ 0,077 com 10 seeds (derivação)
 Verificado: parcial→corrigido (paginação do ICH; localizador e leitura de Bouthillier)
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até a 8.1 rodar
 
 [decision:C] EQ-EXPL — o que conta como divergência explicada
-Escolha: (a) categoria do catálogo fechado com sentido/previsão identificável + (b) compatibilidade + (c) localização pela decomposição; features/dados/hiperparâmetros não explicam sozinhos; pilha numérica não explica modelo; defeito do anterior só com referência; não explicada → [finding] listado no relatório, sem bloquear a 8.2, salvo indício de defeito na pipeline nova em A1/A2 · Alternativas: julgamento caso a caso; "diferença pequena"; catálogo aberto · Degrau: 1
+Escolha: (a) categoria do catálogo fechado com sentido/previsão identificável, aplicável à comparação pela tabela da §5.6 (fixada antes da 8.1) + (b) compatibilidade + (c) localização pela decomposição; features/dados/hiperparâmetros não explicam sozinhos; pilha numérica não explica modelo; defeito do anterior só com referência; não explicada → [finding] listado no relatório, sem bloquear a 8.2, salvo indício de defeito na pipeline nova em A1/A2 · Alternativas: julgamento caso a caso; "diferença pequena"; catálogo aberto · Degrau: 1
 Base: roadmap 8.2 DoD "divergências explicadas pela teoria (não 'bate com o antigo')"; overview §2 (oráculo, nunca autoridade; bug conhecido do anterior)
 Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
@@ -938,6 +990,17 @@ versão); localizador e leitura de Bouthillier (§1 para a recomendação de
 considerar variância; §7 para a variância de seed ser pequena frente à de
 split); origem da razão "a tolerância esconde defeito" (ADR 7.1.0003 alt. A).
 O roadmap da 8.2 foi emendado (DoD, non_goals, arquivos), ancorado em B1.
+
+Segunda rodada (re-revisão independente, 2026-10-22): obrigações da 8.1 levadas
+ao bloco do roadmap (geração julgada preservada; hash de conteúdo do silver);
+o lock de dependências é ambiente, não caminho de cálculo; a capacidade de CPU
+entra na definição de mesmo ambiente (o ADR 7.1.0003 a registra sem usá-la
+como chave) e uma diferença diagnosticada cai nas classes da §4.3; u_q
+redefinida por grandeza na sua escala natural (σ_y² dava 1–4 % para
+var(d̄)); o DM e as grandezas só agregadas viraram registro descritivo; a
+aplicabilidade das categorias por comparação foi fixada na §5.6; o candidato é
+pareado por papel. A relação entre a tolerância da ASSUM-4 e os números do
+modelo está com o humano (achado N1 da re-revisão).
 
 ## 10. Referências
 
