@@ -2077,15 +2077,20 @@ def test_rows_discarded_by_post_filters_do_not_change_digest(case: str) -> None:
 
 
 @pytest.mark.unit
-def test_rows_of_a_run_with_unusable_fold_do_not_change_digest() -> None:
-    """Run do candidato com fold inutilizável vira `undefined`: suas atribuições não são lidas."""
+@pytest.mark.parametrize(
+    ("column", "unusable"), [("fold", "fold-x"), ("seed", None)], ids=["fold", "seed"]
+)
+def test_rows_of_a_run_with_unusable_fold_or_seed_do_not_change_digest(
+    column: str, unusable: object
+) -> None:
+    """Run do candidato com fold ou seed inutilizável vira `undefined`: nada dele é lido."""
     cohort = _h3_cohort()
     run = sorted(r.run_id for r in cohort.runs if r.model == "tft")[0]
 
     def silver_with_unusable_fold(value_raw: float | None) -> dict[str, list[dict[str, object]]]:
         silver = _h3_silver(cohort)
         silver["dim_run"] = [
-            {**row, "fold": "fold-x"} if row["run_id"] == run else row for row in silver["dim_run"]
+            {**row, column: unusable} if row["run_id"] == run else row for row in silver["dim_run"]
         ]
         if value_raw is not None:
             silver["fact_permuted_predictions"] = [
@@ -2129,3 +2134,24 @@ def test_gold_tables_identical_with_and_without_hashing(monkeypatch: pytest.Monk
     assert _published(unhashed)[1] == _published(hashed)[1]
     assert returned
     assert all(rows == before for rows, before in returned)
+
+
+@pytest.mark.unit
+def test_attribution_post_filter_by_run_id_when_the_partition_has_other_runs() -> None:
+    """CC2-1: sem `run_id` na partição, a leitura de um run traz as linhas dos outros runs
+    do candidato; o pós-filtro as descarta antes do hash (o digest é o da partição por run)."""
+    cohort = _h3_cohort()
+    silver = _h3_silver(cohort)
+    without_run_id = {
+        **SILVER_PARTITIONS,
+        "fact_permuted_predictions": ("asset", "feature_set_name", "year"),
+        "fact_vsn_weights": ("asset", "feature_set_name", "year"),
+    }
+    candidate_runs = {r.run_id for r in cohort.runs if r.model == "tft"}
+    assert len({row["run_id"] for row in silver["fact_permuted_predictions"]}) == len(
+        candidate_runs
+    )
+
+    assert _h3_content(silver, cohort=cohort, partition_keys=without_run_id) == _h3_content(
+        silver, cohort=cohort
+    )

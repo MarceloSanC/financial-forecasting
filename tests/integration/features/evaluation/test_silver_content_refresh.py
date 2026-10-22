@@ -303,15 +303,18 @@ def test_read_and_discarded_rows_do_not_change_digest(
     assert _content(result) == _content(base.result)
 
 
-def test_run_with_unusable_fold_attribution_does_not_change_digest(
-    base: _Base, tmp_path: Path
+@pytest.mark.parametrize(
+    ("column", "unusable"), [("fold", "fold-x"), ("seed", None)], ids=["fold", "seed"]
+)
+def test_run_with_unusable_fold_or_seed_attribution_does_not_change_digest(
+    base: _Base, tmp_path: Path, column: str, unusable: object
 ) -> None:
-    """Run do candidato com fold não inteiro vira `undefined`: suas atribuições não entram."""
+    """Run do candidato com fold não inteiro ou sem seed vira `undefined`: nada dele entra."""
 
     def unusable_run(deps: ApplicationDependencies) -> Row:
         runs = _read(deps, "dim_run", asset=_ASSET, parent_sweep_id=_COHORT)
         template = next(run for run in runs if run["model_version"] == _candidate(base))
-        return {**template, "run_id": "unusable-fold-run", "fold": "fold-x"}
+        return {**template, "run_id": "unusable-fold-run", column: unusable}
 
     def with_run(deps: ApplicationDependencies, _: Path) -> None:
         _append(deps, "dim_run", [unusable_run(deps)])
