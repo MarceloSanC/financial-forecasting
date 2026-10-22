@@ -366,6 +366,23 @@ def test_process_denies_push_on_a_later_line(tmp_path: Path) -> None:
         assert ('"deny"' in result.stdout) is denied
 
 
+def test_payload_with_utf8_bom_is_read(tmp_path: Path) -> None:
+    """Pipe do Windows PowerShell 5.1 prefixa BOM; sem `utf-8-sig` o hook calava (fail open)."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    subprocess.run(["git", "init", "-q", "-b", "develop", str(tmp_path)], check=True, env=env)
+    payload = json.dumps({"tool_input": {"command": "git push"}, "cwd": str(tmp_path)})
+    result = subprocess.run(
+        [sys.executable, str(_HOOK)],
+        input=("﻿" + payload).encode("utf-8"),
+        capture_output=True,
+        check=True,
+        timeout=60,
+        env=env,
+    )
+    out = json.loads(result.stdout.decode("utf-8"))["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny"
+
+
 def test_hook_is_registered_on_pre_tool_use_for_bash_and_powershell() -> None:
     settings_path = _HOOK.parents[1] / "settings.json"
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
