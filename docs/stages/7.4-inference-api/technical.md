@@ -1162,4 +1162,15 @@ Nenhum worker do xdist caiu. Cobertura (`term-missing` do mesmo run) dos arquivo
 **Razão:** gate de saída verde, com cobertura ≥ 90% em cada arquivo tocado e 98,79% no
 total.
 
+### 2026-10-22 — [deviation] Auditoria da Stage F5 — exemplo do concept §9 com `side` em texto, e operação da API — Claude (sessão Windows)
+**Contexto:** o exemplo de payload do concept 7.4 §9 (`concept.md:678`) mostra
+`"side": "two_sided"`. Pela C1-1, `side` é o sinal inteiro de Δ̂_f em {-1, 0, +1}. O
+concept está `done` e não foi editado; o contrato vigente é o do `[deviation]` C1-1 e o
+do schema HTTP (`side: int | None`). Este registro é o retoque do §9. Os outros retoques
+do concept estão em C1-1 e C2-4.
+**Razão:** a operação da API não ganhou runbook. Ela consiste em subir `uvicorn
+financial_forecasting.main:app` com `DATA_ROOT` e `SERVING_COHORT_FILE`, e a receita
+executada está no `[measurement]` CA12. O `.env.example` ganhou a linha comentada
+`SERVING_COHORT_FILE`.
+
 <!-- END: post-execution -->
