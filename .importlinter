@@ -411,11 +411,17 @@ allow_indirect_imports = False
 # `_REAL_VIOLATION_CASES`, mais `lightning` no domain (matrícula de
 # `inference.domain`, que o `domain-purity` não cobre para `lightning`).
 [importlinter:contract:inference-no-torch-leak]
-name = Application/domain de inference não importam torch/lightning/pytorch_forecasting
+name = Application/domain e o router HTTP de inference não importam torch/lightning/pytorch_forecasting
 type = forbidden
 source_modules =
     financial_forecasting.features.inference.application
     financial_forecasting.features.inference.domain
+    # Stage 7.4 (ADR 7.4.0001 item 1): a API serve o gravado e nunca carrega a pilha de
+    # deep learning; o pacote do router entra no perímetro (caso
+    # `inference-no-torch-leak:inference-http-router-imports-torch`). O teste em
+    # subprocesso `tests/e2e/features/inference/test_inference_api_no_deep_learning.py`
+    # prova o mesmo em runtime, pela app inteira.
+    financial_forecasting.features.inference.adapters.in.http
 forbidden_modules =
     torch
     lightning
