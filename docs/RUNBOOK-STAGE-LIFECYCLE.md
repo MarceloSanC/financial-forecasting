@@ -801,8 +801,11 @@ clone nem worktree, e o `commit-msg` avisa disso a cada commit (issue #199).
 Nesse caso o T1 roda no container, só nos arquivos da Task:
 `uv run --no-sync ruff check <arquivos>` e `uv run --no-sync mypy` (as
 versões do `make lint` e do `make typecheck`), mais
-`uvx ruff@0.6.9 format <arquivos>`, que usa o pin do hook e mantém o estilo
-já commitado.
+`uvx ruff@0.6.9 format <arquivos>`, o mesmo formatador que o hook rodaria.
+Nenhuma das duas versões do ruff aceita o estilo já commitado no repo inteiro
+(a #222 alinha os pins). Por isso o formato roda só nos arquivos da Task, e
+nunca com a lista vazia, que formataria o repo inteiro. O `uvx` baixa o ruff
+na primeira chamada de cada container e precisa de rede.
 
 **Plano de gates** (escrito na Fase 3B, em §1 do `technical.md`; revisado no
 Passo 7 / Checkpoint B):
