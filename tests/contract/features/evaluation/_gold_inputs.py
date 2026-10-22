@@ -228,7 +228,8 @@ def _estimates(series: PairedLossSeries, backend: FakeMcsBackend) -> tuple[Block
 @cache
 def samples_of() -> tuple[HorizonSamples, ...]:
     """As amostras por horizonte do cohort de `completed_inputs()` (para recalcular perfis)."""
-    return _assemble(_cohort()).horizons
+    horizons: tuple[HorizonSamples, ...] = _assemble(_cohort()).horizons
+    return horizons
 
 
 @cache

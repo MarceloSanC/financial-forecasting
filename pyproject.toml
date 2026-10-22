@@ -291,8 +291,8 @@ omit = [
     # Settings ganhou mlflow_tracking_uri) e teste real exercitando-os
     # (tests/unit/shared/test_composition_root.py, .../config/test_settings.py),
     # contando cobertura ≥90%. Ver concept/technical 1.5 (I7, Task 06).
-    # wiring FastAPI — consumido só no Step de API (7.4)
-    "*/shared/infrastructure/http/*",
+    # Stage 7.4: `shared/infrastructure/http/*` SAIU do omit — a API de inferência
+    # liga `app.py` e `error_handlers.py` (ADR 1.1.0001; concept 7.4 D14).
     # boot/config de infra (logging) — não lógica de domínio
     "*/shared/infrastructure/logging/*",
     # Infra herdada do template sem consumidor (adapters `clock`/`uuid_generator`

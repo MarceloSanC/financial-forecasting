@@ -5,7 +5,7 @@ when-use: Reference before adding any torch/pytorch-forecasting code to the infe
 keywords: [adr, inference, checkpoint, consumer-owned-port, modeling, pytorch-forecasting, train-serve-skew, two-pipelines, emission-rule, dataset-parameters, cli, runtime-surface]
 status: accepted
 created_at: 2026-10-06
-updated_at: 2026-10-06
+updated_at: 2026-10-22
 adr_id: 7.1.0001
 decision: The inference slice declares consumer-owned ports `CheckpointResolver` (run_id, model_version, checkpoint path and streamed sha256 per fold, no load) and `CheckpointGridPredictor` (raw grid per fold, partition, decision and horizon for an allowlist of run_id → sha256); they are satisfied structurally by new modeling use cases `ResolveTftCheckpoints` and `PredictTftFromCheckpoints`, which reuse the cohort's run identity, grid, splitter and artifact-directory rule and call new modeling ports-out `CheckpointLocator` (stdlib adapter) and `TftCheckpointPredictor` (`predict_from_checkpoint`), the latter implemented by the existing `PfTftTrainer` with the same prediction-dataset recipe and the same `_emit` rule the trainer uses for the test block; the inference application/domain import no torch, and its runtime surface is an `infer` subcommand of the existing CLI.
 context_stage: 7.1-inference-engine
@@ -13,6 +13,8 @@ bounded_context: inference
 ---
 
 # ADR 7.1.0001 — Checkpoint prediction supplied by modeling through a consumer-owned port
+
+> ⚠️ **Errata (2026-10-22):** "ch. 6" → cap. 7 "Model Deployment and Prediction Service" (Huyen 2022, *Designing Machine Learning Systems*; the "two pipelines"/batch-vs-online discussion lives there, ch. 6 is "Model Development and Offline Evaluation") — ver Stage 7.4 (technical 7.4 §7, Checkpoint C3-4).
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 

@@ -848,6 +848,17 @@ _REAL_VIOLATION_CASES = (
         },
         id="inference-no-torch-leak:inference-application-imports-pytorch-forecasting",
     ),
+    # Stage 7.4 (ADR 7.4.0001 item 1): o router HTTP do `inference` também não importa
+    # torch; sem a matrícula do pacote, esta violação passaria verde.
+    pytest.param(
+        "inference-no-torch-leak",
+        {
+            "features/inference/adapters/in/http/_arch_audit_taint_torch.py": (
+                "import torch  # violação temporária\n"
+            )
+        },
+        id="inference-no-torch-leak:inference-http-router-imports-torch",
+    ),
     # `inference-no-mapie-leak` (Stage 7.2, I1): cada módulo proibido em ao menos uma
     # das duas fontes, e cada fonte com ao menos um caso.
     pytest.param(
@@ -1052,6 +1063,19 @@ _REAL_VIOLATION_CASES = (
             )
         },
         id="bc-independence:other-evaluation-module-imports-quantile-forecast-for-h3",
+    ),
+    # Stage 7.4 (ADR 7.4.0001 item 7): a aresta `read_serving_gold -> serving_gold` é
+    # exceção do MÓDULO; outro módulo do `evaluation` com o mesmo import reprova.
+    pytest.param(
+        "bc-independence",
+        {
+            "features/evaluation/application/use_cases/_arch_audit_taint_sg.py": (
+                "from financial_forecasting.features.inference.application"
+                ".dtos.serving_gold import ServingGold\n"
+                "\n_use = ServingGold\n"
+            )
+        },
+        id="bc-independence:other-evaluation-module-imports-serving-gold-dtos",
     ),
 )
 

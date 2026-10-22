@@ -65,6 +65,17 @@ Stage 7.3 (Task 20): a fábrica `permutation_inference_for(cohort_path)` monta o
 registry como referência), os dois escritores do silver de atribuição sobre o MESMO
 repositório, o ledger do cohort e o `JsonAttributionManifest` sob `data_root`. Nada de
 `evaluation` (I9).
+
+Stage 7.4 (Task 07): a fábrica `serve_inference_for(cohort_path)` monta o
+`ServeInference` da API: lê o cohort pelo leitor da 5.5 (`importlib`), exige cohort
+congelado (`CohortNotFrozenError`), deriva o `cohort_id` pelo `CohortHash` e monta o
+escopo com o `MODEL_VERSION` do candidato; silver = o MESMO repositório, gold = o
+`ReadServingGold` do `evaluation` sobre o MESMO `ParquetGoldStore` (port do consumidor,
+ADR 7.4.0001 item 7). `register_http_routes(app, deps, serving_cohort_file=...)` carrega o
+router por `importlib` (`in` é keyword), troca o provedor do use case quando há cohort
+(montado UMA vez, na subida) e inclui o router: o `shared/http` importa só esta
+composition root (LAYOUT §6). `FastAPI` só sob `TYPE_CHECKING` — a CLI não importa
+fastapi por aqui.
 """
 
 import importlib
@@ -165,6 +176,9 @@ from financial_forecasting.features.evaluation.application.ports.out.mcs_backend
 from financial_forecasting.features.evaluation.application.use_cases.build_confirmatory_scorecard import (  # noqa: E501
     BuildConfirmatoryScorecard,
 )
+from financial_forecasting.features.evaluation.application.use_cases.read_serving_gold import (
+    ReadServingGold,
+)
 from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
     RefreshGold,
 )
@@ -219,6 +233,10 @@ from financial_forecasting.features.inference.application.use_cases.run_inferenc
 )
 from financial_forecasting.features.inference.application.use_cases.run_permutation_inference import (  # noqa: E501
     RunPermutationInference,
+)
+from financial_forecasting.features.inference.application.use_cases.serve_inference import (
+    ServeInference,
+    ServingScope,
 )
 from financial_forecasting.features.market_data.adapters.out.parquet.parquet_fundamental_fetcher import (  # noqa: E501
     ParquetFundamentalFetcher,
@@ -283,6 +301,9 @@ from financial_forecasting.features.modeling.application.ports.out.tft_trainer i
     TftTrainingParams,
     TftTrainingResult,
 )
+from financial_forecasting.features.modeling.application.use_cases.cohort_unit_runner import (
+    CohortNotFrozenError,
+)
 from financial_forecasting.features.modeling.application.use_cases.measure_ablation_cost import (
     MeasureAblationCost,
 )
@@ -318,6 +339,9 @@ from financial_forecasting.features.modeling.application.use_cases.train_gbm_qua
     modeling_columns,
 )
 from financial_forecasting.features.modeling.application.use_cases.train_tft import (
+    MODEL_VERSION as TFT_MODEL_VERSION,
+)
+from financial_forecasting.features.modeling.application.use_cases.train_tft import (
     TrainTft,
     registry_family_partition,
 )
@@ -348,10 +372,13 @@ from financial_forecasting.shared.application.ports.out.medallion_store import (
     MedallionStore,
 )
 from financial_forecasting.shared.domain.services.trading_calendar import TradingCalendar
+from financial_forecasting.shared.domain.value_objects.cohort_hash import CohortHash
 from financial_forecasting.shared.infrastructure.clock.system_clock import SystemClock
 from financial_forecasting.shared.infrastructure.config.settings import Settings, get_settings
 
 if TYPE_CHECKING:
+    from fastapi import FastAPI
+
     from financial_forecasting.features.modeling.adapters.out.pytorch_forecasting.pf_tft_trainer import (  # noqa: E501
         PfTftTrainer,
     )
@@ -656,6 +683,39 @@ def ablation_spec_loader(
     return load
 
 
+def serve_inference_factory(
+    *, hasher: Hasher, silver: ParquetAnalyticsRepository, gold_store: ParquetGoldStore
+) -> Callable[[Path], ServeInference]:
+    """A fábrica do `ServeInference` da API para um arquivo de cohort (Stage 7.4).
+
+    O cohort é lido pelo leitor da 5.5 (`importlib`, LAYOUT §8) e tem de estar congelado
+    (o `cohort_id` é o do congelamento, pelo `CohortHash`); o escopo leva o
+    `MODEL_VERSION` do candidato. O silver é o repositório (como `SilverTableReader`) e o
+    gold é lido pelo `ReadServingGold` do `evaluation` sobre o `ParquetGoldStore`.
+    """
+    cohort_file = importlib.import_module(f"{_MODELING_CLI}.cohort_file")
+
+    def serve_inference_for(cohort_path: Path) -> ServeInference:
+        spec = cohort_file.load(cohort_path)
+        if not spec.is_frozen():
+            raise CohortNotFrozenError(f"cohort {spec.name!r} r{spec.revision} is not frozen")
+        cohort_hash = CohortHash.compute(hasher=hasher, payload=spec.hash_payload())
+        scope = ServingScope(
+            cohort_id=spec.cohort_id(cohort_hash),
+            asset=spec.asset_id,
+            feature_set_name=spec.feature_set_name,
+            model_version=TFT_MODEL_VERSION,
+            horizons=spec.horizons,
+            quantile_levels=spec.quantile_levels,
+            seeds=spec.seeds,
+        )
+        return ServeInference(
+            scope=scope, silver=silver, gold=ReadServingGold(gold_reader=gold_store)
+        )
+
+    return serve_inference_for
+
+
 def dump_ablation_spec(spec: "AblationCohortSpec") -> str:
     """O TOML do spec de ablação (`ablation_cohort_file.dump_ablation_cohort`)."""
     ablation_file = importlib.import_module(f"{_MODELING_CLI}.ablation_cohort_file")
@@ -868,6 +928,9 @@ class ApplicationDependencies:
     # BC inference (Stage 7.3, Task 20): a atribuição do candidato, por arquivo do cohort
     # confirmatório (o probe depende do caminho); predição sempre no treinador de `cpu`.
     permutation_inference_for: Callable[[Path], RunPermutationInference]
+    # BC inference (Stage 7.4, Task 07): o use case da API de inferência, por arquivo de
+    # cohort (montado uma vez pelo `register_http_routes`, na subida da app).
+    serve_inference_for: Callable[[Path], ServeInference]
 
 
 def wire_dependencies(
@@ -1272,4 +1335,30 @@ def wire_dependencies(
         measure_ablation_cost_for=measure_ablation_cost_for,
         supported_devices=frozenset(_SUPPORTED_DEVICES),
         permutation_inference_for=permutation_inference_for,
+        # BC inference (Stage 7.4, Task 07): a API serve o gravado, sobre o MESMO
+        # repositório silver e o MESMO `ParquetGoldStore` do refresh.
+        serve_inference_for=serve_inference_factory(
+            hasher=hasher, silver=analytics_repository, gold_store=gold_store
+        ),
     )
+
+
+_INFERENCE_ROUTER = "financial_forecasting.features.inference.adapters.in.http.inference_router"
+
+
+def register_http_routes(
+    app: "FastAPI", deps: ApplicationDependencies, *, serving_cohort_file: Path | None
+) -> None:
+    """Inclui os routers de feature na app (Stage 7.4; LAYOUT §6).
+
+    O router do `inference` mora sob `adapters/in/` (keyword): `importlib`. Com arquivo de
+    cohort, o `ServeInference` é montado aqui, uma vez, e troca o provedor padrão por
+    `dependency_overrides`; sem arquivo, a rota existe e responde 500 "serviço de
+    inferência sem cohort configurado" (concept I12). Arquivo ilegível ou cohort não
+    congelado erguem aqui — a app não sobe.
+    """
+    module = importlib.import_module(_INFERENCE_ROUTER)
+    if serving_cohort_file is not None:
+        serve = deps.serve_inference_for(serving_cohort_file)
+        app.dependency_overrides[module.get_serve_inference] = lambda: serve
+    app.include_router(module.router)

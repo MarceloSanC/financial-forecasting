@@ -5,7 +5,7 @@ when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; ao consumir as
 keywords: [concept, inference-engine, inference, checkpoint, calib, cqr-input, reproduction, bitwise, tolerance, normalized-space, dataset-parameters, consumer-owned-port, modeling, fact-oos-predictions, idempotency, write-ahead, manifest, writer-lock, cli, blinding]
 status: done
 created_at: 2026-10-06
-updated_at: 2026-10-06
+updated_at: 2026-10-22
 stage_id: 7.1-inference-engine
 stage_title: Motor de inferência
 step_id: 7
@@ -14,6 +14,8 @@ depends_on: [5.4-tft-trainer, 4.3-prediction-persister]
 ---
 
 # Concept — Stage 7.1 — Motor de inferência
+
+> ⚠️ **Errata (2026-10-22):** "cap. 6" → cap. 7 "Model Deployment and Prediction Service" (Huyen 2022, *Designing Machine Learning Systems*; o cap. 6 é "Model Development and Offline Evaluation") — ver Stage 7.4 (technical 7.4 §7, Checkpoint C3-4).
 
 > **Escopo deste documento:** o que será feito nesta Stage, por quê, e
 > decisões técnicas relevantes para entender o "porquê". O plano executável

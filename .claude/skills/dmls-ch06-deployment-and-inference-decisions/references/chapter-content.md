@@ -9,7 +9,7 @@
 - [Appendix A: Background Context (not task-critical)](#appendix-a-background-context-not-task-critical)
 - [Appendix B: Cross-chapter connections](#appendix-b-cross-chapter-connections)
 
-Task-oriented notes from Chip Huyen's *Designing Machine Learning Systems*, Chapter 6. Organized around the decisions you make when taking a trained model to production users.
+Task-oriented notes from Chip Huyen's *Designing Machine Learning Systems*, Chapter 7 "Model Deployment and Prediction Service" (the skill keeps its `ch06` name; erratum 2026-10-22). Organized around the decisions you make when taking a trained model to production users.
 
 <!--
 METADATA (for hybrid spine-skill assembly)
