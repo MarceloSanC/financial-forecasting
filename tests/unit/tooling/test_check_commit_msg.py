@@ -86,9 +86,10 @@ def test_missing_pre_commit_hook_warns_naming_the_hooks(
 ) -> None:
     assert ccm.warn_if_pre_commit_hook_missing(repo) is True
     err = capsys.readouterr().err
-    assert "hook pre-commit não está instalado" in err
+    assert "hook pre-commit nao esta instalado" in err
     assert "ruff-format, ruff e mypy" in err
-    assert "não bloqueia" in err
+    assert "nao bloqueia" in err
+    assert err.isascii()  # o Python do host escreve na code page do console (cp1252)
 
 
 def test_installed_pre_commit_hook_stays_silent(
@@ -158,7 +159,7 @@ def test_warning_does_not_change_the_verdict_of_a_valid_subject(
     monkeypatch.chdir(repo)
     msg = _message(tmp_path, "chore(tooling): subject valido [#199/task-01]")
     assert ccm.main(["check_commit_msg.py", msg]) == _EXIT_OK
-    assert "hook pre-commit não está instalado" in capsys.readouterr().err
+    assert "hook pre-commit nao esta instalado" in capsys.readouterr().err
 
 
 def test_warning_does_not_rescue_an_invalid_subject(
@@ -171,7 +172,7 @@ def test_warning_does_not_rescue_an_invalid_subject(
     assert ccm.main(["check_commit_msg.py", _message(tmp_path, "sem formato")]) == _EXIT_FAIL
     err = capsys.readouterr().err
     assert "rejected commit subject" in err
-    assert "hook pre-commit não está instalado" in err
+    assert "hook pre-commit nao esta instalado" in err
 
 
 def test_main_with_hook_installed_prints_nothing(

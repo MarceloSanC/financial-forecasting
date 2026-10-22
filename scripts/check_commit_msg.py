@@ -181,17 +181,20 @@ def pre_commit_hook_path(cwd: Path) -> Path | None:
 def warn_if_pre_commit_hook_missing(cwd: Path) -> bool:
     """Print a warning when the `pre-commit` hook is missing. Never blocks.
 
+    The text is ASCII: the host Python writes stderr in the console code page
+    (cp1252 on Windows), and accents would reach the terminal garbled.
+
     Returns True when it warned.
     """
     hook = pre_commit_hook_path(cwd)
     if hook is None or hook.is_file():
         return False
     lines = (
-        f"check_commit_msg: aviso — o hook pre-commit não está instalado ({hook.as_posix()}).",
-        "  ruff-format, ruff e mypy do .pre-commit-config.yaml NÃO rodaram neste commit.",
-        "  Rode o equivalente no container antes do próximo commit",
-        "  (docs/RUNBOOK-STAGE-LIFECYCLE.md §Gates em camadas, T1).",
-        "  O commit segue: este aviso não bloqueia.",
+        f"check_commit_msg: aviso - o hook pre-commit nao esta instalado ({hook.as_posix()}).",
+        "  ruff-format, ruff e mypy do .pre-commit-config.yaml NAO rodaram neste commit.",
+        "  Rode o equivalente no container antes do proximo commit",
+        "  (docs/RUNBOOK-STAGE-LIFECYCLE.md, secao Gates em camadas, T1).",
+        "  O commit segue: este aviso nao bloqueia.",
     )
     for line in lines:
         print(line, file=sys.stderr)
