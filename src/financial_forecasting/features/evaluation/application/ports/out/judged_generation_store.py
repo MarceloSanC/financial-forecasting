@@ -16,7 +16,11 @@ Port do **consumidor** (concept 8.1 §4, D5, D12; ADRs `8_1_0003` itens 1-5b e
 - `record_attempt(partition, attempt)` / `attempts(partition)` — o log write-ahead
   `judged/ATTEMPTS.jsonl`, na ordem de gravação.
 
-Nenhum caminho de código sobrescreve, move ou apaga uma cópia selada ou o log. A geração
+Nenhum caminho de código sobrescreve, move ou apaga uma cópia selada ou o log.
+**Escritor único por partição é pré-condição** (como no `GoldStore`, ADR 6.4.0005 item 6):
+dois `preserve` concorrentes compartilhariam o staging, e entre a checagem de
+`judged/<ref>/` e a troca não há trava — o lock é do use case (`EvaluationWriterLock`,
+concept 8.1 D8; Checkpoint C 8.1, CC3-5). A geração
 viva é lida pelo `GoldGenerationReader.read_generation` que já existe. O formato da
 listagem, dos documentos e das linhas do log tem dono único em
 `application/dtos/judged_generation.py`.

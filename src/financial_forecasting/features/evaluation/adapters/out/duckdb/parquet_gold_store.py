@@ -80,6 +80,7 @@ from financial_forecasting.features.evaluation.application.dtos.judged_generatio
     parse_attempts_jsonl,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    MANIFEST_NAME,
     GoldGeneration,
     GoldGenerationCorruptError,
     GoldManifest,
@@ -99,7 +100,6 @@ from financial_forecasting.shared.domain.services.path_identifier import (
 
 logger = logging.getLogger(__name__)
 
-MANIFEST_NAME = "MANIFEST.json"
 _CURRENT = "current"
 _STAGING = ".staging"
 _PREVIOUS = ".previous"

@@ -626,6 +626,10 @@ class GoldManifest:
         )
 
 
+MANIFEST_NAME: Final = "MANIFEST.json"
+"""O arquivo do manifesto de uma geração do gold — dono único do nome (o `ParquetGoldStore`
+grava em `current/`, a cópia julgada o leva em `generation/`; Checkpoint C 8.1, CC3-4)."""
+
 _MANIFEST_KEYS = (
     "status",
     "asset",

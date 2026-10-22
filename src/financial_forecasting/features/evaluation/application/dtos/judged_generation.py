@@ -34,6 +34,7 @@ from types import MappingProxyType
 from typing import Final
 
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    MANIFEST_NAME,
     GoldManifest,
     GoldPartition,
     RefreshStatus,
@@ -52,8 +53,8 @@ SCORECARD_DOCUMENT: Final = "gold_model_comparison_confirmatory_scorecard.json"
 RUN_RECORD_DOCUMENT: Final = "run_record.json"
 ATTEMPTS_NAME: Final = "ATTEMPTS.jsonl"
 DOCUMENT_NAMES: Final = frozenset({SCORECARD_DOCUMENT, RUN_RECORD_DOCUMENT})
-GENERATION_MANIFEST: Final = f"{GENERATION_DIR}/MANIFEST.json"
-"""O manifesto copiado de `current/` (o mesmo nome do `ParquetGoldStore`)."""
+GENERATION_MANIFEST: Final = f"{GENERATION_DIR}/{MANIFEST_NAME}"
+"""O manifesto copiado de `current/`."""
 
 _LISTING_LINE: Final = re.compile(r"([0-9a-f]{64})  ([^\r\n]+)")
 _COMMIT_LENGTH: Final = 40

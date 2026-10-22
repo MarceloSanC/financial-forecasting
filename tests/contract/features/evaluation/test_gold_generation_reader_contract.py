@@ -28,7 +28,6 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb import (
     parquet_gold_store as parquet_gold_store_module,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
-    MANIFEST_NAME,
     ParquetGoldStore,
 )
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
@@ -38,6 +37,7 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
     GOLD_SCHEMAS,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    MANIFEST_NAME,
     GoldGeneration,
     GoldManifest,
     GoldPartition,
