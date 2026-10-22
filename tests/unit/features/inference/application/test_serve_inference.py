@@ -641,17 +641,22 @@ def test_gold_reader_error_propagates() -> None:
 # --- CA6: estados do intervalo -------------------------------------------------------
 
 
-@pytest.mark.parametrize("status", ["undefined", "error"])
-def test_non_ok_tail_makes_the_interval_unavailable_with_the_gold_status(status: str) -> None:
-    overrides: dict[_Key, dict[str, object]] = {
-        ("0", 1, 1, (0.1, 0.9), UPPER): {
-            "status": status,
-            "reason": f"motivo {status}",
-            "correction": None,
-            "n": None,
-            "rank": None,
-        }
+def _non_ok(status: str) -> dict[str, object]:
+    return {
+        "status": status,
+        "reason": f"motivo {status}",
+        "correction": None,
+        "n": None,
+        "rank": None,
     }
+
+
+@pytest.mark.parametrize("tail", [LOWER, UPPER])
+@pytest.mark.parametrize("status", ["undefined", "error"])
+def test_non_ok_tail_makes_the_interval_unavailable_with_the_gold_status(
+    status: str, tail: str
+) -> None:
+    overrides: dict[_Key, dict[str, object]] = {("0", 1, 1, (0.1, 0.9), tail): _non_ok(status)}
     payload = _serve(gold=_gold(corrections=_corrections(overrides)))[0](_query())
     outer, inner = _member(payload, 1, 1).conformal.intervals
     assert (outer.status, outer.gold_status, outer.reason, outer.lower, outer.upper) == (
@@ -662,6 +667,20 @@ def test_non_ok_tail_makes_the_interval_unavailable_with_the_gold_status(status:
         None,
     )
     assert (inner.status, inner.lower, inner.upper) == (OK, 0.0078125, -0.0078125)
+
+
+def test_two_non_ok_tails_report_the_lower_tail() -> None:
+    overrides: dict[_Key, dict[str, object]] = {
+        ("0", 1, 1, (0.1, 0.9), LOWER): _non_ok("error"),
+        ("0", 1, 1, (0.1, 0.9), UPPER): _non_ok("undefined"),
+    }
+    payload = _serve(gold=_gold(corrections=_corrections(overrides)))[0](_query())
+    outer = _member(payload, 1, 1).conformal.intervals[0]
+    assert (outer.status, outer.gold_status, outer.reason) == (
+        UNAVAILABLE,
+        "error",
+        "motivo error",
+    )
 
 
 def test_missing_unit_is_unavailable_and_other_pairs_stay_ok() -> None:
