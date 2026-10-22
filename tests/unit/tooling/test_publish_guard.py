@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -141,6 +142,63 @@ def test_allows_feature_branch_push_from_worktree(command: str) -> None:
 )
 def test_blocks_any_push_from_main_checkout(command: str) -> None:
     assert _reason(command, cwd=MAIN) is not None
+
+
+# --- passo 7 do fechamento autônomo (limpeza a partir do checkout principal) ------------
+
+_REPO = _HOOK.parents[2]
+_STEP7_DOCS = (
+    _REPO / "docs" / "GIT-WORKFLOW.md",
+    _REPO / ".claude" / "skills" / "git-versioning-pointer" / "SKILL.md",
+    _REPO / ".claude" / "skills" / "issue-audit" / "SKILL.md",
+    _REPO / ".claude" / "skills" / "stage-audit" / "SKILL.md",
+)
+_PLACEHOLDERS = {"<branch>": "feat/1-x", "<sha-remoto>": HEAD}
+_WORKTREE_RM_CALLS = 2  # a limpeza normal e a do fallback, ambas com --delete-remote
+
+
+def _documented_step7() -> list[str]:
+    """Comandos do passo 7 (com o fallback 7a-7c) como o GIT-WORKFLOW os manda rodar."""
+    text = _STEP7_DOCS[0].read_text(encoding="utf-8")
+    block = text.split("# 7. Limpeza", 1)[1].split("# 8. ", 1)[0]
+    found: list[str] = []
+    for raw in block.splitlines():
+        line = re.sub(r"\s+#.*$", "", raw).strip()
+        if not line or line.startswith("#"):
+            continue
+        for placeholder, value in _PLACEHOLDERS.items():
+            line = line.replace(placeholder, value)
+        found.append(line)
+    return found
+
+
+def test_step7_documents_the_temporary_worktree_fallback() -> None:
+    commands = _documented_step7()
+    remove = "python scripts/worktree-rm.py feat/1-x --no-docker --delete-remote"
+    assert commands.count(remove) == _WORKTREE_RM_CALLS
+    assert f"git merge-base --is-ancestor {HEAD} origin/develop" in commands
+    assert any(c.startswith("python scripts/worktree-new.py feat/1-x") for c in commands)
+    assert not any(" push" in c for c in commands)
+
+
+def test_documented_step7_passes_publish_guard_from_main_checkout() -> None:
+    commands = _documented_step7()
+    assert commands
+    assert [c for c in commands if _reason(c, cwd=MAIN) is not None] == []
+    assert _reason("\n".join(commands), cwd=MAIN) is None
+
+
+def test_old_step7_fallback_is_refused_from_main_checkout() -> None:
+    found = _reason("git push origin --delete feat/1-x", cwd=MAIN)
+    assert found is not None
+    assert "checkout principal" in found
+
+
+@pytest.mark.parametrize("doc", _STEP7_DOCS, ids=lambda p: p.parent.name)
+def test_no_doc_tells_to_delete_remote_by_push_from_main_checkout(doc: Path) -> None:
+    lines = doc.read_text(encoding="utf-8").splitlines()
+    offending = [ln for ln in lines if "push origin --delete" in ln and "nunca" not in ln]
+    assert offending == []
 
 
 def test_git_dash_c_redirects_to_worktree() -> None:
