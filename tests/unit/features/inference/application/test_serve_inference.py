@@ -529,6 +529,10 @@ def _second_run_dim() -> list[dict[str, object]]:
             "run f1s2 do candidato sem fold",
         ),
         (
+            _rows_with(dim=[*_dim_rows(), {**_dim_rows()[0], "run_id": "noseed", "seed": None}]),
+            "run noseed do candidato sem seed",
+        ),
+        (
             _rows_with(
                 dim=_second_run_dim(), extra_facts=_fact_rows(("dup", 1, 9), "test", _FRIDAY, 1)
             ),
@@ -569,6 +573,7 @@ def _second_run_dim() -> list[dict[str, object]]:
         "only-baseline-runs",
         "seed-without-run",
         "run-without-fold",
+        "run-without-seed",
         "two-runs-at-the-point",
         "incomplete-grid",
         "repeated-level",

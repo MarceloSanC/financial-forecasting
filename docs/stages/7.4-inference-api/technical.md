@@ -826,4 +826,17 @@ Checkpoint C1, reproduzido pela sonda do revisor).
 no mesmo payload de schema 1, que ainda não foi publicado. Commits: `task-01-fix` (DTO),
 `task-03-fix` (leitor) e `task-06-fix` (schema HTTP).
 
+### 2026-10-22 — [decision] Checkpoint C1-5 — run do candidato com seed nula no `dim_run` — Claude (sessão Windows)
+**Contexto:** o fluxo do §1 trata como `ApplicationError` o run do candidato sem `fold`,
+mas não diz nada sobre o run com `seed` nula. A Task 02 o ignorava em silêncio, e o
+Checkpoint C1 apontou o mutante `si-seed-none-skip` como sobrevivente.
+**Pergunta:** run do candidato com `seed` nula é ignorado ou é silver inconsistente?
+**Opções:**
+- A — ignorar (o escopo lista as seeds; o run nunca seria servido).
+- B — `ApplicationError`, como o run sem `fold` ✅ recomendada
+**Decisão:** B (fixada pelo orquestrador na disposição do C1-5).
+**Razão:** o candidato TFT treina com seed por unidade, então um run dele sem seed é
+defeito do silver, não falta de dado do pedido (concept I3: silver inconsistente → 500).
+Ignorá-lo esconderia o defeito. O teste `run-without-seed` mata o mutante.
+
 <!-- END: post-execution -->

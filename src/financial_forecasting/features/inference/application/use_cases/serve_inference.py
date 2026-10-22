@@ -6,7 +6,7 @@ modelo, não carrega checkpoint e não lê o realizado (I1, I2). Fluxo (technica
 1. ativo, horizontes e seeds do pedido contra o escopo servido → `NoServedDataError`;
 2. `dim_run` do cohort, só os runs do `model_version` servido (o mesmo
    `parent_sweep_id` também tem baselines); zero runs, seed do escopo sem run ou run
-   sem `fold` → `ApplicationError` (I3);
+   sem `fold` ou sem `seed` → `ApplicationError` (I3);
 3. `fact_oos_predictions` da partição do ano da decisão, só `split = "test"` de um run
    do cohort, nos horizontes pedidos e com a data de `timestamp_utc` igual à decisão;
 4. um run por (seed, horizonte): nenhum → 404 com o que faltou; mais de um → 500;
@@ -390,8 +390,10 @@ class ServeInference:
                     f"run {run_id} do candidato sem fold no dim_run do cohort {scope.cohort_id}"
                 )
             seed = row.get("seed")
-            if seed is None:
-                continue  # run sem seed nunca é servido (o escopo lista as seeds)
+            if seed is None:  # silver inconsistente, como o run sem fold (C1-5)
+                raise ApplicationError(
+                    f"run {run_id} do candidato sem seed no dim_run do cohort {scope.cohort_id}"
+                )
             runs[run_id] = _Run(run_id=run_id, seed=_integer(seed, "dim_run.seed"), fold=str(fold))
         with_run = {run.seed for run in runs.values()}
         missing = [seed for seed in scope.seeds if seed not in with_run]
