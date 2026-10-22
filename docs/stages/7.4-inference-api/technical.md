@@ -948,4 +948,41 @@ skills) e a `ch01`, que não foi conferida (pode cobrir os caps. 1–2). Quem ci
 partir de uma skill confere o capítulo pela linha "Chapter N". Renomear as skills, se um
 dia valer a pena, é issue própria de tooling; não há Stage candidata.
 
+### 2026-10-22 — [measurement] Checkpoint C3-7 — pacotes do handoff Linux → Windows conferidos e arquivados — Claude (sessão Windows)
+**Contexto:** o `HANDOFF-windows.md` é apagado no commit final da Stage, e a pendência
+"conferir no Windows antes de descartar o Linux" (§6/§7 dele) precisa ficar registrada
+aqui.
+**Medição:** os três pacotes estão em
+`C:\Users\Marcelo\Documents\Code\financial-forecasting\data\backups\handoff-7.4-linux\`:
+
+| pacote | tamanho | sha256 |
+|---|---|---|
+| `ff-data-7.4.tar.gz` (dados do cohort) | 141 669 585 B | `91d243f5e182167342fc0f4b1497531f054cb2ff5ac1ec9ec59848b2114889ff` |
+| `ff-checkpoints-tft.tar` (checkpoints) | 8 430 243 840 B | `271e7cb808669ac36a8d3dfffa0b5b2831f4b5304a49ddfc71a6040aa540e961` |
+| `ff-extra.tar.gz` (extras) | 27 858 845 B | `1ad257d99abb0ea2360846d18c6dc866e2b75618010b50ee3d6e3f4644c68525` |
+
+O orquestrador conferiu os três com `sha256sum -c` em 2026-10-22 (OK) e os extraiu no
+checkout principal do Windows: `data/cohorts/aapl/{bronze,inference,processed,raw,silver}`,
+`artifacts/tft` e `artifacts/cohorts`. A sessão executora repetiu a conferência no mesmo
+dia (`sha256sum -c ff-data-7.4.sha ff-extra.sha ff-checkpoints-tft.sha` →
+`ff-data-7.4.tar.gz: OK`, `ff-extra.tar.gz: OK`, `ff-checkpoints-tft.tar: OK`) e contou
+o que foi extraído, só por listagem de arquivos (nenhuma métrica):
+
+- `artifacts/tft`: **300** diretórios de run e **306** `.ckpt`, os mesmos do tar
+  (`tar -tf`: 300 diretórios, 306 `.ckpt`, 607 entradas). Os 300 são exatamente os 300
+  `run_id` do ledger `artifacts/cohorts/aapl_ablation-r0-8a2d1de2dd8c/progress.json`.
+- **Divergência com o handoff:** o §6 dele diz que o tar tem "360 dirs = 60 do
+  confirmatório + 300 da ablação". O tar medido não tem nenhum dos 60 `run_id` TFT do
+  ledger `aapl_confirmatory-r0-665f45d9169a` (0 de 60 em `artifacts/tft` e 0 no `tar -tf`).
+  Os 60 estão, todos com `.ckpt`, em
+  `data/backups/tft-pre-7.4-20261022-030008/` (60 diretórios, 60 `.ckpt`), a cópia de
+  `artifacts/tft` que existia no Windows antes da extração.
+- Portanto o tar é a única cópia dos **300 checkpoints da ablação**. Os **60 do
+  confirmatório**, que a verificação `infer` da 8.1 usa, estão só no backup
+  `tft-pre-7.4-…` e hoje **não** estão sob `ARTIFACTS_ROOT=artifacts`.
+**Razão:** fecha a pendência "conferir no Windows" para os três sha256. Deixa
+registrado, antes de o handoff sumir, onde mora cada conjunto de checkpoints. A 8.1 tem
+de devolver os 60 do backup a `artifacts/tft` (ou apontar o `ARTIFACTS_ROOT` para ele)
+antes do `infer`. A 7.4 não usa checkpoints.
+
 <!-- END: post-execution -->
