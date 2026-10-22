@@ -355,8 +355,10 @@ não carrega fastapi por ali.
   monta o **DTO do port-out do consumidor** e a aresta vai no sentido oposto, declarada
   módulo a módulo (outro módulo do fornecedor com o mesmo import reprova). Único caso
   hoje: `read_serving_gold → inference.application.dtos.serving_gold` (ADR 7.4.0001
-  item 7; nota de emenda no ADR 0.0.0053). O grafo entre slices continua acíclico. O
-  que o gate não vê:
+  item 7; nota de emenda no ADR 0.0.0053). O grafo entre slices continua acíclico. Um
+  **segundo** caso não herda esta exceção: exige ADR próprio, que mostre o ciclo que a
+  direção prevista fecharia e por que nenhum dado do port-in do fornecedor serve, além da
+  linha declarada no `bc-independence` com o seu caso de violação. O que o gate não vê:
 
   - **Arestas sob `if TYPE_CHECKING:` são invisíveis ao contrato**
     (`exclude_type_checking_imports = True`, ver §3). Hoje as únicas type-only
