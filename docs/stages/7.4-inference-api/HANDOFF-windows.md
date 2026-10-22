@@ -125,6 +125,14 @@ nos "Critério de aceite" de cada Task).
   na verificação `infer`. Extrair na raiz do repo (`ARTIFACTS_ROOT=artifacts`).
   **A máquina Linux não volta ao projeto**: este tar é a única cópia a partir
   daqui — a pendência de arquivamento da 7.3 fecha com ele.
+- Extras: `~/ff-extra.tar.gz` (27 MB; sha256
+  `1ad257d99abb0ea2360846d18c6dc866e2b75618010b50ee3d6e3f4644c68525`, em
+  `~/ff-extra.sha`): `data/{analytics,raw,processed}` da raiz (bronze/silver dos
+  Steps 1–4, jun/2026 — não é o cohort), `.claude/settings.local.json`
+  (permissões liberadas ao Claude) e `memory/` (os 3 arquivos da memória do
+  Claude deste projeto; no Windows vão para a pasta equivalente em
+  `~/.claude/projects/<slug-do-caminho>/memory/`). Extrair na raiz do repo;
+  mover `memory/` para fora.
 - `.env`: cópia em `~/ff-dot-env` (4 chaves de API ausentes do `.env.example`:
   ALPHAVANTAGE, BENZINGA, FINNHUB, HUGGING_FACE). Levar por fora do git.
 
