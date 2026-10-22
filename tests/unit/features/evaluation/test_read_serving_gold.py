@@ -350,7 +350,7 @@ def test_blocked_generation_makes_both_blocks_unavailable_without_reading_tables
     # a geração BLOCKED não lista as tabelas confirmatórias: ler uma delas ergueria
     gold = _read(_reader(RefreshStatus.BLOCKED))
     assert gold == ServingGold(
-        **_IDENTITY,  # type: ignore[arg-type]
+        **_IDENTITY,
         generation_status="BLOCKED",
         conformal_status=UNAVAILABLE,
         conformal_reason="geração gold BLOCKED",

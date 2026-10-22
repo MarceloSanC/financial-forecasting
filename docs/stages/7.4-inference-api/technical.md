@@ -791,4 +791,13 @@ diff de cada bloco é `git diff <último checkpoint>..HEAD`; o C1 parte de `9520
 (`stage 7.4: technical approved`), porque o WIP da Task 01 (`ef08dd9d`) já traz
 código de `src/` e do fake.
 
+### 2026-10-22 — [deviation] Task 03 — `type: ignore` sem uso no teste do leitor — Claude (sessão Windows)
+**Contexto:** o mypy strict explícito da Task 04 segue o import do contrato até
+`tests/unit/features/evaluation/test_read_serving_gold.py` (da Task 03) e acusou
+`Unused "type: ignore" comment` na linha do `**_IDENTITY`. O T1 da Task 03 não roda
+mypy sobre `tests/` (o mypy do projeto cobre só `src/`), por isso passou.
+**Razão:** correção local de uma linha, sem mudar comportamento nem contrato; vai num
+commit `test(evaluation): … [7.4/task-03-fix]` antes da Task 04, para o mypy strict
+da Task 04 fechar verde sobre os arquivos que o contrato importa.
+
 <!-- END: post-execution -->
