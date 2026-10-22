@@ -39,8 +39,9 @@ references:
 > feitas para este doc são marcadas como **derivação**. As bifurcações do
 > gate foram triadas pela skill `evidence-resolution` (2026-10-22): as de
 > classe E/C foram fechadas pelo agente e registradas em §9.1 no formato
-> `[decision:E|C]`; a de classe P (o que a 8.2 compara — **B1**) foi decidida
-> pelo humano na issue #208 (2026-10-22), e a política editorial do TCC é
+> `[decision:E|C]`; as de classe P (o que a 8.2 compara — **B1**, ADR
+> 0.0.0061; a tolerância declarada nos números do modelo — **B2**, ADR
+> 0.0.0062) foram decididas pelo humano na issue #208 (2026-10-22), e a política editorial do TCC é
 > decisão do humano anterior a este gate. Todas as convenções são anteriores
 > a qualquer dado confirmatório (a 8.1 não rodou), então nenhuma C virou P.
 > Rodadas de revisão: verificação adversarial de citações e revisão de
@@ -542,8 +543,8 @@ d̄ e a rejeição ao α de cada lado — com a declaração explícita de que a
 amostras, a loss (P̄_G depende da grade — evaluation §3.1), o estimador e a
 família de cada lado diferem. Do lado novo, o DM lido é o do gold, com o
 estimador primário (retangular — ADR 6.5.0006), **também nos horizontes em
-que H1 reprova** (lá ele é perfil, porque H2 é "não aplicável" — §2.3). É
-puramente descritivo.
+que H1 reprova** (lá ele é perfil, porque H2 é "não aplicável" — §2.3). Não
+há teste sobre a diferença entre os lados: a tolerância é o sentido (§5.5, B2).
 
 **Sentido do veredito.** Para cada (horizonte, baseline comum), o par (sinal
 de d̄, rejeição) reportado por cada lado; e, onde o anterior tiver uma leitura
@@ -626,7 +627,7 @@ p. 15 impressa da versão do site da ICH). Aqui não existe razão substantiva
 para margem nenhuma entre modelos diferentes — o mesmo motivo pelo qual o
 projeto não adotou TOST em H2 (evaluation §6.10, conv. 15) nem a equivalência
 B2 em H1 (evaluation §8.5); e a parte (ii) não sustenta claim do texto. "Sem
-divergência material" **não** é "equivalência demonstrada" (evaluation §6.10).
+divergência de sentido" **não** é "equivalência demonstrada" (evaluation §6.10).
 
 **Não há tolerância em unidades de dispersão entre seeds.** Medir a
 diferença entre os dois modelos em desvios-padrão entre seeds foi descartado
@@ -642,7 +643,7 @@ normal. Para o GBM e os baselines (sem seed) a escala nem existe.
 ### 5.6 Divergência explicada pela teoria (EQ-EXPL)
 
 **Convenção (EQ-EXPL, classe C, §9.1).** Uma divergência — A1 ou A2 fora da
-tolerância, ou divergência material de modelo (§5.5) — conta como **explicada**
+tolerância, ou divergência de sentido de modelo (§5.5) — conta como **explicada**
 se, e só se, as três condições valem:
 
 - **(a) diferença declarada** — é atribuída a uma diferença concreta e
@@ -676,7 +677,7 @@ se, e só se, as três condições valem:
   | DM e grandezas só agregadas — sentido | agregação de seeds do candidato; defeito referenciado (condição (c) dispensada, §5.5) |
 
   "Features, dataset re-derivado ou hiperparâmetros diferentes" é sempre
-  verdade e não prevê sentido: **não** explica uma divergência material
+  verdade e não prevê sentido: **não** explica uma divergência de sentido
   sozinho; é registrado como contexto da divergência não explicada. "Pilha
   numérica" não explica divergência de **modelo** (seu efeito é da ordem do
   arredondamento, §4.3); só entra em A2, já coberta pela tolerância R2.
