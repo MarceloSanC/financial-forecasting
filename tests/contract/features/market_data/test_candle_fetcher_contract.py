@@ -184,8 +184,8 @@ def _unavailable_yfinance(_tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> C
     def _download(*_args: object, **_kwargs: object) -> pd.DataFrame:
         raise YFRateLimitError
 
-    monkeypatch.setattr(yfinance_module.yf, "download", _download)
-    monkeypatch.setattr(yfinance_module.sleep_time, "sleep", lambda _s: None)
+    monkeypatch.setattr(yfinance_module.yf, "download", _download)  # type: ignore[attr-defined]
+    monkeypatch.setattr(yfinance_module.sleep_time, "sleep", lambda _s: None)  # type: ignore[attr-defined]
     return YfinanceCandleFetcher(max_retries=0, retry_delay=0.0)
 
 
