@@ -20,18 +20,35 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.conformal_corrections import (  # noqa: E501
+    ConformalCorrectionsGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_reading import (
+    H3ReadingGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_shares import (
+    H3SharesGoldBuilder,
+)
+from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders.h3_vsn import (
+    H3VsnGoldBuilder,
+)
 from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
     ParquetGoldStore,
 )
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
     GOLD_H3_VSN,
+    GOLD_SCHEMAS,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    GoldInputs,
+    GoldManifest,
     GoldPartition,
+    GoldTable,
     RefreshParameters,
     RefreshStatus,
 )
@@ -58,12 +75,17 @@ from financial_forecasting.features.inference.application.ports.out.serving_gold
     ServingGoldReader,
 )
 from financial_forecasting.shared.application.exceptions import ApplicationError
+from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
+    DatasetContentFingerprint,
+)
+from tests.contract.features.evaluation._gold_inputs import completed_inputs
 from tests.fakes.features.inference.in_memory_serving_gold_reader import (
     InMemoryServingGoldReader,
 )
-from tests.unit.features.evaluation.test_read_serving_gold import (
+from tests.unit.features.evaluation._serving_gold_rows import (
     complete_rows,
     generation,
+    refresh_parameters,
     vsn_row,
 )
 
@@ -136,7 +158,7 @@ _CORRECTIONS = (
 )
 _SHARES = (
     H3ShareRecord(
-        "ablation",
+        "loco",
         "price",
         0.5,
         0.25,
@@ -150,7 +172,7 @@ _SHARES = (
         None,
     ),
     H3ShareRecord(
-        "ablation",
+        "loco",
         "technical",
         0.5,
         0.25,
@@ -224,11 +246,6 @@ def _undefined_vsn_rows() -> _Rows:
     return {**complete_rows(), GOLD_H3_VSN.name: [vsn_row("family", "price", **undefined)]}
 
 
-def _without_blocks() -> RefreshParameters:
-    default = generation()[1].parameters
-    return replace(default, conformal_parameters=None, h3_parameters=None)
-
-
 _BLOCKED = (UNAVAILABLE, "geração gold BLOCKED")
 _BOTH = (AVAILABLE, None)
 
@@ -253,7 +270,7 @@ SCENARIOS: dict[str, Scenario] = {
     "completed-without-blocks": Scenario(
         status=RefreshStatus.COMPLETED,
         rows={},
-        parameters=_without_blocks(),
+        parameters=refresh_parameters(conformal=False, h3=False),
         expected=_published(
             "COMPLETED",
             conformal=(UNAVAILABLE, "geração sem bloco [conformal]"),
@@ -322,3 +339,91 @@ def test_real_corrupt_generation_raises_application_error(tmp_path: Path) -> Non
     reader: ServingGoldReader = ReadServingGold(gold_reader=store)
     with pytest.raises(ApplicationError):
         reader.read(asset=_ASSET, cohort_id=_COHORT)
+
+
+# --- builders reais (Checkpoint C1-2) ---------------------------------------------------
+
+
+def _undefined_vsn(inputs: GoldInputs) -> GoldInputs:
+    vsn = replace(inputs.h3_reports.vsn, status="undefined", reason="sem pesos", entries=())
+    return replace(inputs, h3_reports=replace(inputs.h3_reports, vsn=vsn))
+
+
+def _publish_real_builders(root: Path, inputs: GoldInputs) -> None:
+    """As quatro tabelas servidas escritas pelos builders reais; as demais vazias."""
+    built = {
+        table.name: table
+        for table in (
+            builder.build(inputs)
+            for builder in (
+                ConformalCorrectionsGoldBuilder(),
+                H3SharesGoldBuilder(),
+                H3ReadingGoldBuilder(),
+                H3VsnGoldBuilder(),
+            )
+        )
+    }
+    tables = [
+        built.get(name) or GoldTable(name, schema.key, ()) for name, schema in GOLD_SCHEMAS.items()
+    ]
+    now = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
+    manifest = GoldManifest(
+        status=RefreshStatus.COMPLETED,
+        partition=inputs.partition,
+        rows_by_table={table.name: len(table.rows) for table in tables},
+        parameters=inputs.parameters,
+        horizons=(1, 7),
+        window_deficits={inputs.parameters.candidate: 0},
+        dataset_fingerprint=DatasetContentFingerprint("ab" * 32),
+        grid_trimmed_prefix=0,
+        realized_sessions=250,
+        realized_returns_fsum=0.125,
+        realized_first_timestamp="2024-01-02T00:00:00+00:00",
+        realized_last_timestamp="2024-12-31T00:00:00+00:00",
+        n_runs=12,
+        build_order=tuple(table.name.removeprefix("gold_") for table in tables),
+        started_at=now,
+        finished_at=now,
+    )
+    ParquetGoldStore(root).publish(partition=inputs.partition, tables=tables, manifest=manifest)
+
+
+@pytest.mark.parametrize("vsn", ["ok", "undefined"])
+def test_real_reads_what_the_real_builders_write(vsn: str, tmp_path: Path) -> None:
+    """Os builders reais da 7.2/7.3 sobre `completed_inputs()`, pelo `ParquetGoldStore`.
+
+    Prende os tipos que só o builder real grava (o blocker C1-1: `side` inteiro), os
+    infinitos reconstruídos das flags e o `n` das unidades `ok`.
+    """
+    inputs = completed_inputs() if vsn == "ok" else _undefined_vsn(completed_inputs())
+    _publish_real_builders(tmp_path, inputs)
+    reader: ServingGoldReader = ReadServingGold(gold_reader=ParquetGoldStore(tmp_path))
+    gold = reader.read(asset=inputs.partition.asset, cohort_id=inputs.partition.parent_sweep_id)
+
+    assert (gold.conformal_status, gold.explainability_status) == (AVAILABLE, AVAILABLE)
+    ok_units = [r for r in gold.corrections if r.status == "ok"]
+    assert ok_units
+    assert {r.n for r in ok_units} == {10}
+    assert all(isinstance(r.seed, int) and isinstance(r.horizon, int) for r in gold.corrections)
+    assert all(isinstance(r.correction, float) for r in ok_units)
+    assert math.inf in {r.correction for r in ok_units}
+    assert {r.status for r in gold.corrections} >= {"ok", "error"}
+
+    assert {s.method for s in gold.shares} == {"loco", "permutation"}
+    sides = {s.side for s in gold.shares}
+    assert sides <= {-1, 0, 1, None}
+    assert {-1, 0, 1} <= sides
+    assert all(type(s.side) is int for s in gold.shares if s.side is not None)
+    assert -math.inf in {s.lower for s in gold.shares}
+    assert math.inf in {s.upper for s in gold.shares}
+    # participação não-ok com limite finito gravado: o valor passa (0.0, não None)
+    (zero,) = (s for s in gold.shares if s.status != "ok" and s.lower is not None)
+    assert (zero.lower, zero.upper, zero.side) == (0.0, 0.0, 0)
+
+    assert gold.reading is not None
+    if vsn == "ok":
+        assert {v.status for v in gold.vsn} == {"ok"}
+        assert all(isinstance(v.n_decisions, int) for v in gold.vsn)
+    else:
+        assert {v.status for v in gold.vsn} == {"undefined"}
+        assert all(v.p10 is v.p50 is v.p90 is v.n_decisions is None for v in gold.vsn)

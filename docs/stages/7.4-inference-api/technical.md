@@ -839,4 +839,31 @@ Checkpoint C1 apontou o mutante `si-seed-none-skip` como sobrevivente.
 defeito do silver, não falta de dado do pedido (concept I3: silver inconsistente → 500).
 Ignorá-lo esconderia o defeito. O teste `run-without-seed` mata o mutante.
 
+### 2026-10-22 — [deviation] Checkpoint C1-2 — fábricas em `_serving_gold_rows.py` e cenário dos builders reais — Claude (sessão Windows)
+**Contexto:** o contrato da Task 04 só via linhas escritas à mão, e foi assim que o
+blocker C1-1 (`side` texto × inteiro) passou. Além disso, as fábricas eram importadas de
+`test_read_serving_gold.py` (o `[deviation]` da Task 04) e tinham dois valores que o
+builder real nunca grava: o método `"ablation"` (o builder grava `"loco"`) e uma unidade
+sem seed com medidas e status `ok` (o builder grava `undefined` sem medidas).
+**Razão:** `generation`, `complete_rows`, `correction_row`, `share_row`, `reading_row`,
+`vsn_row` e `refresh_parameters` passam para
+`tests/unit/features/evaluation/_serving_gold_rows.py` (arquivo novo, pedido pelo
+revisor; segue o precedente de `_conformal_parameters.py`), com os valores corrigidos.
+Isso substitui o `[deviation]` da Task 04. O contrato ganha
+`test_real_reads_what_the_real_builders_write`: os quatro builders servidos sobre
+`tests/contract/features/evaluation/_gold_inputs.completed_inputs()`, e uma variante com
+VSN `undefined` (via `dataclasses.replace`), publicados pelo `ParquetGoldStore` real. O
+teste afirma os tipos, `-inf`/`+inf`, `side` inteiro e `n = 10` nas unidades `ok`.
+
+### 2026-10-22 — [finding] mypy strict do contrato alcança `_gold_inputs.py` da 7.3 — Claude (sessão Windows)
+**Contexto:** com o import de `completed_inputs`, o
+`mypy --strict tests/contract/features/inference/test_serving_gold_reader_contract.py …`
+da Task 04 segue até `tests/contract/features/evaluation/_gold_inputs.py:231` e acusa
+`no-any-return` (`samples_of`, em `dd16c1e8`, Stage 7.3), num arquivo fora da lista desta
+Stage. Os arquivos da 7.4 passam limpos com
+`mypy --strict --follow-imports=silent <contrato> <fake> _serving_gold_rows.py test_read_serving_gold.py`.
+**Direção sugerida:** entra na issue de follow-up da Task 10 (b), "contratos da 7.1/7.3
+afirmam prova por mypy que não roda sobre `tests/`". A correção de uma linha
+(anotar/converter o retorno) vai com ela. Stage candidata: a issue (b) da Task 10.
+
 <!-- END: post-execution -->
