@@ -32,6 +32,7 @@ UPPER: Final = "upper"
 _BLOCK_STATUSES: Final = frozenset({AVAILABLE, UNAVAILABLE})
 _UNIT_STATUSES: Final = frozenset({OK, "undefined", "error"})
 _TAILS: Final = frozenset({LOWER, UPPER})
+_SIDES: Final = frozenset({-1, 0, 1})
 
 
 def _check_not_nan(field: str, *values: float | None) -> None:
@@ -86,7 +87,7 @@ class H3ShareRecord:
     lower: float | None  # ±inf permitido; `None` = sem valor
     upper: float | None
     level: float | None
-    side: str | None
+    side: int | None  # sinal de Δ̂_f em {-1, 0, +1} (`FamilyShare.side`); `None` sem valor
     excludes_zero: bool | None
     status: str
     reason: str | None
@@ -97,6 +98,8 @@ class H3ShareRecord:
         _check_not_nan(
             "share", self.share_h1, self.share_h7, self.delta, self.lower, self.upper, self.level
         )
+        if self.side is not None and (isinstance(self.side, bool) or self.side not in _SIDES):
+            raise ValueError(f"side must be -1, 0 or +1, got {self.side!r}")
         if self.status == OK and (self.lower is None or self.upper is None):
             raise ValueError("an ok share needs both interval bounds")
 

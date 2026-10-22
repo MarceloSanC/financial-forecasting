@@ -64,7 +64,7 @@ def _share(**overrides: object) -> H3ShareRecord:
         "lower": -0.2,
         "upper": 0.05,
         "level": 0.9,
-        "side": "two_sided",
+        "side": 1,
         "excludes_zero": False,
         "status": OK,
         "reason": None,
@@ -183,6 +183,17 @@ def test_share_refuses_ok_without_a_bound(bound: str) -> None:
 def test_share_refuses_nan(field: str) -> None:
     with pytest.raises(ValueError, match="NaN"):
         _share(**{field: math.nan})
+
+
+@pytest.mark.parametrize("side", [-1, 0, 1, None])
+def test_share_accepts_the_sign_of_delta(side: int | None) -> None:
+    assert _share(side=side).side == side
+
+
+@pytest.mark.parametrize("side", [2, -2, True, "two_sided"])
+def test_share_refuses_a_side_outside_minus_one_zero_one(side: object) -> None:
+    with pytest.raises(ValueError, match="side must be"):
+        _share(side=side)
 
 
 def test_share_refuses_empty_status() -> None:

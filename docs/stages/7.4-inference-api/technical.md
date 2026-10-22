@@ -813,4 +813,17 @@ esperados do contrato são literais próprios, não derivados do teste unitário
 parâmetro sem `[conformal]`/`[h3]` sai por `dataclasses.replace` do padrão, sem
 importar nome privado.
 
+### 2026-10-22 — [deviation] Checkpoint C1-1 — `H3ShareRecord.side` é `int | None` — Claude (sessão Windows)
+**Contexto:** o §1 "Contratos" declara `H3ShareRecord.side: str | None`, e os testes das
+Tasks 01–04 e 06 usavam `"two_sided"`. No gold real o campo é o sinal de Δ̂_f:
+`FamilyShare.side: int | None` em {-1, 0, +1} (`family_contribution.py`), gravado como
+inteiro pelo `H3SharesGoldBuilder`. Com os builders reais, o leitor da Task 03 erguia
+`GoldGenerationCorruptError: gold_h3_shares.side: expected str, got int 1` (blocker do
+Checkpoint C1, reproduzido pela sonda do revisor).
+**Razão:** correção do contrato, não mudança de desenho. Vale a forma
+`H3ShareRecord.side: int | None` com valor em {-1, 0, +1} (o DTO recusa outro valor e
+`bool`), lida por `col_int_or_none`. O schema HTTP da Task 06 passa a `side: int | None`
+no mesmo payload de schema 1, que ainda não foi publicado. Commits: `task-01-fix` (DTO),
+`task-03-fix` (leitor) e `task-06-fix` (schema HTTP).
+
 <!-- END: post-execution -->
