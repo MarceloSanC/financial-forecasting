@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-22
 updated_at: 2026-10-22
 adr_id: 0.0.0060
-decision: The Step 8 domain gate is satisfied by a single doc, docs/domain/evaluation/reproduction-equivalence-and-reporting.md, with pointers only for 8.1, new theory for 8.2 (reproduction of the own run from persisted artifacts — the citable claim — and an internal equivalence audit against the prior confirmatory evidence on the common intersection, with the declared tolerance on the realized target and the metric code, a descriptive comparison of the model numbers and a closed catalog of theory-backed explanations) and for 8.3 (status label of each canonical plot and the minimum content of the traceability dossier per Sandve et al. 2013); it consumes the evaluation and inference docs by pointer only, defers implementation to the Stages' technical.md, and keeps the prior-evidence audit out of the TCC text.
+decision: The Step 8 domain gate is satisfied by a single doc, docs/domain/evaluation/reproduction-equivalence-and-reporting.md, with pointers only for 8.1, new theory for 8.2 (reproduction of the own run from persisted artifacts — the citable claim — and an internal equivalence audit against the prior confirmatory evidence on the common intersection, with the declared tolerance on the realized target and the metric code, direction as the declared tolerance for the model numbers (ADR 0.0.0062) and a closed catalog of theory-backed explanations) and for 8.3 (status label of each canonical plot and the minimum content of the traceability dossier per Sandve et al. 2013); it consumes the evaluation and inference docs by pointer only, defers implementation to the Stages' technical.md, and keeps the prior-evidence audit out of the TCC text.
 context_stage: 0.0-global
 bounded_context: evaluation
 ---
@@ -83,8 +83,9 @@ roadmap). Its scope:
   sides compute the same thing — the realized target (prior storage
   precision) and the metric code (new code on prior predictions vs the prior
   stored number); the model numbers, which differ in features, data and
-  hyperparameters, are compared descriptively (material divergence = a change
-  of sign, side of nominal or DM direction), with no TOST and no seed-scale
+  hyperparameters, have direction as the declared tolerance (ADR 0.0.0062;
+  direction divergence = a change of sign, side of nominal or DM direction,
+  with the deltas documented), with no TOST and no seed-scale
   tolerance; the DM is compared only as each side reported it; a closed
   catalog of theory-backed explanations with identifiable direction;
   unexplained divergences are reported, not blocking; a rule for retiring
@@ -101,7 +102,8 @@ roadmap). Its scope:
 
 Methodological forks were triaged with the `evidence-resolution` skill
 (2026-10-22) and recorded in doc §9.1: the E/C forks were closed by the agent;
-the P fork (B1) was decided by the human (ADR 0.0.0061).
+the P forks were decided by the human — B1, what 8.2 compares (ADR 0.0.0061),
+and B2, the declared tolerance for the model numbers (ADR 0.0.0062).
 
 ## Alternatives considered
 
@@ -142,7 +144,7 @@ the P fork (B1) was decided by the human (ADR 0.0.0061).
 
 ### Negative
 - One more long doc; mitigated by the consumption map and by pointers.
-- The float64 reproduction tolerance and the definition of a "material"
+- The float64 reproduction tolerance and the definition of a direction
   divergence are conventions without a primary source for the exact form
   (recorded as such).
 - The roadmap block of 8.2 was amended in the same PR (anchored on the human
