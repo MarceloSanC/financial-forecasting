@@ -34,7 +34,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # uv: gerenciador de pacotes oficial deste template (ver CLAUDE.md).
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+# Versao pinada IGUAL a do CI (`version:` do passo `astral-sh/setup-uv` em
+# .github/workflows/ci.yml): os gates locais (`uv lock --check`,
+# `uv sync --locked`, `make check`) rodam nesta imagem, e um uv diferente do CI
+# pode ler o uv.lock de outro jeito. Trocar a versao = editar os DOIS lugares
+# no mesmo commit; tests/architecture/test_uv_version_parity.py falha se
+# divergirem (ou se esta linha voltar a `:latest`).
+COPY --from=ghcr.io/astral-sh/uv:0.11.28 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
