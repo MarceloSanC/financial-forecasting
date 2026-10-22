@@ -800,4 +800,17 @@ mypy sobre `tests/` (o mypy do projeto cobre só `src/`), por isso passou.
 commit `test(evaluation): … [7.4/task-03-fix]` antes da Task 04, para o mypy strict
 da Task 04 fechar verde sobre os arquivos que o contrato importa.
 
+### 2026-10-22 — [deviation] Task 04 — fábricas da geração vindas do teste da Task 03 — Claude (sessão Windows)
+**Contexto:** a Task 04 pede manifesto e `_generation()` "como na suíte do
+`GoldGenerationReader`" e os parâmetros pelos helpers `_conformal_parameters.py` e
+`_h3_parameters.py`. A Task 03 já escreveu, em `test_read_serving_gold.py`, a fábrica
+`generation()` (manifesto + toda tabela de `GOLD_SCHEMAS`, sobre esses dois helpers) e
+as linhas das quatro tabelas servidas com as colunas dos builders.
+**Razão:** o contrato importa `generation`, `complete_rows` e `vsn_row` desse módulo
+em vez de copiar ~150 linhas, para que as duas suítes leiam a mesma geração; nenhum
+arquivo novo (a lista fechada da Task 04 continua só com o contrato). Os `ServingGold`
+esperados do contrato são literais próprios, não derivados do teste unitário. O
+parâmetro sem `[conformal]`/`[h3]` sai por `dataclasses.replace` do padrão, sem
+importar nome privado.
+
 <!-- END: post-execution -->
