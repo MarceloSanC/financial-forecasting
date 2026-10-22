@@ -1,7 +1,7 @@
 """Contrato dos ports `CheckpointResolver` e `CheckpointGridPredictor` do `inference` (7.1).
 
-Duas pernas por port, tipadas pelo Protocol DO INFERENCE (o mypy prova a
-conformidade estrutural): `fake` (`InMemoryCheckpointResolver` /
+Duas pernas por port, tipadas pelo Protocol DO INFERENCE (o mypy do `make typecheck`
+prova a conformidade estrutural): `fake` (`InMemoryCheckpointResolver` /
 `InMemoryCheckpointGridPredictor`) e `real` — os use cases do `modeling`
 `ResolveTftCheckpoints` e `PredictTftFromCheckpoints` (Task 05) montados sobre o
 cohort sintético `_frozen_tft_cohort` com os fakes do modeling (locator,
