@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 6 (
 keywords: [domain, evaluation, pinball, crps, interval-score, winkler, picp, mpiw, reliability, sharpness, degeneracy-gate, diebold-mariano, hln, holm, mcs, christoffersen, kupiec, var, preregistration, scorecard, per-horizon]
 status: accepted
 created_at: 2026-09-12
-updated_at: 2026-10-06
+updated_at: 2026-10-22
 bounded_context: evaluation
 subdomain: probabilistic-forecast-evaluation
 references:
@@ -502,7 +502,9 @@ standard error (pq)^{1/2} n^{−1/2}". O Wald p̂ ± κ√(p̂q̂/T) (Eq. (1), p
 desaconselhado: "the chaotic coverage properties of the Wald interval are far
 more persistent than is appreciated … we recommend the Wilson interval or the
 equal-tailed Jeffreys prior interval for small n" (abstract, p. 101). Origem:
-Wilson (1927) `[CITAÇÃO-NÃO-ACESSADA]`.
+Wilson (1927, p. 209: "(p0−p)² = λ²pq/n, where q=1−p, is quadratic in p and may
+be solved to find p"; lido no scan do JSTOR na auditoria da #169, linha B5.4
+de `docs/audits/tcc-citation-support.md`).
 
 **Ordem de grandeza (cálculo próprio a partir da Eq. (4), 95 %, c = round(T·p)):**
 τ = 0.02: T = 500 → [0.011, 0.036]; T = 1000 → [0.013, 0.031]. Intervalo 96 %:
@@ -756,8 +758,10 @@ aviso (com h = 1 a variância nula é erro, não fallback); DM 1995 trataria com
 regra `[SEM-FONTE-PRIMÁRIA]` (convenção de software contra a prescrição do
 paper), pré-registrada (**B-DM — decidida, §10.1**: degrau 2, o oráculo fixa a
 convenção e mantém a equivalência testável).
-**Bartlett** (Newey & West 1987 `[CITAÇÃO-NÃO-ACESSADA]`; pesos 1 − k/h para
-k = 0..h−1, inferidos das implementações verificadas em R e statsmodels) fica
+**Bartlett** (Newey & West 1987, Eq. (5): "w(j,m) = 1 − [j/(m+1)]", lido no
+NBER TWP 55, rev. 1986, na auditoria da #169, linha B9.3 de
+`docs/audits/tcc-citation-support.md`; com m = h − 1, pesos 1 − k/h para
+k = 0..h−1, os mesmos das implementações verificadas em R e statsmodels) fica
 como **sensibilidade**: é sempre ≥ 0, mas sob MA(h−1) exata com
 autocovariâncias positivas subestima a LRV (pesos < 1) e tende a sobre-rejeitar
 (derivação); e a combinação Bartlett + fator HLN é convenção de software, não
@@ -1980,7 +1984,7 @@ Scoring e calibração:
 Inferência pareada:
 
 - Diebold, F. X. (2015). "Comparing Predictive Accuracy, Twenty Years Later: A Personal Perspective on the Use and Abuse of Diebold–Mariano Tests". *Journal of Business & Economic Statistics*, 33(1), 1–9. DOI: 10.1080/07350015.2014.983236. (§2.1 Eqs. (1)–(2) p. 2; §2.2 p. 2; §3.1–§3.5 pp. 3–5; §7 p. 8.)
-- Newey, W. K.; West, K. D. (1987). "A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix". *Econometrica*, 55(3), 703–708. DOI: 10.2307/1913610. `[CITAÇÃO-NÃO-ACESSADA]` (pesos de Bartlett 1 − j/(m+1) inferidos das implementações verificadas em R e statsmodels.)
+- Newey, W. K.; West, K. D. (1987). "A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix". *Econometrica*, 55(3), 703–708. DOI: 10.2307/1913610. (Lido na versão NBER Technical Working Paper 55, rev. 1986: Eq. (5), pesos de Bartlett w(j,m) = 1 − j/(m+1); título "Positive Semi-Definite" — auditoria da #169, linha B9.3. Numeração da versão de periódico não conferida.)
 - Newey, W. K.; West, K. D. (1994). "Automatic Lag Selection in Covariance Matrix Estimation". *Review of Economic Studies*, 61(4), 631–653. `[CITAÇÃO-NÃO-ACESSADA]` (regra floor(4(T/100)^{2/9}), default do statsmodels; fork não adotado.)
 - Andrews, D. W. K. (1991). "Heteroskedasticity and Autocorrelation Consistent Covariance Matrix Estimation". *Econometrica*, 59(3), 817–858. `[CITAÇÃO-NÃO-ACESSADA]` (citado por DM 1995 p. 254; fork não adotado.)
 - Politis, D. N.; Romano, J. P. (1994). "The Stationary Bootstrap". *JASA*, 89(428), 1303–1313. DOI: 10.1080/01621459.1994.10476870. `[CITAÇÃO-NÃO-ACESSADA]` (semântica confirmada em Politis & White 2004 §2 e nas docs do backend.)
@@ -1999,7 +2003,7 @@ Backtests e pré-registro:
 - Berkowitz, J.; Christoffersen, P.; Pelletier, D. (2011). "Evaluating Value-at-Risk Models with Desk-Level Data". *Management Science*, 57(12), 2213–2227. DOI: 10.1287/mnsc.1080.0964. (Lido na versão preliminar: p. 16, regra de desempate do p-valor Monte Carlo com "≤"; §7.6, ADR 6.3.0006.)
 - Christoffersen, P.; Pelletier, D. (2004). "Backtesting Value-at-Risk: A Duration-Based Approach". *Journal of Financial Econometrics*, 2(1), 84–108. DOI: 10.1093/jjfinec/nbh004. (Lido no CIRANO WP 2003s-05: abstract; §2; §4.1 p. 7; §4.3 pp. 8–9; §5 p. 11.)
 - Brown, L. D.; Cai, T. T.; DasGupta, A. (2001). "Interval Estimation for a Binomial Proportion". *Statistical Science*, 16(2), 101–133. DOI: 10.1214/ss/1009213286. (Abstract p. 101; Eq. (1) p. 103; §3.1.1 Eq. (4) p. 107.)
-- Wilson, E. B. (1927). "Probable Inference, the Law of Succession, and Statistical Inference". *JASA*, 22(158), 209–212. DOI: 10.1080/01621459.1927.10502953. `[CITAÇÃO-NÃO-ACESSADA]` (origem do intervalo; via BCD 2001.)
+- Wilson, E. B. (1927). "Probable Inference, the Law of Succession, and Statistical Inference". *JASA*, 22(158), 209–212. DOI: 10.1080/01621459.1927.10502953. (Origem do intervalo; lido no scan do JSTOR, p. 209 — auditoria da #169, linha B5.4.)
 - Basel Committee on Banking Supervision (1996). *Supervisory framework for the use of "backtesting" in conjunction with the internal models approach to market risk capital requirements*. Bank for International Settlements, jan. 1996. (§III(b)–(c), pp. 6–8. Documento oficial, bis.org.)
 - ICH (1998). *ICH Harmonised Tripartite Guideline E9: Statistical Principles for Clinical Trials*. CPMP/ICH/363/96 (EMA). (§2.2.2 pp. 7–8; §3.3.2 pp. 17–18; §4.2 p. 21; §5.1 pp. 23–24; §5.2 p. 24; §5.3 pp. 26–27; §5.5 p. 28. Documento oficial, EMA; paginação da versão EMA. Na versão do site da ICH — database.ich.org/sites/default/files/E9_Guideline.pdf — §3.3.2 ocupa as pp. 14–16 impressas e o trecho "Concluding equivalence … is inappropriate" está na p. 16; nota acrescentada em 2026-10-22, gate do Step 8.)
 - Simmons, J. P.; Nelson, L. D.; Simonsohn, U. (2011). "False-Positive Psychology: Undisclosed Flexibility in Data Collection and Analysis Allows Presenting Anything as Significant". *Psychological Science*, 22(11), 1359–1366. DOI: 10.1177/0956797611417632. (p. 1359; Table 1 p. 1361; requisitos pp. 1362–1363; Guideline 3 p. 1363.)
