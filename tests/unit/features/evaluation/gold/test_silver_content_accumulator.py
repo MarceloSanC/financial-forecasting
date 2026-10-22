@@ -220,3 +220,12 @@ def test_silver_content_round_trip_and_rejects_bad_hex_or_missing_key() -> None:
 def test_row_without_run_id_or_int_year_raises(row: Mapping[str, object]) -> None:
     with pytest.raises(ValueError, match=r"run_id|int year"):
         _accumulator().add_facts(table=_OOS, columns=SILVER_COLUMNS[_OOS], rows=[row])
+
+
+@pytest.mark.unit
+def test_created_at_utc_declared_in_dim_run_does_not_change_units() -> None:
+    """O `dim_run` declara `created_at_utc` (fake e real): proveniência fica fora do hash."""
+    rewritten = [{**row, "created_at_utc": "2030-01-01T00:00:00+00:00"} for row in _DIM_RUNS]
+
+    assert "created_at_utc" in SILVER_COLUMNS["dim_run"]
+    assert _content(dim_runs=rewritten) == _content()
