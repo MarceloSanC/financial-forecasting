@@ -5,12 +5,13 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 5 (
 keywords: [domain, modeling, quantile, pinball, baseline, ewma, ar1, historical-quantiles, random-walk, lightgbm, gbm, tft, early-stopping, optuna, hpo, confirmatory-cohort, seeds-folds, rearrangement, quantile-crossing, degenerate-grid]
 status: accepted
 created_at: 2026-07-14
-updated_at: 2026-09-26
+updated_at: 2026-10-22
 bounded_context: modeling
 subdomain: quantile-model-training
 references:
   - ../../adr/0_0_0051-modeling-domain-doc-scope-and-boundary.md
   - ../../adr/0_0_0052-baseline-quantile-emission-conventions.md
+  - ../../adr/0_0_0009-pinball-primary-crps-complementary.md
   - ../../adr/5_1_0001-expanding-window-walk-forward.md
   - ../../adr/5_1_0002-dedicated-calibration-partition.md
   - ../../adr/5_1_0003-split-fingerprint-four-way-calib.md
@@ -116,14 +117,23 @@ teorema de cardinalidade ótima da grade:
 2. **Padrão de competição:** a M5 Uncertainty exigiu 9 quantis
    ({0.005, 0.025, 0.165, 0.25, 0.5, 0.75, 0.835, 0.975, 0.995}) como
    suficientes para descrever a distribuição (Makridakis et al. 2022).
-3. **Quadratura do CRPS:** Gneiting & Ranjan (2011), Eq. (6):
+3. **Elo com o CRPS:** Gneiting & Ranjan (2011), Eq. (6):
    `CRPS(F,y) = ∫₀¹ QS_α(F⁻¹(α), y) dα`, com `QS_α(q,y) = 2(1{y<q} − α)(q−y)`
    — o fator 2 vive **dentro** do QS_α; equivalentemente,
-   `CRPS = 2∫₀¹ ρ_α dα` com ρ_α a pinball usual. A pinball média ρ̄ sobre uma
-   grade finita é, portanto, uma aproximação por quadratura (soma finita que
-   aproxima a integral) de **CRPS/2** — quanto mais densa a grade, melhor a
-   aproximação. O fator constante 2 não altera nenhuma comparação ou
-   ordenação entre modelos.
+   `CRPS = 2∫₀¹ ρ_α dα` com ρ_α a pinball usual. A pinball em cada nível é,
+   portanto, o integrando do CRPS: pontuar a grade com pinball mede, nível a
+   nível, o que o CRPS integra. **Não** se segue que a pinball média ρ̄ da
+   grade do projeto aproxime CRPS/2 por quadratura: a versão discretizada de
+   Gneiting & Ranjan (TR 533, §3.1, Eq. (17)) usa níveis **equiespaçados**
+   (α_j = j/J), e a grade do projeto não é equiespaçada e entra com pesos
+   iguais — logo densificá-la não garante, por si, aproximar o CRPS. O CRPS
+   que o projeto reporta é o estimador rotulado
+   **CRPS_Q = 2 × pinball média na grade (pesos iguais)**, com a mesma
+   ordenação da pinball e não comparável a CRPS publicado — decisão no
+   [ADR 0.0.0009](../../adr/0_0_0009-pinball-primary-crps-complementary.md) e
+   teoria no [doc de avaliação §3.2](../evaluation/probabilistic-forecast-evaluation.md).
+   O fator constante 2 não altera nenhuma comparação ou ordenação entre
+   modelos.
 
 Contra o excesso: Wen et al. (2017, §4.2) treinaram apenas 5 quantis e
 interpolaram linearmente para os 99 exigidos pela GEFCom2014 (Hong et al.
@@ -244,10 +254,12 @@ se reduz se F é um point forecast" — a comparação entre preditores pontuais
 probabilísticos é formalmente bem-posta. Pelo Theorem 9 de Gneiting (2011)
 (§2.2), avaliar qualquer preditor com pinball em τ é avaliá-lo como estimador
 do quantil τ. Logo, emitir a grade com q̂_τ = r̂ para todo τ e pontuá-la com a
-pinball média na grade é uma aproximação discreta de **metade** do CRPS do
-Dirac — isto é, de **MAE/2**, já que CRPS = 2∫₀¹ ρ_α dα (§2.3) e o CRPS do
-Dirac é o MAE; o fator constante 2 não altera nenhuma comparação ou ordenação
-entre modelos.
+pinball média na grade dá, numa grade **simétrica** (média dos τ = 0.5, como a
+do projeto), **exatamente** |y − r̂|/2 por observação — **metade** do CRPS do
+Dirac, isto é, **MAE/2**, já que o CRPS do Dirac é o MAE (caso Dirac do
+[doc de avaliação §3.2](../evaluation/probabilistic-forecast-evaluation.md);
+numa grade assimétrica o valor fica enviesado). O fator constante 2 não altera
+nenhuma comparação ou ordenação entre modelos.
 
 Duas notas de honestidade metodológica:
 
@@ -427,7 +439,7 @@ TFT.
 
 O paper usa **Q = {0.1, 0.5, 0.9}** (3 quantis). A grade densa ~7–9 do projeto
 **não vem do paper** — vem do triângulo do §2.3 (default da biblioteca, padrão
-M5, quadratura do CRPS). Nunca atribuir a grade a Lim et al. (2021).
+M5, elo com o CRPS). Nunca atribuir a grade a Lim et al. (2021).
 
 ### 5.2 Tipagem known/observed/static — a base formal do anti-leakage
 
@@ -584,7 +596,7 @@ Legenda: **[H]** = decisão humana (2026-07-14, gate de domínio do Step 5);
 | 6 | Alvo em h = retorno de UM dia em t+h; nenhuma regra √h | [M] | [3.5.0001](../../adr/3_5_0001-target-definition-backward-log-return.md) + [4.3.0001](../../adr/4_3_0001-target-timestamp-trading-day-indexing-and-domain-purity.md) | Mudar o alvo supersede os dois ADRs (cara) |
 | 7 | Grade degenerada para baselines pontuais; penalização em τ extremo é informativa | [M] | DoD roadmap 5.2 + [4.3.0002](../../adr/4_3_0002-quantile-forecast-dense-grid-guardrail.md) | — (fundamento adicionado, decisão pré-existente) |
 | 8 | Guardrail sorted() = rearranjo CFG 2010 na grade de pesos iguais; corrige monotonicidade, NÃO calibração | [M] | [4.3.0002](../../adr/4_3_0002-quantile-forecast-dense-grid-guardrail.md) | — (fundamento adicionado, decisão pré-existente) |
-| 9 | Grade ~7–9 quantis fundamentada pelo triângulo (lib 7 / M5 9 / quadratura CRPS); jamais atribuída a Lim et al. 2021 | [M] | overview §3/§11 | — |
+| 9 | Grade ~7–9 quantis fundamentada pelo triângulo (lib 7 / M5 9 / elo com o CRPS); jamais atribuída a Lim et al. 2021 | [M] | overview §3/§11 | — |
 | 10 | Early stopping no sub-split dedicado, restaura melhor checkpoint; val monitorado nunca vira calib conformal; retrain-em-train+val não adotado | [M] | [5.1.0002](../../adr/5_1_0002-dedicated-calibration-partition.md) | Mudar exige superseder o 5.1.0002 |
 | 11 | Sweeps Optuna exploratórios; HPs congelados antes do confirmatório; candidato único all-features sem seleção por OOS; seeds × folds como composição; congelar+hashear | [M] | overview §3/§4/§7 + roadmap 5.4/5.5 | Mudar reabre o desenho confirmatório (caro) |
 
