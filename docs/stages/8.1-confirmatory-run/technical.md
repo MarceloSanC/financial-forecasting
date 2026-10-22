@@ -3,7 +3,7 @@ title: Technical — Stage 8.1 — Corrida confirmatória ponta a ponta (cohort 
 description: Plano de execução da Stage 8.1 em 17 Tasks inside-out (1 Task = 1 commit) — VO SilverContentHash, tipos declarados no leitor do silver, hash do silver dentro do RefreshGold, resolver da revisão julgada extraído, registros .judged.toml, port JudgedGenerationStore satisfeito pelo ParquetGoldStore, ports de ambiente e lock, use case RunConfirmatoryEvaluation, wiring, subcomando evaluate e gate de custo — e a Etapa R, que roda a corrida real sobre o cohort aapl_confirmatory r0 julgada pela r3, sela a geração e faz a atestação
 when-use: Consultar durante a Fase 4 (execução) da Stage 8.1; cada Task tem arquivos (lista fechada), testes a escrever primeiro, critério de aceite do concept que cobre e verificação; a Etapa R traz o runbook da corrida real (intenção commitada, backup, evaluate, selo, tag, comentário, .judged.toml)
 keywords: [technical, plano de execução, confirmatory-run, evaluation, refresh-gold, scorecard, silver-content-hash, judged-generation, attempt-log, run-record, attestation, evaluate, cost-gate, blinding, r3]
-status: draft
+status: done
 created_at: 2026-10-22
 updated_at: 2026-10-22
 stage_id: 8.1-confirmatory-run
