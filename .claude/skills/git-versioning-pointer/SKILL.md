@@ -99,7 +99,7 @@ seção correspondente. Cada uma traz três blocos:
   gh pr view --json mergeable,statusCheckRollup,reviewDecision
   gh pr checks
   ```
-- **GOTCHA:** merge commit obrigatório. **NUNCA** `--squash`, **NUNCA** `--rebase`. Comando: `gh pr merge <num> --merge --match-head-commit <sha literal do headRefOid>` (o hook `publish_guard` exige). Com worktree (caso normal): **sem** `--delete-branch` (ele deixa a remota de pé); limpeza por `python scripts/worktree-rm.py <branch> --no-docker --delete-remote` a partir do checkout principal. `--delete-branch` só quando a branch não tem worktree.
+- **GOTCHA:** merge commit obrigatório. **NUNCA** `--squash`, **NUNCA** `--rebase`. Comando: `gh pr merge <num> --merge --match-head-commit <sha literal do headRefOid>` (o hook `publish_guard` exige). Com worktree (caso normal): **sem** `--delete-branch` (ele deixa a remota de pé); limpeza por `python scripts/worktree-rm.py <branch> --no-docker --delete-remote` a partir do checkout principal, com `--delete-remote` **já na primeira chamada**. Remota que sobrou: nunca `git push origin --delete` do checkout principal (o `publish_guard` recusa); seguir o fallback 7a–7c do §"Fechamento autônomo pela auditoria" (ancestralidade em `origin/develop` → worktree temporária → `worktree-rm.py --delete-remote`). `--delete-branch` só quando a branch não tem worktree.
 
 ## 🩹 hotfix
 
