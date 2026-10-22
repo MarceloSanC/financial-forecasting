@@ -55,6 +55,7 @@ from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher imp
 )
 from tests.fakes.features.evaluation.fake_conformal_calibration import FakeConformalCalibration
 from tests.fakes.features.evaluation.fake_mcs_backend import FakeMcsBackend
+from tests.fakes.features.evaluation.fake_silver_table_reader import SILVER_COLUMNS
 from tests.fakes.features.evaluation.fake_training_grid_reader import FakeTrainingGridReader
 from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
 from tests.fakes.shared.in_memory_clock import FakeClock
@@ -165,6 +166,10 @@ class _GeneratingReader:
         rows = list(self._generate(table, wanted))
         self.rows += len(rows)
         return rows
+
+    def columns(self, *, layer: str, table: str) -> Mapping[str, tuple[str, bool]]:
+        """Tipos declarados do fake (Stage 8.1): mantém o leitor no Protocol."""
+        return SILVER_COLUMNS[table]
 
     def _generate(self, table: str, wanted: Mapping[str, object]) -> Iterator[dict]:  # type: ignore[type-arg]  # noqa: PLR0912 — um ramo por tabela
         if table == "dim_run":

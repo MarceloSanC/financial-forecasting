@@ -64,6 +64,16 @@ _CREATED_AT_UTC = "created_at_utc"
 # Colunas de partição que armazenam o sentinel `__none__` e devem voltar `None`.
 _NULLABLE_PARTITION_COLS = frozenset({"parent_sweep_id"})
 
+# dtype pandera do schema silver → tipo declarado do port `SilverTableReader.columns`
+# do `evaluation` (Stage 8.1, ADR 8.1.0002 item 2b; só tipos embutidos cruzam o port).
+_DECLARED_KINDS: Mapping[str, str] = {
+    "int64": "int",
+    "Int64": "int",
+    "float64": "float",
+    "str": "str",
+    "bool": "bool",
+}
+
 
 def _safe_partition(value: object) -> str:
     """Sanitiza um valor de partição (None/vazio → sentinela estável, como o old)."""
@@ -341,6 +351,28 @@ class ParquetAnalyticsRepository:
             con.close()
 
         return [self._restore_row(record) for record in result_df.to_dict(orient="records")]
+
+    def columns(self, *, layer: str, table: str) -> Mapping[str, tuple[str, bool]]:
+        """Coluna → (tipo declarado, nulável) de toda coluna do schema silver da tabela.
+
+        Deriva de `SilverTable.schema.columns` (dono único do schema): dtype `int64`/
+        `Int64` → `"int"`, `float64` → `"float"`, `str` → `"str"`, `bool` → `"bool"`;
+        nulabilidade do `Column.nullable`. Satisfaz o `SilverTableReader.columns` do
+        `evaluation` (Stage 8.1). `(layer, table)` desconhecido → `ApplicationError`.
+
+        Raises:
+            ValueError: dtype fora do mapeamento (nomeia tabela e coluna).
+        """
+        meta = self._table(layer, table)
+        declared: dict[str, tuple[str, bool]] = {}
+        for name, column in meta.schema.columns.items():
+            kind = _DECLARED_KINDS.get(str(column.dtype))
+            if kind is None:
+                raise ValueError(
+                    f"{table}.{name}: dtype {str(column.dtype)!r} has no declared kind"
+                )
+            declared[name] = (kind, bool(column.nullable))
+        return declared
 
     @staticmethod
     def _build_predicates(
