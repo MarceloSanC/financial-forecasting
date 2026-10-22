@@ -56,6 +56,7 @@ graph LR
   S72-->S74[7.4-inference-api]; S73-->S74
   S65-->S81[8.1-confirmatory-run]; S66-->S81; S71-->S81; S72-->S81; S73-->S81
   S81-->S82[8.2-equivalence-audit]-->S83[8.3-plots-report]
+  S83-->S84[8.4-production-cohort-job]; S81-->S84; S74-->S84
 ```
 
 ## Tabela de Steps
@@ -69,7 +70,7 @@ graph LR
 | 5 | Modelagem, baselines e treino | TFT re-treinado + GBM quantílico + baselines naive/estatísticos sobre walk-forward purgado/embargoado; cohort confirmatório AAPL | done | 5.1–5.5 |
 | 6 | Núcleo estatístico confirmatório | Pipeline gold confirmatória: pinball/CRPS/DM/MCS/Holm/PICP-Christoffersen + gates + scorecard pré-registrado, no domínio e validada por oráculo | done | 6.1–6.6 |
 | 7 | Inferência, conformal, explicabilidade e API | Motor de inferência + conformal CQR (benchmark) + explicabilidade (VSN/permutação/ablação) servidos por API fina | done | 7.1–7.4 |
-| 8 | Reprodução, equivalência e relatório | Protocolo completo em AAPL; equivalência vs evidência anterior auditada; plots e dossiê de rastreabilidade | not_started | 8.1–8.3 |
+| 8 | Reprodução, equivalência e relatório | Protocolo completo em AAPL; equivalência vs evidência anterior auditada; plots e dossiê de rastreabilidade; job agendado que mantém um cohort de produção servível pela API | not_started | 8.1–8.4 |
 
 **Legenda de status (Step):** `not_started`, `in_progress`, `blocked`, `done`, `deprecated`.
 
@@ -112,6 +113,7 @@ graph LR
 | `8.1-confirmatory-run` | evaluation | application (orquestração) | vertical | draft | 6.5, 6.6, 7.1, 7.2, 7.3 |
 | `8.2-equivalence-audit` | evaluation | application + tests | vertical | draft | 8.1 |
 | `8.3-plots-and-final-report` | evaluation | adapters/out + docs | vertical | draft | 8.2 |
+| `8.4-production-cohort-job` | inference | multi (orquestração market_data → feature_engineering → modeling → evaluation + configuração do processo da API) | vertical | draft | 7.4, 8.1, 8.3 |
 
 **Legenda de status (Stage):** `draft`, `in_progress`, `review`, `done`, `archived`.
 
@@ -1172,7 +1174,7 @@ arquivos_a_modificar:
 contratos_introduzidos: [ServeInference (use case = port-in via FastAPI Depends; POST /inference/run, payload com schema_version), ServingGoldReader (port-out do inference) + DTOs ServingGold, satisfeito por ReadServingGold no evaluation sobre o GoldGenerationReader (padrão do D9 da 7.2), NoServedDataError (404), handler ApplicationError → 500]
 contratos_consumidos: [predições split = "test" do candidato em fact_oos_predictions e dim_run, lidas pelo SilverTableReader do inference (gravadas pelo treinador da 5.5, reprodução provada pela 7.1), gold_conformal_corrections da geração current/ aplicada aos quantis nativos por PairCorrection.limits (7.2; a API não recalibra, doc de domínio inference §6), tabelas gold de H3 — gold_h3_shares, gold_h3_reading, gold_h3_vsn — lidas da geração current/, sem calcular atribuição (7.3, ADR 7.3.0001)]
 definition_of_done: "`POST /inference/run` retorna quantis nativos + intervalo conformal + explicabilidade (payload com schema versionado; rótulos 'cobertura empírica' e 'descritiva'); router é fino (sem regra); exceções de domínio viram HTTP; e2e verde."
-non_goals: [autenticação, servir treino, streaming, predição online a partir do checkpoint, atualização contínua (job agendado — issue própria)]
+non_goals: [autenticação, servir treino, streaming, predição online a partir do checkpoint, atualização contínua (job agendado — Stage 8.4, issue #202)]
 complexidade_estimada: M
 gate_mode: batch  # justificado no concept 7.4 D13
 skills_hint: [fastapi-thin-adapter, hex-arch-python, dmls-ch06-deployment-and-inference-decisions]
@@ -1182,7 +1184,7 @@ skills_hint: [fastapi-thin-adapter, hex-arch-python, dmls-ch06-deployment-and-in
 
 ### Step 8 — Reprodução, equivalência e relatório
 
-Roda o protocolo confirmatório completo em AAPL, audita equivalência vs evidência anterior (tolerância declarada) e gera os plots e o dossiê de rastreabilidade. **Resultado de negócio:** "a evidência final está produzida, reproduzível e auditada — pronta para o TCC".
+Roda o protocolo confirmatório completo em AAPL, audita equivalência vs evidência anterior (tolerância declarada) e gera os plots e o dossiê de rastreabilidade. Depois do relatório, a 8.4 mantém um cohort de produção servível pela API da 7.4, separado do confirmatório. **Resultado de negócio:** "a evidência final está produzida, reproduzível e auditada — pronta para o TCC".
 
 - **Depende de:** Steps 6 e 7.
 - **Tamanho estimado:** M
@@ -1260,6 +1262,36 @@ gate_mode: batch
 skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 ```
 
+#### Stage 8.4 — `8.4-production-cohort-job`
+
+**Descrição humana:** Job agendado que mantém um **cohort de produção** servível pela API da 7.4 sem tocar no cohort confirmatório. A 7.4 só serve as predições `split = "test"` já gravadas de um cohort configurado (concept 7.4 D1, D10; ADR 7.4.0001 itens 1 e 8), e o humano fixou no Passo 1b da 7.4 (B1) que "a solução para ficar sempre atualizado é ter um scheduler que roda de maneira agendada". O cohort confirmatório é congelado: sessões novas mudam o `DatasetContentFingerprint` e o runner recusa (`DatasetMismatchError`); o `RefreshGold` recusa por `GridFingerprintMismatchError`; e o `RunInference` da 7.1 não grava linhas de teste. Por isso o job materializa dado novo, prediz e publica sob um `data_root` **separado**, e a API troca de cohort só por configuração (`SERVING_COHORT_FILE` + `DATA_ROOT`).
+
+**Por que Stage e não issue avulsa** (litmus PIPELINE §4.5, issue #202): o concept precisa decidir quatro incertezas, com ADR:
+- a **forma do cohort de produção** (revisão nova por janela ou geometria própria; muda como o `cohort_id` evolui e se a API recarrega a configuração sem reiniciar);
+- o **retreino** (retreinar a cada rodada, ao custo medido na 7.3 de horas por cohort em CPU, ou predizer com checkpoints congelados, o que pede um modo de predição de datas novas que o port da 7.1 não tem: ele prediz partições inteiras por fold);
+- o **escopo do gold** (republicar conformal + H3 a cada rodada ou só as predições; sem gold novo a API serve os blocos `unavailable`);
+- **onde roda o scheduler** (cron do host, container dedicado ou orquestrador).
+
+A janela entre as duas trocas de pasta do `ParquetGoldStore` (ADR 6.4.0005) também entra: a 7.4 aceitou o risco porque o refresh é manual e raro (concept 7.4 §8), mas uma publicação recorrente precisa tratá-la (publicar em outro `data_root` e trocar a configuração da API, ou ter leitura atômica da geração) ou medir e aceitar o risco por escrito.
+
+**Gatilho de abertura:** demanda de servir datas posteriores ao teste do cohort confirmatório, ou seja, uso da API além da reprodução do estudo. A Stage depende da 8.1 (primeiro refresh real do gold, que exercita a publicação que o job repetiria) e só abre depois que a 8.3 fechar o relatório, para que nenhum dado de produção se misture à evidência confirmatória.
+
+**Descrição para IA:**
+```yaml
+stage_id: 8.4-production-cohort-job
+bounded_context: inference
+camada_alvo: multi (orquestração market_data → feature_engineering → modeling → evaluation, em adapters/in/cli ou scheduler externo; configuração do processo da API)
+arquivos_a_criar: []  # o concept da 8.4 fixa, depois de decidir as quatro incertezas (issue #202)
+arquivos_a_modificar: []
+contratos_introduzidos: [job de cohort de produção (forma decidida no concept, com ADR), procedimento de troca do cohort servido pela API]
+contratos_consumidos: [ServeInference e a configuração SERVING_COHORT_FILE + DATA_ROOT (7.4), RunInference / subcomando `infer` (7.1), executor de cohort e CohortSpec (5.5), RefreshGold e ParquetGoldStore (6.4, ADR 6.4.0005), publicação real do gold exercitada pela 8.1]
+definition_of_done: "Uma rodada do job deixa um cohort servível pela API sem tocar no data_root do cohort confirmatório; a janela de publicação do ADR 6.4.0005 está tratada, ou o risco está medido e aceito por escrito; a API serve o cohort novo sem mudança de código."
+non_goals: [mudar o contrato da API (POST /inference/run, schema 1), predição online por pedido (rejeitada no ADR 7.4.0001, alternativas A e B), escrever no data_root do cohort confirmatório]
+complexidade_estimada: M  # a confirmar no concept; o retreino por rodada pode empurrar para L
+gate_mode: strict
+skills_hint: [orchestrator-design, composition-root, hex-arch-python, dmls-ch06-deployment-and-inference-decisions]
+```
+
 ---
 
 ## Lacunas conhecidas
@@ -1296,6 +1328,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 | 2026-10-19 | Stage `7.2-conformal-cqr` `done`; Step 7 segue `in_progress`. Revisão r2 ancorada (`aapl_confirmatory-r2-f32ef5ebbbb8`, tag `preregistration/aapl_confirmatory-r2-f32ef5ebbbb8`, comentário na #158); prova de geometria real (Etapa G) verde, só de geometria: 60/60 runs (6 folds × 10 seeds), manifesto com 60 `completed`, sem métrica nem `gold/` | Fechamento da Stage 7.2 (issue #158; ADRs 7.2.0001–7.2.0005; technical 7.2 §7) |
 | 2026-10-21 | Bloco da 7.4 alinhado ao concept: serve as predições de teste gravadas (sem ports de checkpoint nem partição `calib`), `ServeInference` no lugar de `RunInferencePort`, port `ServingGoldReader` com leitor `ReadServingGold` no evaluation (aresta evaluation → inference como exceção declarada ao ADR 0.0.0053), handler `ApplicationError → 500`; camada multi e arquivos completos; `gate_mode: batch` justificado; atualização contínua fora (job agendado) | Concept 7.4 (issue #201; ADRs 7.4.0001–7.4.0002) |
 | 2026-10-22 | Stage `7.4-inference-api` `done`; Step 7 `done` (última Stage do step). `POST /inference/run` serve as predições de teste gravadas do candidato, uma entrada por seed, com o intervalo conformal da variante de registro e a leitura de H3 lidos do gold por port do consumidor (`ServingGoldReader` ← `ReadServingGold` do evaluation; aresta evaluation → inference declarada, 41 → 42); 404 "não há dados para o pedido solicitado"; gold ausente → blocos `unavailable`. Execução real (CA12): 200 em 1,46 s com 20/20 membros iguais ao `value_guardrail` gravado e gold não publicado; D15: pedido com gold sintético do tamanho do real em ≤ 2,51 s (sem cache). Follow-ups #202 (job agendado), #203, #204 | Fechamento da Stage 7.4 (issue #201; ADRs 7.4.0001–7.4.0002; technical 7.4 §7) |
+| 2026-10-22 | Stage `8.4-production-cohort-job` criada (`draft`, BC `inference`, depende de 7.4, 8.1 e 8.3); Step 8 passa a 8.1–8.4 e ganha o job agendado no resultado de negócio | A issue #202 (job agendado que mantém um cohort de produção servível pela API) carrega conceito: quatro incertezas a decidir com ADR, além da janela de publicação do ADR 6.4.0005. O litmus de forma (PIPELINE §4.5) manda Stage; decisão do humano: Step 8, depois da 8.3 |
 
 ## Próxima revisão de roadmap
 
