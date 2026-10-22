@@ -902,4 +902,16 @@ referência cruzada:
 
 Os três números foram comentados na #201.
 
+### 2026-10-22 — [deviation] Checkpoint C2-4 — o provedor do use case é trocado na composition root, não no `app.py` — Claude (sessão Windows)
+**Contexto:** o concept 7.4 D8 ("provedor trocado no `app.py`") e o ADR 7.4.0002 item 6
+("replaced in `app.py` through `dependency_overrides`") localizam a troca do provedor no
+`app.py`. O §1 "Composition root" deste technical, e a Task 07, a puseram em
+`composition_root.register_http_routes`, que o `create_app` chama.
+**Razão:** a decisão é a mesma: o port-in é o próprio use case, injetado por `Depends`,
+com o provedor trocado por `dependency_overrides`. Só muda o arquivo em que a troca
+acontece, porque o `shared/http` só pode importar a composition root (contrato
+`shared-no-features`; LAYOUT §6). O ADR 7.4.0002 ganhou um banner de errata append-only
+(CONVENTIONS, regra do ADR `accepted`), sem editar o corpo. O concept 7.4 está `done` e
+não foi editado: esta entrada é o registro para ele.
+
 <!-- END: post-execution -->

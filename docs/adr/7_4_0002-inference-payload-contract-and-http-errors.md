@@ -5,7 +5,7 @@ when-use: Reference when changing the payload of POST /inference/run (when to bu
 keywords: [adr, inference-api, payload, schema-version, versioning, backward-compatibility, json, infinity, labels, http-errors, exception-handlers, problem-details, fastapi]
 status: accepted
 created_at: 2026-10-21
-updated_at: 2026-10-21
+updated_at: 2026-10-22
 adr_id: 7.4.0002
 decision: Every 200 answer of POST /inference/run carries an integer schema_version in the body (1 at birth; bumped when a field is removed, renamed, changes type or meaning — a label included — and not bumped for a new optional field whose absence keeps the previous behaviour), every limit that can be infinite (conformal and H3 share intervals) carries an *_infinite flag (null + true ⇔ infinite; null + false only without a value), the labels are the evaluation domain constants, always present, with the labels stored in the gold checked against them (the H3 reading label in every status; a VSN row's label per its status), and errors are mapped only by the global handlers in shared/infrastructure/http — NotFoundError → 404, DomainError → 422 and a new ApplicationError → 500 with the project's {detail, type} body, while request validation keeps FastAPI's standard 422 body.
 context_stage: 7.4-inference-api
@@ -13,6 +13,8 @@ bounded_context: inference
 ---
 
 # ADR 7.4.0002 — Inference payload contract and HTTP error mapping
+
+> ⚠️ **Errata (2026-10-22):** item 6 (and concept 7.4 D8) say the use case provider is replaced "in `app.py`" through `dependency_overrides`. It is replaced in `composition_root.register_http_routes`, which `create_app` calls, as technical 7.4 §1 "Composition root" plans: `shared/http` imports only the composition root (`shared-no-features`, LAYOUT §6). The decision (in-port = the use case, injected with `Depends`, provider swapped by `dependency_overrides`) is unchanged — ver Stage 7.4, Checkpoint C2 (C2-4), technical 7.4 §7.
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
