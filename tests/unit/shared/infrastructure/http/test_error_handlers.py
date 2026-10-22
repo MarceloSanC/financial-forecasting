@@ -6,6 +6,8 @@ App FastAPI mínima com `register_error_handlers` e rotas que erguem cada hierar
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -82,3 +84,21 @@ def test_body_validation_keeps_the_fastapi_default_list_body() -> None:
     assert isinstance(detail, list)
     assert detail[0]["loc"] == ["body", "value"]
     assert "type" not in response.json()
+
+
+def test_application_error_is_logged_with_its_traceback(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.ERROR, logger="financial_forecasting.shared.infrastructure.http"):
+        response = _client().get("/application")
+    assert response.status_code == 500  # noqa: PLR2004
+    (record,) = (r for r in caplog.records if r.name.endswith("error_handlers"))
+    assert record.levelno == logging.ERROR
+    assert "GET /application" in record.getMessage()
+    assert "geração gold corrompida" in record.getMessage()
+    assert record.exc_info is not None
+    assert record.exc_info[0] is ApplicationError
+
+
+def test_not_found_is_not_logged_as_error(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.ERROR, logger="financial_forecasting.shared.infrastructure.http"):
+        _client().get("/not-found")
+    assert not [r for r in caplog.records if r.name.endswith("error_handlers")]

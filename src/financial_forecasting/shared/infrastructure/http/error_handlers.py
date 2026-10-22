@@ -17,6 +17,8 @@ Regra: adicione um handler aqui para cada nova hierarquia de exceção que preci
 de tratamento HTTP específico. Nunca coloque lógica de negócio nos handlers.
 """
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -25,6 +27,8 @@ from financial_forecasting.shared.domain.exceptions.base import (
     DomainError,
     NotFoundError,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def register_error_handlers(app: FastAPI) -> None:
@@ -48,7 +52,19 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(ApplicationError)
     async def application_error_handler(request: Request, exc: ApplicationError) -> JSONResponse:
-        """ApplicationError → 500 Internal Server Error, com o corpo do projeto."""
+        """ApplicationError → 500 Internal Server Error, com o corpo do projeto.
+
+        É defeito de dado ou de configuração, não erro do cliente: registra o traceback
+        (`exc_info` da própria exceção, que já foi capturada pelo Starlette) antes de
+        responder, para o 500 não sumir sem rastro no log do servidor (C2-3).
+        """
+        logger.exception(
+            "application error on %s %s: %s",
+            request.method,
+            request.url.path,
+            exc,
+            exc_info=exc,
+        )
         return JSONResponse(
             status_code=500,
             content={"detail": str(exc), "type": "application_error"},
