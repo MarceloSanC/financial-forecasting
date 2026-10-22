@@ -5,7 +5,7 @@ when-use: Consultar durante a Fase 4 (execução) da Stage 7.2; cada Task traz l
 keywords: [technical, plano de execução, conformal-cqr, inference, evaluation, cqr, nexcp, mapie, oracle, fixture, calibration-set, embargo, coverage, refresh-gold, gold, preregistration, r2, anchor, reproduction-policy, port-coverage, import-linter, blinding, geometry]
 status: done
 created_at: 2026-10-17
-updated_at: 2026-10-17
+updated_at: 2026-10-22
 stage_id: 7.2-conformal-cqr
 stage_title: Conformal CQR (benchmark)
 step_id: 7
@@ -43,8 +43,12 @@ tasks_count: 23
 > **Cegamento (I12, inegociável).** Nenhuma Task, teste, script ou etapa desta
 > Stage calcula escore, Q̂, cobertura ou qualquer função de predição × realizado
 > sobre o cohort `aapl_confirmatory-r0-665f45d9169a`, e nenhum `RefreshGold`
-> roda sobre ele. Os testes usam silver sintético. A Etapa G lê só timestamps,
-> partições, fingerprints e o manifesto — nunca `value_*` nem `target_return`.
+> roda sobre ele. Os testes usam silver sintético. A Etapa G lê timestamps, as
+> features do painel do TFT (inclusive `close` e `log_return_*`, ou seja, preços e
+> retornos passados, para reproduzir o corte de prefixo do `build_training_grid`),
+> partições, fingerprints e o manifesto — nunca `value_*` nem `target_return`, e não
+> calcula escore, Q̂ nem cobertura. *(Alinhado após o merge, issue #197; ver §7,
+> `[deviation] task-21-fix / task-22-fix`, C5-2.)*
 
 ## 1. Contexto e estratégia de execução
 
@@ -208,17 +212,26 @@ vai para §7 num commit `docs(inference): evidência da prova de geometria real 
     nula (unidade `undefined` por seed `None`) é única por `fold_raw`.
   - `gold_conformal_coverage` — chave `(horizon, variant, kind, lower_level,
     upper_level, seed, band_level)`; `read_columns = (status, reason, label,
-    n_points, n_evaluated, nominal, count, coverage, mean_of_seed_coverages,
-    sd_of_seed_coverages, n_seeds_used, seeds_excluded, mpiw, mpiw_infinite,
-    crossed_rate, nesting_violation_rate, wilson_lower, wilson_upper,
-    wilson_contains_nominal, serial_dependence_warning)`. `kind ∈ {lower_tail,
+    n_points, n_evaluated, n_mean, nominal, count, mean_count, coverage,
+    mean_of_seed_coverages, sd_of_seed_coverages, n_seeds_used, seeds_excluded,
+    mpiw, mpiw_infinite, mean_of_seed_mpiws, sd_of_seed_mpiws, crossed_rate,
+    mean_of_seed_crossed_rates, sd_of_seed_crossed_rates, nesting_violation_rate,
+    mean_of_seed_nesting_rates, sd_of_seed_nesting_rates, wilson_lower,
+    wilson_upper, wilson_contains_nominal, serial_dependence_warning)`. `kind ∈ {lower_tail,
     upper_tail, pair, nesting}`: caudas com `count_at_or_below`, ĉ, nominal τ e
     Wilson (uma linha por `band_level`); `pair` com PICP em `coverage`,
     `pair_nominal`, MPIW e cruzamento (`band_level` nulo); `nesting` com níveis e
     `band_level` nulos. `seed` nulo ⇔ linha de média entre seeds (`coverage` =
     c̄/n̄, `mean_of_seed_coverages` e `sd_of_seed_coverages` ao lado,
     `n_seeds_used`, `seeds_excluded` como texto `"s1,s2"` ordenado, `""` sem
-    exclusão). `status ∈ {ok, undefined, not_applicable}` (C6 = série 100 %
+    exclusão). **n̄ e c̄ têm colunas DOUBLE próprias:** na linha de média, n̄ vai em
+    `n_mean` e c̄ em `mean_count`, com `n_evaluated` e `count` nulos; nas linhas por
+    seed, `n_evaluated` e `count` são inteiros e `n_mean` e `mean_count` ficam nulos.
+    MPIW, cruzamento e aninhamento entram na média pelas duas formas: a contada
+    (`mpiw`, `crossed_rate`, `nesting_violation_rate`) e a média simples por seed
+    com o dp (`mean_of_seed_*`, `sd_of_seed_*`), preenchidas só na linha de média.
+    *(Alinhado após o merge, issue #197; ver §7, `[decision] task-18-fix`, C4-9, e a
+    errata do `[decision] Task 09`, C3-2.)* `status ∈ {ok, undefined, not_applicable}` (C6 = série 100 %
     degenerada). `label` = `EMPIRICAL_COVERAGE_LABEL` em toda linha `ok`.
     **Forma fixa das linhas não-`ok`** (as mesmas chaves das linhas `ok`, então
     nunca colidem): (seed, horizonte, variante) `undefined` ou `not_applicable`
@@ -1234,8 +1247,10 @@ tests/
   `ConformalCoverage.evaluate` (`degeneracy_tolerance`, `band_levels` do plano) →
   `seed_mean` por (horizonte, variante) com `expected_seeds` = as seeds do
   candidato; (seed, horizonte, variante) com unidade não-`ok` → linha `undefined`
-  com o motivo. Cada `error` soma 1 a `conformal_error_units`; exceção do port
-  propaga.
+  com o motivo. Cada **unidade** `(fold, seed, h)` distinta com alguma linha
+  `error` soma 1 a `conformal_error_units` (uma unidade tem pares × variantes
+  linhas; contam-se unidades, não linhas — CA15); exceção do port propaga.
+  *(Alinhado após o merge, issue #197; ver §7, `[decision] task-19-fix`, C4-6.)*
 - **Critério de aceite (CA14 — aresta única; parte de CA6 "unidade não-`ok`";
   I14, I15; C9):** testes verdes; `lint-imports` com exatamente uma aresta nova.
 - **Verificação (T3):**
