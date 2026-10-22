@@ -26,6 +26,9 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
 from financial_forecasting.features.evaluation.application.ports.out.gold_generation_reader import (
     GoldGenerationCorruptError,
 )
+from financial_forecasting.features.evaluation.application.use_cases import (
+    read_serving_gold as read_serving_gold_module,
+)
 from financial_forecasting.features.evaluation.application.use_cases.read_serving_gold import (
     ReadServingGold,
 )
@@ -359,3 +362,20 @@ def test_share_side_stored_as_text_is_corruption() -> None:
     }
     with pytest.raises(GoldGenerationCorruptError, match="side: expected int"):
         _read(_reader(rows=rows))
+
+
+def test_infinite_vsn_measure_becomes_corruption(monkeypatch: pytest.MonkeyPatch) -> None:
+    """C2-2: o `GoldTable` já recusa float não finito na gravação; se um chegasse ao leitor,
+    o DTO o recusa e o leitor o traduz em `GoldGenerationCorruptError` (500)."""
+    original = read_serving_gold_module.col_float_or_none
+
+    def p10_infinite(row: object, schema: object, column: str) -> float | None:
+        if column == "p10":
+            return math.inf
+        return original(row, schema, column)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(read_serving_gold_module, "col_float_or_none", p10_infinite)
+    with pytest.raises(GoldGenerationCorruptError, match="vsn must be finite") as info:
+        _read(_reader(rows=complete_rows()))
+    assert isinstance(info.value, ApplicationError)
+    assert isinstance(info.value.__cause__, ValueError)

@@ -48,6 +48,13 @@ def check_not_nan(field: str, *values: float | None) -> None:
             raise ValueError(f"{field} must not be NaN")
 
 
+def check_finite(field: str, *values: float | None) -> None:
+    """`ValueError` se algum valor é NaN ou ±inf: medidas que nunca são infinitas (C2-2)."""
+    for value in values:
+        if value is not None and not math.isfinite(value):
+            raise ValueError(f"{field} must be finite, got {value!r}")
+
+
 def _check_status(status: str) -> None:
     if not isinstance(status, str) or not status:
         raise ValueError(f"status must be a non-empty string, got {status!r}")
@@ -100,11 +107,10 @@ class H3ShareRecord:
     reason: str | None
 
     def __post_init__(self) -> None:
-        """Sem NaN; participação `ok` tem os dois limites."""
+        """Medidas finitas, limites sem NaN (±inf permitido); `ok` tem os dois limites."""
         _check_status(self.status)
-        check_not_nan(
-            "share", self.share_h1, self.share_h7, self.delta, self.lower, self.upper, self.level
-        )
+        check_finite("share", self.share_h1, self.share_h7, self.delta, self.level)
+        check_not_nan("share bound", self.lower, self.upper)
         if self.side is not None and (isinstance(self.side, bool) or self.side not in _SIDES):
             raise ValueError(f"side must be -1, 0 or +1, got {self.side!r}")
         if self.status == OK and (self.lower is None or self.upper is None):
@@ -146,9 +152,9 @@ class VsnRecord:
     reason: str | None
 
     def __post_init__(self) -> None:
-        """Status não vazio; sem NaN."""
+        """Status não vazio; medidas finitas."""
         _check_status(self.status)
-        check_not_nan("vsn", self.p10, self.p50, self.p90)
+        check_finite("vsn", self.p10, self.p50, self.p90)
 
 
 def check_block(name: str, status: str, reason: str | None, *records: Sized | None) -> None:

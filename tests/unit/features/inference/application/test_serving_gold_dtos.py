@@ -182,7 +182,8 @@ def test_share_refuses_ok_without_a_bound(bound: str) -> None:
 
 @pytest.mark.parametrize("field", ["share_h1", "share_h7", "delta", "lower", "upper", "level"])
 def test_share_refuses_nan(field: str) -> None:
-    with pytest.raises(ValueError, match="NaN"):
+    # medidas: "must be finite"; limites (±inf permitido): "must not be NaN"
+    with pytest.raises(ValueError, match=r"NaN|must be finite"):
         _share(**{field: math.nan})
 
 
@@ -195,6 +196,13 @@ def test_share_accepts_the_sign_of_delta(side: int | None) -> None:
 def test_share_refuses_a_side_outside_minus_one_zero_one(side: object) -> None:
     with pytest.raises(ValueError, match="side must be"):
         _share(side=side)
+
+
+@pytest.mark.parametrize("field", ["share_h1", "share_h7", "delta", "level"])
+@pytest.mark.parametrize("value", [math.inf, -math.inf])
+def test_share_measures_refuse_infinity(field: str, value: float) -> None:
+    with pytest.raises(ValueError, match="must be finite"):
+        _share(**{field: value})
 
 
 def test_share_refuses_empty_status() -> None:
@@ -214,8 +222,15 @@ def test_vsn_accepts_undefined_with_null_measures() -> None:
     assert record.p50 is None
 
 
+@pytest.mark.parametrize("field", ["p10", "p50", "p90"])
+@pytest.mark.parametrize("value", [math.inf, -math.inf])
+def test_vsn_measures_refuse_infinity(field: str, value: float) -> None:
+    with pytest.raises(ValueError, match="must be finite"):
+        _vsn(**{field: value})
+
+
 def test_vsn_refuses_nan_and_empty_status() -> None:
-    with pytest.raises(ValueError, match="NaN"):
+    with pytest.raises(ValueError, match="must be finite"):
         _vsn(p90=math.nan)
     with pytest.raises(ValueError, match="status"):
         _vsn(status="")
