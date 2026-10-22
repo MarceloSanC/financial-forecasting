@@ -111,33 +111,33 @@ nos "Critério de aceite" de cada Task).
 - `make check` só na saída (plano de gates); T1 por Task = pytest dos testes da Task `--no-cov` + hooks.
 - Worktree no Windows: criar com `python scripts/worktree-new.py feat/201-7-4-inference-api --no-setup --no-vscode`
   **não** — a branch já existe no remoto: `git fetch` e `git worktree add ../financial-forecasting-worktrees/feat-201-7-4-inference-api feat/201-7-4-inference-api` (ou checkout em worktree pelo script se ele aceitar branch existente), depois `make setup`.
-- Dados: pacote gerado no Linux em `~/ff-data-7.4.tar.gz` (136 MB, 779 entradas;
+- Dados: pacote gerado no Linux em `~/ff-handoff/ff-data-7.4.tar.gz` (136 MB, 779 entradas;
   sha256 `91d243f5e182167342fc0f4b1497531f054cb2ff5ac1ec9ec59848b2114889ff`, em
-  `~/ff-data-7.4.sha`), com `data/cohorts/aapl/{bronze,raw,processed,silver,inference}`
+  `ff-data-7.4.sha`), com `data/cohorts/aapl/{bronze,raw,processed,silver,inference}`
   e `artifacts/cohorts/` (ledgers com o ambiente gravado). Transferir por fora do
   git, conferir `sha256sum -c ff-data-7.4.sha`, extrair na raiz do repo e usar
   `DATA_ROOT=data/cohorts/aapl` na verificação CA12 (§3 do technical). Serve
   também à 8.1/8.2/8.3.
-- Checkpoints: `~/ff-checkpoints-tft.tar` (7,9 GB sem compressão, `artifacts/tft`
+- Checkpoints: `~/ff-handoff/ff-checkpoints-tft.tar` (7,9 GB sem compressão, `artifacts/tft`
   com os 360 dirs = 60 do confirmatório + 300 da ablação; 306 arquivos `.ckpt`; sha256
   `271e7cb808669ac36a8d3dfffa0b5b2831f4b5304a49ddfc71a6040aa540e961`, em
-  `~/ff-checkpoints-tft.sha`). A 7.4 não os usa; a 8.1 usa os 60 do confirmatório
+  `ff-checkpoints-tft.sha`). A 7.4 não os usa; a 8.1 usa os 60 do confirmatório
   na verificação `infer`. Extrair na raiz do repo (`ARTIFACTS_ROOT=artifacts`).
   **A máquina Linux não volta ao projeto**: este tar é a única cópia a partir
   daqui — a pendência de arquivamento da 7.3 fecha com ele.
-- Extras: `~/ff-extra.tar.gz` (27 MB; sha256
+- Extras: `~/ff-handoff/ff-extra.tar.gz` (27 MB; sha256
   `1ad257d99abb0ea2360846d18c6dc866e2b75618010b50ee3d6e3f4644c68525`, em
-  `~/ff-extra.sha`): `data/{analytics,raw,processed}` da raiz (bronze/silver dos
+  `ff-extra.sha`): `data/{analytics,raw,processed}` da raiz (bronze/silver dos
   Steps 1–4, jun/2026 — não é o cohort), `.claude/settings.local.json`
   (permissões liberadas ao Claude) e `memory/` (os 3 arquivos da memória do
   Claude deste projeto; no Windows vão para a pasta equivalente em
   `~/.claude/projects/<slug-do-caminho>/memory/`). Extrair na raiz do repo;
   mover `memory/` para fora.
-- `.env`: cópia em `~/ff-dot-env` (4 chaves de API ausentes do `.env.example`:
+- `.env`: cópia em `~/ff-handoff/ff-dot-env` (4 chaves de API ausentes do `.env.example`:
   ALPHAVANTAGE, BENZINGA, FINNHUB, HUGGING_FACE). Levar por fora do git.
 
 ## 7. Pendências fora da 7.4 (registrar/decidir depois)
 
-- ~~Arquivar `artifacts/tft`~~ — feito: `~/ff-checkpoints-tft.tar` + sha (ver §6); conferir no Windows antes de descartar o Linux.
+- ~~Arquivar `artifacts/tft`~~ — feito: `~/ff-handoff/ff-checkpoints-tft.tar` + sha (ver §6); conferir no Windows antes de descartar o Linux.
 - Issues a abrir na Task 10: job agendado (D10) e "contratos da 7.1/7.3 afirmam prova por mypy que não roda sobre tests/".
 - Issue #199 (hooks ausentes em worktrees) e #198 (pin do ruff) continuam abertas.
