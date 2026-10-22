@@ -18,6 +18,11 @@ from financial_forecasting.features.inference.application.dtos.serving_gold impo
     BLOCKED,
     COMPLETED,
     GENERATION_STATUSES,
+    OK,
+    UNIT_STATUSES,
+)
+from financial_forecasting.features.inference.application.use_cases.calibrate_conformal import (
+    UnitStatus,
 )
 
 pytestmark = pytest.mark.unit
@@ -37,3 +42,9 @@ def test_the_catalogue_is_exactly_the_refresh_status() -> None:
             BLOCKED,
         }
     )
+
+
+def test_unit_statuses_are_the_conformal_unit_status() -> None:
+    """Os status de unidade que o gold servido aceita são os que a 7.2 grava (F2)."""
+    assert {status.value for status in UnitStatus} == UNIT_STATUSES
+    assert UnitStatus.OK.value == OK
