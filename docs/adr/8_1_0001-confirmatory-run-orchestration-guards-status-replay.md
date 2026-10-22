@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-22
 updated_at: 2026-10-22
 adr_id: 8.1.0001
-decision: The confirmatory run is the application use case `RunConfirmatoryEvaluation` in the evaluation slice, which validates the judged revision (chain, expected hash, anchors) through a resolver extracted from `BuildConfirmatoryScorecard`, refuses dirty code, takes the data-root writer lock and checks for an existing judged generation before any effect, then runs `RefreshGold` (command from `refresh_command_from`), the scorecard and the preservation of ADR 8.1.0003; it reports `JUDGED`, `BLOCKED` or `ALREADY_JUDGED` (failures are exceptions), keeps exactly one judged generation per cohort partition (refusing a second revision) with no re-judge switch, re-runs fully when nothing was sealed, and does not know the inference slice — the `evaluate` CLI subcommand runs the 7.1 `infer` first and calls the use case only if it succeeded.
+decision: The confirmatory run is the application use case `RunConfirmatoryEvaluation` in the evaluation slice, which validates the judged revision (chain, expected hash, anchors) through a resolver extracted from `BuildConfirmatoryScorecard`, refuses dirty code, takes the data-root writer lock and checks for an existing judged generation before any effect, then runs `RefreshGold` (command from `refresh_command_from`), the scorecard and the preservation of ADR 8.1.0003; it reports `JUDGED`, `BLOCKED` or `ALREADY_JUDGED` (failures are exceptions), keeps exactly one judged generation per cohort partition (refusing a second revision) with no re-judge switch, allows a new attempt after an unsealed one only with the same code, environment and input (otherwise only with a registered `--deviation`, ADR 8.1.0004), and does not know the inference slice — the `evaluate` CLI subcommand runs the 7.1 `infer` first and calls the use case only if it succeeded.
 context_stage: 8.1-confirmatory-run
 bounded_context: evaluation
 ---
@@ -111,9 +111,11 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
    judged generation of another revision, and re-judging is a human-decided
    deviation outside this path. Tampered or incomplete sealed copy →
    `JudgedGenerationTamperedError` before any effect. Anything that failed
-   before the seal leaves nothing judged; a re-run is a full run (staging
-   leftovers removed), and because the chain is deterministic in the same
-   environment it yields the same results — only provenance differs. A
+   before the seal leaves nothing judged, but numbers exist from E1: a new
+   attempt is accepted only with the same code, environment and input
+   (otherwise only with a registered `--deviation`), and its result is checked
+   against the earlier live generation (ADR 8.1.0004); staging leftovers are
+   removed. A
    `BLOCKED` outcome is final for the revision: re-running until it passes
    would choose the result after seeing it. A correction after the seal is a
    deviation of the plan, decided by the human in its own issue (domain doc
@@ -197,7 +199,9 @@ domain gate requirements (§4.5) would be unmet.
 ### Positive
 - No confirmatory metric can be computed under an unanchored plan through this
   path, and nothing is published or preserved when a guard fails.
-- The study is judged once per cohort partition; re-running is safe and auditable.
+- The study is judged once per cohort partition; a new attempt after an
+  unsealed one is restricted (same code, environment and input, or a
+  registered deviation) and auditable.
 - Slice independence is unchanged (no new evaluation → inference edge).
 
 ### Negative

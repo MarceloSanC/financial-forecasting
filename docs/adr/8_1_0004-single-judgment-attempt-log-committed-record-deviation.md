@@ -1,5 +1,5 @@
 ---
-title: ADR 8.1.0004 — One judgment per cohort partition enforced against unsealed attempts and a lost data root — write-ahead attempt log, live-generation check, the committed `.judged.toml` as cross truth, and re-execution only with the same code or a registered deviation
+title: ADR 8.1.0004 — One judgment per cohort partition enforced against unsealed attempts and a lost data root — write-ahead attempt log, live-generation check, the committed `.judged.toml` as cross truth, and re-execution only with the same code, environment and input or a registered deviation
 description: Architecture Decision Record
 when-use: Reference before re-running `evaluate` after an interrupted or failed run, before restoring or deleting a data root that holds gold, before anchoring a new revision of a plan already evaluated, or when asking what counts as "numbers already exist"
 keywords: [adr, evaluation, confirmatory-run, re-judgment, forking-paths, attempt-log, write-ahead, deviation, judged-record, data-root, git-ignored, cross-check, replay]
@@ -53,8 +53,8 @@ Verificado: não verificado (§4.2) — internal sources
 Sensibilidade pré-registrada: nenhuma · Reversível: sim (before the 8.1 run)
 
 [decision:C] 8.1-R2 — re-execution after an unsealed attempt
-Escolha: allowed with the same code (code.src and code.uv_lock equal to every earlier attempt of the revision); with other code only with `--deviation "<justification containing [deviation]>"`, recorded in the attempt log, the run record and the technical §7 · Alternativas: never re-run after E1 started; re-run freely before the seal · Degrau (C): 1 (ADR 7.1.0003 item 3: forcing needs a justification citing the diagnosis record) and 4 (most conservative that still lets an infrastructure crash be retried)
-Base: domain doc reproduction §4.2 R-BIT (same code + same environment ⇒ same result, so a same-code re-run cannot choose a different result) and R-BIT-COMMIT (the code diff, not the commit id, decides); §4.6 (deviation reported)
+Escolha: allowed with the same code (code.src and code.uv_lock), the same R-BIT environment (image id, platform, CPU capability, library versions) and the same input (silver_content, dataset fingerprint) as every earlier attempt of the revision, the result checked against the earlier live generation; otherwise only with `--deviation "<justification containing [deviation]>"`, recorded in the attempt log, the run record and the technical §7 · Alternativas: never re-run after E1 started; re-run freely before the seal · Degrau (C): 1 (ADR 7.1.0003 item 3: forcing needs a justification citing the diagnosis record) and 4 (most conservative that still lets an infrastructure crash be retried)
+Base: domain doc reproduction §4.2 R-BIT (same code + same environment ⇒ same result, so a re-run with the same code, environment and input cannot choose a different result) and R-BIT-COMMIT (the code diff, not the commit id, decides); §4.6 (deviation reported)
 Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
 [decision:C] 8.1-R3 — cross truth outside the data root
@@ -127,9 +127,9 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
 ### Alternative B — Never re-run after E1 started
 - **Pros:** strongest.
 - **Cons:** an out-of-memory or power loss during the refresh would end the
-  study with no judgment although a same-code re-run reproduces the result
+  study with no judgment although a same-code, same-environment, same-input re-run reproduces the result
   bit for bit (R-BIT).
-- **Why rejected:** R-BIT makes same-code re-runs result-neutral; code
+- **Why rejected:** R-BIT makes same-code, same-environment, same-input re-runs result-neutral (and the result is checked); code, environment or input
   changes still need a deviation.
 
 ### Alternative C — Data root as the only truth
@@ -156,7 +156,7 @@ Leaves DT-1/DT-2: re-judgment without trace.
   path in the CLI.
 
 ### Neutral / trade-offs accepted
-- A same-code re-run after a crash is allowed and leaves its attempts on
+- A re-run after a crash with the same code, environment and input is allowed and leaves its attempts on
   record; the dossier lists them.
 
 ## References

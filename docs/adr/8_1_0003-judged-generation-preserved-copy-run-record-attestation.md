@@ -121,8 +121,9 @@ Verificado: herdado · Sensibilidade pré-registrada: nenhuma · Reversível: si
    sorted by path bytes, UTF-8, LF — and `generation_digest` is the sha256 of
    that file's bytes. Anyone can check it with `sha256sum -c CONTENTS.sha256`
    and `sha256sum CONTENTS.sha256`. `find` refuses a missing file, an extra
-   file, a listing whose digest differs from the committed `.judged.toml`
-   (ADR 8.1.0004), and an empty `generation/`.
+   file and an empty `generation/`; comparing the digest with the committed
+   `.judged.toml` is the use case's job (ADR 8.1.0004 item 2a), since the store
+   does not know the expected digest.
 6. **Run record.** The keys of decision 8.1-J3, from the consumer port
    `EvaluationEnvironment` (real composed in the composition root from the 5.5
    probe — whose keys are not changed — plus `importlib.metadata` versions of
@@ -136,7 +137,7 @@ Verificado: herdado · Sensibilidade pré-registrada: nenhuma · Reversível: si
 6b. **Input backup for the 8.2.** The silver is upsert-able and issues #163/#58
    will change silver and grid after the 8.1. The pre-run backup of the data
    root (concept D10) is declared the frozen input of the 8.2 reproduction:
-   its path and the sha256 of its archive are recorded in the `.judged.toml`;
+   its path and the sha256 of its `sha256sum` listing are recorded in the `.judged.toml`;
    the 8.2 checks `silver_content` against the live silver and restores from
    the backup when they differ (Checkpoint A, DT-3). `input_backup_sha256` is
    the sha256 of the bytes of the backup's `sha256sum` listing (same form as
