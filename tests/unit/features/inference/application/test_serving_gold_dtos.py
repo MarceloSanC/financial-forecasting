@@ -382,11 +382,14 @@ def test_fake_returns_the_loaded_gold_and_records_calls() -> None:
     assert reader.calls == [("AAPL", "c1")]
 
 
-def test_fake_without_load_raises_key_error() -> None:
-    reader = InMemoryServingGoldReader({})
-    with pytest.raises(KeyError):
-        reader.read(asset="AAPL", cohort_id="c1")
-    assert reader.calls == [("AAPL", "c1")]
+def test_fake_without_load_returns_the_unpublished_gold() -> None:
+    reader = InMemoryServingGoldReader({("AAPL", "c1"): _published()})
+    gold = reader.read(asset="AAPL", cohort_id="c2")
+    assert not gold.published
+    assert (
+        gold.conformal_reason == gold.explainability_reason == "gold não publicado para o cohort c2"
+    )
+    assert reader.calls == [("AAPL", "c2")]
 
 
 def test_fake_raises_the_configured_error() -> None:

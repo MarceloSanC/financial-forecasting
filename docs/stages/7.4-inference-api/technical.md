@@ -1076,4 +1076,20 @@ sem colisão de diretório.
 do orquestrador, as duas issues ficam sem label, sem contornar o hook. O tipo `chore` está
 no título de cada uma.
 
+### 2026-10-22 — [decision] Auditoria de testes TA-5 — o fake do `ServingGoldReader` devolve `unpublished` para partição ausente — Claude (sessão Windows)
+**Contexto:** a Task 01 fixou um fake "sem fallback": partição não carregada erguia
+`KeyError`. A auditoria de testes apontou que isso viola o invariante do port (gold
+ausente é estado, não erro; concept I8), e que um teste com o fake pode passar sem
+exercitar o caminho que o real segue.
+**Pergunta:** o fake ergue `KeyError` ou devolve `ServingGold.unpublished` para partição
+ausente?
+**Opções:**
+- 1 — devolver `ServingGold.unpublished`, com o motivo e os rótulos do real ✅ recomendada
+- 2 — manter o `KeyError`.
+**Decisão:** 1 (a decisão da auditoria).
+**Razão:** o fake passa a seguir o invariante do port. O contrato ganhou o cenário
+"outro cohort → unpublished" nas duas pernas, que prova a forma contra o
+`ReadServingGold` real. Os parâmetros trocados em `gold.read` continuam cobertos: o
+`calls` do fake é afirmado no contrato e no use case.
+
 <!-- END: post-execution -->

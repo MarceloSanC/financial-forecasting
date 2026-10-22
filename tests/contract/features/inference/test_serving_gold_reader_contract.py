@@ -353,6 +353,37 @@ def test_reader_returns_the_expected_serving_gold(
     assert reader.read(asset=_ASSET, cohort_id=_COHORT) == scenario.expected
 
 
+_OTHER_COHORT = "aapl_confirmatory-r0-other"
+
+
+def _fake_other_cohort(_: Path) -> InMemoryServingGoldReader:
+    return InMemoryServingGoldReader(
+        {(_ASSET, _COHORT): SCENARIOS["completed-with-both-blocks"].expected}
+    )
+
+
+def _real_other_cohort(root: Path) -> ServingGoldReader:
+    store = ParquetGoldStore(root)
+    tables, manifest = generation(RefreshStatus.COMPLETED, rows=complete_rows())
+    store.publish(partition=_PARTITION, tables=tables, manifest=manifest)
+    return ReadServingGold(gold_reader=store)
+
+
+@pytest.mark.parametrize("leg", ["fake", "real"])
+def test_another_cohort_of_a_published_asset_is_unpublished(leg: str, tmp_path: Path) -> None:
+    """Partição sem geração (outro cohort do mesmo ativo) → `unpublished`, nas duas pernas."""
+    reader = _fake_other_cohort(tmp_path) if leg == "fake" else _real_other_cohort(tmp_path)
+    gold = reader.read(asset=_ASSET, cohort_id=_OTHER_COHORT)
+    assert gold == ServingGold.unpublished(
+        reason=f"gold não publicado para o cohort {_OTHER_COHORT}",
+        conformal_label=EMPIRICAL_COVERAGE_LABEL,
+        h3_label=H3_LABEL,
+        vsn_label=VSN_LABEL,
+    )
+    if isinstance(reader, InMemoryServingGoldReader):
+        assert reader.calls == [(_ASSET, _OTHER_COHORT)]
+
+
 def _fake_with_error(_: Path) -> ServingGoldReader:
     corrupt = GoldGenerationCorruptError("the generation has no table 'gold_h3_vsn'")
     return InMemoryServingGoldReader({}, error=corrupt)
