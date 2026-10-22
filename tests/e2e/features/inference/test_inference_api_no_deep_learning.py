@@ -33,18 +33,17 @@ assert Path(financial_forecasting.__file__).resolve().is_relative_to(
 ), financial_forecasting.__file__
 from fastapi.testclient import TestClient
 from financial_forecasting.shared.infrastructure.http.app import create_app
-from tests.e2e.features.inference.test_inference_api_e2e import (
-    _publish, _settings, _write_silver,
-)
+from tests.e2e.features.inference._scenario import publish, settings, write_silver
 
 root = Path(sys.argv[1])
-_write_silver(root)
-_publish(root)
-client = TestClient(create_app(_settings(root)))
+forbidden_roots = set(json.loads(sys.argv[3]))
+write_silver(root)
+publish(root)
+client = TestClient(create_app(settings(root)))
 response = client.post("/inference/run", json={"asset": "AAPL", "decision_date": "2024-03-15"})
 forbidden = sorted(
     name for name in sys.modules
-    if name.split(".")[0] in {"torch", "lightning", "pytorch_forecasting"}
+    if name.split(".")[0] in forbidden_roots
 )
 print(json.dumps({"status": response.status_code, "forbidden": forbidden}))
 """
@@ -56,7 +55,7 @@ def test_serving_a_request_loads_no_deep_learning_stack(tmp_path: Path) -> None:
     pythonpath = [str(_REPO / "src"), str(_REPO), os.environ.get("PYTHONPATH", "")]
     env = {**os.environ, "PYTHONPATH": os.pathsep.join(part for part in pythonpath if part)}
     result = subprocess.run(
-        [sys.executable, "-c", _SCRIPT, str(tmp_path), str(_REPO)],
+        [sys.executable, "-c", _SCRIPT, str(tmp_path), str(_REPO), json.dumps(_FORBIDDEN)],
         cwd=_REPO,
         env=env,
         capture_output=True,
