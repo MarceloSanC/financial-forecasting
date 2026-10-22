@@ -772,4 +772,23 @@ Vocabulário fechado (CONVENTIONS §3.4): `decision` (ou `decision:E` /
 `measurement`. Outra tag no cabeçalho de entrada é recusada por
 `scripts/check_technical_postexec.py`.
 
+### 2026-10-22 — [decision] pontos do Checkpoint C — Claude (sessão Windows)
+**Contexto:** o plano de gates (§1) fixa só o `make check` de saída e não diz onde
+fecham os blocos do Checkpoint C. O PROMPT de sessão única pede um a cada 2–3
+Tasks; o orquestrador da sessão Windows autorizou blocos de 3–4 Tasks, registrados
+aqui antes de seguir.
+**Pergunta:** onde fecham os blocos do Checkpoint C?
+**Opções:**
+- A — blocos fixos de 3 Tasks (01–03, 04–06, 07–09, 10).
+- B — blocos pelas fronteiras do plano: C1 = 01–04 (DTOs, use case, leitor real e
+  contrato: o port fecha com o `check_port_coverage.py` verde), C2 = 05–07
+  (handler, rota e wiring da app), C3 = 08–10 (gate de torch e docs) ✅ recomendada
+**Decisão:** B
+**Razão:** cada bloco termina num estado que se revisa inteiro. O port nasce na 01 e
+só tem real e contrato na 04 (§1 "Estratégia"), então cortar no meio deixaria o
+revisor com um port sem real. A 05–07 é a superfície HTTP com o seu wiring. O
+diff de cada bloco é `git diff <último checkpoint>..HEAD`; o C1 parte de `95204e6b`
+(`stage 7.4: technical approved`), porque o WIP da Task 01 (`ef08dd9d`) já traz
+código de `src/` e do fake.
+
 <!-- END: post-execution -->
