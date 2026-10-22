@@ -1373,4 +1373,15 @@ aceitar `silver_content` no conjunto mudado e afirma que só unidades
 `fact_oos_predictions|…` e a tabela `fact_oos_predictions` mudam (nem `dim_run` nem
 `realized`); as tabelas gold seguem idênticas, que é o que o teste protege.
 
+### 2026-10-22 — [finding] Task 08 — erros de mypy pré-existentes em `test_refresh_gold_dtos.py` — Claude (sessão Windows)
+**Contexto:** o mypy strict pontual da Task 08 sobre `tests/unit/features/evaluation/test_judged_generation_dtos.py`
+segue o import do helper `_manifest` até `tests/unit/features/evaluation/gold/test_refresh_gold_dtos.py`
+e acusa 29 erros em linhas que a 8.1 não escreveu: `call-arg` e `unused-ignore` na
+construção de `RefreshParameters` sem argumentos (l.102), `arg-type` em
+`dataclasses.replace` de `GoldInputs` (l.389, 391, 936, 1024) e `attr-defined`/`unused-ignore`
+em `.items()` sobre `object` (l.756, 808, 961). Os arquivos de `src/` e os testes novos
+estão limpos; nenhum gate roda mypy sobre `tests/`.
+**Razão:** mesma classe da issue #204 (mypy não cobre `tests/`); fora do escopo da 8.1,
+escalado para lá junto com os 3 erros registrados na Task 02.
+
 <!-- END: post-execution -->
