@@ -64,12 +64,13 @@ depends_on: [6.5-preregistration-and-scorecard, 6.6-scorecard-profiles, 7.1-infe
   existente, através de um port do consumidor (D8).
 - **Subcomando `evaluate` da CLI**: o encadeamento fica no `cli.py` — roda o
   `infer` da 7.1 sobre o cohort (o comando passa a devolver o resumo do
-  `RunInferenceResult`) e, só se ele terminar sem erro, o
+  `RunInferenceResult` por uma função nova ao lado, sem mudar o `infer`) e,
+  só se ele terminar sem erro, o
   `RunConfirmatoryEvaluation`; imprime o desfecho e o corpo do comentário de
   atestação (D1, D7); `--deviation` para re-execução com código mudado (D12).
 - **Gate de custo antes da corrida real**: medição do hash do silver em escala
   (sintético com as contagens do §3, hash ligado × desligado, tempo e pico de
-  memória) contra um limiar fixado no technical (D11).
+  memória) contra o limiar fixado no D11 (pico ≤ 6 GiB, acréscimo ≤ 30 min, plano B declarado).
 - **Atestação** (passo de runbook, depois do selo): registro versionado
   `config/preregistration/<nome>-r<rev>.judged.toml`, tag
   `confirmatory-run/<preregistration_ref>` no commit da corrida e **um**
@@ -218,6 +219,7 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
           refresh_gold: GoldRefresh,              # Protocol local; real = RefreshGold
           build_scorecard: ScorecardBuilder,      # Protocol local; real = BuildConfirmatoryScorecard
           judged_store: JudgedGenerationStore,
+          gold_reader: GoldGenerationReader,     # 6.5; geração viva antes do E1 (I13)
           environment: EvaluationEnvironment,
           writer_lock: EvaluationWriterLock,
       ) -> None: ...
@@ -273,17 +275,22 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
   as linhas, nunca pelo tipo em runtime: `3.0` numa coluna int → `3`; `None`
   em coluna não-nula (o que um NaN vira no leitor real) → `ValueError`;
   coluna não declarada → `ValueError`.
-- **`SilverTableReader.columns(layer=..., table=...)`** (método novo do port do
-  consumidor): tipo declarado e nulabilidade por coluna; o real
+- **`SilverTableReader.columns(layer=..., table=...) -> Mapping[str, tuple[str, bool]]`**
+  (método novo do port do consumidor, só tipos embutidos): coluna →
+  (`"int"`|`"float"`|`"str"`|`"bool"`, nulável); o real
   (`ParquetAnalyticsRepository`) responde pelo metadado `SilverTable`, dono
-  único do schema; o fake declara o mesmo (contrato `[fake, real]`).
+  único do schema; o fake declara o mesmo (contrato `[fake, real]`). Os tipos
+  da unidade do realizado vêm da grade (`TrainingGridReader`): `timestamp` →
+  (`"str"`, não-nulo), retorno-alvo → (`"float"`, não-nulo), declarados pelo
+  `RefreshGold` ao montar a unidade, que já recebe o realizado tipado.
 - **`PreregistrationSource.judged_records(name)`** (método novo): os
   `config/preregistration/<nome>-r*.judged.toml` commitados (ref, digest),
   lidos pelo mesmo `TomlPreregistrationSource` (D12).
 - **`GoldManifest.silver_content`** (campo novo do dto, ADR 6.4.0005 item 8
   ampliado): digest combinado, digest por tabela consumida e digest por
   unidade de conteúdo (D4). Serializado em `as_mapping()` e lido por
-  `from_stored`.
+  `GoldManifest.from_mapping` com o campo **obrigatório** (nenhum gold real
+  foi publicado antes; manifestos de teste são regenerados).
 - **`RefreshGoldResult.manifest`** (campo novo do dto): o `GoldManifest`
   publicado, para o orquestrador conferir a cópia (I8).
 - **`JudgedGenerationStore`** (port-out, `evaluation/application/ports/out/judged_generation_store.py`)
@@ -304,14 +311,22 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
   (`gold_model_comparison_confirmatory_scorecard`, `run_record`), grava
   `CONTENTS.sha256` por último e troca o diretório de staging para o
   definitivo; existindo selada → `JudgedGenerationExistsError` (D5). Mais
-  `judged_refs(partition)`, `record_attempt(partition, attempt)`,
-  `attempts(partition)` e `live_manifest(partition)` (D12; ADR 8.1.0004).
+  `judged_refs(partition)`, `record_attempt(partition, attempt)` e
+  `attempts(partition)` (D12; ADR 8.1.0004). Um port só: separar o registro de
+  tentativas não muda comportamento (mesmo adapter, mesmo dono do layout). A
+  geração viva é lida pelo `GoldGenerationReader.read_generation` que já existe
+  (não há `live_manifest`).
   Real: o **`ParquetGoldStore`** (já satisfaz `GoldStore` e
   `GoldGenerationReader`; dono único do layout — nenhum segundo adapter
   redeclara caminhos nem importa outro adapter); fake em
   `tests/fakes/features/evaluation/`; contrato `[fake, real]`.
 - **`JudgedAttempt`** (dto): `preregistration_ref`, `commit`, `code_src`,
-  `code_uv_lock`, `started_at`, `deviation`.
+  `code_uv_lock`, ambiente do R-BIT (id da imagem, plataforma, capacidade de
+  CPU, versões), `started_at`, `deviation`, `prior_live_silver_content`
+  (geração viva anterior desta revisão, se houver) e, numa segunda linha
+  depois do E1, `silver_content` da entrada lida.
+- **Erros novos do I13:** `PriorAttemptEnvironmentChangedError`,
+  `PriorAttemptInputChangedError`, `PriorAttemptDivergenceError`.
 - **`JudgedGeneration`** (dto): `preregistration_ref`, `partition`,
   `generation_digest`, `refresh_status`, `files` (caminho relativo → sha256).
 - **`EvaluationEnvironment`** (port-out do consumidor): `snapshot() -> Mapping[str, str]`
@@ -328,8 +343,11 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
   `JudgedGenerationTamperedError`, `JudgedGenerationMismatchError`,
   `JudgedGenerationExistsError`, `PriorAttemptCodeChangedError`,
   `InvalidDeviationError`.
-- **`inference_commands.infer`** (7.1, modificado): devolve o resumo do
-  `RunInferenceResult` ao `cli.py` em vez de só `0`.
+- **`inference_commands.infer_with_summary`** (7.1, função nova ao lado de
+  `infer`): roda o mesmo `RunInference` e devolve o resumo (runs, `strict` ×
+  `tolerance`, max |Δ|, linhas `calib` verificadas); `infer` passa a chamá-la e
+  continua devolvendo o exit code — o contrato existente e seus testes não
+  mudam.
 - **Subcomando `evaluate`** (adapter primário, `cli.py` + módulo de comandos do
   `evaluation` sob `adapters/in/cli/`):
   `python -m financial_forecasting.cli evaluate --data-root <dir> --cohort <toml> --preregistration aapl_confirmatory --revision 3 --preregistration-ref <ref> [--break-stale-lock] [--deviation "<justificativa com [deviation]>"]`.
@@ -338,8 +356,11 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
 - **Registro de atestação** `config/preregistration/<nome>-r<rev>.judged.toml`
   (formato de repositório, como o `.anchor.toml` do ADR 6.5.0003 item 2):
   `preregistration_ref`, `generation_digest`, `refresh_status`, `commit`,
-  `tag`, `comment_url`, `commented_at`, `input_backup`, `input_backup_sha256`
-  (D7, D10) — verdade cruzada conferida pelo G4 (D12).
+  `tag`, `comment_url`, `commented_at`, `input_backup`, `input_backup_sha256`,
+  `judged_backup`, `judged_backup_sha256` (D7, D10) — verdade cruzada
+  conferida pelo G4 (D12). Os dois `*_sha256` têm a mesma forma: sha256 dos
+  bytes da listagem `sha256sum` (ordenada, caminhos relativos POSIX, LF) do
+  diretório copiado, gravada ao lado do backup.
 
 ### Consumidos
 
@@ -378,14 +399,25 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
   `anchored_at` da r3 (o scorecard já marca o contrário como
   `GOLD_BEFORE_ANCHOR`, ADR 6.5.0003 item 3).
 - **I13 — Números existem desde o E1.** A tentativa é registrada antes do
-  `RefreshGold`; toda tentativa da partição aparece no `run_record.json`. Uma
-  tentativa sem selo da mesma revisão só é repetida com o mesmo `code.src` e
-  `code.uv_lock` (R-BIT: o resultado é o mesmo) ou com `--deviation` citando
-  um `[deviation]`; tentativa ou geração viva de outra revisão bloqueia
-  (D12).
+  `RefreshGold`; toda tentativa da partição aparece no `run_record.json`. Uma tentativa sem selo da mesma revisão só é repetida com o **mesmo código**
+  (`code.src`, `code.uv_lock`), o **mesmo ambiente** do R-BIT (id da imagem,
+  plataforma, capacidade de CPU, versões) e a **mesma entrada**
+  (`silver_content` e `dataset_fingerprint` do manifesto); senão só com
+  `--deviation` citando um `[deviation]`. Código e ambiente são conferidos no
+  G4 contra a tentativa anterior; a entrada, logo depois do E1, contra o
+  `silver_content` gravado pela tentativa anterior. Se uma geração viva
+  (`current/`) desta revisão já existe, ela é lida pelo `GoldGenerationReader`
+  antes do E1 e a tentativa registra seu `silver_content`; depois do E1, a
+  geração nova tem de ser **igual** na camada de resultado (tabelas por valor e
+  manifesto sem os timestamps) — diferente com código, ambiente e entrada
+  iguais é falha do R-BIT: `[finding]`, `PriorAttemptDivergenceError`, nada
+  selado (doc de domínio §4.2: parada para diagnóstico); tentativa ou geração viva de outra revisão bloqueia (D12).
 - **I14 — Verdade cruzada fora do `data_root`.** Um `.judged.toml` commitado
   de outra revisão bloqueia; um da mesma revisão exige a cópia selada com o
-  mesmo `generation_digest` (apagar ou trocar a cópia não abre re-julgamento).
+  mesmo `generation_digest` (apagar ou trocar a cópia não abre re-julgamento). A recuperação de uma
+  cópia adulterada ou perdida não tem caminho no código: é restaurar o
+  backup selado da cópia (D7, sha256 no `.judged.toml`) depois de um
+  `[deviation]` commitado.
 - **I4 — Uma geração julgada por partição.** `judged/<preregistration_ref>/`
   existe no máximo uma vez e nunca é sobrescrita nem apagada pelo código. Com
   ela selada, a corrida não chama o refresh nem o scorecard (D3). Uma revisão
@@ -446,7 +478,9 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
 | Geração julgada selada e íntegra | G4 | `ALREADY_JUDGED`, devolve o registro; sem refresh, scorecard nem escrita |
 | Geração julgada com digest divergente ou arquivo faltando | G4 | `JudgedGenerationTamperedError`; zero efeito; diagnóstico humano |
 | Sobra de staging de corrida interrompida | E3 | removida pelo `preserve` antes de copiar (como `.staging/` do ADR 6.4.0005 item 5) |
-| `GridFingerprintMismatchError`, cohort vazio, linha mal-formada, não-finito no silver | E1 | propaga do `RefreshGold`; `current/` intacto; nada selado; re-execução permitida (determinística) |
+| `GridFingerprintMismatchError`, cohort vazio, linha mal-formada, não-finito no silver | E1 | propaga do `RefreshGold`; `current/` intacto; nada selado; tentativa fica registrada; re-execução só nas condições do I13 |
+| Entrada (`silver_content`/`dataset_fingerprint`) diferente da tentativa anterior sem `--deviation` | depois do E1 | `PriorAttemptInputChangedError`; nada selado; `[finding]` |
+| Geração nova ≠ geração viva anterior com código, ambiente e entrada iguais | depois do E1 | `PriorAttemptDivergenceError`; nada selado; `[finding]` e diagnóstico (R-BIT) |
 | Refresh `BLOCKED` | E1 → E3 | sem scorecard; `preserve` com status `BLOCKED` e checks que falharam; status `BLOCKED`; na corrida real, `[finding]` e parada para decisão humana (I5) |
 | Gold corrompido ou de outro plano na leitura do scorecard | E2 | erros da 6.5 (`GoldGenerationCorruptError`, `PreregistrationMismatchError`) propagam; nada selado |
 | Manifesto copiado ≠ publicado / ≠ lido pelo scorecard | E3 | `JudgedGenerationMismatchError`; staging descartado; nada selado |
@@ -454,9 +488,12 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
 | Falha de escrita na cópia | E3 | `OSError` propaga; staging fica para o próximo `preserve` limpar; nada selado |
 | Exceção em qualquer ponto depois de G3 | use case | lock liberado em `finally` |
 
-Re-executar depois de qualquer falha antes do selo é seguro: a cadeia é
-determinística (doc de domínio §4.2), então a nova geração tem o mesmo
-resultado da que não foi selada; só a proveniência muda.
+Re-executar depois de uma falha antes do selo **não** é livre: os números já
+existem desde o E1 (I13). É permitido só com o mesmo código, o mesmo ambiente
+e a mesma entrada — condições em que o R-BIT garante o mesmo resultado, e o
+use case confere isso contra a geração viva anterior —; fora delas, só como
+desvio registrado (`--deviation`). Antes de cada `evaluate` real, o runbook
+commita no technical §7 a intenção da tentativa (D12).
 
 ## 7. Decisões técnicas relevantes
 
@@ -612,7 +649,10 @@ resultado da que não foi selada; só a proveniência muda.
   `generation_digest`, status, commit, tag, `started_at`/`finished_at` do
   manifesto, prontidão e o veredito por horizonte); grava
   `config/preregistration/aapl_confirmatory-r3.judged.toml` com os campos do §4
-  (`commented_at` = `created_at` do servidor) e o commita. Antes de postar,
+  (`commented_at` = `created_at` do servidor) e o commita. Antes disso, copia
+  `judged/<ref>/` para fora do `data_root` (backup selado, listagem
+  `sha256sum` ao lado; caminho e sha256 no `.judged.toml`) — é a única
+  recuperação de uma cópia perdida ou adulterada (I14). Antes de postar,
   procura o digest nos comentários da issue (não duplica).
 - **Por quê:** o comentário dá, com timestamp do servidor, o limite
   **superior** do primeiro refresh confirmatório (o refresh terminou antes do
@@ -645,7 +685,15 @@ resultado da que não foi selada; só a proveniência muda.
 - **O quê:** uma Task antes da corrida real mede, em silver **sintético** com
   as contagens do §3 (≈ 11 M linhas consumidas), o `RefreshGold` com e sem o
   hash: tempo por etapa e pico de memória sob o limite de recursos do projeto
-  (`--memory 8g`). O technical fixa o limiar; passar é pré-condição do A13.
+  (`--memory 8g`). **Limiar fixado aqui, antes da medição:** pico de memória
+  do processo ≤ 6 GiB e acréscimo de tempo do hash ≤ 30 min sobre o refresh
+  sem hash. **Plano B declarado**, mesma definição de identidade só onde
+  possível: memória acima → unidades mais finas `(tabela, run_id, year,
+  horizon)` (muda a chave da unidade, não a canonização; decidido antes da
+  corrida real); tempo acima → canonização colunar (por coluna do Arrow/pandas
+  em vez de dict por linha), mesmo digest, provado igual ao da versão por linha
+  num teste. Reprovar também no plano B → `[finding]` e revisão do concept
+  antes de qualquer tentativa real. Passar é pré-condição do A12.
 - **Por quê:** o refresh descarta as linhas cruas depois de convertê-las
   (`_read_records`), e canonizar ≈ 11 M linhas × ≈ 15 colunas em Python tem
   custo que não foi medido; descobrir na corrida real seria descobrir com a
@@ -656,15 +704,20 @@ resultado da que não foi selada; só a proveniência muda.
 
 - **O quê:** registro write-ahead da tentativa antes do E1; G4 confere
   `.judged.toml` commitados, cópias seladas, tentativas e a geração viva
-  (`current/MANIFEST.json` traz a `preregistration_ref`); re-execução depois
-  de tentativa sem selo só com o mesmo código ou `--deviation` com
-  `[deviation]`; tentativas interrompidas também registradas no technical §7
-  (commitado) pelo runbook.
+  (lida pelo `GoldGenerationReader` existente); re-execução depois de
+  tentativa sem selo só com mesmo código + mesmo ambiente + mesma entrada (I13)
+  ou `--deviation` com `[deviation]`. A fonte durável é o git: antes de cada
+  `evaluate` real, o runbook commita no technical §7 a **intenção** da
+  tentativa (commit, `code.src`, id da imagem, plataforma, capacidade de CPU,
+  hora); nenhum mecanismo de código novo para isso. Resíduo declarado:
+  apagar `gold/` ou restaurar o backup do `data_root` apaga o registro de
+  tentativas local, mas não o commitado.
 - **Por quê:** o E1 publica números antes do selo, e o primeiro refresh
   confirmatório é o da 8.1 (ADR 6.5.0003 item 4); sem isso, uma queda entre E1
   e E3 ou uma r4 abriria um segundo julgamento, e o `data_root` git-ignorado
   poderia ser apagado ou restaurado sem rastro (doc de domínio §4.6). A
-  re-execução com o mesmo código é neutra pelo R-BIT.
+  re-execução com mesmo código, ambiente e entrada é neutra pelo R-BIT, e a
+  comparação com a geração viva anterior verifica isso em vez de supor.
 - **Fonte:** Checkpoint A (DT-1, DT-2, CA-1, CA-2, CA-3); ADR 6.5.0003; ADR
   7.1.0003 item 3 (justificativa que cita o registro).
 - **ADR:** [`8.1.0004`](../../adr/8_1_0004-single-judgment-attempt-log-committed-record-deviation.md)
@@ -708,8 +761,8 @@ resultado da que não foi selada; só a proveniência muda.
 - `analytics_store` (4.x): o `ParquetAnalyticsRepository` passa a responder
   `columns(layer, table)` pelo metadado `SilverTable` (port do consumidor
   `SilverTableReader` ampliado; contrato `[fake, real]`).
-- `inference` (7.1): só pelo `cli.py` (`infer` antes do use case; o comando
-  `infer` passa a devolver o resumo do resultado); nenhuma aresta nova de
+- `inference` (7.1): só pelo `cli.py` (`infer` antes do use case; o resumo
+  vem de `infer_with_summary`, e o `infer` segue igual); nenhuma aresta nova de
   import do `evaluation` para o `inference`.
 - `modeling` (5.5): o `JsonCohortProgressLedger` e o probe de ambiente
   satisfazem ports do consumidor do `evaluation` por duck typing; montagem no
@@ -776,7 +829,8 @@ ficam no manifesto.
 | R10 — r3 alterada em `HEAD` | B | A | G1 recusa (hash ≠ esperado) antes de qualquer efeito |
 | R11 — Comentário duplicado | B | B | runbook procura o digest nos comentários antes de postar |
 | R12 — Tipo numérico do leitor real (DuckDB → pandas: NaN → `None`, `seed` `Int64` anulável como float) | M | M | canonização pelo tipo declarado no schema do silver (D4); testes com o `ParquetAnalyticsRepository` real (A2) |
-| R13 — `data_root` apagado/restaurado e tentativa sem selo (re-julgamento sem rastro) | B | A | `.judged.toml` commitado, registro de tentativas e geração viva no G4; tentativas interrompidas também no technical §7 (D12) |
+| R13 — `gold/` apagado ou backup do `data_root` restaurado (some o registro local de tentativas) | B | A | fonte durável é o git: intenção de cada tentativa commitada no technical §7 antes do `evaluate` real; `.judged.toml` commitado e geração viva conferidos no G4 (D12) |
+| R15 — Cópia julgada perdida ou adulterada depois do selo | B | A | backup selado de `judged/<ref>/` com sha256 no `.judged.toml`; recuperação = `[deviation]` commitado + restauração conferida por `sha256sum -c` (I14) |
 | R14 — Silver mudado depois da 8.1 (#163/#58, upsert) antes da 8.2 | M | A | backup do D10 é a entrada congelada da 8.2 (caminho + sha256 no `.judged.toml`); a 8.2 confere `silver_content` |
 
 ## 11. Critérios de aceitação
@@ -817,12 +871,18 @@ Código (silver sintético; nenhum teste toca o cohort real):
   de outra revisão; tentativa de outra revisão; `current/` com outra
   `preregistration_ref`; `current/` desta revisão sem tentativa registrada;
   tentativa desta revisão com outro `code.src` e sem `--deviation`;
-  `--deviation` sem `[deviation]`.
+  tentativa desta revisão com outro ambiente (id da imagem, plataforma ou
+  capacidade de CPU) e sem `--deviation`; `--deviation` sem `[deviation]`;
+  `find` devolve cópia selada coerente cujo `generation_digest` ≠ o do
+  `.judged.toml` (o use case confere; o store não conhece o digest esperado).
+  Depois do E1 (fakes): entrada diferente da tentativa anterior →
+  `PriorAttemptInputChangedError`; geração nova ≠ geração viva anterior com
+  tudo igual → `PriorAttemptDivergenceError`; nos dois, nada selado.
 - [ ] **A5** — Replay e tentativas: selada e íntegra → `ALREADY_JUDGED`, zero
   chamadas ao refresh e ao scorecard, corpo de atestação igual ao do `JUDGED`;
   queda simulada entre E1 e E3 → tentativa registrada, nada selado;
-  re-execução com o mesmo código → corrida completa e duas tentativas no
-  `run_record.json`; com código diferente e `--deviation` válido → corrida
+  re-execução com mesmo código, ambiente e entrada → corrida completa, geração
+  igual à viva anterior e duas tentativas no `run_record.json`; com código diferente e `--deviation` válido → corrida
   completa com o desvio registrado na tentativa e no `run_record.json`; sobra
   de staging → removida.
 - [ ] **A6** — `JudgedGenerationStore` (contrato `[fake, real]`, real =
@@ -830,11 +890,11 @@ Código (silver sintético; nenhum teste toca o cohort real):
   arquivos igual e não vazio), grava os documentos e `CONTENTS.sha256` por
   último; `generation_digest` = sha256 dos bytes de `CONTENTS.sha256`;
   `find` → `JudgedGenerationTamperedError` com um byte alterado, um arquivo
-  faltando, um arquivo extra, `CONTENTS.sha256` reescrito coerente mas digest
-  ≠ o do `.judged.toml`, e `generation/` vazio; manifesto copiado ≠
+  faltando, um arquivo extra e `generation/` vazio; com `CONTENTS.sha256`
+  reescrito de forma coerente, `find` devolve o digest novo (o caso é do A4); manifesto copiado ≠
   `expected_manifest` → `JudgedGenerationMismatchError` sem selo; `preserve`
   sobre selada → `JudgedGenerationExistsError` sem tocar nada;
-  `record_attempt`/`attempts`/`judged_refs`/`live_manifest` coerentes.
+  `record_attempt`/`attempts`/`judged_refs` coerentes.
 - [ ] **A6b** — Use case: `ScorecardResult.manifest_read` ≠ manifesto publicado
   → `JudgedGenerationMismatchError`, nada selado (I8).
 - [ ] **A7** — Caminho `BLOCKED`: silver sintético que bloqueia → status
@@ -865,15 +925,18 @@ Código (silver sintético; nenhum teste toca o cohort real):
   métodos novos, docs).
 - [ ] **A17** — Gate de custo (D11): `RefreshGold` sobre silver sintético com
   as contagens do §3, hash ligado × desligado, tempo por etapa e pico de
-  memória sob `--memory 8g` registrados no technical §7 e dentro do limiar
-  que o technical fixa — **antes** do A12.
+  memória sob `--memory 8g` registrados no technical §7: pico ≤ 6 GiB e
+  acréscimo do hash ≤ 30 min (D11), ou o plano B do D11 aprovado com os
+  mesmos limites — **antes** do A12.
 
 Execução real (cohort `aapl_confirmatory-r0-665f45d9169a`, r3):
 
 - [ ] **A12** — Pré-condições registradas no technical §7 antes de rodar: A17
   aprovado; 60/60 checkpoints do confirmatório em `ARTIFACTS_ROOT`; nenhum
   `gold/` no `data_root`; backup do `data_root` com sha256 conferido; commit
-  limpo; id da imagem anotado.
+  limpo; id da imagem anotado; **intenção da tentativa commitada** no
+  technical §7 (commit, `code.src`, id da imagem, plataforma, capacidade de
+  CPU, hora) antes de cada `evaluate` real.
 - [ ] **A13** — `evaluate` roda até o fim: `infer` com 60 runs (modo e max |Δ|
   registrados), status `JUDGED` ou `BLOCKED`, `judged/aapl_confirmatory-r3-00fd83d9cd39/`
   selado, `ATTEMPTS.jsonl` com as tentativas; com `JUDGED`, o scorecard
@@ -896,7 +959,9 @@ Execução real (cohort `aapl_confirmatory-r0-665f45d9169a`, r3):
   descritiva e o conformal rotulado "cobertura empírica (não garantida)",
   cujo `created_at` é posterior ao `anchored_at` da r3;
   `config/preregistration/aapl_confirmatory-r3.judged.toml` commitado com os
-  campos do §4 (inclusive `input_backup` e `input_backup_sha256`); depois do
+  campos do §4 (inclusive `input_backup`, `judged_backup` e os dois sha256);
+  `sha256sum -c` da listagem do backup de `judged/<ref>/` passa e o sha256 da
+  listagem é igual ao do `.judged.toml`; depois do
   commit, uma terceira execução de `evaluate` → `ALREADY_JUDGED` (G4 confere o
   registro commitado); entrada no technical §7 com os tempos por etapa do
   refresh e toda tentativa.
