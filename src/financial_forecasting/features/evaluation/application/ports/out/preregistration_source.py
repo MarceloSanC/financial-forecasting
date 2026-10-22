@@ -27,6 +27,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     RefreshStatus,
 )
 from financial_forecasting.shared.application.exceptions import ApplicationError
+from financial_forecasting.shared.domain.services.git_commit import validate_git_commit_sha
 from financial_forecasting.shared.domain.services.sha256_hex import validate_sha256_hex
 
 ANCHOR_TAG_PREFIX: Final = "preregistration/"
@@ -34,9 +35,6 @@ ANCHOR_TAG_PREFIX: Final = "preregistration/"
 
 JUDGED_TAG_PREFIX: Final = "confirmatory-run/"
 """Prefixo da tag git da corrida julgada (concept 8.1 D7: `confirmatory-run/<ref>`)."""
-
-_COMMIT_LENGTH: Final = 40
-_HEX_DIGITS: Final = frozenset("0123456789abcdef")
 
 
 class PreregistrationNotFoundError(ApplicationError):
@@ -150,13 +148,7 @@ class JudgedRecord:
             raise ValueError(
                 f"judged refresh_status must be a RefreshStatus, got {self.refresh_status!r}"
             )
-        commit = self.commit
-        if (
-            not isinstance(commit, str)
-            or len(commit) != _COMMIT_LENGTH
-            or set(commit) - _HEX_DIGITS
-        ):
-            raise ValueError(f"judged commit must be 40 lowercase hex characters, got {commit!r}")
+        validate_git_commit_sha(self.commit, field="judged commit")
         expected_tag = f"{JUDGED_TAG_PREFIX}{self.preregistration_ref}"
         if self.tag != expected_tag:
             raise ValueError(f"judged tag must be {expected_tag!r}, got {self.tag!r}")

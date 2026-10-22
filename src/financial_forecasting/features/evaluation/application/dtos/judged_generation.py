@@ -42,6 +42,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
 from financial_forecasting.features.evaluation.application.dtos.silver_content import (
     SilverContent,
 )
+from financial_forecasting.shared.domain.services.git_commit import validate_git_commit_sha
 from financial_forecasting.shared.domain.services.path_identifier import (
     validate_path_identifier,
 )
@@ -57,8 +58,6 @@ GENERATION_MANIFEST: Final = f"{GENERATION_DIR}/{MANIFEST_NAME}"
 """O manifesto copiado de `current/`."""
 
 _LISTING_LINE: Final = re.compile(r"([0-9a-f]{64})  ([^\r\n]+)")
-_COMMIT_LENGTH: Final = 40
-_HEX_DIGITS: Final = frozenset("0123456789abcdef")
 _CODE_PREFIX: Final = "code."
 _ENV_PREFIX: Final = "env."
 
@@ -406,13 +405,7 @@ class JudgedAttempt:
             self._check_input_read()
 
     def _check_started(self) -> None:
-        commit = self.commit
-        if (
-            not isinstance(commit, str)
-            or len(commit) != _COMMIT_LENGTH
-            or set(commit) - _HEX_DIGITS
-        ):
-            raise ValueError(f"attempt commit must be 40 lowercase hex characters, got {commit!r}")
+        validate_git_commit_sha(self.commit, field="attempt commit")
         object.__setattr__(
             self, "code", _check_prefixed_map(self.code, prefix=_CODE_PREFIX, field="attempt code")
         )
