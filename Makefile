@@ -222,8 +222,9 @@ arch-ast:
 # toda Stage tem issue correspondente no backlog do GitHub (CONVENTIONS
 # §3 + GIT-WORKFLOW.md §Princípios fundamentais #1; best-effort — pula se
 # `gh` não está autenticado), (3) que todo ADR declara um
-# `bounded_context` do conjunto do roadmap (CONVENTIONS §2), (4) que
-# concept tocando concern transversal declara o teste da solução mais
+# `bounded_context` do conjunto do roadmap (CONVENTIONS §2), (3b) que
+# nenhum número de ADR se repete e o `adr_id` bate com o nome do arquivo
+# (CONVENTIONS §1, issue #190), (4) que concept tocando concern transversal declara o teste da solução mais
 # direta no §12 (RUNBOOK Passo 1b/5) e (5) que os docs normativos vivos
 # (docs/ + templates + runbooks + os SKILL.md de .claude/skills/) não
 # carregam padrões conhecidos de drift (ponteiros/frases defasadas).
@@ -232,6 +233,7 @@ docs-check:
 	uv run python scripts/check_technical_postexec.py
 	uv run python scripts/check_stage_issue.py
 	uv run python scripts/check_adr_bounded_context.py
+	uv run python scripts/check_adr_numbering.py
 	uv run python scripts/check_concept_directness.py
 	uv run python scripts/check_docs_pointers.py
 	uv run python scripts/check_harness.py
