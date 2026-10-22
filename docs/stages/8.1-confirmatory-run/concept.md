@@ -3,7 +3,7 @@ title: Concept — Stage 8.1 — Corrida confirmatória ponta a ponta (cohort pe
 description: Use case RunConfirmatoryEvaluation que, depois do infer idempotente, valida a revisão ancorada r3, roda o RefreshGold derivado do plano e o BuildConfirmatoryScorecard e preserva a geração julgada (gold + manifesto + scorecard + registro de execução) numa cópia imutável com digest de conteúdo; hash de conteúdo do silver lido gravado no manifesto do gold por um VO de identidade novo; atestação por registro versionado, tag e comentário na issue
 when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; antes de rodar ou re-rodar a corrida confirmatória; ao consumir a geração julgada na 8.2 (reprodução) ou na 8.3 (plots e dossiê); ao questionar por que a corrida recusa re-julgar, por que o hash do silver não é o dos bytes do Parquet ou onde fica a cópia julgada
 keywords: [concept, confirmatory-run, evaluation, orchestration, refresh-gold, scorecard, preregistration, r3, judged-generation, content-hash, silver-content-hash, provenance, reproducibility, replay, idempotency, anchor, blinding]
-status: draft
+status: done
 created_at: 2026-10-22
 updated_at: 2026-10-22
 stage_id: 8.1-confirmatory-run
