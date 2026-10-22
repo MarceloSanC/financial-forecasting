@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-10-21
-last_reviewed_at: 2026-10-21
+updated_at: 2026-10-22
+last_reviewed_at: 2026-10-22
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -68,7 +68,7 @@ graph LR
 | 4 | Analytics store (silver) | Silver modular (schema por tabela), repositório append-only, persister único de predições multi-horizonte | done | 4.1–4.3 |
 | 5 | Modelagem, baselines e treino | TFT re-treinado + GBM quantílico + baselines naive/estatísticos sobre walk-forward purgado/embargoado; cohort confirmatório AAPL | done | 5.1–5.5 |
 | 6 | Núcleo estatístico confirmatório | Pipeline gold confirmatória: pinball/CRPS/DM/MCS/Holm/PICP-Christoffersen + gates + scorecard pré-registrado, no domínio e validada por oráculo | done | 6.1–6.6 |
-| 7 | Inferência, conformal, explicabilidade e API | Motor de inferência + conformal CQR (benchmark) + explicabilidade (VSN/permutação/ablação) servidos por API fina | in_progress | 7.1–7.4 |
+| 7 | Inferência, conformal, explicabilidade e API | Motor de inferência + conformal CQR (benchmark) + explicabilidade (VSN/permutação/ablação) servidos por API fina | done | 7.1–7.4 |
 | 8 | Reprodução, equivalência e relatório | Protocolo completo em AAPL; equivalência vs evidência anterior auditada; plots e dossiê de rastreabilidade | not_started | 8.1–8.3 |
 
 **Legenda de status (Step):** `not_started`, `in_progress`, `blocked`, `done`, `deprecated`.
@@ -108,7 +108,7 @@ graph LR
 | `7.1-inference-engine` | inference | multi (application + adapters/out) | vertical | done | 5.4, 4.3 |
 | `7.2-conformal-cqr` | inference | multi (domain + application + adapters/out; + evaluation) | vertical | done | 7.1, 5.1 |
 | `7.3-explainability` | inference | multi (modeling + inference + analytics_store + evaluation; Windows + Linux) | vertical | done | 7.1, 6.1, 7.2 |
-| `7.4-inference-api` | inference | multi (domain + application + adapters/in/http; + evaluation application; shared http) | vertical | draft | 7.2, 7.3 |
+| `7.4-inference-api` | inference | multi (domain + application + adapters/in/http; + evaluation application; shared http) | vertical | done | 7.2, 7.3 |
 | `8.1-confirmatory-run` | evaluation | application (orquestração) | vertical | draft | 6.5, 6.6, 7.1, 7.2, 7.3 |
 | `8.2-equivalence-audit` | evaluation | application + tests | vertical | draft | 8.1 |
 | `8.3-plots-and-final-report` | evaluation | adapters/out + docs | vertical | draft | 8.2 |
@@ -1295,6 +1295,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 | 2026-10-18 | Bloco da 7.3 refinado: estatística de H3 no domain do evaluation e gold pelo `RefreshGold` (não no domain do inference), predições permutadas e VSN pelo port do modeling em duas tabelas silver novas (sem adapter de VSN no inference), cohort de ablação por referência ao confirmatório com identidade por configuração, device por instância do treinador, r3 única ancorada no Linux, fases Windows/Linux; `contratos_consumidos` de 7.4 e 8.1 passam a nomear as tabelas gold de H3; lacuna do pré-registro de H3 fechada | Concept 7.3 (issue #186; ADRs 7.3.0001–7.3.0006) |
 | 2026-10-19 | Stage `7.2-conformal-cqr` `done`; Step 7 segue `in_progress`. Revisão r2 ancorada (`aapl_confirmatory-r2-f32ef5ebbbb8`, tag `preregistration/aapl_confirmatory-r2-f32ef5ebbbb8`, comentário na #158); prova de geometria real (Etapa G) verde, só de geometria: 60/60 runs (6 folds × 10 seeds), manifesto com 60 `completed`, sem métrica nem `gold/` | Fechamento da Stage 7.2 (issue #158; ADRs 7.2.0001–7.2.0005; technical 7.2 §7) |
 | 2026-10-21 | Bloco da 7.4 alinhado ao concept: serve as predições de teste gravadas (sem ports de checkpoint nem partição `calib`), `ServeInference` no lugar de `RunInferencePort`, port `ServingGoldReader` com leitor `ReadServingGold` no evaluation (aresta evaluation → inference como exceção declarada ao ADR 0.0.0053), handler `ApplicationError → 500`; camada multi e arquivos completos; `gate_mode: batch` justificado; atualização contínua fora (job agendado) | Concept 7.4 (issue #201; ADRs 7.4.0001–7.4.0002) |
+| 2026-10-22 | Stage `7.4-inference-api` `done`; Step 7 `done` (última Stage do step). `POST /inference/run` serve as predições de teste gravadas do candidato, uma entrada por seed, com o intervalo conformal da variante de registro e a leitura de H3 lidos do gold por port do consumidor (`ServingGoldReader` ← `ReadServingGold` do evaluation; aresta evaluation → inference declarada, 41 → 42); 404 "não há dados para o pedido solicitado"; gold ausente → blocos `unavailable`. Execução real (CA12): 200 em 1,46 s com 20/20 membros iguais ao `value_guardrail` gravado e gold não publicado; D15: pedido com gold sintético do tamanho do real em ≤ 2,51 s (sem cache). Follow-ups #202 (job agendado), #203, #204 | Fechamento da Stage 7.4 (issue #201; ADRs 7.4.0001–7.4.0002; technical 7.4 §7) |
 
 ## Próxima revisão de roadmap
 
