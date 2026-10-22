@@ -384,7 +384,7 @@ def test_reader_single_assembly_every_leg(
     calls: list[int] = []
     original = GoldGeneration.from_stored.__func__  # type: ignore[attr-defined]
 
-    def spy(cls: type[GoldGeneration], *args: object, **kwargs: object) -> GoldGeneration:
+    def spy(cls: type[GoldGeneration], /, *args: object, **kwargs: object) -> GoldGeneration:
         calls.append(1)
         generation: GoldGeneration = original(cls, *args, **kwargs)
         return generation

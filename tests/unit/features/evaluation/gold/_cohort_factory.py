@@ -278,7 +278,7 @@ def with_calib(
     horizons = sorted({r.horizon for r in cohort.records if r.model == model})
     extra: list[ForecastRecord] = []
     for run in cohort.runs:
-        if run.model != model or run.fold not in calib_decisions:
+        if run.model != model or run.fold is None or run.fold not in calib_decisions:
             continue
         for horizon in horizons:
             rng = random.Random(f"calib|{model}|{run.seed}|{run.fold}|{horizon}")

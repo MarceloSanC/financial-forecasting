@@ -402,7 +402,7 @@ def _strip(rows: object, inputs: GoldInputs) -> list[dict[str, object]]:
 
 
 def _expected_dm(inputs: GoldInputs) -> list[dict[str, object]]:
-    rows = []
+    rows: list[dict[str, object]] = []
     for profile in inputs.profile_reports:
         report = profile.dm_profiles
         if report is None:
@@ -497,7 +497,7 @@ def _expected_mcs_block(inputs: GoldInputs) -> list[dict[str, object]]:
 
 
 def _expected_mc(inputs: GoldInputs) -> list[dict[str, object]]:
-    rows = []
+    rows: list[dict[str, object]] = []
     for profile in inputs.profile_reports:
         for unit in profile.monte_carlo:
             v = unit.values
@@ -552,7 +552,7 @@ def _expected_partial(inputs: GoldInputs) -> list[dict[str, object]]:
 def _expected_breaks(inputs: GoldInputs) -> list[dict[str, object]]:
     rules = inputs.parameters.profile_parameters
     assert rules is not None
-    rows = []
+    rows: list[dict[str, object]] = []
     for p in inputs.profile_reports:
         for r in p.stationarity or ():
             rep = r.report
