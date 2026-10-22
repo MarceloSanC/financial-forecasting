@@ -248,6 +248,16 @@ exceção declarada: composition_root é o **único** ponto onde o caminho indir
 `scripts/check_layout.py` não detecta esse caminho indireto (limitação
 documentada no script) — depende de revisão manual no gate de saída da Stage.
 
+**Routers de feature passam pela composition root (Stage 7.4).** O `app.py` não
+importa router de feature: `create_app(settings)` chama
+`composition_root.register_http_routes(app, deps, serving_cohort_file=...)`, que
+carrega cada router por `importlib` (o segmento `adapters/in/` é keyword, §8), troca o
+provedor do use case por `dependency_overrides` quando há configuração (ex.: o
+`ServeInference` montado UMA vez, na subida, a partir do arquivo de cohort) e inclui o
+router. Assim o `shared/http` continua importando só a composition root (contrato
+`shared-no-features`), e `FastAPI` fica sob `TYPE_CHECKING` na composition root — a CLI
+não carrega fastapi por ali.
+
 ---
 
 ## 7. Regras de Ouro
@@ -307,9 +317,12 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   `evaluation` — este desde a Stage 6.1 —, e `inference` — desde a Stage 7.1: seus
   ports do consumidor só têm imports de tipo; o contrato `inference-no-torch-leak`
   mantém `torch`/`lightning`/`pytorch_forecasting` fora da application/domain do
-  slice, ADR 7.1.0001 item 4; desde a Stage 7.2, o `inference-no-mapie-leak` mantém
+  slice, ADR 7.1.0001 item 4, e desde a Stage 7.4 também fora do pacote do router HTTP
+  `inference/adapters/in/http/` — a API serve o gravado e nunca carrega a pilha de deep
+  learning, provado também em runtime por um teste em subprocesso, ADR 7.4.0001 item 1;
+  desde a Stage 7.2, o `inference-no-mapie-leak` mantém
   `mapie`/`numpy`/`sklearn`/`scipy` fora dela — só o adapter
-  `inference/adapters/out/mapie/` os importa, ADR 7.2.0002 item 1). As 41 arestas de runtime existentes
+  `inference/adapters/out/mapie/` os importa, ADR 7.2.0002 item 1). As 42 arestas de runtime existentes
   estão declaradas UMA A UMA como exceção comentada (débito medido, não
   permissão) — as 8 `feature_engineering → market_data.domain.entities`
   (`Candle`, `NewsArticle`, `FundamentalReport`, #95), as seis
@@ -329,8 +342,21 @@ documentada no script) — depende de revisão manual no gate de saída da Stage
   `PersistPermutedPredictions`/`PersistVsnWeights`, as chaves do port do probe e o VO
   `QuantileForecast`, ADR 7.3.0002) e a do `evaluation.domain.services.attribution_assembly`
   (Stage 7.3: o VO `QuantileForecast` construído com os valores persistidos do silver de
-  atribuição, ADR 7.3.0001 item 1) são dados, pela regra da ADR
-  0.0.0053 — e **uma aresta nova reprova o build**. O que o gate não vê:
+  atribuição, ADR 7.3.0001 item 1) e a do
+  `evaluation.application.use_cases.read_serving_gold → inference.application.dtos.serving_gold`
+  (Stage 7.4: o leitor do gold servido monta os DTOs do port do consumidor
+  `ServingGoldReader`, ADR 7.4.0001 item 7) são dados, pela regra da ADR
+  0.0.0053 — e **uma aresta nova reprova o build**.
+
+  **Exceção de direção (Stage 7.4).** A regra da ADR 0.0.0053 (itens 2–3) é que o
+  fornecedor não importa o consumidor: o que cruza é o DTO do port-in do fornecedor. Quando
+  essa direção fecharia um ciclo entre slices — o `inference` importaria o `evaluation`,
+  que já importa o `inference` (`refresh_gold → calibrate_conformal`) —, o fornecedor
+  monta o **DTO do port-out do consumidor** e a aresta vai no sentido oposto, declarada
+  módulo a módulo (outro módulo do fornecedor com o mesmo import reprova). Único caso
+  hoje: `read_serving_gold → inference.application.dtos.serving_gold` (ADR 7.4.0001
+  item 7; nota de emenda no ADR 0.0.0053). O grafo entre slices continua acíclico. O
+  que o gate não vê:
 
   - **Arestas sob `if TYPE_CHECKING:` são invisíveis ao contrato**
     (`exclude_type_checking_imports = True`, ver §3). Hoje as únicas type-only
