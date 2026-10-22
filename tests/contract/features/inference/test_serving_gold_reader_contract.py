@@ -282,6 +282,13 @@ SCENARIOS: dict[str, Scenario] = {
         parameters=None,
         expected=_published("BLOCKED", conformal=_BLOCKED, explainability=_BLOCKED),
     ),
+    # BLOCKED vence a falta de bloco no pré-registro: o status é conferido antes (TA-4)
+    "blocked-without-blocks": Scenario(
+        status=RefreshStatus.BLOCKED,
+        rows={},
+        parameters=refresh_parameters(conformal=False, h3=False),
+        expected=_published("BLOCKED", conformal=_BLOCKED, explainability=_BLOCKED),
+    ),
     "completed-without-blocks": Scenario(
         status=RefreshStatus.COMPLETED,
         rows={},
