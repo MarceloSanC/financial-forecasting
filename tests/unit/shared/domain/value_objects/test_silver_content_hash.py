@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import struct
 from collections.abc import Mapping
+from typing import cast
 
 import numpy as np
 import pytest
@@ -134,13 +135,21 @@ def test_absent_column_and_null_hash_differently() -> None:
 
 @pytest.mark.unit
 def test_str_preserved() -> None:
-    columns: dict[str, tuple[str, bool]] = {"label": (KIND_STR, False), "code": (KIND_INT, False)}
+    as_str: dict[str, tuple[str, bool]] = {"label": (KIND_STR, False)}
+    as_int: dict[str, tuple[str, bool]] = {"label": (KIND_INT, False)}
 
-    assert _unit([{"label": "1"}], columns=columns) != _unit([{"code": 1}], columns=columns)
+    # Mesma tabela, mesma coluna: só o tipo declarado difere, e "1" nunca vira 1.
+    assert _unit([{"label": "1"}], columns=as_str) != _unit([{"label": 1}], columns=as_int)
+    assert _unit([{"label": "1"}], columns=as_str) != _unit([{"label": "01"}], columns=as_str)
     with pytest.raises(ValueError, match=r"int in a str column"):
-        _unit([{"label": 1}], columns=columns)
+        _unit([{"label": 1}], columns=as_str)
     with pytest.raises(ValueError, match=r"str in a int column"):
-        _unit([{"code": "1"}], columns=columns)
+        _unit([{"label": "1"}], columns=as_int)
+
+
+@pytest.mark.unit
+def test_float_column_accepts_integral_int() -> None:
+    assert _unit([{**_ROW_A, "quantile": 1}]) == _unit([{**_ROW_A, "quantile": 1.0}])
 
 
 @pytest.mark.unit
@@ -150,6 +159,10 @@ def test_created_at_utc_does_not_change_hash() -> None:
 
     # Não declarada nas colunas: sai antes da checagem de coluna declarada.
     assert _unit([early]) == _unit([late]) == _unit([_ROW_A])
+    # Declarada (como no schema real e no fake do `dim_run`): continua fora do hash.
+    declared = {**_COLUMNS, "created_at_utc": (KIND_STR, False)}
+    assert _unit([early], columns=declared) == _unit([late], columns=declared)
+    assert _unit([early], columns=declared) == _unit([_ROW_A])
 
 
 @pytest.mark.unit
@@ -192,5 +205,5 @@ def test_combine_depends_on_keys_and_digests() -> None:
 @pytest.mark.parametrize("value", ["abc", "A" * 64, "0" * 63, 123])
 def test_raw_constructor_validates_sha256_hex(value: object) -> None:
     with pytest.raises(ValueError, match=r"SilverContentHash\.value"):
-        SilverContentHash(value=value)
+        SilverContentHash(value=cast("str", value))  # entrada inválida de propósito
     assert SilverContentHash(value="0" * 64).value == "0" * 64
