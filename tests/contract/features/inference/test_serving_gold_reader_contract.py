@@ -18,7 +18,7 @@ na perna real, aqui e em `test_real_reads_what_the_real_builders_write`.
 
 Erro: a perna fake com `error=` e a perna real com a geração corrompida (tabela
 apagada) erguem `ApplicationError`. O leitor é anotado pelo Protocol do `inference`,
-conferido pelo mypy strict explícito da Task 04.
+conferido pelo mypy do `make typecheck`.
 """
 
 from __future__ import annotations
@@ -414,6 +414,7 @@ def test_corrupt_generation_raises_application_error(leg: str, tmp_path: Path) -
 
 
 def _undefined_vsn(inputs: GoldInputs) -> GoldInputs:
+    assert inputs.h3_reports.vsn is not None
     vsn = replace(inputs.h3_reports.vsn, status="undefined", reason="sem pesos", entries=())
     return replace(inputs, h3_reports=replace(inputs.h3_reports, vsn=vsn))
 
