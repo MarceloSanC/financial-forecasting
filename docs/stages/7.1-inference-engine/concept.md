@@ -5,7 +5,7 @@ when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; ao consumir as
 keywords: [concept, inference-engine, inference, checkpoint, calib, cqr-input, reproduction, bitwise, tolerance, normalized-space, dataset-parameters, consumer-owned-port, modeling, fact-oos-predictions, idempotency, write-ahead, manifest, writer-lock, cli, blinding]
 status: done
 created_at: 2026-10-06
-updated_at: 2026-10-06
+updated_at: 2026-10-22
 stage_id: 7.1-inference-engine
 stage_title: Motor de inferência
 step_id: 7
@@ -14,6 +14,8 @@ depends_on: [5.4-tft-trainer, 4.3-prediction-persister]
 ---
 
 # Concept — Stage 7.1 — Motor de inferência
+
+> ⚠️ **Errata (2026-10-22):** "cap. 6" → cap. 7 "Model Deployment and Prediction Service" (Huyen 2022, *Designing Machine Learning Systems*; o cap. 6 é "Model Development and Offline Evaluation") — ver Stage 7.4 (technical 7.4 §7, Checkpoint C3-3).
 
 > **Escopo deste documento:** o que será feito nesta Stage, por quê, e
 > decisões técnicas relevantes para entender o "porquê". O plano executável
@@ -847,6 +849,5 @@ exceções e sua hierarquia; formato exato do JSON do manifesto; se os fakes do
   `notes/randomness.md`, `notes/numerical_accuracy.md`), lidos na imagem pinada
 - Sandve, Nekrutenko, Taylor & Hovig (2013), *Ten Simple Rules for Reproducible
   Computational Research*, PLoS Comput Biol 9(10):e1003285
-- Huyen, C. (2022), *Designing Machine Learning Systems*, cap. 7 "Model Deployment and
-  Prediction Service" (errata de 2026-10-22, Stage 7.4: o localizador dizia "cap. 6") (skill
+- Huyen, C. (2022), *Designing Machine Learning Systems*, cap. 6 (skill
   `dmls-ch06-deployment-and-inference-decisions`)
