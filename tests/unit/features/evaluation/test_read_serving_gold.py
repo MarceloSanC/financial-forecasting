@@ -153,7 +153,7 @@ def share_row(method: str, family: str, **fields: object) -> dict[str, object]:
         "lower_infinite": False,
         "upper_infinite": False,
         "level": 0.9875,
-        "side": "two_sided",
+        "side": -1,
         "excludes_zero": False,
         "status": "ok",
         "reason": None,
@@ -422,7 +422,7 @@ def test_completed_generation_with_both_blocks() -> None:
             -math.inf,
             0.125,
             0.9875,
-            "two_sided",
+            -1,
             False,
             "ok",
             None,
@@ -436,7 +436,7 @@ def test_completed_generation_with_both_blocks() -> None:
             -0.5,
             None,
             0.9875,
-            "two_sided",
+            -1,
             False,
             "undefined",
             "Σ* <= 0",
@@ -450,7 +450,7 @@ def test_completed_generation_with_both_blocks() -> None:
             -0.5,
             math.inf,
             0.9875,
-            "two_sided",
+            -1,
             False,
             "ok",
             None,
@@ -583,3 +583,19 @@ def test_corrupt_generation_propagates_as_application_error() -> None:
     with pytest.raises(GoldGenerationCorruptError, match="table missing") as info:
         _read(reader)
     assert isinstance(info.value, ApplicationError)
+
+
+@pytest.mark.parametrize("side", [-1, 0, 1])
+def test_share_side_is_read_as_the_sign_of_delta(side: int) -> None:
+    rows = {**complete_rows(), GOLD_H3_SHARES.name: [share_row("permutation", "price", side=side)]}
+    (share,) = _read(_reader(rows=rows)).shares
+    assert share.side == side
+
+
+def test_share_side_stored_as_text_is_corruption() -> None:
+    rows = {
+        **complete_rows(),
+        GOLD_H3_SHARES.name: [share_row("permutation", "price", side="two_sided")],
+    }
+    with pytest.raises(GoldGenerationCorruptError, match="side: expected int"):
+        _read(_reader(rows=rows))

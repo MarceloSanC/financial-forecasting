@@ -123,7 +123,7 @@ def _shares(generation: GoldGeneration) -> tuple[H3ShareRecord, ...]:
             lower=_bound(row, "lower", -math.inf),
             upper=_bound(row, "upper", math.inf),
             level=col_float_or_none(row, schema, "level"),
-            side=col_str_or_none(row, schema, "side"),
+            side=col_int_or_none(row, schema, "side"),  # sinal de Δ̂_f em {-1, 0, +1}
             excludes_zero=col_bool_or_none(row, schema, "excludes_zero"),
             status=col_str(row, schema, "status"),
             reason=col_str_or_none(row, schema, "reason"),
