@@ -184,6 +184,9 @@ def _publish(
     rows[GOLD_CONFORMAL_CORRECTIONS.name] += [
         _inner_pair("lower", 0.001953125),
         _inner_pair("upper", 0.0009765625),
+        # fold "1", seed 1, h+1, par (0.1, 0.9): Q_lo = 2^-4, Q_hi = 2^-5 (C2-6)
+        correction_row("1", 1, "lower", correction=0.0625),
+        correction_row("1", 1, "upper", correction=0.03125),
     ]
     tables, manifest = generation(status, rows=rows, parameters=parameters)
     partition = GoldPartition(_ASSET, _COHORT)
@@ -293,6 +296,48 @@ def test_happy_path_serves_the_recorded_grid_with_literal_intervals(
     assert (share["method"], share["lower"], share["lower_infinite"]) == ("loco", None, True)
     assert body["gold"]["published"] is True
     assert body["gold"]["generation_status"] == "COMPLETED"
+
+
+def test_a_fold_1_decision_uses_the_unit_of_fold_1(api: _Post, tmp_path: Path) -> None:
+    _publish(tmp_path)
+    status, body = api(_request(date(2024, 3, 18), horizons=[1], seeds=[1]))
+    assert status == 200  # noqa: PLR2004
+    (member,) = body["forecasts"][0]["members"]
+    assert (member["fold"], member["run_id"]) == ("1", "f1s1")
+    _, middle, _ = member["conformal"]["intervals"]
+    # seed 1, h+1, fold 1: base = 1/512 + 1/4096 + 1/8192; q(0.1) = base - 2^-5,
+    # q(0.9) = base + 2^-5; (q_lo - 2^-4, q_hi + 2^-5)
+    assert (middle["lower_level"], middle["upper_level"], middle["status"]) == (0.1, 0.9, "ok")
+    assert (middle["lower"], middle["upper"]) == (-0.0914306640625, 0.0648193359375)
+    assert (middle["lower_infinite"], middle["upper_infinite"]) == (False, False)
+
+
+def test_reading_and_vsn_rows_reach_the_client(api: _Post, tmp_path: Path) -> None:
+    _publish(tmp_path)
+    _, body = api(_request())
+    reading = body["explainability"]["reading"]
+    assert reading == {
+        "reading_rule": "interval_side_agreement_same_family_v1",
+        "heterogeneous_permutation": True,
+        "heterogeneous_ablation": False,
+        "sustained": False,
+        "agreeing_families": ["price", "technical"],
+        "n_points": 1505,
+        "status": "ok",
+        "reason": None,
+    }
+    family = next(v for v in body["explainability"]["vsn"] if v["kind"] == "family")
+    assert family == {
+        "kind": "family",
+        "name": "price",
+        "family": "price",
+        "p10": 0.125,
+        "p50": 0.25,
+        "p90": 0.5,
+        "n_decisions": 1505,
+        "status": "ok",
+        "reason": None,
+    }
 
 
 def test_overlap_of_test_and_next_calib_is_served_by_the_test_run(
