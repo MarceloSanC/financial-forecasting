@@ -35,13 +35,14 @@ COMPLETED: Final = "COMPLETED"
 BLOCKED: Final = "BLOCKED"
 GENERATION_STATUSES: Final = frozenset({COMPLETED, BLOCKED})
 
-_BLOCK_STATUSES: Final = frozenset({AVAILABLE, UNAVAILABLE})
-_UNIT_STATUSES: Final = frozenset({OK, "undefined", "error"})
+BLOCK_STATUSES: Final = frozenset({AVAILABLE, UNAVAILABLE})
+UNIT_STATUSES: Final = frozenset({OK, "undefined", "error"})  # status de unidade da 7.2
 _TAILS: Final = frozenset({LOWER, UPPER})
 _SIDES: Final = frozenset({-1, 0, 1})
 
 
-def _check_not_nan(field: str, *values: float | None) -> None:
+def check_not_nan(field: str, *values: float | None) -> None:
+    """`ValueError` se algum valor é NaN (dono único da recusa no `inference`, C1-6)."""
     for value in values:
         if value is not None and math.isnan(value):
             raise ValueError(f"{field} must not be NaN")
@@ -74,9 +75,9 @@ class ConformalCorrectionRecord:
         """Cauda e status do catálogo da 7.2; cauda `ok` tem correção e `n` (I3 da 7.2)."""
         if self.tail not in _TAILS:
             raise ValueError(f"tail must be one of {sorted(_TAILS)}, got {self.tail!r}")
-        if self.status not in _UNIT_STATUSES:
-            raise ValueError(f"status must be one of {sorted(_UNIT_STATUSES)}, got {self.status!r}")
-        _check_not_nan("correction", self.correction)
+        if self.status not in UNIT_STATUSES:
+            raise ValueError(f"status must be one of {sorted(UNIT_STATUSES)}, got {self.status!r}")
+        check_not_nan("correction", self.correction)
         if self.status == OK and (self.correction is None or self.n is None):
             raise ValueError("an ok tail needs a correction and n")
 
@@ -101,7 +102,7 @@ class H3ShareRecord:
     def __post_init__(self) -> None:
         """Sem NaN; participação `ok` tem os dois limites."""
         _check_status(self.status)
-        _check_not_nan(
+        check_not_nan(
             "share", self.share_h1, self.share_h7, self.delta, self.lower, self.upper, self.level
         )
         if self.side is not None and (isinstance(self.side, bool) or self.side not in _SIDES):
@@ -147,12 +148,13 @@ class VsnRecord:
     def __post_init__(self) -> None:
         """Status não vazio; sem NaN."""
         _check_status(self.status)
-        _check_not_nan("vsn", self.p10, self.p50, self.p90)
+        check_not_nan("vsn", self.p10, self.p50, self.p90)
 
 
-def _check_block(name: str, status: str, reason: str | None, *records: Sized | None) -> None:
-    if status not in _BLOCK_STATUSES:
-        raise ValueError(f"{name}_status must be one of {sorted(_BLOCK_STATUSES)}, got {status!r}")
+def check_block(name: str, status: str, reason: str | None, *records: Sized | None) -> None:
+    """Bloco `available`/`unavailable` coerente: indisponível com motivo e sem registros."""
+    if status not in BLOCK_STATUSES:
+        raise ValueError(f"{name}_status must be one of {sorted(BLOCK_STATUSES)}, got {status!r}")
     if status == UNAVAILABLE:
         if not reason:
             raise ValueError(f"an unavailable {name} block needs a reason")
@@ -185,9 +187,9 @@ class ServingGold:
 
     def __post_init__(self) -> None:
         """Blocos coerentes com o status; não publicado sem campos de geração; rótulos."""
-        _check_block("conformal", self.conformal_status, self.conformal_reason, self.corrections)
+        check_block("conformal", self.conformal_status, self.conformal_reason, self.corrections)
         reading = None if self.reading is None else (self.reading,)
-        _check_block(
+        check_block(
             "explainability",
             self.explainability_status,
             self.explainability_reason,

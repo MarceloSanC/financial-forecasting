@@ -830,17 +830,17 @@ def test_payload_blocks_refuse_incoherent_states() -> None:
         replace(interval, gold_status="skipped")
     with pytest.raises(ValueError, match="NaN"):
         replace(interval, lower=math.nan)
-    with pytest.raises(ValueError, match="unavailable block carries no records"):
+    with pytest.raises(ValueError, match="unavailable conformal block carries no records"):
         replace(member.conformal, status=UNAVAILABLE, reason="x")
-    with pytest.raises(ValueError, match="unavailable block needs a reason"):
+    with pytest.raises(ValueError, match="unavailable conformal block needs a reason"):
         replace(member.conformal, status=UNAVAILABLE, intervals=())
-    with pytest.raises(ValueError, match="available block carries no reason"):
+    with pytest.raises(ValueError, match="available conformal block carries no reason"):
         replace(member.conformal, reason="x")
-    with pytest.raises(ValueError, match="block label"):
+    with pytest.raises(ValueError, match="conformal label must not be empty"):
         replace(member.conformal, label="")
     with pytest.raises(ValueError, match="variant must be"):
         replace(member.conformal, variant=_NEXCP)
-    with pytest.raises(ValueError, match="block status"):
+    with pytest.raises(ValueError, match="explainability_status must be one of"):
         replace(payload.explainability, status="partial")
     with pytest.raises(ValueError, match="vsn_label"):
         replace(payload.explainability, vsn_label="")

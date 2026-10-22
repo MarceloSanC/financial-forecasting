@@ -37,12 +37,15 @@ from financial_forecasting.features.inference.application.dtos.serving_gold impo
     LOWER,
     OK,
     UNAVAILABLE,
+    UNIT_STATUSES,
     UPPER,
     ConformalCorrectionRecord,
     H3ReadingRecord,
     H3ShareRecord,
     ServingGold,
     VsnRecord,
+    check_block,
+    check_not_nan,
 )
 from financial_forecasting.features.inference.application.ports.out.serving_gold_reader import (
     ServingGoldReader,
@@ -72,9 +75,7 @@ _VARIANT: Final = ConformalVariant.SPLIT_CQR
 _UNIT_MISSING: Final = "unidade ausente na geração gold"
 _OTHER_CANDIDATE: Final = "geração gold de outro candidato"
 _HALF: Final = Fraction(1, 2)
-_BLOCK_STATUSES: Final = frozenset({AVAILABLE, UNAVAILABLE})
 _INTERVAL_STATUSES: Final = frozenset({OK, UNAVAILABLE})
-_GOLD_STATUSES: Final = frozenset({OK, "undefined", "error"})
 
 
 def _is_int(value: object) -> bool:
@@ -90,12 +91,6 @@ def _check_ids(name: str, values: tuple[int, ...], *, positive: bool) -> None:
         raise ValueError(f"{name} must be unique and increasing, got {values!r}")
     if positive and values[0] < 1:
         raise ValueError(f"{name} must be >= 1, got {values!r}")
-
-
-def _check_no_nan(field: str, *values: float | None) -> None:
-    for value in values:
-        if value is not None and math.isnan(value):
-            raise ValueError(f"{field} must not be NaN")
 
 
 @dataclass(frozen=True)
@@ -175,27 +170,18 @@ class ConformalInterval:
         """Status do catálogo; `ok` ⇒ limites; `unavailable` ⇒ sem limites; sem NaN."""
         if self.status not in _INTERVAL_STATUSES:
             raise ValueError(f"interval status must be ok or unavailable, got {self.status!r}")
-        if self.gold_status is not None and self.gold_status not in _GOLD_STATUSES:
+        if self.gold_status is not None and self.gold_status not in UNIT_STATUSES:
             raise ValueError(f"gold_status outside the catalogue: {self.gold_status!r}")
-        _check_no_nan("interval limit", self.lower, self.upper)
+        check_not_nan("interval limit", self.lower, self.upper)
         if self.status == OK and (self.lower is None or self.upper is None):
             raise ValueError("an ok interval needs both limits")
         if self.status == UNAVAILABLE and (self.lower is not None or self.upper is not None):
             raise ValueError("an unavailable interval carries no limits")
 
 
-def _check_block(status: str, reason: str | None, label: str, *records: object) -> None:
-    if status not in _BLOCK_STATUSES:
-        raise ValueError(f"block status must be available or unavailable, got {status!r}")
+def _check_label(name: str, label: str) -> None:
     if not label:
-        raise ValueError("block label must not be empty")
-    if status == UNAVAILABLE:
-        if not reason:
-            raise ValueError("an unavailable block needs a reason")
-        if any(record not in ((), None) for record in records):
-            raise ValueError("an unavailable block carries no records")
-    elif reason is not None:
-        raise ValueError("an available block carries no reason")
+        raise ValueError(f"{name} label must not be empty")
 
 
 @dataclass(frozen=True)
@@ -210,7 +196,8 @@ class ConformalBlock:
 
     def __post_init__(self) -> None:
         """Bloco coerente com o status; variante de registro."""
-        _check_block(self.status, self.reason, self.label, self.intervals)
+        check_block("conformal", self.status, self.reason, self.intervals)
+        _check_label("conformal", self.label)
         if self.variant != _VARIANT.value:
             raise ValueError(f"variant must be {_VARIANT.value!r}, got {self.variant!r}")
 
@@ -249,7 +236,9 @@ class ExplainabilityBlock:
 
     def __post_init__(self) -> None:
         """Bloco coerente com o status; rótulo da VSN não vazio."""
-        _check_block(self.status, self.reason, self.label, self.shares, self.reading, self.vsn)
+        reading = None if self.reading is None else (self.reading,)
+        check_block("explainability", self.status, self.reason, self.shares, reading, self.vsn)
+        _check_label("explainability", self.label)
         if not self.vsn_label:
             raise ValueError("vsn_label must not be empty")
 
