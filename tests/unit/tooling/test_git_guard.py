@@ -236,6 +236,14 @@ def test_process_denies_branch_creation_on_a_later_segment(
     assert out["permissionDecision"] == "deny"
 
 
+def test_payload_with_utf8_bom_is_read(main_checkout: Path) -> None:
+    """Pipe do Windows PowerShell 5.1 prefixa BOM; sem `utf-8-sig` o hook calava (fail open)."""
+    payload = {"tool_input": {"command": "git switch -c feat/99-x"}, "cwd": str(main_checkout)}
+    result = _run("﻿" + json.dumps(payload))
+    out = json.loads(result.stdout)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny"
+
+
 def test_process_is_silent_on_safe_commands(main_checkout: Path) -> None:
     payload = {"tool_input": {"command": "git status\ngit log -1"}, "cwd": str(main_checkout)}
     assert _run(json.dumps(payload)).stdout == ""

@@ -359,7 +359,7 @@ def reason(
 
 def main() -> int:
     try:
-        payload: dict[str, Any] = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+        payload: dict[str, Any] = json.loads(sys.stdin.buffer.read().decode("utf-8-sig"))
     except (json.JSONDecodeError, UnicodeDecodeError):
         return 0
     command = str((payload.get("tool_input") or {}).get("command") or "")
