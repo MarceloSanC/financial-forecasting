@@ -1055,4 +1055,25 @@ seeds, 2 horizontes e ~1508 decisões, com `loss_differentials` = 2 × 21 pares 
 2,27 s e 2,51 s, abaixo do limiar de 5 s do D15. A Task extra de cache por manifesto
 não entra.
 
+### 2026-10-22 — [measurement] adendo ao C3-7 — os 60 checkpoints do confirmatório restaurados em `artifacts/tft` — Claude (sessão Windows)
+**Contexto:** o `[measurement]` do C3-7 achou os 60 checkpoints TFT do confirmatório
+só no backup `data/backups/tft-pre-7.4-20261022-030008/`, fora do `ARTIFACTS_ROOT`. Em
+seguida o orquestrador os copiou do backup para `artifacts/tft` do checkout principal,
+sem colisão de diretório.
+**Medição:** recontagem por listagem no checkout principal, depois da cópia:
+`artifacts/tft` tem **360** diretórios e **366** `.ckpt`. Os 60 `run_id` TFT do ledger
+`aapl_confirmatory-r0-665f45d9169a` têm diretório com `.ckpt` lá (60 de 60). O backup
+`tft-pre-7.4-20261022-030008/` continua com os 60 diretórios.
+**Razão:** o estado final é este:
+- O `ff-checkpoints-tft.tar` contém só os 300 checkpoints da ablação, e é a única cópia
+  arquivada deles; o "360 no tar" do handoff estava errado.
+- Os 60 do confirmatório estão em `artifacts/tft`, que é o `ARTIFACTS_ROOT` da
+  verificação `infer` da 8.1, e no backup, como segunda cópia.
+
+### 2026-10-22 — [deviation] Checkpoint C3-9 — #203 e #204 ficam sem label — Claude (sessão Windows)
+**Contexto e razão:** o label `chore` não existe no repositório, e o hook
+`publish_guard` recusa `gh issue edit` com label fora do fechamento autônomo. Por decisão
+do orquestrador, as duas issues ficam sem label, sem contornar o hook. O tipo `chore` está
+no título de cada uma.
+
 <!-- END: post-execution -->
