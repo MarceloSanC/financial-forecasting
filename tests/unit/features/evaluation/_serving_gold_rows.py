@@ -90,13 +90,14 @@ def correction_row(  # noqa: PLR0913
     rank: int | None = 190,
     correction: float | None = 0.004,
     infinite: bool | None = False,
+    horizon: int = 1,
 ) -> dict[str, object]:
     """Uma linha de `gold_conformal_corrections` com as colunas do builder da 7.2."""
     return _base(
         fold_raw=fold_raw,
         fold=int(fold_raw),
         seed=seed,
-        horizon=1,
+        horizon=horizon,
         lower_level=0.1,
         upper_level=0.9,
         variant=SPLIT,
@@ -146,7 +147,7 @@ def reading_row(**fields: object) -> dict[str, object]:
         "reading_rule": "interval_side_agreement_same_family_v1",
         "heterogeneous_permutation": True,
         "heterogeneous_ablation": False,
-        "sustained": False,
+        "sustained": True,  # != heterogeneous_ablation (auditoria TA-2)
         "agreeing_families": "price,technical",
         "block_length": 7,
         "max_block_estimate": 6.5,
@@ -188,6 +189,9 @@ def complete_rows() -> dict[str, list[dict[str, object]]]:
         GOLD_CONFORMAL_CORRECTIONS.name: [
             correction_row("0", 1, "lower", correction=0.00390625),
             correction_row("0", 1, "upper", correction=None, infinite=True, n=10, rank=11),
+            # a mesma unidade em h+7, com correções próprias (auditoria TA-2)
+            correction_row("0", 1, "lower", correction=0.0078125, horizon=7),
+            correction_row("0", 1, "upper", correction=0.015625, horizon=7),
             # unidade de run sem seed: sempre undefined e sem medidas (o builder grava
             # assim); o leitor a descarta
             *[
@@ -228,7 +232,7 @@ def complete_rows() -> dict[str, list[dict[str, object]]]:
             ),
         ],
         GOLD_H3_SHARES.name: [
-            share_row("loco", "price", lower=None, lower_infinite=True),
+            share_row("loco", "price", lower=None, lower_infinite=True, excludes_zero=True),
             share_row(
                 "loco",
                 "technical",
@@ -256,7 +260,10 @@ def complete_rows() -> dict[str, list[dict[str, object]]]:
             ),
         ],
         GOLD_H3_READING.name: [reading_row()],
-        GOLD_H3_VSN.name: [vsn_row("family", "price"), vsn_row("variable", "log_return")],
+        GOLD_H3_VSN.name: [
+            vsn_row("family", "price"),
+            vsn_row("variable", "log_return", family="price"),  # family != name
+        ],
     }
 
 

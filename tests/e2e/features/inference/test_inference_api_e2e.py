@@ -135,6 +135,9 @@ def test_happy_path_serves_the_recorded_grid_with_literal_intervals(
         0.010986328125,
         "ok",
     )
+    # h+7, seed 1, fold 0, par (0.1, 0.9): base = 1/512 + 7/4096; Q_lo = 2^-7, Q_hi = 2^-6
+    h7 = forecasts[1]["members"][0]["conformal"]["intervals"][1]
+    assert (h7["status"], h7["lower"], h7["upper"]) == ("ok", -0.035400390625, 0.050537109375)
     explainability = body["explainability"]
     assert (explainability["status"], explainability["label"], explainability["vsn_label"]) == (
         "available",
@@ -169,7 +172,7 @@ def test_reading_and_vsn_rows_reach_the_client(api: _Post, tmp_path: Path) -> No
         "reading_rule": "interval_side_agreement_same_family_v1",
         "heterogeneous_permutation": True,
         "heterogeneous_ablation": False,
-        "sustained": False,
+        "sustained": True,
         "agreeing_families": ["price", "technical"],
         "n_points": 1505,
         "status": "ok",

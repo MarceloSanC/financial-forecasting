@@ -159,6 +159,12 @@ _CORRECTIONS = (
         "0", 1, 1, 0.1, 0.9, _SPLIT, "upper", 0.9, "ok", None, 10, 11, math.inf
     ),
     ConformalCorrectionRecord(
+        "0", 1, 7, 0.1, 0.9, _SPLIT, "lower", 0.1, "ok", None, 200, 190, 0.0078125
+    ),
+    ConformalCorrectionRecord(
+        "0", 1, 7, 0.1, 0.9, _SPLIT, "upper", 0.9, "ok", None, 200, 190, 0.015625
+    ),
+    ConformalCorrectionRecord(
         "1", 2, 1, 0.1, 0.9, _SPLIT, "lower", 0.1, "undefined", "n < 1/alpha", None, None, None
     ),
     ConformalCorrectionRecord(
@@ -176,7 +182,7 @@ _SHARES = (
         0.125,
         0.9875,
         -1,
-        False,
+        True,
         "ok",
         None,
     ),
@@ -227,7 +233,7 @@ _READING = H3ReadingRecord(
     "interval_side_agreement_same_family_v1",
     True,
     False,
-    False,
+    True,
     ("price", "technical"),
     1505,
     "ok",
@@ -235,7 +241,7 @@ _READING = H3ReadingRecord(
 )
 _VSN_OK = (
     VsnRecord("family", "price", "price", 0.125, 0.25, 0.5, 1505, "ok", None),
-    VsnRecord("variable", "log_return", "log_return", 0.125, 0.25, 0.5, 1505, "ok", None),
+    VsnRecord("variable", "log_return", "price", 0.125, 0.25, 0.5, 1505, "ok", None),
 )
 _VSN_UNDEFINED = (
     VsnRecord("family", "price", "price", None, None, None, None, "undefined", "sem pesos"),
@@ -445,6 +451,45 @@ def test_real_reads_what_the_real_builders_write(vsn: str, tmp_path: Path) -> No
     (zero,) = (s for s in gold.shares if s.status != "ok" and s.lower is not None)
     assert (zero.lower, zero.upper, zero.side) == (0.0, 0.0, 0)
 
+    # uma linha de cada tabela, valor a valor, como os builders reais a gravam (TA-2)
+    assert (
+        ConformalCorrectionRecord(
+            "1",
+            2,
+            2,
+            0.1,
+            0.9,
+            _SPLIT,
+            "lower",
+            0.1,
+            "error",
+            "points[3].target_timestamp: not before test_start",
+            None,
+            None,
+            None,
+        )
+        in gold.corrections
+    )
+    assert (
+        H3ShareRecord(
+            "permutation", "price", 0.4, 0.2, -0.2, -0.3, -0.1, 0.975, -1, True, "ok", None
+        )
+        in gold.shares
+    )
+    assert gold.reading == H3ReadingRecord(
+        "interval_side_agreement_same_family_v1",
+        True,
+        None,
+        False,
+        (),
+        3,
+        "undefined",
+        "loco: the point total of importances is <= 0 at h=1 or h=7 (H3-NEG)",
+    )
+    if vsn == "ok":
+        assert (
+            VsnRecord("variable", "log_return", "price", 0.1, 0.2, 0.3, 40, "ok", None) in gold.vsn
+        )
     assert gold.reading is not None
     if vsn == "ok":
         assert {v.status for v in gold.vsn} == {"ok"}

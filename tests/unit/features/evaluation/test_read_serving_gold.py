@@ -169,6 +169,12 @@ def test_completed_generation_with_both_blocks() -> None:
             "0", 1, 1, 0.1, 0.9, SPLIT, "upper", 0.9, "ok", None, 10, 11, math.inf
         ),
         ConformalCorrectionRecord(
+            "0", 1, 7, 0.1, 0.9, SPLIT, "lower", 0.1, "ok", None, 200, 190, 0.0078125
+        ),
+        ConformalCorrectionRecord(
+            "0", 1, 7, 0.1, 0.9, SPLIT, "upper", 0.9, "ok", None, 200, 190, 0.015625
+        ),
+        ConformalCorrectionRecord(
             "1", 2, 1, 0.1, 0.9, SPLIT, "lower", 0.1, "undefined", "n < 1/alpha", None, None, None
         ),
         ConformalCorrectionRecord(
@@ -186,7 +192,7 @@ def test_completed_generation_with_both_blocks() -> None:
             0.125,
             0.9875,
             -1,
-            False,
+            True,
             "ok",
             None,
         ),
@@ -237,7 +243,7 @@ def test_completed_generation_with_both_blocks() -> None:
         "interval_side_agreement_same_family_v1",
         True,
         False,
-        False,
+        True,
         ("price", "technical"),
         1505,
         "ok",
@@ -245,7 +251,7 @@ def test_completed_generation_with_both_blocks() -> None:
     )
     assert gold.vsn == (
         VsnRecord("family", "price", "price", 0.125, 0.25, 0.5, 1505, "ok", None),
-        VsnRecord("variable", "log_return", "log_return", 0.125, 0.25, 0.5, 1505, "ok", None),
+        VsnRecord("variable", "log_return", "price", 0.125, 0.25, 0.5, 1505, "ok", None),
     )
 
 
