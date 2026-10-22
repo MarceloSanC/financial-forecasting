@@ -5,7 +5,7 @@ when-use: Reference when questioning how H3 is worded and read, why the VSN does
 keywords: [adr, h3, feature-attribution, feature-families, vsn, permutation-importance, grouped-importance, loco, ablation, block-bootstrap, per-horizon, descriptive, inference, step-7]
 status: accepted
 created_at: 2026-10-06
-updated_at: 2026-10-17
+updated_at: 2026-10-22
 adr_id: 0.0.0007
 decision: H3 holds when, for at least one feature family, the change of its normalized share between h+1 and h+7 has the same sign under grouped permutation importance and under LOCO ablation with retraining, with a paired block-bootstrap interval excluding zero in both; VSN weights are reported as horizon-invariant description only; the ablation is LOCO with 10 seeds in its own frozen, hashed cohort that also retrains the full reference model; the reading is a preregistered mechanical rule yielding a descriptive conclusion separate from the H1→H2 verdict.
 context_stage: 0.0-global
@@ -15,6 +15,8 @@ bounded_context: inference
 # ADR 0.0.0007 — H3: family contribution across horizons
 
 > ⚠️ **Errata (2026-10-17, issue #151):** the "Pending outside this ADR" note under "Decision" (volatility features in price per ADR 0.0.0016 vs technical in the registry) is **resolved**: the registry stands and ADR 0.0.0016 carries an errata. The H3 partition is the registry's — the six volatility features and the regimes are **technical** — and `feature_set_hash`, the frozen cohort `aapl_confirmatory-r0` and the 6.5 preregistration are unchanged. Item 9's preregistration freezes the partition by **feature list per family + `feature_set_hash`**, not by family name. Reading caveat: technical's share includes volatility, which should weigh on quantile width. To decide in the 7.3 concept: a descriptive permutation profile of the volatility subgroup, outside the verdict and without ablation. Decision record: inference domain doc §5.2 and §10.1 (C8).
+
+> ⚠️ **Errata (2026-10-22, issue #171):** item 2 of "Decision" reads "Within-time shuffling is rejected (Hooker, Mentch & Zhou 2021)". Hooker et al. do not deal with time series: their argument (abstract; §4 of arXiv:1905.03151v2) is that permuting a feature breaks its dependence on the other features and forces the model to extrapolate. Rejecting the within-time shuffle (permuting the lags of a feature inside its encoder window) is therefore **a decision of this project, by analogy** to that argument — such a shuffle also breaks the temporal dependence of the feature with itself ("observations of the same feature over subsequent time steps are not independent", Leung et al. 2023, as already cited in the inference domain doc §5.4) — not a recommendation of the source. The decision is unchanged: the family's whole encoder window is still permuted jointly across test samples, and the permutation scheme, the frozen cohort and the preregistration are untouched. The citation of Hooker et al. in item 4 (LOCO, §5) stands. See row B12.6 of [the TCC citation audit](../audits/tcc-citation-support.md).
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
