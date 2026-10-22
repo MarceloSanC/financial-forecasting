@@ -364,7 +364,8 @@ class RefreshGoldCommand:
 
     Raises:
         ValueError: identificador inválido (C3), `horizons` vazio/repetido/não-`tuple`,
-            `window_deficits` não-`Mapping` ou `parameters` de outro tipo.
+            `window_deficits` não-`Mapping`, `parameters` de outro tipo ou cohort da
+            ablação de H3 igual ao próprio cohort.
     """
 
     asset: str
@@ -386,6 +387,14 @@ class RefreshGoldCommand:
         object.__setattr__(self, "window_deficits", MappingProxyType(dict(self.window_deficits)))
         if not isinstance(self.parameters, RefreshParameters):
             raise ValueError(f"parameters must be RefreshParameters, got {self.parameters!r}")
+        h3 = self.parameters.h3_parameters
+        if h3 is not None and h3.ablation_cohort_id == self.parent_sweep_id:
+            # Stage 8.1 (Checkpoint C bloco 2, CC2-2): o `dim_run` da ablação é outra
+            # leitura (e outra unidade do hash do silver) que o do cohort julgado
+            raise ValueError(
+                f"the h3 ablation cohort_id {h3.ablation_cohort_id!r} must differ from the "
+                "cohort's parent_sweep_id"
+            )
         # o fingerprint congelado do cohort (ADR 6.4.0009 item 5); o formato hex é do VO
         _check_text(self.dataset_fingerprint, field="dataset_fingerprint")
 

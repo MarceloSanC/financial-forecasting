@@ -1065,3 +1065,22 @@ def test_manifest_without_silver_content_is_unreadable() -> None:
         GoldManifest.from_mapping(mapping)
     with pytest.raises(ValueError, match="silver_content must be a SilverContent"):
         _manifest(silver_content=SAMPLE_SILVER_CONTENT.as_mapping())
+
+
+@pytest.mark.unit
+def test_command_refuses_h3_ablation_cohort_equal_to_the_cohort() -> None:
+    """CC2-2: a ablação lida como o próprio cohort seria a mesma unidade lida duas vezes."""
+    h3 = h3_parameters()
+    parameters = dataclasses.replace(_PARAMETERS, h3_parameters=h3)
+    kwargs: dict[str, object] = {
+        "asset": "AAPL",
+        "horizons": (1, 7),
+        "window_deficits": {},
+        "parameters": parameters,
+        "dataset_fingerprint": "ab" * 32,
+    }
+
+    with pytest.raises(ValueError, match=r"ablation cohort_id .* must differ"):
+        RefreshGoldCommand(parent_sweep_id=h3.ablation_cohort_id, **kwargs)  # type: ignore[arg-type]
+    command = RefreshGoldCommand(parent_sweep_id="sweep-01", **kwargs)  # type: ignore[arg-type]
+    assert command.parameters.h3_parameters == h3
