@@ -421,3 +421,12 @@ def test_reader_only_calls_read_generation_once_per_request() -> None:
     gold = ReadServingGold(gold_reader=spy).read(asset=ASSET, cohort_id=COHORT)
     assert gold.published
     assert spy.calls == [PARTITION]
+
+
+@pytest.mark.parametrize("bound", ["lower", "upper"])
+def test_infinite_share_bound_with_a_stored_value_is_corruption(bound: str) -> None:
+    """F4: a regra do TA-6 nos limites das participações — flag `true` exige `null`."""
+    row = share_row("permutation", "price", **{bound: 0.25, f"{bound}_infinite": True})
+    rows = {**complete_rows(), GOLD_H3_SHARES.name: [row]}
+    with pytest.raises(GoldGenerationCorruptError, match=f"{bound}_infinite = true with {bound}"):
+        _read(_reader(rows=rows))

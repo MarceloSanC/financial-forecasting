@@ -113,7 +113,13 @@ def _corrections(generation: GoldGeneration) -> tuple[ConformalCorrectionRecord,
 
 def _bound(row: Row, column: str, infinity: float) -> float | None:
     flag = col_bool_or_none(row, GOLD_H3_SHARES, f"{column}_infinite")
-    return infinity if flag else col_float_or_none(row, GOLD_H3_SHARES, column)
+    stored = col_float_or_none(row, GOLD_H3_SHARES, column)
+    if flag and stored is not None:  # o builder grava `null` + flag (mesma regra do TA-6)
+        raise GoldGenerationCorruptError(
+            f"{GOLD_H3_SHARES.name}: {column}_infinite = true with {column} {stored!r} "
+            "(expected null)"
+        )
+    return infinity if flag else stored
 
 
 def _shares(generation: GoldGeneration) -> tuple[H3ShareRecord, ...]:
