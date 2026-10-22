@@ -914,4 +914,19 @@ acontece, porque o `shared/http` só pode importar a composition root (contrato
 (CONVENTIONS, regra do ADR `accepted`), sem editar o corpo. O concept 7.4 está `done` e
 não foi editado: esta entrada é o registro para ele.
 
+### 2026-10-22 — [decision] Checkpoint C2-5 — o e2e importa as fábricas de `tests/unit/` — Claude (sessão Windows)
+**Contexto:** `tests/e2e/features/inference/test_inference_api_e2e.py` importa
+`complete_rows`, `correction_row` e `generation` de
+`tests.unit.features.evaluation._serving_gold_rows`. O revisor do C2 apontou o import
+de uma suíte de outro nível (e2e → unit).
+**Pergunta:** mover as fábricas para um lugar neutro ou manter o import?
+**Opções:**
+- A — mover para um pacote comum de fixtures de teste (refactor de três suítes).
+- B — manter: o módulo `_` é helper, não suíte, e há precedente ✅ recomendada
+**Decisão:** B (o orquestrador decidiu manter, sem refactor).
+**Razão:** contratos e e2e do projeto já importam helpers de `tests/unit/` (por exemplo,
+os contratos do `evaluation` usam `tests/unit/features/evaluation/_conformal_parameters.py`
+e `_h3_parameters.py`). Uma fonte única das linhas do gold servido para o unit, o contrato
+e o e2e é o que mantém as três suítes lendo a mesma geração.
+
 <!-- END: post-execution -->
