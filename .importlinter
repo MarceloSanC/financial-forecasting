@@ -552,8 +552,11 @@ allow_indirect_imports = False
 # `inference` (o `RunPermutationInference`: DTOs de comando de `ResolveTftCheckpoints`, de
 # `PredictTftAttributionFromCheckpoints` e dos dois escritores do silver de atribuição, as
 # chaves do probe e o `QuantileForecast` — ADR 7.3.0002) e 1 do `evaluation` (o
-# `QuantileForecast` construído pela `AttributionAssembly` — ADR 7.3.0001 item 1). Cada
-# aresta de runtime existente entra como exceção NOMEADA abaixo (41 hoje). Elas
+# `QuantileForecast` construído pela `AttributionAssembly` — ADR 7.3.0001 item 1); a
+# Stage 7.4 trouxe 1 de `evaluation` para `inference` (os DTOs do port do consumidor
+# `ServingGoldReader` montados pelo `ReadServingGold` — ADR 7.4.0001 item 7, exceção
+# declarada aos itens 2-3 do ADR 0.0.0053). Cada
+# aresta de runtime existente entra como exceção NOMEADA abaixo (42 hoje). Elas
 # não são "ok": são o débito medido, e a lista encolhe conforme as issues de
 # fronteira fecham. Aresta nova entre estes seis slices reprova o build — que é
 # o ponto.
@@ -716,6 +719,17 @@ ignore_imports =
     # reprova (caso `other-evaluation-module-imports-quantile-forecast-for-h3`).
     # ADR 7.3.0001 item 1 / ADR 0.0.0053 item 3.
     financial_forecasting.features.evaluation.domain.services.attribution_assembly -> financial_forecasting.features.analytics_store.domain.value_objects.quantile_forecast
+    # -- evaluation -> inference (aresta de DADOS: DTOs do port do consumidor, Stage 7.4)
+    # O `ReadServingGold` satisfaz por duck typing o port `ServingGoldReader` do
+    # `inference` e monta os DTOs dele (`ServingGold` e registros) a partir do gold, lido
+    # pelo `GoldGenerationReader` e pelo `gold_schema` (donos únicos de tabela, coluna e
+    # montagem). A direção INVERTE os itens 2-3 do ADR 0.0.0053 (o fornecedor importa o
+    # DTO do consumidor) porque a direção prevista, inference -> evaluation, fecharia
+    # ciclo com a aresta `refresh_gold -> calibrate_conformal` acima. Exceção do MÓDULO,
+    # não do slice: outro módulo de `evaluation` com o mesmo import reprova (caso
+    # `other-evaluation-module-imports-serving-gold-dtos`). O `inference` não importa o
+    # `evaluation`. ADR 7.4.0001 item 7 / concept 7.2 D9.
+    financial_forecasting.features.evaluation.application.use_cases.read_serving_gold -> financial_forecasting.features.inference.application.dtos.serving_gold
 # `error` é o detector de EXCEÇÃO MORTA: quando uma issue de fronteira remover
 # uma aresta, o ignore correspondente deixa de casar e o build cobra a remoção
 # da linha. É o que faz esta lista encolher sozinha em vez de virar sedimento.

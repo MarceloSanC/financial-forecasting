@@ -1053,6 +1053,19 @@ _REAL_VIOLATION_CASES = (
         },
         id="bc-independence:other-evaluation-module-imports-quantile-forecast-for-h3",
     ),
+    # Stage 7.4 (ADR 7.4.0001 item 7): a aresta `read_serving_gold -> serving_gold` é
+    # exceção do MÓDULO; outro módulo do `evaluation` com o mesmo import reprova.
+    pytest.param(
+        "bc-independence",
+        {
+            "features/evaluation/application/use_cases/_arch_audit_taint_sg.py": (
+                "from financial_forecasting.features.inference.application"
+                ".dtos.serving_gold import ServingGold\n"
+                "\n_use = ServingGold\n"
+            )
+        },
+        id="bc-independence:other-evaluation-module-imports-serving-gold-dtos",
+    ),
 )
 
 
