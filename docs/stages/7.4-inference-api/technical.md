@@ -1092,4 +1092,20 @@ ausente?
 `ReadServingGold` real. Os parâmetros trocados em `gold.read` continuam cobertos: o
 `calls` do fake é afirmado no contrato e no use case.
 
+### 2026-10-22 — [decision] Auditoria de testes TA-6 — `infinite = true` com `correction` gravada é corrupção — Claude (sessão Windows)
+**Contexto:** o builder da 7.2 grava a correção infinita como `correction = null` +
+`infinite = true`. O leitor da Task 03 reconstruía `+inf` pela flag e ignorava um valor
+gravado junto. O mutante `rg-infinite-ignored-when-value` (preferir o valor gravado à
+flag) sobrevivia.
+**Pergunta:** flag `true` com valor não nulo: vale a flag, vale o valor ou é corrupção?
+**Opções:**
+- A — vale a flag (o comportamento anterior, que esconde a contradição).
+- B — `GoldGenerationCorruptError` ✅ recomendada
+**Decisão:** B (a decisão da auditoria).
+**Razão:** a combinação não sai do builder; aceitá-la em silêncio esconderia um gold
+adulterado (concept D4: defeito de dado vira 500). Teste
+`test_infinite_flag_with_a_stored_correction_is_corruption`. O mutante original perdeu a
+âncora com a mudança; a versão contra o código novo (`rg-infinite-ignored-when-value-v2`,
+a checagem removida) morre.
+
 <!-- END: post-execution -->

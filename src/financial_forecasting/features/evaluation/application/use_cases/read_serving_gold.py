@@ -86,6 +86,11 @@ def _corrections(generation: GoldGeneration) -> tuple[ConformalCorrectionRecord,
         if seed is None:
             continue
         infinite = col_bool_or_none(row, schema, "infinite")
+        stored = col_float_or_none(row, schema, "correction")
+        if infinite and stored is not None:  # o builder grava `null` + flag (TA-6)
+            raise GoldGenerationCorruptError(
+                f"{schema.name}: infinite = true with correction {stored!r} (expected null)"
+            )
         records.append(
             ConformalCorrectionRecord(
                 fold_raw=col_str(row, schema, "fold_raw"),
@@ -100,7 +105,7 @@ def _corrections(generation: GoldGeneration) -> tuple[ConformalCorrectionRecord,
                 reason=col_str_or_none(row, schema, "reason"),
                 n=col_int_or_none(row, schema, "n"),
                 rank=col_int_or_none(row, schema, "rank"),
-                correction=(math.inf if infinite else col_float_or_none(row, schema, "correction")),
+                correction=math.inf if infinite else stored,
             )
         )
     return tuple(records)

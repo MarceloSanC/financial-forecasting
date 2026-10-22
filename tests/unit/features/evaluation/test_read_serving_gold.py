@@ -385,3 +385,15 @@ def test_infinite_vsn_measure_becomes_corruption(monkeypatch: pytest.MonkeyPatch
         _read(_reader(rows=complete_rows()))
     assert isinstance(info.value, ApplicationError)
     assert isinstance(info.value.__cause__, ValueError)
+
+
+def test_infinite_flag_with_a_stored_correction_is_corruption() -> None:
+    """TA-6: o builder grava infinito como `null` + `infinite = true`; valor e flag juntos
+    não se sustentam."""
+    bad = [
+        correction_row("0", 1, "lower"),
+        correction_row("0", 1, "upper", correction=0.5, infinite=True),
+    ]
+    rows = {**complete_rows(), GOLD_CONFORMAL_CORRECTIONS.name: bad}
+    with pytest.raises(GoldGenerationCorruptError, match=r"infinite = true with correction 0.5"):
+        _read(_reader(rows=rows))
