@@ -72,6 +72,8 @@ from financial_forecasting.features.evaluation.application.dtos.judged_generatio
     JudgedGeneration,
     attempts_jsonl,
     check_documents,
+    check_identity,
+    check_judged_ref,
     contents_listing,
     document_bytes,
     judged_generation_from,
@@ -248,8 +250,7 @@ class ParquetGoldStore:
         return self.partition_root(partition) / _JUDGED
 
     def _judged_dir(self, partition: GoldPartition, preregistration_ref: str) -> Path:
-        validate_path_identifier(preregistration_ref, field="preregistration_ref")
-        return self._judged_root(partition) / preregistration_ref
+        return self._judged_root(partition) / check_judged_ref(preregistration_ref)
 
     def find(
         self, *, partition: GoldPartition, preregistration_ref: str
@@ -296,6 +297,14 @@ class ParquetGoldStore:
         target = self._judged_dir(partition, preregistration_ref)
         if target.exists():
             raise JudgedGenerationExistsError(f"{preregistration_ref} is already sealed")
+        try:
+            check_identity(
+                partition=partition,
+                preregistration_ref=preregistration_ref,
+                manifest=expected_manifest,
+            )
+        except ValueError as error:
+            raise JudgedGenerationMismatchError(str(error)) from error
         check_documents(documents)
         staging = self._judged_root(partition) / _STAGING
         if staging.exists():

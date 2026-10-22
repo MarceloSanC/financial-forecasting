@@ -41,6 +41,9 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
 from financial_forecasting.features.evaluation.application.dtos.silver_content import (
     SilverContent,
 )
+from financial_forecasting.shared.domain.services.path_identifier import (
+    validate_path_identifier,
+)
 from financial_forecasting.shared.domain.services.sha256_hex import validate_sha256_hex
 
 GENERATION_DIR: Final = "generation"
@@ -57,6 +60,41 @@ _COMMIT_LENGTH: Final = 40
 _HEX_DIGITS: Final = frozenset("0123456789abcdef")
 _CODE_PREFIX: Final = "code."
 _ENV_PREFIX: Final = "env."
+
+
+def check_judged_ref(preregistration_ref: object) -> str:
+    """A referência como nome de `judged/<ref>/`: identificador de caminho fora do layout.
+
+    Além da regra única de identificador, recusa o que colide com o próprio `judged/`: nome
+    começando com `.` (o staging, `.` e `..`) e o nome do log (Checkpoint C bloco 3, CC3-1).
+
+    Raises:
+        ValueError: identificador inválido ou que colide com o layout.
+    """
+    validate_path_identifier(preregistration_ref, field="preregistration_ref")
+    assert isinstance(preregistration_ref, str)  # garantido pela regra acima
+    if preregistration_ref.startswith(".") or preregistration_ref == ATTEMPTS_NAME:
+        raise ValueError(
+            f"preregistration_ref {preregistration_ref!r} collides with the judged/ layout"
+        )
+    return preregistration_ref
+
+
+def check_identity(
+    *, partition: GoldPartition, preregistration_ref: str, manifest: GoldManifest
+) -> None:
+    """O manifesto é da partição e da revisão de `judged/<ref>/` (CC3-2).
+
+    Raises:
+        ValueError: manifesto de outra partição ou de outra `preregistration_ref`.
+    """
+    if manifest.parameters.preregistration_ref != preregistration_ref:
+        raise ValueError(
+            f"the manifest is for {manifest.parameters.preregistration_ref!r}, "
+            f"not {preregistration_ref!r}"
+        )
+    if manifest.partition != partition:
+        raise ValueError(f"the manifest is for partition {manifest.partition}, not {partition}")
 
 
 # --- listagem `sha256sum` ---------------------------------------------------------------
@@ -263,6 +301,11 @@ class JudgedGeneration:
             validate_sha256_hex(digest, field=f"sha256 of {path!r}")
         if not isinstance(self.manifest, GoldManifest):
             raise ValueError(f"manifest must be a GoldManifest, got {self.manifest!r}")
+        check_identity(
+            partition=self.partition,
+            preregistration_ref=self.preregistration_ref,
+            manifest=self.manifest,
+        )
         check_documents(self.documents)
         object.__setattr__(self, "files", MappingProxyType(dict(self.files)))
         object.__setattr__(self, "documents", MappingProxyType(dict(self.documents)))

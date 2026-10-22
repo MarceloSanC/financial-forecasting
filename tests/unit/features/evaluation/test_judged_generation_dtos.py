@@ -23,6 +23,7 @@ from financial_forecasting.features.evaluation.application.dtos.judged_generatio
     JudgedAttempt,
     JudgedGeneration,
     attempts_jsonl,
+    check_judged_ref,
     contents_listing,
     document_bytes,
     generation_digest_of,
@@ -205,9 +206,12 @@ def test_attempt_from_mapping_rejects_extra_or_missing_key() -> None:
         JudgedAttempt.from_mapping({**mapping, "phase": "finished"})
 
 
+_GENERATION_REF = _manifest().parameters.preregistration_ref
+
+
 def _generation(**changes: object) -> JudgedGeneration:
     fields: dict[str, Any] = {
-        "preregistration_ref": _REF,
+        "preregistration_ref": _GENERATION_REF,
         "partition": _PARTITION,
         "generation_digest": _A,
         "refresh_status": RefreshStatus.COMPLETED,
@@ -237,7 +241,7 @@ def test_judged_generation_requires_non_empty_files_and_hex_digest() -> None:
     with pytest.raises(ValueError, match="refresh_status"):
         _generation(refresh_status="COMPLETED")
     with pytest.raises(dataclasses.FrozenInstanceError):
-        generation.generation_digest = _B  # type: ignore[misc]
+        generation.generation_digest = _B
 
 
 @pytest.mark.unit
@@ -252,7 +256,7 @@ def test_judged_generation_from_reads_manifest_and_documents() -> None:
 
     generation = judged_generation_from(
         partition=_PARTITION,
-        preregistration_ref=_REF,
+        preregistration_ref=_GENERATION_REF,
         listing=listing,
         actual=actual,
         read=data.__getitem__,
@@ -263,3 +267,20 @@ def test_judged_generation_from_reads_manifest_and_documents() -> None:
     assert generation.generation_digest == generation_digest_of(listing)
     assert generation.refresh_status is manifest.status
     assert document_bytes({"b": 1, "a": [1.5]}) == b'{\n  "a": [\n    1.5\n  ],\n  "b": 1\n}\n'
+
+
+@pytest.mark.unit
+def test_judged_generation_bound_to_its_reference_and_partition() -> None:
+    """CC3-2: o manifesto lido tem de ser da revisão e da partição da cópia."""
+    with pytest.raises(ValueError, match="the manifest is for"):
+        _generation(preregistration_ref=_REF)
+    with pytest.raises(ValueError, match="the manifest is for partition"):
+        _generation(partition=GoldPartition("AAPL", "sweep-02"))
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("ref", [".staging", ".", "..", ".hidden", "ATTEMPTS.jsonl"])
+def test_judged_ref_cannot_collide_with_the_layout(ref: str) -> None:
+    with pytest.raises(ValueError, match="collides with the judged/ layout"):
+        check_judged_ref(ref)
+    assert check_judged_ref(_REF) == _REF

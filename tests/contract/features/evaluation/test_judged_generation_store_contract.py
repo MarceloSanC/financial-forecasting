@@ -87,6 +87,8 @@ class Harness(Protocol):
 
     def rewrite_contents(self, ref: str) -> None: ...
 
+    def move(self, source: str, target: str) -> None: ...
+
     def leave_staging(self) -> None: ...
 
     def staging_exists(self) -> bool: ...
@@ -114,6 +116,9 @@ class _FakeHarness:
 
     def rewrite_contents(self, ref: str) -> None:
         self._judged.rewrite_contents(partition=_PARTITION, preregistration_ref=ref)
+
+    def move(self, source: str, target: str) -> None:
+        self._judged.move(partition=_PARTITION, source=source, target=target)
 
     def leave_staging(self) -> None:
         self._judged.leave_staging(_PARTITION)
@@ -156,6 +161,9 @@ class _ParquetHarness:
         }
         (directory / CONTENTS_NAME).write_bytes(contents_listing(actual))
 
+    def move(self, source: str, target: str) -> None:
+        (self.judged_root / source).rename(self.judged_root / target)
+
     def leave_staging(self) -> None:
         leftover = self.judged_root / ".staging" / GENERATION_DIR
         leftover.mkdir(parents=True)
@@ -192,9 +200,19 @@ def _tables() -> list[GoldTable]:
     return [_table(_TABLE, 4), _table("gold_dm_results", 6)]
 
 
-def _publish(harness: Harness, tables: list[GoldTable] | None = None) -> GoldManifest:
+def _manifest_of(ref: str, tables: list[GoldTable]) -> GoldManifest:
+    """O manifesto da geração com a revisão `ref` (a cópia é amarrada a ela, CC3-2)."""
+    manifest = _manifest(tables)
+    return dataclasses.replace(
+        manifest, parameters=dataclasses.replace(manifest.parameters, preregistration_ref=ref)
+    )
+
+
+def _publish(
+    harness: Harness, tables: list[GoldTable] | None = None, ref: str = _REF
+) -> GoldManifest:
     chosen = _tables() if tables is None else tables
-    manifest = _manifest(chosen)
+    manifest = _manifest_of(ref, chosen)
     harness.gold.publish(partition=_PARTITION, tables=chosen, manifest=manifest)
     return manifest
 
@@ -355,7 +373,7 @@ def test_preserve_over_sealed_raises_exists_and_touches_nothing(harness: Harness
 @pytest.mark.contract
 def test_preserve_without_live_generation_raises_and_seals_nothing(harness: Harness) -> None:
     with pytest.raises(GoldManifestNotFoundError):
-        _preserve(harness, _manifest(_tables()))
+        _preserve(harness, _manifest_of(_REF, _tables()))
     assert harness.judged.judged_refs(partition=_PARTITION) == ()
 
 
@@ -391,6 +409,41 @@ def test_write_failure_during_preserve_seals_nothing(harness: Harness, failing: 
     assert not harness.staging_exists()
 
 
+@pytest.mark.contract
+def test_find_refuses_a_copy_moved_to_another_reference(harness: Harness) -> None:
+    """CC3-2: `judged/A` movida para `judged/B` é íntegra byte a byte, mas não é a de B."""
+    _preserve(harness, _publish(harness))
+    harness.move(_REF, _OTHER_REF)
+
+    with pytest.raises(JudgedGenerationTamperedError, match="the manifest is for"):
+        _find(harness, _OTHER_REF)
+    assert _find(harness) is None
+
+
+@pytest.mark.contract
+def test_preserve_under_a_reference_other_than_the_manifest_raises_mismatch(
+    harness: Harness,
+) -> None:
+    manifest = _publish(harness)
+
+    with pytest.raises(JudgedGenerationMismatchError, match="the manifest is for"):
+        _preserve(harness, manifest, _OTHER_REF)
+    assert harness.judged.judged_refs(partition=_PARTITION) == ()
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("ref", [".staging", "..", ".", "ATTEMPTS.jsonl"])
+def test_reference_colliding_with_the_layout_is_refused(harness: Harness, ref: str) -> None:
+    """CC3-1: o staging, `.`/`..` e o nome do log nunca viram `judged/<ref>/`."""
+    manifest = _publish(harness)
+
+    with pytest.raises(ValueError, match="collides with the judged/ layout"):
+        harness.judged.find(partition=_PARTITION, preregistration_ref=ref)
+    with pytest.raises(ValueError, match="collides with the judged/ layout"):
+        _preserve(harness, manifest, ref)
+    assert harness.judged.judged_refs(partition=_PARTITION) == ()
+
+
 # --- referências e tentativas ------------------------------------------------------------
 
 
@@ -407,9 +460,8 @@ def test_record_attempt_appends_and_attempts_reads_in_order(harness: Harness) ->
 
 @pytest.mark.contract
 def test_judged_refs_lists_sealed_refs_only(harness: Harness) -> None:
-    manifest = _publish(harness)
-    _preserve(harness, manifest, _REF)
-    _preserve(harness, manifest, _OTHER_REF)
+    _preserve(harness, _publish(harness), _REF)
+    _preserve(harness, _publish(harness, ref=_OTHER_REF), _OTHER_REF)
     harness.judged.record_attempt(partition=_PARTITION, attempt=_attempt(0))
     harness.leave_staging()
 

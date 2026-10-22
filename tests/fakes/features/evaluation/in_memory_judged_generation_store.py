@@ -28,6 +28,8 @@ from financial_forecasting.features.evaluation.application.dtos.judged_generatio
     JudgedAttempt,
     JudgedGeneration,
     check_documents,
+    check_identity,
+    check_judged_ref,
     contents_listing,
     document_bytes,
     judged_generation_from,
@@ -41,9 +43,6 @@ from financial_forecasting.features.evaluation.application.ports.out.judged_gene
     JudgedGenerationExistsError,
     JudgedGenerationMismatchError,
     JudgedGenerationTamperedError,
-)
-from financial_forecasting.shared.domain.services.path_identifier import (
-    validate_path_identifier,
 )
 from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
 
@@ -71,7 +70,7 @@ class InMemoryJudgedGenerationStore:
     def find(
         self, *, partition: GoldPartition, preregistration_ref: str
     ) -> JudgedGeneration | None:
-        validate_path_identifier(preregistration_ref, field="preregistration_ref")
+        check_judged_ref(preregistration_ref)
         files = self._sealed.get((partition, preregistration_ref))
         if files is None:
             return None
@@ -97,9 +96,17 @@ class InMemoryJudgedGenerationStore:
         expected_manifest: GoldManifest,
         documents: Mapping[str, Mapping[str, object]],
     ) -> JudgedGeneration:
-        validate_path_identifier(preregistration_ref, field="preregistration_ref")
+        check_judged_ref(preregistration_ref)
         if (partition, preregistration_ref) in self._sealed:
             raise JudgedGenerationExistsError(f"{preregistration_ref} is already sealed")
+        try:
+            check_identity(
+                partition=partition,
+                preregistration_ref=preregistration_ref,
+                manifest=expected_manifest,
+            )
+        except ValueError as error:
+            raise JudgedGenerationMismatchError(str(error)) from error
         check_documents(documents)
         self._staging.pop(partition, None)  # staging sobrante de um preserve interrompido
         live = self._store.current(partition)
@@ -155,6 +162,10 @@ class InMemoryJudgedGenerationStore:
             del files[path]
         else:
             files[path] = data
+
+    def move(self, *, partition: GoldPartition, source: str, target: str) -> None:
+        """Move a cópia selada `source` para `target` (como um `mv` no disco)."""
+        self._sealed[partition, target] = self._sealed.pop((partition, source))
 
     def rewrite_contents(self, *, partition: GoldPartition, preregistration_ref: str) -> None:
         """Regrava `CONTENTS.sha256` coerente com os arquivos atuais da cópia."""
