@@ -176,7 +176,7 @@ def test_anti_leakage_synthetic_divergence_raises_naming_feature() -> None:
     real_attach = assembler._attach_price_derived
 
     def corrupt(frame: object) -> None:
-        real_attach(frame)  # type: ignore[arg-type]
+        real_attach(frame)
         frame.loc[100, "momentum_5d"] = 999.0  # type: ignore[attr-defined]
 
     assembler._attach_price_derived = corrupt  # type: ignore[method-assign]
@@ -284,8 +284,8 @@ def test_assemble_rejects_frame_violating_schema() -> None:
     real_finalize = assembler._finalize_storage_dtypes
 
     def corrupt_dtype(frame: object) -> object:
-        out = real_finalize(frame)  # type: ignore[arg-type]
-        out["target_return"] = out["target_return"].astype("string")  # type: ignore[index]
+        out = real_finalize(frame)
+        out["target_return"] = out["target_return"].astype("string")
         return out
 
     assembler._finalize_storage_dtypes = corrupt_dtype  # type: ignore[method-assign]
@@ -311,7 +311,7 @@ def test_persist_writes_parquet_with_62_columns(tmp_path: object) -> None:
 
     path = tmp_path / "AAPL" / "dataset_tft_AAPL.parquet"  # type: ignore[operator]
     assert path.exists()
-    schema = pq.read_schema(path)
+    schema = pq.read_schema(path)  # type: ignore[no-untyped-call]
     expected_cols = 62
     assert len(schema.names) == expected_cols
     assert schema.names[0] == "timestamp"
