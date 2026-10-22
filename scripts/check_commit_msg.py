@@ -17,6 +17,12 @@ Body content is NOT validated here — the bullet-list expectation lives in
 the docs and is enforced by code review, not by the hook (avoids false
 positives on trivial commits where the body is intentionally absent).
 
+It is also the only hook that runs on every clone and worktree of this
+repo: the Python of the host runs it, with the standard library only. So
+it warns, without blocking, when the `pre-commit` hook is not installed —
+then `ruff-format`, `ruff` and `mypy` from `.pre-commit-config.yaml` did
+not run on this commit (issue #199).
+
 Exit codes:
   0  subject OK
   1  subject violates convention (message printed to stderr)
@@ -25,6 +31,7 @@ Exit codes:
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -149,6 +156,51 @@ def validate_subject(subject: str) -> int:
     return _error(subject, _no_match_reason(subject))
 
 
+def pre_commit_hook_path(cwd: Path) -> Path | None:
+    """Where git looks for the `pre-commit` hook of the repo at `cwd`.
+
+    Uses `git rev-parse --git-path`, which follows `core.hooksPath` and the
+    common `.git/hooks` shared by every worktree. `None` when git does not
+    answer (no git, not a repo): the warning then stays silent.
+    """
+    try:
+        cp = subprocess.run(
+            ["git", "rev-parse", "--git-path", "hooks/pre-commit"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None
+    if cp.returncode != 0 or not cp.stdout.strip():
+        return None
+    return cwd / cp.stdout.strip()
+
+
+def warn_if_pre_commit_hook_missing(cwd: Path) -> bool:
+    """Print a warning when the `pre-commit` hook is missing. Never blocks.
+
+    The text is ASCII: the host Python writes stderr in the console code page
+    (cp1252 on Windows), and accents would reach the terminal garbled.
+
+    Returns True when it warned.
+    """
+    hook = pre_commit_hook_path(cwd)
+    if hook is None or hook.is_file():
+        return False
+    lines = (
+        f"check_commit_msg: aviso - o hook pre-commit nao esta instalado ({hook.as_posix()}).",
+        "  ruff-format, ruff e mypy do .pre-commit-config.yaml NAO rodaram neste commit.",
+        "  Rode o equivalente no container antes do proximo commit",
+        "  (docs/RUNBOOK-STAGE-LIFECYCLE.md, secao Gates em camadas, T1).",
+        "  O commit segue: este aviso nao bloqueia.",
+    )
+    for line in lines:
+        print(line, file=sys.stderr)
+    return True
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < _REQUIRED_ARGC:
         print(
@@ -181,7 +233,9 @@ def main(argv: list[str]) -> int:
             subject = line
             break
 
-    return validate_subject(subject.rstrip())
+    verdict = validate_subject(subject.rstrip())
+    warn_if_pre_commit_hook_missing(Path.cwd())
+    return verdict
 
 
 if __name__ == "__main__":

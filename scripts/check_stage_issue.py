@@ -51,12 +51,14 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 _ISSUE_ID_RE = re.compile(r"^\s*issue_id:\s*(.+?)\s*$", re.MULTILINE)
@@ -131,21 +133,19 @@ def check_one(technical_path: Path) -> tuple[bool, str]:
 _BASE_REF = "origin/develop"
 
 
-def _git_lines(args: list[str]) -> list[str] | None:
-    """Roda `git <args>` e devolve stdout em linhas; `None` em qualquer falha."""
-    try:
-        result = subprocess.run(
-            ["git", *args],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-    except (subprocess.TimeoutExpired, OSError):
-        return None
-    if result.returncode != 0:
-        return None
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+def _load(name: str) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        f"_{name}", Path(__file__).resolve().parent / f"{name}.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+# Delta sem gravar o índice do git: o `git diff` antigo deixava `index.lock` órfão (#199).
+_delta = _load("git_delta_lib")
 
 
 def discover_changed_technicals() -> list[Path] | None:
@@ -156,17 +156,10 @@ def discover_changed_technicals() -> list[Path] | None:
     (`is_file()`). Devolve `None` quando o delta não pode ser determinado
     — o chamador cai na varredura completa (fail-safe).
     """
-    merge_base = _git_lines(["merge-base", "HEAD", _BASE_REF])
-    if not merge_base:
-        return None
-    changed = _git_lines(["diff", "--name-only", merge_base[0], "--", "docs/stages"])
+    changed = _delta.changed_paths("docs/stages", _BASE_REF)
     if changed is None:
         return None
-    untracked = _git_lines(["ls-files", "--others", "--exclude-standard", "docs/stages"])
-    if untracked is None:
-        return None
-    candidates = {Path(line) for line in changed + untracked}
-    return sorted(path for path in candidates if path.name == "technical.md" and path.is_file())
+    return [path for path in changed if path.name == "technical.md" and path.is_file()]
 
 
 def discover_all_technicals() -> list[Path]:
