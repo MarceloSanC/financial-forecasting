@@ -31,21 +31,52 @@ geração **só** por `GoldGeneration.from_stored` — este adapter faz apenas I
 
 Falha antes da troca propaga e deixa `current/` intacto (C9). Escritor único por
 partição é pré-condição do port (ADR `6_4_0005` item 6): sem lock.
+
+Satisfaz também o port `JudgedGenerationStore` (Stage 8.1, ADRs `8_1_0003` itens 1-5b e
+`8_1_0004` item 1) — dono único do layout do gold, então nenhum segundo adapter
+redeclara caminhos:
+
+    <partição>/judged/<preregistration_ref>/generation/...   (cópia byte a byte de current/)
+    <partição>/judged/<preregistration_ref>/<documento>.json
+    <partição>/judged/<preregistration_ref>/CONTENTS.sha256    (gravado por último)
+    <partição>/judged/.staging/                               (removido no início do preserve)
+    <partição>/judged/ATTEMPTS.jsonl                          (temporário + os.replace)
+
+O formato da listagem, dos documentos e das linhas do log é o de
+`application/dtos/judged_generation.py` (o mesmo do fake); o sha256 de cada arquivo é
+calculado por streaming (`hashlib`, blocos de 1 MiB). Nenhum caminho de código
+sobrescreve, move ou apaga uma cópia selada nem o log.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import shutil
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Final
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import GOLD_SCHEMAS
+from financial_forecasting.features.evaluation.application.dtos.judged_generation import (
+    ATTEMPTS_NAME,
+    CONTENTS_NAME,
+    GENERATION_DIR,
+    GENERATION_MANIFEST,
+    JudgedAttempt,
+    JudgedGeneration,
+    attempts_jsonl,
+    check_documents,
+    contents_listing,
+    document_bytes,
+    judged_generation_from,
+    parse_attempts_jsonl,
+)
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldGeneration,
     GoldGenerationCorruptError,
@@ -54,6 +85,11 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     GoldPartition,
     GoldTable,
     check_generation,
+)
+from financial_forecasting.features.evaluation.application.ports.out.judged_generation_store import (  # noqa: E501
+    JudgedGenerationExistsError,
+    JudgedGenerationMismatchError,
+    JudgedGenerationTamperedError,
 )
 from financial_forecasting.shared.domain.services.path_identifier import (
     validate_path_identifier,
@@ -65,6 +101,30 @@ MANIFEST_NAME = "MANIFEST.json"
 _CURRENT = "current"
 _STAGING = ".staging"
 _PREVIOUS = ".previous"
+_JUDGED = "judged"
+_SHA256_BLOCK: Final = 1 << 20  # streaming do sha256 em blocos de 1 MiB
+
+
+def _write_bytes(path: Path, data: bytes) -> None:
+    """Toda escrita de documento e da listagem da cópia julgada passa por aqui."""
+    path.write_bytes(data)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while block := stream.read(_SHA256_BLOCK):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _file_hashes(root: Path) -> dict[str, str]:
+    """Caminho relativo POSIX → sha256 de todo arquivo sob `root`, sem o `CONTENTS.sha256`."""
+    return {
+        path.relative_to(root).as_posix(): _sha256_file(path)
+        for path in sorted(root.rglob("*"))
+        if path.is_file() and path.relative_to(root).as_posix() != CONTENTS_NAME
+    }
 
 
 def _write_table(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
@@ -181,3 +241,110 @@ class ParquetGoldStore:
                 raise GoldGenerationCorruptError(f"table file {path.name} is missing")
             rows_by_table[name] = [] if count == 0 else _read_rows(path)
         return GoldGeneration.from_stored(manifest, rows_by_table, partition=partition)
+
+    # -- geração julgada (Stage 8.1, port `JudgedGenerationStore`) ----------------------
+
+    def _judged_root(self, partition: GoldPartition) -> Path:
+        return self.partition_root(partition) / _JUDGED
+
+    def _judged_dir(self, partition: GoldPartition, preregistration_ref: str) -> Path:
+        validate_path_identifier(preregistration_ref, field="preregistration_ref")
+        return self._judged_root(partition) / preregistration_ref
+
+    def find(
+        self, *, partition: GoldPartition, preregistration_ref: str
+    ) -> JudgedGeneration | None:
+        """A cópia selada conferida contra o seu `CONTENTS.sha256`, ou `None`.
+
+        Raises:
+            JudgedGenerationTamperedError: listagem ausente ou que não confere com os
+                arquivos (alterado, faltando, a mais, `generation/` vazio).
+        """
+        directory = self._judged_dir(partition, preregistration_ref)
+        if not directory.exists():
+            return None
+        contents = directory / CONTENTS_NAME
+        if not contents.is_file():
+            raise JudgedGenerationTamperedError(f"{preregistration_ref}: no {CONTENTS_NAME}")
+        try:
+            return judged_generation_from(
+                partition=partition,
+                preregistration_ref=preregistration_ref,
+                listing=contents.read_bytes(),
+                actual=_file_hashes(directory),
+                read=lambda path: (directory / path).read_bytes(),
+            )
+        except ValueError as error:
+            raise JudgedGenerationTamperedError(f"{preregistration_ref}: {error}") from error
+
+    def preserve(
+        self,
+        *,
+        partition: GoldPartition,
+        preregistration_ref: str,
+        expected_manifest: GoldManifest,
+        documents: Mapping[str, Mapping[str, object]],
+    ) -> JudgedGeneration:
+        """Copia `current/`, confere o manifesto, grava os documentos e sela por último.
+
+        Raises:
+            JudgedGenerationExistsError: `judged/<ref>/` já existe (nada é escrito).
+            JudgedGenerationMismatchError: o manifesto copiado ≠ `expected_manifest`.
+            GoldManifestNotFoundError: a partição não tem geração viva.
+            OSError: falha de escrita (nada é selado; o próximo `preserve` limpa o staging).
+        """
+        target = self._judged_dir(partition, preregistration_ref)
+        if target.exists():
+            raise JudgedGenerationExistsError(f"{preregistration_ref} is already sealed")
+        check_documents(documents)
+        staging = self._judged_root(partition) / _STAGING
+        if staging.exists():
+            shutil.rmtree(staging)
+        current = self.current_dir(partition)
+        if not (current / MANIFEST_NAME).is_file():
+            raise GoldManifestNotFoundError(f"no gold generation for {partition}")
+        shutil.copytree(current, staging / GENERATION_DIR, copy_function=shutil.copyfile)
+        copied = GoldManifest.from_mapping(
+            json.loads((staging / GENERATION_MANIFEST).read_text(encoding="utf-8"))
+        )
+        if copied != expected_manifest:
+            shutil.rmtree(staging)
+            raise JudgedGenerationMismatchError(
+                f"the copied manifest of {partition} is not the one the refresh returned"
+            )
+        for name in sorted(documents):
+            _write_bytes(staging / name, document_bytes(documents[name]))
+        _write_bytes(staging / CONTENTS_NAME, contents_listing(_file_hashes(staging)))
+        os.replace(staging, target)
+        sealed = self.find(partition=partition, preregistration_ref=preregistration_ref)
+        if sealed is None:  # pragma: no cover — acabou de ser selada
+            raise JudgedGenerationTamperedError(f"{preregistration_ref}: sealed copy vanished")
+        return sealed
+
+    def judged_refs(self, *, partition: GoldPartition) -> tuple[str, ...]:
+        """As referências com cópia selada (diretórios de `judged/` sem prefixo `.`)."""
+        root = self._judged_root(partition)
+        if not root.exists():
+            return ()
+        return tuple(
+            sorted(
+                path.name
+                for path in root.iterdir()
+                if path.is_dir() and not path.name.startswith(".")
+            )
+        )
+
+    def record_attempt(self, *, partition: GoldPartition, attempt: JudgedAttempt) -> None:
+        """Acrescenta a linha ao `ATTEMPTS.jsonl` (arquivo inteiro por temporário + replace)."""
+        root = self._judged_root(partition)
+        root.mkdir(parents=True, exist_ok=True)
+        path = root / ATTEMPTS_NAME
+        existing = path.read_bytes() if path.exists() else b""
+        temporary = root / f".{ATTEMPTS_NAME}.tmp"
+        temporary.write_bytes(existing + attempts_jsonl([attempt]))
+        os.replace(temporary, path)
+
+    def attempts(self, *, partition: GoldPartition) -> tuple[JudgedAttempt, ...]:
+        """As linhas do `ATTEMPTS.jsonl`, na ordem de gravação (sem arquivo → vazio)."""
+        path = self._judged_root(partition) / ATTEMPTS_NAME
+        return parse_attempts_jsonl(path.read_bytes()) if path.exists() else ()
