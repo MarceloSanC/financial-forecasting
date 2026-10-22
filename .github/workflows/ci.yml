@@ -61,6 +61,9 @@ jobs:
       # e o lock (revision 3) passaria a ser interpretado por um resolvedor que
       # ninguém escolheu. Cache habilitado porque a Stage 5.4 trouxe torch CPU +
       # lightning + scipy + scikit-learn (~250-300 MB de download) — ADR 5.4.0003.
+      # A imagem de dev (`Dockerfile`, `COPY --from=ghcr.io/astral-sh/uv:<versão>`)
+      # pina a MESMA versão: trocar aqui = trocar lá no mesmo commit.
+      # tests/architecture/test_uv_version_parity.py falha se divergirem.
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:
