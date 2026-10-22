@@ -207,7 +207,7 @@ def _gbm(leg: str, *, broken: bool, monkeypatch: pytest.MonkeyPatch) -> Any:  # 
     if leg == "fake":
         return FakeQuantileModelTrainer(simulate_backend_failure=_SIMULATED if broken else None)
     if broken:
-        monkeypatch.setattr(gbm_module.lgb, "train", _raising_lgb_train)
+        monkeypatch.setattr(gbm_module.lgb, "train", _raising_lgb_train)  # type: ignore[attr-defined]
     return LightgbmQuantileTrainer()
 
 

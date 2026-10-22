@@ -70,7 +70,7 @@ def _emitting_test_decisions(setup: _Setup, fold: Any) -> tuple[int, ...]:  # no
 
 
 def _donors(setup: _Setup) -> dict[int, tuple[tuple[int, ...], ...]]:
-    donors = {}
+    donors: dict[int, tuple[tuple[int, ...], ...]] = {}
     for fold in setup.folds():
         n = len(_emitting_test_decisions(setup, fold))
         donors[fold.fold_index] = (tuple(reversed(range(n))), (*range(1, n), 0))
