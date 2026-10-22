@@ -85,7 +85,7 @@ def _payload() -> InferencePayload:
             -0.2,
             math.inf,
             0.9,
-            "two_sided",
+            1,
             False,
             OK,
             None,
@@ -99,7 +99,7 @@ def _payload() -> InferencePayload:
             -math.inf,
             0.05,
             0.9,
-            "two_sided",
+            -1,
             False,
             OK,
             None,
@@ -113,7 +113,7 @@ def _payload() -> InferencePayload:
             -0.5,
             None,
             0.9,
-            "two_sided",
+            0,
             None,
             "undefined",
             "Σ* <= 0",
@@ -327,6 +327,11 @@ def test_share_limits_follow_the_value_flag_rule() -> None:
         (-0.5, False, None, False),  # não-ok com limite finito gravado: número + false
         (None, False, None, False),  # sem valor
     ]
+
+
+def test_share_side_is_the_integer_sign_of_delta() -> None:
+    shares = _ok_response()["explainability"]["shares"]
+    assert [s["side"] for s in shares] == [1, -1, 0, None]
 
 
 def test_no_other_value_flag_pair_is_emitted() -> None:

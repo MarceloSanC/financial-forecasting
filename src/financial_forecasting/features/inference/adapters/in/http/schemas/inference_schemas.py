@@ -193,7 +193,7 @@ class H3ShareResponse(BaseModel):
     lower_infinite: bool
     upper_infinite: bool
     level: FiniteFloat | None
-    side: str | None
+    side: int | None  # sinal de Δ̂_f em {-1, 0, +1}
     excludes_zero: bool | None
     status: str
     reason: str | None
