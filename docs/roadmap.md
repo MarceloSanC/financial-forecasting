@@ -1205,9 +1205,9 @@ camada_alvo: application (orquestração)
 arquivos_a_criar:
   - src/financial_forecasting/features/evaluation/application/use_cases/run_confirmatory_evaluation.py
   - tests/integration/features/evaluation/test_run_confirmatory_evaluation.py
-contratos_introduzidos: [RunConfirmatoryEvaluation (use case)]
+contratos_introduzidos: [RunConfirmatoryEvaluation (use case), geração julgada preservada com hash de conteúdo, hash de conteúdo do silver lido — a forma (inclusive se o hash do silver pede um VO de identidade novo, ADR 6.4.0005 item 9) é decisão do concept da 8.1]
 contratos_consumidos: [BuildConfirmatoryScorecard e refresh_command_from (6.5), RefreshGold (6.4), RunInference / subcomando `infer` idempotente (7.1), tabelas gold conformais do RefreshGold e revisão r2 (7.2), tabelas gold de H3 publicadas pelo RefreshGold derivado da revisão ancorada mais recente, com o bloco [h3] da r3 (7.3, ADR 7.3.0001), predições permutadas e pesos da VSN no silver (`attribute` completo) e cohort de ablação congelado e treinado (7.3), tabelas de perfil (6.6)]
-definition_of_done: "Pipeline confirmatória roda do cohort persistido até o scorecard sem re-treino; veredito mecânico H1/H2/H3 produzido; conformal incluído como eixo comparativo; tudo rastreável por run_id + hash de pré-registro."
+definition_of_done: "Pipeline confirmatória roda do cohort persistido até o scorecard sem re-treino; veredito mecânico H1/H2/H3 produzido; conformal incluído como eixo comparativo; tudo rastreável por run_id + hash de pré-registro + hash de conteúdo das tabelas do silver lidas; a geração julgada (gold + manifesto + scorecard) é preservada numa cópia imutável com hash do conteúdo antes de qualquer outro refresh da partição (requisitos de fronteira 8.1 → 8.2 do doc de domínio de reprodução §4.5)."
 non_goals: [equivalência (8.2), plots (8.3)]
 complexidade_estimada: M
 gate_mode: strict
@@ -1216,7 +1216,7 @@ skills_hint: [composition-root, hex-arch-python]
 
 #### Stage 8.2 — `8.2-equivalence-audit`
 
-**Descrição humana:** Auditoria de equivalência: comparar a pipeline oficial corrigida com a evidência anterior (oráculo de regressão) dentro da **tolerância declarada**; documentar deltas e justificar aposentadoria de qualquer andaime interino.
+**Descrição humana:** Duas comparações (decisões B1 e B2 do humano, ADRs 0.0.0061 e 0.0.0062; teoria no [doc de domínio](./domain/evaluation/reproduction-equivalence-and-reporting.md) §4–§5): **(i) reprodução da própria corrida** — re-executar a cadeia silver → gold → scorecard da 8.1 a partir dos artefatos persistidos, em destino separado, e provar igualdade bit a bit no ambiente registrado (por classe entre ambientes) contra a geração julgada preservada — é o claim citável no TCC; **(ii) auditoria interna de equivalência** da pipeline oficial com a evidência anterior (oráculo de regressão, congelado por hash) na interseção comum, com **tolerância declarada** numérica no alvo e no código de métrica e **tolerância de sentido** nos números do modelo (ADR 0.0.0062); documentar deltas e justificar aposentadoria de qualquer andaime interino. A parte (ii) não entra no texto do TCC.
 
 **Descrição para IA:**
 ```yaml
@@ -1224,14 +1224,16 @@ stage_id: 8.2-equivalence-audit
 bounded_context: evaluation
 camada_alvo: application + tests
 arquivos_a_criar:
-  - tests/equivalence/test_official_vs_prior_evidence.py
+  - tests/equivalence/test_official_vs_prior_evidence.py   # pulado sem o oráculo hasheado; fora do CI (doc de domínio §5.7)
   - docs/reports/equivalence_audit.md
+  - docs/reports/reproduction_audit.md                     # resultado da reprodução (i), classe por classe
+  # o registro de hashes da evidência anterior e o modo de re-executar a cadeia em destino separado: o technical da 8.2 fixa
 # o espelho docs/preregistration/aapl_confirmatory.md só recebe seções acrescentadas por revisão (ADR 6.5.0001 item 6)
 arquivos_a_modificar: []
 contratos_introduzidos: []
-contratos_consumidos: [RunConfirmatoryEvaluation (8.1)]
-definition_of_done: "Deltas vs evidência anterior dentro da tolerância declarada (ASSUM-4) documentados; divergências explicadas pela teoria (não 'bate com o antigo'); relatório de equivalência commitado."
-non_goals: [bit-identical, reabrir metodologia]
+contratos_consumidos: [RunConfirmatoryEvaluation (8.1), geração julgada preservada e hash de conteúdo do silver (8.1)]
+definition_of_done: "(i) Reprodução da corrida da 8.1 a partir dos artefatos persistidos, sem re-treino, em destino separado: bit a bit no ambiente registrado contra a geração julgada preservada (entre ambientes, por classe — doc de domínio §4.3), resultado documentado; (ii) equivalência interna vs evidência anterior congelada por hash: alvo e código de métrica dentro da tolerância declarada (ASSUM-4), números do modelo dentro da tolerância de sentido (ADR 0.0.0062) com deltas documentados, divergências de sentido explicadas pela teoria (não 'bate com o antigo') ou registradas como não explicadas; relatórios de reprodução e de equivalência commitados."
+non_goals: [bit-identical vs evidência anterior, reabrir metodologia, mencionar a evidência anterior no texto do TCC]
 complexidade_estimada: M
 gate_mode: strict
 skills_hint: [hex-arch-python]
@@ -1267,7 +1269,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 - **Variante do CQR (7.2):** decidida — split-CQR assimétrico sem pesos como registro + NexCP ρ = 0,99 como sensibilidade (ADR `0_0_0008`; doc de domínio inference §4.5); os detalhes do pré-registro (forma, papel do MAPIE) ficam na 7.2 (ADRs 7.2.0001 e 7.2.0002: emenda cega r2; MAPIE como oráculo).
 - **Pré-registro de H3 (7.3):** decidido — nível 1 − 0,05/4 (Bonferroni sobre as famílias), intervalo básico, total não positivo ⇒ indefinido, pareamento por ponto de decisão, bloco como regra max(7, ⌈max b̂⌉), K_p = 10, B = 1000 (ADR 7.3.0005); perfil do subgrupo de volatilidade fora; congelado pela r3 única, ancorada no Linux depois do freeze do cohort de ablação.
 - **Parâmetros do MCS (6.2):** regra do bloco fixada no doc de domínio evaluation §6.5 (max(h, maior b̂_sb de Politis–White), sensibilidades l = h, √T e moving-block — ADR 0.0.0010); `B` de bootstrap e semente a fixar no concept de 6.2.
-- **Bandas e tolerâncias:** bandas de calibração pré-registradas (H1) e tolerância de equivalência (8.2) a fixar nos concepts de 6.5/8.2.
+- **Bandas e tolerâncias:** bandas de calibração pré-registradas (H1) fixadas na 6.5 (Wilson 97,5 % por cauda no gate, 95 % no perfil — ADR 6.5.0009); a forma da tolerância da 8.2 está fixada no [doc de domínio de reprodução, equivalência e relatório](./domain/evaluation/reproduction-equivalence-and-reporting.md) (§4.2–§4.3: reprodução bit a bit no mesmo ambiente, por classe entre ambientes; §5.4–§5.6: equivalência com a evidência anterior com tolerância declarada no alvo — precisão de armazenamento do anterior — e no código de métrica, tolerância de sentido nos números do modelo, divergências de sentido explicadas por mecanismo ou registradas como [finding]; ADRs 0.0.0060, 0.0.0061 e 0.0.0062) — o concept da 8.2 só preenche a mecânica.
 - **Fallback de fundamentals (3.3):** janela exata do fallback de disponibilidade a declarar e pré-registrar no concept de 3.3.
 
 ## Premissas adotadas no Roadmap
@@ -1276,7 +1278,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 - **ROADMAP-2:** bronze **reusa o raw existente** (ASSUM-1); não há Step de re-ingestão completa — só adapters limpos sobre o raw, com re-ingestão pontual opcional.
 - **ROADMAP-3:** o BC `evaluation` força cada métrica/teste a ser **serviço de domínio sobre value object**; é o que extrai a estatística dos builders e a torna auditável.
 - **ROADMAP-4:** multi-asset é **preparado, não executado** (única execução confirmatória = AAPL).
-- **ROADMAP-5:** equivalência vs evidência anterior (8.2) usa **tolerância declarada** (ASSUM-4), não bit-identical.
+- **ROADMAP-5:** equivalência vs evidência anterior (8.2, parte ii) usa **tolerância declarada** (ASSUM-4) onde a mesma coisa é calculada dos dois lados (alvo e código de métrica), não bit-identical; a reprodução da própria corrida (8.2, parte i) é bit a bit no ambiente registrado (ADR 0.0.0061; doc de domínio de reprodução §4).
 - **ROADMAP-6:** o bundle de skills **ml-systems** (DMLS) é incluído no bootstrap (projeto é ML-pesado); os `skills_hint` referenciam `dmls-ch0X` nas Stages de dados/modelagem/avaliação/inferência.
 
 ## Histórico de mudanças do roadmap
@@ -1296,6 +1298,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 | 2026-10-19 | Stage `7.2-conformal-cqr` `done`; Step 7 segue `in_progress`. Revisão r2 ancorada (`aapl_confirmatory-r2-f32ef5ebbbb8`, tag `preregistration/aapl_confirmatory-r2-f32ef5ebbbb8`, comentário na #158); prova de geometria real (Etapa G) verde, só de geometria: 60/60 runs (6 folds × 10 seeds), manifesto com 60 `completed`, sem métrica nem `gold/` | Fechamento da Stage 7.2 (issue #158; ADRs 7.2.0001–7.2.0005; technical 7.2 §7) |
 | 2026-10-21 | Bloco da 7.4 alinhado ao concept: serve as predições de teste gravadas (sem ports de checkpoint nem partição `calib`), `ServeInference` no lugar de `RunInferencePort`, port `ServingGoldReader` com leitor `ReadServingGold` no evaluation (aresta evaluation → inference como exceção declarada ao ADR 0.0.0053), handler `ApplicationError → 500`; camada multi e arquivos completos; `gate_mode: batch` justificado; atualização contínua fora (job agendado) | Concept 7.4 (issue #201; ADRs 7.4.0001–7.4.0002) |
 | 2026-10-22 | Stage `7.4-inference-api` `done`; Step 7 `done` (última Stage do step). `POST /inference/run` serve as predições de teste gravadas do candidato, uma entrada por seed, com o intervalo conformal da variante de registro e a leitura de H3 lidos do gold por port do consumidor (`ServingGoldReader` ← `ReadServingGold` do evaluation; aresta evaluation → inference declarada, 41 → 42); 404 "não há dados para o pedido solicitado"; gold ausente → blocos `unavailable`. Execução real (CA12): 200 em 1,46 s com 20/20 membros iguais ao `value_guardrail` gravado e gold não publicado; D15: pedido com gold sintético do tamanho do real em ≤ 2,51 s (sem cache). Follow-ups #202 (job agendado), #203, #204 | Fechamento da Stage 7.4 (issue #201; ADRs 7.4.0001–7.4.0002; technical 7.4 §7) |
+| 2026-10-22 | Gate de domínio do Step 8: doc [`reproduction-equivalence-and-reporting`](./domain/evaluation/reproduction-equivalence-and-reporting.md) aceito; a 8.2 faz as duas comparações — reprodução da própria corrida (claim citável) e equivalência interna com a evidência anterior na interseção comum, com a evidência anterior congelada por hash; lacuna "tolerância de equivalência (8.2)" fechada. Bloco da 8.2 emendado: descrição, DoD com (i) reprodução da corrida da 8.1 a partir dos artefatos persistidos e (ii) equivalência interna; `non_goals` passa a "bit-identical vs evidência anterior" (a reprodução da própria corrida é bit a bit no ambiente registrado); relatório de reprodução em `arquivos_a_criar`; teste de equivalência fora do CI; ROADMAP-5 ajustada. Bloco da 8.1: DoD e contratos ganham as obrigações que o doc de domínio impõe (cópia imutável + hash da geração julgada antes de qualquer refresh; hash de conteúdo do silver lido, forma decidida no concept da 8.1). Decisão B2 do humano (ADR 0.0.0062): tolerância numérica no alvo e no código de métrica, sentido nos números do modelo; overview §2, ASSUM-4 e R-REPRO-1 emendados na redação; status de Stages e do Step inalterado | Gate de domínio do Step 8 (issue #208; ADRs 0.0.0060, 0.0.0061 e 0.0.0062; decisões B1 e B2 do humano) |
 
 ## Próxima revisão de roadmap
 
