@@ -20,6 +20,7 @@ infinito (RFC 8259 §6) e o Pydantic o serializaria como `null` sem flag.
 from __future__ import annotations
 
 import math
+import re
 from datetime import date
 from typing import Annotated, Literal
 
@@ -42,6 +43,7 @@ from financial_forecasting.features.inference.application.use_cases.serve_infere
 )
 
 SCHEMA_VERSION: Literal[1] = 1
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 FiniteFloat = Annotated[float, Field(allow_inf_nan=False)]
 Horizon = Annotated[int, Field(strict=True, gt=0)]
@@ -68,8 +70,9 @@ class InferenceRunRequest(BaseModel):
     @field_validator("decision_date", mode="before")
     @classmethod
     def _iso_text(cls, value: object) -> object:
-        # só texto ISO `YYYY-MM-DD`: o modo lax do Pydantic aceitaria um timestamp numérico
-        if not isinstance(value, str):
+        # só texto `YYYY-MM-DD`: o modo lax do Pydantic aceitaria um timestamp numérico, e
+        # o `date.fromisoformat` do 3.12 aceitaria `20240315` e `2024-W11-5` (C2-1)
+        if not isinstance(value, str) or _ISO_DATE.fullmatch(value) is None:
             raise ValueError("decision_date must be an ISO date string (YYYY-MM-DD)")
         return value
 
