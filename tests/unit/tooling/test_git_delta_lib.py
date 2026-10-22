@@ -222,3 +222,16 @@ def test_doc_gates_report_unknown_delta_as_none(
     gate = _load(script)
     monkeypatch.setattr(gate, "_BASE_REF", "origin/nao-existe")
     assert getattr(gate, function)() is None
+
+
+@pytest.mark.parametrize("failing", ["diff", "status"])
+def test_any_failed_step_gives_none(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, failing: str
+) -> None:
+    real_git = lib._git
+
+    def _git_failing_at(args: list[str]) -> str | None:
+        return None if args[0] == failing else real_git(args)
+
+    monkeypatch.setattr(lib, "_git", _git_failing_at)
+    assert lib.changed_paths(_SPEC, _BASE) is None
