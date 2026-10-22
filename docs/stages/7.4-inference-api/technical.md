@@ -1173,4 +1173,106 @@ financial_forecasting.main:app` com `DATA_ROOT` e `SERVING_COHORT_FILE`, e a rec
 executada está no `[measurement]` CA12. O `.env.example` ganhou a linha comentada
 `SERVING_COHORT_FILE`.
 
+### 2026-10-22 — [measurement] Checkpoints A e B — resumo levado do handoff apagado — Claude (sessão Windows)
+**Contexto:** os Checkpoints A e B rodaram na sessão Linux. A disposição deles estava
+só no §4 do `HANDOFF-windows.md`, apagado no `stage 7.4: complete` (conteúdo recuperável
+por `git show 676d6713:docs/stages/7.4-inference-api/HANDOFF-windows.md`). O detalhe
+completo ficou no scratchpad da sessão Linux, que se perdeu; este resumo é o registro.
+**Medição:**
+- **Checkpoint A (concept):** 3 revisores na rodada 1 (conformidade, domínio e
+  testabilidade, completude das decisões), mais as rodadas 2 e 3 de re-verificação.
+  - Rodada 1: 30 achados. Entre eles, 3 major de conformidade: A1 (aresta
+    evaluation → inference sem exceção declarada ao ADR 0.0.0053), A2 (camada e
+    `gate_mode` do roadmap) e A3 (CA10 sem gate de torch no router). E 2 major de
+    domínio: T1 (o corpo do 422 de validação é lista) e T3 (semântica de
+    disponibilidade ambígua).
+  - Rodada 2: 6 contradições novas, entre elas N1 (major: VSN `undefined` grava
+    rótulo nulo, então a conferência viraria 500).
+  - Todos `corrigido` no concept, nos ADRs e no roadmap; nenhum `refutado` ou
+    `escalado`.
+  - Rodada 3: 4 resíduos de redação corrigidos, zero blocker.
+- **Checkpoint B (technical):** 2 revisores (rastreabilidade, atomicidade e gates;
+  viabilidade contra o código, com sondas). 12 achados minor (B1–B12) e mais 4 (V1–V4),
+  todos `corrigido` na reescrita do technical:
+  - 9 → 10 Tasks, com o handler de `ApplicationError` como Task 05 própria;
+  - router registrado pela composition root;
+  - `omit` do `http/` saindo na Task 07;
+  - mypy explícito sobre fake e contrato nas Tasks 01 e 04;
+  - seed nula no gold descartada;
+  - `ok ⇒ n` e limites não nulos.
+
+  A matriz CA1–CA14 → Tasks não tem órfão.
+**Razão:** as disposições dos Checkpoints A e B ficam no technical depois que o handoff
+foi apagado.
+
+### 2026-10-22 — [deviation] Auditoria da Stage F6 — arquivos novos fora das listas das Tasks — Claude (sessão Windows)
+**Contexto:** três arquivos de teste entraram por achados de checkpoint, fora das
+listas fechadas das Tasks:
+- `tests/unit/features/evaluation/_serving_gold_rows.py` (C1-2, já registrado);
+- `tests/architecture/test_serving_gold_status_parity.py` (C1-4, depois F2);
+- `tests/e2e/features/inference/_scenario.py` (C3-2).
+**Razão:** são só testes e helpers de teste, pedidos pelos revisores, sem código de
+`src/` novo. Mapa achado → commit (o código do achado está no body de cada commit):
+
+| achado | commit |
+|---|---|
+| C1-1 | `b21dd7e0`, `9d531699`, `4c3f66ba` |
+| C1-2 | `081f5cc1` |
+| C1-3 | `b3857e8b` |
+| C1-4 | `0e08f254` |
+| C1-5 | `0649668d` |
+| C1-6 | `eedc3884` |
+| C1-7 | `c160c400` |
+| C2-1 | `596a57a0` |
+| C2-2 | `ea907135` |
+| C2-3 | `74b9870e` |
+| C2-4 | `dc6dc270` |
+| C2-5 | `eaea6ee2` |
+| C2-6 | `0a2d45e8` |
+| C3-1 | `b54f1b96` |
+| C3-2 | `60cd10a9` |
+| C3-3 | `a696bc19` |
+| C3-4 | `59981a65` |
+| C3-6 | `2a67c00d` |
+| C3-7 | `b5d2bf6c`, `6e9aaef8` |
+| C3-8 | `cba25610` |
+| TA-1 | `2b883a90` |
+| TA-2 | `3689aac9` |
+| TA-3 | `52505fb6` |
+| TA-4 | `2ea55629` |
+| TA-5 | `d73bc984` |
+| TA-6 | `aa612d9b` |
+| TA-7 | `76ec38cf` |
+| TA-8 | `e9721d90` |
+| F1 | `987caf66` |
+| F2 | `f80e9758` |
+| F3 | `335fd327` |
+| F4 | `b9236ab6` |
+| F5 | `ece7bd15` |
+
+O C3-5 foi coberto pelo C2-4, e o C3-9 está no `[deviation]` próprio.
+
+### 2026-10-22 — [deviation] Auditoria da Stage F7 — a entrada C3-4 é desvio aplicado, não finding — Claude (sessão Windows)
+**Contexto e razão:** nota append-only à entrada "[finding] Checkpoint C3-4". O conserto
+(a linha "Chapter N" das skills `dmls-ch02..06`, commit `59981a65`) foi aplicado nesta
+Stage. Por isso a entrada vale como `[deviation]`: um ajuste feito, não um gap deixado
+para outra Stage. A parte que fica para depois (renomear as skills e conferir a `ch01`)
+continua sem Stage candidata. O cabeçalho original não foi reescrito.
+
+### 2026-10-22 — [measurement] Fixes da auditoria da Stage (F1–F7) — alcance dos testes — Claude (sessão Windows)
+**Contexto:** a auditoria pediu os fixes F1–F7 sem outro `make check` completo.
+**Medição:** os fixes só tocam `tests/`, `docs/`, `.env.example` e o `_bound` do
+`read_serving_gold.py` (F4), este com teste próprio e um mutante com a checagem removida
+que morre (2 failed). Rodaram:
+- os testes tocados;
+- o mypy strict literal da Task 04, sem `silent`: `Success: no issues found in 2 source
+  files`;
+- `check_technical_postexec` e `make docs-check`;
+- `make check-task SLICE=evaluation`, por causa do `_bound`.
+
+As saídas estão no comentário de veredito do PR #205.
+**Razão:** o `make check` de saída (`EXIT=0`, 98,79%) segue valendo. A única mudança de
+`src/` depois dele é a recusa nova do `_bound`, coberta por teste e pelo `check-task`
+do slice.
+
 <!-- END: post-execution -->
