@@ -131,8 +131,9 @@ def test_project_mypy_rejects_a_fixture_that_drifts_from_the_port(
         ]
     )
     errors = [line for line in stdout.splitlines() if ": error:" in line]
-    assert status == 1
-    assert len(errors) == 1
+    # 2+ erros = o port `SilverTableReader` mudou de forma: alinhar `Conforming`.
+    assert status == 1, stdout
+    assert len(errors) == 1, stdout
     drifted_line = _PORT_PROBE.splitlines().index("    return Drifted()") + 1
     assert f"port_probe.py:{drifted_line}:" in errors[0]
     assert "[return-value]" in errors[0]
