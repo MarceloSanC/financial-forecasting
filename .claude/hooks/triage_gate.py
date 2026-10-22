@@ -91,8 +91,8 @@ def decide(payload: dict[str, Any]) -> dict[str, Any] | None:
 
 def main() -> int:
     try:
-        # bytes → UTF-8 explícito: no Windows o stdio do Python é cp1252
-        payload = json.loads(sys.stdin.buffer.read().decode("utf-8"))
+        # bytes → UTF-8 explícito (stdio do Python no Windows é cp1252); -sig: BOM do pipe do PS 5.1
+        payload = json.loads(sys.stdin.buffer.read().decode("utf-8-sig"))
     except (json.JSONDecodeError, UnicodeDecodeError):
         return 0  # hook não deve derrubar a sessão por entrada inesperada
     out = decide(payload)
