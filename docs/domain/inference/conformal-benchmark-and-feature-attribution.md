@@ -5,7 +5,7 @@ when-use: Consultar antes de escrever o concept.md de qualquer Stage do Step 7 (
 keywords: [domain, inference, determinism, reproducibility, dropout, mc-dropout, guardrail, conformal, split-conformal, cqr, asymmetric-cqr, nexcp, aci, enbpi, exchangeability, beta-coverage, empirical-coverage, h3, feature-attribution, vsn, permutation-importance, grouped-importance, loco, ablation, block-bootstrap, per-horizon, preregistration, api]
 status: accepted
 created_at: 2026-10-06
-updated_at: 2026-10-17
+updated_at: 2026-10-22
 bounded_context: inference
 subdomain: conformal-benchmark-and-feature-attribution
 references:
@@ -702,10 +702,15 @@ não se aplica aqui (inferência deste doc: o TFT não é aditivo e as features 
 uma família são correlacionadas), então se permuta o grupo em vez de somar
 importâncias individuais. Embaralhar
 **dentro** do tempo (a ordem dos lags) foi rejeitado: quebra a estrutura
-temporal da própria variável e força o modelo a extrapolar ("breaking
-dependencies between features in hold-out data ... forcing the original model
-to extrapolate", Hooker, Mentch & Zhou 2021, abstract; "observations of the same
-feature over subsequent time steps are not independent", Leung et al. 2023).
+temporal da própria variável ("observations of the same feature over
+subsequent time steps are not independent", Leung et al. 2023) e força o modelo
+a extrapolar. A rejeição é **decisão do projeto, por analogia**: Hooker,
+Mentch & Zhou (2021) não tratam de séries temporais — o argumento deles é sobre
+a dependência entre features ("breaking dependencies between features in
+hold-out data ... forcing the original model to extrapolate", abstract), e aqui
+se estende à dependência da feature consigo mesma ao longo do tempo (auditoria
+da #169, linha B12.6 de `docs/audits/tcc-citation-support.md`; errata do
+ADR 0.0.0007).
 **Ressalva:** permutar entre amostras ainda quebra a correlação entre famílias
 (Hooker et al. 2021; Strobl et al. 2008) — é exatamente por isso que a
 ablação, com outro estimando, é o segundo método (§5.5).
