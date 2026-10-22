@@ -269,8 +269,10 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
   Floats codificados exatamente (`repr`, como o `PreregistrationHash`), linhas
   em ordem canônica, colunas por nome, tipos normalizados (inteiros de
   numpy/pandas → `int`, flutuantes → `float`; outro tipo → `ValueError`),
-  colunas de proveniência de escrita (`created_at_utc`) fora; NaN/±inf
-  recusados (D4; ADR 8.1.0002). **Canonização pelo tipo declarado** da coluna
+  colunas de proveniência de escrita (`created_at_utc`) fora; não-finitos
+  codificados como fichas distintas (`float:inf`, `float:-inf`, `float:nan`),
+  nunca recusados — a linha inválida de atribuição é dado da unidade
+  `undefined` (I16/C8-2 da 7.3) e não pode abortar o refresh (D4; ADR 8.1.0002). **Canonização pelo tipo declarado** da coluna
   no schema do silver (int/float/str/bool + nulabilidade), recebido junto com
   as linhas, nunca pelo tipo em runtime: `3.0` numa coluna int → `3`; `None`
   em coluna não-nula (o que um NaN vira no leitor real) → `ValueError`;
@@ -442,7 +444,10 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
   exato, ao lado do `DatasetContentFingerprint` (que arredonda e segue como
   identidade ancorada do cohort).
 - **I7 — Floats exatos na identidade.** Nenhum arredondamento entra no hash do
-  silver: dois valores distintos dão hashes distintos (D4).
+  silver: dois valores distintos dão hashes distintos (D4); `inf`, `-inf` e
+  `nan` são fichas próprias, distintas entre si e de qualquer finito, e o hash
+  nunca aborta o refresh por um não-finito (a regra de validade é do dono da
+  leitura — I16/C8-2 da 7.3).
 - **I8 — A cópia é a geração publicada.** O manifesto copiado é **igual** ao
   `RefreshGoldResult.manifest` desta execução e, quando há scorecard, ao
   `ScorecardResult.manifest_read`; divergente → erro, nada selado.
@@ -479,7 +484,7 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
 | Geração julgada selada e íntegra | G4 | `ALREADY_JUDGED`, devolve o registro; sem refresh, scorecard nem escrita |
 | Geração julgada com digest divergente ou arquivo faltando | G4 | `JudgedGenerationTamperedError`; zero efeito; diagnóstico humano |
 | Sobra de staging de corrida interrompida | E3 | removida pelo `preserve` antes de copiar (como `.staging/` do ADR 6.4.0005 item 5) |
-| `GridFingerprintMismatchError`, cohort vazio, linha mal-formada, não-finito no silver | E1 | propaga do `RefreshGold`; `current/` intacto; nada selado; tentativa fica registrada; re-execução só nas condições do I13 |
+| `GridFingerprintMismatchError`, cohort vazio, linha mal-formada, não-finito no silver onde o `RefreshGold` já o recusa (o hash não recusa: codifica a ficha; linha inválida de atribuição segue `undefined`, I16/C8-2 da 7.3) | E1 | propaga do `RefreshGold`; `current/` intacto; nada selado; tentativa fica registrada; re-execução só nas condições do I13 |
 | Entrada (`silver_content`/`dataset_fingerprint`) diferente da tentativa anterior sem `--deviation` | depois do E1 | `PriorAttemptInputChangedError`; nada selado; `[finding]` |
 | Geração nova ≠ geração viva anterior com código, ambiente e entrada iguais | depois do E1 | `PriorAttemptDivergenceError`; nada selado; `[finding]` e diagnóstico (R-BIT) |
 | Refresh `BLOCKED` | E1 → E3 | sem scorecard; `preserve` com status `BLOCKED` e checks que falharam; status `BLOCKED`; na corrida real, `[finding]` e parada para decisão humana (I5) |
@@ -846,7 +851,10 @@ Código (silver sintético; nenhum teste toca o cohort real):
   tipo declarado — `3` e `3.0` numa coluna int dão o mesmo hash, `3.5` numa
   coluna int → `ValueError`, `None` em coluna não-nula → `ValueError`, `None`
   em coluna nula aceito, coluna não declarada → `ValueError`, `str` preservado;
-  `created_at_utc` diferente não muda o hash; NaN/±inf → `ValueError`;
+  `created_at_utc` diferente não muda o hash; `inf`, `-inf` e `nan` dão hashes
+  distintos entre si e de qualquer finito, sem exceção; um refresh com linha
+  `inf` em `fact_permuted_predictions` e em `fact_vsn_weights` não aborta
+  (unidade `undefined`, testes da 7.3 verdes) e grava `silver_content`;
   construtor cru valida `validate_sha256_hex`.
 - [ ] **A2** — `RefreshGold` grava `silver_content`, com o silver lido pelo
   **`ParquetAnalyticsRepository` real** sobre arquivos sintéticos:
