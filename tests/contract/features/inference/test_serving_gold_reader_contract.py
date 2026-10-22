@@ -10,9 +10,15 @@ cenário, exatamente o mesmo `ServingGold`:
 
 Pernas: `fake` (`InMemoryServingGoldReader` carregado com o `ServingGold` esperado) e
 `real` (`ReadServingGold` sobre um `ParquetGoldStore` em `tmp_path`, com a geração
-publicada pelo `publish` real). Só na perna real: geração corrompida (tabela apagada)
-→ `ApplicationError`. O leitor é anotado pelo Protocol do `inference`, conferido pelo
-mypy strict explícito da Task 04.
+publicada pelo `publish` real). A perna fake é uma **busca simples** por partição: não
+monta nada a partir do gold, então devolver o esperado não prova regra de leitura. O
+que ela prova é a forma do contrato que os testes do `ServeInference` usam (o mesmo
+`ServingGold` por cenário e o erro como `ApplicationError`); a montagem é provada só
+na perna real, aqui e em `test_real_reads_what_the_real_builders_write`.
+
+Erro: a perna fake com `error=` e a perna real com a geração corrompida (tabela
+apagada) erguem `ApplicationError`. O leitor é anotado pelo Protocol do `inference`,
+conferido pelo mypy strict explícito da Task 04.
 """
 
 from __future__ import annotations
@@ -51,6 +57,9 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     GoldTable,
     RefreshParameters,
     RefreshStatus,
+)
+from financial_forecasting.features.evaluation.application.ports.out.gold_generation_reader import (
+    GoldGenerationCorruptError,
 )
 from financial_forecasting.features.evaluation.application.use_cases.read_serving_gold import (
     ReadServingGold,
@@ -331,12 +340,28 @@ def test_reader_returns_the_expected_serving_gold(
     assert reader.read(asset=_ASSET, cohort_id=_COHORT) == scenario.expected
 
 
-def test_real_corrupt_generation_raises_application_error(tmp_path: Path) -> None:
-    store = ParquetGoldStore(tmp_path)
+def _fake_with_error(_: Path) -> ServingGoldReader:
+    corrupt = GoldGenerationCorruptError("the generation has no table 'gold_h3_vsn'")
+    return InMemoryServingGoldReader({}, error=corrupt)
+
+
+def _real_corrupt(root: Path) -> ServingGoldReader:
+    store = ParquetGoldStore(root)
     tables, manifest = generation(RefreshStatus.COMPLETED, rows=complete_rows())
     store.publish(partition=_PARTITION, tables=tables, manifest=manifest)
     (store.current_dir(_PARTITION) / f"{GOLD_H3_VSN.name}.parquet").unlink()
-    reader: ServingGoldReader = ReadServingGold(gold_reader=store)
+    return ReadServingGold(gold_reader=store)
+
+
+CORRUPT_LEGS: dict[str, Callable[[Path], ServingGoldReader]] = {
+    "fake": _fake_with_error,
+    "real": _real_corrupt,
+}
+
+
+@pytest.mark.parametrize("leg", list(CORRUPT_LEGS))
+def test_corrupt_generation_raises_application_error(leg: str, tmp_path: Path) -> None:
+    reader = CORRUPT_LEGS[leg](tmp_path)
     with pytest.raises(ApplicationError):
         reader.read(asset=_ASSET, cohort_id=_COHORT)
 
