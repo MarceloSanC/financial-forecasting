@@ -1384,4 +1384,24 @@ estão limpos; nenhum gate roda mypy sobre `tests/`.
 **Razão:** mesma classe da issue #204 (mypy não cobre `tests/`); fora do escopo da 8.1,
 escalado para lá junto com os 3 erros registrados na Task 02.
 
+### 2026-10-22 — [finding] ponto 1 do plano de gates — `PYTEST_PAR` por variável de ambiente não vale — Claude (sessão Windows)
+**Contexto:** o 1º `make check` (container `ff81-check1`) rodou com `-e PYTEST_PAR="-n 4
+--dist loadgroup"`, como o comando literal do §1 manda, mas o `Makefile` (l.120) declara
+`PYTEST_PAR := -n auto`, e atribuição do Makefile vence a variável de ambiente: subiram
+≈12 workers (gw0..gw11), a memória chegou a 7,4/8 GiB e o container travou 5 h em 99 %
+com CPU ~0 % (resultado inválido; parado pelo coordenador).
+**Razão:** processo, não código. Todo `make check` seguinte passa o valor como argumento
+do make (`make check PYTEST_PAR='-n 4 --dist loadgroup'`) e o log é conferido (só
+gw0..gw3). O comando literal do §1 fica como está (fora de `post-execution`); a correção
+do doc/RUNBOOK é para quem mantém o processo.
+
+### 2026-10-22 — [deviation] Task 07 — regra de inteiro com dono único no `JudgedRecord` — Claude (sessão Windows)
+**Contexto:** a parte de testes que chegou a rodar no 1º `make check` reprovou
+`tests/architecture/test_evaluation_validation_single_owner.py::test_int_rule_has_a_single_owner`:
+o `JudgedRecord.__post_init__` reescrevia "int não-`bool` ≥ 0" em vez de usar o dono
+`domain/value_objects/_integer.py` (#118).
+**Razão:** correção local de uma linha, sem mudar comportamento:
+`validate_int_at_least(self.revision, minimum=0, field="judged revision")`. O T1 da Task 07
+não roda `tests/architecture/`; o ponto 1 do plano existe para isso.
+
 <!-- END: post-execution -->
