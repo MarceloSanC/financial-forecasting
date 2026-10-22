@@ -201,6 +201,18 @@ def test_no_doc_tells_to_delete_remote_by_push_from_main_checkout(doc: Path) -> 
     assert offending == []
 
 
+@pytest.mark.parametrize("doc", _STEP7_DOCS, ids=lambda p: p.parent.name)
+def test_no_doc_removes_a_branch_worktree_without_delete_remote(doc: Path) -> None:
+    # sem --delete-remote na 1ª chamada a remota sobra e o hook recusa apagá-la depois
+    lines = doc.read_text(encoding="utf-8").splitlines()
+    offending = [
+        ln
+        for ln in lines
+        if "scripts/worktree-rm.py <branch>" in ln and "--delete-remote" not in ln
+    ]
+    assert offending == []
+
+
 def test_git_dash_c_redirects_to_worktree() -> None:
     assert _reason(f"git -C {WORKTREE} push", cwd=MAIN) is None
 
