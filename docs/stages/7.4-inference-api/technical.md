@@ -1108,4 +1108,53 @@ adulterado (concept D4: defeito de dado vira 500). Teste
 âncora com a mudança; a versão contra o código novo (`rg-infinite-ignored-when-value-v2`,
 a checagem removida) morre.
 
+### 2026-10-22 — [measurement] Auditoria de testes — mutantes sobreviventes depois dos fixes TA-1 a TA-8 — Claude (sessão Windows)
+**Contexto:** a auditoria de testes independente rodou 47 mutantes sobre `cba2561`: 26
+mortos e 21 sobreviventes, 18 deles reais. Os achados TA-1 a TA-8 entraram em commits
+próprios. Depois deles, os sobreviventes foram rodados de novo.
+**Medição:** os mutantes de `…\scratchpad\ta74\.audit\mutants.py` foram aplicados um por
+vez, in place, sobre a worktree em `/app` (`--cpus 3`), com a suíte direcionada da
+auditoria (9 arquivos, `.suite.txt`), e cada arquivo foi restaurado depois. Resultado:
+`PLACAR: 19 killed / 21`.
+- **Mortos:**
+  - `si-failed-prefers-upper` e `si-failed-always-upper`;
+  - `rg-horizon-constant`, `rg-vsn-family-from-name`, `rg-reading-swap-ablation-sustained`,
+    `rg-excludes-zero-never-true` e `rg-blocked-after-missing-blocks`;
+  - `rg-infinite-ignored-when-value-v2`, versão do original contra o código do TA-6, cuja
+    âncora mudou;
+  - os dez `sc-*` de mapeamento e o `sc-seed-lax`.
+- **Sobreviventes equivalentes** (fora da lista citada pela auditoria):
+  - `si-other-candidate-ignores-published`: o `ServingGold` só tem
+    `generation_status` não nulo quando `published` é `True`, então tirar o `published`
+    da condição não muda o comportamento;
+  - `eh-no-exc-info`: `logger.exception` dentro do handler já recebe a exceção corrente do
+    Starlette, e o `exc_info` explícito só a torna explícita.
+**Razão:** todo mutante real que a auditoria citou morre.
+
+### 2026-10-22 — [measurement] Gate de saída — `make check` e cobertura por arquivo — Claude (sessão Windows)
+**Contexto:** §3, "Verificações automatizadas" (Passo 10). É o único `make check` do plano
+de gates.
+**Medição:** o comando foi `docker run --name ff-gate-201 --cpus 6 --memory 8g
+--memory-swap 8g` (imagem `financial_forecasting-app:dev`, volume
+`financial-forecasting_ff74-venv`, worktree em `/app`) com `uv lock --check && make check
+PYTEST_PAR='-n 4 --dist loadgroup'`, sobre `e9721d90` mais o roadmap ainda não
+commitado. Saída (últimas linhas):
+```
+Contracts: 17 kept, 0 broken.
+Success: no issues found in 402 source files
+TOTAL                                                                                                                 17375    211    99%
+Required test coverage of 90.0% reached. Total coverage: 98.79%
+========= 8244 passed, 28 skipped, 771 warnings in 1364.72s (0:22:44) ==========
+EXIT=0
+```
+Nenhum worker do xdist caiu. Cobertura (`term-missing` do mesmo run) dos arquivos de
+`src/` tocados pela Stage:
+- `composition_root.py` 98% e `serve_inference.py` 98%;
+- `read_serving_gold.py`, `inference_router.py`, `inference_schemas.py`,
+  `serving_gold.py`, `serving_gold_reader.py`, `domain/exceptions/serving.py`,
+  `settings.py`, `http/app.py` e `http/error_handlers.py`: 100% cada;
+- os `__init__.py` novos: 100%.
+**Razão:** gate de saída verde, com cobertura ≥ 90% em cada arquivo tocado e 98,79% no
+total.
+
 <!-- END: post-execution -->
