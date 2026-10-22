@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-22
 updated_at: 2026-10-22
 adr_id: 8.1.0004
-decision: Numbers exist from the moment `RefreshGold` starts, not from the seal; so before E1 the use case appends an attempt entry (ref, commit, code.src, code.uv_lock, started_at, deviation text if any) to a write-ahead attempt log of the partition, and G4 refuses — before any effect — when the partition has a sealed copy, an attempt or a live `current/` generation of another revision, when a committed `<name>-r*.judged.toml` names another revision or names this one without a sealed copy of the same digest, or when an earlier unsealed attempt of the same revision ran other code (code.src or code.uv_lock) and no `[deviation]` justification is given; every earlier attempt is listed in the run record, and interrupted attempts are also recorded in the committed technical §7.
+decision: Numbers exist from the moment `RefreshGold` starts, not from the seal; so before E1 the use case appends an attempt entry (ref, commit, code.src, code.uv_lock, R-BIT environment keys, started_at, deviation text if any, silver_content of a prior live generation; after E1 a second line with the silver_content read) to a write-ahead attempt log of the partition, and G4 refuses — before any effect — when the partition has a sealed copy, an attempt or a live `current/` generation of another revision, when a committed `<name>-r*.judged.toml` names another revision or names this one without a sealed copy of the same digest, or when an earlier unsealed attempt of the same revision ran other code or another R-BIT environment and no `[deviation]` justification is given; after E1 a different input (silver_content, dataset fingerprint) than the earlier attempt's, or a result different from the earlier live generation with code, environment and input equal, stops with a `[finding]` and nothing is sealed; the durable source is git — the runbook commits each real attempt's intention in the technical §7 before running.
 context_stage: 8.1-confirmatory-run
 bounded_context: evaluation
 ---
@@ -68,9 +68,15 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
    `judged_refs(partition)`. The log lives in the partition
    (`judged/ATTEMPTS.jsonl`, append-only, one JSON object per line, written by
    temporary file + `os.replace` of the whole file). The use case appends an
-   entry — `preregistration_ref`, `commit`, `code.src`, `code.uv_lock`,
-   `started_at` (from the `Clock`), `deviation` (text or null) — **after G1–G3
-   and before E1**. The run record lists every entry of the partition.
+   entry — `preregistration_ref`, `commit`, `code.src`, `code.uv_lock`, the
+   R-BIT environment keys (image id, platform, CPU capability, library
+   versions), `started_at` (from the `Clock`), `deviation` (text or null), and
+   the `silver_content` of the live generation of this revision if one exists
+   (read through the existing `GoldGenerationReader.read_generation`; no new
+   store method) — **after G1–G3 and before E1**; after E1 it appends a second
+   line with the `silver_content` the refresh read. The run record lists every
+   entry of the partition. One port: splitting the attempt log from the judged
+   store would not change behavior (same adapter, same layout owner).
 2. **G4, in this order, all before any effect:**
    a. committed records (`PreregistrationSource.judged_records(name)`, a new
       read of `config/preregistration/<name>-r*.judged.toml`): another
@@ -86,13 +92,30 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
       no attempt entry of this ref → `JudgedGenerationTamperedError` (an
       unrecorded refresh);
    e. attempts of this revision with `code.src` or `code.uv_lock` different
-      from the current snapshot and no `command.deviation` →
-      `PriorAttemptCodeChangedError`; a `deviation` must contain
-      `[deviation]` (checked) and is recorded.
-3. **Residual (declared).** Between the first attempt and the seal nothing is
-   in git. The runbook records every interrupted attempt in the committed
-   technical §7 (time, ref, commit, reason) before re-running; deleting the
-   whole data root *and* that record is outside what code can detect.
+      from the current snapshot → `PriorAttemptCodeChangedError`, or with
+      another image id, platform, CPU capability or library versions →
+      `PriorAttemptEnvironmentChangedError` — both unless `command.deviation`
+      is given; a `deviation` must contain `[deviation]` (checked) and is
+      recorded.
+2b. **After E1, before E2.** (i) The `silver_content` and
+   `dataset_fingerprint` of the new manifest differ from the last recorded
+   input of an earlier attempt of this revision and no deviation →
+   `PriorAttemptInputChangedError`; (ii) a live generation of this revision
+   existed before E1 and the new one differs from it in the result layer
+   (table rows by value; manifest without `started_at`/`finished_at`) while
+   code, environment and input are equal → `PriorAttemptDivergenceError`: an
+   R-BIT failure, which the domain doc §4.2 makes a stop for diagnosis
+   (`[finding]`), never a switch. In both, nothing is sealed.
+2c. **Recovery of a tampered or lost judged copy** has no code path: a
+   `[deviation]` is committed, the sealed backup of `judged/<ref>/` (ADR
+   8.1.0003 item 6c) is restored and checked by `sha256sum -c`, and G4 then
+   passes because the digest matches the committed record.
+3. **Durable source = git; residual (declared).** Before **each** real
+   `evaluate`, the runbook commits in the technical §7 the attempt's intention
+   (commit, `code.src`, image id, platform, CPU capability, time); no new code
+   mechanism. Residual: deleting `gold/` or restoring the data-root backup
+   erases the local attempt log, but not the committed intentions, so an
+   attempt is never invisible to a reviewer of the repository.
 4. **No code path deletes** the attempt log, a sealed copy or a `.judged.toml`.
 
 ## Alternatives considered

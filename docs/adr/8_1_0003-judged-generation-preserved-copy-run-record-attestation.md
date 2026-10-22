@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-22
 updated_at: 2026-10-22
 adr_id: 8.1.0003
-decision: After the confirmatory refresh and the scorecard, a port-out `JudgedGenerationStore` (filesystem adapter next to `ParquetGoldStore`) copies the partition's `current/` byte for byte into `gold/asset=<a>/parent_sweep_id=<p>/judged/<preregistration_ref>/generation/`, checks the copied manifest equals the published one, writes `gold_model_comparison_confirmatory_scorecard.json` (absent if BLOCKED) and `run_record.json` (commit, clean tree, environment keys, gold-path library versions, inference summary; seeds by reference to the manifest), writes `CONTENTS.sha256` (sha256 of every file and a generation digest over the sorted list) last and renames staging into place; the copy is never overwritten and every read re-checks the digest; the run is attested, by runbook, with a committed `<name>-r<rev>.judged.toml`, a `confirmatory-run/<ref>` tag and one comment on the Stage issue.
+decision: After the confirmatory refresh and the scorecard, the `ParquetGoldStore` — as the real of the port-out `JudgedGenerationStore` and single owner of the gold layout — copies the partition's `current/` byte for byte into `gold/asset=<a>/parent_sweep_id=<p>/judged/<preregistration_ref>/generation/`, checks the copied manifest equals the published one, writes `gold_model_comparison_confirmatory_scorecard.json` (absent if BLOCKED) and `run_record.json` (commit, clean tree, R-BIT environment keys with a mandatory image id, gold-path library versions, inference summary, attempts; seeds by reference to the manifest), writes `CONTENTS.sha256` (a `sha256sum` listing; the generation digest is the sha256 of its bytes) last and renames staging into place; the copy is never overwritten and every read re-checks the listing; after the seal the runbook backs the copy up outside the data root and attests the run with a committed `<name>-r<rev>.judged.toml` (digests and paths of the input and judged backups), a `confirmatory-run/<ref>` tag and one comment on the Stage issue.
 context_stage: 8.1-confirmatory-run
 bounded_context: evaluation
 ---
@@ -73,7 +73,7 @@ Base: ADR 6.4.0005 items 4–5 (current/ is replaced); naming by digest would ad
 Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim (before the 8.1 run)
 
 [decision:C] 8.1-J3 — run record
-Escolha: `run_record.json` in the copy: commit, code_dirty (false), whether `config/preregistration/` is clean, the 5.5 probe keys (reused, unchanged), the CPU capability (the quantity ADR 7.1.0003 item 2 records — the probe's `cpu` is only machine/count, and R-BIT needs the capability), versions of the gold-path libraries the probe lacks, platform and CPU count, image id when available, inference summary; seeds by reference to the manifest's parameters and the cohort spec · Alternativas: extend the 5.5 probe keys; rely on uv.lock hash only; duplicate seeds · Degrau (C): 1 (domain doc §4.5 items 3–5; ADR 7.1.0003) and 5
+Escolha: `run_record.json` in the copy: commit, code_dirty (false), whether `config/preregistration/` is clean, the 5.5 probe keys (reused, unchanged), the CPU capability (the quantity ADR 7.1.0003 item 2 records — the probe's `cpu` is only machine/count, and R-BIT needs the capability), versions of the gold-path libraries the probe lacks, platform and CPU count, the image id (mandatory — the `:dev` tag is mutable), inference summary, every attempt of the partition; seeds by reference to the manifest's parameters and the cohort spec · Alternativas: extend the 5.5 probe keys; rely on uv.lock hash only; duplicate seeds · Degrau (C): 1 (domain doc §4.5 items 3–5; ADR 7.1.0003) and 5
 Base: Sandve et al. 2013 Rules 3 "note the exact names and versions of the main programs", 4, 6 "the random seed should be recorded" (verified in the Step 8 domain gate); ADR 7.1.0003 item 3 (extra probe keys would break `strict`)
 Verificado: herdado · Sensibilidade pré-registrada: nenhuma · Reversível: sim
 
@@ -88,7 +88,8 @@ Verificado: herdado · Sensibilidade pré-registrada: nenhuma · Reversível: si
    `find(partition, preregistration_ref) -> JudgedGeneration | None`,
    `preserve(partition, preregistration_ref, expected_manifest, documents) -> JudgedGeneration`,
    `judged_refs(partition)`, `record_attempt(partition, attempt)`,
-   `attempts(partition)` and `live_manifest(partition) -> GoldManifest | None`
+   and `attempts(partition)` (the live generation is read through the existing
+   `GoldGenerationReader.read_generation`; no `live_manifest`)
    (ADR 8.1.0004). Real: **`ParquetGoldStore` itself** — it already satisfies
    `GoldStore` and `GoldGenerationReader` and is the single owner of the gold
    layout (`current/`, staging, `MANIFEST.json`), so no second adapter
@@ -137,7 +138,14 @@ Verificado: herdado · Sensibilidade pré-registrada: nenhuma · Reversível: si
    root (concept D10) is declared the frozen input of the 8.2 reproduction:
    its path and the sha256 of its archive are recorded in the `.judged.toml`;
    the 8.2 checks `silver_content` against the live silver and restores from
-   the backup when they differ (Checkpoint A, DT-3).
+   the backup when they differ (Checkpoint A, DT-3). `input_backup_sha256` is
+   the sha256 of the bytes of the backup's `sha256sum` listing (same form as
+   `CONTENTS.sha256`), written next to the backup.
+6c. **Backup of the judged copy.** After the seal, the runbook copies
+   `judged/<ref>/` outside the data root with its `sha256sum` listing; path
+   and the sha256 of that listing go in the `.judged.toml`
+   (`judged_backup`, `judged_backup_sha256`). It is the only recovery of a
+   lost or tampered copy (ADR 8.1.0004 item 2c).
 7. **Attestation.** Runbook step after the seal (decision 8.1-J4). The CLI
    prints a deterministic comment body: preregistration ref, generation
    digest, status, commit, tag, manifest `started_at`/`finished_at`,
@@ -216,9 +224,8 @@ to reproduce against.
 
 ## Implementation notes
 
-- Share the copy/rename helpers with `ParquetGoldStore` only through a
-  domain-free module of the same adapter package (no adapter-to-adapter import
-  across slices).
+- The copy/rename logic lives in `ParquetGoldStore` itself (item 1), next to
+  `publish`; there is no second adapter.
 - `CONTENTS.sha256` lists paths relative to `judged/<ref>/`, POSIX separators,
   sorted.
 

@@ -122,8 +122,10 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
    process root that already dispatches three slices), not in the evaluation
    CLI module, so `evaluation/adapters/in/cli/` never imports inference
    (Checkpoint A, CA-5). `cli.py` loads the cohort spec, runs the 7.1 `infer`
-   command (which takes and releases its own lock; the command is changed to
-   return the `RunInferenceResult` summary instead of only `0` — DT-8), and
+   through a new function `infer_with_summary` next to `infer` (same
+   `RunInference`, which takes and releases its own lock; it returns the
+   summary, and `infer` calls it and keeps returning the exit code, so the
+   existing contract and its tests do not change — DT-8), and
    only if it raised nothing builds the command — with an inference
    summary as plain data (runs, strict/tolerance counts, max |Δ|, calib rows
    verified) — and calls the use case. No import edge from evaluation to

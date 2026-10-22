@@ -122,8 +122,8 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
    DuckDB version could change runtime types without changing content. The
    declared schema has one owner (the `analytics_store` pandera schemas), so
    the consumer port `SilverTableReader` gains
-   `columns(layer=..., table=...) -> Mapping[str, ColumnKind]` (kind ∈
-   int/float/str/bool plus `nullable`), satisfied by the
+   `columns(layer=..., table=...) -> Mapping[str, tuple[str, bool]]` (built-in
+   types only: kind ∈ `"int"`/`"float"`/`"str"`/`"bool"`, nullable), satisfied by the
    `ParquetAnalyticsRepository` from its `SilverTable` metadata; the fake
    declares the same for its tables (contract `[fake, real]`). The VO
    receives the kinds with the rows: int → `int(v)` only if integral (`3.0` →
@@ -131,7 +131,9 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
    only where nullable — a `None` in a non-nullable column (which is what a
    NaN becomes through the real reader) → `ValueError`; a column not declared
    → `ValueError`. Write-provenance columns are excluded by name from a list
-   owned next to the kinds.
+   owned next to the kinds. The realized unit's kinds come from the grid the
+   refresh already holds typed (`TrainingGridReader` → `RealizedReturns`):
+   timestamp `("str", False)`, target return `("float", False)`.
 3. **Units.** `(table, parent_sweep_id)` for `dim_run`; `(table, run_id, year)`
    for fact tables, with `year` taken from the row (so a run read in one pass
    or year by year hashes the same). The exact key format and whether the
@@ -139,7 +141,9 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
    generation are fixed in the technical; the overall and per-table digests
    are in the manifest.
 4. **Recording.** `GoldManifest` gains `silver_content` (overall, per table,
-   per unit), serialized by `as_mapping()` and read by `from_stored`.
+   per unit), serialized by `as_mapping()` and parsed by
+   `GoldManifest.from_mapping` as a **mandatory** field (no real gold was ever
+   published; test manifests are regenerated).
    `RefreshGoldResult` gains the published `manifest`. No gold table changes.
 5. **Invariant.** The hash depends only on the multiset of rows consumed: not
    on file layout, read order, read granularity, partition typing or Parquet
@@ -209,7 +213,8 @@ and the gap of ADR 6.4.0005 item 9 stays open.
 - `GoldManifest`, its serialization and `RefreshGoldResult` change (6.4 DTOs);
   tests of 6.4–7.3 that pin manifests need the new field.
 - One more pass over every consumed row (≈ 11 M on the real cohort); the cost
-  is measured in the real run.
+  is gated before the real run on synthetic silver at that scale (concept D11:
+  peak ≤ 6 GiB under `--memory 8g`, hash overhead ≤ 30 min, declared plan B).
 
 ### Neutral / trade-offs accepted
 - The hash identifies what the gold read; it does not bind a checkpoint to its
