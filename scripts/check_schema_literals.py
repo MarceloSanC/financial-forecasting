@@ -11,7 +11,10 @@ hoje cada use case do modeling redeclara as três como constante local, e um ren
 ou da coluna exige editar todos — esquecer um é silencioso. "Every piece of knowledge must
 have a single, unambiguous, authoritative representation within a system." (Hunt & Thomas,
 *The Pragmatic Programmer*, 20th anniv., Tip 15); o módulo se organiza pela decisão que
-esconde (Parnas 1972, p.1056, doi:10.1145/361598.361623).
+esconde: "Every module in the second decomposition is characterized by its knowledge of a
+design decision which it hides from all others." (Parnas 1972, p.1056, §The Criteria,
+doi:10.1145/361598.361623; a prescrição equivalente da p.1058, §Conclusion, é a que a skill
+`architecture-fitness` cita).
 
 Perímetro estreito de propósito (issue #61, correção pós-verificação):
 

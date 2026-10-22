@@ -155,7 +155,10 @@ O critério é **quem é dono** do tipo ou da regra, não quantas features o con
 
 **Por que não "2+ consumidores → shared":** mover um tipo com dono para `shared/` separa-o
 das invariantes e das decisões do slice que o produz (o módulo se organiza pela decisão de
-projeto que esconde — Parnas 1972, p.1056, doi:10.1145/361598.361623) e transforma
+projeto que esconde: "Every module in the second decomposition is characterized by its
+knowledge of a design decision which it hides from all others." — Parnas 1972, p.1056,
+§The Criteria, doi:10.1145/361598.361623; a mesma ideia como prescrição está na p.1058,
+§Conclusion, que a skill `architecture-fitness` cita) e transforma
 `shared/` num pacote de tipos de negócio sem dono. O que vai para módulo à parte é o
 genérico, "sem traço das especialidades" do domínio (Evans, *DDD Reference* 2015,
 GENERIC SUBDOMAINS, p.41). Shared Kernel não se aplica entre slices de um mesmo
