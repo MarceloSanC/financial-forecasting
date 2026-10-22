@@ -160,7 +160,7 @@ def test_fact_oos_round_trip(repo: AnalyticsRepository) -> None:
 
     assert len(rows) == 1
     assert rows[0]["run_id"] == "run-1"
-    assert float(rows[0]["quantile_level"]) == pytest.approx(0.5)
+    assert float(rows[0]["quantile_level"]) == pytest.approx(0.5)  # type: ignore[arg-type]
 
 
 @pytest.mark.contract
@@ -198,7 +198,7 @@ def test_allow_upsert_replaces_only_collided(repo: AnalyticsRepository) -> None:
 
     rows = repo.read(layer=_SILVER, table="fact_oos_predictions", filters={"asset": "AAPL"})
     assert len(rows) == _TWO_ROWS
-    by_q = {float(r["quantile_level"]): float(r["value_raw"]) for r in rows}
+    by_q = {float(r["quantile_level"]): float(r["value_raw"]) for r in rows}  # type: ignore[arg-type]
     assert by_q[0.1] == pytest.approx(0.5)  # substituída
     assert by_q[0.9] == pytest.approx(0.01)  # intacta
 
