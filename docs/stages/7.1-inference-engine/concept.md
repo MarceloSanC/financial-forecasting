@@ -847,5 +847,6 @@ exceções e sua hierarquia; formato exato do JSON do manifesto; se os fakes do
   `notes/randomness.md`, `notes/numerical_accuracy.md`), lidos na imagem pinada
 - Sandve, Nekrutenko, Taylor & Hovig (2013), *Ten Simple Rules for Reproducible
   Computational Research*, PLoS Comput Biol 9(10):e1003285
-- Huyen, C. (2022), *Designing Machine Learning Systems*, cap. 6 (skill
+- Huyen, C. (2022), *Designing Machine Learning Systems*, cap. 7 "Model Deployment and
+  Prediction Service" (errata de 2026-10-22, Stage 7.4: o localizador dizia "cap. 6") (skill
   `dmls-ch06-deployment-and-inference-decisions`)

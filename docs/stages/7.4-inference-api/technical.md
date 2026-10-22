@@ -864,7 +864,8 @@ Stage. Os arquivos da 7.4 passam limpos com
 `mypy --strict --follow-imports=silent <contrato> <fake> _serving_gold_rows.py test_read_serving_gold.py`.
 **Direção sugerida:** entra na issue de follow-up da Task 10 (b), "contratos da 7.1/7.3
 afirmam prova por mypy que não roda sobre `tests/`". A correção de uma linha
-(anotar/converter o retorno) vai com ela. Stage candidata: a issue (b) da Task 10.
+(anotar/converter o retorno) vai com ela. Stage candidata: issue #203 (correção pontual),
+irmã da #204 (mypy sobre `tests/`).
 
 ### 2026-10-22 — [deviation] Task 07 — conferência das rotas pelo OpenAPI e fábrica fora do `wire_dependencies` — Claude (sessão Windows)
 **Contexto:** (1) o terceiro comando de verificação da Task 07 (`sorted(x.path for x in
@@ -880,5 +881,25 @@ do e2e. (2) a fábrica mora em `serve_inference_factory(*, hasher, silver, gold_
 nível do módulo da composition root (o precedente é `ablation_spec_loader`). O
 `ApplicationDependencies.serve_inference_for` é preenchido com ela, sem mudar o contrato
 do §1.
+
+### 2026-10-22 — [deviation] Task 10 — issues de follow-up abertas (três em vez de duas) — Claude (sessão Windows)
+**Contexto:** a Task 10 prevê duas issues: (a) o job agendado (concept D10) e (b) os
+contratos da 7.1/7.3 que afirmam prova por mypy sem que o mypy rode sobre `tests/`
+(achado B3 do Checkpoint B). O `[finding]` da Task 04 (mypy strict alcança
+`_gold_inputs.py:231`) pedia uma terceira, e o orquestrador mandou abri-la. Antes de
+abrir, busquei duplicatas no GitHub (`agendado`, `scheduler`, `mypy`, `_gold_inputs`,
+`no-any-return`, abertas e fechadas) e não achei nenhuma.
+**Razão:** as três foram abertas com `### BC / camada` e `### Depende de`, e com
+referência cruzada:
+- **#202:** `feat(inference)`, o job agendado que mantém um cohort de produção servível.
+  Traz `## Incerteza` (forma do cohort, retreino, escopo do gold, onde roda), a
+  condição de disparo e a restrição da janela de publicação do ADR 6.4.0005.
+- **#204:** `chore(tooling)`, os contratos da 7.1/7.3 que afirmam prova por mypy. A
+  medição de 2026-10-22 achou 3 `unused-ignore` nos próprios arquivos e 12 erros em 5
+  arquivos seguindo os imports.
+- **#203:** `chore(evaluation)`, o `no-any-return` em `samples_of`. O `[finding]` da
+  Task 04 aponta para ela.
+
+Os três números foram comentados na #201.
 
 <!-- END: post-execution -->

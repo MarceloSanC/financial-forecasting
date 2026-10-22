@@ -42,7 +42,8 @@ Forces:
   requested decisions). Every one of those details is load-bearing (ADR
   4.3.0001 off-by-one class; I15/I16 of concept 5.4). A second implementation is
   the "two pipelines" anti-pattern of train/serve skew (Huyen 2022, *Designing
-  Machine Learning Systems* ch. 6 — skill `dmls-ch06-deployment-and-inference-decisions`,
+  Machine Learning Systems* ch. 7 "Model Deployment and Prediction Service" (erratum
+  2026-10-22, Stage 7.4: this ADR said "ch. 6") — skill `dmls-ch06-deployment-and-inference-decisions`,
   Task 1) and the second-definition failure that ADR 5.5.0004 removed for the
   training grid.
 - **The checkpoint carries the fitted dataset state.** `BaseModel.from_dataset`
@@ -231,6 +232,7 @@ Forces:
   [7.1.0004](./7_1_0004-checkpoint-resolution-before-load-and-write-ahead-inference-manifest.md)
 - External: pytorch-forecasting 1.8.0 `data/timeseries/_timeseries.py`
   L1623–1745, `models/base/_base_model.py` L1535–1590 (read on the pinned image,
-  2026-10-06); Huyen, C. (2022) *Designing Machine Learning Systems*, ch. 6.
+  2026-10-06); Huyen, C. (2022) *Designing Machine Learning Systems*, ch. 7 "Model Deployment and
+  Prediction Service" (erratum 2026-10-22: the locator said "ch. 6").
 - Conversation/issue: [#153](https://github.com/MarceloSanC/financial-forecasting/issues/153)
   (Passo 1b, point 5 "solução mais direta").
