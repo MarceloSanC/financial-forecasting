@@ -188,7 +188,7 @@ def test_overwrite_replaces_colliding_rows(store: MedallionStore) -> None:
 
     rows = store.read(layer="bronze", table="candle", filters={"asset": "AAPL"})
     assert len(rows) == 1
-    assert float(rows[0]["close"]) == pytest.approx(200.0)
+    assert float(rows[0]["close"]) == pytest.approx(200.0)  # type: ignore[arg-type]
 
 
 @pytest.mark.contract
@@ -396,9 +396,7 @@ def test_dataset_tft_invalid_asset_filter_value_raises(
 
 
 @pytest.mark.contract
-def test_dataset_tft_unsupported_filter_key_raises(
-    store: MedallionStore, tmp_path: Path
-) -> None:
+def test_dataset_tft_unsupported_filter_key_raises(store: MedallionStore, tmp_path: Path) -> None:
     """Filtro não suportado (chave ≠ `asset`) no par read-only ergue, não ignora."""
     ts = datetime(2024, 1, 2, tzinfo=UTC)
     _seed_dataset_tft(store, tmp_path, "AAPL", [_dataset_row("AAPL", ts, 0.01, 55.0)])

@@ -255,7 +255,16 @@ known-first-party = ["financial_forecasting"]
 # Mypy — checagem estática de tipos
 # ---------------------------------------------------------------------------
 [tool.mypy]
-files = ["src"]
+# `tests/contract` e `tests/fakes` entram porque as suítes de contrato provam a
+# conformidade de fake e real com o Protocol do consumidor por fixtures tipadas
+# pelo port — prova que só existe se o mypy roda sobre elas (issue #204). O resto
+# de `tests/` fica fora (não carrega prova estrutural; ~450 erros legados).
+files = ["src", "tests/contract", "tests/fakes"]
+# Sem `mypy_path`, um arquivo de `tests/` checado sozinho resolve
+# `financial_forecasting` pelo `.pth` do editable install, que o mypy ignora por
+# falta de `py.typed`: o pacote vira `Any` (com `ignore_missing_imports`) e toda
+# checagem contra os ports passa em silêncio.
+mypy_path = "src"
 strict = true
 # Permite importar libs sem stubs sem gerar erro
 ignore_missing_imports = true

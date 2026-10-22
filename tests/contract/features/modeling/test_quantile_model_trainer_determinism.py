@@ -20,6 +20,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from _pytest.mark import ParameterSet
 
 from financial_forecasting.features.modeling.adapters.out.lightgbm.lightgbm_quantile_trainer import (  # noqa: E501
     LightgbmQuantileTrainer,
@@ -52,7 +53,7 @@ def _labels(rows: tuple[tuple[float, ...], ...], salt: int) -> tuple[float, ...]
     )
 
 
-def _param_sets() -> list[pytest.param]:  # type: ignore[type-arg]
+def _param_sets() -> list[ParameterSet]:
     sets = [
         pytest.param({}, id="defaults-5.3"),
         pytest.param(

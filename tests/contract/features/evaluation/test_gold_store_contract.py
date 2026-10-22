@@ -109,7 +109,9 @@ class _ParquetHarness:
         if not manifest.exists():
             return None
         tables = {
-            path.stem: pq.read_table(path, partitioning=None).to_pylist()
+            path.stem: pq.read_table(  # type: ignore[no-untyped-call]
+                path, partitioning=None
+            ).to_pylist()
             for path in sorted(directory.glob("*.parquet"))
         }
         return json.loads(manifest.read_text(encoding="utf-8")), tables
@@ -393,7 +395,7 @@ def test_real_previous_delete_warns(
     def _refuse_previous(path: str | Path, *args: object, **kwargs: object) -> None:
         if Path(path).name == ".previous":
             raise OSError("busy (simulated)")
-        real_rmtree(path, *args, **kwargs)  # type: ignore[arg-type]
+        real_rmtree(path, *args, **kwargs)  # type: ignore[call-overload]
 
     monkeypatch.setattr(shutil, "rmtree", _refuse_previous)
     second = [_table("gold_quality_checks", 2, offset=3.0)]

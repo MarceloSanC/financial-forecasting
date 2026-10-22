@@ -23,6 +23,7 @@ import warnings
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
+import numpy as np
 import pytest
 
 from financial_forecasting.features.inference.adapters.out.mapie import (
@@ -203,13 +204,13 @@ _PREFIT = mapie_module._PrefitPredictions  # o original, antes de qualquer monke
 class _WithoutFeatures:
     """Como o `_PrefitPredictions`, sem `n_features_in_`."""
 
-    def __init__(self, values: object) -> None:
+    def __init__(self, values: np.ndarray) -> None:
         self._inner = _PREFIT(values)
 
     def fit(self, X: object, y: object) -> _WithoutFeatures:
         return self
 
-    def predict(self, X: object) -> object:
+    def predict(self, X: np.ndarray) -> np.ndarray:
         return self._inner.predict(X)
 
     def __sklearn_is_fitted__(self) -> bool:
@@ -221,13 +222,13 @@ class _WithoutFittedHook:
 
     n_features_in_ = 1
 
-    def __init__(self, values: object) -> None:
+    def __init__(self, values: np.ndarray) -> None:
         self._inner = _PREFIT(values)
 
     def fit(self, X: object, y: object) -> _WithoutFittedHook:
         return self
 
-    def predict(self, X: object) -> object:
+    def predict(self, X: np.ndarray) -> np.ndarray:
         return self._inner.predict(X)
 
 
