@@ -263,7 +263,8 @@ P̄_τ × τ é o *quantile score plot* (Gneiting & Ranjan 2011, Eq. (23), atrib
 a Laio & Tamea 2007) — perfil de onde (cauda vs centro) o skill vive.
 
 **Convenções.** (FA2) pesos iguais na grade, ratificado de fato (modeling
-§2.3 fala em quadratura; a lib usa iguais; é score próprio); pesos de
+§2.3 falava em quadratura até a #171 e hoje remete ao §3.2; a lib usa iguais;
+é score próprio); pesos de
 quadratura em τ ficam como sensibilidade **só** se um dia a grade for
 não-equiespaçada por desenho — e, nesse caso, sem a garantia "rearranjar
 nunca piora" do §2.2 (que vale para pesos iguais). (T8) escala ρ_τ.
