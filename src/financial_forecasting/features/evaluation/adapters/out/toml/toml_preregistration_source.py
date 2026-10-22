@@ -13,15 +13,24 @@ Adapter de saída (concept 6.5 §4 "Adapters", §8 "Externas", C2; ADRs `6_5_000
 
 `name` passa pela regra única de identificador de caminho antes de montar o caminho;
 `revision` é `int` não-`bool` ≥ 0.
+
+Stage 8.1 (`judged_records`): `<root>/<name>-r<revision>.judged.toml`, os registros de
+atestação commitados, com exatamente as chaves de `_JUDGED_KEYS` (como o `.anchor.toml`);
+a revisão vem do nome do arquivo e `commented_at` é um *offset date-time* TOML nativo.
 """
 
 from __future__ import annotations
 
+import re
 import tomllib
 from datetime import datetime
 from pathlib import Path
 
+from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    RefreshStatus,
+)
 from financial_forecasting.features.evaluation.application.ports.out.preregistration_source import (
+    JudgedRecord,
     PreregistrationAnchor,
     PreregistrationNotFoundError,
     PreregistrationRecord,
@@ -34,6 +43,22 @@ from financial_forecasting.shared.domain.services.path_identifier import (
 )
 
 _ANCHOR_KEYS = frozenset({"tag", "commit", "comment_url", "anchored_at"})
+_JUDGED_KEYS = frozenset(
+    {
+        "preregistration_ref",
+        "generation_digest",
+        "refresh_status",
+        "commit",
+        "tag",
+        "comment_url",
+        "commented_at",
+        "input_backup",
+        "input_backup_sha256",
+        "judged_backup",
+        "judged_backup_sha256",
+    }
+)
+_JUDGED_SUFFIX = ".judged.toml"
 
 
 def _load(path: Path) -> dict[str, object]:
@@ -64,6 +89,18 @@ class TomlPreregistrationSource:
         anchor = _anchor(anchor_path) if anchor_path.is_file() else None
         return PreregistrationRecord(payload=payload, anchor=anchor)
 
+    def judged_records(self, *, name: str) -> tuple[JudgedRecord, ...]:
+        """Os `<name>-r<revision>.judged.toml` sob a raiz, ordenados pela revisão."""
+        validate_path_identifier(name, field="name")
+        pattern = re.compile(rf"{re.escape(name)}-r(\d+){re.escape(_JUDGED_SUFFIX)}")
+        records: list[JudgedRecord] = []
+        for path in sorted(self._root.glob(f"{name}-r*{_JUDGED_SUFFIX}")):
+            match = pattern.fullmatch(path.name)
+            if match is None:
+                raise ValueError(f"{path.name}: judged record file name has no integer revision")
+            records.append(_judged(path, revision=int(match.group(1))))
+        return tuple(sorted(records, key=lambda record: record.revision))
+
 
 def _anchor(path: Path) -> PreregistrationAnchor:
     fields = _load(path)
@@ -79,4 +116,35 @@ def _anchor(path: Path) -> PreregistrationAnchor:
         commit=fields["commit"],  # type: ignore[arg-type]
         comment_url=fields["comment_url"],  # type: ignore[arg-type]
         anchored_at=anchored_at,
+    )
+
+
+def _judged(path: Path, *, revision: int) -> JudgedRecord:
+    fields = _load(path)
+    if set(fields) != _JUDGED_KEYS:
+        raise ValueError(
+            f"{path.name} must have exactly the keys {sorted(_JUDGED_KEYS)}, got {sorted(fields)}"
+        )
+    commented_at = fields["commented_at"]
+    if not isinstance(commented_at, datetime):
+        raise ValueError(
+            f"{path.name}: commented_at must be a TOML date-time, got {commented_at!r}"
+        )
+    try:
+        status = RefreshStatus(str(fields["refresh_status"]))
+    except ValueError as error:
+        raise ValueError(f"{path.name}: {error}") from error
+    return JudgedRecord(
+        revision=revision,
+        preregistration_ref=fields["preregistration_ref"],  # type: ignore[arg-type]
+        generation_digest=fields["generation_digest"],  # type: ignore[arg-type]
+        refresh_status=status,
+        commit=fields["commit"],  # type: ignore[arg-type]
+        tag=fields["tag"],  # type: ignore[arg-type]
+        comment_url=fields["comment_url"],  # type: ignore[arg-type]
+        commented_at=commented_at,
+        input_backup=fields["input_backup"],  # type: ignore[arg-type]
+        input_backup_sha256=fields["input_backup_sha256"],  # type: ignore[arg-type]
+        judged_backup=fields["judged_backup"],  # type: ignore[arg-type]
+        judged_backup_sha256=fields["judged_backup_sha256"],  # type: ignore[arg-type]
     )

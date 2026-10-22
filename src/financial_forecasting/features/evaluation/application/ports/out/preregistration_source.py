@@ -9,6 +9,11 @@ O real é o `TomlPreregistrationSource` (`adapters/out/toml/`); o fake é o
 `InMemoryPreregistrationSource` (`tests/fakes/features/evaluation/`). A forma do
 retorno (`PreregistrationRecord`, `PreregistrationAnchor`) e o erro de revisão
 inexistente (`PreregistrationNotFoundError`) moram aqui, junto do port.
+
+Stage 8.1 (concept 8.1 §4, D7, D12; ADR `8_1_0004` item 2a): `judged_records(name=...)`
+lê os registros de atestação commitados `<name>-r<revision>.judged.toml` — a verdade
+cruzada que o G4 confere antes de qualquer efeito. A forma (`JudgedRecord`) e o prefixo
+da tag (`JUDGED_TAG_PREFIX`) moram aqui também.
 """
 
 from __future__ import annotations
@@ -18,10 +23,20 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Protocol
 
+from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    RefreshStatus,
+)
 from financial_forecasting.shared.application.exceptions import ApplicationError
+from financial_forecasting.shared.domain.services.sha256_hex import validate_sha256_hex
 
 ANCHOR_TAG_PREFIX: Final = "preregistration/"
 """Prefixo da tag git da âncora (ADR 6.5.0003 item 1: `preregistration/<ref>`)."""
+
+JUDGED_TAG_PREFIX: Final = "confirmatory-run/"
+"""Prefixo da tag git da corrida julgada (concept 8.1 D7: `confirmatory-run/<ref>`)."""
+
+_COMMIT_LENGTH: Final = 40
+_HEX_DIGITS: Final = frozenset("0123456789abcdef")
 
 
 class PreregistrationNotFoundError(ApplicationError):
@@ -79,3 +94,73 @@ class PreregistrationSource(Protocol):
                 a menos, instante sem fuso).
         """
         ...
+
+    def judged_records(self, *, name: str) -> tuple[JudgedRecord, ...]:
+        """Os registros `.judged.toml` do plano `name`, ordenados pela revisão.
+
+        Sem arquivo → tupla vazia.
+
+        Raises:
+            ValueError: registro malformado (chave a mais ou a menos, campo inválido,
+                nome de arquivo sem revisão inteira).
+        """
+        ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class JudgedRecord:
+    """O registro de atestação commitado de uma revisão julgada (concept 8.1 §4, D7).
+
+    Campos: `revision` (do nome do arquivo), `preregistration_ref`, `generation_digest`
+    (sha256 hex do `CONTENTS.sha256`), `refresh_status`, `commit` (40 hex), `tag`
+    (`confirmatory-run/<preregistration_ref>`), `comment_url`, `commented_at` (com fuso),
+    `input_backup` e `input_backup_sha256`, `judged_backup` e `judged_backup_sha256`
+    (sha256 hex da listagem `sha256sum` de cada backup, ADR 8.1.0003 itens 6b-6c).
+
+    Raises:
+        ValueError: campo de tipo ou forma errada, na construção.
+    """
+
+    revision: int
+    preregistration_ref: str
+    generation_digest: str
+    refresh_status: RefreshStatus
+    commit: str
+    tag: str
+    comment_url: str
+    commented_at: datetime
+    input_backup: str
+    input_backup_sha256: str
+    judged_backup: str
+    judged_backup_sha256: str
+
+    def __post_init__(self) -> None:
+        """Forma de cada campo; a tag é a da própria referência."""
+        if isinstance(self.revision, bool) or not isinstance(self.revision, int):
+            raise ValueError(f"judged revision must be an int, got {self.revision!r}")
+        if self.revision < 0:
+            raise ValueError(f"judged revision must be >= 0, got {self.revision}")
+        for name in ("preregistration_ref", "comment_url", "input_backup", "judged_backup"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"judged {name} must be a non-empty str, got {value!r}")
+        for name in ("generation_digest", "input_backup_sha256", "judged_backup_sha256"):
+            validate_sha256_hex(getattr(self, name), field=f"judged {name}")
+        if not isinstance(self.refresh_status, RefreshStatus):
+            raise ValueError(
+                f"judged refresh_status must be a RefreshStatus, got {self.refresh_status!r}"
+            )
+        commit = self.commit
+        if (
+            not isinstance(commit, str)
+            or len(commit) != _COMMIT_LENGTH
+            or set(commit) - _HEX_DIGITS
+        ):
+            raise ValueError(f"judged commit must be 40 lowercase hex characters, got {commit!r}")
+        expected_tag = f"{JUDGED_TAG_PREFIX}{self.preregistration_ref}"
+        if self.tag != expected_tag:
+            raise ValueError(f"judged tag must be {expected_tag!r}, got {self.tag!r}")
+        if not isinstance(self.commented_at, datetime) or self.commented_at.tzinfo is None:
+            raise ValueError(
+                f"judged commented_at must be a timezone-aware datetime, got {self.commented_at!r}"
+            )

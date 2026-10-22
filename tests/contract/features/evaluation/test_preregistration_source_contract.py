@@ -10,6 +10,10 @@ Pernas (*harness*): `fake` (`InMemoryPreregistrationSource`) e `toml`
 escritor de teste `to_toml` — nenhum TOML escrito à mão), sem `skipif`. Os testes
 `real_*` são só do adapter: âncora com chave a mais, TOML malformado e `name` que
 não é identificador de caminho (antes de tocar o disco).
+
+Stage 8.1 (Task 07; concept 8.1 §4, D12): `judged_records` — vazio sem arquivo, ida e
+volta de todos os campos, ordenado pela revisão; na perna real, chave a mais ou a menos,
+tag que não é `confirmatory-run/<ref>` e `commented_at` sem ser date-time com fuso.
 """
 
 from __future__ import annotations
@@ -24,7 +28,11 @@ import pytest
 from financial_forecasting.features.evaluation.adapters.out.toml.toml_preregistration_source import (  # noqa: E501
     TomlPreregistrationSource,
 )
+from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    RefreshStatus,
+)
 from financial_forecasting.features.evaluation.application.ports.out.preregistration_source import (
+    JudgedRecord,
     PreregistrationAnchor,
     PreregistrationNotFoundError,
     PreregistrationSource,
@@ -54,6 +62,8 @@ class Harness(Protocol):
         self, revision: int, payload: Mapping[str, object], anchor: Mapping[str, object] | None
     ) -> None: ...
 
+    def put_judged(self, revision: int, fields: Mapping[str, object]) -> None: ...
+
 
 class _FakeHarness:
     def __init__(self, _: Path) -> None:
@@ -65,6 +75,11 @@ class _FakeHarness:
     ) -> None:
         built = None if anchor is None else PreregistrationAnchor(**anchor)  # type: ignore[arg-type]
         self.fake.add(_NAME, revision, payload, built)
+
+    def put_judged(self, revision: int, fields: Mapping[str, object]) -> None:
+        status = RefreshStatus(str(fields["refresh_status"]))
+        record = JudgedRecord(**{**fields, "refresh_status": status, "revision": revision})  # type: ignore[arg-type]
+        self.fake.add_judged(_NAME, record)
 
 
 class _TomlHarness:
@@ -81,6 +96,10 @@ class _TomlHarness:
             (self.root / f"{_NAME}-r{revision}.anchor.toml").write_text(
                 to_toml(anchor), encoding="utf-8"
             )
+
+    def put_judged(self, revision: int, fields: Mapping[str, object]) -> None:
+        path = self.root / f"{_NAME}-r{revision}.judged.toml"
+        path.write_text(to_toml(fields), encoding="utf-8")
 
 
 HARNESSES: dict[str, Callable[[Path], Harness]] = {"fake": _FakeHarness, "toml": _TomlHarness}
@@ -225,3 +244,114 @@ def test_source_anchor_per_revision(harness: Harness) -> None:
     anchor1 = harness.source.read(name=_NAME, revision=1).anchor
     assert anchor1 is not None
     assert anchor1.commit == commit_b
+
+
+# --- Stage 8.1: registros `.judged.toml` (Task 07) -------------------------------------
+
+
+def _judged(revision: int, **changes: object) -> dict[str, object]:
+    reference = f"{_NAME}-r{revision}-0123456789ab"
+    fields: dict[str, object] = {
+        "preregistration_ref": reference,
+        "generation_digest": "ab" * 32,
+        "refresh_status": "COMPLETED",
+        "commit": "0123456789abcdef0123456789abcdef01234567",
+        "tag": f"confirmatory-run/{reference}",
+        "comment_url": "https://github.com/example/repo/issues/211#issuecomment-2",
+        "commented_at": datetime(2026, 10, 23, 9, 30, tzinfo=UTC),
+        "input_backup": "/backups/aapl-input-2026-10-23",
+        "input_backup_sha256": "cd" * 32,
+        "judged_backup": "/backups/aapl-judged-2026-10-23",
+        "judged_backup_sha256": "ef" * 32,
+    }
+    fields.update(changes)
+    return fields
+
+
+@pytest.mark.contract
+def test_judged_records_empty_without_files(harness: Harness) -> None:
+    harness.put(0, valid_payload(), _ANCHOR)
+
+    assert harness.source.judged_records(name=_NAME) == ()
+
+
+@pytest.mark.contract
+def test_judged_record_round_trip(harness: Harness) -> None:
+    fields = _judged(3)
+    harness.put_judged(3, fields)
+
+    [record] = harness.source.judged_records(name=_NAME)
+
+    assert record == JudgedRecord(
+        **{**fields, "refresh_status": RefreshStatus.COMPLETED, "revision": 3}  # type: ignore[arg-type]
+    )
+    assert record.commented_at.utcoffset() is not None
+    assert record.tag == f"confirmatory-run/{record.preregistration_ref}"
+
+
+@pytest.mark.contract
+def test_judged_records_sorted_by_revision(harness: Harness) -> None:
+    for revision in (10, 2, 3):
+        harness.put_judged(revision, _judged(revision, refresh_status="BLOCKED"))
+
+    records = harness.source.judged_records(name=_NAME)
+
+    assert [record.revision for record in records] == [2, 3, 10]
+    assert {record.refresh_status for record in records} == {RefreshStatus.BLOCKED}
+
+
+@pytest.mark.contract
+def test_judged_file_with_extra_or_missing_key_raises(tmp_path: Path) -> None:
+    harness = _TomlHarness(tmp_path)
+    harness.put_judged(3, {**_judged(3), "note": "x"})
+    with pytest.raises(ValueError, match="must have exactly the keys"):
+        TomlPreregistrationSource(tmp_path).judged_records(name=_NAME)
+
+    harness.put_judged(3, {k: v for k, v in _judged(3).items() if k != "judged_backup"})
+    with pytest.raises(ValueError, match="must have exactly the keys"):
+        TomlPreregistrationSource(tmp_path).judged_records(name=_NAME)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize(
+    "tag",
+    ["preregistration/test_plan-r3-0123456789ab", "confirmatory-run/test_plan-r2-0123456789ab"],
+    ids=["anchor-prefix", "other-reference"],
+)
+def test_judged_tag_must_be_confirmatory_run_of_its_reference(tmp_path: Path, tag: str) -> None:
+    _TomlHarness(tmp_path).put_judged(3, _judged(3, tag=tag))
+
+    with pytest.raises(ValueError, match="judged tag must be"):
+        TomlPreregistrationSource(tmp_path).judged_records(name=_NAME)
+
+
+@pytest.mark.contract
+def test_commented_at_must_be_offset_datetime(tmp_path: Path) -> None:
+    harness = _TomlHarness(tmp_path)
+    harness.put_judged(3, _judged(3, commented_at="2026-10-23T09:30:00+00:00"))
+    with pytest.raises(ValueError, match="commented_at must be a TOML date-time"):
+        TomlPreregistrationSource(tmp_path).judged_records(name=_NAME)
+
+    harness.put_judged(3, _judged(3, commented_at=datetime(2026, 10, 23, 9, 30)))
+    with pytest.raises(ValueError, match="commented_at must be a timezone-aware datetime"):
+        TomlPreregistrationSource(tmp_path).judged_records(name=_NAME)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"refresh_status": "RUNNING"}, "is not a valid RefreshStatus"),
+        ({"commit": "ABC"}, "judged commit must be 40 lowercase hex"),
+        ({"generation_digest": "xyz"}, r"judged generation_digest must be a lowercase sha256"),
+        ({"input_backup": ""}, "judged input_backup must be a non-empty str"),
+    ],
+    ids=["status", "commit", "digest", "backup"],
+)
+def test_real_judged_fields_validated(
+    tmp_path: Path, changes: dict[str, object], message: str
+) -> None:
+    _TomlHarness(tmp_path).put_judged(3, _judged(3, **changes))
+
+    with pytest.raises(ValueError, match=message):
+        TomlPreregistrationSource(tmp_path).judged_records(name=_NAME)
