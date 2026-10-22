@@ -544,9 +544,22 @@ gh pr view <num-pr> --json mergeable,mergeStateStatus   # MERGEABLE + CLEAN
 gh pr view <num-pr> --json headRefOid -q .headRefOid    # o mesmo HEAD que passou no passo 4
 gh pr merge <num-pr> --merge --match-head-commit <sha>
 
-# 7. Limpeza, a partir do checkout principal (nunca de dentro da worktree)
+# 7. Limpeza, a partir do checkout principal (nunca de dentro da worktree). O
+#    --delete-remote vai JÁ nesta primeira chamada: depois que a worktree some, o
+#    publish_guard recusa apagar a remota pelo checkout principal (todo push dele é recusado)
 python scripts/worktree-rm.py <branch> --no-docker --delete-remote
-git ls-remote --heads origin <branch>                   # vazio; senão: git push origin --delete <branch>
+git ls-remote --heads origin <branch>                   # vazio = fim; senão, fallback 7a–7c
+
+# 7a. (fallback) A remota sobrou: confirmar que o conteúdo dela já está em develop
+git fetch --prune origin
+git merge-base --is-ancestor <sha-remoto> origin/develop   # <sha-remoto> = 1ª coluna do ls-remote
+#    exit ≠ 0 → a remota tem commit fora de develop: NÃO apaga, PARA e reporta
+# 7b. Recriar uma worktree temporária da branch (sai de origin/<branch>, com tracking)
+python scripts/worktree-new.py <branch> --no-setup --no-vscode --no-env --no-port-assign
+# 7c. Apagar worktree, branch local e remota de uma vez (o push sai do script, não do shell)
+python scripts/worktree-rm.py <branch> --no-docker --delete-remote
+git ls-remote --heads origin <branch>                   # agora vazio
+#    nunca `git push origin --delete <branch>` do checkout principal: o publish_guard recusa
 
 # 8. Sincronizar o develop local sem criar merge commit
 git fetch --prune origin && git merge --ff-only origin/develop
