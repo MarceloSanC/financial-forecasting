@@ -75,48 +75,17 @@ def _payload() -> InferencePayload:
         quantiles=(-0.03, -0.01, 0.0, 0.01, 0.03),
         conformal=ConformalBlock(AVAILABLE, None, "rótulo c", _SPLIT, intervals),
     )
+    # valores distintos por campo, para o mapeamento DTO -> schema não poder trocar um
+    # campo por outro sem um teste cair (auditoria TA-1)
     shares = (
         H3ShareRecord(
-            "permutation",
-            "price",
-            0.4,
-            0.3,
-            -0.1,
-            -0.2,
-            math.inf,
-            0.9,
-            1,
-            False,
-            OK,
-            None,
+            "permutation", "price", 0.4, 0.3, -0.1, -0.2, math.inf, 0.9, 1, False, OK, None
         ),
         H3ShareRecord(
-            "ablation",
-            "price",
-            0.4,
-            0.3,
-            -0.1,
-            -math.inf,
-            0.05,
-            0.9,
-            -1,
-            False,
-            OK,
-            None,
+            "loco", "price", 0.35, 0.25, -0.125, -math.inf, 0.05, 0.95, -1, True, OK, None
         ),
         H3ShareRecord(
-            "ablation",
-            "technical",
-            0.1,
-            0.2,
-            0.1,
-            -0.5,
-            None,
-            0.9,
-            0,
-            None,
-            "undefined",
-            "Σ* <= 0",
+            "loco", "technical", 0.1, 0.2, 0.1, -0.5, None, 0.9, 0, None, "undefined", "Σ* <= 0"
         ),
         H3ShareRecord(
             "permutation",
@@ -133,8 +102,11 @@ def _payload() -> InferencePayload:
             "método indefinido",
         ),
     )
-    reading = H3ReadingRecord("regra", True, False, False, ("price",), 1505, OK, None)
-    vsn = (VsnRecord("family", "price", "price", 0.1, 0.2, 0.3, 1505, OK, None),)
+    reading = H3ReadingRecord("regra", True, False, True, ("price",), 1505, OK, None)
+    vsn = (
+        VsnRecord("family", "price", "price", 0.1, 0.2, 0.3, 1505, OK, None),
+        VsnRecord("variable", "log_return", "price", 0.05, 0.1, 0.15, 1505, OK, None),
+    )
     return InferencePayload(
         asset="AAPL",
         decision_date=_DAY,
@@ -353,3 +325,156 @@ def test_no_other_value_flag_pair_is_emitted() -> None:
             assert not (value is not None and flag)  # nunca número com flag true
             if value is not None:
                 assert math.isfinite(value)
+
+
+def _inf_interval(lo: float, hi: float, lower: float | None, upper: float | None) -> dict:
+    return {"lower_level": lo, "upper_level": hi, "status": "ok", "gold_status": "ok"} | {
+        "reason": None,
+        "lower": lower,
+        "upper": upper,
+    }
+
+
+def test_conformal_block_maps_every_field() -> None:
+    conformal = _ok_response()["forecasts"][0]["members"][0]["conformal"]
+    assert conformal == {
+        "status": "available",
+        "reason": None,
+        "label": "rótulo c",
+        "variant": _SPLIT,
+        "intervals": [
+            {
+                **_inf_interval(0.02, 0.98, None, None),
+                "lower_infinite": True,
+                "upper_infinite": True,
+            },
+            {
+                **_inf_interval(0.1, 0.9, -0.035, None),
+                "lower_infinite": False,
+                "upper_infinite": True,
+            },
+            {
+                **_inf_interval(0.25, 0.75, 0.0078125, -0.0078125),
+                "lower_infinite": False,
+                "upper_infinite": False,
+            },
+            {
+                "lower_level": 0.3,
+                "upper_level": 0.7,
+                "status": "unavailable",
+                "gold_status": "undefined",
+                "reason": "n < 1/alpha",
+                "lower": None,
+                "upper": None,
+                "lower_infinite": False,
+                "upper_infinite": False,
+            },
+        ],
+    }
+
+
+def test_every_share_maps_every_field() -> None:
+    shares = _ok_response()["explainability"]["shares"]
+    flags = {"lower_infinite": False, "upper_infinite": False}
+    assert shares == [
+        {
+            "method": "permutation",
+            "family": "price",
+            "share_h1": 0.4,
+            "share_h7": 0.3,
+            "delta": -0.1,
+            "lower": -0.2,
+            "upper": None,
+            **flags,
+            "upper_infinite": True,
+            "level": 0.9,
+            "side": 1,
+            "excludes_zero": False,
+            "status": "ok",
+            "reason": None,
+        },
+        {
+            "method": "loco",
+            "family": "price",
+            "share_h1": 0.35,
+            "share_h7": 0.25,
+            "delta": -0.125,
+            "lower": None,
+            "upper": 0.05,
+            **flags,
+            "lower_infinite": True,
+            "level": 0.95,
+            "side": -1,
+            "excludes_zero": True,
+            "status": "ok",
+            "reason": None,
+        },
+        {
+            "method": "loco",
+            "family": "technical",
+            "share_h1": 0.1,
+            "share_h7": 0.2,
+            "delta": 0.1,
+            "lower": -0.5,
+            "upper": None,
+            **flags,
+            "level": 0.9,
+            "side": 0,
+            "excludes_zero": None,
+            "status": "undefined",
+            "reason": "Σ* <= 0",
+        },
+        {
+            "method": "permutation",
+            "family": "technical",
+            "share_h1": None,
+            "share_h7": None,
+            "delta": None,
+            "lower": None,
+            "upper": None,
+            **flags,
+            "level": None,
+            "side": None,
+            "excludes_zero": None,
+            "status": "undefined",
+            "reason": "método indefinido",
+        },
+    ]
+
+
+def test_reading_and_vsn_map_every_field() -> None:
+    explainability = _ok_response()["explainability"]
+    assert explainability["reading"] == {
+        "reading_rule": "regra",
+        "heterogeneous_permutation": True,
+        "heterogeneous_ablation": False,
+        "sustained": True,
+        "agreeing_families": ["price"],
+        "n_points": 1505,
+        "status": "ok",
+        "reason": None,
+    }
+    assert explainability["vsn"] == [
+        {
+            "kind": "family",
+            "name": "price",
+            "family": "price",
+            "p10": 0.1,
+            "p50": 0.2,
+            "p90": 0.3,
+            "n_decisions": 1505,
+            "status": "ok",
+            "reason": None,
+        },
+        {
+            "kind": "variable",
+            "name": "log_return",
+            "family": "price",
+            "p10": 0.05,
+            "p50": 0.1,
+            "p90": 0.15,
+            "n_decisions": 1505,
+            "status": "ok",
+            "reason": None,
+        },
+    ]
