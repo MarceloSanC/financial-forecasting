@@ -177,7 +177,8 @@ def publish(
     store.publish(
         partition=partition, tables=tables, manifest=replace(manifest, partition=partition)
     )
-    return store.current_dir(partition)
+    current: Path = store.current_dir(partition)
+    return current
 
 
 def settings(root: Path, cohort_file: Path | None = COHORT_FILE) -> Settings:

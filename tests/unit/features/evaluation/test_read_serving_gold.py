@@ -378,7 +378,8 @@ def test_infinite_vsn_measure_becomes_corruption(monkeypatch: pytest.MonkeyPatch
     def p10_infinite(row: object, schema: object, column: str) -> float | None:
         if column == "p10":
             return math.inf
-        return original(row, schema, column)  # type: ignore[arg-type]
+        value: float | None = original(row, schema, column)
+        return value
 
     monkeypatch.setattr(read_serving_gold_module, "col_float_or_none", p10_infinite)
     with pytest.raises(GoldGenerationCorruptError, match="vsn must be finite") as info:

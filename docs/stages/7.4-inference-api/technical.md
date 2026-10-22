@@ -860,8 +860,13 @@ teste afirma os tipos, `-inf`/`+inf`, `side` inteiro e `n = 10` nas unidades `ok
 `mypy --strict tests/contract/features/inference/test_serving_gold_reader_contract.py …`
 da Task 04 segue até `tests/contract/features/evaluation/_gold_inputs.py:231` e acusa
 `no-any-return` (`samples_of`, em `dd16c1e8`, Stage 7.3), num arquivo fora da lista desta
-Stage. Os arquivos da 7.4 passam limpos com
-`mypy --strict --follow-imports=silent <contrato> <fake> _serving_gold_rows.py test_read_serving_gold.py`.
+Stage. Os arquivos da 7.4 passavam com
+`mypy --strict --follow-imports=silent <contrato> <fake> _serving_gold_rows.py test_read_serving_gold.py`,
+mas **não estavam limpos**: o `silent` escondia dois erros nos próprios arquivos da Stage
+(`_scenario.py:180` e `test_read_serving_gold.py:381`, apontados pela auditoria da Stage,
+F1). Correção registrada em 2026-10-22: os três `no-any-return` (incluindo o
+`_gold_inputs.py:231`) foram corrigidos neste PR, que fecha a #203, e o mypy strict
+literal da Task 04, sem `silent`, fecha verde.
 **Direção sugerida:** entra na issue de follow-up da Task 10 (b), "contratos da 7.1/7.3
 afirmam prova por mypy que não roda sobre `tests/`". A correção de uma linha
 (anotar/converter o retorno) vai com ela. Stage candidata: issue #203 (correção pontual),
