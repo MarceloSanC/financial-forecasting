@@ -20,7 +20,7 @@ ambos.
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -45,7 +45,7 @@ def _build_real(tmp_path: Path) -> ExperimentTracker:
 
 
 @pytest.fixture(params=[_build_fake, _build_real], ids=["fake", "real"])
-def tracker(request: pytest.FixtureRequest, tmp_path: Path) -> ExperimentTracker:
+def tracker(request: pytest.FixtureRequest, tmp_path: Path) -> Iterator[ExperimentTracker]:
     """Parametriza o contrato sobre o fake e o adapter real (isolado em tmp_path)."""
     factory: Callable[[Path], ExperimentTracker] = request.param
     impl = factory(tmp_path)
