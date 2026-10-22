@@ -91,6 +91,16 @@ class Settings(BaseSettings):
     # descartável em `tmp_path`.
     repo_root: Path = Path(".")
 
+    # ---------------------------------------------------------------------------
+    # API de inferência (Stage 7.4 / concept I12, P2)
+    # ---------------------------------------------------------------------------
+    # Arquivo do cohort que o processo da API serve (um cohort por processo). Sem ele,
+    # `POST /inference/run` existe e responde 500 "serviço de inferência sem cohort
+    # configurado"; arquivo ilegível ou cohort não congelado fazem o `create_app`
+    # falhar na subida. Silver e gold são lidos sob o `data_root` (o do cohort real é
+    # `data/cohorts/aapl`). Override por env (`SERVING_COHORT_FILE`).
+    serving_cohort_file: Path | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

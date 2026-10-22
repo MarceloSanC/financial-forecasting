@@ -866,4 +866,19 @@ Stage. Os arquivos da 7.4 passam limpos com
 afirmam prova por mypy que não roda sobre `tests/`". A correção de uma linha
 (anotar/converter o retorno) vai com ela. Stage candidata: a issue (b) da Task 10.
 
+### 2026-10-22 — [deviation] Task 07 — conferência das rotas pelo OpenAPI e fábrica fora do `wire_dependencies` — Claude (sessão Windows)
+**Contexto:** (1) o terceiro comando de verificação da Task 07 (`sorted(x.path for x in
+app.routes if 'inference' in x.path)`) quebra no FastAPI 0.138.1:
+`AttributeError: '_IncludedRouter' object has no attribute 'path'`, porque o router
+incluído fica em `app.routes` como `_IncludedRouter`, sem `path`. (2) O
+`wire_dependencies` estava no limite de 50 comandos do ruff (`PLR0915`), e a fábrica
+aninhada o levava a 56.
+**Razão:** (1) a conferência equivalente lê os caminhos do esquema que a app publica:
+`sorted(p for p in app.openapi()["paths"] if "inference" in p) == ["/inference/run"]`
+(saída `['/inference/run']`), e virou o caso `test_the_app_exposes_one_inference_route`
+do e2e. (2) a fábrica mora em `serve_inference_factory(*, hasher, silver, gold_store)`, no
+nível do módulo da composition root (o precedente é `ablation_spec_loader`). O
+`ApplicationDependencies.serve_inference_for` é preenchido com ela, sem mudar o contrato
+do §1.
+
 <!-- END: post-execution -->
