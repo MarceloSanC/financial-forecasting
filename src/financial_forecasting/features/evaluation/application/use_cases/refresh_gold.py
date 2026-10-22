@@ -30,7 +30,8 @@ de efeitos):
    `7_2_0003` itens 4-5), a etapa `conformal`: `ConformalAssembly` → uma chamada ao
    port `ConformalCalibration` com as unidades `ok` → registros, coberturas por seed e
    médias entre seeds (`conformal_reports_from`) — unidade não-`ok` vira linha com o
-   motivo e cada `error` soma em `conformal_error_units`; exceção do port propaga;
+   motivo e cada unidade `(fold, seed, h)` com alguma linha `error` soma 1 em
+   `conformal_error_units`; exceção do port propaga;
 8. builders na ordem validada (bloqueado → só os `runs_when_blocked`);
 9. `GoldManifest` (timestamps só do `Clock`, I16) e `GoldStore.publish` — o único
    efeito colateral, por último (nada é gravado antes; exceção antes dele não toca o
