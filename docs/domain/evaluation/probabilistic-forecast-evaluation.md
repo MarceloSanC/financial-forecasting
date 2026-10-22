@@ -1595,7 +1595,7 @@ teste que só consegue **reprovar**: passar significa "não há evidência de
 descalibração", não prova de calibração. H1 é enunciada como **"calibração
 não rejeitada na banda de Wilson"**, sempre acompanhada do **poder
 declarado** contra um desvio mínimo pré-registrado; "calibrado" sem
-qualificação não é usado (overview §4). Base: ICH E9 §3.3.2 (pp. 17–18):
+qualificação não é usado (overview §4). Base: ICH E9 §3.3.2 (pp. 17–18 da versão EMA; o trecho está na p. 18):
 "Concluding equivalence or non-inferiority based on observing a
 non-significant test result of the null hypothesis that there is no
 difference … is inappropriate" — o mesmo tratamento dado a H2 em §6.10. Alternativa
@@ -1844,7 +1844,7 @@ sessão; os demais localizadores são os da sessão do gate.
 ```
 [decision:P] B1 — redação do claim de H1
 Escolha: "calibração não rejeitada na banda de Wilson" + poder declarado contra desvio mínimo pré-registrado · Alternativas: B2 (equivalência, IC ⊂ nominal ± δ) · Decisor: humano (issue #78, 2026-09-26)
-Base: ICH E9 §3.3.2 pp. 17–18 "Concluding equivalence or non-inferiority based on observing a non-significant test result … is inappropriate" [verificado]
+Base: ICH E9 §3.3.2 p. 18 (versão EMA) "Concluding equivalence or non-inferiority based on observing a non-significant test result … is inappropriate" [verificado]
 Sensibilidade pré-registrada: nenhuma · Reversível: sim, até o hash do pré-registro
 
 [decision:C] B-GATE-H1 — que teste é o gate de H1 por horizonte
@@ -2001,7 +2001,7 @@ Backtests e pré-registro:
 - Brown, L. D.; Cai, T. T.; DasGupta, A. (2001). "Interval Estimation for a Binomial Proportion". *Statistical Science*, 16(2), 101–133. DOI: 10.1214/ss/1009213286. (Abstract p. 101; Eq. (1) p. 103; §3.1.1 Eq. (4) p. 107.)
 - Wilson, E. B. (1927). "Probable Inference, the Law of Succession, and Statistical Inference". *JASA*, 22(158), 209–212. DOI: 10.1080/01621459.1927.10502953. `[CITAÇÃO-NÃO-ACESSADA]` (origem do intervalo; via BCD 2001.)
 - Basel Committee on Banking Supervision (1996). *Supervisory framework for the use of "backtesting" in conjunction with the internal models approach to market risk capital requirements*. Bank for International Settlements, jan. 1996. (§III(b)–(c), pp. 6–8. Documento oficial, bis.org.)
-- ICH (1998). *ICH Harmonised Tripartite Guideline E9: Statistical Principles for Clinical Trials*. CPMP/ICH/363/96 (EMA). (§2.2.2 pp. 7–8; §3.3.2 pp. 17–18; §4.2 p. 21; §5.1 pp. 23–24; §5.2 p. 24; §5.3 pp. 26–27; §5.5 p. 28. Documento oficial, EMA.)
+- ICH (1998). *ICH Harmonised Tripartite Guideline E9: Statistical Principles for Clinical Trials*. CPMP/ICH/363/96 (EMA). (§2.2.2 pp. 7–8; §3.3.2 pp. 17–18; §4.2 p. 21; §5.1 pp. 23–24; §5.2 p. 24; §5.3 pp. 26–27; §5.5 p. 28. Documento oficial, EMA; paginação da versão EMA. Na versão do site da ICH — database.ich.org/sites/default/files/E9_Guideline.pdf — §3.3.2 ocupa as pp. 14–16 impressas e o trecho "Concluding equivalence … is inappropriate" está na p. 16; nota acrescentada em 2026-10-22, gate do Step 8.)
 - Simmons, J. P.; Nelson, L. D.; Simonsohn, U. (2011). "False-Positive Psychology: Undisclosed Flexibility in Data Collection and Analysis Allows Presenting Anything as Significant". *Psychological Science*, 22(11), 1359–1366. DOI: 10.1177/0956797611417632. (p. 1359; Table 1 p. 1361; requisitos pp. 1362–1363; Guideline 3 p. 1363.)
 - Wagenmakers, E.-J.; Wetzels, R.; Borsboom, D.; van der Maas, H. L. J.; Kievit, R. A. (2012). "An Agenda for Purely Confirmatory Research". *Perspectives on Psychological Science*, 7(6), 632–638. DOI: 10.1177/1745691612463078. (Abstract p. 632; p. 635.)
 - Chambers, C. D. (2013). "Registered Reports: A new publishing initiative at Cortex". *Cortex*, 49(3), 609–610. DOI: 10.1016/j.cortex.2012.12.016. `[CITAÇÃO-NÃO-ACESSADA]` (suplementar.)
