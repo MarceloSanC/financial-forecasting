@@ -1540,4 +1540,30 @@ todo o acréscimo está no `h3` (+180 s, as 8,6 M linhas de permutadas) e no `re
 §3 (o cohort real tem decisões a mais na borda dos folds).
 **Conta para:** A17, pré-condição do A12.
 
+### 2026-10-23 — [deviation] Task 13 — tentativas sem `input_read` no trecho (Checkpoint C final, CC6-1/CC6-2) — Claude (sessão Windows)
+**Contexto:** o Checkpoint C final (`ba4ad820..f95da69a`) provou dois buracos com sondas:
+- **CC6-1** (médio): queda entre o publish do E1 e a linha `input_read`. A 2ª corrida,
+  sem `--deviation` e com resultado diferente, selava.
+- **CC6-2** (baixo): um `--deviation` que morria antes de gravar a entrada recomeçava o
+  trecho vazio, e a corrida seguinte, sem desvio, selava o resultado divergente.
+
+A auditoria de testes recomendou ainda o caso de erro do use case pela CLI.
+**Ajuste:**
+- A linha `started` grava a testemunha `prior_live_result_digest`.
+- Cada `started` sem `input_read` ganha na referência o que publicou: o `prior_live_*` da
+  `started` seguinte, ou a geração viva atual se não há outra.
+- O G4 recusa referências que já discordam, de entrada ou de resultado.
+- O trecho só recomeça num desvio que chegou ao `input_read`.
+
+Item 2b do ADR 8.1.0004 emendado (emenda 2). As sondas viraram testes que afirmam o
+comportamento correto:
+- `test_crash_before_input_read_makes_the_live_generation_the_reference`
+- `test_crash_before_input_read_then_same_result_is_judged`
+- `test_deviation_attempt_dying_before_input_read_does_not_reset_the_reference`
+- `test_prior_live_fields_come_together`
+- `tests/unit/test_cli.py::test_evaluate_use_case_error_exits_2_naming_the_error`
+
+O G4 com entradas registradas diferentes agora recusa com
+`PriorAttemptInputChangedError`, e não mais com o rótulo de divergência (nota do revisor).
+
 <!-- END: post-execution -->
