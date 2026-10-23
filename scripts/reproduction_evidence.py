@@ -3,11 +3,11 @@
 Só stdlib — não importa `financial_forecasting` (roda em qualquer árvore e no host).
 
     python scripts/reproduction_evidence.py env-equal <ATTEMPTS.jsonl> <foto.json> \\
-        [--preregistration-ref <ref>]
+        --preregistration-ref <ref>
     python scripts/reproduction_evidence.py ast-equal <rev_a> <rev_b> [--paths src/ ...]
 
 `env-equal` (base de A2/I4): compara a ÚLTIMA linha `phase = started` do `ATTEMPTS.jsonl`
-(só as da `--preregistration-ref`, quando dada — CC2-2) com a foto do ambiente gravada
+da `--preregistration-ref` (obrigatória — CC2-2, CC3-1) com a foto do ambiente gravada
 pelo driver (`environment.json` ou o stdout do `--check`):
 `commit` igual; `code_dirty` e `preregistration_dirty` da foto = `"false"`; o conjunto e os
 valores das chaves `code.*` = `code` da linha e das `env.*` = `environment`. Imprime
@@ -48,8 +48,8 @@ EXIT_DIFFERENT: Final = 1
 # --- env-equal ----------------------------------------------------------------------------
 
 
-def started_line(attempts: str, preregistration_ref: str | None = None) -> dict[str, object]:
-    """A última linha `phase = started` do `ATTEMPTS.jsonl` (da referência, se dada).
+def started_line(attempts: str, preregistration_ref: str) -> dict[str, object]:
+    """A última linha `phase = started` da referência no `ATTEMPTS.jsonl`.
 
     Raises:
         ValueError: nenhuma linha `started` (da referência).
@@ -58,12 +58,10 @@ def started_line(attempts: str, preregistration_ref: str | None = None) -> dict[
     started: list[dict[str, object]] = [
         line
         for line in lines
-        if line.get("phase") == STARTED
-        and (preregistration_ref is None or line.get("preregistration_ref") == preregistration_ref)
+        if line.get("phase") == STARTED and line.get("preregistration_ref") == preregistration_ref
     ]
     if not started:
-        scope = "" if preregistration_ref is None else f" of {preregistration_ref}"
-        raise ValueError(f"ATTEMPTS.jsonl has no started line{scope}")
+        raise ValueError(f"ATTEMPTS.jsonl has no started line of {preregistration_ref}")
     return started[-1]
 
 
@@ -106,7 +104,7 @@ def env_equal(
     attempts_path: Path,
     snapshot_path: Path,
     out: TextIO,
-    preregistration_ref: str | None = None,
+    preregistration_ref: str,
 ) -> int:
     """`ENV_EQUAL` e 0, ou as divergências e 1."""
     started = started_line(attempts_path.read_text(encoding="utf-8"), preregistration_ref)
@@ -224,7 +222,7 @@ def main(argv: Sequence[str] | None = None, *, out: TextIO | None = None) -> int
     env = commands.add_parser("env-equal")
     env.add_argument("attempts", type=Path)
     env.add_argument("snapshot", type=Path)
-    env.add_argument("--preregistration-ref", default=None)
+    env.add_argument("--preregistration-ref", required=True)
     tree = commands.add_parser("ast-equal")
     tree.add_argument("rev_a")
     tree.add_argument("rev_b")

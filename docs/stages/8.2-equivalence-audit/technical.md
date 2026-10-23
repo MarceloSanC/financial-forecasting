@@ -1413,4 +1413,18 @@ que a E1 fixa. Também entrou no `test_audit_table_render.py` um teste do `compu
 sobre dois lados sintéticos (o cálculo da E4 só rodaria no opt-in) e o teste AST da porta
 única de leitura (CC3-3 do Checkpoint C bloco 3).
 
+### 2026-10-23 — [deviation] `env-equal` com `--preregistration-ref` obrigatória (emenda do runbook E2/E3) — Claude (executor)
+**Contexto:** Checkpoint C bloco 3, CC3-1: o `env-equal` passou a filtrar a linha `started`
+pela referência (CC2-2, `bd4b54ff`), mas o §2 Task 06 (linha "`env-equal <ATTEMPTS.jsonl>
+<foto.json>`") e as chamadas do runbook na E2 passo do `--check` (`env-equal
+"$P/judged/ATTEMPTS.jsonl" "$SCRATCH/check.json"`) e na E3 (`env-equal
+"$P/judged/ATTEMPTS.jsonl" "$DISPH/reproduction/environment.json"`) não a passam. A opção
+virou **obrigatória** no script (`[8.2/task-06-extra]`): sem ela o argparse sai com erro de
+uso — a chamada antiga falha alto, nunca compara a `started` de outra referência.
+**Razão / emenda:** §1–§6 não são editáveis com `status: done` (CONVENTIONS §3.4;
+`check_technical_postexec.py`), então a emenda vale por esta entrada: nas duas chamadas do
+runbook (E2 e E3), acrescentar `--preregistration-ref "$REF"` ao fim do comando
+`env-equal`; o §2 Task 06 lê-se `env-equal <ATTEMPTS.jsonl> <foto.json>
+--preregistration-ref <ref>`.
+
 <!-- END: post-execution -->

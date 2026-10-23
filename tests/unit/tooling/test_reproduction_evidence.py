@@ -70,9 +70,14 @@ def _files(
     return attempts, photo
 
 
+_REF = "plan-r3-0123456789ab"
+
+
 def _env_equal(attempts: Path, photo: Path) -> tuple[int, list[str]]:
     out = io.StringIO()
-    code = evidence.main(["env-equal", str(attempts), str(photo)], out=out)
+    code = evidence.main(
+        ["env-equal", str(attempts), str(photo), "--preregistration-ref", _REF], out=out
+    )
     return code, out.getvalue().splitlines()
 
 
@@ -131,7 +136,8 @@ def test_env_equal_filters_by_preregistration_ref(tmp_path: Path) -> None:
     out = io.StringIO()
     assert evidence.main(["env-equal", str(attempts), str(photo), *ref], out=out) == 0
     assert out.getvalue() == "ENV_EQUAL\n"
-    assert _env_equal(attempts, photo)[0] == 1  # sem filtro: a última é a de outra ref
+    with pytest.raises(SystemExit):  # CC3-1: sem a referência, erro de uso
+        evidence.main(["env-equal", str(attempts), str(photo)], out=io.StringIO())
     with pytest.raises(ValueError, match="no started line of plan-r0-000000000000"):
         evidence.main(
             [
