@@ -1440,4 +1440,41 @@ igual em S = 5 e S = 10. O teste `slow` ficou ~4x mais longo (pelo hash de ~8,6 
 de permutadas). `pytest` isolado do arquivo: `2 passed`, 653 s (H3) e 292 s (ablação).
 O custo na escala real continua para o gate D11 (Task 17).
 
+### 2026-10-23 — [decision] Tasks 12–14 — forma do `run_record.json`, do corpo e do replay — Claude (sessão Windows)
+**Contexto:** o concept §4, o D6 e o ADR 8.1.0003 itens 6–7 fixam o conteúdo do registro e
+do corpo de atestação, não as chaves e o texto. O ADR 8.1.0004 item 2b não diz como saber
+que "código e ambiente são iguais" quando veio um `--deviation`.
+**Decisão:**
+- `run_record.json` com as chaves `preregistration_ref`, `partition`, `environment` (a foto
+  inteira, onde o R8 lê `commit`), `inference_summary`, `deviation`, `attempts` (todas as
+  linhas do log), `refresh` (status, contagens, unidades com erro), `failed_checks` (vazio
+  com `COMPLETED`) e `seeds` (por referência ao manifesto e ao spec). O dono único é
+  `run_record_document` em `dtos/confirmatory_run.py`; o corpo lê pelas mesmas constantes.
+- O corpo é Markdown em português e só lê manifesto, `run_record` e scorecard. Tem
+  cabeçalho (status selado, digest, commit, tag, partição, `started_at`/`finished_at`),
+  prontidão com razões e veredito por horizonte (ou os checks, com `BLOCKED`) e duas
+  tabelas de contagem: H3 "(descritiva)" e conformal "cobertura empírica (não garantida)".
+  Tabela ausente do `rows_by_table` aparece como "não publicada".
+- `ALREADY_JUDGED` devolve `scorecard=None` e `failed_checks=()`: os dois ficam na cópia,
+  e o corpo, que os cita, é o mesmo do `JUDGED`/`BLOCKED` que selou.
+- 2b(ii) compara a geração só quando o código e o ambiente de **toda** tentativa anterior
+  desta revisão são iguais à foto atual, e a entrada da geração viva é igual à nova.
+  Com `--deviation` e código igual, a comparação continua.
+- `wire_dependencies` estava no limite de 50 statements do PLR0915. O scorecard e a
+  fábrica da corrida saem juntos de `confirmatory_wiring`, sobre o mesmo
+  `TomlPreregistrationSource` (precedente: `serve_inference_factory`).
+**Razão:** são decisões de forma, todas reversíveis antes da corrida real. Os testes da
+Task 12 (golden) e da 13 (A4/A5) fixam o comportamento.
+
+### 2026-10-23 — [finding] Checkpoint C bloco 4 — achados e disposição — Claude (sessão Windows)
+**Contexto:** a revisão de `45392918..83e91c11` não teve bloqueante.
+- **CC4-1** (prefixos `code.`/`env.` redeclarados em `dtos/judged_generation.py`):
+  corrigido em `c21eaa14`; o DTO importa os prefixos do port `evaluation_environment`.
+- **CC4-2** (`GitEvaluationEnvironment` fail-open): corrigido em `5500ade4`. Mapa do
+  probe incompleto e sujeira fora de `"true"`/`"false"` agora erguem `RuntimeError`, com
+  dois casos na perna real do contrato.
+- **CC4-3**: `a509a998` (Task 11) também reformatou duas assinaturas de
+  `modeling/.../json_cohort_progress_ledger.py` (l.106, l.130), além do docstring que o
+  technical previa. Foi formatação do `ruff`, sem mudança de comportamento.
+
 <!-- END: post-execution -->
