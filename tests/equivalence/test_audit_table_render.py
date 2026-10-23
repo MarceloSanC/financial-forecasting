@@ -216,7 +216,7 @@ def _synthetic_value(column: str, keep: bool) -> object:
 def _oracle(tmp_path: Path) -> Path:
     root = tmp_path / "analytics"
     for path in cs.PRIOR_FILES:
-        columns = [*readers.prior_columns(path), "secret"]  # independe do estado da E1
+        columns = [*cs.FILTER_COLUMNS[path], *cs.VALUE_COLUMNS[path], _LABEL, "secret"]
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         data = {c: [_synthetic_value(c, True), _synthetic_value(c, False)] for c in columns}
@@ -225,7 +225,11 @@ def _oracle(tmp_path: Path) -> Path:
     return root
 
 
-def test_prior_reader_reads_only_registered_columns_and_filters(tmp_path: Path) -> None:
+@pytest.mark.parametrize("label", [None, "model_version_x"], ids=["before_e1", "after_e1"])
+def test_prior_reader_reads_only_registered_columns_and_filters(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, label: str | None
+) -> None:
+    monkeypatch.setattr(cs, "MODEL_LABEL_COLUMN", label)
     root = _oracle(tmp_path)
     registry = parse_registry(build_registry(oracle_root=root, paths=cs.PRIOR_FILES))
 
@@ -234,7 +238,10 @@ def test_prior_reader_reads_only_registered_columns_and_filters(tmp_path: Path) 
     assert set(prior.tables) == set(cs.PRIOR_FILES)
     for path, rows in prior.tables.items():
         assert len(rows) == 1, path  # a linha de outro sweep/split/horizonte saiu
-        assert list(rows[0]) == list(readers.prior_columns(path))
+        expected = [*cs.FILTER_COLUMNS[path], *cs.VALUE_COLUMNS[path]]
+        if path == cs.GOLD_OOS and label is not None:
+            expected.append(label)  # o rótulo de modelo só no gold_oos, só depois da E1
+        assert list(rows[0]) == list(dict.fromkeys(expected))
         assert "secret" not in rows[0]
     assert prior.column_types[cs.GOLD_OOS]["y_true"] == "double"
     assert cs.GOLD_OOS in prior.source_ids
