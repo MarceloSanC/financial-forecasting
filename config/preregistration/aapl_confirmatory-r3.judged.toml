@@ -1,0 +1,14 @@
+# Registro de atestação da corrida confirmatória da r3 (Stage 8.1; ADR 8.1.0003 item 7; I14).
+# Valores do selo (`run_record.json`, `CONTENTS.sha256`), da tag enviada e do comentário na #211
+# (created_at do servidor). Backups relativos ao checkout principal, fora do git.
+preregistration_ref = "aapl_confirmatory-r3-00fd83d9cd39"
+generation_digest = "96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539"
+refresh_status = "COMPLETED"
+commit = "060537fc7069b38a318bb5cf839d84b7767b1b4f"
+tag = "confirmatory-run/aapl_confirmatory-r3-00fd83d9cd39"
+comment_url = "https://github.com/MarceloSanC/financial-forecasting/issues/211#issuecomment-6362212743"
+commented_at = 2026-10-23T09:51:53Z
+input_backup = "data/backups/aapl-pre-8.1-20261023-084758"
+input_backup_sha256 = "e4c774570767c5679a11347beabd9ea872b53101acb8c77ada5a64bc2e50d5e6"
+judged_backup = "data/backups/judged-aapl_confirmatory-r3-00fd83d9cd39-20261023-084758"
+judged_backup_sha256 = "ebaadfc4440b400dc9d1fe8c9eb6e42e73f3edb0659e429c5eb2aa151a6613f3"
