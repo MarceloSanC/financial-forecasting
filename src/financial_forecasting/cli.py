@@ -13,6 +13,12 @@ Stage 7.3: `ablation-pilot`, `ablation-run`, `ablation-verify` e `ablation-freez
 <toml>` (predições de atribuição do candidato no silver; `--cohort` é o confirmatório e o
 `[partition]` vem do arquivo de ablação, lido aqui pelo loader do `modeling` — o slice
 `inference` nunca importa esse loader).
+Stage 8.1: `evaluate --preregistration <nome> --revision <r> --preregistration-ref <ref>
+[--deviation "<justificativa com [deviation]>"]` — a corrida confirmatória: roda, no mesmo
+processo, o `infer` da 7.1 sobre o mesmo cohort (`infer_with_summary`) e, só se ele
+terminar sem exceção, o `RunConfirmatoryEvaluation` do `evaluation` com o resumo do
+`infer` como dado (concept 8.1 D1). O encadeamento fica AQUI: o comando do `evaluation`
+(`features/evaluation/adapters/in/cli`) não importa o `inference`.
 `--data-root` é obrigatório em todos, sem default: o dado de um cohort vive
 isolado em `data/cohorts/<nome>/` (concept D10) e um default silencioso poderia
 misturá-lo com o `data/` de desenvolvimento.
@@ -71,6 +77,9 @@ if TYPE_CHECKING:
 
 _CLI_PACKAGE = "financial_forecasting.features.modeling.adapters.in.cli"
 _INFERENCE_COMMANDS = "financial_forecasting.features.inference.adapters.in.cli.inference_commands"
+_EVALUATION_COMMANDS = (
+    "financial_forecasting.features.evaluation.adapters.in.cli.evaluation_commands"
+)
 # Janela da materialização: a mesma janela ampla fixa do calendário do composition
 # root. O que entra no dataset é decidido pelos brutos em `data_root`, não por ela.
 _MATERIALIZE_START = datetime(1990, 1, 1, tzinfo=UTC)
@@ -156,6 +165,27 @@ def _parser() -> argparse.ArgumentParser:
         metavar="JUSTIFICATIVA",
         help="força o modo tolerance com a justificativa gravada no manifesto",
     )
+    evaluate = add(
+        "evaluate", "roda o infer e a corrida confirmatória do cohort contra uma revisão julgada"
+    )
+    evaluate.add_argument(
+        "--preregistration", required=True, metavar="NOME", help="nome do plano pré-registrado"
+    )
+    evaluate.add_argument(
+        "--revision", type=int, required=True, help="revisão julgada do plano (ex.: 3)"
+    )
+    evaluate.add_argument(
+        "--preregistration-ref",
+        required=True,
+        metavar="REF",
+        help="referência esperada da revisão (<nome>-r<rev>-<hash12>)",
+    )
+    evaluate.add_argument(
+        "--deviation",
+        default=None,
+        metavar="JUSTIFICATIVA",
+        help="re-tentativa com código, ambiente ou entrada diferentes; cita um [deviation]",
+    )
     add("ablation-pilot", "mede o custo de uma unidade da ablação (não grava nada)", lock=False)
     add("ablation-run", "corre o cohort de ablação congelado (retomável)")
     add("ablation-verify", "confere a corrida da ablação pela contagem no silver", lock=False)
@@ -212,8 +242,12 @@ def main(
                 dataset_start=_dataset_start(args.start, spec.dataset_start),
                 out=stdout,
             )
-        if args.command in _INFERENCE_SUBCOMMANDS:
-            return _dispatch_inference_command(args, deps, cohort_file, stdout)
+        if args.command in _INFERENCE_SUBCOMMANDS or args.command == "evaluate":
+            # `evaluate` (8.1) encadeia o `infer` do `inference` ao use case do `evaluation`
+            dispatch = (
+                _dispatch_evaluate if args.command == "evaluate" else _dispatch_inference_command
+            )
+            return dispatch(args, deps, cohort_file, stdout)
         if args.command.startswith(_ABLATION_PREFIX):
             return _dispatch_ablation_command(args, deps, stdout)
         return _dispatch_cohort_command(args, deps, cohort_file, stdout)
@@ -299,6 +333,37 @@ def _dispatch_inference_command(
             break_stale_lock=args.break_stale_lock,
             cross_environment=args.cross_environment,
         )
+    return exit_code
+
+
+def _dispatch_evaluate(
+    args: argparse.Namespace, deps: ApplicationDependencies, cohort_file: ModuleType, out: TextIO
+) -> int:
+    """`evaluate` (8.1): o `infer` da 7.1 e, só sem exceção, a corrida confirmatória (D1).
+
+    O `infer` toma e libera o seu lock; o use case toma o dele depois (D8). O resumo do
+    `infer` passa como dado: nenhum slice importa o outro.
+    """
+    spec = cohort_file.load(args.cohort)
+    inference = importlib.import_module(_INFERENCE_COMMANDS)
+    summary = inference.infer_with_summary(
+        deps.run_inference_for,
+        spec,
+        args.cohort,
+        out=out,
+        break_stale_lock=args.break_stale_lock,
+    )
+    evaluation = importlib.import_module(_EVALUATION_COMMANDS)
+    exit_code: int = evaluation.evaluate(
+        deps.run_confirmatory_evaluation_for(args.cohort, spec.device),
+        name=args.preregistration,
+        revision=args.revision,
+        preregistration_ref=args.preregistration_ref,
+        inference_summary=summary,
+        break_stale_lock=args.break_stale_lock,
+        deviation=args.deviation,
+        out=out,
+    )
     return exit_code
 
 
