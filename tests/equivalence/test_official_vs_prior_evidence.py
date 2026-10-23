@@ -6,8 +6,10 @@ partição viva `data/cohorts/aapl`, montada `:ro`); sem elas, ou com caminho in
 **pula** com o motivo e o caminho do registro (ver com `-rs`). Com elas, confere o registro
 (arquivo diferente ou ausente **falha**, nunca pula), recalcula a tabela e afirma:
 
-1. a classificação recomputada = `DECLARED` (declarada aqui, vazia até a E5 — com o oráculo e
-   `DECLARED` vazio o teste falha);
+1. ids, tipos e status recomputados = os de `DECLARED` (declarada aqui, vazia até a E5 — com o
+   oráculo e `DECLARED` vazio o teste falha); a classificação de cada linha (`explained:<cat>`,
+   `not_explained`, `not_compared:<motivo>`, `reported` ou o próprio status) é declarada e
+   conferida contra a aplicabilidade da §5.6 pelo `parse`;
 2. `DECLARED` = a tabela parseada de `docs/reports/equivalence_audit.md` (editar um sem o
    outro falha, com o diff visível).
 
@@ -25,7 +27,14 @@ from typing import Final
 
 import pytest
 
-from tests.equivalence.audit_table import Declared, classification, compute, declared_diff, parse
+from tests.equivalence.audit_table import (
+    Declared,
+    classification,
+    compute,
+    declared_diff,
+    parse,
+    recomputed_matches,
+)
 from tests.equivalence.prior_evidence import REGISTRY_PATH
 
 pytestmark = pytest.mark.integration
@@ -35,7 +44,7 @@ OFFICIAL_ENV: Final = "EQUIVALENCE_OFFICIAL_ROOT"
 REPORT_PATH: Final = REGISTRY_PATH.parent / "equivalence_audit.md"
 
 DECLARED: Final[tuple[Declared, ...]] = ()
-"""A classificação declarada (id, status) — preenchida só na E5, depois da E4."""
+"""A classificação declarada (id, tipo, status, classificação) — preenchida só na E5."""
 
 
 def _root(name: str) -> Path | None:
@@ -53,8 +62,9 @@ def test_official_vs_prior_evidence() -> None:
             f"evidence is checked against {REGISTRY_PATH.relative_to(REGISTRY_PATH.parents[2])}"
         )
 
-    recomputed = classification(compute(oracle, official))
+    rows = compute(oracle, official)
 
-    assert recomputed == DECLARED, declared_diff(DECLARED, recomputed)
+    # ids, tipos e status recomputados = os declarados; a classificação (explicação) é humana
+    assert recomputed_matches(rows, DECLARED), declared_diff(DECLARED, classification(rows))
     parsed = parse(REPORT_PATH.read_text(encoding="utf-8"))
     assert parsed == DECLARED, declared_diff(DECLARED, parsed)

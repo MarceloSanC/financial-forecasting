@@ -31,6 +31,12 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldPartition,
 )
+from financial_forecasting.features.evaluation.application.dtos.silver_content import (
+    SilverContent,
+)
+from financial_forecasting.features.evaluation.application.use_cases.silver_content_accumulator import (  # noqa: E501
+    SilverContentAccumulator,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.realized_returns import (
     RealizedReturns,
 )
@@ -59,6 +65,8 @@ from tests.equivalence.prior_evidence import (
 
 Row = dict[str, object]
 _SILVER = "silver"
+_DIM_RUN = "dim_run"
+_FACT = "fact_oos_predictions"
 
 
 # --- anterior ------------------------------------------------------------------------------
@@ -95,9 +103,26 @@ def read_prior_table(verified: Mapping[str, Path], path: str) -> list[Row]:
 
 @dataclass(frozen=True)
 class PriorSide:
-    """As tabelas lidas da evidência anterior, por arquivo do `comparison_set`."""
+    """As tabelas lidas da evidência anterior e o que o registro declara sobre elas.
+
+    Campos:
+        tables: arquivo do `comparison_set` → linhas filtradas.
+        column_types: arquivo → coluna → tipo físico do footer registrado (a precisão de
+            armazenamento de m_ant e de y_ant sai daqui — D12 e, D13).
+        source_ids: as fontes de definição registradas (`repo@commit:path` de cada
+            `[[definition_source]]` e o caminho de cada arquivo) — um `CommonBaseline` só
+            vale com a sua `source` aqui (D12 a).
+    """
 
     tables: Mapping[str, list[Row]]
+    column_types: Mapping[str, Mapping[str, str]]
+    source_ids: frozenset[str]
+
+
+def registry_source_ids(registry: PriorEvidenceRegistry) -> frozenset[str]:
+    """As fontes de definição aceitas por D12 a: código (`repo@commit:path`) ou arquivo."""
+    code = {f"{s.repo}@{s.commit}:{s.path}" for s in registry.definition_sources}
+    return frozenset(code | {item.path for item in registry.files})
 
 
 def read_prior(*, oracle_root: Path, registry: PriorEvidenceRegistry) -> PriorSide:
@@ -107,7 +132,14 @@ def read_prior(*, oracle_root: Path, registry: PriorEvidenceRegistry) -> PriorSi
         PriorEvidenceHashError: arquivo diferente do registro, ausente ou fora dele.
     """
     verified = verify_registered_files(oracle_root=oracle_root, registry=registry)
-    return PriorSide({path: read_prior_table(verified, path) for path in cs.PRIOR_FILES})
+    return PriorSide(
+        tables={path: read_prior_table(verified, path) for path in cs.PRIOR_FILES},
+        column_types={
+            item.path: {column.name: column.type for column in item.columns}
+            for item in registry.files
+        },
+        source_ids=registry_source_ids(registry),
+    )
 
 
 # --- oficial -------------------------------------------------------------------------------
@@ -115,6 +147,10 @@ def read_prior(*, oracle_root: Path, registry: PriorEvidenceRegistry) -> PriorSi
 
 class OfficialFingerprintMismatchError(AssertionError):
     """O `dataset_fingerprint` da grade lida difere do manifesto da cópia julgada: parar."""
+
+
+class OfficialSilverMismatchError(AssertionError):
+    """O silver lido (`dim_run`/`fact_oos_predictions`) não é o que a cópia julgada consumiu."""
 
 
 @dataclass(frozen=True)
@@ -152,28 +188,54 @@ def judged_partition(official_root: Path) -> tuple[GoldPartition, str]:
 
 
 def _model_predictions(
-    repository: ParquetAnalyticsRepository, partition: GoldPartition, models: frozenset[str]
+    repository: ParquetAnalyticsRepository,
+    partition: GoldPartition,
+    models: frozenset[str],
+    consumed: SilverContent,
 ) -> list[Row]:
-    runs = {
-        str(row["run_id"]): row
+    """As predições dos `models`, depois de conferir o silver lido contra a cópia julgada.
+
+    O `dim_run` do cohort e as linhas de `fact_oos_predictions` dos seus runs são lidos com o
+    MESMO pós-filtro do `RefreshGold` e hasheados pelo `SilverContentAccumulator`; cada unidade
+    tem de ter o digest do `silver_content` da cópia julgada (CC4-6).
+
+    Raises:
+        OfficialSilverMismatchError: unidade ausente, a mais ou com outro digest.
+    """
+    accumulator = SilverContentAccumulator(hasher=CanonicalJsonHasher())
+    cohort = [
+        row
         for row in repository.read(
             layer=_SILVER,
-            table="dim_run",
+            table=_DIM_RUN,
             filters={"asset": partition.asset, "parent_sweep_id": partition.parent_sweep_id},
         )
-        if row.get("parent_sweep_id") == partition.parent_sweep_id
-        and row.get("model_version") in models
-    }
+        if (row.get("asset"), row.get("parent_sweep_id"))
+        == (partition.asset, partition.parent_sweep_id)
+    ]
+    accumulator.add_dim_run(
+        columns=repository.columns(layer=_SILVER, table=_DIM_RUN),
+        parent_sweep_id=partition.parent_sweep_id,
+        rows=cohort,
+    )
+    by_id = {str(row["run_id"]): row for row in cohort}
+    fact_columns = repository.columns(layer=_SILVER, table=_FACT)
     points: list[Row] = []
-    for feature_set in sorted({str(run["feature_set_name"]) for run in runs.values()}):
-        for row in repository.read(
-            layer=_SILVER,
-            table="fact_oos_predictions",
-            filters={"asset": partition.asset, "feature_set_name": feature_set},
-        ):
-            run = runs.get(str(row["run_id"]))
+    for feature_set in sorted({str(run["feature_set_name"]) for run in cohort}):
+        kept = [
+            row
+            for row in repository.read(
+                layer=_SILVER,
+                table=_FACT,
+                filters={"asset": partition.asset, "feature_set_name": feature_set},
+            )
+            if row.get("asset") == partition.asset and str(row["run_id"]) in by_id
+        ]
+        accumulator.add_facts(table=_FACT, columns=fact_columns, rows=kept)
+        for row in kept:
+            run = by_id[str(row["run_id"])]
             if (
-                run is None
+                run.get("model_version") not in models
                 or row.get("split") != cs.SPLIT
                 or row.get("quantile_level") not in cs.COMMON_LEVELS
             ):
@@ -188,7 +250,33 @@ def _model_predictions(
                     "value": row["value_guardrail"],  # NEW_SCORED_VARIANT
                 }
             )
+    check_silver_units(accumulator.result(), consumed, partition)
     return points
+
+
+def check_silver_units(
+    read: SilverContent, consumed: SilverContent, partition: GoldPartition
+) -> None:
+    """As unidades de `dim_run` do cohort e de `fact_oos_predictions` lidas = as consumidas.
+
+    Raises:
+        OfficialSilverMismatchError: unidade ausente, a mais ou com outro digest.
+    """
+
+    def ours(units: Mapping[str, str]) -> dict[str, str]:
+        dim_run = f"{_DIM_RUN}|{partition.parent_sweep_id}"
+        return {
+            key: value
+            for key, value in units.items()
+            if key == dim_run or key.startswith(f"{_FACT}|")
+        }
+
+    got, expected = ours(read.units), ours(consumed.units)
+    if got != expected:
+        differing = sorted(k for k in set(got) | set(expected) if got.get(k) != expected.get(k))
+        raise OfficialSilverMismatchError(
+            f"official silver differs from the judged copy's silver_content in {differing[:10]}"
+        )
 
 
 def read_official(official_root: Path) -> OfficialSide:
@@ -224,6 +312,8 @@ def read_official(official_root: Path) -> OfficialSide:
         preregistration_ref=ref,
         candidate=candidate,
         realized=realized,
-        predictions=tuple(_model_predictions(repository, partition, models)),
+        predictions=tuple(
+            _model_predictions(repository, partition, models, judged.manifest.silver_content)
+        ),
         dm_rows=tuple(dict(row) for row in (dm_table.rows if dm_table is not None else ())),
     )

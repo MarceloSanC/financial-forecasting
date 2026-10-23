@@ -1427,4 +1427,45 @@ runbook (E2 e E3), acrescentar `--preregistration-ref "$REF"` ao fim do comando
 `env-equal`; o §2 Task 06 lê-se `env-equal <ATTEMPTS.jsonl> <foto.json>
 --preregistration-ref <ref>`.
 
+### 2026-10-23 — [deviation] Checkpoint C final (bloco 4), CC4-1..CC4-8 no andaime — Claude (executor)
+**Contexto:** o Checkpoint C final achou o andaime da Task 11 sem a classificação final na
+tabela declarada (CC4-1) e o `compute_rows` quase sem teste — cinco mutações sobreviviam
+(CC4-2) —, além de CC4-3..CC4-8. Correções em `[8.2/task-10-fix]` (CC4-5) e
+`[8.2/task-11-fix]` (o resto):
+- **CC4-1:** `APPLICABILITY_TEXT` transcreve LITERALMENTE a tabela "Aplicabilidade por
+  comparação" do doc de domínio §5.6 (um teste confere linha a linha contra o doc);
+  `APPLICABILITY` dá, por tipo de comparação, os tokens de categoria aceitos (`alvo`,
+  `escala`, `bruto_rearranjado`, `amostra`, `pesos_grade`, `defeito_referenciado`,
+  `convencao_empate`, `agregacao_seeds`). A tabela ganha as colunas `tipo` e
+  `classificação`: `within_tolerance`/`same_sense` (passou), `explained:<token>` ou
+  `not_explained` (não passou), `not_compared:<motivo>` (`A1`, `empty_intersection`,
+  `sample`, `dm_rows`), `reported` (delta). O `parse` recusa classificação que não cabe no
+  status ou categoria fora da aplicabilidade do tipo. **Reconciliação com o runbook:** o
+  `not_compared: A1` do E4 passo 2 escreve-se `not_compared:A1` (sem espaço); o
+  `explained:<categoria>` do E4 passo 3 usa os tokens acima. Seguindo o mesmo passo 2, as
+  linhas **A10** de um horizonte com A1 fora também viram `not_compared:A1`. O teste opt-in
+  afirma ids, tipos e status recomputados = `DECLARED`, e `DECLARED` = a tabela parseada (a
+  classificação é declarada na E5).
+- **E4 passo 1:** o runbook chama `python -m tests.equivalence.audit_table` sem argumentos;
+  o `main` passou a ler `EQUIVALENCE_ORACLE_ROOT`/`EQUIVALENCE_OFFICIAL_ROOT` quando não há
+  argumento (antes, exit 2).
+- **CC4-3** seed que não cobre T∩ → `ValueError` nomeando as seeds (sem descarte);
+  **CC4-4** D7 e T∩ só pelas funções de `alignment.py`; **CC4-5** meio ulp pelo tipo
+  registrado (`half_ulp_of`); **CC4-6** as unidades `dim_run|<sweep>` e
+  `fact_oos_predictions|…` do silver vivo, hasheadas pelo `SilverContentAccumulator` com o
+  pós-filtro do `RefreshGold`, têm de ser as do `silver_content` da cópia julgada;
+  **CC4-7** guarda da E1 no início do `compute` (coluna e rótulos do candidato; `source` de
+  baseline comum no registro); **CC4-8** predição nova repetida → `ValueError`.
+**Mutações M1–M5 (CC4-2), cada uma aplicada, `pytest tests/equivalence/test_audit_table_render.py`
+e revertida:**
+```
+M1 D7 janela mais antiga: 2 failed, 18 passed, 1 warning in 7.62s
+M2 agregação só a primeira seed: 2 failed, 18 passed, 1 warning in 7.67s
+M3 lado do nominal novo fixo inside: 1 failed, 19 passed, 1 warning in 7.60s
+M4 a1_ok ignorado: 1 failed, 19 passed, 1 warning in 7.69s
+M5 variante raw no candidato anterior: 1 failed, 19 passed, 1 warning in 7.60s
+```
+**Razão:** correções in-scope do andaime, sem mudar concept nem ADR; o runbook (§1–§6
+congelados) fica reconciliado por esta entrada.
+
 <!-- END: post-execution -->
