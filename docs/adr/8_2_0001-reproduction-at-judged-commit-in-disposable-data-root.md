@@ -51,8 +51,9 @@ backup of the data root the frozen input of the 8.2.
 3. **Calculation path only, through a declared driver.** The whole calculation —
    refresh **and** scorecard — runs in `060537fc`'s code. A driver
    `scripts/reproduce_judged_generation.py`, versioned at HEAD outside `src/`,
-   is mounted apart (`/driver/`) while the `060537fc` tree is mounted as `/app`,
-   so the probe still sees a clean tree. It only wires through that commit's
+   is mounted apart (`/driver/`) while the `060537fc` tree is mounted as `/app`
+   (an isolation choice: the probe only flags `src/`, `uv.lock` and the cohort
+   file, but the judged tree stays untouched). It only wires through that commit's
    `ApplicationDependencies`: `wire_dependencies(Settings(data_root=<disposable>))`,
    `resolve_judged_revision`, `refresh_gold(refresh_command_from(plan, ref))`,
    `build_confirmatory_scorecard(...)`, and writes
@@ -72,10 +73,25 @@ backup of the data root the frozen input of the 8.2.
 5. **Live partition untouched.** sha256 of `current/MANIFEST.json`,
    `judged/ATTEMPTS.jsonl` and the copy's `CONTENTS.sha256` are recorded before
    and after.
-6. **HEAD confirmation.** For each `src/` file in `060537fc..HEAD`, compare
-   `ast.dump` of both versions with docstrings stripped (docstrings are
-   `Expr(Constant)` nodes and are part of the AST). The result is recorded; it
-   does not replace step 3.
+6. **Base confirmation.** For each `src/` file in `060537fc..64b8a17d` (`64b8a17d` =
+   merge-base with `origin/develop` at the start of the Stage, a fixed base),
+   compare `ast.dump` of both versions with docstrings stripped (docstrings are
+   `Expr(Constant)` nodes and are part of the AST). The files the 8.2 itself
+   touches (`64b8a17d..HEAD`: composition root, CLI, port and store) are listed
+   apart, each justified as outside the refresh/scorecard path. The result is
+   recorded; it does not replace step 3.
+7. **Environment snapshot from the same producer.** At `060537fc` the
+   `GitEvaluationEnvironment` is built only inside the composition root's
+   `run_confirmatory_evaluation_for` closure. The driver takes
+   `deps.run_confirmatory_evaluation_for(cohort, device)._environment.snapshot()`
+   — a declared private access, the only way to get the same snapshot the 8.1
+   recorded without new code at `060537fc` — with cohort
+   `config/cohorts/aapl_confirmatory.toml`, device `cpu`, `IMAGE_ID` set, cwd
+   `/app` and explicit `GIT_DIR`/`GIT_WORK_TREE`, before the refresh. A
+   `--check` mode (wiring + snapshot, no refresh) runs at `060537fc` as the
+   pre-flight; the HEAD smoke test with fakes only proves the driver's logic.
+   `env.platform` carries the WSL kernel; a kernel update breaks equality and
+   is an environment diagnosis, not a code one.
 
 ## Alternatives considered
 
