@@ -1605,4 +1605,17 @@ R2: `infer` avulso com `60 runs (60 strict, 0 tolerance); calib rows written 0, 
 - tipo: **1ª execução** (nem replay A15 nem pós-registro A16)
 - `--break-stale-lock`: não; `--deviation`: não
 
+### 2026-10-23 — [measurement] etapa-r — intenção da tentativa 2 da corrida confirmatória — Claude (sessão Windows)
+**Contexto:** tentativa 1 (09:05:14Z → 09:34:18Z, exit 0) saiu `JUDGED` com `generation_digest`
+`96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539`; R5 com `CONTENTS_OK` e
+`DIGEST_OK`.
+**Tentativa 2:**
+- HEAD: o commit desta intenção (filho de `060537fc`, só §7); código, imagem e entrada iguais aos da tentativa 1
+- `code.src` `4d2b2540a10f5cbb2f59164bba3262224d572d7b`; `code.uv_lock` `0f36050a0044db5f05ca9037e23c4425220cb82b`
+- `platform` `Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.41`; `cpu_capability` `AVX2`
+- `IMAGE_ID` `sha256:b69a7620e7bd8449369bde2f46e903c5f46c25e9efb3597f452af3272e0a8f45`
+- hora UTC da intenção: 2026-10-23T09:37Z; tempo esperado: `infer` ≈ 15 min, sem refresh
+- tipo: **replay (A15)** — esperado `ALREADY_JUDGED` com o mesmo digest e o mesmo corpo
+- `--break-stale-lock`: não; `--deviation`: não
+
 <!-- END: post-execution -->
