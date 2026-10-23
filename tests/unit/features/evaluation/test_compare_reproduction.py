@@ -374,3 +374,18 @@ def test_undeclared_column_raises() -> None:
         ValueError, match=r"columns without a declared reproduction class \['surprise'\]"
     ):
         _compare(_stored(surprise).generation())
+
+
+@pytest.mark.unit
+def test_started_and_finished_at_outside_manifest_read_still_count() -> None:
+    """Só `manifest_read.started_at`/`finished_at` são proveniência; a mesma chave noutro nível
+    do scorecard é resultado (auditoria de testes, mutante j)."""
+    comparison = _compare(
+        _stored().generation(),
+        judged_scorecard=_scorecard(started_at="2026-10-05T12:00:00+00:00"),
+        reproduced_scorecard=_scorecard(started_at="2027-10-05T12:00:00+00:00"),
+    )
+
+    assert comparison.scorecard.equal is False
+    assert comparison.scorecard.paths == ("verdict.started_at",)
+    assert comparison.bit_identical is False
