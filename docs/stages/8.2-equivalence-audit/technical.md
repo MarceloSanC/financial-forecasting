@@ -12,7 +12,7 @@ step_id: N                       # sequencial, sem zero-padding (1, 2, 15…)
 step_title: <Título humano do Step>
 depends_on: []
 concept_ref: ./concept.md
-issue_id: 0
+issue_id: 232
 branch: feat/<num-issue>-<N-M>-<slug>
 tasks_count: 0
 ---
