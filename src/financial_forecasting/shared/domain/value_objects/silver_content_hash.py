@@ -60,6 +60,7 @@ KIND_FLOAT: Final = "float"
 KIND_STR: Final = "str"
 KIND_BOOL: Final = "bool"
 _KINDS: Final = frozenset({KIND_INT, KIND_FLOAT, KIND_STR, KIND_BOOL})
+_NATIVE_PASSTHROUGH: Final = frozenset({(KIND_INT, int), (KIND_STR, str), (KIND_BOOL, bool)})
 
 
 def _float_token(value: float) -> str:
@@ -72,7 +73,21 @@ def _float_token(value: float) -> str:
 
 
 def _canonical_value(value: object, *, kind: str, nullable: bool, where: str) -> object:
-    """Canoniza um valor pelo tipo declarado da coluna (ver docstring do módulo)."""
+    """Canoniza um valor pelo tipo declarado da coluna (ver docstring do módulo).
+
+    Caminho rápido para os tipos nativos (`int`/`str`/`bool` exatos e `float`): o mesmo
+    resultado de `_canonical_value_by_kind`, sem o `isinstance` contra as ABCs de
+    `numbers`, que domina o custo em milhões de linhas (Stage 8.1, teste de memória da 7.3).
+    """
+    if (kind, type(value)) in _NATIVE_PASSTHROUGH:
+        return value
+    if kind == KIND_FLOAT and isinstance(value, float):
+        return _float_token(float(value))
+    return _canonical_value_by_kind(value, kind=kind, nullable=nullable, where=where)
+
+
+def _canonical_value_by_kind(value: object, *, kind: str, nullable: bool, where: str) -> object:
+    """Caso geral: `None`, escalares de numpy e recusas, pelo tipo declarado."""
     if value is None:
         if nullable:
             return None
