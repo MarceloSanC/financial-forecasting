@@ -2,11 +2,13 @@
 
 Só stdlib — não importa `financial_forecasting` (roda em qualquer árvore e no host).
 
-    python scripts/reproduction_evidence.py env-equal <ATTEMPTS.jsonl> <foto.json>
+    python scripts/reproduction_evidence.py env-equal <ATTEMPTS.jsonl> <foto.json> \\
+        [--preregistration-ref <ref>]
     python scripts/reproduction_evidence.py ast-equal <rev_a> <rev_b> [--paths src/ ...]
 
 `env-equal` (base de A2/I4): compara a ÚLTIMA linha `phase = started` do `ATTEMPTS.jsonl`
-com a foto do ambiente gravada pelo driver (`environment.json` ou o stdout do `--check`):
+(só as da `--preregistration-ref`, quando dada — CC2-2) com a foto do ambiente gravada
+pelo driver (`environment.json` ou o stdout do `--check`):
 `commit` igual; `code_dirty` e `preregistration_dirty` da foto = `"false"`; o conjunto e os
 valores das chaves `code.*` = `code` da linha e das `env.*` = `environment`. Imprime
 `ENV_EQUAL` e sai 0, ou uma linha por divergência (`missing`/`extra`/`different`/`dirty`/
@@ -46,16 +48,22 @@ EXIT_DIFFERENT: Final = 1
 # --- env-equal ----------------------------------------------------------------------------
 
 
-def started_line(attempts: str) -> dict[str, object]:
-    """A última linha `phase = started` do `ATTEMPTS.jsonl`.
+def started_line(attempts: str, preregistration_ref: str | None = None) -> dict[str, object]:
+    """A última linha `phase = started` do `ATTEMPTS.jsonl` (da referência, se dada).
 
     Raises:
-        ValueError: nenhuma linha `started`.
+        ValueError: nenhuma linha `started` (da referência).
     """
     lines = [json.loads(line) for line in attempts.splitlines() if line.strip()]
-    started: list[dict[str, object]] = [line for line in lines if line.get("phase") == STARTED]
+    started: list[dict[str, object]] = [
+        line
+        for line in lines
+        if line.get("phase") == STARTED
+        and (preregistration_ref is None or line.get("preregistration_ref") == preregistration_ref)
+    ]
     if not started:
-        raise ValueError("ATTEMPTS.jsonl has no started line")
+        scope = "" if preregistration_ref is None else f" of {preregistration_ref}"
+        raise ValueError(f"ATTEMPTS.jsonl has no started line{scope}")
     return started[-1]
 
 
@@ -94,9 +102,14 @@ def env_differences(started: dict[str, object], snapshot: dict[str, str]) -> lis
     return problems
 
 
-def env_equal(attempts_path: Path, snapshot_path: Path, out: TextIO) -> int:
+def env_equal(
+    attempts_path: Path,
+    snapshot_path: Path,
+    out: TextIO,
+    preregistration_ref: str | None = None,
+) -> int:
     """`ENV_EQUAL` e 0, ou as divergências e 1."""
-    started = started_line(attempts_path.read_text(encoding="utf-8"))
+    started = started_line(attempts_path.read_text(encoding="utf-8"), preregistration_ref)
     snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
     problems = env_differences(started, snapshot)
     out.write("".join(f"{line}\n" for line in problems or [ENV_EQUAL]))
@@ -211,6 +224,7 @@ def main(argv: Sequence[str] | None = None, *, out: TextIO | None = None) -> int
     env = commands.add_parser("env-equal")
     env.add_argument("attempts", type=Path)
     env.add_argument("snapshot", type=Path)
+    env.add_argument("--preregistration-ref", default=None)
     tree = commands.add_parser("ast-equal")
     tree.add_argument("rev_a")
     tree.add_argument("rev_b")
@@ -218,7 +232,7 @@ def main(argv: Sequence[str] | None = None, *, out: TextIO | None = None) -> int
     args = parser.parse_args(argv)
     stream = out or sys.stdout
     if args.command == "env-equal":
-        return env_equal(args.attempts, args.snapshot, stream)
+        return env_equal(args.attempts, args.snapshot, stream, args.preregistration_ref)
     return ast_equal(args.rev_a, args.rev_b, args.paths, stream)
 
 

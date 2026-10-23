@@ -122,6 +122,29 @@ def test_env_equal_reads_the_started_line_only(tmp_path: Path) -> None:
         _env_equal(*_files(tmp_path, _snapshot(), input_read))
 
 
+def test_env_equal_filters_by_preregistration_ref(tmp_path: Path) -> None:
+    """CC2-2: com `--preregistration-ref`, a última `started` DAQUELA referência."""
+    other = _started(preregistration_ref="plan-r9-ffffffffffff", commit="9" * 40)
+    attempts, photo = _files(tmp_path, _snapshot(), _started(), other)
+    ref = ["--preregistration-ref", "plan-r3-0123456789ab"]
+
+    out = io.StringIO()
+    assert evidence.main(["env-equal", str(attempts), str(photo), *ref], out=out) == 0
+    assert out.getvalue() == "ENV_EQUAL\n"
+    assert _env_equal(attempts, photo)[0] == 1  # sem filtro: a última é a de outra ref
+    with pytest.raises(ValueError, match="no started line of plan-r0-000000000000"):
+        evidence.main(
+            [
+                "env-equal",
+                str(attempts),
+                str(photo),
+                "--preregistration-ref",
+                "plan-r0-000000000000",
+            ],
+            out=io.StringIO(),
+        )
+
+
 def test_ast_equal_ignores_docstrings_and_joined_fstrings() -> None:
     evidence.self_test()
     left = (
