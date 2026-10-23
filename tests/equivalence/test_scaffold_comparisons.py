@@ -138,6 +138,23 @@ def test_a1_passes_at_half_ulp_and_fails_one_ulp_beyond() -> None:
     assert cs.A1_HALF_ULP == 2.0**-53
 
 
+def test_storage_precision_comes_from_the_registered_type() -> None:
+    """CC4-5: o meio ulp sai do tipo físico registrado; tipo sem precisão é recusado."""
+    assert cs.half_ulp_of("double") == 2.0**-53
+    assert cs.half_ulp_of("float") == 2.0**-24
+    with pytest.raises(ValueError, match="no floating-point storage precision"):
+        cs.half_ulp_of("string")
+    y = 1.0
+    off = y + 2.0**-30  # dentro do meio ulp de float32, fora do de float64
+    assert a1_check([(off, y)], half_ulp=cs.half_ulp_of("float")).status is (
+        RawStatus.WITHIN_TOLERANCE
+    )
+    assert a1_check([(off, y)]).status is RawStatus.OUT_OF_TOLERANCE
+    assert a2_tolerance(m_a=0.0, m_ant=1e10, u_q=0.0, storage_half_ulp=2.0**-24) == (
+        2.0**-24 * 1e10
+    )
+
+
 def test_a1_reports_count_out_and_max() -> None:
     result = a1_check([(1.0, 1.0), (2.0, 2.5), (-1.0, -1.25), (3.0, 3.0)])
 

@@ -184,6 +184,22 @@ A1_HALF_ULP: Final = 2.0**-53
 """D13: meio ulp do `double` gravado pelo anterior, na magnitude de y_ant."""
 STORAGE_HALF_ULP_DOUBLE: Final = 2.0**-53
 """D12 e: precisão de armazenamento de m_ant (`double`)."""
+HALF_ULP_BY_TYPE: Final[dict[str, float]] = {"double": 2.0**-53, "float": 2.0**-24}
+"""Meio ulp por tipo físico do footer (`str(pyarrow.DataType)`): D12 e, D13 — a precisão de
+armazenamento sai do tipo REGISTRADO da coluna, não de uma suposição (CC4-5)."""
+
+
+def half_ulp_of(physical_type: str) -> float:
+    """Meio ulp do tipo físico registrado.
+
+    Raises:
+        ValueError: tipo sem precisão de ponto flutuante conhecida (ex.: texto, inteiro).
+    """
+    if physical_type not in HALF_ULP_BY_TYPE:
+        raise ValueError(f"no floating-point storage precision for physical type {physical_type!r}")
+    return HALF_ULP_BY_TYPE[physical_type]
+
+
 R2_RELATIVE: Final = 1e-9
 """Doc §4.3 R2: o default relativo de `math.isclose`."""
 

@@ -63,16 +63,16 @@ class A1Result:
     status: RawStatus
 
 
-def a1_within(y_new: float, y_prior: float) -> bool:
-    """|y_novo - y_ant| ≤ 2⁻⁵³·|y_ant| (y_ant = 0 ⇒ igualdade exata)."""
-    return abs(y_new - y_prior) <= A1_HALF_ULP * abs(y_prior)
+def a1_within(y_new: float, y_prior: float, *, half_ulp: float = A1_HALF_ULP) -> bool:
+    """|y_novo - y_ant| ≤ meio ulp·|y_ant| (2⁻⁵³ para `double`; y_ant = 0 ⇒ igualdade exata)."""
+    return abs(y_new - y_prior) <= half_ulp * abs(y_prior)
 
 
-def a1_check(pairs: Sequence[tuple[float, float]]) -> A1Result:
-    """A1 sobre os pares (y_novo, y_ant) de T∩ de um horizonte."""
+def a1_check(pairs: Sequence[tuple[float, float]], *, half_ulp: float = A1_HALF_ULP) -> A1Result:
+    """A1 sobre os pares (y_novo, y_ant) de T∩ de um horizonte (meio ulp do tipo de y_ant)."""
     if not pairs:
         return A1Result(0, 0, None, RawStatus.EMPTY_INTERSECTION)
-    n_out = sum(not a1_within(new, prior) for new, prior in pairs)
+    n_out = sum(not a1_within(new, prior, half_ulp=half_ulp) for new, prior in pairs)
     max_abs_diff = max(abs(new - prior) for new, prior in pairs)
     status = RawStatus.WITHIN_TOLERANCE if n_out == 0 else RawStatus.OUT_OF_TOLERANCE
     return A1Result(len(pairs), n_out, max_abs_diff, status)
@@ -95,10 +95,12 @@ U_Q_PICP: float = 1.0
 """u_q de uma cobertura (adimensional limitada)."""
 
 
-def a2_tolerance(*, m_a: float, m_ant: float, u_q: float) -> float:
-    """max(1e-9·max(|m_A|, |m_ant|, u_q), 2⁻⁵³·|m_ant|) — D12 e."""
+def a2_tolerance(
+    *, m_a: float, m_ant: float, u_q: float, storage_half_ulp: float = STORAGE_HALF_ULP_DOUBLE
+) -> float:
+    """max(1e-9·max(|m_A|, |m_ant|, u_q), meio ulp do tipo de m_ant·|m_ant|) — D12 e."""
     r2 = R2_RELATIVE * max(abs(m_a), abs(m_ant), u_q)
-    return max(r2, STORAGE_HALF_ULP_DOUBLE * abs(m_ant))
+    return max(r2, storage_half_ulp * abs(m_ant))
 
 
 @dataclass(frozen=True)
@@ -112,11 +114,19 @@ class A2Result:
     status: RawStatus
 
 
-def a2_compare(*, m_a: float, m_ant: float, u_q: float, n_recorded: int, n_points: int) -> A2Result:
+def a2_compare(  # noqa: PLR0913 — m_A, m_ant, u_q, amostra e precisão do tipo
+    *,
+    m_a: float,
+    m_ant: float,
+    u_q: float,
+    n_recorded: int,
+    n_points: int,
+    storage_half_ulp: float = STORAGE_HALF_ULP_DOUBLE,
+) -> A2Result:
     """m_A contra m_ant; a amostra do anterior tem de ser a reconstruída (`n_recorded`)."""
     if n_recorded != n_points:
         return A2Result(None, m_ant, None, None, RawStatus.NOT_REALIZABLE)
-    tolerance = a2_tolerance(m_a=m_a, m_ant=m_ant, u_q=u_q)
+    tolerance = a2_tolerance(m_a=m_a, m_ant=m_ant, u_q=u_q, storage_half_ulp=storage_half_ulp)
     diff = abs(m_a - m_ant)
     status = RawStatus.WITHIN_TOLERANCE if diff <= tolerance else RawStatus.OUT_OF_TOLERANCE
     return A2Result(m_a, m_ant, diff, tolerance, status)
