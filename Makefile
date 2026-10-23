@@ -155,8 +155,11 @@ check-block: $(STATIC_GATES) docs-check
 # ---------------------------------------------------------------------------
 # lint — verifica estilo e regras sem modificar arquivos
 # ---------------------------------------------------------------------------
+# `ruff format --check` entra no gate (issue #222): sem ele o estilo commitado não
+# seguia versão nenhuma do formatador. Corrigir com `make fmt`.
 lint:
 	uv run ruff check src/ tests/ scripts/ .claude/hooks/
+	uv run ruff format --check src/ tests/ scripts/ .claude/hooks/
 
 # ---------------------------------------------------------------------------
 # fmt — formata e corrige automaticamente o que for possível

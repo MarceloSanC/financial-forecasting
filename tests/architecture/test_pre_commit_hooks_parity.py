@@ -23,6 +23,7 @@ pytestmark = pytest.mark.unit
 
 _REPO = Path(__file__).resolve().parents[2]
 _CONFIG = _REPO / ".pre-commit-config.yaml"
+_MAKEFILE = _REPO / "Makefile"
 
 # Ferramenta de cada hook que tem de rodar pelo venv, e o comando esperado no `entry:`.
 _VENV_HOOKS = {
@@ -162,3 +163,33 @@ def test_local_hook_named_like_a_tool_in_a_remote_repo_is_rejected() -> None:
     problems = parity_violations(text)
 
     assert any("repo remoto" in p for p in problems)
+
+
+def make_target_recipe(text: str, target: str) -> list[str]:
+    """Linhas de receita (com tab) do alvo `target:` do Makefile."""
+    lines = text.splitlines()
+    recipe: list[str] = []
+    inside = False
+    for line in lines:
+        if inside:
+            if not line.startswith("\t"):
+                break
+            recipe.append(line.strip())
+        elif line.startswith(f"{target}:"):
+            inside = True
+    return recipe
+
+
+def test_make_lint_checks_formatting() -> None:
+    """O hook `ruff-format` só concorda com o gate se o gate também checar o formato."""
+    recipe = make_target_recipe(_MAKEFILE.read_text(encoding="utf-8"), "lint")
+
+    assert any(line.startswith("uv run ruff format --check") for line in recipe), recipe
+
+
+def test_make_target_recipe_stops_at_next_target() -> None:
+    text = "lint:\n\tuv run ruff check src/\n\nlint-imports:\n\tuv run lint-imports\n"
+
+    assert make_target_recipe(text, "lint") == ["uv run ruff check src/"]
+    assert make_target_recipe(text, "lint-imports") == ["uv run lint-imports"]
+    assert make_target_recipe(text, "absent") == []
