@@ -188,6 +188,7 @@ from financial_forecasting.features.evaluation.application.ports.out.mcs_backend
 )
 from financial_forecasting.features.evaluation.application.use_cases.audit_reproduction import (
     AuditReproduction,
+    EqualReproductionRootsError,
 )
 from financial_forecasting.features.evaluation.application.use_cases.build_confirmatory_scorecard import (  # noqa: E501
     BuildConfirmatoryScorecard,
@@ -812,11 +813,17 @@ def wire_reproduction_audit(
     `<repo_root>/config/preregistration/` e o `CanonicalJsonHasher` que calcula o
     `preregistration_ref`.
 
+    Dono único da recusa de raízes iguais (Checkpoint C 8.2 bloco 2, CC2-1): o `cli.py`
+    só chama.
+
     Raises:
-        ValueError: as duas raízes são a mesma (após `resolve()`), antes de montar adapter.
+        EqualReproductionRootsError: as duas raízes são a mesma (após `resolve()`), antes de
+            montar qualquer adapter.
     """
     if Path(judged_data_root).resolve() == Path(reproduced_data_root).resolve():
-        raise ValueError(f"the judged and the reproduced roots are the same: {judged_data_root}")
+        raise EqualReproductionRootsError(
+            f"--judged-data-root and --reproduced-data-root are the same root {judged_data_root}"
+        )
     return AuditReproduction(
         source=TomlPreregistrationSource(root=settings.repo_root / "config" / "preregistration"),
         hasher=CanonicalJsonHasher(),

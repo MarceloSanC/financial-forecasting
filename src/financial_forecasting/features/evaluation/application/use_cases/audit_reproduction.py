@@ -61,6 +61,10 @@ class ReproductionAuditError(ApplicationError):
     """Falta um insumo da auditoria: registro commitado, scorecard da cópia ou `input_read`."""
 
 
+class EqualReproductionRootsError(ApplicationError):
+    """A raiz julgada e a reproduzida são a mesma (concept 8.2 I2): recusa antes de ler."""
+
+
 class AuditReproduction:
     """Compara a geração reproduzida com a cópia julgada da revisão (só leitura)."""
 

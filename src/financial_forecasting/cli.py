@@ -22,9 +22,9 @@ terminar sem exceção, o `RunConfirmatoryEvaluation` do `evaluation` com o resu
 Stage 8.2: `audit-reproduction --judged-data-root <dir> --reproduced-data-root <dir>
 --preregistration <nome> --revision <r> --preregistration-ref <ref>` — só leitura, sem
 `--data-root`, `--cohort` nem lock (não usa o helper `add()`); despachado ANTES do
-`wire_dependencies` (não monta o grafo inteiro): recusa as duas raízes iguais (após
-`resolve()`) antes de montar qualquer adapter e monta só o `AuditReproduction` por
-`composition_root.wire_reproduction_audit`, com `Settings(**settings_overrides)` (o
+`wire_dependencies` (não monta o grafo inteiro): monta só o `AuditReproduction` por
+`composition_root.wire_reproduction_audit` (que recusa as duas raízes iguais, após
+`resolve()`, antes de montar qualquer adapter), com `Settings(**settings_overrides)` (o
 `repo_root` do pré-registro). Exit 0 só com `bit_identical`, 1 com diferença, 2 em erro.
 `--data-root` é obrigatório nos demais, sem default: o dado de um cohort vive
 isolado em `data/cohorts/<nome>/` (concept D10) e um default silencioso poderia
@@ -107,10 +107,6 @@ class MissingSentimentExtraError(ApplicationError):
 
 class DatasetStartConflictError(ApplicationError):
     """`--start` e o `dataset_start` do arquivo do cohort declaram datas diferentes."""
-
-
-class EqualReproductionRootsError(ApplicationError):
-    """`--judged-data-root` e `--reproduced-data-root` são a mesma raiz (concept 8.2 I2)."""
 
 
 @dataclass(frozen=True)
@@ -304,13 +300,10 @@ def main(  # noqa: PLR0911 — um return por família de subcomando
 
 
 def _dispatch_audit_reproduction(args: argparse.Namespace, injected: CliWiring, out: TextIO) -> int:
-    """`audit-reproduction` (8.2): recusa raízes iguais antes de montar adapter algum."""
+    """`audit-reproduction` (8.2): o `wire_reproduction_audit` recusa raízes iguais antes de
+    montar adapter algum (dono único da recusa, CC2-1)."""
     judged_root: Path = args.judged_data_root
     reproduced_root: Path = args.reproduced_data_root
-    if judged_root.resolve() == reproduced_root.resolve():
-        raise EqualReproductionRootsError(
-            f"--judged-data-root and --reproduced-data-root are the same root {judged_root}"
-        )
     audit = wire_reproduction_audit(
         Settings(**injected.settings_overrides),
         judged_data_root=judged_root,

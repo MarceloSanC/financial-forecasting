@@ -1030,9 +1030,11 @@ def test_audit_reproduction_requires_both_roots_and_revision(
 def test_audit_reproduction_refuses_equal_roots_before_wiring_exit_2(
     spelling: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    wired: list[object] = []
-    monkeypatch.setattr(cli, "wire_reproduction_audit", lambda *a, **k: wired.append(a))
-    monkeypatch.setattr(cli, "wire_dependencies", lambda *a, **k: wired.append(a))
+    composition: Any = cli.importlib.import_module("financial_forecasting.composition_root")
+    built: list[object] = []
+    for name in ("ParquetGoldStore", "TomlPreregistrationSource", "AuditReproduction"):
+        monkeypatch.setattr(composition, name, lambda *a, _n=name, **k: built.append(_n))
+    monkeypatch.setattr(cli, "wire_dependencies", lambda *a, **k: built.append(a))
     root = tmp_path / "root"
     other = root if spelling == "same" else tmp_path / "x" / ".." / "root"
     err = io.StringIO()
@@ -1041,7 +1043,28 @@ def test_audit_reproduction_refuses_equal_roots_before_wiring_exit_2(
 
     assert code == _EXIT_ERROR
     assert "error: EqualReproductionRootsError" in err.getvalue()
-    assert wired == []
+    assert built == []  # o wire_reproduction_audit recusou antes de montar adapter
+
+
+@pytest.mark.unit
+def test_wire_reproduction_audit_refuses_equal_roots_and_wires_distinct_ones(
+    tmp_path: Path,
+) -> None:
+    settings = cli.Settings(_env_file=None, repo_root=tmp_path)
+    use_cases: Any = cli.importlib.import_module(
+        "financial_forecasting.features.evaluation.application.use_cases.audit_reproduction"
+    )
+
+    with pytest.raises(use_cases.EqualReproductionRootsError, match="same root"):
+        cli.wire_reproduction_audit(
+            settings,
+            judged_data_root=tmp_path / "a",
+            reproduced_data_root=tmp_path / "b" / ".." / "a",
+        )
+    audit = cli.wire_reproduction_audit(
+        settings, judged_data_root=tmp_path / "a", reproduced_data_root=tmp_path / "b"
+    )
+    assert type(audit).__name__ == "AuditReproduction"
 
 
 @pytest.mark.unit
