@@ -3,7 +3,7 @@ title: Technical — Stage 8.2 — Reprodução da corrida confirmatória e equi
 description: Plano de execução da Stage 8.2 em 11 Tasks inside-out (1 Task = 1 commit) — DTO e mapa de classes da reprodução, comparador puro, leitor da cópia julgada no port, use case de auditoria, subcomando audit-reproduction, driver da reprodução com smoke test, prova de independência de processo, e o andaime da equivalência em tests/equivalence/ — e as Etapas reais E1–E5 na ordem do D10 (registro de hashes, pré-voo em 060537fc, reprodução real, leitura de valores do anterior, teste opt-in e relatórios)
 when-use: Consultar durante a Fase 4 (execução) da Stage 8.2; cada Task tem arquivos (lista fechada), testes a escrever primeiro, critério de aceite do concept que cobre e verificação; as Etapas E1–E5 trazem o runbook da parte real, com a ordem fixa do D10 e a tabela "Se falhar"
 keywords: [technical, plano de execução, equivalence-audit, reproduction, evaluation, judged-generation, bit-identical, audit-reproduction, driver, prior-evidence, hash-registry, scaffold, opt-in-test, r-bit-commit]
-status: draft
+status: done
 created_at: 2026-10-23
 updated_at: 2026-10-23
 stage_id: 8.2-equivalence-audit
@@ -686,10 +686,12 @@ docs/reports/{prior_evidence_registry.toml, reproduction_audit.md, equivalence_a
   - `docs/LAYOUT.md` (§2: `tests/equivalence/` — andaime interino da 8.2, ADR
     8.2.0003; §3: regra "nenhum módulo de `src/` importa `tests/`", espelhada no
     `.importlinter`)
-- **Testes primeiro:** o caso novo de `_REAL_VIOLATION_CASES` (vermelho sem o
-  contrato: o `lint-imports` com a sonda passa; verde com ele: reprova) e a entrada
-  de `_EXPECTED_CONTRACTS` (`test_importlinter_declares_expected_contracts`
-  vermelho até o contrato existir).
+- **Testes primeiro:** a entrada `src-no-tests` em `_EXPECTED_CONTRACTS` — o
+  vermelho real é o `test_importlinter_declares_expected_contracts` até o contrato
+  existir no `.importlinter` (o caso novo de `_REAL_VIOLATION_CASES` não dá um
+  vermelho informativo antes: `limit_to_contracts` com nome inexistente já sai com
+  erro); com o contrato, o caso real prova que a sonda que importa
+  `tests.equivalence` reprova o `lint-imports` (verde do teste = contrato não vácuo).
 - **O que fazer:** Task própria porque muda configuração de gate (RUNBOOK §Gates em
   camadas) e um escopo que não é o do `evaluation`; 3 arquivos.
 - **Critério de aceite:** A14 (parte `import-linter`).
@@ -824,9 +826,12 @@ processo novo (variáveis não persistem) e tem teto de 10 min:
   06 e 08 — CB-7), executado a partir da worktree limpa no commit registrado;
 - (vi) **venv congelado (GB-3):** o volume `financial-forecasting_app-venv` é
   compartilhado por todas as worktrees (há outra em voo). Da E2 ao fim da E3,
-  **proibido** `uv sync`, `make setup`, `make install`, rebuild de imagem ou
-  `docker compose up` em qualquer worktree; a sessão declara isso ao coordenador
-  antes da E2, e o sha256 do `uv pip freeze` da E2 é exigido igual depois da E3.
+  **proibido** em qualquer worktree: `uv sync`, `make setup`, `make install`,
+  `make check`, `make test` (e todo alvo do Makefile que chama `uv run` puro —
+  `Makefile` l.146–221 —, que sincroniza o volume), qualquer `uv run` **sem**
+  `--no-sync`, rebuild de imagem ou `docker compose up`; todo comando das Etapas
+  usa `uv run --no-sync`. A sessão declara essa lista ao coordenador antes da E2,
+  e o sha256 do `uv pip freeze` da E2 é exigido igual depois da E3.
 
 **E0 — Variáveis (host, Git Bash; uma vez, depois do ponto 1).**
 ```bash
@@ -987,16 +992,19 @@ Antes de qualquer valor. Só footer, contagens e rótulos de definição.
 5. *Ambiente no container da reprodução:*
    ```bash
    set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
-   MSYS_NO_PATHCONV=1 docker run --rm $RES $RMOUNTS $RENVS "$IMAGE_ID" sh -c "$PRE; git rev-parse HEAD; git status --porcelain; cat /sys/fs/cgroup/cpu.max; uname -r" > "$SCRATCH/env-preflight.txt" && rc=0 || rc=$?
+   MSYS_NO_PATHCONV=1 docker run --rm $RES $RMOUNTS $RENVS "$IMAGE_ID" sh -c "$PRE; git rev-parse HEAD; git status --porcelain | wc -l; cat /sys/fs/cgroup/cpu.max; uname -r" > "$SCRATCH/env-preflight.txt" && rc=0 || rc=$?
    echo "exit $rc"; test "$rc" = 0 || { echo FAIL_ENV_PROBE; exit 1; }; cat "$SCRATCH/env-preflight.txt"
-   test "$(sed -n 2p "$SCRATCH/env-preflight.txt")" = "600000 100000" || { echo FAIL_CPU_MAX; exit 1; }; echo CPU_MAX_6
-   test "$(sed -n 3p "$SCRATCH/env-preflight.txt")" = 6.18.54.1-microsoft-standard-WSL2 || { echo FAIL_KERNEL; exit 1; }; echo SAME_KERNEL
+   test "$(wc -l < "$SCRATCH/env-preflight.txt")" = 4 || { echo FAIL_PREFLIGHT_SHAPE; exit 1; }
+   test "$(sed -n 1p "$SCRATCH/env-preflight.txt")" = "$JUDGED_COMMIT" || { echo FAIL_CONTAINER_HEAD; exit 1; }; echo CONTAINER_AT_JUDGED
+   test "$(sed -n 2p "$SCRATCH/env-preflight.txt" | tr -d " ")" = 0 || { echo FAIL_CONTAINER_DIRTY; exit 1; }; echo CONTAINER_TREE_CLEAN
+   test "$(sed -n 3p "$SCRATCH/env-preflight.txt")" = "600000 100000" || { echo FAIL_CPU_MAX; exit 1; }; echo CPU_MAX_6
+   test "$(sed -n 4p "$SCRATCH/env-preflight.txt")" = 6.18.54.1-microsoft-standard-WSL2 || { echo FAIL_KERNEL; exit 1; }; echo SAME_KERNEL
    MSYS_NO_PATHCONV=1 docker run --rm $RES $RMOUNTS $RENVS "$IMAGE_ID" sh -c "uv pip freeze --python /app/.venv/bin/python" > "$SCRATCH/freeze-e2.txt" && rc=0 || rc=$?
    echo "exit $rc"; test "$rc" = 0 || { echo FAIL_FREEZE; exit 1; }
    printf 'FREEZE_E2=%s\n' "$(sha256sum "$SCRATCH/freeze-e2.txt" | cut -d' ' -f1)" >> "$SCRATCH/etapa-82.env"
    ```
-   (O `git status --porcelain` vazio sai como linha ausente: a linha 1 é o
-   `060537fc…`, a 2 o `cpu.max`, a 3 o kernel; conferir na saída que é isso.)
+   (Quatro linhas fixas: HEAD do container, número de linhas do `git status
+   --porcelain`, `cpu.max`, kernel.)
    O sha256 do freeze é a foto do venv; a 8.1 não registrou o seu, então ele não
    compara com a 8.1 — compara E2 × E3 (`FREEZE_SAME`).
 6. *Driver `--check` em `060537fc`* (wiring + foto, sem refresh; prova também que o
@@ -1115,6 +1123,7 @@ reprodução).
    ```bash
    set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
    test -z "$(git -C "$WTH" status --porcelain)" || { echo FAIL_WT_DIRTY; exit 1; }
+   git -C "$WTH" diff --quiet "$GATE1" HEAD -- tests/equivalence ':!tests/equivalence/comparison_set.py' || { echo FAIL_SCAFFOLD_CHANGED; exit 1; }; echo SCAFFOLD_AS_GATE1
    REG_SHA=$(sha256sum "$WTH/docs/reports/prior_evidence_registry.toml" | cut -d' ' -f1)
    MSYS_NO_PATHCONV=1 docker run --rm $RES $HMOUNTS -v $MAIND/data/analytics:/oracle:ro -v $MAIND/data/cohorts/aapl:/official:ro $HENVS -e EQUIVALENCE_ORACLE_ROOT=/oracle -e EQUIVALENCE_OFFICIAL_ROOT=/official "$IMAGE_ID" sh -c "$PRE; uv run --no-sync python -m tests.equivalence.audit_table" > "$SCRATCH/equivalence.md" 2> "$SCRATCH/equivalence.err" && rc=0 || rc=$?
    echo "exit $rc"; test "$rc" = 0 || { echo FAIL_AUDIT_TABLE; tail -30 "$SCRATCH/equivalence.err"; exit 1; }
@@ -1160,8 +1169,22 @@ reprodução).
    test -z "$(git -C "$WTH" status --porcelain)" || { echo FAIL_TEST_WROTE; exit 1; }
    test "$(sha256sum "$WTH/docs/reports/prior_evidence_registry.toml" "$WTH/docs/reports/equivalence_audit.md")" = "$BEFORE" || { echo FAIL_TEST_TOUCHED_FILES; exit 1; }; echo TEST_NEVER_WRITES
    ```
-   Prova negativa: uma linha de `DECLARED` alterada à mão (não commitada) → o
-   mesmo comando sai ≠ 0 mostrando o diff; `git -C "$WTH" checkout -- <teste>`.
+   Prova negativa (não vácua: sem a checagem de árvore limpa do bloco acima —
+   a edição à mão suja a árvore de propósito):
+   ```bash
+   set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
+   T=tests/equivalence/test_official_vs_prior_evidence.py
+   # antes: alterar à mão a classificação de UMA linha de DECLARED em $WTH/$T (não commitar)
+   test -n "$(git -C "$WTH" status --porcelain -- "$T")" || { echo FAIL_NO_EDIT; exit 1; }
+   MSYS_NO_PATHCONV=1 docker run --rm $RES $HMOUNTS -v $MAIND/data/analytics:/oracle:ro -v $MAIND/data/cohorts/aapl:/official:ro $HENVS -e EQUIVALENCE_ORACLE_ROOT=/oracle -e EQUIVALENCE_OFFICIAL_ROOT=/official "$IMAGE_ID" sh -c "$PRE; uv run --no-sync pytest $T -rs -q --no-cov -p no:cacheprovider" > "$SCRATCH/optin-neg.out" && rc=0 || rc=$?
+   echo "exit $rc"; test "$rc" != 0 || { echo FAIL_NEGATIVE_PASSED; exit 1; }
+   grep -qE 'DECLARED|declared|!=|mismatch' "$SCRATCH/optin-neg.out" || { echo FAIL_NO_DIFF_SHOWN; exit 1; }
+   grep -nE 'DECLARED|declared|!=|mismatch' "$SCRATCH/optin-neg.out" | head -20
+   git -C "$WTH" checkout -- "$T"
+   test -z "$(git -C "$WTH" status --porcelain)" || { echo FAIL_WT_DIRTY_AFTER; exit 1; }; echo NEGATIVE_PROOF_OK
+   ```
+   (o `grep` tem de mostrar a linha alterada no diff da asserção; o padrão exato
+   segue a mensagem do `test_declared_vs_parsed_mismatch_shows_the_diff`.)
    Saídas em §7 (`[measurement] E5`), commit `docs(evaluation): evidência do teste
    opt-in da equivalência [8.2/--]`. Depois, o **ponto 2** do plano (`make check`),
    o roadmap e `stage 8.2: complete`.
@@ -1192,6 +1215,7 @@ nunca montar a partição viva com escrita; nunca re-julgar):
 | E3/E4/E5: `FAIL_LIVE_CHANGED`/`FAIL_LIVE_NEW_FILE` | `[finding]` e **parar**: algo escreveu na partição viva; restaurar dos backups conferidos e `[deviation]` |
 | E4: `FAIL_AUDIT_TABLE` com `PriorEvidenceHashError` | o oráculo mudou depois do registro: `[finding]`, **parar** (nunca regenerar o registro) |
 | E4: `dataset_fingerprint` do `ReadTrainingGrid` ≠ `00e4406d…` | `[finding]` e parar (a partição viva não é a entrada julgada) |
+| E4: `FAIL_SCAFFOLD_CHANGED` | o andaime mudou depois do `GATE1` (fora do `comparison_set.py` da E1): parar; a mudança precisa de T1, revisão e `make check` extra justificado (`[deviation]`), `GATE1` novo, antes de qualquer leitura |
 | E4/E5: `FAIL_SCAFFOLD_WROTE`, `FAIL_REGISTRY_TOUCHED`, `FAIL_TEST_WROTE`, `FAIL_TEST_TOUCHED_FILES` | o andaime escreveu: `[finding]`, `git -C "$WTH" checkout -- <arquivo>`, corrigir o andaime (`fix`, T1) e repetir |
 | E4: A1 fora | D13 (diagnóstico na ordem), categoria "alvo", comparação de modelo daquele horizonte para; regra não afrouxada |
 | E5: `FAIL_OPTIN` com o oráculo | corrigir a cópia de `DECLARED` (nunca o cálculo para caber); se o recomputado mudou entre E4 e E5, `[finding]` |
