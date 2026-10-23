@@ -1507,6 +1507,9 @@ geração nova tem de ser igual à geração viva anterior". Agora a referência
 resultado de toda tentativa do trecho, sem `current/`. O concept está `done`, e esta
 sessão não o editou. A regra vigente é a do ADR emendado.
 
+**Resolvida (auditoria da Stage, 2026-10-23):** o concept foi alinhado ao ADR 8.1.0004 em
+`247f1b64` (I13, §6, D3 e D12 em redação única); não há pendência aberta.
+
 ### 2026-10-23 — [measurement] Task 17 — gate de custo do hash do silver (A17, D11): aprovado — Claude (sessão Windows)
 **Contexto:** `test_silver_hash_cost_measurement.py` (opt-in `MEASURE_SILVER_HASH_COST=1`)
 roda no HEAD `4c3ee5f8` mais o arquivo do teste, com `--cpus 6 --memory 8g --memory-swap 8g`.
@@ -1596,7 +1599,7 @@ R2: `infer` avulso com `60 runs (60 strict, 0 tolerance); calib rows written 0, 
 (08:49:09Z → 09:04:18Z); backup `data/backups/aapl-pre-8.1-20261023-084758` com `BACKUP_OK`
 (311 arquivos; sha256 da listagem `e4c774570767c5679a11347beabd9ea872b53101acb8c77ada5a64bc2e50d5e6`).
 **Tentativa 1:**
-- HEAD (`GATE2`): `d3b4990950e33d2b8da5158dcdf3035bd446ca4d`
+- HEAD (`GATE2`): `d3b4990950e33d2b8da5158dcdf3035bd446ca4d` (errata: a corrida rodou em `060537fc`, ver entrada da auditoria)
 - `code.src` `4d2b2540a10f5cbb2f59164bba3262224d572d7b`; `code.uv_lock` `0f36050a0044db5f05ca9037e23c4425220cb82b`
 - `platform` `Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.41`; `cpu_capability` `AVX2`
 - `IMAGE_ID` `sha256:b69a7620e7bd8449369bde2f46e903c5f46c25e9efb3597f452af3272e0a8f45`
@@ -1684,7 +1687,7 @@ levou 625 s contra 407 s do sintético da Task 17; dentro de 3× o esperado).
 com `preregistration_ref` = r3, `verdict`, `academic_decision_ready` e `readiness_reasons`;
 `rows_by_table`: `gold_h3_reading` 1, `gold_conformal_corrections` 1440,
 `gold_conformal_coverage` 704. `judged/<ref>/` com `CONTENTS.sha256` (22 linhas),
-`generation/`, scorecard e `run_record.json` (2 tentativas listadas).
+`generation/`, scorecard e `run_record.json` (2 linhas de 1 tentativa; errata da auditoria).
 
 **`ATTEMPTS.jsonl`** (2 linhas, sha256 `320def2b01946a7f0d8064d0ece30aea6eed2a2d7cc1ebc82852106d21484fc9`;
 as duas execuções `ALREADY_JUDGED` não acrescentaram linha). A linha `input_read` tem 177 KB
@@ -1712,5 +1715,49 @@ pelo `TomlPreregistrationSource` real (1 registro, campos iguais ao `etapa-r.env
 execução `RECORD_REPLAY_OK`. Depois dela, `docker ps --filter name=ff81` vazio e nenhum
 `.writer.lock` no `data_root`.
 **Conta para:** A12–A16.
+
+### 2026-10-23 — [measurement] auditoria da Stage — testes com mutação real: 11 mutantes, todos mortos — Claude (auditoria da Stage)
+**Contexto:** a auditoria do PR #231 aplicou mutantes reais ao `src/` de uma cópia de
+`f95da69a` (auditor independente, fora desta worktree) e rodou a suíte. Base: **4267
+passed**. Cada mutante tinha de derrubar ao menos um teste.
+
+| # | mutante | resultado |
+|---|---|---|
+| M1 | VO: `-inf` codificado como `inf` | 1 failed (`test_non_finite_floats_encoded_as_distinct_tokens`) |
+| M2 | `WRITE_PROVENANCE_COLUMNS = frozenset()` | 2 failed |
+| M3 | regra de inteiro aceita fracionário | 1 failed |
+| M4 | linhas `calib` da ablação entram no hash | 2 failed |
+| M9 | fatos do cohort fora do hash | 4 failed |
+| M5 | `_since_last_deviation` parte do índice 0 | 1 failed |
+| M6 | pós-E1 confere só a última tentativa | 1 failed |
+| M8 | G4d sem erro para geração viva sem tentativa | 1 failed |
+| M10 | G4a sem conferência de digest | 3 failed |
+| M11 | sem a conferência do I8 | 1 failed |
+| M13 | G2 ignora `preregistration_dirty` | 1 failed |
+| M7 | `verify_listing` não acusa arquivo a mais | 3 failed |
+
+**Ressalva:** a regra de re-execução mudou depois de `f95da69a` — `bf559b76` (tentativas sem
+`input_read` com testemunha da geração viva) e `98de9e9a` (referências do 2b com toda
+testemunha e a geração viva). M5, M6 e M8 foram medidos sobre a regra anterior. A regra
+vigente é coberta pelos testes novos dessas mudanças: as sondas do Checkpoint C (CC6-1,
+CC6-2 e a re-verificação rodada 2) viraram testes de unidade e integração nos mesmos commits.
+**Conta para:** gate de qualidade dos testes (technical §3).
+
+### 2026-10-23 — [finding] auditoria da Stage — erratas da evidência da Etapa R e cobertura por arquivo — Claude (auditoria da Stage)
+**Contexto:** a auditoria do PR #231 cruzou a §7 com o `run_record.json` e com o `git log`.
+- **O1 (errata):** a intenção 1 registra HEAD `d3b49909` (o `GATE2`). A corrida rodou em
+  `060537fc`, o commit da própria intenção (filho de `d3b49909`, só §7). O `code.src`
+  (`4d2b2540…`) e o `code.uv_lock` (`0f36050a…`) são os mesmos, e o `commit` do
+  `run_record.json` e a tag apontam `060537fc`. A identidade de código da geração julgada
+  não muda.
+- **O2 (errata):** "run_record (2 tentativas listadas)" na evidência quer dizer **2 linhas
+  (`started` e `input_read`) de 1 tentativa**. É o que o `ATTEMPTS.jsonl` mostra logo
+  abaixo.
+- **F1 (corrigido):** dois arquivos de `src/` tocados ficaram abaixo dos 90 % por arquivo do
+  §3: `git_evaluation_environment.py` (89 %) e `dtos/silver_content.py` (88 %). Testes novos
+  em `9af1bbb3` (contrato: diretório fora do repo, probe sem sujeira, lib `"absent"`, fora de
+  repositório git e sem o executável) e `062b8a8b` (unit: `unit_key`, `_digest_map`,
+  `from_mapping`). Os dois foram a **100 %**. O `src/` não mudou, então o selo da corrida
+  continua válido.
 
 <!-- END: post-execution -->
