@@ -95,10 +95,16 @@ class Conforming:
     ) -> Sequence[Mapping[str, object]]:
         return ()
 
+    def columns(self, *, layer: str, table: str) -> Mapping[str, tuple[str, bool]]:
+        return {}
+
 
 class Drifted:
     def read(self, *, layer: str, table: str) -> Sequence[Mapping[str, object]]:
         return ()
+
+    def columns(self, *, layer: str, table: str) -> Mapping[str, tuple[str, bool]]:
+        return {}
 
 
 def conforming() -> SilverTableReader:
