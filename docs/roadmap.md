@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-10-22
-last_reviewed_at: 2026-10-22
+updated_at: 2026-10-23
+last_reviewed_at: 2026-10-23
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -69,7 +69,7 @@ graph LR
 | 5 | Modelagem, baselines e treino | TFT re-treinado + GBM quantílico + baselines naive/estatísticos sobre walk-forward purgado/embargoado; cohort confirmatório AAPL | done | 5.1–5.5 |
 | 6 | Núcleo estatístico confirmatório | Pipeline gold confirmatória: pinball/CRPS/DM/MCS/Holm/PICP-Christoffersen + gates + scorecard pré-registrado, no domínio e validada por oráculo | done | 6.1–6.6 |
 | 7 | Inferência, conformal, explicabilidade e API | Motor de inferência + conformal CQR (benchmark) + explicabilidade (VSN/permutação/ablação) servidos por API fina | done | 7.1–7.4 |
-| 8 | Reprodução, equivalência e relatório | Protocolo completo em AAPL; equivalência vs evidência anterior auditada; plots e dossiê de rastreabilidade | not_started | 8.1–8.3 |
+| 8 | Reprodução, equivalência e relatório | Protocolo completo em AAPL; equivalência vs evidência anterior auditada; plots e dossiê de rastreabilidade | in_progress | 8.1–8.3 |
 
 **Legenda de status (Step):** `not_started`, `in_progress`, `blocked`, `done`, `deprecated`.
 
@@ -109,7 +109,7 @@ graph LR
 | `7.2-conformal-cqr` | inference | multi (domain + application + adapters/out; + evaluation) | vertical | done | 7.1, 5.1 |
 | `7.3-explainability` | inference | multi (modeling + inference + analytics_store + evaluation; Windows + Linux) | vertical | done | 7.1, 6.1, 7.2 |
 | `7.4-inference-api` | inference | multi (domain + application + adapters/in/http; + evaluation application; shared http) | vertical | done | 7.2, 7.3 |
-| `8.1-confirmatory-run` | evaluation | multi (orquestração) | vertical | draft | 6.5, 6.6, 7.1, 7.2, 7.3 |
+| `8.1-confirmatory-run` | evaluation | multi (orquestração) | vertical | done | 6.5, 6.6, 7.1, 7.2, 7.3 |
 | `8.2-equivalence-audit` | evaluation | application + tests | vertical | draft | 8.1 |
 | `8.3-plots-and-final-report` | evaluation | adapters/out + docs | vertical | draft | 8.2 |
 
@@ -1317,6 +1317,7 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 | 2026-10-22 | Gate de domínio do Step 8: doc [`reproduction-equivalence-and-reporting`](./domain/evaluation/reproduction-equivalence-and-reporting.md) aceito; a 8.2 faz as duas comparações — reprodução da própria corrida (claim citável) e equivalência interna com a evidência anterior na interseção comum, com a evidência anterior congelada por hash; lacuna "tolerância de equivalência (8.2)" fechada. Bloco da 8.2 emendado: descrição, DoD com (i) reprodução da corrida da 8.1 a partir dos artefatos persistidos e (ii) equivalência interna; `non_goals` passa a "bit-identical vs evidência anterior" (a reprodução da própria corrida é bit a bit no ambiente registrado); relatório de reprodução em `arquivos_a_criar`; teste de equivalência fora do CI; ROADMAP-5 ajustada. Bloco da 8.1: DoD e contratos ganham as obrigações que o doc de domínio impõe (cópia imutável + hash da geração julgada antes de qualquer refresh; hash de conteúdo do silver lido, forma decidida no concept da 8.1). Decisão B2 do humano (ADR 0.0.0062): tolerância numérica no alvo e no código de métrica, sentido nos números do modelo; overview §2, ASSUM-4 e R-REPRO-1 emendados na redação; status de Stages e do Step inalterado | Gate de domínio do Step 8 (issue #208; ADRs 0.0.0060, 0.0.0061 e 0.0.0062; decisões B1 e B2 do humano) |
 | 2026-10-22 | Bloco da 8.1 refinado pelo concept: arquivos a criar e a modificar, contratos (use case com três status e uma geração julgada por partição; resolução da revisão extraída do scorecard; VO `SilverContentHash` no manifesto do gold; `JudgedGenerationStore`; ports de ambiente e lock; subcomando `evaluate` com o `infer` antes); caminho do scorecard refinado de `scorecard/<ref>/` para `judged/<ref>/` (cópia selada da geração inteira); comentário de atestação como passo de runbook depois do selo | Concept 8.1 (issue #211; ADRs 8.1.0001–8.1.0003) |
 | 2026-10-22 | Bloco da 8.1 alinhado ao Checkpoint A do concept: `camada_alvo` multi, complexidade L, `skills_hint` ampliado; arquivos a modificar do leitor do silver (`columns`), do source do pré-registro (`judged_records`), do repositório do `analytics_store` e do `infer`; contratos com o registro de tentativas e o `.judged.toml` como verdade cruzada | Checkpoint A da 8.1, rodada 1 (CA-11; ADR 8.1.0004) |
+| 2026-10-23 | Stage `8.1-confirmatory-run` `done`; Step 8 `in_progress`. `RunConfirmatoryEvaluation` (CLI `evaluate` encadeado ao `infer`) julgou o cohort `aapl_confirmatory-r0` pela r3 (`aapl_confirmatory-r3-00fd83d9cd39`): status `JUDGED`, generation_digest `96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539`; H1 passa em h+1 e h+7; H2 h+1 `beats_naive_only` e h+7 `beats_naive_ties_strong` (vencedor primário `tft_quantile`); sucesso do estudo (≥ 1 horizonte): sim. Geração julgada selada em `judged/<ref>/` com `CONTENTS.sha256` + backup; hash de conteúdo do silver no manifesto (`SilverContentHash`); tag `confirmatory-run/aapl_confirmatory-r3-00fd83d9cd39`, comentário na #211 (issuecomment-6362212743), `config/preregistration/aapl_confirmatory-r3.judged.toml`. Re-execução só com mesmo código, ambiente, entrada e resultado; senão `--deviation` (ADR 8.1.0004). Libera #58 e #163 | Fechamento da Stage 8.1 (issue #211; ADRs 8.1.0001–8.1.0004; technical 8.1 §7) |
 
 ## Próxima revisão de roadmap
 
