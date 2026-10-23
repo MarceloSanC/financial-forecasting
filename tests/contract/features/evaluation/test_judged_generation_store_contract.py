@@ -562,6 +562,26 @@ def test_read_judged_generation_refuses_copy_moved_to_another_reference(
         _read_judged(harness)
 
 
+@pytest.mark.contract
+@pytest.mark.parametrize("path", [f"{_TABLE}.parquet", "MANIFEST.json"])
+def test_read_judged_generation_refuses_unreadable_file_in_coherently_resealed_copy(
+    harness: Harness, path: str
+) -> None:
+    """Listagem regravada coerente, mas o arquivo da cópia não se lê: adulteração (CC1-1)."""
+    _, manifest = _publish_readable(harness)
+    _preserve(harness, manifest)
+    harness.tamper(_REF, f"{GENERATION_DIR}/{path}", b"neither parquet nor json")
+    harness.rewrite_contents(_REF)
+    if path == "MANIFEST.json":
+        with pytest.raises(JudgedGenerationTamperedError, match=_REF):
+            _find(harness)  # o find já relê o manifesto
+    else:
+        assert _find(harness) is not None  # a integridade da listagem confere
+
+    with pytest.raises(JudgedGenerationTamperedError, match=_REF):
+        _read_judged(harness)
+
+
 # --- referências e tentativas ------------------------------------------------------------
 
 
@@ -686,24 +706,3 @@ def test_real_reads_generation_dir_even_without_current(
     assert judged.manifest == manifest
     with pytest.raises(GoldManifestNotFoundError):
         harness.store.read_generation(partition=_PARTITION)
-
-
-@pytest.mark.contract
-@pytest.mark.parametrize("path", [f"{_TABLE}.parquet", "MANIFEST.json"])
-def test_real_unreadable_file_in_coherently_resealed_copy_is_tampered(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, path: str
-) -> None:
-    """Listagem regravada coerente, mas o arquivo da cópia não se lê: adulteração."""
-    harness = _real(tmp_path, monkeypatch)
-    _, manifest = _publish_readable(harness)
-    _preserve(harness, manifest)
-    harness.tamper(_REF, f"{GENERATION_DIR}/{path}", b"neither parquet nor json")
-    harness.rewrite_contents(_REF)
-    if path == "MANIFEST.json":
-        with pytest.raises(JudgedGenerationTamperedError, match=_REF):
-            _find(harness)  # o find já relê o manifesto
-    else:
-        assert _find(harness) is not None  # a integridade da listagem confere
-
-    with pytest.raises(JudgedGenerationTamperedError, match=_REF):
-        _read_judged(harness)

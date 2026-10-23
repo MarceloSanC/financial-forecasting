@@ -8,9 +8,13 @@ determinísticos, então o digest se repete entre execuções. Os documentos, a 
 `application/dtos/judged_generation.py` que o `ParquetGoldStore` usa; o `find` monta a
 cópia por `judged_generation_from`, a mesma conferência do real.
 
-`read_judged_generation` (Stage 8.2) confere a cópia pelo `find` e devolve a geração
-copiada no `preserve` (manifesto e linhas guardados junto da cópia), montada pelo dono único
-`GoldGeneration.from_stored` — o real relê os arquivos de `judged/<ref>/generation/`.
+`read_judged_generation` (Stage 8.2) confere a cópia pelo `find` e relê os bytes SELADOS
+de `generation/` — o manifesto e as linhas JSON de cada `<tabela>.parquet` —, montados pelo
+dono único `GoldGeneration.from_stored`, como o real relê os arquivos de
+`judged/<ref>/generation/` (Checkpoint C 8.2 bloco 1, CC1-1): arquivo trocado com a listagem
+regravada coerente e ilegível → `JudgedGenerationTamperedError` nas duas pernas. A ida e
+volta JSON não perde tipo: as células do `GoldTable` são só `None`, `bool`, `int`, `str` e
+`float` finito (o `repr` do float volta bit a bit) e o manifesto já é JSON-safe.
 
 Contadores: `preserves` (selagens concluídas) e `recorded` (linhas de tentativa).
 Ganchos da suíte de contrato: `tamper` (troca ou remove um arquivo selado),
@@ -21,7 +25,6 @@ Ganchos da suíte de contrato: `tamper` (troca ou remove um arquivo selado),
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
 from collections.abc import Mapping
@@ -52,7 +55,7 @@ from financial_forecasting.features.evaluation.application.ports.out.judged_gene
     JudgedGenerationNotFoundError,
     JudgedGenerationTamperedError,
 )
-from tests.fakes.features.evaluation.in_memory_gold_store import Generation, InMemoryGoldStore
+from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
 
 Files = dict[str, bytes]
 
@@ -67,7 +70,6 @@ class InMemoryJudgedGenerationStore:
     def __init__(self, store: InMemoryGoldStore) -> None:
         self._store = store
         self._sealed: dict[tuple[GoldPartition, str], Files] = {}
-        self._copied: dict[tuple[GoldPartition, str], Generation] = {}
         self._staging: dict[GoldPartition, Files] = {}
         self._attempts: dict[GoldPartition, list[JudgedAttempt]] = {}
         self.preserves = 0
@@ -138,7 +140,6 @@ class InMemoryJudgedGenerationStore:
         listing = contents_listing({path: _sha256(data) for path, data in staging.items()})
         self._write(staging, CONTENTS_NAME, listing)
         self._sealed[partition, preregistration_ref] = self._staging.pop(partition)
-        self._copied[partition, preregistration_ref] = copy.deepcopy(live)
         self.preserves += 1
         sealed = self.find(partition=partition, preregistration_ref=preregistration_ref)
         assert sealed is not None
@@ -151,10 +152,17 @@ class InMemoryJudgedGenerationStore:
             raise JudgedGenerationNotFoundError(
                 f"no judged copy of {preregistration_ref} for {partition}"
             )
-        manifest, rows_by_table = self._copied[partition, preregistration_ref]
+        files = self._sealed[partition, preregistration_ref]
+        prefix, suffix = f"{GENERATION_DIR}/", ".parquet"
         try:
+            manifest = json.loads(files[GENERATION_MANIFEST])
+            rows_by_table = {
+                path.removeprefix(prefix).removesuffix(suffix): json.loads(data)["rows"]
+                for path, data in files.items()
+                if path.startswith(prefix) and path.endswith(suffix)
+            }
             return GoldGeneration.from_stored(manifest, rows_by_table, partition=partition)
-        except GoldGenerationCorruptError as error:
+        except (KeyError, TypeError, ValueError, GoldGenerationCorruptError) as error:
             raise JudgedGenerationTamperedError(f"{preregistration_ref}: {error}") from error
 
     def judged_refs(self, *, partition: GoldPartition) -> tuple[str, ...]:
@@ -189,7 +197,6 @@ class InMemoryJudgedGenerationStore:
     def move(self, *, partition: GoldPartition, source: str, target: str) -> None:
         """Move a cópia selada `source` para `target` (como um `mv` no disco)."""
         self._sealed[partition, target] = self._sealed.pop((partition, source))
-        self._copied[partition, target] = self._copied.pop((partition, source))
 
     def rewrite_contents(self, *, partition: GoldPartition, preregistration_ref: str) -> None:
         """Regrava `CONTENTS.sha256` coerente com os arquivos atuais da cópia."""
