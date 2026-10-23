@@ -47,8 +47,8 @@ _SUMMARY = {
     "calib_rows_written": 0,
     "calib_rows_verified": 1200,
 }
-_REF = "aapl_confirmatory-r3-00fd83d9cd39"
-_PARTITION = GoldPartition("AAPL", "aapl_confirmatory-r0-665f45d9169a")
+_REF = "synthetic_plan-r3-0123456789ab"
+_PARTITION = GoldPartition("AAPL", "synthetic_cohort-r0-000000000000")
 _DIGEST = "e" * 64
 _COMMIT = "0123456789abcdef0123456789abcdef01234567"
 
