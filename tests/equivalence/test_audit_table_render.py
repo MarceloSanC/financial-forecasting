@@ -216,7 +216,7 @@ def _synthetic_value(column: str, keep: bool) -> object:
 def _oracle(tmp_path: Path) -> Path:
     root = tmp_path / "analytics"
     for path in cs.PRIOR_FILES:
-        columns = [*cs.FILTER_COLUMNS[path], *cs.VALUE_COLUMNS[path], "secret"]
+        columns = [*readers.prior_columns(path), "secret"]  # independe do estado da E1
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         data = {c: [_synthetic_value(c, True), _synthetic_value(c, False)] for c in columns}
@@ -234,8 +234,7 @@ def test_prior_reader_reads_only_registered_columns_and_filters(tmp_path: Path) 
     assert set(prior.tables) == set(cs.PRIOR_FILES)
     for path, rows in prior.tables.items():
         assert len(rows) == 1, path  # a linha de outro sweep/split/horizonte saiu
-        expected = list(dict.fromkeys([*cs.FILTER_COLUMNS[path], *cs.VALUE_COLUMNS[path]]))
-        assert list(rows[0]) == expected
+        assert list(rows[0]) == list(readers.prior_columns(path))
         assert "secret" not in rows[0]
     assert prior.column_types[cs.GOLD_OOS]["y_true"] == "double"
     assert cs.GOLD_OOS in prior.source_ids
@@ -707,6 +706,8 @@ def test_official_predictions_are_checked_against_the_judged_silver() -> None:
 
 
 def test_compute_rows_requires_the_e1(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cs, "MODEL_LABEL_COLUMN", None)  # o estado antes da E1
+    monkeypatch.setattr(cs, "PRIOR_CANDIDATE_LABELS", ())
     with pytest.raises(ValueError, match="run the E1"):
         compute_rows(_prior_side(), _official_side())
     monkeypatch.setattr(cs, "MODEL_LABEL_COLUMN", _LABEL)

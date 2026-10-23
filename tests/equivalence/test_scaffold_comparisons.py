@@ -271,7 +271,7 @@ def test_comparison_set_is_fixed_before_values() -> None:
     assert cs.PAIR_80 == (0.1, 0.9)
     assert cs.PRIOR_FILES == tuple(cs.FILTER_COLUMNS) == tuple(cs.VALUE_COLUMNS)
     assert cs.COMMON_BASELINES == ()  # preenchido só na E1
-    assert cs.MODEL_LABEL_COLUMN is None
+    assert cs.MODEL_LABEL_COLUMN in {None, "model_version_x", "model_version_y"}  # E1: só a forma
     assert cs.variant_of_column("picp_post_guardrail") == "post_guardrail"
     assert cs.variant_of_column("mpiw_raw") == "raw"
     assert cs.variant_of_column("picp_q10_q90") == cs.MARGINAL_COVERAGE_VARIANT
