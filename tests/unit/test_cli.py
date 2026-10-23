@@ -932,3 +932,197 @@ def test_evaluate_use_case_error_exits_2_naming_the_error(
     assert code == _EXIT_ERROR
     assert "error: JudgedGenerationExistsError: x" in err.getvalue()
     assert "--- attestation ---" not in out.getvalue()
+
+
+# --- audit-reproduction (Stage 8.2, Task 05) -------------------------------------------
+
+_DTOS = "financial_forecasting.features.evaluation.application.dtos.reproduction_comparison"
+
+
+def _audit_argv(judged: Path, reproduced: Path) -> list[str]:
+    return [
+        "audit-reproduction",
+        "--judged-data-root",
+        str(judged),
+        "--reproduced-data-root",
+        str(reproduced),
+        "--preregistration",
+        "synthetic_plan",
+        "--revision",
+        "3",
+        "--preregistration-ref",
+        _REF,
+    ]
+
+
+def _comparison(*, different: int = 0) -> Any:  # noqa: ANN401 — DTO carregado por importlib
+    dtos: Any = cli.importlib.import_module(_DTOS)
+    refresh: Any = cli.importlib.import_module(
+        "financial_forecasting.features.evaluation.application.dtos.refresh_gold"
+    )
+    r1, r2, r3 = dtos.ReproductionClass
+
+    def cls(item: Any, diff: int = 0) -> Any:  # noqa: ANN401
+        return dtos.ClassComparison(
+            reproduction_class=item,
+            compared=4,
+            different=diff,
+            numeric=2,
+            max_abs_diff=2.0**-52 if diff else 0.0,
+        )
+
+    return dtos.ReproductionComparison(
+        preregistration_ref=_REF,
+        partition=refresh.GoldPartition("AAPL", "synthetic_cohort-r0-000000000000"),
+        identity=tuple(dtos.IdentityComparison(name, "v", "v") for name in dtos.IDENTITY_FIELDS),
+        judged_result_digest="a" * 64,
+        reproduced_result_digest="a" * 64,
+        expected_result_digest="a" * 64,
+        tables=(
+            dtos.TableComparison(
+                name="gold_dm_results",
+                judged_rows=2,
+                reproduced_rows=2,
+                keys_equal=True,
+                classes=(cls(r1), cls(r2, different), cls(r3)),
+            ),
+        ),
+        scorecard=dtos.ScorecardComparison(
+            leaves=5, different=0, numeric=3, max_abs_diff=0.0, paths=()
+        ),
+    )
+
+
+def _scorecard_file(root: Path) -> Path:
+    path = root / "reproduction" / "scorecard.json"
+    path.parent.mkdir(parents=True)
+    path.write_text('{"verdict": {"p": 0.5}}\n', encoding="utf-8")
+    return root
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "missing",
+    [
+        "--judged-data-root",
+        "--reproduced-data-root",
+        "--preregistration",
+        "--revision",
+        "--preregistration-ref",
+    ],
+)
+def test_audit_reproduction_requires_both_roots_and_revision(
+    missing: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = _audit_argv(tmp_path / "j", tmp_path / "r")
+    index = argv.index(missing)
+    del argv[index : index + 2]
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(argv, wiring=_wiring(tmp_path))
+
+    assert exc.value.code == _EXIT_ERROR
+    assert missing in capsys.readouterr().err
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("spelling", ["same", "dotdot"])
+def test_audit_reproduction_refuses_equal_roots_before_wiring_exit_2(
+    spelling: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wired: list[object] = []
+    monkeypatch.setattr(cli, "wire_reproduction_audit", lambda *a, **k: wired.append(a))
+    monkeypatch.setattr(cli, "wire_dependencies", lambda *a, **k: wired.append(a))
+    root = tmp_path / "root"
+    other = root if spelling == "same" else tmp_path / "x" / ".." / "root"
+    err = io.StringIO()
+
+    code = cli.main(_audit_argv(root, other), wiring=_wiring(tmp_path), out=io.StringIO(), err=err)
+
+    assert code == _EXIT_ERROR
+    assert "error: EqualReproductionRootsError" in err.getvalue()
+    assert wired == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(("different", "expected"), [(0, 0), (1, 1)])
+def test_audit_reproduction_exit_0_only_when_bit_identical(
+    different: int, expected: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[dict[str, Any]] = []
+    commands: list[Any] = []
+
+    def wire(settings: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        calls.append({"settings": settings, **kwargs})
+
+        def audit(command: Any) -> Any:  # noqa: ANN401
+            commands.append(command)
+            return _comparison(different=different)
+
+        return audit
+
+    built: list[object] = []
+    monkeypatch.setattr(cli, "wire_reproduction_audit", wire)
+    monkeypatch.setattr(cli, "wire_dependencies", lambda *a, **k: built.append(a))
+    judged, reproduced = tmp_path / "judged", _scorecard_file(tmp_path / "reproduced")
+
+    code = cli.main(_audit_argv(judged, reproduced), wiring=_wiring(tmp_path), out=io.StringIO())
+
+    assert code == expected
+    assert built == []  # não monta o grafo inteiro
+    assert calls[0]["judged_data_root"] == judged
+    assert calls[0]["reproduced_data_root"] == reproduced
+    assert calls[0]["settings"].repo_root == tmp_path  # settings_overrides do CliWiring
+    assert commands[0].reproduced_scorecard == {"verdict": {"p": 0.5}}
+    assert (commands[0].name, commands[0].revision) == ("synthetic_plan", 3)
+    assert commands[0].preregistration_ref == _REF
+
+
+@pytest.mark.unit
+def test_audit_reproduction_prints_contract_lines(tmp_path: Path) -> None:
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    out = io.StringIO()
+
+    code = evaluation.audit_reproduction(
+        lambda command: _comparison(different=1),
+        reproduced_data_root=_scorecard_file(tmp_path),
+        name="synthetic_plan",
+        revision=3,
+        preregistration_ref=_REF,
+        out=out,
+    )
+
+    digest = "a" * 64
+    assert code == 1
+    assert out.getvalue().splitlines() == [
+        f"reproduction {_REF}: bit_identical false partition AAPL/synthetic_cohort-r0-000000000000",
+        f"result_digest judged {digest} reproduced {digest} expected {digest}",
+        "identity preregistration_ref judged v reproduced v equal true",
+        "identity partition judged v reproduced v equal true",
+        "identity silver_content.digest judged v reproduced v equal true",
+        "identity dataset_fingerprint judged v reproduced v equal true",
+        "class R1 compared 4 different 0 max_abs_diff 0.0",
+        f"class R2 compared 4 different 1 max_abs_diff {2.0**-52!r}",
+        "class R3 compared 4 different 0 max_abs_diff 0.0",
+        f"table gold_dm_results rows 2/2 keys_equal true R1 4/0/0.0 R2 4/1/{2.0**-52!r} R3 4/0/0.0",
+        "scorecard equal true leaves 5 different 0 max_abs_diff 0.0",
+    ]
+
+
+@pytest.mark.unit
+def test_audit_reproduction_without_scorecard_file_raises(tmp_path: Path) -> None:
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    called: list[object] = []
+
+    with pytest.raises(Exception, match="no reproduced scorecard") as exc:
+        evaluation.audit_reproduction(
+            called.append,
+            reproduced_data_root=tmp_path,
+            name="synthetic_plan",
+            revision=3,
+            preregistration_ref=_REF,
+            out=io.StringIO(),
+        )
+
+    assert type(exc.value).__name__ == "ReproductionAuditError"
+    assert called == []

@@ -19,7 +19,14 @@ processo, o `infer` da 7.1 sobre o mesmo cohort (`infer_with_summary`) e, só se
 terminar sem exceção, o `RunConfirmatoryEvaluation` do `evaluation` com o resumo do
 `infer` como dado (concept 8.1 D1). O encadeamento fica AQUI: o comando do `evaluation`
 (`features/evaluation/adapters/in/cli`) não importa o `inference`.
-`--data-root` é obrigatório em todos, sem default: o dado de um cohort vive
+Stage 8.2: `audit-reproduction --judged-data-root <dir> --reproduced-data-root <dir>
+--preregistration <nome> --revision <r> --preregistration-ref <ref>` — só leitura, sem
+`--data-root`, `--cohort` nem lock (não usa o helper `add()`); despachado ANTES do
+`wire_dependencies` (não monta o grafo inteiro): recusa as duas raízes iguais (após
+`resolve()`) antes de montar qualquer adapter e monta só o `AuditReproduction` por
+`composition_root.wire_reproduction_audit`, com `Settings(**settings_overrides)` (o
+`repo_root` do pré-registro). Exit 0 só com `bit_identical`, 1 com diferença, 2 em erro.
+`--data-root` é obrigatório nos demais, sem default: o dado de um cohort vive
 isolado em `data/cohorts/<nome>/` (concept D10) e um default silencioso poderia
 misturá-lo com o `data/` de desenvolvimento.
 
@@ -46,7 +53,10 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
-from financial_forecasting.composition_root import wire_dependencies
+from financial_forecasting.composition_root import (
+    wire_dependencies,
+    wire_reproduction_audit,
+)
 from financial_forecasting.features.feature_engineering.application.use_cases.build_dataset import (
     BuildDatasetRequest,
 )
@@ -88,6 +98,7 @@ _SENTIMENT_MODULE = "transformers"
 _EXIT_ERROR = 2
 _ABLATION_PREFIX = "ablation-"
 _INFERENCE_SUBCOMMANDS = frozenset({"infer", "attribute"})
+_AUDIT_REPRODUCTION = "audit-reproduction"
 
 
 class MissingSentimentExtraError(ApplicationError):
@@ -96,6 +107,10 @@ class MissingSentimentExtraError(ApplicationError):
 
 class DatasetStartConflictError(ApplicationError):
     """`--start` e o `dataset_start` do arquivo do cohort declaram datas diferentes."""
+
+
+class EqualReproductionRootsError(ApplicationError):
+    """`--judged-data-root` e `--reproduced-data-root` são a mesma raiz (concept 8.2 I2)."""
 
 
 @dataclass(frozen=True)
@@ -197,6 +212,29 @@ def _parser() -> argparse.ArgumentParser:
     ablation_freeze.add_argument(
         "--seeds", type=_seed_list, required=True, help="seeds do cohort, ex.: 1,2,3"
     )
+    # Stage 8.2: só leitura, sem `--data-root`/`--cohort`/lock — fora do helper `add()`
+    audit = commands.add_parser(
+        _AUDIT_REPRODUCTION, help="compara a geração reproduzida com a cópia julgada"
+    )
+    audit.add_argument(
+        "--judged-data-root", type=Path, required=True, help="raiz com a cópia julgada"
+    )
+    audit.add_argument(
+        "--reproduced-data-root",
+        type=Path,
+        required=True,
+        help="raiz descartável com a geração e o reproduction/scorecard.json do driver",
+    )
+    audit.add_argument(
+        "--preregistration", required=True, metavar="NOME", help="nome do plano pré-registrado"
+    )
+    audit.add_argument("--revision", type=int, required=True, help="revisão julgada do plano")
+    audit.add_argument(
+        "--preregistration-ref",
+        required=True,
+        metavar="REF",
+        help="referência esperada da revisão (<nome>-r<rev>-<hash12>)",
+    )
     return parser
 
 
@@ -210,7 +248,7 @@ def _seed_list(text: str) -> tuple[int, ...]:
         ) from exc
 
 
-def main(
+def main(  # noqa: PLR0911 — um return por família de subcomando
     argv: Sequence[str] | None = None,
     *,
     wiring: CliWiring | None = None,
@@ -226,6 +264,8 @@ def main(
     stderr = err or sys.stderr
     cohort_file = importlib.import_module(f"{_CLI_PACKAGE}.cohort_file")
     try:
+        if args.command == _AUDIT_REPRODUCTION:
+            return _dispatch_audit_reproduction(args, injected, stdout)
         settings = Settings(data_root=args.data_root, **injected.settings_overrides)
         deps = wire_dependencies(
             settings,
@@ -261,6 +301,31 @@ def main(
         # nunca o 1 do `verify` ("a corrida diverge").
         traceback.print_exc(file=stderr)
         return _EXIT_ERROR
+
+
+def _dispatch_audit_reproduction(args: argparse.Namespace, injected: CliWiring, out: TextIO) -> int:
+    """`audit-reproduction` (8.2): recusa raízes iguais antes de montar adapter algum."""
+    judged_root: Path = args.judged_data_root
+    reproduced_root: Path = args.reproduced_data_root
+    if judged_root.resolve() == reproduced_root.resolve():
+        raise EqualReproductionRootsError(
+            f"--judged-data-root and --reproduced-data-root are the same root {judged_root}"
+        )
+    audit = wire_reproduction_audit(
+        Settings(**injected.settings_overrides),
+        judged_data_root=judged_root,
+        reproduced_data_root=reproduced_root,
+    )
+    evaluation = importlib.import_module(_EVALUATION_COMMANDS)
+    exit_code: int = evaluation.audit_reproduction(
+        audit,
+        reproduced_data_root=reproduced_root,
+        name=args.preregistration,
+        revision=args.revision,
+        preregistration_ref=args.preregistration_ref,
+        out=out,
+    )
+    return exit_code
 
 
 def _dispatch_cohort_command(
