@@ -1669,5 +1669,33 @@ campos; `R1 882727/0/0.0`, `R2 288671/0/0.0`, `R3 1856/0/0.0`; 19 tabelas com `k
 `scorecard equal true leaves 66117 different 0`. `BIT_IDENTICAL`. Item 4: `LIVE_INTACT`.
 Item 5: `docs/reports/reproduction_audit.md` (claim (a) afirmado, (b) citado da 7.1, (c) não
 executado; tabelas por classe e por tabela).
+Item 6: `git worktree remove` da `repro-060537fc` (exit 0; sem prune). Fim do venv congelado.
+
+### 2026-10-23 — [finding] E4 passo 1 — `FAIL_AUDIT_TABLE` por `OfficialSilverMismatchError` do andaime — Claude (executor das Etapas)
+**Contexto:** `SCAFFOLD_AS_GATE1` ok; o `python -m tests.equivalence.audit_table` saiu `exit 1`
+com `OfficialSilverMismatchError: official silver differs from the judged copy's silver_content
+in ['fact_oos_predictions|00d427b0…|2023', …]` (dentro do `read_official`, antes de qualquer
+leitura da evidência anterior chegar ao cálculo — nenhuma linha da tabela foi gerada; nenhum
+valor do anterior foi visto). Depois: `LIVE_INTACT`, árvore limpa.
+**Diagnóstico (só hashes e chaves de unidade, nenhum valor):**
+- o silver vivo é byte a byte o do backup de entrada da 8.1 (257 arquivos `silver/`, `diff` das
+  listagens sha256 vazio), e esse backup reproduziu o `silver_content.digest` `7ac4c759…` na E3
+  — o dado está certo;
+- sonda descartável no scratchpad (`diag_units.py`, chama `read_official` com o
+  `check_silver_units` substituído por um espião; fora do repo): `dim_run|<cohort>` igual;
+  unidades `fact_oos_predictions|…` lidas 252 × julgadas 852; **0 com digest diferente, 0 só no
+  lido, 600 só no julgado** — as 600 são dos 300 runs da ablação (o `silver_content` julgado tem
+  `dim_run|aapl_ablation-r0-8a2d1de2dd8c` e as unidades `test` por ano desses runs, que o
+  `RefreshGold._read_ablation…` consome).
+**Causa:** defeito do andaime (`tests/equivalence/readers.py`, `check_silver_units.ours`): o
+esperado toma **toda** unidade `fact_oos_predictions|` do `silver_content`, inclusive as da
+ablação, mas o `_model_predictions` só lê os runs do `dim_run` do cohort. A mutação "m" da
+rodada b usou um silver sintético sem ablação e não exercitou o caso.
+**Estado e parada:** linha "E4/E5: andaime" do "Se falhar" não cobre exatamente este sintoma (o
+andaime não escreveu; recusou); pela regra de parada dura da sessão, nada foi consertado. A
+correção (restringir o esperado às unidades dos runs do cohort, ou exigir as da ablação como
+"não lidas", com teste sintético que inclua unidades de ablação) precisa de `fix` no andaime,
+T1, revisão e `make check` extra (`[deviation]`) e `GATE1` novo antes de repetir a E4 desde o
+passo 1 (linha `FAIL_SCAFFOLD_CHANGED`). E2/E3 seguem válidas (não dependem do andaime).
 
 <!-- END: post-execution -->
