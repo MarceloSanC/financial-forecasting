@@ -5,7 +5,7 @@ when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; antes de rodar
 keywords: [concept, confirmatory-run, evaluation, orchestration, refresh-gold, scorecard, preregistration, r3, judged-generation, content-hash, silver-content-hash, provenance, reproducibility, replay, idempotency, anchor, blinding]
 status: draft
 created_at: 2026-10-22
-updated_at: 2026-10-22
+updated_at: 2026-10-23
 stage_id: 8.1-confirmatory-run
 stage_title: Corrida confirmatória ponta a ponta
 step_id: 8
@@ -219,7 +219,7 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
           refresh_gold: GoldRefresh,              # Protocol local; real = RefreshGold
           build_scorecard: ScorecardBuilder,      # Protocol local; real = BuildConfirmatoryScorecard
           judged_store: JudgedGenerationStore,
-          gold_reader: GoldGenerationReader,     # 6.5; geração viva antes do E1 (I13)
+          gold_reader: GoldGenerationReader,     # 6.5; geração viva antes do E1 (G4(d), proveniência)
           environment: EvaluationEnvironment,
           writer_lock: EvaluationWriterLock,
       ) -> None: ...
@@ -325,8 +325,11 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
 - **`JudgedAttempt`** (dto): `preregistration_ref`, `commit`, `code_src`,
   `code_uv_lock`, ambiente do R-BIT (id da imagem, plataforma, capacidade de
   CPU, versões), `started_at`, `deviation`, `prior_live_silver_content`
-  (geração viva anterior desta revisão, se houver) e, numa segunda linha
-  depois do E1, `silver_content` da entrada lida.
+  (geração viva desta revisão, se houver — só proveniência) e, numa segunda
+  linha (`input_read`) depois do E1, o `silver_content` da entrada lida e o
+  `result_digest` (sha256 da camada de resultado da geração publicada: tabelas
+  por valor e `manifest.as_mapping()` **sem** as chaves `started_at`/
+  `finished_at`; ADR 8.1.0004, emenda de 2026-10-23).
 - **Erros novos do I13:** `PriorAttemptEnvironmentChangedError`,
   `PriorAttemptInputChangedError`, `PriorAttemptDivergenceError`.
 - **`JudgedGeneration`** (dto): `preregistration_ref`, `partition`,
@@ -405,15 +408,20 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
   (`code.src`, `code.uv_lock`), o **mesmo ambiente** do R-BIT (id da imagem,
   plataforma, capacidade de CPU, versões) e a **mesma entrada**
   (`silver_content` e `dataset_fingerprint` do manifesto); senão só com
-  `--deviation` citando um `[deviation]`. Código e ambiente são conferidos no
-  G4 contra a tentativa anterior; a entrada, logo depois do E1, contra o
-  `silver_content` gravado pela tentativa anterior. Se uma geração viva
-  (`current/`) desta revisão já existe, ela é lida pelo `GoldGenerationReader`
-  antes do E1 e a tentativa registra seu `silver_content`; depois do E1, a
-  geração nova tem de ser **igual** na camada de resultado (tabelas por valor e
-  manifesto sem os timestamps) — diferente com código, ambiente e entrada
-  iguais é falha do R-BIT: `[finding]`, `PriorAttemptDivergenceError`, nada
-  selado (doc de domínio §4.2: parada para diagnóstico); tentativa ou geração viva de outra revisão bloqueia (D12).
+  `--deviation` citando um `[deviation]`. A referência é o **trecho** do
+  registro desta revisão que começa na última linha `started` com desvio (sem
+  nenhuma, o registro inteiro). No G4, toda `started` do trecho tem de ter o
+  código e o ambiente atuais; um trecho cujas linhas `input_read` tenham mais de
+  um `result_digest` é uma **divergência registrada** e recusa antes de
+  qualquer efeito (`PriorAttemptDivergenceError`) — dali em diante, só com
+  `--deviation`. Depois do E1, a linha `input_read` é gravada primeiro (a
+  recusa também fica registrada); então a entrada nova tem de ser igual à de
+  **toda** `input_read` do trecho (`PriorAttemptInputChangedError`) e o
+  `result_digest` novo igual a cada uma delas (`PriorAttemptDivergenceError`:
+  falha do R-BIT, `[finding]`, nada selado — doc de domínio §4.2, parada para
+  diagnóstico). A geração viva em `current/` **não** é referência de nenhuma
+  comparação (é substituída pelo próximo refresh); só é lida para o G4(d) e
+  como proveniência; tentativa ou geração viva de outra revisão bloqueia (D12).
 - **I14 — Verdade cruzada fora do `data_root`.** Um `.judged.toml` commitado
   de outra revisão bloqueia; um da mesma revisão exige a cópia selada com o
   mesmo `generation_digest` (apagar ou trocar a cópia não abre re-julgamento). A recuperação de uma
@@ -485,8 +493,9 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
 | Geração julgada com digest divergente ou arquivo faltando | G4 | `JudgedGenerationTamperedError`; zero efeito; diagnóstico humano |
 | Sobra de staging de corrida interrompida | E3 | removida pelo `preserve` antes de copiar (como `.staging/` do ADR 6.4.0005 item 5) |
 | `GridFingerprintMismatchError`, cohort vazio, linha mal-formada, não-finito no silver onde o `RefreshGold` já o recusa (o hash não recusa: codifica a ficha; linha inválida de atribuição segue `undefined`, I16/C8-2 da 7.3) | E1 | propaga do `RefreshGold`; `current/` intacto; nada selado; tentativa fica registrada; re-execução só nas condições do I13 |
-| Entrada (`silver_content`/`dataset_fingerprint`) diferente da tentativa anterior sem `--deviation` | depois do E1 | `PriorAttemptInputChangedError`; nada selado; `[finding]` |
-| Geração nova ≠ geração viva anterior com código, ambiente e entrada iguais | depois do E1 | `PriorAttemptDivergenceError`; nada selado; `[finding]` e diagnóstico (R-BIT) |
+| Divergência já registrada no trecho (mais de um `result_digest`) sem `--deviation` | G4 | `PriorAttemptDivergenceError`; zero efeito |
+| Entrada (`silver_content`/`dataset_fingerprint`) diferente de alguma tentativa do trecho sem `--deviation` | depois do E1 | `input_read` gravada; `PriorAttemptInputChangedError`; nada selado; `[finding]` |
+| `result_digest` novo ≠ o de alguma tentativa do trecho, com código, ambiente e entrada iguais | depois do E1 | `input_read` gravada; `PriorAttemptDivergenceError`; nada selado; `[finding]` e diagnóstico (R-BIT); daí em diante só com `--deviation` |
 | Refresh `BLOCKED` | E1 → E3 | sem scorecard; `preserve` com status `BLOCKED` e checks que falharam; status `BLOCKED`; na corrida real, `[finding]` e parada para decisão humana (I5) |
 | Gold corrompido ou de outro plano na leitura do scorecard | E2 | erros da 6.5 (`GoldGenerationCorruptError`, `PreregistrationMismatchError`) propagam; nada selado |
 | Manifesto copiado ≠ publicado / ≠ lido pelo scorecard | E3 | `JudgedGenerationMismatchError`; staging descartado; nada selado |
@@ -497,7 +506,7 @@ Assinaturas indicativas; nomes de campo e tipos exatos fecham no technical.
 Re-executar depois de uma falha antes do selo **não** é livre: os números já
 existem desde o E1 (I13). É permitido só com o mesmo código, o mesmo ambiente
 e a mesma entrada — condições em que o R-BIT garante o mesmo resultado, e o
-use case confere isso contra a geração viva anterior —; fora delas, só como
+use case confere isso contra o resultado de **toda** tentativa do trecho desde o último `--deviation` —; fora delas, só como
 desvio registrado (`--deviation`). Antes de cada `evaluate` real, o runbook
 commita no technical §7 a intenção da tentativa (D12).
 
@@ -551,7 +560,7 @@ commita no technical §7 a intenção da tentativa (D12).
   com outra escolha é o *garden of forking paths* que o pré-registro existe
   para impedir; antes do selo os números já existem (desde o E1), então a
   nova tentativa só é aceita nas condições em que o R-BIT garante o mesmo
-  resultado, e o use case confere isso contra a geração viva anterior (I13).
+  resultado, e o use case confere isso contra o resultado de **toda** tentativa do trecho desde o último `--deviation` (I13).
   Decidir por hash, não por
   timestamp (contraparte GNU make, issue #211).
 - **Fonte:** skill `evidence-resolution` §1 (Gelman & Loken 2014; Nosek et al.
@@ -711,8 +720,9 @@ commita no technical §7 a intenção da tentativa (D12).
 ### D12 — Uma geração julgada por partição, contra tentativa sem selo e perda do `data_root`
 
 - **O quê:** registro write-ahead da tentativa antes do E1; G4 confere
-  `.judged.toml` commitados, cópias seladas, tentativas e a geração viva
-  (lida pelo `GoldGenerationReader` existente); re-execução depois de
+  `.judged.toml` commitados, cópias seladas, tentativas (inclusive divergência
+  já registrada) e a geração viva de outra revisão ou sem tentativa (lida pelo
+  `GoldGenerationReader` existente); re-execução depois de
   tentativa sem selo só com mesmo código + mesmo ambiente + mesma entrada (I13)
   ou `--deviation` com `[deviation]`. A fonte durável é o git: antes de cada
   `evaluate` real, o runbook commita no technical §7 a **intenção** da
@@ -725,9 +735,14 @@ commita no technical §7 a intenção da tentativa (D12).
   e E3 ou uma r4 abriria um segundo julgamento, e o `data_root` git-ignorado
   poderia ser apagado ou restaurado sem rastro (doc de domínio §4.6). A
   re-execução com mesmo código, ambiente e entrada é neutra pelo R-BIT, e a
-  comparação com a geração viva anterior verifica isso em vez de supor.
-- **Fonte:** Checkpoint A (DT-1, DT-2, CA-1, CA-2, CA-3); ADR 6.5.0003; ADR
-  7.1.0003 item 3 (justificativa que cita o registro).
+  comparação do `result_digest` com toda tentativa do trecho verifica isso em
+  vez de supor; a geração viva não serve de referência (o próximo refresh a
+  troca, e apagar `current/` desligaria a conferência — Checkpoint C 8.1,
+  bloco 5).
+- **Fonte:** Checkpoint A (DT-1, DT-2, CA-1, CA-2, CA-3); Checkpoint C 8.1
+  bloco 5 (CC5-1..3; technical §7, `[deviation]` de 2026-10-23); ADR 6.5.0003;
+  ADR 7.1.0003 item 3 (justificativa que cita o registro); ADR 8.1.0004 (emenda
+  de 2026-10-23).
 - **ADR:** [`8.1.0004`](../../adr/8_1_0004-single-judgment-attempt-log-committed-record-deviation.md)
 
 ### D9 — Nenhum número novo; canal de emissão
@@ -828,7 +843,7 @@ ficam no manifesto.
 | R1 — Checkpoints fora do `ARTIFACTS_ROOT` | B | M | o `infer` falha antes de qualquer escrita (`CheckpointNotFoundError`); restaurar do backup `tft-pre-7.4-…`; pré-condição conferida na Task real (60/60) |
 | R2 — `infer` sai em `tolerance` (ambiente ≠ o gravado no cohort) | M | B | política da 7.1 (ADR 7.1.0003): passa se dentro da tolerância e fica registrado no manifesto de inferência e no `inference_summary`; não bloqueia a 8.1 |
 | R3 — Custo do hash do silver (≈ 11 M linhas consumidas) | M | M | digest por unidade (memória limitada a uma unidade); gate de custo em sintético na escala real **antes** da corrida (D11, A17); se reprovar também no plano B, `[finding]` e revisão do concept (onde o limiar mora) antes de qualquer tentativa real |
-| R4 — Corrida interrompida | M | B | nada selado; tentativa registrada; nova tentativa só com mesmo código, mesmo ambiente e mesma entrada (I13), senão só com `--deviation`, conferida contra a geração viva anterior; sobras de staging removidas |
+| R4 — Corrida interrompida | M | B | nada selado; tentativa registrada; nova tentativa só com mesmo código, mesmo ambiente e mesma entrada (I13), senão só com `--deviation`, conferida contra o `result_digest` de toda tentativa do trecho desde o último desvio; sobras de staging removidas |
 | R5 — Rename de diretório no bind mount do Windows | B | M | selo = `CONTENTS.sha256` por último; `find` confere o digest; residual do ADR 6.4.0005 |
 | R6 — Desfecho `BLOCKED` no real | B | A | é resultado confirmatório (I5): selado, atestado e relatado; o DoD de veredito fica não cumprido e a Stage para com `[finding]`; qualquer correção vira desvio decidido pelo humano em issue própria |
 | R7 — Defeito descoberto depois do selo | B | A | desvio do plano (doc de domínio §4.6): a geração julgada não é trocada; nova issue; listado no dossiê |
@@ -886,14 +901,21 @@ Código (silver sintético; nenhum teste toca o cohort real):
   capacidade de CPU) e sem `--deviation`; `--deviation` sem `[deviation]`;
   `find` devolve cópia selada coerente cujo `generation_digest` ≠ o do
   `.judged.toml` (o use case confere; o store não conhece o digest esperado).
-  Depois do E1 (fakes): entrada diferente da tentativa anterior →
-  `PriorAttemptInputChangedError`; geração nova ≠ geração viva anterior com
-  tudo igual → `PriorAttemptDivergenceError`; nos dois, nada selado.
+  Divergência já registrada no trecho → `PriorAttemptDivergenceError` no G4.
+  Depois do E1 (fakes, com o `Clock` carimbando instantes diferentes): entrada
+  diferente de qualquer tentativa do trecho (inclusive a 1ª) →
+  `PriorAttemptInputChangedError`; `result_digest` ≠ o de alguma tentativa do
+  trecho com tudo igual → `PriorAttemptDivergenceError`; nos dois, a
+  `input_read` fica gravada e nada é selado; uma 3ª corrida depois de uma
+  divergência sem `--deviation` → recusa no G4; `current/` apagado não
+  desliga a conferência.
 - [ ] **A5** — Replay e tentativas: selada e íntegra → `ALREADY_JUDGED`, zero
   chamadas ao refresh e ao scorecard, corpo de atestação igual ao do `JUDGED`;
   queda simulada entre E1 e E3 → tentativa registrada, nada selado;
-  re-execução com mesmo código, ambiente e entrada → corrida completa, geração
-  igual à viva anterior e duas tentativas no `run_record.json`; com código diferente e `--deviation` válido → corrida
+  re-execução com mesmo código, ambiente e entrada → corrida completa, mesmo
+  `result_digest` das tentativas do trecho (instantes do manifesto diferentes)
+  e duas tentativas no `run_record.json`; depois de um `--deviation`, o trecho
+  recomeça nele; com código diferente e `--deviation` válido → corrida
   completa com o desvio registrado na tentativa e no `run_record.json`; sobra
   de staging → removida.
 - [ ] **A6** — `JudgedGenerationStore` (contrato `[fake, real]`, real =
