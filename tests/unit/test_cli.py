@@ -897,3 +897,38 @@ def test_evaluate_prints_status_digest_and_attestation() -> None:
     )
     assert commands[0].inference_summary == dtos.InferenceSummary.from_mapping(_SUMMARY)
     assert (commands[0].name, commands[0].revision) == ("synthetic_plan", 3)
+
+
+@pytest.mark.unit
+def test_evaluate_use_case_error_exits_2_naming_the_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Erro do use case depois do `infer`: exit 2 com o nome do erro e sem corpo impresso."""
+    inference: Any = cli.importlib.import_module(_INFERENCE_COMMANDS)
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    store: Any = cli.importlib.import_module(
+        "financial_forecasting.features.evaluation.application.ports.out.judged_generation_store"
+    )
+    monkeypatch.setattr(inference, "infer_with_summary", lambda *args, **kwargs: dict(_SUMMARY))
+    real_evaluate = evaluation.evaluate
+
+    def failing_use_case(command: object) -> object:
+        raise store.JudgedGenerationExistsError("x")
+
+    monkeypatch.setattr(
+        evaluation,
+        "evaluate",
+        lambda use_case, **kwargs: real_evaluate(failing_use_case, **kwargs),
+    )
+    out, err = io.StringIO(), io.StringIO()
+
+    code = cli.main(
+        _evaluate_argv(tmp_path, _cohort(tmp_path, frozen=True)),
+        wiring=_wiring(tmp_path),
+        out=out,
+        err=err,
+    )
+
+    assert code == _EXIT_ERROR
+    assert "error: JudgedGenerationExistsError: x" in err.getvalue()
+    assert "--- attestation ---" not in out.getvalue()
