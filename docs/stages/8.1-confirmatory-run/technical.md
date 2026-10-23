@@ -1566,4 +1566,26 @@ comportamento correto:
 O G4 com entradas registradas diferentes agora recusa com
 `PriorAttemptInputChangedError`, e não mais com o rótulo de divergência (nota do revisor).
 
+### 2026-10-23 — [decision:C] Task 13 — referências do 2b simplificadas; edição manual de `current/` como resíduo (re-verificação rodada 2) — Claude (sessão Windows)
+**Contexto:** a re-verificação da regra não achou quebra por quedas nem por desvios. Sobrou
+uma classe: mexer à mão em `current/` sem apagar `gold/`.
+**Decisão (degrau 4–5, da mestra):**
+- a classe vai para o **resíduo** do item 3 do ADR 8.1.0004, ao lado de "apagar `gold/` ou
+  restaurar o backup". Fica visível pelas intenções commitadas neste §7, e a regra não é
+  endurecida;
+- adotei a simplificação do revisor, estritamente mais segura. As referências do 2b são
+  toda linha `input_read` do trecho, todo `prior_live_result_digest` não nulo das
+  `started` do trecho exceto a primeira, e a geração viva no G4. Isso substitui o
+  pareamento de cada `started` sem `input_read` com a seguinte;
+- `run_record.deviation` fica `null` quando a corrida que sela não leva `--deviation`,
+  mesmo que o trecho tenha começado num desvio. O desvio fica nas linhas de tentativa que
+  o `run_record` lista.
+
+O que a simplificação recusa a mais: `current/` com resultado diferente do registrado
+pelas tentativas, sem nenhuma tentativa sem `input_read`
+(`test_live_generation_differing_from_the_log_is_refused_in_g4`). Os testes anteriores
+seguem verdes. O ADR 8.1.0004 foi reescrito com redação única nos itens 1, 2e, 2b e 3, o
+`decision:` do frontmatter cita o `prior_live_result_digest`, e o histórico das emendas
+ficou numa seção própria.
+
 <!-- END: post-execution -->
