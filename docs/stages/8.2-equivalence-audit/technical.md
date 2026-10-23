@@ -1378,4 +1378,14 @@ Colunas float da chave (`level_low`, `lower_level`, `band_level`…) ficam R2 e
 **Razão:** reversível barato, sem âncora explícita no §1: impede DTO incoerente
 (contagem e max que se contradizem) sem mudar o contrato do concept §4.
 
+### 2026-10-23 — [deviation] Task 02, regra "número não-`bool`" com dono único — Claude (executor)
+**Contexto:** o ripple da Task 05 rodou `tests/architecture/` e
+`test_evaluation_validation_single_owner.py::test_number_rule_has_a_single_owner`
+reprovou: o `_is_numeric` do `compare_reproduction` reescrevia
+`isinstance(x, int | float) and not isinstance(x, bool)`, regra cujo dono único é
+`domain/value_objects/_finite_number.py` (issue #167). O T1 da Task 02 não roda
+`tests/architecture/`.
+**Razão:** correção local, sem mudar comportamento: o comparador passa a usar
+`is_real_number` do dono (`fix(evaluation): … [8.2/task-02-fix]`).
+
 <!-- END: post-execution -->

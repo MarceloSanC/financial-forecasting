@@ -48,6 +48,9 @@ from financial_forecasting.features.evaluation.application.dtos.reproduction_com
     ScorecardComparison,
     TableComparison,
 )
+from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
+    is_real_number,
+)
 from financial_forecasting.shared.domain.services.sha256_hex import validate_sha256_hex
 
 _MANIFEST_READ = "manifest_read"
@@ -63,10 +66,6 @@ def _same(left: object, right: object) -> bool:
         assert isinstance(right, float)  # mesmo tipo, acima
         return struct.pack(">d", left) == struct.pack(">d", right)
     return left == right
-
-
-def _is_numeric(value: object) -> bool:
-    return isinstance(value, int | float) and not isinstance(value, bool)
 
 
 def _abs_diff(left: float, right: float) -> float:
@@ -95,9 +94,8 @@ class _Tally:
             self.different += 1
             if path and len(self.paths) < MAX_SCORECARD_PATHS:
                 self.paths.append(path)
-        if _is_numeric(left) and _is_numeric(right):
-            assert isinstance(left, int | float)  # _is_numeric
-            assert isinstance(right, int | float)
+        # número não-`bool`: a regra tem dono único (`_finite_number`, issue #167)
+        if is_real_number(left) and is_real_number(right):
             self.numeric += 1
             delta = _abs_diff(left, right)
             self.max_abs_diff = (
