@@ -46,6 +46,9 @@ _VARIANT_VALUES: Final = tuple(
 
 MODEL_LABEL_COLUMN: str | None = None
 """`model_version_x` ou `model_version_y` — o que D-M2 usou; fixado na E1 (só rótulos)."""
+PRIOR_CANDIDATE_LABELS: tuple[str, ...] = ()
+"""Os rótulos (na `MODEL_LABEL_COLUMN`) do candidato anterior `BTSF` (D-M2: 15 `model_version`,
+3 janelas x 5 seeds); fixados na E1 pela mesma lista de rótulos distintos, sem valor."""
 
 FILTER_COLUMNS: Final[dict[str, tuple[str, ...]]] = {
     GOLD_OOS: (

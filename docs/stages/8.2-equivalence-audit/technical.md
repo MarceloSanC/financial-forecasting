@@ -1388,4 +1388,29 @@ reprovou: o `_is_numeric` do `compare_reproduction` reescrevia
 **Razão:** correção local, sem mudar comportamento: o comparador passa a usar
 `is_real_number` do dono (`fix(evaluation): … [8.2/task-02-fix]`).
 
+### 2026-10-23 — [decision:C] Task 11, status dos deltas de modelo na tabela — Claude (executor)
+**Contexto:** o A11 (1) pede os deltas m_novo − m_A por nível, PICP e MPIW "documentados
+com sinal, sem limiar" (EQ-DESC, doc §5.5); nenhum dos seis `RawStatus` da Task 10 é a
+classificação de um delta sem limiar.
+**Pergunta:** que status a linha de delta leva na tabela declarada?
+**Opções:**
+- A — `within_tolerance` (falso: não há tolerância).
+- B — status `reported` (status `None` no código), só para os deltas; o lado do nominal,
+  os sinais por baseline e o DM seguem `same_sense`/`divergent_sense`. ✅ recomendada
+**Decisão:** B.
+**Razão:** reversível barato; mantém o vocabulário do §2 para tudo o que é classificado e
+não inventa tolerância onde o doc diz que não há (EQ-DESC).
+
+### 2026-10-23 — [deviation] Task 11, `PRIOR_CANDIDATE_LABELS` no `comparison_set.py` — Claude (executor)
+**Contexto:** o A11 precisa identificar o candidato anterior (`BTSF`, D-M2) na
+`MODEL_LABEL_COLUMN`; o §1 fixa só a coluna na E1. A constante nova
+`PRIOR_CANDIDATE_LABELS: tuple[str, ...] = ()` entrou no `comparison_set.py` (arquivo da
+Task 10, fora da lista da Task 11), ao lado da `MODEL_LABEL_COLUMN`, para a E1 fixar os
+dois pela mesma lista de rótulos distintos (metadado, sem valor) no mesmo commit do
+registro. Sem ela vazia, o `compute` recusa (`run the E1`).
+**Razão:** o arquivo já é o que a E1 edita (runbook E1 passo 1); outra casa espalharia o
+que a E1 fixa. Também entrou no `test_audit_table_render.py` um teste do `compute_rows`
+sobre dois lados sintéticos (o cálculo da E4 só rodaria no opt-in) e o teste AST da porta
+única de leitura (CC3-3 do Checkpoint C bloco 3).
+
 <!-- END: post-execution -->
