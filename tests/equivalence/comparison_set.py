@@ -44,9 +44,29 @@ _VARIANT_VALUES: Final = tuple(
     for variant in ("raw", "post_guardrail")
 )
 
-MODEL_LABEL_COLUMN: str | None = None
-"""`model_version_x` ou `model_version_y` — o que D-M2 usou; fixado na E1 (só rótulos)."""
-PRIOR_CANDIDATE_LABELS: tuple[str, ...] = ()
+MODEL_LABEL_COLUMN: str | None = "model_version_x"
+"""`model_version_x` ou `model_version_y` — o que D-M2 usou; fixado na E1 (só rótulos).
+
+E1: nas 52 280 linhas `parent_sweep_id = phase_b_confirmatorio_20260524`, `split = test`, as
+duas colunas têm os mesmos 18 rótulos distintos (15 `*_BTSF` + 3 baselines de D-M2), sem nulo,
+e coincidem linha a linha (0 linhas com x != y); fica a `_x`."""
+PRIOR_CANDIDATE_LABELS: tuple[str, ...] = (
+    "20260524_062419_BTSF",
+    "20260524_062723_BTSF",
+    "20260524_062922_BTSF",
+    "20260524_063226_BTSF",
+    "20260524_063508_BTSF",
+    "20260524_063811_BTSF",
+    "20260524_064010_BTSF",
+    "20260524_064145_BTSF",
+    "20260524_064431_BTSF",
+    "20260524_064641_BTSF",
+    "20260524_064851_BTSF",
+    "20260524_065100_BTSF",
+    "20260524_065400_BTSF",
+    "20260524_065620_BTSF",
+    "20260524_065828_BTSF",
+)
 """Os rótulos (na `MODEL_LABEL_COLUMN`) do candidato anterior `BTSF` (D-M2: 15 `model_version`,
 3 janelas x 5 seeds); fixados na E1 pela mesma lista de rótulos distintos, sem valor."""
 
@@ -214,4 +234,14 @@ class CommonBaseline:
 
 
 COMMON_BASELINES: tuple[CommonBaseline, ...] = ()
-"""Preenchido só na E1 (D12 a); vazio = zero comuns, tabela vazia registrada."""
+"""Preenchido só na E1 (D12 a); vazio = zero comuns, tabela vazia registrada.
+
+E1 (technical 8.2 §7, `[decision:C] E1 — baselines comuns`): zero comuns. (a) o commit do
+`dim_run` do anterior (`2dc19116…`, só nas linhas do candidato; baselines com `git_commit`
+nulo) não existe em nenhum repositório local; (b) o payload `training_config_json` do
+`silver/fact_config` do anterior declara só família e janela (`zero_return` sem janela,
+`historical_mean_rolling` W = 30, `historical_quantiles_rolling` W = 252), sem estimador de
+quantil nem regra de dispersão; lado novo (`features/modeling/domain/services/
+baseline_emission.py`, `quantile_grid_emission.py`): `zero_return` grade degenerada em 0,
+`historical_mean` média do train expansivo (grade degenerada), `historical_quantiles` quantil
+tipo 7 de W = 252. Nenhum par tem as quatro partes declaradas equivalentes."""

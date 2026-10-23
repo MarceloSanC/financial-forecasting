@@ -1508,4 +1508,81 @@ vazio caía no mesmo caminho do "A1 fora".
   as linhas A10/A11 do horizonte viram `not_compared:A1` (runbook E4 passo 2).
 **Razão:** reversível barato; ancorado no concept §6 e no doc §5.3 item 4 / §5.4.
 
+### 2026-10-23 — [measurement] E0/E1 — HEAD íntegro e rótulo de modelo — Claude (executor das Etapas)
+**Contexto:** E0 com `STAMP=20261023-190339`, `GATE1=0d422aab2e2f4dc8136220378a896038d8b96bb2`
+(`make check` 1 verde: 8965 passed, coverage 99 %). Bloco "HEAD íntegro" no início da E1:
+```
+WT_CLEAN
+BLOB scripts/reproduce_judged_generation.py 855aaa02744f30d13dcae74beea1274bb95b7aff
+BLOB scripts/reproduction_evidence.py 960598f5229765f68b2102c3622d35aaa4e166d2
+BLOB tests/equivalence/prior_evidence.py f04e2f2a8699d05512725c563cad93d267148a76
+```
+E1 passo 1 (container `b69a7620…`, `data/analytics` `:ro`; lidas só `parent_sweep_id`, `split`,
+`model_version_x`, `model_version_y`): 52 280 linhas `phase_b_confirmatorio_20260524`/`test`;
+as duas colunas têm os mesmos 18 rótulos distintos (15 `20260524_*_BTSF` +
+`baseline_zero_return_v1`, `baseline_historical_mean_rolling_v1`,
+`baseline_historical_quantiles_rolling_v1`), sem nulo, e `rows_x_ne_y 0` (iguais linha a
+linha). `MODEL_LABEL_COLUMN = "model_version_x"`; `PRIOR_CANDIDATE_LABELS` = os 15 `*_BTSF`.
+E1 passo 3:
+```
+exit 0
+REGISTRY_EQUALS_DM1
+REGISTRY_OK 5
+exit 0
+```
+(`docs/reports/` não existia: o primeiro `cp` falhou e o bloco foi repetido inteiro depois do
+`mkdir -p`.) Os 5 sha256 do registro = D-M1; linhas 410208, 452, 452, 60, 6.
+
+### 2026-10-23 — [decision:C] E1 — baselines comuns — Claude (executor das Etapas)
+**Contexto:** D12 a: comum só com as quatro partes da definição (estimador, janela,
+parâmetros, regra de dispersão dos quantis) declaradas equivalentes nos dois lados, por fonte
+versionada ou registrada; nome igual não basta.
+**Fontes olhadas (só rótulos/definição, nenhum valor):**
+- lado novo (HEAD): `features/modeling/domain/services/baseline_emission.py` l.140–146 e
+  184–193 e `quantile_grid_emission.py` (`degenerate_grid` l.38, `sample_quantiles_type7`
+  l.83); `config/cohorts/aapl_confirmatory.toml` l.93–107. `zero_return` = grade degenerada em
+  0; `historical_mean` = média do train expansivo, grade degenerada; `historical_quantiles` =
+  quantil tipo 7 (Hyndman & Fan) da janela rolante W = 252.
+- (a) código do anterior: o `silver/dim_run` do sweep
+  (`3b02f2a7169bbcdd295d52813e7542ff0ced8d81104ea93d1e631d8b0686eb10`) registra
+  `git_commit = 2dc191160d6afb5529740730a517c9acd2089f65` só nas 15 linhas do candidato
+  (as 45 dos baselines têm `git_commit` nulo; `pipeline_version = 0.1`); `git cat-file -e`
+  falhou em todos os repositórios git de `C:/Users/Marcelo/Documents/Code/*`
+  (financial-forecasting, learning, restaurant-hub, tcc-sentiment-analysis,
+  whaka-dev-project-tamplate) → sem código.
+- (b) payload: `silver/fact_config` do sweep
+  (`8622c34338abb0ef263177b92308b4403b834641a4dd66db238dd224d1f1ea45`), linhas dos baselines:
+  `training_config_json` = `{"baseline": "zero_return", "window": null}` (modo `point`),
+  `{"baseline": "historical_mean_rolling", "window": 30}` (`point`),
+  `{"baseline": "historical_quantiles_rolling", "window": 252}` (`quantile`);
+  `dataset_parameters_json` e `search_space_json` vazios. Declara família e janela, não o
+  estimador de quantil nem a regra de dispersão.
+**Pergunta:** algum par é comum?
+**Opções:**
+- A — `historical_quantiles` comum por família + W = 252 iguais.
+- B — zero comuns: `zero_return` sem regra de dispersão declarada no anterior;
+  `historical_mean` com janela diferente (rolante 30 × train expansivo); `historical_quantiles`
+  sem estimador de quantil declarado no anterior (tipo 7 não verificável). ✅ recomendada
+**Decisão:** B. `COMMON_BASELINES = ()`; o A11 registra a linha
+`A11/baselines/none` (`not_compared:no_common_baseline`). Como nenhuma fonte deu definição
+completa, nenhum `[[definition_source]]` entra no registro e os dois arquivos do silver ficam
+fora dele (o andaime não os lê; os sha256 acima registram o que foi olhado).
+**Razão:** D12 a exige as quatro partes; A seria "nome (e janela) igual basta", que o technical
+recusa explicitamente.
+
+### 2026-10-23 — [deviation] E1 passo 4 — T1 vermelho por testes presos ao estado pré-E1 — Claude (executor das Etapas)
+**Contexto:** com o `comparison_set.py` preenchido, o T1 da E1 deu `3 failed, 65 passed,
+1 skipped`: `test_prior_reader_reads_only_registered_columns_and_filters` (o Parquet sintético
+não tinha a coluna de rótulo que o leitor passa a ler), `test_compute_rows_requires_the_e1`
+(partia do módulo sem monkeypatch) e `test_comparison_set_is_fixed_before_values`
+(`assert cs.MODEL_LABEL_COLUMN is None`). Defeito de forma dos testes, não do cálculo.
+**Razão / correção:** linha "E1: T1 vermelho" do "Se falhar" (corrigir só a forma; nenhum valor
+lido). Commit `543e602a` (`test(evaluation): … [8.2/--]`): o oráculo sintético e a asserção
+usam `readers.prior_columns`; a guarda da E1 parte do estado pré-E1 por monkeypatch; o teste do
+conjunto aceita `None` ou uma das duas colunas. Verde com o `comparison_set.py` do GATE1 e com o
+da E1 (`68 passed, 1 skipped` nos dois). Como o andaime mudou fora do `comparison_set.py`, a
+guarda `SCAFFOLD_AS_GATE1` da E4 reprovaria: pela linha `FAIL_SCAFFOLD_CHANGED` do "Se
+falhar", `make check` extra (antes da E2, fora do venv congelado) sobre o commit do registro,
+que passa a ser o `GATE1`.
+
 <!-- END: post-execution -->
