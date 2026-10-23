@@ -144,24 +144,85 @@ def _prefixed(snapshot: Mapping[str, str], prefix: str) -> dict[str, str]:
 
 
 def _since_last_deviation(attempts: Sequence[JudgedAttempt]) -> tuple[JudgedAttempt, ...]:
-    """As linhas a partir da última `started` com `deviation` (todas, se nenhuma tem)."""
+    """As linhas a partir da última `started` com `deviation` que chegou ao `input_read`.
+
+    Uma tentativa com desvio que caiu antes de gravar a entrada não recomeça o trecho
+    (CC6-2): senão a corrida seguinte, sem desvio, herdaria uma referência vazia.
+    Nenhuma assim → todas as linhas.
+    """
+    read = {a.attempt_id for a in attempts if a.phase is AttemptPhase.INPUT_READ}
     start = 0
     for index, attempt in enumerate(attempts):
-        if attempt.phase is AttemptPhase.STARTED and attempt.deviation is not None:
+        if (
+            attempt.phase is AttemptPhase.STARTED
+            and attempt.deviation is not None
+            and attempt.attempt_id in read
+        ):
             start = index
     return tuple(attempts[start:])
+
+
+@dataclasses.dataclass(frozen=True)
+class _Reference:
+    """O que uma re-execução sem desvio tem de reproduzir.
+
+    `silver_content`/`dataset_fingerprint` só nas linhas `input_read` e na geração viva;
+    a testemunha gravada numa `started` traz só o `result_digest`, que já cobre a entrada
+    (o manifesto sem os instantes inclui `silver_content` e `dataset_fingerprint`).
+    """
+
+    label: str
+    result_digest: str
+    silver_content: object = None
+    dataset_fingerprint: str | None = None
+
+
+def _references(
+    segment: Sequence[JudgedAttempt], live: GoldGeneration | None, live_digest: str | None
+) -> tuple[_Reference, ...]:
+    """As linhas `input_read` do trecho e, para cada `started` sem `input_read` (a
+    tentativa caiu depois de o E1 publicar e antes de gravar a entrada, CC6-1), a
+    testemunha do que ela publicou: o `prior_live_*` da `started` seguinte do trecho, ou a
+    geração viva atual se ela é a última."""
+    read = {a.attempt_id for a in segment if a.phase is AttemptPhase.INPUT_READ}
+    started = [a for a in segment if a.phase is AttemptPhase.STARTED]
+    references = [
+        _Reference(a.attempt_id, str(a.result_digest), a.silver_content, a.dataset_fingerprint)
+        for a in segment
+        if a.phase is AttemptPhase.INPUT_READ
+    ]
+    for index, attempt in enumerate(started):
+        if attempt.attempt_id in read:
+            continue
+        later = started[index + 1 :]
+        if later:
+            witness = later[0].prior_live_result_digest
+            if witness is not None:
+                references.append(_Reference(f"live-before-{later[0].attempt_id}", witness))
+        elif live is not None and live_digest is not None:
+            references.append(
+                _Reference(
+                    "live",
+                    live_digest,
+                    live.manifest.silver_content,
+                    live.manifest.dataset_fingerprint.value,
+                )
+            )
+    return tuple(references)
 
 
 @dataclasses.dataclass(frozen=True)
 class _Prior:
     """O que o G4 leu da partição antes de qualquer efeito.
 
-    `segment` são as linhas desta revisão desde o último desvio — a referência das
-    conferências sem `--deviation`.
+    `segment` são as linhas desta revisão desde o último desvio; `references` é o que
+    uma re-execução sem `--deviation` tem de reproduzir (ver `_references`).
     """
 
     segment: tuple[JudgedAttempt, ...]
     live: GoldGeneration | None
+    live_digest: str | None
+    references: tuple[_Reference, ...]
 
 
 class RunConfirmatoryEvaluation:
@@ -282,6 +343,7 @@ class RunConfirmatoryEvaluation:
                 prior_live_silver_content=(
                     None if prior.live is None else prior.live.manifest.silver_content
                 ),
+                prior_live_result_digest=prior.live_digest,
             ),
         )
         logger.info("step=attempt phase=started attempt_id=%s", attempt_id)
@@ -409,13 +471,25 @@ class RunConfirmatoryEvaluation:
                     f"an earlier attempt of {ref} ran in another environment; re-running "
                     "needs --deviation"
                 )
-            results = {a.result_digest for a in segment if a.phase is AttemptPhase.INPUT_READ}
-            if len(results) > 1:
+        live_digest = None if live is None else result_layer_digest(live)
+        references = _references(segment, live, live_digest)
+        if command.deviation is None:
+            inputs = [
+                (r.silver_content, r.dataset_fingerprint)
+                for r in references
+                if r.dataset_fingerprint is not None
+            ]
+            if any(item != inputs[0] for item in inputs):
+                raise PriorAttemptInputChangedError(
+                    f"the attempts of {ref} already read another input than each other; re-running "
+                    "needs --deviation"
+                )
+            if len({r.result_digest for r in references}) > 1:
                 raise PriorAttemptDivergenceError(
                     f"the attempts of {ref} already diverged in the result layer (R-BIT "
                     "failure recorded); re-running needs --deviation"
                 )
-        return _Prior(segment=segment, live=live)
+        return _Prior(segment=segment, live=live, live_digest=live_digest, references=references)
 
     def _judged_store_input(
         self, partition: GoldPartition, attempt_id: str, ref: str, manifest: GoldManifest
@@ -443,17 +517,20 @@ class RunConfirmatoryEvaluation:
         """2b (i)-(ii): entrada e resultado contra toda tentativa do trecho, sem desvio."""
         if command.deviation is not None:
             return
-        earlier = [a for a in prior.segment if a.phase is AttemptPhase.INPUT_READ]
+        earlier = prior.references
         new_input = (read_back.silver_content, read_back.dataset_fingerprint)
         changed = [
-            a.attempt_id for a in earlier if (a.silver_content, a.dataset_fingerprint) != new_input
+            r.label
+            for r in earlier
+            if r.dataset_fingerprint is not None
+            and (r.silver_content, r.dataset_fingerprint) != new_input
         ]
         if changed:
             raise PriorAttemptInputChangedError(
                 f"the refresh read another input than the attempts {changed} of "
                 f"{command.preregistration_ref}; re-running needs --deviation"
             )
-        diverged = [a.attempt_id for a in earlier if a.result_digest != read_back.result_digest]
+        diverged = [r.label for r in earlier if r.result_digest != read_back.result_digest]
         if diverged:
             raise PriorAttemptDivergenceError(
                 f"the new generation of {command.preregistration_ref} differs in the result "

@@ -144,7 +144,9 @@ def test_verify_listing_names_missing_extra_altered_and_empty_generation() -> No
 @pytest.mark.unit
 def test_attempt_round_trip_started_and_input_read() -> None:
     started = _started(
-        deviation="[deviation] reprocessed", prior_live_silver_content=SAMPLE_SILVER_CONTENT
+        deviation="[deviation] reprocessed",
+        prior_live_silver_content=SAMPLE_SILVER_CONTENT,
+        prior_live_result_digest=_B,
     )
     attempts = (started, _input_read(), _started())
 
@@ -328,3 +330,14 @@ def test_result_layer_digest_ignores_only_the_clock_instants() -> None:
         )
         != digest
     )
+
+
+@pytest.mark.unit
+def test_prior_live_fields_come_together() -> None:
+    """CC6-1: a testemunha da geração viva tem `silver_content` e digest, ou nenhum."""
+    with pytest.raises(ValueError, match="come together"):
+        _started(prior_live_silver_content=SAMPLE_SILVER_CONTENT)
+    with pytest.raises(ValueError, match="come together"):
+        _started(prior_live_result_digest=_B)
+    with pytest.raises(ValueError, match="prior_live_result_digest"):
+        _started(prior_live_silver_content=SAMPLE_SILVER_CONTENT, prior_live_result_digest="x")

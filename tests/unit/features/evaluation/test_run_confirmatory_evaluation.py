@@ -948,3 +948,77 @@ def test_deviation_starts_a_new_reference_segment() -> None:
     result = world.run()  # sem desvio: o trecho começa na tentativa com desvio
 
     assert result.status is ConfirmatoryRunStatus.JUDGED
+
+
+# --- CC6 (Checkpoint C final): queda antes do input_read e desvio que não chegou a ler ---
+
+
+def _crash_before_input_read(world: _World) -> GoldGeneration:
+    """1ª tentativa: o E1 publica e o processo cai antes de gravar a linha `input_read`."""
+    real = world.judged.record_attempt
+    state = {"armed": True}
+
+    def flaky(*, partition: GoldPartition, attempt: JudgedAttempt) -> None:
+        if attempt.phase is AttemptPhase.INPUT_READ and state["armed"]:
+            state["armed"] = False
+            raise OSError("killed after E1 publish")
+        real(partition=partition, attempt=attempt)
+
+    world.judged.record_attempt = flaky  # type: ignore[method-assign]
+    with pytest.raises(OSError, match="killed"):
+        world.run()
+    phases = [a.phase for a in world.judged.attempts(partition=world.partition)]
+    assert phases == [AttemptPhase.STARTED]
+    return world.reader.read_generation(partition=world.partition)
+
+
+def test_crash_before_input_read_makes_the_live_generation_the_reference() -> None:
+    """CC6-1: sem `input_read`, o que o E1 publicou (a geração viva) é a referência."""
+    world = _World()
+    _crash_before_input_read(world)
+    stored = world.stored()
+    assert stored.set_cell(GOLD_QUALITY_CHECKS.name, lambda _row: True, "detail", "changed")
+    world.refresh.generations = [stored.generation()]
+
+    with pytest.raises(PriorAttemptDivergenceError, match=r"\['live'\]"):
+        world.run()  # sem --deviation: o resultado novo difere do publicado pela 1ª
+
+    assert world.judged.preserves == 0
+    with pytest.raises(PriorAttemptDivergenceError, match="already diverged"):
+        world.run()  # a divergência ficou registrada: daí em diante, só com desvio
+
+
+def test_crash_before_input_read_then_same_result_is_judged() -> None:
+    """CC6-1: com o mesmo resultado da geração viva, a re-execução sela normalmente."""
+    world = _World()
+    live = _crash_before_input_read(world)
+
+    result = world.run()
+
+    assert result.status is ConfirmatoryRunStatus.JUDGED
+    read = [
+        a
+        for a in world.judged.attempts(partition=world.partition)
+        if a.phase is AttemptPhase.INPUT_READ
+    ]
+    assert [a.result_digest for a in read] == [result_layer_digest(live)]
+
+
+def test_deviation_attempt_dying_before_input_read_does_not_reset_the_reference() -> None:
+    """CC6-2: um desvio que caiu no E1 não recomeça o trecho; sem desvio, segue recusado."""
+    world = _diverged_world()
+    world.refresh.error = OSError("killed in E1")
+    with pytest.raises(OSError):
+        world.run(deviation=_DEVIATION)
+    world.refresh.error = None
+    before = world.effects()
+
+    with pytest.raises(PriorAttemptDivergenceError, match="already diverged"):
+        world.run()  # sem --deviation
+
+    assert world.effects() == before
+    result = world.run(deviation=_DEVIATION)
+    assert result.status is ConfirmatoryRunStatus.JUDGED
+    sealed = world.judged.find(partition=world.partition, preregistration_ref=world.ref)
+    assert sealed is not None
+    assert sealed.documents[RUN_RECORD_DOCUMENT]["deviation"] == _DEVIATION

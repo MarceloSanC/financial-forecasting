@@ -372,6 +372,7 @@ _STARTED_KEYS: Final = (
     "started_at",
     "deviation",
     "prior_live_silver_content",
+    "prior_live_result_digest",
 )
 _INPUT_READ_KEYS: Final = (
     "phase",
@@ -388,6 +389,7 @@ _STARTED_ONLY: Final = (
     "started_at",
     "deviation",
     "prior_live_silver_content",
+    "prior_live_result_digest",
 )
 _INPUT_READ_ONLY: Final = ("silver_content", "dataset_fingerprint", "result_digest")
 
@@ -409,8 +411,10 @@ class JudgedAttempt:
 
     `started` carrega `commit` (40 hex), `code` (chaves `code.*`), `environment` (chaves
     `env.*`), `started_at` (com fuso; `attempt_id` = `started_at.isoformat()`),
-    `deviation` (texto ou `None`) e `prior_live_silver_content` (da geração viva desta
-    revisão antes do E1, ou `None`). `input_read` carrega `silver_content` e
+    `deviation` (texto ou `None`), `prior_live_silver_content` e `prior_live_result_digest`
+    (o `silver_content` e o `result_layer_digest` da geração viva desta revisão antes do
+    E1 — a testemunha do que uma tentativa anterior sem `input_read` publicou, CC6-1 — ou
+    `None`). `input_read` carrega `silver_content` e
     `dataset_fingerprint` (sha256 hex) do manifesto novo e `result_digest` (sha256 hex,
     `result_layer_digest` da geração publicada). Os campos da outra fase ficam `None`.
 
@@ -427,6 +431,7 @@ class JudgedAttempt:
     started_at: datetime | None = None
     deviation: str | None = None
     prior_live_silver_content: SilverContent | None = None
+    prior_live_result_digest: str | None = None
     silver_content: SilverContent | None = None
     dataset_fingerprint: str | None = None
     result_digest: str | None = None
@@ -474,6 +479,12 @@ class JudgedAttempt:
         prior = self.prior_live_silver_content
         if prior is not None and not isinstance(prior, SilverContent):
             raise ValueError(f"prior_live_silver_content must be a SilverContent, got {prior!r}")
+        if (prior is None) != (self.prior_live_result_digest is None):
+            raise ValueError(
+                "prior_live_silver_content and prior_live_result_digest come together or not at all"
+            )
+        if self.prior_live_result_digest is not None:
+            validate_sha256_hex(self.prior_live_result_digest, field="prior_live_result_digest")
 
     def _check_input_read(self) -> None:
         if not isinstance(self.silver_content, SilverContent):
@@ -498,6 +509,7 @@ class JudgedAttempt:
                 "started_at": self.started_at.isoformat(),
                 "deviation": self.deviation,
                 "prior_live_silver_content": None if prior is None else prior.as_mapping(),
+                "prior_live_result_digest": self.prior_live_result_digest,
             }
         assert self.silver_content is not None  # garantido pelo __post_init__
         return {
@@ -552,6 +564,7 @@ class JudgedAttempt:
             prior_live_silver_content=(
                 None if prior is None else SilverContent.from_mapping(prior)  # type: ignore[arg-type]
             ),
+            prior_live_result_digest=mapping["prior_live_result_digest"],  # type: ignore[arg-type]
         )
 
 
