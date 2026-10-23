@@ -42,6 +42,10 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
 from financial_forecasting.features.evaluation.application.dtos.silver_content import (
     SilverContent,
 )
+from financial_forecasting.features.evaluation.application.ports.out.evaluation_environment import (
+    CODE_PREFIX,
+    ENV_PREFIX,
+)
 from financial_forecasting.shared.domain.services.git_commit import validate_git_commit_sha
 from financial_forecasting.shared.domain.services.path_identifier import (
     validate_path_identifier,
@@ -58,8 +62,6 @@ GENERATION_MANIFEST: Final = f"{GENERATION_DIR}/{MANIFEST_NAME}"
 """O manifesto copiado de `current/`."""
 
 _LISTING_LINE: Final = re.compile(r"([0-9a-f]{64})  ([^\r\n]+)")
-_CODE_PREFIX: Final = "code."
-_ENV_PREFIX: Final = "env."
 
 
 def check_judged_ref(preregistration_ref: object) -> str:
@@ -407,12 +409,12 @@ class JudgedAttempt:
     def _check_started(self) -> None:
         validate_git_commit_sha(self.commit, field="attempt commit")
         object.__setattr__(
-            self, "code", _check_prefixed_map(self.code, prefix=_CODE_PREFIX, field="attempt code")
+            self, "code", _check_prefixed_map(self.code, prefix=CODE_PREFIX, field="attempt code")
         )
         object.__setattr__(
             self,
             "environment",
-            _check_prefixed_map(self.environment, prefix=_ENV_PREFIX, field="attempt environment"),
+            _check_prefixed_map(self.environment, prefix=ENV_PREFIX, field="attempt environment"),
         )
         started_at = self.started_at
         if not isinstance(started_at, datetime) or started_at.tzinfo is None:
