@@ -63,9 +63,7 @@ class CohortProgressLedger(Protocol):
         """`unit_key -> {run_id: linhas}` das unidades marcadas; vazio se nenhuma."""
         ...
 
-    def mark_completed(
-        self, cohort_id: str, unit_key: str, rows_by_run: Mapping[str, int]
-    ) -> None:
+    def mark_completed(self, cohort_id: str, unit_key: str, rows_by_run: Mapping[str, int]) -> None:
         """Marca a unidade como concluída com as contagens por `run_id`."""
         ...
 
@@ -86,9 +84,7 @@ class CohortProgressLedger(Protocol):
         """Instante (ISO-8601) da primeira execução; `None` se ainda não houve."""
         ...
 
-    def record_sweep_result(
-        self, scope_id: str, model: str, result: Mapping[str, object]
-    ) -> None:
+    def record_sweep_result(self, scope_id: str, model: str, result: Mapping[str, object]) -> None:
         """Grava o resultado do sweep de `model` (`"tft"`/`"gbm"`) sob o scope id.
 
         `result` passa por JSON: tuplas voltam como listas e chaves como texto —

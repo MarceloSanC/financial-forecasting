@@ -100,9 +100,7 @@ _MIN_DATA_IN_LEAF = 5
 _COHORT_ID = "cohort-h2"
 _FEATURE_NAMES = expected_feature_names()
 
-_SCOPE = ScopeSpec(
-    asset_id="TEST", feature_set_name="fs_test", max_horizon=2, cohort_id=_COHORT_ID
-)
+_SCOPE = ScopeSpec(asset_id="TEST", feature_set_name="fs_test", max_horizon=2, cohort_id=_COHORT_ID)
 
 
 # Instante do `created_at_utc` write-time (fixo, UTC).
@@ -337,9 +335,7 @@ def test_happy_path_one_summary_and_dim_run_row_per_fold() -> None:
     assert all(r["split_fingerprint"] for r in dim_run)
     assert {s.run_id for s in result.runs} == {str(r["run_id"]) for r in dim_run}
     # best_iteration do fake (=1 por horizonte) propagado verbatim ao Result.
-    assert all(
-        s.best_iteration_by_horizon == dict.fromkeys(_HORIZONS, 1) for s in result.runs
-    )
+    assert all(s.best_iteration_by_horizon == dict.fromkeys(_HORIZONS, 1) for s in result.runs)
 
 
 @pytest.mark.unit
@@ -358,9 +354,7 @@ def test_happy_path_predictions_long_grid_complete_and_aligned() -> None:
         key = (row["run_id"], row["decision_idx"], row["horizon"])
         grids.setdefault(key, set()).add(float(str(row["quantile_level"])))
     assert all(levels == set(_LEVELS) for levels in grids.values())
-    iso = [
-        datetime(day.year, day.month, day.day, tzinfo=UTC).isoformat() for day in _SESSIONS
-    ]
+    iso = [datetime(day.year, day.month, day.day, tzinfo=UTC).isoformat() for day in _SESSIONS]
     for row in rows:
         decision_idx = int(str(row["decision_idx"]))
         horizon = int(str(row["horizon"]))
@@ -437,9 +431,7 @@ def test_i10_matrices_carry_the_exact_partition_feature_values() -> None:
                 for day in partition
             )
             assert call[block] == expected, f"{block} != partição exata do fold"
-        assert call["test_decision_indices"] == tuple(
-            index_by_session[day] for day in fold.test
-        )
+        assert call["test_decision_indices"] == tuple(index_by_session[day] for day in fold.test)
 
 
 # -- A7/I12: alinhamento e anti-leakage dos labels ---------------------------------
@@ -496,9 +488,7 @@ def test_a7_label_sources_never_reach_the_next_partition() -> None:
         for horizon in _HORIZONS:
             train_sources = [round(label * 1000) for label in train_labels[horizon]]
             assert max(train_sources) < early_stop_start
-            monitor_sources = [
-                round(label * 1000) for label in early_stop_labels[horizon]
-            ]
+            monitor_sources = [round(label * 1000) for label in early_stop_labels[horizon]]
             assert max(monitor_sources) < calib_start
 
 
@@ -553,9 +543,7 @@ def test_i6_calib_value_mutation_does_not_change_anything_persisted() -> None:
     """Mutar sessões de calib inalcançáveis pelo port -> mesmíssimas predições."""
     baseline_case, baseline_repo = _build()
     baseline_case(_command())
-    mutated_rows = _dataset_rows(
-        _SESSIONS, _returns(), mutate_indices=_unreachable_calib_indices()
-    )
+    mutated_rows = _dataset_rows(_SESSIONS, _returns(), mutate_indices=_unreachable_calib_indices())
     mutated_case, mutated_repo = _build(store=_seeded_store(mutated_rows))
     mutated_case(_command())
 
@@ -798,11 +786,9 @@ def test_i4_run_ids_and_signatures_deterministic_across_invocations() -> None:
     runs_b = second(_command()).runs
 
     assert [
-        (s.run_id, s.model_version, s.fold_index, dict(s.best_iteration_by_horizon))
-        for s in runs_a
+        (s.run_id, s.model_version, s.fold_index, dict(s.best_iteration_by_horizon)) for s in runs_a
     ] == [
-        (s.run_id, s.model_version, s.fold_index, dict(s.best_iteration_by_horizon))
-        for s in runs_b
+        (s.run_id, s.model_version, s.fold_index, dict(s.best_iteration_by_horizon)) for s in runs_b
     ]
 
 

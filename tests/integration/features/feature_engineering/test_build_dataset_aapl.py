@@ -161,9 +161,7 @@ def test_full_pipeline_against_bronze_if_available(tmp_path: Path) -> None:
     # procuração do extra `sentiment` deixaria a guarda sempre verde — e o
     # `_LazyFinbertSentimentModel` estouraria `ImportError` no meio do pipeline,
     # onde o desenho quer um skip limpo.
-    pytest.importorskip(
-        "transformers", reason="extra `sentiment` ausente — pula pipeline real"
-    )
+    pytest.importorskip("transformers", reason="extra `sentiment` ausente — pula pipeline real")
 
     bronze_candle = Path("data") / "bronze" / "candle"
     if not bronze_candle.exists() or not any(bronze_candle.rglob("*.parquet")):

@@ -40,12 +40,8 @@ def test_order_within_split_is_irrelevant() -> None:
     hasher = CanonicalJsonHasher()
     shuffled_train = ["2020-01-03", "2020-01-01", "2020-01-02"]
 
-    ordered = SplitFingerprint.compute(
-        hasher=hasher, train=_TRAIN, val=_VAL, test=_TEST
-    )
-    shuffled = SplitFingerprint.compute(
-        hasher=hasher, train=shuffled_train, val=_VAL, test=_TEST
-    )
+    ordered = SplitFingerprint.compute(hasher=hasher, train=_TRAIN, val=_VAL, test=_TEST)
+    shuffled = SplitFingerprint.compute(hasher=hasher, train=shuffled_train, val=_VAL, test=_TEST)
 
     assert ordered == shuffled
 
@@ -57,9 +53,7 @@ def test_content_of_split_matters() -> None:
     different_train = ["2020-01-01", "2020-01-02", "2020-01-99"]
 
     base = SplitFingerprint.compute(hasher=hasher, train=_TRAIN, val=_VAL, test=_TEST)
-    changed = SplitFingerprint.compute(
-        hasher=hasher, train=different_train, val=_VAL, test=_TEST
-    )
+    changed = SplitFingerprint.compute(hasher=hasher, train=different_train, val=_VAL, test=_TEST)
 
     assert base != changed
 
@@ -124,9 +118,7 @@ def test_three_way_fingerprint_is_byte_identical_to_pre_calib_value() -> None:
     golden é o hash de produção (a trava byte-a-byte do esquema canônico em si
     vive em `tests/contract/shared/test_hasher_golden.py`).
     """
-    frozen_pre_calib = (
-        "f51e6aae8a9690cd0dca5884233cee073d90bb0811aaddb09e135e7e23edd894"
-    )
+    frozen_pre_calib = "f51e6aae8a9690cd0dca5884233cee073d90bb0811aaddb09e135e7e23edd894"
 
     three_way = SplitFingerprint.compute(
         hasher=CanonicalJsonHasher(), train=_TRAIN, val=_VAL, test=_TEST
@@ -170,9 +162,7 @@ def test_calib_content_matters() -> None:
     hasher = CanonicalJsonHasher()
     other_calib = ["2020-02-20", "2020-02-25"]
 
-    base = SplitFingerprint.compute(
-        hasher=hasher, train=_TRAIN, val=_VAL, test=_TEST, calib=_CALIB
-    )
+    base = SplitFingerprint.compute(hasher=hasher, train=_TRAIN, val=_VAL, test=_TEST, calib=_CALIB)
     changed = SplitFingerprint.compute(
         hasher=hasher, train=_TRAIN, val=_VAL, test=_TEST, calib=other_calib
     )

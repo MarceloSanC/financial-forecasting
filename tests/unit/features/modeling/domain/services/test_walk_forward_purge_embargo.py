@@ -95,9 +95,7 @@ def test_test_blocks_tile_the_tail() -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize(("max_horizon", "embargo"), [(1, 0), (2, 1), (3, 2)])
-def test_purge_embargo_gap_equals_max_horizon_plus_embargo(
-    max_horizon: int, embargo: int
-) -> None:
+def test_purge_embargo_gap_equals_max_horizon_plus_embargo(max_horizon: int, embargo: int) -> None:
     """I3/I4: entre blocos há exatamente max_horizon+embargo sessões excluídas.
 
     Falha se a purga não escalar com max_horizon (mutação: purga fixa) ou se o

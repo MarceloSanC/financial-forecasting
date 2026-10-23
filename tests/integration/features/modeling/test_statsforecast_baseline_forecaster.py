@@ -230,10 +230,7 @@ def test_c4_seam_is_monkeypatchable(monkeypatch: pytest.MonkeyPatch) -> None:
 
 # -- I7: dispatch exaustivo ------------------------------------------------------
 
-_SPECS = {
-    spec.family: spec
-    for spec in BaselineSpec.canonical_five(historical_quantiles_window=20)
-}
+_SPECS = {spec.family: spec for spec in BaselineSpec.canonical_five(historical_quantiles_window=20)}
 
 
 @pytest.mark.parametrize("family", BASELINE_FAMILIES)

@@ -146,7 +146,7 @@ def matches_pattern(import_str: str, pattern: str) -> bool:
     prefix, suffix = parts
     if not import_str.startswith(prefix):
         return False
-    remaining = import_str[len(prefix):]
+    remaining = import_str[len(prefix) :]
     # O sufixo deve aparecer em algum ponto após o prefixo
     return suffix == "" or suffix in remaining
 
@@ -351,9 +351,7 @@ def check_feature_structure(features_root: Path) -> list[str]:
 
 def main() -> int:
     """Executa todas as verificações e reporta os resultados."""
-    parser = argparse.ArgumentParser(
-        description="Valida a estrutura de arquitetura do projeto"
-    )
+    parser = argparse.ArgumentParser(description="Valida a estrutura de arquitetura do projeto")
     parser.add_argument(
         "--src",
         default="src/financial_forecasting",

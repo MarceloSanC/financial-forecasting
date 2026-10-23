@@ -18,9 +18,7 @@ _MAX_HORIZON = 7
 @pytest.mark.unit
 def test_construct_valid_scope() -> None:
     """Cohort válido preserva os campos; cohort_id default é None."""
-    scope = ScopeSpec(
-        asset_id="AAPL", feature_set_name="tft_v1", max_horizon=_MAX_HORIZON
-    )
+    scope = ScopeSpec(asset_id="AAPL", feature_set_name="tft_v1", max_horizon=_MAX_HORIZON)
 
     assert scope.asset_id == "AAPL"
     assert scope.feature_set_name == "tft_v1"

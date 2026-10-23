@@ -98,9 +98,7 @@ class FakeMedallionStore:
 
     # -- semeadura read-only (fora do port) -----------------------------------
 
-    def seed_read_only(
-        self, *, layer: str, table: str, asset: str, rows: Sequence[Row]
-    ) -> None:
+    def seed_read_only(self, *, layer: str, table: str, asset: str, rows: Sequence[Row]) -> None:
         """Semeia um par read-only in-memory (análogo a gravar o Parquet da 3.5).
 
         NÃO faz parte do port `MedallionStore` — existe para os testes popularem

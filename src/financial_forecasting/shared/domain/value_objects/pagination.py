@@ -28,8 +28,7 @@ class Pagination:
             raise ValueError(f"page deve ser >= 1, recebido: {self.page}")
         if not (1 <= self.page_size <= MAX_PAGE_SIZE):
             raise ValueError(
-                f"page_size deve estar entre 1 e {MAX_PAGE_SIZE}, "
-                f"recebido: {self.page_size}"
+                f"page_size deve estar entre 1 e {MAX_PAGE_SIZE}, recebido: {self.page_size}"
             )
 
     @property

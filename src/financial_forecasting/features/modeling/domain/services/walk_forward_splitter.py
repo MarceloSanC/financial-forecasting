@@ -132,9 +132,7 @@ class WalkForwardSplitter:
             self._assert_trading_day_gap(early_stop[-1], calib[0], gap)
             self._assert_trading_day_gap(calib[-1], test[0], gap)
 
-            folds.append(
-                self._build_fold(fold_index, train, early_stop, calib, test, hasher)
-            )
+            folds.append(self._build_fold(fold_index, train, early_stop, calib, test, hasher))
 
         return tuple(folds)
 
@@ -166,9 +164,7 @@ class WalkForwardSplitter:
         previous: date | None = None
         for current in grid:
             if not self._calendar.is_session(current):
-                raise ValueError(
-                    f"grid contains a non-trading day: {current.isoformat()}"
-                )
+                raise ValueError(f"grid contains a non-trading day: {current.isoformat()}")
             if previous is not None:
                 if current <= previous:
                     raise ValueError(
@@ -183,13 +179,9 @@ class WalkForwardSplitter:
                     )
             previous = current
 
-    def _assert_trading_day_gap(
-        self, earlier: date, later: date, gap: int
-    ) -> None:
+    def _assert_trading_day_gap(self, earlier: date, later: date, gap: int) -> None:
         """Confere que `later` está `gap + 1` sessões à frente de `earlier`."""
-        expected = self._calendar.shift_trading_days(
-            earlier, gap + 1, direction="forward"
-        )
+        expected = self._calendar.shift_trading_days(earlier, gap + 1, direction="forward")
         # Asserção autoritativa da purga em dias de pregão. O ramo de erro é
         # inalcançável dado o invariante de contiguidade validado em `_validate_grid`
         # (índice == dia de pregão), mas mantê-lo blinda contra regressões futuras.

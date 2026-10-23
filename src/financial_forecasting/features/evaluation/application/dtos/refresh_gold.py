@@ -1020,8 +1020,7 @@ def _check_h3_method(name: str, method: str, report: object, differentials: obje
             )
         if differentials.method != method:
             raise ValueError(
-                f"{name}_differentials must be the {method} series, got "
-                f"{differentials.method!r}"
+                f"{name}_differentials must be the {method} series, got {differentials.method!r}"
             )
 
 

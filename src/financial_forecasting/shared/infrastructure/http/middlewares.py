@@ -19,7 +19,7 @@ def register_middlewares(app: FastAPI) -> None:
     # CORS — em produção, substitua allow_origins=["*"] pela lista de domínios reais
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],        # FIXME: restringir em produção
+        allow_origins=["*"],  # FIXME: restringir em produção
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

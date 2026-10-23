@@ -43,6 +43,4 @@ class ScopeSpec:
         if not self.feature_set_name:
             raise ValueError("ScopeSpec.feature_set_name must be a non-empty string")
         if self.max_horizon < 1:
-            raise ValueError(
-                f"ScopeSpec.max_horizon must be >= 1; got {self.max_horizon}"
-            )
+            raise ValueError(f"ScopeSpec.max_horizon must be >= 1; got {self.max_horizon}")
