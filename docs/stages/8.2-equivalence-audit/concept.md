@@ -3,7 +3,7 @@ title: Concept — Stage 8.2 — Reprodução da corrida confirmatória e equiva
 description: (i) reprodução bit a bit da geração julgada da 8.1 no commit dela (060537fc), a partir do backup de entrada restaurado num data_root descartável, com RefreshGold e BuildConfirmatoryScorecard direto e comparação por classe contra a cópia julgada; (ii) auditoria interna de equivalência com a evidência anterior congelada por hash, na interseção comum, com tolerância numérica no alvo e no código de métrica e tolerância de sentido nos números do modelo, por um andaime fora do src/ e um teste opt-in fora do CI
 when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; antes de rodar a reprodução ou ler qualquer valor da evidência anterior; ao consumir a cópia julgada na 8.3; ao questionar por que a reprodução roda em 060537fc e não no HEAD, por que não passa pelo RunConfirmatoryEvaluation, ou por que o teste de equivalência pula no CI
 keywords: [concept, reproduction, equivalence, evaluation, judged-generation, bit-identical, r-bit, r-bit-commit, eq-hash, eq-inter, eq-must, eq-desc, eq-expl, eq-andaime, prior-evidence, oracle, scaffold, result-layer]
-status: draft
+status: done
 created_at: 2026-10-23
 updated_at: 2026-10-23
 stage_id: 8.2-equivalence-audit
@@ -46,9 +46,12 @@ depends_on: [8.1-confirmatory-run]
 - **Comparador puro** `compare_reproduction` (application do evaluation) e o
   DTO `ReproductionComparison`, com ponto de entrada só-leitura no CLI
   (`audit-reproduction`).
-- **Registro R-BIT-COMMIT** do diff `060537fc..HEAD` em `src/`: arquivos
-  tocados e igualdade de AST **sem docstrings** por arquivo (confirmação
-  de que o HEAD tem o mesmo caminho de cálculo; não substitui a reprodução em
+- **Registro R-BIT-COMMIT** do diff `060537fc..64b8a17d` em `src/` (`64b8a17d` =
+  merge-base com `origin/develop` no início da Stage, base fixa): arquivos
+  tocados e igualdade de AST **sem docstrings** por arquivo; os acréscimos da
+  própria 8.2 (`64b8a17d..HEAD`) vão numa lista separada, cada arquivo
+  justificado como fora do caminho de refresh/scorecard (confirmação de que o
+  código da base tem o mesmo caminho de cálculo; não substitui a reprodução em
   `060537fc`).
 - **(ii) Equivalência interna** com a evidência anterior (só no repositório;
   o TCC não a menciona — P-EDIT):
@@ -212,8 +215,25 @@ caminho de cálculo; a imagem da corrida segue presente localmente.
   `EvaluationEnvironment` montada em `060537fc`. Recusa `data_root` sob
   `data/cohorts/` ou com `gold/`/`reproduction/` pré-existente. Usa só APIs
   idênticas em `060537fc` e no HEAD (o diff de `src/` é só formatação), o que
-  permite um **smoke test** barato no HEAD com dependências falsas (ordem
-  refresh → scorecard, bytes gravados, recusas).
+  permite um **smoke test** barato no HEAD com dependências falsas — prova só
+  a lógica do driver (ordem refresh → scorecard, bytes gravados, recusas), não
+  o wiring de `060537fc`; por isso o driver tem o modo `--check`, executado
+  **em `060537fc`** como pré-voo da reprodução: monta o wiring e tira a foto
+  do ambiente, sem refresh.
+  **Foto do ambiente — mesmo produtor da linha `started` (Checkpoint A r2, N1).**
+  Em `060537fc` o `GitEvaluationEnvironment` só é montado dentro da closure
+  `run_confirmatory_evaluation_for` do composition root (com
+  `_torch_cpu_capability` privada e `CODE_KEYS`/`DIRTY_KEY` do modeling). O
+  driver usa exatamente esse produtor:
+  `deps.run_confirmatory_evaluation_for(cohort, device)._environment.snapshot()`
+  — acesso a atributo privado **declarado e justificado**: é o único caminho
+  que dá, sem código novo em `060537fc`, a mesma foto que a 8.1 gravou; o
+  use case montado não é chamado. Parâmetros fixos: `cohort` =
+  `config/cohorts/aapl_confirmatory.toml`, `device` = `cpu`, `IMAGE_ID` = id
+  da imagem por variável de ambiente (sem ele, `MissingImageIdError`), cwd =
+  `/app` (o `repo_root` tem de ser o `git rev-parse --show-toplevel`), e
+  `GIT_DIR`/`GIT_WORK_TREE` explícitos (o `.git` de uma worktree aponta para
+  caminho do host). A foto é tirada **antes** do refresh, como na 8.1.
 - **Subcomando `audit-reproduction`** (`adapters/in/cli`): `--judged-data-root`,
   `--reproduced-data-root`, `--preregistration`, `--revision`,
   `--preregistration-ref`; sem lock, só leitura nas duas raízes; recusa as duas
@@ -319,8 +339,8 @@ fica limpo sem depender de um argumento sobre o diff. ADR
 ### D2 — Destino separado sem a orquestração da 8.1
 ```
 [decision:E] D2 — como re-executar em destino separado
-Escolha: copiar o backup de entrada para um data_root descartável (fora de data/cohorts/), conferir com sha256sum -c a listagem cujo sha256 está no .judged.toml, e rodar o driver scripts/reproduce_judged_generation.py (versionado no HEAD, montado em /driver/) contra a árvore de 060537fc montada como /app: wire_dependencies(Settings(data_root=<descartável>)) → resolve_judged_revision → refresh_gold(refresh_command_from(plan, ref)) → build_confirmatory_scorecard, gravando document_bytes(scorecard.as_mapping()) e a foto do EvaluationEnvironment em <descartável>/reproduction/; o audit-reproduction do HEAD só lê esses arquivos e a geração (nunca recalcula); sem RunConfirmatoryEvaluation, sem infer, sem judged/, sem ATTEMPTS.jsonl, sem tag nem comentário; o roadmap passa a consumir RefreshGold + BuildConfirmatoryScorecard em vez de RunConfirmatoryEvaluation · Alternativas: RunConfirmatoryEvaluation sobre o descartável; reproduzir na partição viva; restaurar o backup sobre data/cohorts/aapl; recalcular o scorecard no HEAD a partir da geração reproduzida (contradiz D1); subcomando novo do CLI (não existe em 060537fc); driver dentro de src/ ou da árvore montada (suja o probe)
-Base: CLI de 060537fc sem subcomando de refresh nem de scorecard e scorecard só em memória fora do RunConfirmatoryEvaluation (Checkpoint A, CA-1); ApplicationDependencies expõe refresh_gold e build_confirmatory_scorecard; o probe marca dirty qualquer arquivo novo sob a árvore (git_runtime_environment_probe.py); ADR 6.5.0003 item 4 (o primeiro refresh confirmatório é, por definição, o da 8.1); ADR 8.1.0004 (um julgamento por partição; o .judged.toml commitado é verdade cruzada — no HEAD o G4 recusa um data_root sem a cópia; em 060537fc, sem o registro, selaria um segundo judged/); ADR 6.4.0005 itens 4–5 (o refresh troca current/); doc §4.1, §4.6, R-PRESERVA; ADR 8.1.0003 item 6b (o backup é a entrada congelada da 8.2); concept 8.1 §14 ("os dois já recebem o store por injeção"); composition_root.py (ParquetGoldStore(cfg.data_root), RefreshGold e confirmatory_wiring sobre o mesmo data_root)
+Escolha: copiar o backup de entrada para um data_root descartável (fora de data/cohorts/), conferir com sha256sum -c a listagem cujo sha256 está no .judged.toml, e rodar o driver scripts/reproduce_judged_generation.py (versionado no HEAD, montado em /driver/) contra a árvore de 060537fc montada como /app: wire_dependencies(Settings(data_root=<descartável>)) → resolve_judged_revision → refresh_gold(refresh_command_from(plan, ref)) → build_confirmatory_scorecard, gravando document_bytes(scorecard.as_mapping()) e a foto do EvaluationEnvironment em <descartável>/reproduction/; o audit-reproduction do HEAD só lê esses arquivos e a geração (nunca recalcula); sem RunConfirmatoryEvaluation, sem infer, sem judged/, sem ATTEMPTS.jsonl, sem tag nem comentário; o roadmap passa a consumir RefreshGold + BuildConfirmatoryScorecard em vez de RunConfirmatoryEvaluation · Alternativas: RunConfirmatoryEvaluation sobre o descartável; reproduzir na partição viva; restaurar o backup sobre data/cohorts/aapl; recalcular o scorecard no HEAD a partir da geração reproduzida (contradiz D1); subcomando novo do CLI (não existe em 060537fc); driver dentro de src/ (sujaria o probe) ou copiado para a árvore montada (mistura o driver ao código julgado)
+Base: CLI de 060537fc sem subcomando de refresh nem de scorecard e scorecard só em memória fora do RunConfirmatoryEvaluation (Checkpoint A, CA-1); ApplicationDependencies expõe refresh_gold e build_confirmatory_scorecard; montar o driver em /driver/ é escolha de isolamento (a árvore de 060537fc fica intocada), não necessidade — o probe só marca dirty por git status em src/, uv.lock e o arquivo do cohort (git_runtime_environment_probe.py); ADR 6.5.0003 item 4 (o primeiro refresh confirmatório é, por definição, o da 8.1); ADR 8.1.0004 (um julgamento por partição; o .judged.toml commitado é verdade cruzada — no HEAD o G4 recusa um data_root sem a cópia; em 060537fc, sem o registro, selaria um segundo judged/); ADR 6.4.0005 itens 4–5 (o refresh troca current/); doc §4.1, §4.6, R-PRESERVA; ADR 8.1.0003 item 6b (o backup é a entrada congelada da 8.2); concept 8.1 §14 ("os dois já recebem o store por injeção"); composition_root.py (ParquetGoldStore(cfg.data_root), RefreshGold e confirmatory_wiring sobre o mesmo data_root)
 Verificado: leitura do código e dos ADRs nesta sessão
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
 ```
@@ -456,7 +476,9 @@ horizonte ou baseline; ela não entra em nenhuma decisão deste concept. Isto
   `timestamp: timestamp[ns, tz=UTC]`); nenhuma tabela do gold julgado guarda
   o realizado por ponto. Os dois lados gravam `double` — o caminho float32
   não se aplica ao alvo; o risco remanescente é de **definição** (como o
-  realizado de h=7 é formado a partir da série diária) — §10 e D13.
+  realizado de h=7 é formado a partir da série diária) — §10 e D13. O
+  andaime obtém y_novo pelo `ReadTrainingGrid` do código novo sobre o
+  backup restaurado (o gold não guarda o realizado por ponto).
 - **D-M5 — Interseção (só datas, amostra de 2023):** h=1, 249 das 250 datas
   do anterior presentes no novo; h=7, 243 de 250. A interseção exata (T∩ por
   horizonte) e o motivo do h=7 menor são da Fase 4.
@@ -534,6 +556,7 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
 | Definição dos baselines anteriores não recuperável | M | M | ficam fora do "modelo comum" e entram só em A2 (EQ-INTER item 1); registrado |
 | Interseção h=7 menor que h=1 por definição diferente de `target_timestamp` | M | M | diagnosticar pelo calendário na Fase 4; se for definição do alvo, A1 o mostra |
 | A1 falhar por definição do realizado de h=7 (D-M6: os dois lados `double`, o risco é de definição, não de precisão) | M | M | critério e diagnóstico pré-declarados em D13; a comparação de modelo daquele horizonte para e a divergência é registrada com a categoria "alvo"; a regra não é afrouxada (seria desvio) |
+| `env.platform` inclui o kernel do WSL (`6.18.54.1-microsoft-standard-WSL2`); uma atualização do WSL quebra a igualdade da foto | M | M | diagnóstico de **ambiente**, não de código: `[finding]`, sem rodar como R-BIT; registrar a versão do kernel antes da Fase 4 e não atualizar o WSL até a reprodução |
 | Driver da reprodução divergir do código de `060537fc` | B | A | só wiring, por APIs idênticas nos dois commits; smoke test no HEAD; roda com a árvore de `060537fc` em `/app` |
 | Tempo (~14 min de refresh; `h3` 625 s) e memória da reprodução | M | B | mesmos limites da 8.1; nada concorrente no Docker durante a corrida |
 | O CI passar a buscar o oráculo | B | B | skip por variável de ambiente ausente; o teste nunca procura caminho padrão |
@@ -562,8 +585,10 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
   número de valores comparados, zero diferentes e max |Δ| = 0 (contagem de
   diferentes para R1 não numérico) **reportados** em
   `docs/reports/reproduction_audit.md`; scorecard igual sem proveniência.
-- [ ] **A3b — Driver testado.** Smoke test do driver no HEAD com dependências
-  falsas: chama refresh e depois scorecard, grava os bytes de
+- [ ] **A3b — Driver testado.** `--check` do driver executado em `060537fc`
+  (wiring + foto do ambiente, sem refresh) verde antes da reprodução; smoke
+  test do driver no HEAD com dependências falsas (prova a lógica do driver,
+  não o wiring de `060537fc`): chama refresh e depois scorecard, grava os bytes de
   `document_bytes(...)` no caminho fixo, recusa `data_root` sob
   `data/cohorts/` ou com `gold/`/`reproduction/` pré-existente; pré-checagem
   de refresh sintético em dois processos com `PYTHONHASHSEED` diferentes
@@ -583,9 +608,12 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
   `bit_identical = false`; teste de completude: toda coluna de todo
   `GoldTableSchema` tem classe em `REPRODUCTION_CLASSES`.
 - [ ] **A7 — R-BIT-COMMIT registrado.** Lista dos arquivos de `src/` do diff
-  `060537fc..HEAD` e, por arquivo, igualdade de `ast.dump` com docstrings
-  removidos (Python 3.12 do container), no relatório de reprodução, com a
-  declaração de que o claim é o da execução em `060537fc`.
+  `060537fc..64b8a17d` (base fixa) e, por arquivo, igualdade de `ast.dump` com
+  docstrings removidos (Python 3.12 do container); lista separada dos
+  arquivos de `src/` tocados pela própria 8.2 (`64b8a17d..HEAD`), cada um
+  justificado como fora do caminho de refresh/scorecard; tudo no relatório
+  de reprodução, com a declaração de que o claim é o da execução em
+  `060537fc`.
 - [ ] **A8 — Claim declarado.** O relatório de reprodução afirma (a), cita (b)
   da 7.1 e declara que (c) não foi executada (D4).
 - [ ] **A9 — EQ-MUST A1 (D13).** Por horizonte, T∩ reportado; todo ponto de
@@ -605,7 +633,8 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
   nominal do PICP 80 % (banda de Wilson 95 % do lado novo) de m_novo e de
   m_A; (2) por baseline comum (tabela vazia registrada se não houver) — sinal
   de (candidato − baseline) na pinball de cada nível comum, dentro de cada
-  lado, e DM (sinal de d̄ normalizado e rejeição — D8); igual/divergente por
+  lado, o lado anterior por m_A em T∩ (doc §5.5), e DM — só o reportado
+  por cada lado, sem m_A — (sinal de d̄ normalizado e rejeição — D8); igual/divergente por
   célula; toda divergência de sentido com a categoria aplicável pela tabela
   da §5.6 e (a)(b)(c) verificados, ou `[finding]` não explicado.
 - [ ] **A12 — Relatório de equivalência.** `docs/reports/equivalence_audit.md`
@@ -680,6 +709,10 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
 | DT-7 | corrigido — D6, A13, ADR 8.2.0003 itens 5–6 |
 | DT-8 | corrigido — §4 (`REPRODUCTION_CLASSES` completo, max \|Δ\| só numérico, `expected_result_digest`), A6, ADR 8.2.0002 |
 | DT-9 | corrigido — I5, A3b |
+| N1 (r2) | corrigido — foto pelo mesmo produtor da `started` (closure `run_confirmatory_evaluation_for`, acesso privado justificado), parâmetros fixos, risco do kernel WSL em §10 |
+| N2 (r2) | corrigido — R-BIT-COMMIT até a base fixa + lista dos acréscimos da 8.2; `--check` em `060537fc`; escopo do smoke test declarado |
+| N3 (r2) | corrigido — justificativa do `/driver` em D2 |
+| N4 (r2) | corrigido — y_novo pelo `ReadTrainingGrid` (D-M6) |
 | DT-10 | corrigido — premissa em §3 (o `RefreshGold` não recebe `JsonInferenceManifest`); reconferência no technical |
 
 ## 14. O que fica para a 8.3
