@@ -250,28 +250,43 @@ def _model_predictions(
                     "value": row["value_guardrail"],  # NEW_SCORED_VARIANT
                 }
             )
-    check_silver_units(accumulator.result(), consumed, partition)
+    check_silver_units(accumulator.result(), consumed, partition, frozenset(by_id))
     return points
 
 
+def _fact_unit_run(key: str) -> str:
+    """O `run_id` de uma unidade `fact_oos_predictions|<run_id>|<year>`."""
+    return key.removeprefix(f"{_FACT}|").rsplit("|", 1)[0]
+
+
 def check_silver_units(
-    read: SilverContent, consumed: SilverContent, partition: GoldPartition
+    read: SilverContent,
+    consumed: SilverContent,
+    partition: GoldPartition,
+    run_ids: frozenset[str],
 ) -> None:
-    """As unidades de `dim_run` do cohort e de `fact_oos_predictions` lidas = as consumidas.
+    """As unidades de `dim_run` do cohort e de `fact_oos_predictions` dos runs do cohort
+    (`run_ids`, os que o `_model_predictions` lê) = as consumidas.
+
+    O lado lido entra inteiro; o lado julgado só com as unidades do cohort: o `silver_content`
+    da cópia também traz as da ablação (`dim_run|<ablação>` e as `fact_oos_predictions` dos
+    seus runs), que o andaime não lê e não confere.
 
     Raises:
-        OfficialSilverMismatchError: unidade ausente, a mais ou com outro digest.
+        OfficialSilverMismatchError: unidade do cohort ausente, a mais ou com outro digest.
     """
+    dim_run = f"{_DIM_RUN}|{partition.parent_sweep_id}"
 
-    def ours(units: Mapping[str, str]) -> dict[str, str]:
-        dim_run = f"{_DIM_RUN}|{partition.parent_sweep_id}"
+    def ours(units: Mapping[str, str], *, cohort_only: bool) -> dict[str, str]:
         return {
             key: value
             for key, value in units.items()
-            if key == dim_run or key.startswith(f"{_FACT}|")
+            if key == dim_run
+            or (key.startswith(f"{_FACT}|") and (not cohort_only or _fact_unit_run(key) in run_ids))
         }
 
-    got, expected = ours(read.units), ours(consumed.units)
+    got = ours(read.units, cohort_only=False)
+    expected = ours(consumed.units, cohort_only=True)
     if got != expected:
         differing = sorted(k for k in set(got) | set(expected) if got.get(k) != expected.get(k))
         raise OfficialSilverMismatchError(

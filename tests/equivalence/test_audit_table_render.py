@@ -512,8 +512,11 @@ def test_check_silver_units_compares_dim_run_and_fact_units() -> None:
         "dim_run|sweep-01": "a" * 64,
         "dim_run|ablation": "b" * 64,  # outra unidade do refresh: não é conferida aqui
         "fact_oos_predictions|run-a|2024": "c" * 64,
+        "fact_oos_predictions|abl-1|2023": "7" * 64,  # run da ablação: não lido, não conferido
+        "fact_oos_predictions|abl-1|2024": "8" * 64,
         "realized|AAPL": "d" * 64,
     }
+    cohort = frozenset({"run-a"})
     judged = SilverContent(digest="e" * 64, tables={"dim_run": "f" * 64}, units=units)
     read = SilverContent(
         digest="0" * 64,
@@ -525,15 +528,16 @@ def test_check_silver_units_compares_dim_run_and_fact_units() -> None:
         },
     )
 
-    check_silver_units(read, judged, partition)
+    check_silver_units(read, judged, partition, cohort)
     for changed in (
         {**read.units, "fact_oos_predictions|run-a|2024": "9" * 64},
         {**read.units, "fact_oos_predictions|run-b|2024": "9" * 64},
+        {**read.units, "fact_oos_predictions|abl-1|2024": "8" * 64},  # leu a ablação: a mais
         {"dim_run|sweep-01": "a" * 64},
     ):
         other = SilverContent(digest="0" * 64, tables={"dim_run": "1" * 64}, units=changed)
         with pytest.raises(OfficialSilverMismatchError, match="differs from the judged copy"):
-            check_silver_units(other, judged, partition)
+            check_silver_units(other, judged, partition, cohort)
 
 
 def test_main_reads_the_roots_from_the_environment(
@@ -705,8 +709,24 @@ def test_official_predictions_are_checked_against_the_judged_silver() -> None:
         0.5,
         0.9,
     ]  # só o candidato, níveis comuns
-    tampered = dict(consumed.units)
-    tampered["fact_oos_predictions|r2|2024"] = "9" * 64
+    # a cópia julgada também traz as unidades da ablação (o `RefreshGold` as consome): passa
+    with_ablation = {
+        **consumed.units,
+        "dim_run|ablation-01": "6" * 64,
+        "fact_oos_predictions|abl-1|2023": "7" * 64,
+        "fact_oos_predictions|abl-1|2024": "8" * 64,
+    }
+    judged_ablation = SilverContent(
+        digest=consumed.digest, tables=consumed.tables, units=with_ablation
+    )
+    assert (
+        readers._model_predictions(  # type: ignore[arg-type]
+            silver, partition, frozenset({"tft_quantile"}), judged_ablation
+        )
+        == points
+    )
+    tampered = dict(with_ablation)
+    tampered["fact_oos_predictions|r2|2024"] = "9" * 64  # unidade do cohort adulterada
     judged = SilverContent(digest=consumed.digest, tables=consumed.tables, units=tampered)
     with pytest.raises(OfficialSilverMismatchError, match="fact_oos_predictions"):
         readers._model_predictions(silver, partition, frozenset({"tft_quantile"}), judged)  # type: ignore[arg-type]
