@@ -1490,4 +1490,22 @@ n T∩ vazio sem a sua linha: 1 failed, 23 passed, 1 warning in 7.75s
 ```
 **Razão:** cobertura in-scope do andaime antes do ponto 1 do plano de gates.
 
+### 2026-10-23 — [decision:C] semântica do T∩ vazio no andaime (escopo de A1, A10 e A11) — Claude (executor)
+**Contexto:** a rodada b mudou o que para A10/A11 num horizonte (`6cfbcf91`): antes, um T∩
+vazio caía no mesmo caminho do "A1 fora".
+**Decisão e escopo:**
+- **T∩ vazio = A1 não verificável, não "A1 fora".** O concept §6 ("Interseção de um
+  horizonte vazia | registrado; sem comparação numérica naquele horizonte (EQ-INTER item
+  4)") e o doc de domínio §5.3 item 4 ("Se a interseção de um horizonte for vazia, aquele
+  horizonte não tem comparação numérica — registrado, não contornado") pedem o registro, não
+  a categoria "alvo": A9 do horizonte = `empty_intersection`.
+- **A11 para** naquele horizonte com `A11/h<h>/stopped` = `empty_intersection`
+  (`not_compared:empty_intersection`): a comparação de modelo (m_novo × m_A) vive em T∩.
+- **A10 continua:** o A2 do doc §5.4 é "código novo aplicado às predições anteriores, na
+  mesma amostra que o anterior usou" contra o número anterior gravado — a amostra é a do run
+  anterior, com o y do próprio anterior; não depende de T∩ nem do realizado novo.
+- **A1 `out_of_tolerance`** (D13 intacto): a comparação de modelo daquele horizonte para e
+  as linhas A10/A11 do horizonte viram `not_compared:A1` (runbook E4 passo 2).
+**Razão:** reversível barato; ancorado no concept §6 e no doc §5.3 item 4 / §5.4.
+
 <!-- END: post-execution -->
