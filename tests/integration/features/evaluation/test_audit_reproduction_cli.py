@@ -12,6 +12,7 @@ Nenhum teste lê o cohort real.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import io
 import json
@@ -24,11 +25,16 @@ import pyarrow.parquet as pq
 import pytest
 
 from financial_forecasting import cli
+from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
+    ParquetGoldStore,
+)
 from financial_forecasting.features.evaluation.application.dtos.judged_generation import (
     GENERATION_DIR,
     SCORECARD_DOCUMENT,
+    AttemptPhase,
     document_bytes,
 )
+from financial_forecasting.features.evaluation.application.dtos.refresh_gold import GoldPartition
 from tests.integration.features.evaluation.test_build_confirmatory_scorecard import _ASSET
 from tests.integration.features.evaluation.test_conformal_refresh_end_to_end import _COHORT
 from tests.integration.features.evaluation.test_run_confirmatory_evaluation import (
@@ -218,3 +224,29 @@ def test_equal_roots_refused_exit_2(roots: _Roots) -> None:
     assert code == _EXIT_ERROR
     assert "error: EqualReproductionRootsError" in err
     assert out == ""
+
+
+def test_input_read_digest_other_than_both_sides_exit_1(roots: _Roots) -> None:
+    """Uma `input_read` posterior da mesma referência com outro `result_digest`: o esperado é o
+    da última linha, as duas gerações batem entre si mas não com ele → exit 1 (T2)."""
+    store = ParquetGoldStore(roots.judged)
+    partition = GoldPartition(_ASSET, _COHORT)
+    last = [a for a in store.attempts(partition=partition) if a.phase is AttemptPhase.INPUT_READ][
+        -1
+    ]
+    other = "ab" * 32
+    store.record_attempt(
+        partition=partition,
+        attempt=dataclasses.replace(
+            last, attempt_id=f"{last.attempt_id}-rerun", result_digest=other
+        ),
+    )
+
+    code, out, _ = roots.run()
+
+    lines = out.splitlines()
+    assert code == _EXIT_DIFFERENT
+    assert " bit_identical false " in lines[0]
+    assert _line(out, "result_digest ").endswith(f"expected {other}")
+    judged_digest = _line(out, "result_digest ").split()[2]
+    assert f"reproduced {judged_digest}" in _line(out, "result_digest ")  # os lados batem
