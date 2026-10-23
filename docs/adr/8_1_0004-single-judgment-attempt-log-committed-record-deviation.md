@@ -155,6 +155,39 @@ hand. This amendment replaces items 2e and 2b (the remaining items stand):
   of this revision with no attempt recorded. The started line still records
   its `silver_content` as provenance.
 
+### Amendment 2026-10-23 (2) — attempts that never wrote their input (Checkpoint C 8.1, final block)
+
+Two windows left the segment rule of the first amendment without a reference:
+
+- **A crash after E1 published and before the `input_read` line (CC6-1).** The
+  attempt's numbers exist in `current/` (I13), but nothing in the log records
+  them. So a second run without `--deviation` that produced another result was
+  sealed.
+- **A `--deviation` attempt that died before its `input_read` (CC6-2).** Its
+  `started` line opened a new segment with no input, so a later run without
+  `--deviation` sealed a result that had already diverged.
+
+Item 2b is completed as follows:
+
+- Each `started` line also records `prior_live_result_digest`, the
+  `result_layer_digest` of the live generation of this revision before E1. It
+  comes together with `prior_live_silver_content`, and both are null when there
+  is no such generation.
+- For every `started` line of the segment without an `input_read` line, the
+  reference adds a **witness** of what that attempt published. The witness is
+  the `prior_live_result_digest` of the next `started` line of the segment, or
+  the live generation (its result digest and its manifest's input) when no
+  later attempt exists. The result digest already covers the input, because
+  the manifest without its instants holds `silver_content` and
+  `dataset_fingerprint`. With no live generation there is no witness: the
+  attempt published nothing, or the data root lost it, which is the residual
+  already declared in item 3.
+- G4 refuses before any effect, without `--deviation`, when the references
+  already disagree: two inputs give `PriorAttemptInputChangedError`, and two
+  result digests give `PriorAttemptDivergenceError`.
+- A segment restarts only at a `started` line with a deviation whose attempt
+  reached its `input_read` line.
+
 ## Alternatives considered
 
 ### Alternative A — "Judged" starts at the seal (ADR 8.1.0001 as first written)
