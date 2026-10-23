@@ -1022,3 +1022,23 @@ def test_deviation_attempt_dying_before_input_read_does_not_reset_the_reference(
     sealed = world.judged.find(partition=world.partition, preregistration_ref=world.ref)
     assert sealed is not None
     assert sealed.documents[RUN_RECORD_DOCUMENT]["deviation"] == _DEVIATION
+
+
+def test_live_generation_differing_from_the_log_is_refused_in_g4() -> None:
+    """A geração viva entra na referência do G4: `current/` com outro resultado que o das
+    tentativas registradas recusa antes de qualquer efeito (o que a simplificação recusa a
+    mais: antes, sem tentativa sem `input_read`, a geração viva não era comparada)."""
+    world = _World()
+    world.judged.fail_writes = {CONTENTS_NAME}
+    with pytest.raises(OSError):
+        world.run()  # tentativa completa até o input_read, cai no E3
+    world.judged.fail_writes = set()
+    stored = world.stored()
+    assert stored.set_cell(GOLD_QUALITY_CHECKS.name, lambda _row: True, "detail", "by hand")
+    world.publish(stored.generation())  # `current/` trocado por fora do use case
+    before = world.effects()
+
+    with pytest.raises(PriorAttemptDivergenceError, match="already diverged"):
+        world.run()
+
+    assert world.effects() == before

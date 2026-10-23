@@ -19,21 +19,22 @@ confere igualdades de identidade e grava; **não calcula nenhum número** (I1). 
   (sem refresh, scorecard nem escrita); (c) tentativas de outra revisão →
   `JudgedGenerationExistsError`; (d) geração viva — de outra revisão →
   `JudgedGenerationExistsError`; desta sem tentativa registrada →
-  `JudgedGenerationTamperedError`; (e) sem `--deviation`, contra **o trecho desde o
-  último desvio** (as tentativas desta revisão a partir da última `started` com
-  `deviation`, ou todas se nenhuma tem): outro `code.*` → `PriorAttemptCodeChangedError`;
-  outro `env.*` → `PriorAttemptEnvironmentChangedError`; uma divergência já registrada no
-  trecho (`result_digest` diferentes entre si) → `PriorAttemptDivergenceError` — daí em
-  diante só com `--deviation`;
-- registro **write-ahead** da tentativa (`started`, com a foto e o `silver_content` da
-  geração viva desta revisão, se houver) → **E1** `refresh_gold(refresh_command_from(plan,
-  ref))` → registro `input_read` (a entrada lida e o `result_layer_digest` da geração
-  publicada: tabelas por valor e manifesto sem `started_at`/`finished_at`) →
-  conferências pós-E1, sem `--deviation` e contra **toda** tentativa do trecho: (i)
-  entrada diferente → `PriorAttemptInputChangedError`; (ii) resultado diferente →
-  `PriorAttemptDivergenceError` (falha do R-BIT; a linha `input_read` gravada antes da
-  recusa deixa a divergência registrada). A geração viva em `current/` não é a referência
-  da comparação (Checkpoint C 8.1 bloco 5, CC5-1..3);
+  `JudgedGenerationTamperedError`; (e) sem `--deviation`, contra **o trecho** (as linhas
+  desde a última `started` com desvio que chegou ao `input_read`, ou todas): outro
+  `code.*` → `PriorAttemptCodeChangedError`; outro `env.*` →
+  `PriorAttemptEnvironmentChangedError`; referências do trecho que já discordam →
+  `PriorAttemptInputChangedError` ou `PriorAttemptDivergenceError` (daí em diante só com
+  `--deviation`). As **referências** (`_references`) são toda linha `input_read` do
+  trecho, todo `prior_live_result_digest` não nulo das `started` do trecho exceto a
+  primeira e a geração viva atual;
+- registro **write-ahead** da tentativa (`started`, com a foto, o `silver_content` e o
+  `prior_live_result_digest` da geração viva desta revisão, se houver) → **E1**
+  `refresh_gold(refresh_command_from(plan, ref))` → registro `input_read` (a entrada lida
+  e o `result_layer_digest` da geração publicada: tabelas por valor e manifesto sem
+  `started_at`/`finished_at`) → conferências pós-E1, sem `--deviation`, contra toda
+  referência: (i) entrada diferente → `PriorAttemptInputChangedError`; (ii) resultado
+  diferente → `PriorAttemptDivergenceError` (falha do R-BIT; a linha `input_read` gravada
+  antes da recusa deixa a divergência registrada). ADR 8.1.0004 itens 2e e 2b;
 - **E2** scorecard, só com refresh `COMPLETED`; `manifest_read` tem de ser o manifesto
   publicado (`JudgedGenerationMismatchError`, I8);
 - **E3** `preserve(expected_manifest=result.manifest)` com o `run_record.json` e o JSON
@@ -180,34 +181,33 @@ class _Reference:
 def _references(
     segment: Sequence[JudgedAttempt], live: GoldGeneration | None, live_digest: str | None
 ) -> tuple[_Reference, ...]:
-    """As linhas `input_read` do trecho e, para cada `started` sem `input_read` (a
-    tentativa caiu depois de o E1 publicar e antes de gravar a entrada, CC6-1), a
-    testemunha do que ela publicou: o `prior_live_*` da `started` seguinte do trecho, ou a
-    geração viva atual se ela é a última."""
-    read = {a.attempt_id for a in segment if a.phase is AttemptPhase.INPUT_READ}
-    started = [a for a in segment if a.phase is AttemptPhase.STARTED]
+    """O que uma re-execução sem desvio tem de reproduzir (ADR 8.1.0004 item 2b).
+
+    Toda linha `input_read` do trecho; todo `prior_live_result_digest` não nulo das
+    `started` do trecho **exceto a primeira** (a que abre o trecho com desvio guarda a
+    geração anterior ao desvio) — a testemunha do que uma tentativa anterior publicou,
+    tenha ou não chegado ao `input_read` (CC6-1); e a geração viva atual.
+    """
     references = [
         _Reference(a.attempt_id, str(a.result_digest), a.silver_content, a.dataset_fingerprint)
         for a in segment
         if a.phase is AttemptPhase.INPUT_READ
     ]
-    for index, attempt in enumerate(started):
-        if attempt.attempt_id in read:
-            continue
-        later = started[index + 1 :]
-        if later:
-            witness = later[0].prior_live_result_digest
-            if witness is not None:
-                references.append(_Reference(f"live-before-{later[0].attempt_id}", witness))
-        elif live is not None and live_digest is not None:
-            references.append(
-                _Reference(
-                    "live",
-                    live_digest,
-                    live.manifest.silver_content,
-                    live.manifest.dataset_fingerprint.value,
-                )
+    started = [a for a in segment if a.phase is AttemptPhase.STARTED]
+    references += [
+        _Reference(f"live-before-{a.attempt_id}", a.prior_live_result_digest)
+        for a in started[1:]
+        if a.prior_live_result_digest is not None
+    ]
+    if live is not None and live_digest is not None:
+        references.append(
+            _Reference(
+                "live",
+                live_digest,
+                live.manifest.silver_content,
+                live.manifest.dataset_fingerprint.value,
             )
+        )
     return tuple(references)
 
 
