@@ -1404,4 +1404,40 @@ o `JudgedRecord.__post_init__` reescrevia "int não-`bool` ≥ 0" em vez de usar
 `validate_int_at_least(self.revision, minimum=0, field="judged revision")`. O T1 da Task 07
 não roda `tests/architecture/`; o ponto 1 do plano existe para isso.
 
+### 2026-10-23 — [finding] ponto 1 do plano de gates — 3 falhas do 2º `make check` (pureza dos unit e teste de memória da 7.3) — Claude (sessão Windows)
+**Contexto:** o `make check` após a Task 11 (`make-check-1b`, `-n 4 --dist loadgroup`) deu
+`3 failed, 8454 passed`, cobertura 99 %:
+1. `test_unit_evaluation_no_lib_or_adapter_import_unitpure`: `test_silver_content_accumulator.py`
+   (Task 03) e `test_refresh_gold_use_case.py` (Task 04) importavam o `CanonicalJsonHasher`
+   (`*.adapters.*`), proibido nos unit do slice. **Fix (`0fa4259`):** o
+   `FloatRefusingHasher`, dublê stdlib já usado nos unit de evaluation; ele ainda prova que
+   nenhum float cru chega ao hasher. O hasher real segue coberto em
+   `test_silver_content_refresh.py`.
+2. e 3. `test_h3_refresh_memory.py`: os dois testes chamam métodos privados do `RefreshGold`,
+   e a Task 04 acrescentou o parâmetro `consumed` sem atualizar o teste (`TypeError`). Com o
+   parâmetro passado, o probe parou num segundo defeito, do próprio teste: as linhas
+   geradas de `fact_permuted_predictions` levavam `split`, coluna que o schema das
+   permutadas não tem (`column not declared` no `SilverContentHash`). **Fix do teste:**
+   `_consumed(reader)` (acumulador real com `CanonicalJsonHasher`, incluído na medição) e
+   sem `split` nas permutadas. Limiar e geometria do teste ficaram iguais (contrato da 7.3).
+**Custo do hash dentro do `_h3`:** a unidade de um run de permutadas (~144 mil linhas)
+custava ~247 MiB transitórios (`tracemalloc`), porque o `json.dumps` materializava o texto
+inteiro do payload e depois a cópia UTF-8. **Fix (`ea119d4`):** o `CanonicalJsonHasher`
+hasheia em streaming (`iterencode`, blocos de ~1 Mi caracteres). Os bytes são os mesmos
+(golden inalterado; contract test novo com payload de vários blocos). Resultado: ~85 MiB.
+**Fix (`75374a5`):** caminho rápido dos tipos nativos no `SilverContentHash`, mesmo
+digest, de ~6,3 s para ~4,2 s por unidade.
+**Medição** (isolada, sem xdist, `--cpus 6 --memory 8g`, com outras sessões disputando CPU):
+
+| Runs do candidato | Pico acima da base (7.3) | Pico acima da base (agora) | Tempo do probe |
+|---|---|---|---|
+| 30 (S = 5) | 263 MiB | 372 MiB | 283 s |
+| 60 (S = 10) | 291 MiB | 399 MiB | 556 s |
+
+Inclinação: (399 − 372) / 30 = 0,88 MiB por run, dentro do orçamento de 2 MiB, e teto de
+512 MiB respeitado. O acréscimo de ~110 MiB é o hash da unidade em curso: transitório,
+igual em S = 5 e S = 10. O teste `slow` ficou ~4x mais longo (pelo hash de ~8,6 M linhas
+de permutadas). `pytest` isolado do arquivo: `2 passed`, 653 s (H3) e 292 s (ablação).
+O custo na escala real continua para o gate D11 (Task 17).
+
 <!-- END: post-execution -->
