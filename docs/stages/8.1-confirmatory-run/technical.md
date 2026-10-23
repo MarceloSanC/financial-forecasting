@@ -1618,4 +1618,17 @@ R2: `infer` avulso com `60 runs (60 strict, 0 tolerance); calib rows written 0, 
 - tipo: **replay (A15)** — esperado `ALREADY_JUDGED` com o mesmo digest e o mesmo corpo
 - `--break-stale-lock`: não; `--deviation`: não
 
+### 2026-10-23 — [measurement] etapa-r — intenção da tentativa 3 da corrida confirmatória — Claude (sessão Windows)
+**Contexto:** tentativa 2 com `REPLAY_OK`, `BODY_SAME`, `NO_NEW_EFFECT`; R7 `JUDGED_BACKUP_OK`;
+R8 `TAG_OK` e um comentário na #211; R9 `aapl_confirmatory-r3.judged.toml` commitado em
+`d632a28b` e lido pelo `TomlPreregistrationSource` real.
+**Tentativa 3:**
+- HEAD: o commit desta intenção (filho de `d632a28b`); código, imagem e entrada iguais aos da tentativa 1
+- `code.src` `4d2b2540a10f5cbb2f59164bba3262224d572d7b`; `code.uv_lock` `0f36050a0044db5f05ca9037e23c4425220cb82b`
+- `platform` `Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.41`; `cpu_capability` `AVX2`
+- `IMAGE_ID` `sha256:b69a7620e7bd8449369bde2f46e903c5f46c25e9efb3597f452af3272e0a8f45`
+- hora UTC da intenção: 2026-10-23T09:55Z; tempo esperado: `infer` ≈ 15 min, sem refresh
+- tipo: **pós-registro (A16)** — esperado `ALREADY_JUDGED` com o mesmo digest (G4 lê o `.judged.toml`)
+- `--break-stale-lock`: não; `--deviation`: não
+
 <!-- END: post-execution -->
