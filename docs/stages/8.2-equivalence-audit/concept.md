@@ -36,7 +36,10 @@ depends_on: [8.1-confirmatory-run]
   mesmo ambiente (imagem `sha256:b69a7620…`, `--cpus 6 --memory 8g`), a
   partir do backup de entrada `data/backups/aapl-pre-8.1-20261023-084758`
   restaurado num `data_root` **descartável**, e comparar com a cópia julgada,
-  por classe (R1/R2/R3), com max |Δ| reportado também quando passa.
+  por classe (R1/R2/R3), com max |Δ| reportado também quando passa. O cálculo
+  inteiro — refresh **e** scorecard — roda no código de `060537fc`, por um
+  **driver** versionado no HEAD fora de `src/` (`scripts/reproduce_judged_generation.py`),
+  montado à parte no container; o HEAD só compara, nunca recalcula.
 - **Leitor da cópia julgada** como `GoldGeneration` (método novo do port
   `JudgedGenerationStore`), com a mesma verificação de integridade do `find`
   — consumido pela comparação e, depois, pela 8.3.
@@ -67,7 +70,8 @@ depends_on: [8.1-confirmatory-run]
   ambiente (Windows/Docker CPU; a máquina Linux saiu). Não é executada e o
   claim (c) da §4.7 **não** é afirmado ("só é afirmado se tiver sido de fato
   executado"). O comparador reporta por classe, mas não implementa a
-  tolerância R2 com u_q (sem consumidor).
+  tolerância R2 com u_q (sem consumidor em `src/`; a tolerância R2 de A2 é do
+  andaime — D12).
 - **Re-treino, re-inferência e re-julgamento:** nada de `infer`,
   `RunConfirmatoryEvaluation`, `judged/` novo, `ATTEMPTS.jsonl`, tag ou
   comentário. A reprodução das predições a partir dos checkpoints é da 7.1
@@ -137,6 +141,13 @@ caminho de cálculo; a imagem da corrida segue presente localmente.
   está no `.judged.toml`) — conferido na Fase 4 antes de restaurar.
 - A evidência anterior em `data/analytics/` do checkout principal é a mesma
   medida na §7 (sha256 de D-M1) até o commit do registro.
+- **Backup ≠ partição viva byte a byte só em `inference/<cohort>/manifest.json`**
+  (o `infer` da 8.1 o regravou depois do backup; Checkpoint A, DT-10). O
+  `RefreshGold` não o lê: seus colaboradores no composition root são o
+  repositório silver, o `ReadTrainingGrid`, o clock, o MCS, o gold store, os
+  builders, o `CalibrateConformal` e o hasher (`composition_root.py`,
+  montagem do `RefreshGold`) — sem `JsonInferenceManifest`. O technical
+  reconfere em `060537fc`.
 
 ### Dependências
 - `8.1-confirmatory-run` (`done`): geração julgada preservada, `silver_content`
@@ -171,21 +182,46 @@ caminho de cálculo; a imagem da corrida segue presente localmente.
   def compare_reproduction(
       *, judged: GoldGeneration, judged_scorecard: Mapping[str, object],
       reproduced: GoldGeneration, reproduced_scorecard: Mapping[str, object],
+      expected_result_digest: str,
   ) -> ReproductionComparison: ...
   ```
-  Classe por coluna por um mapa declarado (`REPRODUCTION_CLASSES`): não-float
-  (contagens, decisões, rótulos, timestamps) → R1; float que depende de
-  número aleatório (p-valores do MCS e da sensibilidade de bloco, p-valores de
-  Monte Carlo do Christoffersen, limites bootstrap de H3) → R3; demais floats
-  → R2. Igualdade de float é **por bits** (distingue `-0.0` de `0.0` e
-  padrões de NaN). Proveniência excluída: `started_at`/`finished_at` do
+  Classe por coluna por um mapa declarado (`REPRODUCTION_CLASSES`), **completo**:
+  toda coluna de todo `GoldTableSchema` tem classe declarada (teste de
+  completude; sem fallback por tipo). Não-float (contagens, decisões,
+  rótulos, timestamps) → R1; float que depende de número aleatório (p-valores
+  do MCS e da sensibilidade de bloco, p-valores de Monte Carlo do
+  Christoffersen, limites bootstrap de H3) → R3; demais floats → R2.
+  Igualdade de float é **por bits** (distingue `-0.0` de `0.0` e padrões de
+  NaN). max |Δ| só para numéricos; para R1 não numérico, a contagem de
+  diferentes. `bit_identical` exige também `result_layer_digest` dos dois
+  lados = `expected_result_digest` (o `result_digest` da linha `input_read`
+  do `ATTEMPTS.jsonl`). Proveniência excluída: `started_at`/`finished_at` do
   manifesto (`RESULT_EXCLUDED_KEYS`) e as mesmas chaves dentro de
   `manifest_read` do scorecard.
+- **Driver da reprodução** (contrato operacional, fora de `src/`):
+  `scripts/reproduce_judged_generation.py`, versionado no HEAD, executado no
+  container da imagem da corrida com a árvore de `060537fc` montada como
+  `/app` e o driver montado à parte (`/driver/`, fora dos caminhos do probe —
+  a árvore segue limpa). Só faz wiring pelo `ApplicationDependencies` de
+  `060537fc` (`wire_dependencies(Settings(data_root=<descartável>))` →
+  `resolve_judged_revision` → `refresh_gold(refresh_command_from(plan, ref))`
+  → `build_confirmatory_scorecard`) e grava, num diretório fixo fora de
+  `gold/` (`<descartável>/reproduction/`), `scorecard.json` =
+  `document_bytes(scorecard.as_mapping())` (o serializador da cópia julgada,
+  presente em `060537fc`) e `environment.json` = a foto do
+  `EvaluationEnvironment` montada em `060537fc`. Recusa `data_root` sob
+  `data/cohorts/` ou com `gold/`/`reproduction/` pré-existente. Usa só APIs
+  idênticas em `060537fc` e no HEAD (o diff de `src/` é só formatação), o que
+  permite um **smoke test** barato no HEAD com dependências falsas (ordem
+  refresh → scorecard, bytes gravados, recusas).
 - **Subcomando `audit-reproduction`** (`adapters/in/cli`): `--judged-data-root`,
   `--reproduced-data-root`, `--preregistration`, `--revision`,
   `--preregistration-ref`; sem lock, só leitura nas duas raízes; recusa as duas
   raízes iguais; confere o `generation_digest` da cópia contra o `.judged.toml`
-  commitado; imprime a comparação por classe e sai `0` só com `bit_identical`.
+  commitado; lê a geração reproduzida e `<reproduzida>/reproduction/scorecard.json`
+  (**nunca recalcula** o scorecard) e o `result_digest` do `ATTEMPTS.jsonl` da
+  raiz julgada; imprime a comparação por classe e sai `0` só com
+  `bit_identical`.
 - **Registro de hashes da evidência anterior** (formato persistido):
   `docs/reports/prior_evidence_registry.toml` — por arquivo: caminho relativo a
   `data/analytics/`, sha256 do conteúdo, número de linhas e tipo físico de cada
@@ -218,16 +254,27 @@ caminho de cálculo; a imagem da corrida segue presente localmente.
   `silver_content.digest`, `dataset_fingerprint`, `preregistration_ref` e
   partição forem iguais aos da geração julgada; senão "é outra corrida"
   (doc §2.2) e nada é comparado como resultado.
-- **I4 — Mesmo caminho de cálculo e ambiente.** O probe na árvore de
-  `060537fc` dá `code.src` `4d2b2540…`, `code.uv_lock` `0f36050a…` e
-  `non-code diff []` contra o ambiente da tentativa (linha `started` do
-  `ATTEMPTS.jsonl`), com o mesmo `--cpus`.
+- **I4 — Mesmo caminho de cálculo e ambiente.** A foto do
+  `EvaluationEnvironment` montada em `060537fc` (`environment.json` do driver)
+  é igual, chave a chave, às chaves `code.*` e `env.*` da linha `started` do
+  `ATTEMPTS.jsonl` (`code.src` `4d2b2540…`, `code.uv_lock` `0f36050a…`,
+  `env.lib.*`, `env.probe.*` inclusive `torch_threads`, `env.image_id`), com
+  a árvore limpa, o container criado pelo id da imagem e o mesmo `--cpus`
+  (evidência: `cat /sys/fs/cgroup/cpu.max` e sha256 de `uv pip freeze` do
+  `.venv` usado, colados no technical §7).
 - **I5 — Falha no mesmo ambiente é parada.** Qualquer diferença com I3–I4
   satisfeitas → `[finding]` e diagnóstico; nenhuma tolerância "salva" a falha
   (R-BIT); a geração julgada nunca é trocada pela reproduzida (doc §4.6).
-- **I6 — Hash antes de valor.** Nenhum valor da evidência anterior é lido
-  antes do commit do registro; o andaime lê só arquivo cujo sha256 bate com o
-  registro e recusa o resto (EQ-HASH).
+  Lista de diagnóstico pré-declarada inclui o processo novo (a 8.1 rodou o
+  refresh depois do `infer` no mesmo processo; aqui é outro processo, com
+  outro `PYTHONHASHSEED`) — o technical pré-checa um refresh sintético em dois
+  processos com `PYTHONHASHSEED` diferentes.
+- **I6 — Hash antes de valor (recorte de D11).** Nenhum valor de métrica,
+  perda, p-valor, sinal, veredito ou realizado (`y_true`) da evidência anterior
+  é lido antes do commit do registro; metadados de forma (schema, contagens,
+  datas, ids, rótulos de definição) são permitidos e os de D9 já foram lidos;
+  o andaime lê só arquivo cujo sha256 bate com o registro e recusa o resto
+  (EQ-HASH).
 - **I7 — A evidência anterior nunca é entrada oficial.** Leitores dela só em
   `tests/equivalence/`; nada em `src/` a importa ou lê (doc §5.1 item 3).
 - **I8 — Regras do doc de domínio fixas.** Interseção, tolerâncias, catálogo
@@ -272,8 +319,8 @@ fica limpo sem depender de um argumento sobre o diff. ADR
 ### D2 — Destino separado sem a orquestração da 8.1
 ```
 [decision:E] D2 — como re-executar em destino separado
-Escolha: copiar o backup de entrada para um data_root descartável (fora de data/cohorts/), conferir com sha256sum -c a listagem cujo sha256 está no .judged.toml, e chamar, na árvore de 060537fc, wire_dependencies(Settings(data_root=<descartável>)) → resolve_judged_revision → refresh_gold(refresh_command_from(plan, ref)) → build_confirmatory_scorecard; sem RunConfirmatoryEvaluation, sem infer, sem judged/, sem ATTEMPTS.jsonl, sem tag nem comentário; o roadmap passa a consumir RefreshGold + BuildConfirmatoryScorecard em vez de RunConfirmatoryEvaluation · Alternativas: RunConfirmatoryEvaluation sobre o descartável; reproduzir na partição viva; restaurar o backup sobre data/cohorts/aapl
-Base: ADR 6.5.0003 item 4 (o primeiro refresh confirmatório é, por definição, o da 8.1); ADR 8.1.0004 (um julgamento por partição; o .judged.toml commitado é verdade cruzada — no HEAD o G4 recusa um data_root sem a cópia; em 060537fc, sem o registro, selaria um segundo judged/); ADR 6.4.0005 itens 4–5 (o refresh troca current/); doc §4.1, §4.6, R-PRESERVA; ADR 8.1.0003 item 6b (o backup é a entrada congelada da 8.2); concept 8.1 §14 ("os dois já recebem o store por injeção"); composition_root.py (ParquetGoldStore(cfg.data_root), RefreshGold e confirmatory_wiring sobre o mesmo data_root)
+Escolha: copiar o backup de entrada para um data_root descartável (fora de data/cohorts/), conferir com sha256sum -c a listagem cujo sha256 está no .judged.toml, e rodar o driver scripts/reproduce_judged_generation.py (versionado no HEAD, montado em /driver/) contra a árvore de 060537fc montada como /app: wire_dependencies(Settings(data_root=<descartável>)) → resolve_judged_revision → refresh_gold(refresh_command_from(plan, ref)) → build_confirmatory_scorecard, gravando document_bytes(scorecard.as_mapping()) e a foto do EvaluationEnvironment em <descartável>/reproduction/; o audit-reproduction do HEAD só lê esses arquivos e a geração (nunca recalcula); sem RunConfirmatoryEvaluation, sem infer, sem judged/, sem ATTEMPTS.jsonl, sem tag nem comentário; o roadmap passa a consumir RefreshGold + BuildConfirmatoryScorecard em vez de RunConfirmatoryEvaluation · Alternativas: RunConfirmatoryEvaluation sobre o descartável; reproduzir na partição viva; restaurar o backup sobre data/cohorts/aapl; recalcular o scorecard no HEAD a partir da geração reproduzida (contradiz D1); subcomando novo do CLI (não existe em 060537fc); driver dentro de src/ ou da árvore montada (suja o probe)
+Base: CLI de 060537fc sem subcomando de refresh nem de scorecard e scorecard só em memória fora do RunConfirmatoryEvaluation (Checkpoint A, CA-1); ApplicationDependencies expõe refresh_gold e build_confirmatory_scorecard; o probe marca dirty qualquer arquivo novo sob a árvore (git_runtime_environment_probe.py); ADR 6.5.0003 item 4 (o primeiro refresh confirmatório é, por definição, o da 8.1); ADR 8.1.0004 (um julgamento por partição; o .judged.toml commitado é verdade cruzada — no HEAD o G4 recusa um data_root sem a cópia; em 060537fc, sem o registro, selaria um segundo judged/); ADR 6.4.0005 itens 4–5 (o refresh troca current/); doc §4.1, §4.6, R-PRESERVA; ADR 8.1.0003 item 6b (o backup é a entrada congelada da 8.2); concept 8.1 §14 ("os dois já recebem o store por injeção"); composition_root.py (ParquetGoldStore(cfg.data_root), RefreshGold e confirmatory_wiring sobre o mesmo data_root)
 Verificado: leitura do código e dos ADRs nesta sessão
 Sensibilidade pré-registrada: nenhuma · Reversível: sim
 ```
@@ -297,7 +344,7 @@ e o que diagnostica uma falha. O leitor da cópia é necessidade compartilhada
 ### D4 — R-ENV não executada
 ```
 [decision:C] D4 — reprodução entre ambientes
-Escolha: não executar; declarar no relatório que só o claim (a) — e o (b) da 7.1 — é afirmado; o comparador classifica R1/R2/R3 mas não implementa a tolerância R2 com u_q · Alternativas: simular um segundo ambiente com outra imagem (não é ambiente registrado do estudo e não sustenta (c))
+Escolha: não executar; declarar no relatório que só o claim (a) — e o (b) da 7.1 — é afirmado; o comparador classifica R1/R2/R3 mas não implementa a tolerância R2 com u_q (sem consumidor em src/; o A2 da equivalência usa a fórmula R2 no andaime, com u_q fixado em D12) · Alternativas: simular um segundo ambiente com outra imagem (não é ambiente registrado do estudo e não sustenta (c))
 Degrau: 1 (doc §4.7: "O item (c) só é afirmado se tiver sido de fato executado; o TCC não promete reprodução que não foi feita")
 Base: doc §4.3, §4.7; fato do projeto: um único ambiente (Windows/Docker CPU)
 Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim (com um segundo ambiente, a tolerância entra numa issue própria)
@@ -315,7 +362,7 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não d
 ### D6 — Andaime e teste de equivalência
 ```
 [decision:C] D6 — EQ-ANDAIME
-Escolha: leitores, alinhamento, A1/A2 e tabela de sentido da evidência anterior vivem em tests/equivalence/ (andaime); o teste é opt-in por variáveis de ambiente que apontam a raiz do oráculo e a do dado oficial: ausentes → pytest.skip com o motivo e o caminho do registro (pula em make check e no CI); presentes → confere todo sha256 contra o registro (diferente → falha) e afirma que a classificação recomputada de cada comparação (dentro da tolerância / explicada com a categoria / não explicada) é a declarada no próprio teste e espelhada no relatório — oráculo de regressão; nunca escreve registro nem relatório · Alternativas: script fora da suíte (contraria o arquivo do roadmap); teste sempre ativo (quebra o CI sem o oráculo); teste que só afirma A1/A2 (falharia numa divergência legitimamente explicada, p. ex. fator 2 de escala)
+Escolha: leitores, alinhamento, A1/A2 e tabela de sentido da evidência anterior vivem em tests/equivalence/ (andaime); o teste é opt-in por variáveis de ambiente que apontam a raiz do oráculo e a do dado oficial: ausentes → pytest.skip com o motivo e o caminho do registro (pula em make check e no CI; o comando documentado usa -rs para mostrar o motivo); presentes → confere todo sha256 contra o registro (diferente → falha) e afirma que a classificação recomputada de cada comparação (dentro da tolerância / explicada com a categoria / não explicada) é a declarada no próprio teste **e** que essa tabela declarada é igual à tabela parseada de docs/reports/equivalence_audit.md (editar uma sem a outra falha, e o diff fica visível) — oráculo de regressão; a função de checagem de hash tem teste unitário sempre ativo (tmp_path, roda no CI); nunca escreve registro nem relatório · Alternativas: script fora da suíte (contraria o arquivo do roadmap); teste sempre ativo (quebra o CI sem o oráculo); teste que só afirma A1/A2 (falharia numa divergência legitimamente explicada, p. ex. fator 2 de escala)
 Degrau: 1 (doc §5.7; §5.1 "oráculo de equivalência/regressão"; roadmap 8.2 arquivos_a_criar) e 5
 Base: doc §5.1, §5.7; pytest "How to use skip and xfail" (skip com motivo — referência da issue #232)
 Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
@@ -334,7 +381,7 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
 ### D8 — "Rejeição" no sentido do DM
 ```
 [decision:E] D8 — o que é a rejeição comparada no DM
-Escolha: o par comparado por (horizonte, baseline comum) é (sinal de d̄, p do teste primário de cada lado ≤ α daquele lado), sem ajuste de Holm em nenhum dos lados; do lado novo, gold_dm_results com o estimador retangular, também onde H1 reprova; do lado anterior, phase_b_dm_family_6 (analysis_role primary_family_6); estimador, HLN, lateralidade, loss e família de cada lado entram como contexto declarado · Alternativas: comparar significant_adj_0_05 × rejected (decisões de Holm)
+Escolha: o par comparado por (horizonte, baseline comum) é (sinal de d̄, p do teste primário de cada lado ≤ α daquele lado), sem ajuste de Holm em nenhum dos lados; o sinal é normalizado para d̄ = perda(candidato) − perda(baseline) nos dois lados, com a convenção de cada lado lida do nome da coluna e do código (mean_loss_diff_tft_minus_baseline do anterior; candidate/comparator do gold novo), nunca dos valores; do lado novo, gold_dm_results com o estimador retangular, também onde H1 reprova; do lado anterior, phase_b_dm_family_6 (analysis_role primary_family_6); estimador, HLN, lateralidade, loss e família de cada lado entram como contexto declarado · Alternativas: comparar significant_adj_0_05 × rejected (decisões de Holm)
 Base: doc §5.3 ("o sinal de d̄ e a rejeição ao α de cada lado"; "Não se cruzam decisões de Holm entre as pipelines: as famílias, o candidato e o gate H1 diferem"); ADR 6.5.0006 (estimador primário)
 Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
 ```
@@ -342,11 +389,14 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
 ### D9 — Medição de forma (data-shape-evidence; sem valor de métrica)
 
 Leituras de schema e de colunas-chave (modelo, split, fold, seed, horizonte,
-timestamps e rótulos de definição) em 2026-10-23, no container da imagem
-`b69a7620…`, montagens só-leitura; nenhuma coluna de métrica, perda,
-p-valor, sinal ou veredito foi lida. O cegamento já não se aplica (a 8.1
-julgou); o EQ-HASH protege os **valores** do anterior até o commit do
-registro.
+timestamps, contagens e rótulos de definição) em 2026-10-23, no container da
+imagem `b69a7620…`, montagens só-leitura; nenhuma coluna de métrica, perda,
+p-valor, sinal, veredito ou realizado foi lida. Ressalva de registro: ao
+listar os valores distintos das colunas de rótulo dos reports de DM, a
+coluna `direction` (rótulo categórico do sentido) também foi impressa como
+**conjunto** {`baseline_better_or_equal`, `tft_better`}, sem associação a
+horizonte ou baseline; ela não entra em nenhuma decisão deste concept. Isto
+é fato declarado sob D11.
 
 - **D-M1 — Arquivos candidatos ao registro e sha256 na medição**
   (`data/analytics/`, git-ignorado; `reports/phase_b/` com mtime 2026-06-29;
@@ -399,6 +449,14 @@ registro.
   × 60 runs), fora da comparação; mesmo formato de timestamp do anterior.
   Gold julgado: 19 tabelas + `MANIFEST.json`; `gold_dm_results` com 24
   linhas.
+- **D-M6 — Tipo físico do realizado do lado novo (Checkpoint A, CA-4; só
+  schema):** o realizado do `RefreshGold` vem do `ReadTrainingGrid` sobre
+  `processed/dataset_tft/AAPL/dataset_tft_AAPL.parquet`, coluna
+  `target_return: double` (também `log_return_1d/5d/21d: double`,
+  `timestamp: timestamp[ns, tz=UTC]`); nenhuma tabela do gold julgado guarda
+  o realizado por ponto. Os dois lados gravam `double` — o caminho float32
+  não se aplica ao alvo; o risco remanescente é de **definição** (como o
+  realizado de h=7 é formado a partir da série diária) — §10 e D13.
 - **D-M5 — Interseção (só datas, amostra de 2023):** h=1, 249 das 250 datas
   do anterior presentes no novo; h=7, 243 de 250. A interseção exata (T∩ por
   horizonte) e o motivo do h=7 menor são da Fase 4.
@@ -412,10 +470,37 @@ registro.
   declarada dos dois lados (EQ-INTER item 1); `y_true` `double` ⇒ tolerância
   A1 = meio ulp de float64 na magnitude (2⁻⁵³·|y|).
 
+### D11 — Recorte do "antes de qualquer valor" (decisão da mestra no Checkpoint A, CA-2)
+```
+[decision:C] D11 — o que o EQ-HASH proíbe ler antes do registro
+Escolha: antes do commit do registro, nenhum valor de métrica, perda, p-valor, sinal, veredito ou realizado (y_true) da evidência anterior é lido; metadados de forma (schema, contagens, datas, ids, rótulos de definição) são permitidos; as leituras de D9 são declaradas como fato; os sha256 de D-M1 ficaram fixados no commit ba289aa3, antes de qualquer valor, e o registro formal os reproduz e confere (arquivo com sha256 diferente de D-M1 → parar e [finding]) · Alternativas: proibir também metadados de forma (inviabiliza fixar a interseção antes dos números, que o próprio doc pede); tratar ba289aa3 como violação e refazer (nenhum valor protegido foi lido)
+Degrau: 1 (doc §5.2: "o congelamento protege a escolha do conjunto de comparação contra os números novos, não contra os antigos"; os agregados do anterior já são conhecidos — overview §2; o registro serve à integridade do oráculo)
+Base: doc §5.2, §9 conv. 8; decisão da mestra no Checkpoint A, rodada 1
+Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não
+```
+
+### D12 — O que A2 e A11 comparam, fixado antes dos valores (Checkpoint A, DT-2/DT-3/DT-4/CA-3/CA-5)
+```
+[decision:C] D12 — conjunto de comparação da equivalência
+Escolha: (a) baseline comum: só se a definição dos dois lados (estimador, janela, parâmetros e — para baselines quantílicos como o zero_return — a regra que gera a dispersão dos quantis) vier de fonte versionada ou registrada no registro de hashes (código/docs do anterior, payload de configuração); a lista de comuns, sua fonte e as colunas lidas fecham no technical e entram no commit do registro, antes do passo 3 do D10; zero comuns → tabela de baseline vazia registrada, não contornada; (b) comparações candidato × candidato independem de baseline e sempre existem: por h, deltas com sinal m_novo − m_A em T∩ na pinball de cada nível comum, no PICP e no MPIW do par 80 %, e o lado do nominal do PICP 80 % do candidato (banda de Wilson 95 % do lado novo) para m_novo e para m_A — o lado anterior entra por m_A (código novo em T∩), nunca por m_ant; (c) variante: cada m_ant usa a variante que o seu rótulo/schema declara (colunas *_raw × *_post_guardrail; loss_function); sem rótulo, a variante declarada pelo anterior para a loss (post_guardrail) — o A2 roda m_A só com essa variante; o lado novo pontua a variante que o seu código declara; (d) agregação de seeds do candidato, nos dois lados: pinball pela média das perdas ponto a ponto e PICP/MPIW pela média das coberturas/larguras por seed (B-SEEDS, evaluation §6.9); (e) u_q de A2 (doc §4.3): pinball por nível = média de |termo| (os termos são ≥ 0, logo a própria pinball); MPIW = média de |largura|; PICP = 1; precisão de armazenamento de m_ant = meio ulp do tipo físico do registro na magnitude de m_ant; tolerância A2 = max(1e-9·max(|m_A|, |m_ant|, u_q), precisão de armazenamento) · Alternativas: fixar baselines e variantes depois de ver os valores (forking paths, doc §5.2); amarrar o sentido só a baseline comum (perde o pareamento por papel do doc §5.3 item 1)
+Degrau: 1 (doc §5.2–§5.5, §4.3; evaluation §6.9; ADR 0.0.0062)
+Base: doc §5.3 item 1 ("O candidato é pareado por papel"), §5.4 tabela de definições, §5.5, §4.3 (u_q por grandeza)
+Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não depois do passo 3 do D10
+```
+
+### D13 — Critério ponto a ponto de A1 e diagnóstico pré-declarado (Checkpoint A, DT-5/CA-4)
+```
+[decision:C] D13 — A1 por ponto
+Escolha: todo ponto de T∩ (por horizonte) é conferido: |y_novo − y_ant| ≤ 2⁻⁵³·|y_ant| (meio ulp do double gravado pelo anterior, na magnitude do valor anterior; y_ant = 0 ⇒ igualdade exata); reporta-se a contagem fora e o max |Δ|; um ponto fora basta para A1 falhar naquele horizonte, e a única categoria que explica é "alvo"; diagnóstico pré-declarado, nesta ordem: (1) definição do realizado multi-passo (retorno de h=7 composto × soma de log × retorno diário em t+h), (2) ajuste de preço (splits/dividendos — ADR 3.5.0001), (3) mapeamento de target_timestamp por calendário de pregão × dias corridos (a interseção h=7 menor de D-M5 é o indício), (4) caminho float32 (descartado para o alvo por D-M6, mantido na lista) · Alternativas: tolerância relativa à maior magnitude dos dois lados; amostrar pontos
+Degrau: 1 (doc §5.4 A1 "meio ulp do tipo gravado na magnitude do valor"; sem ampliar a regra)
+Base: doc §5.4, §5.6 (categoria "alvo"); medições D-M5, D-M6
+Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não depois do passo 3 do D10
+```
+
 ### D10 — Ordem das leituras
 ```
 [decision:C] D10 — sequência obrigatória da Fase 4
-Escolha: (1) commit do registro de hashes (D5); (2) reprodução e audit-reproduction (independem do anterior); (3) só então leitura de valor do anterior pelo andaime; (4) relatórios; a (ii) nunca altera a (i) nem a cópia julgada
+Escolha: (1) commit do registro de hashes (D5), junto com o que D12 delega ao technical (lista de baselines comuns e fonte, colunas lidas); (2) reprodução e audit-reproduction (independem do anterior); (3) só então leitura de valor do anterior pelo andaime; (4) relatórios; a (ii) nunca altera a (i) nem a cópia julgada
 Degrau: 1 (doc §5.2, ordem; §4.6; I1)
 Base: doc §5.2, §4.6
 Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (é o objetivo)
@@ -448,27 +533,41 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
 | Valor do anterior lido antes do registro (forking paths) | B | A | D10; I6; o andaime só lê arquivo do registro |
 | Definição dos baselines anteriores não recuperável | M | M | ficam fora do "modelo comum" e entram só em A2 (EQ-INTER item 1); registrado |
 | Interseção h=7 menor que h=1 por definição diferente de `target_timestamp` | M | M | diagnosticar pelo calendário na Fase 4; se for definição do alvo, A1 o mostra |
+| A1 falhar por definição do realizado de h=7 (D-M6: os dois lados `double`, o risco é de definição, não de precisão) | M | M | critério e diagnóstico pré-declarados em D13; a comparação de modelo daquele horizonte para e a divergência é registrada com a categoria "alvo"; a regra não é afrouxada (seria desvio) |
+| Driver da reprodução divergir do código de `060537fc` | B | A | só wiring, por APIs idênticas nos dois commits; smoke test no HEAD; roda com a árvore de `060537fc` em `/app` |
 | Tempo (~14 min de refresh; `h3` 625 s) e memória da reprodução | M | B | mesmos limites da 8.1; nada concorrente no Docker durante a corrida |
 | O CI passar a buscar o oráculo | B | B | skip por variável de ambiente ausente; o teste nunca procura caminho padrão |
 
 ## 11. Critérios de aceitação
 
-- [ ] **A1 — Registro antes da leitura.** `docs/reports/prior_evidence_registry.toml`
-  (sha256, linhas, tipos físicos) commitado em commit próprio; nenhum commit
-  anterior a ele na branch contém valor da evidência anterior; o `git log`
-  mostra o registro antes de qualquer número do anterior nos relatórios.
+- [ ] **A1 — Registro antes da leitura (recorte D11).** `docs/reports/prior_evidence_registry.toml`
+  (sha256, linhas, tipos físicos; os sha256 iguais aos de D-M1) commitado em
+  commit próprio, junto com o que D12 delega ao technical; nenhum commit
+  anterior a ele na branch contém valor de métrica, perda, p-valor, sinal,
+  veredito ou realizado do anterior (metadados de forma permitidos); o
+  `git log` mostra o registro antes de qualquer número do anterior nos
+  relatórios.
 - [ ] **A2 — Entrada e ambiente da reprodução.** Backup de entrada conferido
-  (`sha256sum -c` + sha256 da listagem = `input_backup_sha256`); probe na
-  árvore de `060537fc` com `code.src` `4d2b2540…`, `code.uv_lock` `0f36050a…`,
-  `dirty false` e `non-code diff []` contra a linha `started` do
-  `ATTEMPTS.jsonl`; saídas coladas no technical §7.
-- [ ] **A3 — Reprodução real bit a bit.** `audit-reproduction` sobre a geração
-  reproduzida sai `0` com `bit_identical = true`: identidade igual
-  (`silver_content.digest` `7ac4c759…`, `dataset_fingerprint` `00e4406d…`,
-  ref, partição), `result_digest` reproduzido = `7c7940d4…`, e por classe
-  R1/R2/R3 o número de valores comparados, zero diferentes e max |Δ| = 0
-  **reportados** em `docs/reports/reproduction_audit.md`; scorecard igual
-  sem proveniência.
+  (`sha256sum -c` + sha256 da listagem = `input_backup_sha256`);
+  `environment.json` do driver igual, chave a chave, às chaves `code.*`/`env.*`
+  da linha `started` do `ATTEMPTS.jsonl`, árvore de `060537fc` limpa,
+  container pelo id da imagem, `cpu.max` e sha256 do `uv pip freeze` colados
+  no technical §7 (I4).
+- [ ] **A3 — Reprodução real bit a bit.** O driver roda em `060537fc` e grava
+  `reproduction/scorecard.json` e `reproduction/environment.json`; o
+  `audit-reproduction` do HEAD, lendo esses arquivos sem recalcular nada, sai
+  `0` com `bit_identical = true`: identidade igual (`silver_content.digest`
+  `7ac4c759…`, `dataset_fingerprint` `00e4406d…`, ref, partição),
+  `result_layer_digest` dos dois lados = `7c7940d4…`, por classe R1/R2/R3 o
+  número de valores comparados, zero diferentes e max |Δ| = 0 (contagem de
+  diferentes para R1 não numérico) **reportados** em
+  `docs/reports/reproduction_audit.md`; scorecard igual sem proveniência.
+- [ ] **A3b — Driver testado.** Smoke test do driver no HEAD com dependências
+  falsas: chama refresh e depois scorecard, grava os bytes de
+  `document_bytes(...)` no caminho fixo, recusa `data_root` sob
+  `data/cohorts/` ou com `gold/`/`reproduction/` pré-existente; pré-checagem
+  de refresh sintético em dois processos com `PYTHONHASHSEED` diferentes
+  dando o mesmo `result_layer_digest` (I5).
 - [ ] **A4 — Partição viva intocada.** sha256 de `current/MANIFEST.json`,
   `judged/ATTEMPTS.jsonl` e `CONTENTS.sha256` da cópia iguais antes e depois
   (I1); nenhum `judged/` nem `ATTEMPTS.jsonl` no `data_root` descartável.
@@ -480,29 +579,35 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
   gerações idênticas → `bit_identical`; mudança de 1 ulp num float R2, num R3
   e de 1 num inteiro R1 → diferença na classe certa com o max |Δ| certo;
   `-0.0` × `0.0` distintos; `started_at`/`finished_at` diferentes não contam;
-  identidade diferente → `bit_identical = false`.
+  identidade diferente ou `result_layer_digest` ≠ `expected_result_digest` →
+  `bit_identical = false`; teste de completude: toda coluna de todo
+  `GoldTableSchema` tem classe em `REPRODUCTION_CLASSES`.
 - [ ] **A7 — R-BIT-COMMIT registrado.** Lista dos arquivos de `src/` do diff
   `060537fc..HEAD` e, por arquivo, igualdade de `ast.dump` com docstrings
   removidos (Python 3.12 do container), no relatório de reprodução, com a
   declaração de que o claim é o da execução em `060537fc`.
 - [ ] **A8 — Claim declarado.** O relatório de reprodução afirma (a), cita (b)
   da 7.1 e declara que (c) não foi executada (D4).
-- [ ] **A9 — EQ-MUST A1.** Por horizonte, T∩ reportado, e o realizado das duas
-  evidências coincide em T∩ a menos de meio ulp do tipo gravado pelo anterior
-  (`double`) — ou a divergência é registrada com a categoria "alvo" e a
-  comparação de modelo daquele horizonte para.
-- [ ] **A10 — EQ-MUST A2.** Para pinball por nível comum, PICP e MPIW do par
-  80 %: m_A (código novo sobre as predições anteriores, na amostra que o
-  anterior usou — D7) contra m_ant dentro de max(R2, precisão de
-  armazenamento), ou explicada por uma linha da tabela de definições da §5.4
-  com a previsão verificada, ou "não realizável", ou `[finding]`.
-- [ ] **A11 — Tabela de sentido por horizonte.** Para h ∈ {1, 7} × baseline
-  comum: sinal de (candidato − baseline) na pinball de cada nível comum, lado
-  do nominal do PICP 80 % (banda de Wilson 95 % do lado novo, em T∩) e DM
-  (sinal de d̄ e rejeição — D8) dos dois lados, com igual/divergente; deltas
-  com sinal documentados; toda divergência de sentido com a categoria
-  aplicável pela tabela da §5.6 e (a)(b)(c) verificados, ou `[finding]` não
-  explicado.
+- [ ] **A9 — EQ-MUST A1 (D13).** Por horizonte, T∩ reportado; todo ponto de
+  T∩ conferido com |y_novo − y_ant| ≤ 2⁻⁵³·|y_ant|, com a contagem fora e o
+  max |Δ| reportados — ou a divergência é registrada com a categoria "alvo",
+  o diagnóstico pré-declarado percorrido, e a comparação de modelo daquele
+  horizonte para.
+- [ ] **A10 — EQ-MUST A2 (D12 c, e).** Para pinball por nível comum, PICP e
+  MPIW do par 80 %: m_A (código novo sobre as predições anteriores, na
+  variante e na amostra que o anterior usou — D7, D12) contra m_ant dentro de
+  max(R2 com o u_q de D12, precisão de armazenamento), ou explicada por uma
+  linha da tabela de definições da §5.4 com a previsão verificada, ou "não
+  realizável", ou `[finding]`.
+- [ ] **A11 — Tabela de sentido por horizonte (D12 a, b, d).** Para h ∈ {1, 7}:
+  (1) candidato × candidato, sempre — deltas com sinal m_novo − m_A em T∩ na
+  pinball de cada nível comum, no PICP e no MPIW do par 80 %, e o lado do
+  nominal do PICP 80 % (banda de Wilson 95 % do lado novo) de m_novo e de
+  m_A; (2) por baseline comum (tabela vazia registrada se não houver) — sinal
+  de (candidato − baseline) na pinball de cada nível comum, dentro de cada
+  lado, e DM (sinal de d̄ normalizado e rejeição — D8); igual/divergente por
+  célula; toda divergência de sentido com a categoria aplicável pela tabela
+  da §5.6 e (a)(b)(c) verificados, ou `[finding]` não explicado.
 - [ ] **A12 — Relatório de equivalência.** `docs/reports/equivalence_audit.md`
   com os hashes dos dois lados (registro + `generation_digest`), as
   diferenças declaradas entre as pipelines como contexto, A9–A11, a lista de
@@ -510,9 +615,11 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
   (doc §5.7: comparações registradas, nada oficial depende dele, motivo).
 - [ ] **A13 — Teste fora do CI.** `tests/equivalence/test_official_vs_prior_evidence.py`:
   sem as variáveis de ambiente → `skipped` com o motivo e o caminho do
-  registro (visto na saída do `make check`); com o oráculo → passa; com um
-  arquivo de sha256 diferente (cópia adulterada em diretório temporário) →
-  **falha**; nunca escreve registro nem relatório.
+  registro (visto com `-rs`); com o oráculo → passa, inclusive a igualdade
+  entre a tabela declarada no teste e a parseada do `equivalence_audit.md`;
+  a função de checagem de hash tem teste unitário sempre ativo (`tmp_path`,
+  roda no CI): arquivo adulterado ou faltando → falha; nunca escreve registro
+  nem relatório.
 - [ ] **A14 — Isolamento do anterior.** Nenhum módulo de `src/` lê
   `data/analytics/` nem importa `tests/equivalence/` (grep + import-linter).
 - [ ] **A15 — Roadmap e gates.** Bloco da 8.2 corrigido (contratos, arquivos,
@@ -523,13 +630,13 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
 
 - [x] Todos os contratos introduzidos têm assinatura definida? — §4: método do
   port, função pura, DTO, subcomando e formato do registro.
-- [x] Toda decisão em §7 tem fonte rastreável? — D1–D10 com âncora no doc de
-  domínio, ADRs, código ou medição D-M1–D-M5.
+- [x] Toda decisão em §7 tem fonte rastreável? — D1–D13 com âncora no doc de
+  domínio, ADRs, código ou medição D-M1–D-M6.
 - [x] Toda integração externa tem contrato definido (interface, formato, auth)?
   — só Docker, com a imagem e os limites da 8.1; nenhuma rede.
 - [x] Decisões com alternativa real descartada têm ADR escrito? — 8.2.0001
-  (D1, D2), 8.2.0002 (D3), 8.2.0003 (D5, D6); D4, D7, D8 e D10 aplicam o doc
-  de domínio sem alternativa real fora dele.
+  (D1, D2, driver), 8.2.0002 (D3), 8.2.0003 (D5, D6); D4, D7, D8, D10–D13
+  aplicam o doc de domínio sem alternativa real fora dele.
 - [x] Dependências de Stages anteriores estão satisfeitas (`done`)? — 8.1 `done`
   (PR #231 mergeado).
 - [x] Stage cabe em ~3–12 Tasks (ver [`CONVENTIONS.md`](../../CONVENTIONS.md) §6)?
@@ -541,18 +648,39 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
 - [x] Cada mecanismo novo passou pelo **teste da solução mais direta**: não é caso especial/tipo/métrica novo remendando, local, um sintoma que recorre em outros consumidores e teria tratamento mais simples/geral em outra camada (concern compartilhado). Captura assim → piso declarado + issue, não solução local. — (i) a reprodução não ganha orquestrador: reusa `RefreshGold` + scorecard pelo composition root do próprio commit (o caminho mais direto); (ii) identidade/fingerprint: reusa `silver_content`, `dataset_fingerprint` e `result_layer_digest` da 8.1 — nenhum hash novo; (iii) o leitor da cópia julgada fica no port (concern compartilhado com a 8.3), não num atalho de leitura de diretório na 8.2; (iv) o comparador é a única peça nova de cálculo em `src/` e é genérico sobre `GoldGeneration` (serve a uma futura R-ENV sem mudar de forma); (v) os leitores da evidência anterior não entram em `src/` (doc §5.1 item 3); (vi) nenhuma métrica nova: A2 aplica os serviços de domínio existentes.
 - [x] A Stage reabre alguma regra do doc de domínio? — não: D7 e D8 são
   leituras do texto da §5.3–§5.4 aplicadas à forma medida (I8).
-- [x] Algum valor da evidência anterior foi lido neste concept? — não: só
-  schema, contagens, chaves e rótulos de definição (D9).
+- [x] Algum valor da evidência anterior foi lido neste concept? — nenhum
+  valor protegido pelo recorte de D11: só schema, contagens, chaves, datas e
+  rótulos de definição (D9, com a ressalva declarada do conjunto de
+  `direction`).
 
 ## 13. Questões em aberto
 
 - [ ] Quais arquivos de D-M1 entram no registro (todo arquivo que o andaime
-  lê) e quais colunas de cada um — technical (Fase 3B), antes do commit do
-  registro.
-- [ ] De onde se recupera a definição dos baselines anteriores (estimador,
-  janela, parâmetros) para o item 1 da EQ-INTER — Fase 4; sem definição
-  recuperável, nenhum baseline é "comum" e o sentido fica só com A2
-  (registrado, não contornado).
+  lê) e quais colunas de cada um — technical (Fase 3B); entra no commit do
+  registro (D10, passo 1).
+- [ ] Fonte da definição dos baselines anteriores e lista de comuns (D12 a) —
+  technical; entra no commit do registro, antes do passo 3 do D10. Sem
+  definição recuperável, a tabela por baseline fica vazia (registrada); a
+  parte candidato × candidato do A11 e o A2 seguem de pé.
+
+### Checkpoint A, rodada 1 — disposição
+
+| achado | disposição |
+|---|---|
+| CA-1 / DT-1 | corrigido — driver `scripts/reproduce_judged_generation.py` como contrato (§4), D2, A3, A3b, ADR 8.2.0001 |
+| CA-2 | corrigido — D11 (decisão da mestra), I6, A1, ressalva em D9 |
+| CA-3 | corrigido — D12 (b), A11 (1), §13 |
+| CA-4 | corrigido — medição D-M6 (`target_return: double`), D13, risco em §10 |
+| CA-5 / DT-3 | corrigido — D4 "sem consumidor em `src/`"; u_q e precisão de m_ant em D12 (e) |
+| CA-6 | corrigido — roadmap (DoD sem "entre ambientes" incondicional; `evaluation_commands.py`; driver) |
+| DT-2 | corrigido — D12 (a), D10 passo 1, §13 |
+| DT-4 | corrigido — D12 (c, d); sinal normalizado em D8 |
+| DT-5 | corrigido — D13, A9 |
+| DT-6 | corrigido — I4, A2 (`environment.json` chave a chave, `cpu.max`, `uv pip freeze`) |
+| DT-7 | corrigido — D6, A13, ADR 8.2.0003 itens 5–6 |
+| DT-8 | corrigido — §4 (`REPRODUCTION_CLASSES` completo, max \|Δ\| só numérico, `expected_result_digest`), A6, ADR 8.2.0002 |
+| DT-9 | corrigido — I5, A3b |
+| DT-10 | corrigido — premissa em §3 (o `RefreshGold` não recebe `JsonInferenceManifest`); reconferência no technical |
 
 ## 14. O que fica para a 8.3
 
