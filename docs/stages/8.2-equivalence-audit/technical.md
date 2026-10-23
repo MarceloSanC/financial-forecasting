@@ -1,6 +1,6 @@
 ---
 title: Technical — Stage 8.2 — Reprodução da corrida confirmatória e equivalência interna
-description: Plano de execução da Stage 8.2 em 10 Tasks inside-out (1 Task = 1 commit) — DTO e mapa de classes da reprodução, comparador puro, leitor da cópia julgada no port, use case de auditoria, subcomando audit-reproduction, driver da reprodução com smoke test, prova de independência de processo, e o andaime da equivalência em tests/equivalence/ — e as Etapas reais E1–E5 na ordem do D10 (registro de hashes, pré-voo em 060537fc, reprodução real, leitura de valores do anterior, teste opt-in e relatórios)
+description: Plano de execução da Stage 8.2 em 11 Tasks inside-out (1 Task = 1 commit) — DTO e mapa de classes da reprodução, comparador puro, leitor da cópia julgada no port, use case de auditoria, subcomando audit-reproduction, driver da reprodução com smoke test, prova de independência de processo, e o andaime da equivalência em tests/equivalence/ — e as Etapas reais E1–E5 na ordem do D10 (registro de hashes, pré-voo em 060537fc, reprodução real, leitura de valores do anterior, teste opt-in e relatórios)
 when-use: Consultar durante a Fase 4 (execução) da Stage 8.2; cada Task tem arquivos (lista fechada), testes a escrever primeiro, critério de aceite do concept que cobre e verificação; as Etapas E1–E5 trazem o runbook da parte real, com a ordem fixa do D10 e a tabela "Se falhar"
 keywords: [technical, plano de execução, equivalence-audit, reproduction, evaluation, judged-generation, bit-identical, audit-reproduction, driver, prior-evidence, hash-registry, scaffold, opt-in-test, r-bit-commit]
 status: draft
@@ -14,7 +14,7 @@ depends_on: [8.1-confirmatory-run]
 concept_ref: ./concept.md
 issue_id: 232
 branch: feat/232-8-2-equivalence-audit
-tasks_count: 10
+tasks_count: 11
 ---
 
 # Technical — Stage 8.2 — Reprodução da corrida confirmatória e equivalência interna
@@ -37,7 +37,7 @@ tasks_count: 10
 > 5. Algo não previsto em §1–§6, no concept ou nos ADRs 8.2.0001–0003 → pausar,
 >    triar (skill `evidence-resolution`: E/C decide e registra, ADR `8_2_0004+`
 >    se tiver alternativa real; só P sobe ao humano) e registrar em §7.
-> 6. Depois da Task 10, da auditoria de testes e do 1º `make check`: **Etapas
+> 6. Depois da Task 11, da auditoria de testes e do 1º `make check`: **Etapas
 >    E1 → E5** na ordem fixa (runbook com commits próprios), §3 e `stage 8.2: complete`.
 >
 > **Stage = 1 branch:** `feat/232-8-2-equivalence-audit`, worktree própria.
@@ -84,8 +84,9 @@ bloco real:
    auditoria com fakes → subcomando + composition root + e2e sintético → driver +
    smoke test → independência de processo (driver em subprocesso com
    `PYTHONHASHSEED` diferentes + `audit-reproduction` real).
-3. **Andaime da equivalência (Tasks 08–10).** Checagem de hash (unit sempre
-   ativo) e isolamento (`import-linter` + teste de arquitetura) → regras puras
+3. **Andaime da equivalência (Tasks 08–11).** Checagem de hash e gerador do
+   registro (unit sempre ativo) + teste de isolamento → contrato `src-no-tests`
+   no `import-linter` (Task própria, escopo `architecture`) → regras puras
    (interseção, A1, A2, sentido) → leitores + tabela + teste opt-in.
 4. **Auditoria de testes com mutação real, Checkpoint C final e 1º `make check`**
    → **Etapas E1–E5** (ordem do D10) → **2º `make check`** (saída).
@@ -174,18 +175,20 @@ nenhuma pede ADR novo.
     existente no `data_root`;
   - `reproduce(*, deps, source, data_root, cohort, name, revision,
     preregistration_ref, snapshot, check, out) -> int` (testável com fakes) e
-    `main(argv=None) -> int`, que monta `deps = wire_dependencies(Settings(data_root=...))`,
+    `main(argv=None, *, wire=wire_dependencies) -> int` (`wire_dependencies`
+    existe em `060537fc`; o smoke test injeta `wire`), que monta `deps = wire_dependencies(Settings(data_root=...))`,
     `source = TomlPreregistrationSource(root=Path("config/preregistration"))` e
     `snapshot = deps.run_confirmatory_evaluation_for(cohort, "cpu")._environment.snapshot`
     (acesso privado declarado — ADR 8.2.0001 item 7);
-  - ordem: resolver a revisão → foto (`snapshot()`) → `--check`: imprime a foto
-    como `document_bytes` no stdout e sai 0, **nada gravado**; senão cria
+  - ordem: resolver a revisão → foto (`snapshot()`) → `--check`: escreve no stdout
+    exatamente os bytes `document_bytes(foto)` (os mesmos do `environment.json`;
+    nenhuma outra linha no stdout) e sai 0, **nada gravado**; senão cria
     `reproduction/`, grava `environment.json` = `document_bytes(foto)` **antes**
     do refresh → `refresh_gold(refresh_command_from(plan, ref))` → status ≠
     `COMPLETED` → stderr + exit 1, sem scorecard → `build_confirmatory_scorecard(
     BuildConfirmatoryScorecardCommand(name, revision, ref))` → grava
     `scorecard.json` = `document_bytes(scorecard.as_mapping())`;
-  - stdout: `reproduction <ref>: refresh <STATUS> tables <n>` e
+  - stdout do modo normal: `reproduction <ref>: refresh <STATUS> tables <n>` e
     `reproduction <ref>: scorecard sha256 <64 hex>`; exceções sobem (exit ≠ 0,
     traceback): o driver não traduz erro;
   - só importa nomes presentes em `060537fc` (o `--check` em `060537fc` é a prova:
@@ -252,7 +255,7 @@ nenhuma pede ADR novo.
   julgada (`00e4406d…`), senão parar.
 - **Variante e níveis do lado novo.** A variante pontuada pelo lado novo e a regra
   da banda de Wilson do "lado do nominal" saem do **código** (`series_assembly`,
-  `HorizonReports`, `CalibrationTable`), conferidas na Task 09 e gravadas como
+  `HorizonReports`, `CalibrationTable`), conferidas na Task 10 e gravadas como
   constantes em `tests/equivalence/comparison_set.py` com o caminho de código na
   docstring — nunca de um número.
 - **Diagnóstico pré-declarado** (antes de qualquer resultado; percorrido na
@@ -342,7 +345,7 @@ CPU ~0 % perto do fim) invalida o resultado: parar e rodar de novo.
 
 | # | Depois da Task | Por quê |
 |---|---|---|
-| 1 | 10 (depois da auditoria de testes com mutação real e do Checkpoint C final) | Pré-corrida: muda port consumido pelo composition root e pela 8.3 (`read_judged_generation`), o composition root e o `cli.py` (Task 05), o `.importlinter` e um teste de arquitetura (Task 08) — o T1 não roda `tests/architecture/` nem os scripts de gate. O driver que a E3 executa e o `audit-reproduction` que a julga têm de estar verdes como no CI **antes** da E2: uma correção do driver depois da E3 obriga a re-reproduzir (~15 min de refresh e a evidência refeita). Um ponto antes (depois da 05) não se paga: as Tasks 06–10 não constroem sobre um contrato que o gate pudesse invalidar além do que o T1 delas já exercita. |
+| 1 | 11 (depois da auditoria de testes com mutação real e do Checkpoint C final) | Pré-corrida: muda port consumido pelo composition root e pela 8.3 (`read_judged_generation`), o composition root e o `cli.py` (Task 05), o `.importlinter` e o `test_import_contracts.py` (Task 09) e um teste de arquitetura (Task 08) — o T1 não roda `tests/architecture/` nem os scripts de gate. O driver que a E3 executa e o `audit-reproduction` que a julga têm de estar verdes como no CI **antes** da E2: uma correção do driver depois da E3 obriga a re-reproduzir (~15 min de refresh e a evidência refeita). Um ponto antes (depois da 05) não se paga: as Tasks 06–11 não constroem sobre um contrato que o gate pudesse invalidar além do que o T1 delas já exercita. |
 | 2 | saída (depois da E5) | Gate de saída (Passo 10): a E1/E5 acrescentam `tests/equivalence/comparison_set.py` e a tabela declarada do teste opt-in (lint, mypy fora de escopo, coleta e skip no CI), o registro e os relatórios. |
 
 Nas demais Tasks o gate é o T1 da Task. Vermelho no ponto 1 → `fix(<escopo>): …
@@ -352,7 +355,7 @@ pode ser o do driver da E3).
 ### Estrutura de pastas afetada
 
 ```
-scripts/reproduce_judged_generation.py                                 # novo (T06)
+scripts/{reproduce_judged_generation.py, reproduction_evidence.py}     # novos (T06)
 src/financial_forecasting/
 ├── cli.py                                                             # audit-reproduction (T05)
 ├── composition_root.py                                                # wire_reproduction_audit (T05)
@@ -369,18 +372,19 @@ tests/
 ├── unit/features/evaluation/{test_reproduction_comparison_dtos.py,
 │                             test_compare_reproduction.py, test_audit_reproduction.py}   # T01, T02, T04
 ├── unit/test_cli.py                                                   # T05
-├── unit/tooling/test_reproduce_judged_generation.py                   # T06
+├── unit/tooling/{test_reproduce_judged_generation.py, test_reproduction_evidence.py}   # T06
 ├── contract/features/evaluation/test_judged_generation_store_contract.py   # T03
 ├── integration/features/evaluation/{test_audit_reproduction_cli.py,
 │                                    test_reproduction_process_independence.py}   # T05, T07
 ├── architecture/test_prior_evidence_isolation.py                      # T08
-└── equivalence/                                                       # andaime (T08–T10, E1, E5)
+├── architecture/test_import_contracts.py                              # T09
+└── equivalence/                                                       # andaime (T08, T10–T11, E1, E5)
     ├── __init__.py, prior_evidence.py, comparison_set.py, alignment.py,
     ├── comparisons.py, readers.py, audit_table.py
     └── test_prior_evidence_registry_check.py, test_scaffold_comparisons.py,
         test_audit_table_render.py, test_official_vs_prior_evidence.py
-.importlinter                                                          # contrato src ↛ tests (T08)
-docs/LAYOUT.md                                                         # tests/equivalence/ no §2 (T08)
+.importlinter                                                          # contrato src-no-tests (T09)
+docs/LAYOUT.md                                                         # §2 tests/equivalence/, §3 src ↛ tests (T09)
 docs/reports/{prior_evidence_registry.toml, reproduction_audit.md, equivalence_audit.md}   # E1, E3, E4/E5
 ```
 
@@ -435,6 +439,8 @@ docs/reports/{prior_evidence_registry.toml, reproduction_audit.md, equivalence_a
   `test_int_and_float_of_same_value_differ`; `test_missing_or_extra_key_row_sets_keys_equal_false`;
   `test_started_and_finished_at_differences_do_not_count` (manifesto e
   `manifest_read` do scorecard); `test_other_scorecard_leaf_differs_with_path`;
+  `test_scorecard_key_only_on_one_side_differs` (chave a mais ou a menos num lado,
+  fora das excluídas → `equal = false`, caminho listado);
   `test_identity_mismatch_is_not_bit_identical` (cada campo: `silver_content.digest`,
   `dataset_fingerprint`, ref, partição); `test_result_digest_other_than_expected_is_not_bit_identical`
   (os dois lados iguais entre si, ≠ esperado); `test_undeclared_column_raises`.
@@ -531,7 +537,11 @@ docs/reports/{prior_evidence_registry.toml, reproduction_audit.md, equivalence_a
   `data/` do mundo com o `gold/` vivo + `reproduction/scorecard.json` =
   `document_bytes` do scorecard da cópia): `test_copy_of_judged_is_bit_identical_exit_0`;
   `test_one_float_changed_in_reproduced_table_exit_1_with_r2_line`;
-  `test_tampered_judged_copy_exit_2`; `test_judged_toml_with_other_digest_exit_2`;
+  `test_altered_leaf_in_reproduced_scorecard_json_exit_1_with_scorecard_line`
+  (uma folha numérica do `reproduction/scorecard.json` alterada, geração intacta →
+  exit 1 e linha `scorecard equal false`: prova que o subcomando lê o arquivo e
+  não recalcula); `test_tampered_judged_copy_exit_2`;
+  `test_judged_toml_with_other_digest_exit_2`;
   `test_missing_reproduced_scorecard_exit_2`; `test_nothing_written_in_either_root`
   (sha256 de todo arquivo das duas raízes antes e depois).
 - **O que fazer:** como no §1 (saída, exits, recusa, `settings_overrides` do
@@ -545,29 +555,55 @@ docs/reports/{prior_evidence_registry.toml, reproduction_audit.md, equivalence_a
 
 ---
 
-### Task 06 — Driver da reprodução e smoke test
+### Task 06 — Driver da reprodução, scripts de evidência e smoke tests
 
 - **Arquivos a criar:**
   - `scripts/reproduce_judged_generation.py`
+  - `scripts/reproduction_evidence.py`
   - `tests/unit/tooling/test_reproduce_judged_generation.py`
-- **Testes primeiro** (deps falsas: objeto com `hasher`, `refresh_gold`,
+  - `tests/unit/tooling/test_reproduction_evidence.py`
+- **Testes primeiro** — driver (deps falsas: objeto com `hasher`, `refresh_gold`,
   `build_confirmatory_scorecard`, `run_confirmatory_evaluation_for` devolvendo um
   objeto com `_environment.snapshot`; `source` = `InMemoryPreregistrationSource`;
   registro de chamadas em ordem): `test_calls_snapshot_then_refresh_then_scorecard`;
   `test_writes_environment_before_refresh_and_document_bytes_of_scorecard`
   (bytes = `document_bytes(...)` nos caminhos fixos);
   `test_check_mode_prints_snapshot_and_writes_nothing_nor_refreshes`;
+  `test_check_stdout_equals_environment_json_bytes` (mesma foto: stdout do
+  `--check` == bytes do `environment.json` do modo normal — base do
+  `SNAPSHOT_SAME_AS_CHECK` da E3);
   `test_refuses_data_root_under_data_cohorts` (também via `..` e link relativo
   resolvido); `test_refuses_existing_gold_or_reproduction[gold|reproduction]`
   (nos dois modos, antes do wiring); `test_refresh_not_completed_exits_1_without_scorecard`;
   `test_snapshot_error_propagates_before_any_write` (ex.: `MissingImageIdError`);
-  `test_main_wires_snapshot_from_run_confirmatory_evaluation_for_cpu` (com `wire`
-  injetado: `run_confirmatory_evaluation_for(cohort, "cpu")`).
-- **O que fazer:** como no §1 (argumentos, recusas, ordem, saídas). Docstring do
-  módulo: o contrato operacional do concept §4 e o porquê do acesso privado.
-- **Critério de aceite:** A3b (smoke test).
-- **Verificação (T1):** `pytest tests/unit/tooling/test_reproduce_judged_generation.py -q --no-cov` (+ ruff do script)
-- **Commit:** `feat(tooling): driver da reprodução da geração julgada [8.2/task-06]`
+  `test_main_wires_snapshot_from_run_confirmatory_evaluation_for_cpu`
+  (`main(argv, wire=<fake>)`: `run_confirmatory_evaluation_for(cohort, "cpu")`).
+  Scripts de evidência (stdlib, sem importar `financial_forecasting`):
+  `test_env_equal_passes_on_identical_keys_and_values`;
+  `test_env_equal_fails_listing_missing_extra_and_different_keys` (inclusive
+  `commit` e `code_dirty`/`preregistration_dirty` ≠ `"false"`);
+  `test_env_equal_reads_the_started_line_only`;
+  `test_ast_equal_ignores_docstrings_and_joined_fstrings`;
+  `test_ast_equal_flags_code_change`; `test_ast_equal_lists_added_or_deleted_files_apart`
+  (repositório git temporário em `tmp_path` com dois commits).
+- **O que fazer:** driver como no §1 (argumentos, recusas, ordem, saídas;
+  docstring com o contrato do concept §4 e o porquê do acesso privado).
+  `reproduction_evidence.py` (CB-7 do Checkpoint B: as evidências de A2/A7 saem
+  de código versionado e testado, não de script de sessão), subcomandos:
+  `env-equal <ATTEMPTS.jsonl> <foto.json>` — compara a linha `phase = started`
+  com a foto (`commit`; `code_dirty` e `preregistration_dirty` = `"false"`;
+  conjunto e valores de `code.*` = `code` e de `env.*` = `environment`); imprime
+  `ENV_EQUAL` e sai 0, ou as chaves divergentes e sai 1. `ast-equal <rev_a>
+  <rev_b> [--paths src/]` — auto-teste embutido (docstrings diferentes ⇒ igual;
+  `x = 1` × `x = 2` ⇒ diferente; f-strings adjacentes unidas ⇒ igual), depois,
+  para cada arquivo `M` de `git diff --name-only <a> <b> -- src/`, `ast.dump` das
+  duas versões (`git show`) com o docstring removido do corpo de todo
+  `Module`/`ClassDef`/`FunctionDef`/`AsyncFunctionDef` (`pass` se o corpo
+  esvaziar); `AST_EQUAL`/`AST_DIFF` por arquivo, arquivos `A`/`D`/`R` à parte,
+  `files <n> ast_diff <n>`, exit 1 se `ast_diff > 0` ou se houver A/D/R.
+- **Critério de aceite:** A3b (smoke test), base do A2 e do A7.
+- **Verificação (T1):** `pytest tests/unit/tooling/test_reproduce_judged_generation.py tests/unit/tooling/test_reproduction_evidence.py -q --no-cov` (+ ruff dos dois scripts)
+- **Commit:** `feat(tooling): driver da reprodução e scripts de evidência [8.2/task-06]`
 
 ---
 
@@ -599,24 +635,24 @@ docs/reports/{prior_evidence_registry.toml, reproduction_audit.md, equivalence_a
 
 ---
 
-### Task 08 — Andaime: checagem de hash do registro e isolamento da evidência anterior
+### Task 08 — Andaime: checagem e gerador do registro, isolamento da evidência anterior
 
 - **Arquivos a criar:**
   - `tests/equivalence/__init__.py` *(pacote)*
   - `tests/equivalence/prior_evidence.py`
   - `tests/equivalence/test_prior_evidence_registry_check.py`
   - `tests/architecture/test_prior_evidence_isolation.py`
-- **Arquivos a modificar:**
-  - `.importlinter` (contrato `forbidden` `src-no-tests`: `financial_forecasting` ↛ `tests`)
-  - `docs/LAYOUT.md` (§2: `tests/equivalence/` — andaime interino da 8.2, fora do
-    `src/`, ADR 8.2.0003)
 - **Testes primeiro** (sempre ativos, `tmp_path` com Parquet sintético):
   `test_registered_files_matching_pass_and_return_paths`;
   `test_altered_byte_fails`; `test_missing_registered_file_fails`;
   `test_row_count_or_column_type_other_than_registry_fails` (footer);
   `test_unregistered_file_in_root_is_never_read` (o leitor recusa caminho fora do
   registro); `test_malformed_registry_fails` (sha não hex, `rows` não inteiro,
-  `path` absoluto ou com `..`); arquitetura:
+  `path` absoluto ou com `..`); `test_built_registry_round_trips_and_verifies`
+  (o TOML do gerador relido por `load_registry` e conferido por
+  `verify_registered_files`; colunas na ordem do footer);
+  `test_builder_reads_footer_only` (o gerador não chama leitura de valores —
+  `read_table`/`to_pylist` instrumentados); arquitetura:
   `test_no_src_module_reads_prior_evidence_or_imports_the_scaffold` (AST de
   `src/`: nenhum import de `tests`, nenhum literal com `data/analytics` ou
   `phase_b`), `test_isolation_detector_flags_violations` (o detector não é vácuo).
@@ -624,15 +660,49 @@ docs/reports/{prior_evidence_registry.toml, reproduction_audit.md, equivalence_a
   `verify_registered_files(*, oracle_root, registry) -> Mapping[str, Path]`
   (sha256 por streaming, linhas e tipos pelo footer — `pyarrow.parquet.read_schema`
   / `read_metadata`, sem ler valor); `PriorEvidenceHashError(AssertionError)` com a
-  lista de divergências; `REGISTRY_PATH` = `docs/reports/prior_evidence_registry.toml`.
-- **Critério de aceite:** A13 (função de checagem com unit sempre ativo), A14,
-  base do A1.
-- **Verificação (T1):** `pytest tests/equivalence/test_prior_evidence_registry_check.py tests/architecture/test_prior_evidence_isolation.py -q --no-cov` e `uv run --no-sync lint-imports`
-- **Commit:** `test(evaluation): checagem de hash e isolamento da evidência anterior [8.2/task-08]`
+  lista de divergências; `REGISTRY_PATH` = `docs/reports/prior_evidence_registry.toml`;
+  `build_registry(*, oracle_root, paths, definition_sources=()) -> str` (o TOML do
+  §1, só footer + sha256) com `__main__`: `python -m tests.equivalence.prior_evidence
+  build <oracle_root> <path>...` **imprime** o TOML (o redirecionamento para o
+  arquivo é do runbook da E1; CB-7).
+- **Critério de aceite:** A13 (função de checagem com unit sempre ativo), A14
+  (parte AST), base do A1.
+- **Verificação (T1):** `pytest tests/equivalence/test_prior_evidence_registry_check.py tests/architecture/test_prior_evidence_isolation.py -q --no-cov`
+- **Commit:** `test(evaluation): checagem e gerador do registro da evidência anterior [8.2/task-08]`
 
 ---
 
-### Task 09 — Andaime: conjunto de comparação, interseção, A1, A2 e sentido (regras puras)
+### Task 09 — Contrato `src-no-tests` no `import-linter` (CB-1 do Checkpoint B)
+
+- **Arquivos a modificar:**
+  - `.importlinter` (contrato `forbidden` `src-no-tests`: `source_modules =
+    financial_forecasting`, `forbidden_modules = tests`; comentário com LAYOUT §3
+    e ADR 8.2.0003 item 2)
+  - `tests/architecture/test_import_contracts.py` (`src-no-tests` em
+    `_EXPECTED_CONTRACTS`; caso em `_REAL_VIOLATION_CASES` com módulo-sonda sob
+    `src/` que importa `tests.equivalence` — cobre
+    `test_every_expected_contract_has_a_real_violation_case` e
+    `test_every_forbidden_module_has_a_real_violation_case`)
+  - `docs/LAYOUT.md` (§2: `tests/equivalence/` — andaime interino da 8.2, ADR
+    8.2.0003; §3: regra "nenhum módulo de `src/` importa `tests/`", espelhada no
+    `.importlinter`)
+- **Testes primeiro:** o caso novo de `_REAL_VIOLATION_CASES` (vermelho sem o
+  contrato: o `lint-imports` com a sonda passa; verde com ele: reprova) e a entrada
+  de `_EXPECTED_CONTRACTS` (`test_importlinter_declares_expected_contracts`
+  vermelho até o contrato existir).
+- **O que fazer:** Task própria porque muda configuração de gate (RUNBOOK §Gates em
+  camadas) e um escopo que não é o do `evaluation`; 3 arquivos.
+- **Critério de aceite:** A14 (parte `import-linter`).
+- **Verificação (T1):** `pytest tests/architecture/test_import_contracts.py -q --no-cov` e `uv run --no-sync lint-imports`
+- **Se o `import-linter` recusar o pacote externo `tests` como `forbidden_modules`:**
+  ficar com o teste AST da Task 08, `[deviation]` com a mensagem literal do
+  `lint-imports`, Task sem o contrato (LAYOUT §3 continua com a regra, citando o
+  teste AST como fitness function).
+- **Commit:** `test(architecture): contrato src-no-tests no import-linter e no LAYOUT [8.2/task-09]`
+
+---
+
+### Task 10 — Andaime: conjunto de comparação, interseção, A1, A2 e sentido (regras puras)
 
 - **Arquivos a criar:**
   - `tests/equivalence/comparison_set.py`
@@ -656,21 +726,21 @@ docs/reports/{prior_evidence_registry.toml, reproduction_audit.md, equivalence_a
   próprio).
 - **O que fazer:** `comparison_set.py` com as constantes do §1 (arquivos, colunas,
   filtros, níveis {0,1; 0,5; 0,9}, par 80 %, variantes por coluna, p e α do D8,
-  regra D7, `COMMON_BASELINES: tuple[...] = ()` — preenchido só na E1 — e as
-  constantes do lado novo lidas do código, com o caminho na docstring);
-  `alignment.py` (seleção D7, T∩ por horizonte, agregação de seeds);
-  `comparisons.py` (A1, A2 com tolerância, células de sentido, `RawStatus` =
-  `within_tolerance | out_of_tolerance | not_realizable | empty_intersection |
-  same_sense | divergent_sense`). As métricas do lado novo e de m_A usam os
-  serviços de domínio existentes (`pinball_score`, `coverage_series`,
-  `wilson_band`); nenhuma métrica nova (concept §12 item vi).
+  regra D7, `MODEL_LABEL_COLUMN` e `COMMON_BASELINES: tuple[...] = ()` —
+  preenchidos só na E1 — e as constantes do lado novo lidas do código, com o
+  caminho na docstring); `alignment.py` (seleção D7, T∩ por horizonte, agregação
+  de seeds); `comparisons.py` (A1, A2 com tolerância, células de sentido,
+  `RawStatus` = `within_tolerance | out_of_tolerance | not_realizable |
+  empty_intersection | same_sense | divergent_sense`). As métricas do lado novo e
+  de m_A usam os serviços de domínio existentes (`pinball_score`,
+  `coverage_series`, `wilson_band`); nenhuma métrica nova (concept §12 item vi).
 - **Critério de aceite:** A9, A10, A11 (regras), D7, D8, D12, D13.
 - **Verificação (T1):** `pytest tests/equivalence/test_scaffold_comparisons.py -q --no-cov`
-- **Commit:** `test(evaluation): regras do andaime da equivalência sobre dado sintético [8.2/task-09]`
+- **Commit:** `test(evaluation): regras do andaime da equivalência sobre dado sintético [8.2/task-10]`
 
 ---
 
-### Task 10 — Andaime: leitores, tabela renderizada e teste opt-in
+### Task 11 — Andaime: leitores, tabela renderizada e teste opt-in
 
 - **Arquivos a criar:**
   - `tests/equivalence/readers.py`
@@ -707,17 +777,20 @@ docs/reports/{prior_evidence_registry.toml, reproduction_audit.md, equivalence_a
 - **Verificação (T1):** `pytest tests/equivalence/ -rs -q --no-cov` (os unit
   passam; o opt-in aparece `SKIPPED` com o motivo)
 - **Antes do ponto 1 — Checkpoint C final e auditoria de testes.** Revisão do
-  bloco 08–10 por subagente e a **auditoria de testes** (PROMPT-stage §AUDITORIA
+  bloco 08–11 por subagente e a **auditoria de testes** (PROMPT-stage §AUDITORIA
   DE TESTES; subagente que não escreveu os testes) com **mutação real** —
   igualdade por bits no `compare_reproduction` (trocar por `==` de float),
   conjunção do `bit_identical` (tirar o `expected_result_digest`), conferência do
-  `CONTENTS.sha256` no `read_judged_generation` (pular o `find`), recusa
-  `data/cohorts` e ordem foto → refresh no driver, limiar de A1 (2⁻⁵² no lugar de
-  2⁻⁵³) —, editando, rodando o T1 dos arquivos afetados e revertendo, saída
-  colada em §7. Achado → `test(<escopo>): cobrir <X> [8.2/task-NN-extra]` **antes**
-  do ponto 1 (o driver da E3 é o do commit verde).
-- **Gate T3 — ponto 1 do plano:** `make check` (comando literal do §1).
-- **Commit:** `test(evaluation): teste opt-in da equivalência e tabela do relatório [8.2/task-10]`
+  `CONTENTS.sha256` no `read_judged_generation` (pular o `find`), o
+  `audit-reproduction` ignorando o `scorecard.json` (passar o scorecard da cópia
+  nos dois lados — CB-3), recusa `data/cohorts` e ordem foto → refresh no driver,
+  `env-equal` ignorando chave a mais, limiar de A1 (2⁻⁵² no lugar de 2⁻⁵³) —,
+  editando, rodando o T1 dos arquivos afetados e revertendo, saída colada em §7.
+  Achado → `test(<escopo>): cobrir <X> [8.2/task-NN-extra]` **antes** do ponto 1
+  (o driver da E3 é o do commit verde).
+- **Gate T3 — ponto 1 do plano:** `make check` (comando literal do §1). Anotar o
+  sha do commit verde como `GATE1` (entra no `etapa-82.env` da E0).
+- **Commit:** `test(evaluation): teste opt-in da equivalência e tabela do relatório [8.2/task-11]`
 
 ---
 
@@ -730,17 +803,32 @@ ordem E1 → E2 → E3 → E4 → E5**; nenhuma Etapa começa sem o commit da an
 `[finding]` quando a tabela "Se falhar" manda parar).
 
 **Sessão que executa** (modelo da Etapa R da 8.1). Cada chamada de shell é um
-processo novo (variáveis não persistem) e tem teto de 10 min: (i) todo valor
-calculado vai para `$SCRATCH/etapa-82.env`, e **todo** bloco começa com
-`set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1`;
-(ii) a reprodução (E3) roda num container **destacado** `ff82-repro`, esperado por
-`docker wait` em segundo plano (`run_in_background`, notificação ao sair), com
-`docker ps` e `docker logs --tail`; (iii) o container roda pelo **id** da imagem,
-nunca pela tag `:dev`; (iv) prefixar todo `docker run` com `MSYS_NO_PATHCONV=1`;
-(v) scripts Python de runbook são gravados com a ferramenta Write no
-`$SCRATCH` (não heredoc: o Bash colapsa `\`) e montados `:ro`.
+processo novo (variáveis não persistem) e tem teto de 10 min:
 
-**E0 — Variáveis (host, Git Bash; uma vez).**
+- (i) todo valor calculado vai para `$SCRATCH/etapa-82.env`, e **todo** bloco
+  começa com `set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1`;
+- (ii) **toda asserção que manda parar** tem a forma
+  `test … || { echo FAIL_<NOME>; exit 1; }; echo <NOME>` (com `set -e`, uma falha à
+  esquerda de `&&` **não** aborta o bloco — GB-1); todo comando cujo exit é
+  evidência usa `cmd > out && rc=0 || rc=$?; echo "exit $rc"` (com `set -e`,
+  `echo "exit $?"` depois de um comando que falhou nunca roda — GB-6) e a
+  conferência do `rc` é a linha seguinte;
+- (iii) a reprodução (E3) roda num container **destacado** `ff82-repro`, esperado
+  por `docker wait` em segundo plano (`run_in_background`, notificação ao sair),
+  com `docker ps` e `docker logs --tail`; o estado (`ExitCode`, `OOMKilled`) é
+  gravado **antes** do `docker rm` (GB-2);
+- (iv) o container roda pelo **id** da imagem, nunca pela tag `:dev`; prefixar todo
+  `docker run` com `MSYS_NO_PATHCONV=1`;
+- (v) as evidências saem de código versionado e testado
+  (`scripts/reproduction_evidence.py`, `tests/equivalence/prior_evidence.py`, Tasks
+  06 e 08 — CB-7), executado a partir da worktree limpa no commit registrado;
+- (vi) **venv congelado (GB-3):** o volume `financial-forecasting_app-venv` é
+  compartilhado por todas as worktrees (há outra em voo). Da E2 ao fim da E3,
+  **proibido** `uv sync`, `make setup`, `make install`, rebuild de imagem ou
+  `docker compose up` em qualquer worktree; a sessão declara isso ao coordenador
+  antes da E2, e o sha256 do `uv pip freeze` da E2 é exigido igual depois da E3.
+
+**E0 — Variáveis (host, Git Bash; uma vez, depois do ponto 1).**
 ```bash
 set -eu
 SCRATCH=<scratchpad da sessão, caminho absoluto literal, fora do repo>
@@ -748,12 +836,12 @@ STAMP=$(date -u +%Y%m%d-%H%M%S)
 cat > "$SCRATCH/etapa-82.env" <<EOF
 SCRATCH=$SCRATCH
 STAMP=$STAMP
+GATE1=<sha do commit verde do ponto 1>
 WT=feat-232-8-2-equivalence-audit
 WTH=/c/Users/Marcelo/Documents/Code/financial-forecasting-worktrees/feat-232-8-2-equivalence-audit
 WTD=C:/Users/Marcelo/Documents/Code/financial-forecasting-worktrees/feat-232-8-2-equivalence-audit
 MAINH=/c/Users/Marcelo/Documents/Code/financial-forecasting
 MAIND=C:/Users/Marcelo/Documents/Code/financial-forecasting
-SCRATCHD=<o mesmo scratchpad em forma C:/...>
 REPRO=repro-060537fc
 REPROH=/c/Users/Marcelo/Documents/Code/financial-forecasting-worktrees/repro-060537fc
 REPROD=C:/Users/Marcelo/Documents/Code/financial-forecasting-worktrees/repro-060537fc
@@ -763,6 +851,7 @@ JUDGED_COMMIT=060537fc7069b38a318bb5cf839d84b7767b1b4f
 BASE=64b8a17dfcec6694b03d14b2ea2b39da9e624291
 IMAGE_ID=sha256:b69a7620e7bd8449369bde2f46e903c5f46c25e9efb3597f452af3272e0a8f45
 REF=aapl_confirmatory-r3-00fd83d9cd39
+LIVE=/c/Users/Marcelo/Documents/Code/financial-forecasting/data/cohorts/aapl
 P=/c/Users/Marcelo/Documents/Code/financial-forecasting/data/cohorts/aapl/gold/asset=AAPL/parent_sweep_id=aapl_confirmatory-r0-665f45d9169a
 BK=/c/Users/Marcelo/Documents/Code/financial-forecasting/data/backups/aapl-pre-8.1-20261023-084758
 EOF
@@ -781,15 +870,29 @@ EOF
 pelo descartável (`/repro`) e acrescentando o driver em `/driver/` (fora dos
 caminhos do probe). A partição viva **não** é montada no container da reprodução.
 
+**Bloco "HEAD íntegro" (GB-4)** — roda no início da E1, da E2 e da E3 (o driver e
+os scripts montados são a cópia de trabalho; ela tem de ser o blob commitado e
+o mesmo do `GATE1`):
+```bash
+set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
+test -z "$(git -C "$WTH" status --porcelain)" || { echo FAIL_WT_DIRTY; exit 1; }; echo WT_CLEAN
+for f in scripts/reproduce_judged_generation.py scripts/reproduction_evidence.py tests/equivalence/prior_evidence.py; do
+  test "$(git -C "$WTH" rev-parse "HEAD:$f")" = "$(git -C "$WTH" rev-parse "$GATE1:$f")" || { echo "FAIL_CHANGED_SINCE_GATE1 $f"; exit 1; }
+  test "$(git -C "$WTH" hash-object "$f")" = "$(git -C "$WTH" rev-parse "HEAD:$f")" || { echo "FAIL_WORKING_COPY $f"; exit 1; }
+  echo "BLOB $f $(git -C "$WTH" rev-parse "HEAD:$f")"
+done
+```
+As linhas `BLOB` vão para o §7 e para o relatório de reprodução.
+
 **E1 — Registro de hashes da evidência anterior (A1; D5, D10 passo 1, D11, D12 a).**
 Antes de qualquer valor. Só footer, contagens e rótulos de definição.
 
 1. *Rótulo de modelo do `gold_oos_consolidated`* (metadado): listar, com o
    container da imagem e `data/analytics` `:ro`, os valores **distintos** de
    `model_version_x` e `model_version_y` nas linhas `parent_sweep_id =
-   phase_b_confirmatorio_20260524`, `split = test` (só rótulos; nenhuma coluna de
-   valor); fixar em `comparison_set.MODEL_LABEL_COLUMN` a coluna que traz o
-   candidato `BTSF` e os três baselines de D-M2.
+   phase_b_confirmatorio_20260524`, `split = test` (só essas duas colunas e as de
+   filtro; nenhuma coluna de valor); fixar em `comparison_set.MODEL_LABEL_COLUMN`
+   a coluna que traz o candidato `BTSF` e os três baselines de D-M2.
 2. *Baselines comuns (D12 a).* Lado novo: definição dos `baseline_zero_return`,
    `baseline_historical_mean` e `baseline_historical_quantiles` no código do HEAD
    (`features/modeling/…`, arquivo e linhas citados). Lado anterior, fontes
@@ -807,37 +910,40 @@ Antes de qualquer valor. Só footer, contagens e rótulos de definição.
    `comparison_set.COMMON_BASELINES` (pares `prior_label`/`new_label` + fonte) e
    numa entrada `[decision:C] E1 — baselines comuns` em §7 (com as fontes
    olhadas e o que cada uma deu).
-3. *Registro.* Script Write-gravado `$SCRATCH/registry.py` (stdlib + `pyarrow`;
-   para cada arquivo do conjunto lido do §1 e de 2(b): sha256 por streaming,
-   `read_metadata().num_rows`, `read_schema()` → nome/tipo; imprime o TOML do §1) e:
+3. *Registro* — pelo gerador versionado (Task 08):
    ```bash
    set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
-   MSYS_NO_PATHCONV=1 docker run --rm $RES -v $MAIND/data/analytics:/oracle:ro -v $SCRATCHD:/scratch:ro -v financial-forecasting_app-venv:/app/.venv -w /app "$IMAGE_ID" /app/.venv/bin/python -I /scratch/registry.py /oracle > "$WTH/docs/reports/prior_evidence_registry.toml"
-   grep -c '^\[\[file\]\]' "$WTH/docs/reports/prior_evidence_registry.toml"
+   MSYS_NO_PATHCONV=1 docker run --rm $RES $HMOUNTS -v $MAIND/data/analytics:/oracle:ro $HENVS "$IMAGE_ID" sh -c "$PRE; uv run --no-sync python -m tests.equivalence.prior_evidence build /oracle <os 5 caminhos do §1> <os de 2(b), se houver>" > "$SCRATCH/registry.toml" && rc=0 || rc=$?
+   echo "exit $rc"; test "$rc" = 0 || { echo FAIL_REGISTRY_BUILD; exit 1; }
+   cp "$SCRATCH/registry.toml" "$WTH/docs/reports/prior_evidence_registry.toml"
+   for sha in <os 5 sha256 de D-M1 dos arquivos do §1>; do grep -q "\"$sha\"" "$SCRATCH/registry.toml" || { echo "FAIL_NOT_DM1 $sha"; exit 1; }; done; echo REGISTRY_EQUALS_DM1
+   MSYS_NO_PATHCONV=1 docker run --rm $RES $HMOUNTS -v $MAIND/data/analytics:/oracle:ro $HENVS "$IMAGE_ID" sh -c "$PRE; uv run --no-sync python -c \"from pathlib import Path; from tests.equivalence.prior_evidence import REGISTRY_PATH, load_registry, verify_registered_files as v; print('REGISTRY_OK', len(v(oracle_root=Path('/oracle'), registry=load_registry(REGISTRY_PATH))))\"" && rc=0 || rc=$?
+   echo "exit $rc"; test "$rc" = 0 || { echo FAIL_REGISTRY_CHECK; exit 1; }
    ```
-   Conferir cada `sha256` do registro contra a tabela D-M1 do concept (comando
-   `grep` por sha, um por arquivo) → `REGISTRY_EQUALS_DM1`; e a checagem do
-   andaime sobre o oráculo real:
-   ```bash
-   MSYS_NO_PATHCONV=1 docker run --rm $RES $HMOUNTS -v $MAIND/data/analytics:/oracle:ro $HENVS "$IMAGE_ID" sh -c "$PRE; uv run --no-sync python -c \"from pathlib import Path; from tests.equivalence.prior_evidence import REGISTRY_PATH, load_registry, verify_registered_files as v; print('REGISTRY_OK', len(v(oracle_root=Path('/oracle'), registry=load_registry(REGISTRY_PATH))))\""
-   ```
-4. *Commit próprio* (registro + `comparison_set.py` + §7):
+4. *T1 antes do commit (GB-8)* — a E1 muda código que a E4 executa
+   (`comparison_set.py`): `pytest tests/equivalence/ -rs -q --no-cov`, `ruff
+   format --check`/`ruff check` de `tests/equivalence/comparison_set.py` e `mypy`
+   (comando T1 do §1); verde antes do commit. Sem `make check` novo (o ponto 2
+   cobre).
+5. *Commit próprio* (registro + `comparison_set.py` + §7):
    `docs(evaluation): registro de hashes da evidência anterior antes da leitura [8.2/--]`.
-   Anotar `REGISTRY_COMMIT` no `etapa-82.env`. Nenhum commit anterior da branch
-   contém valor do anterior (conferido no A1 por `git log -p origin/develop..$REGISTRY_COMMIT`
-   sem os sha/valores de D-M1 além de schema e contagens).
+   Anotar `REGISTRY_COMMIT` no `etapa-82.env`. O `git log -p origin/develop..$REGISTRY_COMMIT`
+   não traz valor do anterior (só schema, contagens, rótulos e os sha de D-M1).
 
-**E2 — Pré-voo da reprodução (A2, A3b, A4, A7; sem refresh).**
+**E2 — Pré-voo da reprodução (A2, A3b, A4, A7; sem refresh).** Começa pelo bloco
+"HEAD íntegro" e pela declaração do venv congelado (vi).
 
 1. *Árvore de `060537fc`* — **worktree destacada** em diretório temporário, sem
    branch nova:
    ```bash
    set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
-   test ! -e "$REPROH"
+   test ! -e "$REPROH" || { echo FAIL_REPRO_EXISTS; exit 1; }
    git -C "$WTH" worktree add --detach "$REPROH" "$JUDGED_COMMIT"
-   test "$(git -C "$REPROH" rev-parse HEAD)" = "$JUDGED_COMMIT" && echo TREE_AT_JUDGED
-   cp "$MAINH/.env" "$REPROH/.env"; git -C "$REPROH" check-ignore -q .env && echo ENV_IGNORED
-   sha256sum "$REPROH/.env" | cut -d' ' -f1 > "$SCRATCH/dotenv.sha"; test -z "$(git -C "$REPROH" status --porcelain)" && echo TREE_CLEAN
+   test "$(git -C "$REPROH" rev-parse HEAD)" = "$JUDGED_COMMIT" || { echo FAIL_TREE_NOT_JUDGED; exit 1; }; echo TREE_AT_JUDGED
+   cp "$MAINH/.env" "$REPROH/.env"
+   git -C "$REPROH" check-ignore -q .env || { echo FAIL_ENV_NOT_IGNORED; exit 1; }; echo ENV_IGNORED
+   printf 'DOTENV_SHA=%s\n' "$(sha256sum "$REPROH/.env" | cut -d' ' -f1)" >> "$SCRATCH/etapa-82.env"
+   test -z "$(git -C "$REPROH" status --porcelain)" || { echo FAIL_TREE_DIRTY; exit 1; }; echo TREE_CLEAN
    ```
    **Por que worktree e não `git archive`:** o probe exige um repositório git —
    `git rev-parse HEAD:src` (`code.src`), `git status --porcelain` (sujeira) e
@@ -849,76 +955,96 @@ Antes de qualquer valor. Só footer, contagens e rótulos de definição.
    o tinha (`worktree-new.py` copia o `.env`); nenhuma chave dele entra no cálculo
    (`DATA_ROOT` é sobrescrito pelo `Settings(data_root=...)` explícito), e o sha256
    fica no relatório.
-2. *Imagem e Docker:* `docker image inspect --format '{{.Id}}' "$IMAGE_ID"` =
-   `$IMAGE_ID` (`SAME_IMAGE`); `docker ps --filter name=ff82 -q` vazio; `uname -r`
-   do container = `6.18.54.1-microsoft-standard-WSL2` (o `env.platform` da `started`).
+2. *Imagem, Docker e lock:*
+   ```bash
+   set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
+   test "$(docker image inspect --format '{{.Id}}' "$IMAGE_ID")" = "$IMAGE_ID" || { echo FAIL_IMAGE; exit 1; }; echo SAME_IMAGE
+   test -z "$(docker ps --filter name=ff82 -q)" || { echo FAIL_CONTAINER_ALIVE; exit 1; }; echo NO_FF82
+   printf 'UV_LOCK_SAME_AS_HEAD=%s\n' "$(git -C "$WTH" diff --quiet "$JUDGED_COMMIT" HEAD -- uv.lock && echo yes || echo no)" >> "$SCRATCH/etapa-82.env"
+   ```
+   `UV_LOCK_SAME_AS_HEAD` é registro (GB-3): `no` não para nada sozinho (o
+   `code.uv_lock` comparado é o de `060537fc`), mas diz se uma sincronização do
+   volume pelo HEAD mudaria libs.
 3. *Backup de entrada e restauração no descartável:*
    ```bash
    set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
-   test "$(sha256sum "$BK.sha256sum" | cut -d' ' -f1)" = "$(grep '^input_backup_sha256' "$WTH/config/preregistration/aapl_confirmatory-r3.judged.toml" | cut -d'"' -f2)" && echo LISTING_IS_REGISTERED
-   (cd "$BK" && sha256sum -c --quiet "$BK.sha256sum") && echo BACKUP_OK
-   test ! -e "$DISPH"; mkdir -p "$DISPH" && cp -a "$BK/." "$DISPH/"
-   (cd "$DISPH" && sha256sum -c --quiet "$BK.sha256sum") && echo RESTORE_OK
-   ls -a "$DISPH"      # bronze inference processed raw silver — sem gold/, judged/, reproduction/
+   test "$(sha256sum "$BK.sha256sum" | cut -d' ' -f1)" = "$(grep '^input_backup_sha256' "$WTH/config/preregistration/aapl_confirmatory-r3.judged.toml" | cut -d'"' -f2)" || { echo FAIL_LISTING_NOT_REGISTERED; exit 1; }; echo LISTING_IS_REGISTERED
+   (cd "$BK" && sha256sum -c --quiet "$BK.sha256sum") || { echo FAIL_BACKUP; exit 1; }; echo BACKUP_OK
+   test ! -e "$DISPH" || { echo FAIL_DISPOSABLE_EXISTS; exit 1; }
+   mkdir -p "$DISPH"; cp -a "$BK/." "$DISPH/"
+   (cd "$DISPH" && sha256sum -c --quiet "$BK.sha256sum") || { echo FAIL_RESTORE; exit 1; }; echo RESTORE_OK
+   test -z "$(ls -A "$DISPH" | grep -vxE 'bronze|inference|processed|raw|silver')" || { echo FAIL_DISPOSABLE_LAYOUT; exit 1; }; echo DISPOSABLE_INPUT_ONLY
    ```
-4. *Partição viva antes (I1):*
+4. *Partição viva antes (I1; GB-5 — a partição inteira, não só três arquivos):*
    ```bash
    set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
-   sha256sum "$P/current/MANIFEST.json" "$P/judged/ATTEMPTS.jsonl" "$P/judged/$REF/CONTENTS.sha256" | tee "$SCRATCH/live-before.sha"
+   (cd "$P/judged/$REF" && sha256sum -c --quiet CONTENTS.sha256) || { echo FAIL_JUDGED_COPY; exit 1; }; echo JUDGED_COPY_OK
+   test "$(sha256sum "$P/judged/$REF/CONTENTS.sha256" | cut -d' ' -f1)" = 96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539 || { echo FAIL_DIGEST; exit 1; }; echo DIGEST_OK
+   (cd "$LIVE" && find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum) > "$SCRATCH/live-before.sha256sum"
+   wc -l < "$SCRATCH/live-before.sha256sum"
+   grep -E ' gold/.*/(current/MANIFEST.json|judged/ATTEMPTS.jsonl)$' "$SCRATCH/live-before.sha256sum"   # 56d3ee1c…, 320def2b…
    ```
-   Esperado `56d3ee1c…`, `320def2b…`, `96c05413…` (I1).
 5. *Ambiente no container da reprodução:*
    ```bash
    set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
-   MSYS_NO_PATHCONV=1 docker run --rm $RES $RMOUNTS $RENVS "$IMAGE_ID" sh -c "$PRE; git rev-parse HEAD; git status --porcelain; cat /sys/fs/cgroup/cpu.max; uname -r; uv pip freeze --python /app/.venv/bin/python | sha256sum" | tee "$SCRATCH/env-preflight.txt"
+   MSYS_NO_PATHCONV=1 docker run --rm $RES $RMOUNTS $RENVS "$IMAGE_ID" sh -c "$PRE; git rev-parse HEAD; git status --porcelain; cat /sys/fs/cgroup/cpu.max; uname -r" > "$SCRATCH/env-preflight.txt" && rc=0 || rc=$?
+   echo "exit $rc"; test "$rc" = 0 || { echo FAIL_ENV_PROBE; exit 1; }; cat "$SCRATCH/env-preflight.txt"
+   test "$(sed -n 2p "$SCRATCH/env-preflight.txt")" = "600000 100000" || { echo FAIL_CPU_MAX; exit 1; }; echo CPU_MAX_6
+   test "$(sed -n 3p "$SCRATCH/env-preflight.txt")" = 6.18.54.1-microsoft-standard-WSL2 || { echo FAIL_KERNEL; exit 1; }; echo SAME_KERNEL
+   MSYS_NO_PATHCONV=1 docker run --rm $RES $RMOUNTS $RENVS "$IMAGE_ID" sh -c "uv pip freeze --python /app/.venv/bin/python" > "$SCRATCH/freeze-e2.txt" && rc=0 || rc=$?
+   echo "exit $rc"; test "$rc" = 0 || { echo FAIL_FREEZE; exit 1; }
+   printf 'FREEZE_E2=%s\n' "$(sha256sum "$SCRATCH/freeze-e2.txt" | cut -d' ' -f1)" >> "$SCRATCH/etapa-82.env"
    ```
-   Esperado: `060537fc…`, status vazio, `600000 100000` (6 CPUs), o kernel do item 2,
-   e o sha256 do freeze (registrado; a 8.1 não registrou o seu — vale como foto,
-   não como comparação).
+   (O `git status --porcelain` vazio sai como linha ausente: a linha 1 é o
+   `060537fc…`, a 2 o `cpu.max`, a 3 o kernel; conferir na saída que é isso.)
+   O sha256 do freeze é a foto do venv; a 8.1 não registrou o seu, então ele não
+   compara com a 8.1 — compara E2 × E3 (`FREEZE_SAME`).
 6. *Driver `--check` em `060537fc`* (wiring + foto, sem refresh; prova também que o
    driver só usa nomes que existem em `060537fc`):
    ```bash
    set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
-   MSYS_NO_PATHCONV=1 docker run --rm $RES $RMOUNTS $RENVS "$IMAGE_ID" sh -c "$PRE; $DRIVER --check" > "$SCRATCH/check.json"
-   ls -a "$DISPH"      # continua sem gold/ e sem reproduction/
+   MSYS_NO_PATHCONV=1 docker run --rm $RES $RMOUNTS $RENVS "$IMAGE_ID" sh -c "$PRE; $DRIVER --check" > "$SCRATCH/check.json" 2> "$SCRATCH/check.err" && rc=0 || rc=$?
+   echo "exit $rc"; test "$rc" = 0 || { echo FAIL_CHECK; tail -20 "$SCRATCH/check.err"; exit 1; }
+   test ! -e "$DISPH/gold" && test ! -e "$DISPH/reproduction" || { echo FAIL_CHECK_WROTE; exit 1; }; echo CHECK_WROTE_NOTHING
+   python "$WTH/scripts/reproduction_evidence.py" env-equal "$P/judged/ATTEMPTS.jsonl" "$SCRATCH/check.json" && rc=0 || rc=$?
+   echo "exit $rc"; test "$rc" = 0 || { echo FAIL_ENV_EQUAL; exit 1; }   # a linha anterior imprimiu ENV_EQUAL
    ```
-   Comparação chave a chave com a linha `started` (script Write-gravado
-   `$SCRATCH/env_equal.py`, stdlib: lê a linha `phase = started` do
-   `ATTEMPTS.jsonl` vivo e a foto; exige `commit` igual, `code_dirty` e
-   `preregistration_dirty` = `"false"`, o conjunto de chaves `code.*` igual ao de
-   `code` e o de `env.*` igual ao de `environment`, e cada valor igual; imprime
-   `ENV_EQUAL` ou a lista de chaves divergentes):
+7. *R-BIT-COMMIT (A7, D1)* — no container 3.12, pelo script versionado:
    ```bash
-   python "$SCRATCH/env_equal.py" "$P/judged/ATTEMPTS.jsonl" "$SCRATCH/check.json"   # ENV_EQUAL
+   set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
+   MSYS_NO_PATHCONV=1 docker run --rm $HMOUNTS $HENVS "$IMAGE_ID" sh -c "$PRE; /app/.venv/bin/python --version; /app/.venv/bin/python scripts/reproduction_evidence.py ast-equal $JUDGED_COMMIT $BASE" > "$SCRATCH/ast-equal.txt" && rc=0 || rc=$?
+   echo "exit $rc"; cat "$SCRATCH/ast-equal.txt"
+   git -C "$WTH" diff --name-status "$BASE"..HEAD -- src/ | tee "$SCRATCH/src-8.2.txt"
    ```
-7. *R-BIT-COMMIT (A7, D1)* — no container 3.12 do HEAD, script Write-gravado
-   `$SCRATCH/ast_equal.py`: auto-teste (docstrings diferentes ⇒ igual; `x = 1` ×
-   `x = 2` ⇒ diferente; f-strings adjacentes unidas ⇒ igual), depois, para cada
-   arquivo de `git diff --name-only --diff-filter=M $JUDGED_COMMIT $BASE -- src/`,
-   `ast.dump` das duas versões (`git show <rev>:<arquivo>`) com o docstring removido
-   do corpo de todo `Module`/`ClassDef`/`FunctionDef`/`AsyncFunctionDef`
-   (substituído por `pass` se o corpo esvaziar); arquivos A/D/R do diff listados à
-   parte (esperado: nenhum):
-   ```bash
-   MSYS_NO_PATHCONV=1 docker run --rm $HMOUNTS -v $SCRATCHD:/scratch:ro $HENVS "$IMAGE_ID" sh -c "$PRE; python3 --version; /app/.venv/bin/python -I /scratch/ast_equal.py $JUDGED_COMMIT $BASE" | tee "$SCRATCH/ast-equal.txt"
-   git -C "$WTH" diff --name-only "$BASE"..HEAD -- src/ | tee "$SCRATCH/src-8.2.txt"
-   ```
-   Esperado: 15 arquivos `AST_EQUAL`, `ast_diff 0`. A lista `src-8.2.txt` é a dos
-   acréscimos da 8.2 (Tasks 01–05), cada um justificado no relatório como fora do
-   caminho refresh/scorecard (o `ParquetGoldStore` ganha leitura e um helper
-   extraído da `read_generation`, sem mudar a escrita; o composition root e o
-   `cli.py` ganham só o wiring do subcomando).
+   Esperado: `Python 3.12.13`, 15 arquivos `AST_EQUAL`, `files 15 ast_diff 0`,
+   exit 0 (`AST_DIFF` → linha do "Se falhar", não parada da reprodução). A lista
+   `src-8.2.txt` é a dos acréscimos da 8.2 (Tasks 01–05), cada um justificado no
+   relatório (CB-2): `reproduction_comparison.py` (dto e use case),
+   `audit_reproduction.py`, `judged_generation_store.py`, `evaluation_commands.py`,
+   `cli.py` e `composition_root.py` — **fora** do caminho refresh/scorecard (só
+   comparação, leitura da cópia e wiring do subcomando; o `wire_dependencies`
+   não muda); `parquet_gold_store.py` — **no caminho de leitura do scorecard**
+   (`BuildConfirmatoryScorecard(reader=gold_store)`): a Task 03 extrai
+   `_read_generation_dir` da `read_generation` sem mudar comportamento, provado pela
+   suíte de contrato do `GoldGenerationReader` (verde no ponto 1) e, de qualquer
+   modo, fora do claim, que é o da execução em `060537fc`. A redação do A7 do
+   concept ("cada um justificado como fora do caminho de refresh/scorecard") não
+   cabe para esse arquivo: registrar `[deviation]` de redação em §7 na E2, com
+   esta justificativa.
 8. *Pré-checagem de processo (A3b):* citar o T1 verde da Task 07 e o ponto 1
    (`test_reproduction_process_independence.py`).
 9. **Commit** da evidência do pré-voo em §7 (`[measurement] E2`, saídas literais
-   dos itens 1–8): `docs(evaluation): pré-voo da reprodução em 060537fc [8.2/--]`.
+   dos itens 1–8, linhas `BLOB`, `DOTENV_SHA`, `FREEZE_E2`, `UV_LOCK_SAME_AS_HEAD`, e
+   o `[deviation]` de redação do A7): `docs(evaluation): pré-voo da reprodução em 060537fc [8.2/--]`.
 
-**E3 — Reprodução real e auditoria (A3, A4, A7, A8).**
+**E3 — Reprodução real e auditoria (A3, A4, A7, A8).** Começa pelo bloco "HEAD
+íntegro"; o venv segue congelado (vi).
 
 1. *Corrida destacada* (~15 min: o refresh da 8.1 levou 13,9 min):
    ```bash
    set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
-   test -z "$(docker ps -a --filter name=ff82-repro -q)"
+   test -z "$(docker ps -a --filter name=ff82-repro -q)" || { echo FAIL_CONTAINER_EXISTS; exit 1; }
+   test ! -e "$DISPH/gold" && test ! -e "$DISPH/reproduction" || { echo FAIL_DISPOSABLE_USED; exit 1; }
    MSYS_NO_PATHCONV=1 docker run -d --name ff82-repro $RES $RMOUNTS $RENVS "$IMAGE_ID" sh -c "$PRE; $DRIVER"
    ```
    Em segundo plano (`run_in_background`): `docker wait ff82-repro > "$SCRATCH/repro.exit"`.
@@ -926,40 +1052,59 @@ Antes de qualquer valor. Só footer, contagens e rótulos de definição.
    Ao sair:
    ```bash
    set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
-   docker logs ff82-repro > "$SCRATCH/repro.out" 2> "$SCRATCH/repro.err"; cat "$SCRATCH/repro.exit"   # 0
+   docker inspect --format '{{.State.ExitCode}} {{.State.OOMKilled}}' ff82-repro > "$SCRATCH/repro.state"
+   docker logs ff82-repro > "$SCRATCH/repro.out" 2> "$SCRATCH/repro.err"
+   cat "$SCRATCH/repro.exit" "$SCRATCH/repro.state"
+   test "$(cat "$SCRATCH/repro.state")" = "0 false" || { echo FAIL_REPRO_EXIT; tail -30 "$SCRATCH/repro.err"; exit 1; }
    docker rm ff82-repro
    grep "^reproduction " "$SCRATCH/repro.out"   # refresh COMPLETED tables 19; scorecard sha256 <hex>
-   ls "$DISPH/reproduction"                      # environment.json scorecard.json
-   python "$SCRATCH/env_equal.py" "$P/judged/ATTEMPTS.jsonl" "$DISPH/reproduction/environment.json"   # ENV_EQUAL
-   cmp "$SCRATCH/check.json" "$DISPH/reproduction/environment.json" && echo SNAPSHOT_SAME_AS_CHECK
-   test -z "$(find "$DISPH" -name judged -o -name ATTEMPTS.jsonl)" && echo NO_JUDGMENT_IN_DISPOSABLE
+   grep -q "^reproduction $REF: refresh COMPLETED tables 19$" "$SCRATCH/repro.out" || { echo FAIL_REFRESH_STATUS; exit 1; }; echo REFRESH_COMPLETED
+   test -f "$DISPH/reproduction/environment.json" && test -f "$DISPH/reproduction/scorecard.json" || { echo FAIL_REPRO_FILES; exit 1; }; echo REPRO_FILES
+   python "$WTH/scripts/reproduction_evidence.py" env-equal "$P/judged/ATTEMPTS.jsonl" "$DISPH/reproduction/environment.json" || { echo FAIL_ENV_EQUAL_RUN; exit 1; }
+   cmp -s "$SCRATCH/check.json" "$DISPH/reproduction/environment.json" || { echo FAIL_SNAPSHOT_CHANGED; exit 1; }; echo SNAPSHOT_SAME_AS_CHECK
+   test -z "$(find "$DISPH" \( -name judged -o -name ATTEMPTS.jsonl \) -print)" || { echo FAIL_JUDGMENT_IN_DISPOSABLE; exit 1; }; echo NO_JUDGMENT_IN_DISPOSABLE
    ```
    Tempos por etapa: linhas `_timed` do `repro.err`.
-2. *Auditoria pelo HEAD* (só leitura nas duas raízes):
+2. *Venv igual ao da E2 (GB-3):*
    ```bash
    set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
-   MSYS_NO_PATHCONV=1 docker run --rm $RES $HMOUNTS -v $MAIND/data/cohorts/aapl:/judged:ro -v $DISPD:/reproduced:ro $HENVS "$IMAGE_ID" sh -c "$PRE; uv run --no-sync python -m financial_forecasting.cli audit-reproduction --judged-data-root /judged --reproduced-data-root /reproduced --preregistration aapl_confirmatory --revision 3 --preregistration-ref $REF" > "$SCRATCH/audit.out"; echo "exit $?"
-   head -2 "$SCRATCH/audit.out"   # bit_identical true; os três result_digest = 7c7940d4…
+   MSYS_NO_PATHCONV=1 docker run --rm $RES $RMOUNTS $RENVS "$IMAGE_ID" sh -c "uv pip freeze --python /app/.venv/bin/python" > "$SCRATCH/freeze-e3.txt" && rc=0 || rc=$?
+   echo "exit $rc"; test "$rc" = 0 || { echo FAIL_FREEZE; exit 1; }
+   test "$(sha256sum "$SCRATCH/freeze-e3.txt" | cut -d' ' -f1)" = "$FREEZE_E2" || { echo FAIL_FREEZE_CHANGED; exit 1; }; echo FREEZE_SAME
    ```
-3. *Partição viva depois (I1, A4):*
-   `sha256sum -c "$SCRATCH/live-before.sha"` → `LIVE_INTACT` (os três `OK`).
-4. *Relatório* `docs/reports/reproduction_audit.md`: o claim — (a) afirmado
+3. *Auditoria pelo HEAD* (só leitura nas duas raízes):
+   ```bash
+   set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
+   MSYS_NO_PATHCONV=1 docker run --rm $RES $HMOUNTS -v $MAIND/data/cohorts/aapl:/judged:ro -v $DISPD:/reproduced:ro $HENVS "$IMAGE_ID" sh -c "$PRE; uv run --no-sync python -m financial_forecasting.cli audit-reproduction --judged-data-root /judged --reproduced-data-root /reproduced --preregistration aapl_confirmatory --revision 3 --preregistration-ref $REF" > "$SCRATCH/audit.out" 2> "$SCRATCH/audit.err" && rc=0 || rc=$?
+   echo "exit $rc"; head -2 "$SCRATCH/audit.out"
+   test "$rc" = 0 || { echo FAIL_NOT_BIT_IDENTICAL; exit 1; }; echo BIT_IDENTICAL
+   ```
+   Esperado: `bit_identical true`; os três `result_digest` = `7c7940d4…`.
+4. *Partição viva depois (I1, A4):*
+   ```bash
+   set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
+   (cd "$LIVE" && sha256sum -c --quiet "$SCRATCH/live-before.sha256sum") || { echo FAIL_LIVE_CHANGED; exit 1; }
+   test "$(cd "$LIVE" && find . -type f | wc -l)" = "$(wc -l < "$SCRATCH/live-before.sha256sum")" || { echo FAIL_LIVE_NEW_FILE; exit 1; }; echo LIVE_INTACT
+   ```
+5. *Relatório* `docs/reports/reproduction_audit.md`: o claim — (a) afirmado
    (reprodução bit a bit no commit e no ambiente registrados, a partir dos dados
    persistidos, sem re-treino), (b) citado da 7.1 (predições a partir dos
    checkpoints), (c) **não executado** (um único ambiente, D4) —; identidade
    (`silver_content.digest`, `dataset_fingerprint`, ref, partição); os três
    `result_digest`; a tabela por classe e por tabela do `audit.out` (contagens,
    diferentes, max |Δ| também quando zero); o scorecard sem proveniência; o
-   ambiente (imagem, `cpu.max`, kernel, sha256 do freeze e do `.env`, `ENV_EQUAL`
-   chave a chave); o R-BIT-COMMIT (lista `060537fc..64b8a17d` com `AST_EQUAL` e a
-   lista `64b8a17d..HEAD` justificada) com a declaração de que o claim é o da
-   execução em `060537fc`; a partição viva antes/depois; os comandos. Entrada
-   `[measurement] E3` em §7. Commit
+   ambiente (imagem, `cpu.max`, kernel, `FREEZE_E2` = E3, `DOTENV_SHA`, `ENV_EQUAL`
+   chave a chave); os blobs do driver e dos scripts de evidência (linhas `BLOB`);
+   o R-BIT-COMMIT (lista `060537fc..64b8a17d` com `AST_EQUAL` e a lista
+   `64b8a17d..HEAD` justificada como na E2 item 7) com a declaração de que o claim
+   é o da execução em `060537fc`; a partição viva antes/depois; os comandos.
+   Entrada `[measurement] E3` em §7. Commit
    `docs(evaluation): relatório da reprodução bit a bit da geração julgada [8.2/--]`.
-5. *Limpeza da árvore temporária:* `git -C "$WTH" worktree remove "$REPROH"` (com
+6. *Limpeza da árvore temporária:* `git -C "$WTH" worktree remove "$REPROH"` (com
    arquivos ignorados — `.env`, `artifacts/`, `__pycache__` —: `rm -rf "$REPROH"` e
    `git -C "$WTH" worktree prune`); o `data_root` descartável fica em
-   `data/reproductions/` (git-ignorado) até o merge, como evidência.
+   `data/reproductions/` (git-ignorado) até o merge, como evidência. Fim do venv
+   congelado (avisar o coordenador).
 
 **E4 — Leitura de valores da evidência anterior e comparações (A9–A11; D10 passo 3).**
 
@@ -969,8 +1114,13 @@ reprodução).
 1. *Tabela recomputada:*
    ```bash
    set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
-   MSYS_NO_PATHCONV=1 docker run --rm $RES $HMOUNTS -v $MAIND/data/analytics:/oracle:ro -v $MAIND/data/cohorts/aapl:/official:ro $HENVS -e EQUIVALENCE_ORACLE_ROOT=/oracle -e EQUIVALENCE_OFFICIAL_ROOT=/official "$IMAGE_ID" sh -c "$PRE; uv run --no-sync python -m tests.equivalence.audit_table" > "$SCRATCH/equivalence.md"; echo "exit $?"
-   sha256sum -c "$SCRATCH/live-before.sha"   # a leitura não tocou a partição viva
+   test -z "$(git -C "$WTH" status --porcelain)" || { echo FAIL_WT_DIRTY; exit 1; }
+   REG_SHA=$(sha256sum "$WTH/docs/reports/prior_evidence_registry.toml" | cut -d' ' -f1)
+   MSYS_NO_PATHCONV=1 docker run --rm $RES $HMOUNTS -v $MAIND/data/analytics:/oracle:ro -v $MAIND/data/cohorts/aapl:/official:ro $HENVS -e EQUIVALENCE_ORACLE_ROOT=/oracle -e EQUIVALENCE_OFFICIAL_ROOT=/official "$IMAGE_ID" sh -c "$PRE; uv run --no-sync python -m tests.equivalence.audit_table" > "$SCRATCH/equivalence.md" 2> "$SCRATCH/equivalence.err" && rc=0 || rc=$?
+   echo "exit $rc"; test "$rc" = 0 || { echo FAIL_AUDIT_TABLE; tail -30 "$SCRATCH/equivalence.err"; exit 1; }
+   (cd "$LIVE" && sha256sum -c --quiet "$SCRATCH/live-before.sha256sum") || { echo FAIL_LIVE_CHANGED; exit 1; }; echo LIVE_INTACT
+   test -z "$(git -C "$WTH" status --porcelain)" || { echo FAIL_SCAFFOLD_WROTE; exit 1; }
+   test "$(sha256sum "$WTH/docs/reports/prior_evidence_registry.toml" | cut -d' ' -f1)" = "$REG_SHA" || { echo FAIL_REGISTRY_TOUCHED; exit 1; }; echo SCAFFOLD_WROTE_NOTHING
    ```
 2. *Por horizonte:* T∩ (h=1, h=7) e o motivo do h=7 menor (calendário, D-M5);
    A1 (contagem fora, max |Δ|) — fora em algum horizonte → diagnóstico D13 na
@@ -989,44 +1139,62 @@ reprodução).
    `equivalence.md` entre os marcadores, com a classificação final); `[finding]`
    não explicados; inventário do andaime (arquivos de `tests/equivalence/`) e a
    aposentadoria (doc §5.7: comparações registradas, nada oficial depende dele,
-   motivo). Entrada `[measurement] E4` em §7 com o comando e o exit.
+   motivo). Entrada `[measurement] E4` em §7 com o comando, o exit e
+   `SCAFFOLD_WROTE_NOTHING`.
 
 **E5 — Teste opt-in e commits dos relatórios (A12, A13).**
 
 1. Copiar para `DECLARED` do `test_official_vs_prior_evidence.py` a classificação
-   do relatório (mesmas linhas).
-2. Com o oráculo (comando do E4 trocando `python -m tests.equivalence.audit_table`
-   por `pytest tests/equivalence/test_official_vs_prior_evidence.py -rs -q --no-cov`)
-   → `1 passed`; sem as variáveis (T1 normal) → `1 skipped` com o motivo e o
-   caminho do registro. Prova negativa: com uma linha de `DECLARED` alterada à mão
-   (não commitada) → falha mostrando o diff; revertida.
-3. Commits: `docs(evaluation): relatório da equivalência com a evidência anterior [8.2/--]`
+   do relatório (mesmas linhas); T1 da Task 11 (`pytest tests/equivalence/ -rs`,
+   ruff, mypy) → o opt-in `SKIPPED` com o motivo.
+2. Commits: `docs(evaluation): relatório da equivalência com a evidência anterior [8.2/--]`
    (relatório + §7) e `test(evaluation): tabela declarada da equivalência [8.2/--]`
-   (o teste). Depois, o **ponto 2** do plano (`make check`), o roadmap e
-   `stage 8.2: complete`.
+   (o teste).
+3. Com o oráculo, sobre a árvore commitada (CB-6):
+   ```bash
+   set -eu; SCRATCH=<scratchpad da sessão, caminho absoluto literal>; . "$SCRATCH/etapa-82.env" || exit 1
+   test -z "$(git -C "$WTH" status --porcelain)" || { echo FAIL_WT_DIRTY; exit 1; }
+   BEFORE=$(sha256sum "$WTH/docs/reports/prior_evidence_registry.toml" "$WTH/docs/reports/equivalence_audit.md")
+   MSYS_NO_PATHCONV=1 docker run --rm $RES $HMOUNTS -v $MAIND/data/analytics:/oracle:ro -v $MAIND/data/cohorts/aapl:/official:ro $HENVS -e EQUIVALENCE_ORACLE_ROOT=/oracle -e EQUIVALENCE_OFFICIAL_ROOT=/official "$IMAGE_ID" sh -c "$PRE; uv run --no-sync pytest tests/equivalence/test_official_vs_prior_evidence.py -rs -q --no-cov -p no:cacheprovider" > "$SCRATCH/optin.out" && rc=0 || rc=$?
+   echo "exit $rc"; tail -3 "$SCRATCH/optin.out"; test "$rc" = 0 || { echo FAIL_OPTIN; exit 1; }   # 1 passed
+   test -z "$(git -C "$WTH" status --porcelain)" || { echo FAIL_TEST_WROTE; exit 1; }
+   test "$(sha256sum "$WTH/docs/reports/prior_evidence_registry.toml" "$WTH/docs/reports/equivalence_audit.md")" = "$BEFORE" || { echo FAIL_TEST_TOUCHED_FILES; exit 1; }; echo TEST_NEVER_WRITES
+   ```
+   Prova negativa: uma linha de `DECLARED` alterada à mão (não commitada) → o
+   mesmo comando sai ≠ 0 mostrando o diff; `git -C "$WTH" checkout -- <teste>`.
+   Saídas em §7 (`[measurement] E5`), commit `docs(evaluation): evidência do teste
+   opt-in da equivalência [8.2/--]`. Depois, o **ponto 2** do plano (`make check`),
+   o roadmap e `stage 8.2: complete`.
 
 **Se falhar** (nunca editar silver, gold, cópia julgada ou `ATTEMPTS.jsonl` à mão;
 nunca montar a partição viva com escrita; nunca re-julgar):
 
 | Sintoma | Ação |
 |---|---|
-| E1: sha256 de um arquivo ≠ D-M1 | `[finding]` e **parar** (o oráculo mudou desde a medição; nada é lido) |
+| Bloco "HEAD íntegro": `FAIL_WT_DIRTY`, `FAIL_CHANGED_SINCE_GATE1`, `FAIL_WORKING_COPY` | parar; commitar ou descartar o que sujou a árvore; se um script de evidência ou o driver mudou desde o `GATE1`, ele precisa de novo `make check` (`[deviation]` justificado) e `GATE1` atualizado antes de seguir |
+| E1: `FAIL_NOT_DM1` (sha256 ≠ D-M1) | `[finding]` e **parar** (o oráculo mudou desde a medição; nada é lido) |
 | E1: fonte de definição de baseline ausente | zero comuns, tabela por baseline vazia registrada (D12 a); o resto segue |
+| E1: T1 vermelho no `comparison_set.py` | corrigir só a forma (nunca por valor: nenhum foi lido); repetir o T1 |
 | E2: `git worktree add` recusado (hook ou caminho existente) | conferir `git worktree list`; caminho existente de sessão anterior → `git worktree prune` e outro `REPRO`; recusa do hook → registrar e repetir pelo checkout principal (`git -C "$MAINH" worktree add --detach …`, sem branch) |
-| E2: `BACKUP_OK`/`RESTORE_OK`/`LISTING_IS_REGISTERED` falha | não restaurar; `[finding]` e **parar** (entrada congelada — ADR 8.1.0003 item 6b) |
-| E2: imagem ausente, `TREE_CLEAN` falha, `ENV_EQUAL` com chave divergente, kernel ≠ | não rodar como R-BIT; `[finding]` (diagnóstico de ambiente, não de código); parada para decisão (concept §6) |
-| E2: `--check` com `ImportError`/`AttributeError` | o driver usa nome ausente em `060537fc`: `fix` do driver no HEAD (`[deviation]`), `make check` extra justificado, repetir E2 |
-| E2: `AST_DIFF` num arquivo | `[finding]` no relatório (a reprodução em `060537fc` continua sendo o claim; o diff só deixa de confirmar a base) |
-| E3: exit ≠ 0 / `refresh` ≠ `COMPLETED` | logs; `[finding]`; nada é apagado; diagnóstico antes de repetir (repetição = novo `data_root` descartável, mesmo E2) |
-| E3: exit 137 / OOM | `docker inspect ff82-repro --format '{{.State.OOMKilled}}'`; repetir com mais `--memory` (memória não é chave do I4), `[deviation]` |
+| E2: `FAIL_LISTING_NOT_REGISTERED`, `FAIL_BACKUP`, `FAIL_RESTORE`, `FAIL_DISPOSABLE_LAYOUT` | não seguir; `[finding]` e **parar** (entrada congelada — ADR 8.1.0003 item 6b); o descartável é apagado só depois do registro |
+| E2: `FAIL_JUDGED_COPY`/`FAIL_DIGEST` | cópia julgada adulterada: restaurar do backup `judged-…` com `sha256sum -c` e `[deviation]` (ADR 8.1.0004 item 2c); nunca re-julgar |
+| E2: `FAIL_IMAGE`, `FAIL_TREE_DIRTY`, `FAIL_ENV_EQUAL` (chave divergente), `FAIL_CPU_MAX`, `FAIL_KERNEL` | não rodar como R-BIT; `[finding]` (diagnóstico de ambiente, não de código); parada para decisão (concept §6) |
+| E2: `FAIL_CHECK` com `ImportError`/`AttributeError` | o driver usa nome ausente em `060537fc`: `fix` do driver no HEAD (`[deviation]`), `make check` extra justificado, `GATE1` novo, repetir E2 |
+| E2: `AST_DIFF` num arquivo (exit 1 do `ast-equal`) | `[finding]` no relatório (a reprodução em `060537fc` continua sendo o claim; o diff só deixa de confirmar a base); seguir |
+| E3: `FAIL_REPRO_EXIT` com `OOMKilled true` / exit 137 | repetir com mais `--memory` (memória não é chave do I4) num **novo** descartável (E2 itens 3–6), `[deviation]` |
+| E3: `FAIL_REPRO_EXIT` sem OOM, `FAIL_REFRESH_STATUS`, `FAIL_REPRO_FILES` | logs (`repro.err`); `[finding]`; nada é apagado; diagnóstico antes de repetir (repetição = novo descartável, E2 itens 3–6) |
+| E3: `FAIL_ENV_EQUAL_RUN`, `FAIL_SNAPSHOT_CHANGED` (GB-7) | o ambiente mudou entre o `--check` e a corrida (ou o driver não grava a mesma foto): `[finding]` de ambiente, a reprodução não conta como R-BIT; parada para decisão |
+| E3: `FAIL_JUDGMENT_IN_DISPOSABLE` | `[finding]` e **parar**: o driver fez efeito de julgamento (contradiz D2); nada é usado |
+| E3: `FAIL_FREEZE_CHANGED` (GB-3) | o venv mudou durante as Etapas: `[finding]`, a reprodução não conta; descobrir quem sincronizou, refazer E2 e E3 com o venv congelado |
 | E3: identidade desigual (I3) | `bit_identical = false`, "outra entrada"; `[finding]` e diagnóstico (§1); nada comparado como resultado |
-| E3: `audit-reproduction` exit 1 com I3–I4 satisfeitas | `[finding]` R-BIT, **parada**; diagnóstico pré-declarado do §1 na ordem, cada passo em §7; nenhuma tolerância; a geração julgada não é trocada (doc §4.6) |
-| E3: `JudgedGenerationTamperedError` | restaurar a cópia do backup `judged-…` com `sha256sum -c` e `[deviation]` (ADR 8.1.0004 item 2c); nunca re-julgar |
-| E3/E4: `LIVE_INTACT` falha | `[finding]` e **parar**: algo escreveu na partição viva; restaurar dos backups conferidos e `[deviation]` |
-| E4: `PriorEvidenceHashError` | o oráculo mudou depois do registro: `[finding]`, **parar** (nunca regenerar o registro) |
+| E3: `FAIL_NOT_BIT_IDENTICAL` (exit 1) com I3–I4 satisfeitas | `[finding]` R-BIT, **parada**; diagnóstico pré-declarado do §1 na ordem, cada passo em §7; nenhuma tolerância; a geração julgada não é trocada (doc §4.6) |
+| E3: exit 2 do `audit-reproduction` | ler o `audit.err` (`JudgedGenerationTamperedError` → restauração do backup da cópia e `[deviation]`; outro erro → `[finding]`) |
+| E3/E4/E5: `FAIL_LIVE_CHANGED`/`FAIL_LIVE_NEW_FILE` | `[finding]` e **parar**: algo escreveu na partição viva; restaurar dos backups conferidos e `[deviation]` |
+| E4: `FAIL_AUDIT_TABLE` com `PriorEvidenceHashError` | o oráculo mudou depois do registro: `[finding]`, **parar** (nunca regenerar o registro) |
 | E4: `dataset_fingerprint` do `ReadTrainingGrid` ≠ `00e4406d…` | `[finding]` e parar (a partição viva não é a entrada julgada) |
+| E4/E5: `FAIL_SCAFFOLD_WROTE`, `FAIL_REGISTRY_TOUCHED`, `FAIL_TEST_WROTE`, `FAIL_TEST_TOUCHED_FILES` | o andaime escreveu: `[finding]`, `git -C "$WTH" checkout -- <arquivo>`, corrigir o andaime (`fix`, T1) e repetir |
 | E4: A1 fora | D13 (diagnóstico na ordem), categoria "alvo", comparação de modelo daquele horizonte para; regra não afrouxada |
-| E5: opt-in falha com o oráculo | corrigir a cópia de `DECLARED` (nunca o cálculo para caber); se o recomputado mudou entre E4 e E5, `[finding]` |
+| E5: `FAIL_OPTIN` com o oráculo | corrigir a cópia de `DECLARED` (nunca o cálculo para caber); se o recomputado mudou entre E4 e E5, `[finding]` |
 
 ## 3. Gate de saída da Stage
 
@@ -1052,7 +1220,7 @@ python scripts/check_technical_postexec.py docs/stages/8.2-equivalence-audit/tec
       `1 skipped` sem ele.
 
 ### Checklist de fechamento
-- [ ] 10 Tasks commitadas, cada uma com o seu T1 verde; Checkpoints C nas
+- [ ] 11 Tasks commitadas, cada uma com o seu T1 verde; Checkpoints C nas
       fronteiras do §4 com disposições registradas
 - [ ] Auditoria de testes com mutação real **antes do ponto 1**, todos os itens
       "sim", saídas em §7
@@ -1068,29 +1236,30 @@ python scripts/check_technical_postexec.py docs/stages/8.2-equivalence-audit/tec
 ## 4. Ordem de dependência entre Tasks
 
 ```
-01 ─► 02 ─► 04 ─► 05 ─► 06 ─► 07 ─► 08 ─► 09 ─► 10 ─[make check 1]─► E1 ─► E2 ─► E3 ─► E4 ─► E5 ─[make check 2]
+01 ─► 02 ─► 04 ─► 05 ─► 06 ─► 07 ─► 08 ─► 09 ─► 10 ─► 11 ─[make check 1]─► E1 ─► E2 ─► E3 ─► E4 ─► E5 ─[make check 2]
       03 ──┘
 ```
 
 - 01 antes de 02 (DTO e mapa); 02 e 03 antes de 04 (comparador e leitor); 04
   antes de 05; 05 antes de 07 (o teste chama o subcomando); 06 antes de 07 (o
-  teste chama o driver); 08 antes de 09–10 (registro e checagem); 09 antes de 10;
-  10 antes da E1 (o `comparison_set.py` existe para receber os comuns); E1 → E5 na
-  ordem do D10.
+  teste chama o driver); 08 antes de 09 (a sonda do contrato importa
+  `tests.equivalence`) e de 10–11 (registro e checagem); 10 antes de 11; 11 antes
+  da E1 (o `comparison_set.py` existe para receber os comuns); E1 → E5 na ordem do
+  D10.
 - **Checkpoint C** (revisão do bloco por subagente, sem gate de suíte) depois de
-  03, 05, 07 e 10; a **auditoria de testes** com mutação real fecha antes do
-  ponto 1 (Task 10), nunca depois da E3.
+  03, 05, 07 e 11; a **auditoria de testes** com mutação real fecha antes do
+  ponto 1 (Task 11), nunca depois da E3.
 
 ## 5. Riscos de execução e fallbacks
 
 | Risco | Fallback |
 |---|---|
-| O `import-linter` não aceita `financial_forecasting` como fonte de um contrato `forbidden` contra o pacote externo `tests` | ficar só com o teste de arquitetura da Task 08 (AST + literais) e `[deviation]` com a mensagem do `lint-imports`; A14 por grep + teste |
+| O `import-linter` não aceita `financial_forecasting` como fonte de um contrato `forbidden` contra o pacote externo `tests` | Task 09: ficar só com o teste de arquitetura da Task 08 (AST + literais) e `[deviation]` com a mensagem do `lint-imports`; A14 por grep + teste |
 | Um builder grava coluna não prevista no mapa | o comparador ergue na Task 07 (sintético) ou na E3 (real): acrescentar a classe no mapa com a regra do concept §4 (`[deviation]`); nunca fallback por tipo |
 | Mundo sintético da Task 07 sem alguma das 19 tabelas não vazia | a completude cobre as não vazias e a unit cobre o schema; registrar as vazias na mensagem |
 | `ReadTrainingGrid`/leitor silver exigem escrita (lock, cache) sobre a montagem `:ro` | montar o adaptador com o parâmetro que desliga a escrita, ou ler os mesmos Parquet pelo `ParquetMedallionStore` de leitura; `[deviation]` |
 | Bind mount de arquivo único (`/driver/…`) não aparece no Docker Desktop | montar `$WTD/scripts:/driver:ro` (o diretório; fora dos caminhos do probe do mesmo jeito), `[deviation]` |
-| Volume `financial-forecasting_app-venv` re-sincronizado depois da 8.1 com outra versão de lib | `ENV_EQUAL` falha nas chaves `env.lib.*`/`env.probe.*`: diagnóstico de ambiente, parada (concept §6); nunca `uv sync` para "consertar" sem decisão |
+| Volume `financial-forecasting_app-venv` (compartilhado por todas as worktrees) re-sincronizado depois da 8.1 ou durante as Etapas | `ENV_EQUAL` falha nas chaves `env.lib.*`/`env.probe.*`, ou `FREEZE_SAME` falha entre E2 e E3: diagnóstico de ambiente, parada (concept §6); proibição declarada de `uv sync`/`make setup` em qualquer worktree da E2 ao fim da E3; nunca `uv sync` para "consertar" sem decisão |
 | Tempo da E3 acima de 3× o esperado sem progresso | `docker stats ff82-repro`, registrar; não matar sem `[finding]` |
 | `git worktree remove` recusa por arquivos não rastreados | `rm -rf` da árvore temporária e `git worktree prune` (nenhum dado do repo nela) |
 
@@ -1117,22 +1286,22 @@ python scripts/check_technical_postexec.py docs/stages/8.2-equivalence-audit/tec
 
 | # | Critério de aceite | Task(s)/Etapa | Teste / evidência |
 |---|---|---|---|
-| A1 | Registro antes da leitura | 08, E1 | `test_prior_evidence_registry_check.py`; `REGISTRY_EQUALS_DM1`, `REGISTRY_OK`; commit do registro antes do E4 no `git log` |
-| A2 | Entrada e ambiente da reprodução | E2 | `LISTING_IS_REGISTERED`, `BACKUP_OK`, `RESTORE_OK`, `TREE_CLEAN`, `SAME_IMAGE`, `ENV_EQUAL`, `cpu.max`, sha256 do freeze em §7 |
-| A3 | Reprodução real bit a bit | 01, 02, 04, 05, E3 | `test_compare_reproduction.py`; `test_audit_reproduction.py`; `test_audit_reproduction_cli.py`; `audit.out` (exit 0, `bit_identical true`, `7c7940d4…` × 3) e `reproduction_audit.md` |
-| A3b | Driver testado | 06, 07, E2 | `test_reproduce_judged_generation.py` (lista da Task 06); `test_reproduction_process_independence.py::test_reproduced_result_digest_is_independent_of_hash_seed`; `--check` em `060537fc` (`check.json`, `ENV_EQUAL`) |
-| A4 | Partição viva intocada | 05, 07, E2, E3 | `test_nothing_written_in_either_root`; `test_reproduced_root_has_no_judged_dir_nor_attempts`; `live-before.sha` + `LIVE_INTACT`; `NO_JUDGMENT_IN_DISPOSABLE` |
+| A1 | Registro antes da leitura | 08, E1 | `test_prior_evidence_registry_check.py` (inclusive `test_built_registry_round_trips_and_verifies`); `REGISTRY_EQUALS_DM1`, `REGISTRY_OK`; commit do registro antes do E4 no `git log` |
+| A2 | Entrada e ambiente da reprodução | 06, E2, E3 | `test_reproduction_evidence.py::test_env_equal_*`; `LISTING_IS_REGISTERED`, `BACKUP_OK`, `RESTORE_OK`, `TREE_CLEAN`, `SAME_IMAGE`, `ENV_EQUAL`, `CPU_MAX_6`, `FREEZE_E2` e `FREEZE_SAME` em §7 |
+| A3 | Reprodução real bit a bit | 01, 02, 04, 05, E3 | `test_compare_reproduction.py`; `test_audit_reproduction.py`; `test_audit_reproduction_cli.py` (inclusive `test_altered_leaf_in_reproduced_scorecard_json_exit_1_with_scorecard_line`); `audit.out` (`BIT_IDENTICAL`, `7c7940d4…` × 3) e `reproduction_audit.md` |
+| A3b | Driver testado | 06, 07, E2 | `test_reproduce_judged_generation.py` (lista da Task 06); `test_reproduction_process_independence.py::test_reproduced_result_digest_is_independent_of_hash_seed`; `--check` em `060537fc` (`check.json`, `ENV_EQUAL`, `CHECK_WROTE_NOTHING`) |
+| A4 | Partição viva intocada | 05, 07, E2, E3 | `test_nothing_written_in_either_root`; `test_reproduced_root_has_no_judged_dir_nor_attempts`; `live-before.sha256sum` (partição inteira) + `LIVE_INTACT`; `NO_JUDGMENT_IN_DISPOSABLE` |
 | A5 | Leitor da cópia julgada | 03 | `test_judged_generation_store_contract.py` (lista da Task 03); `check_port_coverage`/`check_fake_parity` no ponto 1 |
 | A6 | Comparador testado | 01, 02, 07 | `test_reproduction_comparison_dtos.py::test_every_schema_column_has_a_declared_class`; `test_compare_reproduction.py` (lista da Task 02); `test_every_stored_column_has_a_declared_class` |
-| A7 | R-BIT-COMMIT registrado | E2, E3 | `ast-equal.txt` (15 `AST_EQUAL`, auto-teste), `src-8.2.txt` justificada no `reproduction_audit.md` |
+| A7 | R-BIT-COMMIT registrado | 06, E2, E3 | `test_reproduction_evidence.py::test_ast_equal_*`; `ast-equal.txt` (15 `AST_EQUAL`, auto-teste), `src-8.2.txt` justificada no `reproduction_audit.md` (com o `[deviation]` de redação para o `parquet_gold_store.py`) |
 | A8 | Claim declarado | E3 | seção de claim do `reproduction_audit.md` ((a) afirmado, (b) citado, (c) não executado) |
-| A9 | EQ-MUST A1 | 09, E4 | `test_scaffold_comparisons.py::test_a1_*`; tabela A9 do `equivalence_audit.md` (T∩, fora, max \|Δ\| por h) |
-| A10 | EQ-MUST A2 | 09, 10, E4 | `test_a2_tolerance_is_max_of_r2_and_storage_precision`, `test_a2_not_realizable_*`; tabela A10 com a classificação |
-| A11 | Tabela de sentido por horizonte | 09, 10, E4 | `test_dm_sign_*`, `test_dm_rejection_*`, `test_side_of_nominal_*`, `test_sense_cell_*`; tabela A11 (candidato × candidato sempre; por baseline comum ou vazia registrada) |
-| A12 | Relatório de equivalência | 10, E4, E5 | `test_audit_table_render.py`; `equivalence_audit.md` com hashes, contexto, A9–A11, findings, inventário e aposentadoria |
-| A13 | Teste fora do CI | 08, 10, E5 | `test_prior_evidence_registry_check.py` (sempre ativo); opt-in `SKIPPED` com `-rs` (T1 da 10 e §3) e `1 passed` com o oráculo (E5) |
-| A14 | Isolamento do anterior | 08 | `test_prior_evidence_isolation.py`; contrato `src-no-tests` no `lint-imports` (ponto 1) |
-| A15 | Roadmap e gates | 10, saída | pontos 1 e 2 do plano (saídas coladas, cobertura por arquivo); roadmap no fechamento |
+| A9 | EQ-MUST A1 | 10, E4 | `test_scaffold_comparisons.py::test_a1_*`; tabela A9 do `equivalence_audit.md` (T∩, fora, max \|Δ\| por h) |
+| A10 | EQ-MUST A2 | 10, 11, E4 | `test_a2_tolerance_is_max_of_r2_and_storage_precision`, `test_a2_not_realizable_*`; tabela A10 com a classificação |
+| A11 | Tabela de sentido por horizonte | 10, 11, E4 | `test_dm_sign_*`, `test_dm_rejection_*`, `test_side_of_nominal_*`, `test_sense_cell_*`; tabela A11 (candidato × candidato sempre; por baseline comum ou vazia registrada) |
+| A12 | Relatório de equivalência | 11, E4, E5 | `test_audit_table_render.py`; `equivalence_audit.md` com hashes, contexto, A9–A11, findings, inventário e aposentadoria |
+| A13 | Teste fora do CI | 08, 11, E4, E5 | `test_prior_evidence_registry_check.py` (sempre ativo); opt-in `SKIPPED` com `-rs` (T1 da 11 e §3), `1 passed` com o oráculo e `TEST_NEVER_WRITES`/`SCAFFOLD_WROTE_NOTHING` (E4, E5) |
+| A14 | Isolamento do anterior | 08, 09 | `test_prior_evidence_isolation.py`; contrato `src-no-tests` no `lint-imports` e caso real em `test_import_contracts.py` (ponto 1) |
+| A15 | Roadmap e gates | 11, saída | pontos 1 e 2 do plano (saídas coladas, cobertura por arquivo); roadmap no fechamento |
 
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
