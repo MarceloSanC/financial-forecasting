@@ -1477,4 +1477,34 @@ Task 12 (golden) e da 13 (A4/A5) fixam o comportamento.
   `modeling/.../json_cohort_progress_ledger.py` (l.106, l.130), além do docstring que o
   technical previa. Foi formatação do `ruff`, sem mudança de comportamento.
 
+### 2026-10-23 — [deviation] Task 13 — referência da re-execução: toda tentativa desde o último desvio (Checkpoint C bloco 5) — Claude (sessão Windows)
+**Contexto:** a revisão de `83e91c11..ba4ad820` achou dois defeitos no use case e um
+problema menor, com sondas que os provam:
+- **CC5-1** (crítico): o 2b(ii) "neutralizava" os instantes trocando-os pelo `started_at`
+  da própria geração. Como o `RefreshGold` real carimba o `Clock`, toda re-execução
+  legítima depois de uma queda entre E1 e E3 dava `PriorAttemptDivergenceError`. Os testes
+  não pegaram porque o `FakeGoldRefresh` publicava instantes fixos.
+- **CC5-2** (alto): a referência era a geração viva. Depois de uma divergência, a 2ª
+  geração virava referência, e a 3ª corrida a selava sem `--deviation`. Apagar `current/`
+  desligava a conferência.
+- **CC5-3** (baixo): a entrada era comparada só com a última tentativa.
+
+**Ajuste:**
+- `7b60e0c5`: a linha `input_read` grava `result_digest`
+  (`result_layer_digest`: tabelas por valor e `manifest.as_mapping()` sem
+  `started_at`/`finished_at`, que saem do payload e não são trocadas). Sem `--deviation`,
+  a referência é o trecho do log desde a última `started` com desvio. Código e ambiente
+  são conferidos no G4. Uma divergência já registrada recusa no G4. Entrada e resultado
+  novos são conferidos contra **toda** tentativa do trecho. O `FakeGoldRefresh` agora
+  carimba pelo `Clock`.
+- `bd895942`: emenda dos itens 2e/2b do ADR 8.1.0004.
+- Testes novos: unit da 3ª corrida depois da divergência, de `current/` apagado, de
+  entrada diferente da 1ª tentativa e do trecho novo depois do desvio; integração com
+  queda real no E3 e re-execução `JUDGED`.
+
+**Pendência para quem mantém o concept:** o concept 8.1 (I13, §6, D3, D12) ainda diz "a
+geração nova tem de ser igual à geração viva anterior". Agora a referência é o
+resultado de toda tentativa do trecho, sem `current/`. O concept está `done`, e esta
+sessão não o editou. A regra vigente é a do ADR emendado.
+
 <!-- END: post-execution -->
