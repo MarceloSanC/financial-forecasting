@@ -45,7 +45,9 @@ redeclara caminhos:
 O formato da listagem, dos documentos e das linhas do log é o de
 `application/dtos/judged_generation.py` (o mesmo do fake); o sha256 de cada arquivo é
 calculado por streaming (`hashlib`, blocos de 1 MiB). Nenhum caminho de código
-sobrescreve, move ou apaga uma cópia selada nem o log.
+sobrescreve, move ou apaga uma cópia selada nem o log. `read_judged_generation` (Stage
+8.2) confere a cópia pelo `find` e lê `judged/<ref>/generation/` pela mesma função da
+`read_generation` (`_read_generation_dir`).
 """
 
 from __future__ import annotations
@@ -92,6 +94,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
 from financial_forecasting.features.evaluation.application.ports.out.judged_generation_store import (  # noqa: E501
     JudgedGenerationExistsError,
     JudgedGenerationMismatchError,
+    JudgedGenerationNotFoundError,
     JudgedGenerationTamperedError,
 )
 from financial_forecasting.shared.domain.services.path_identifier import (
@@ -160,6 +163,38 @@ def _read_rows(path: Path) -> list[dict[str, object]]:
     return rows
 
 
+def _read_generation_dir(directory: Path, partition: GoldPartition) -> GoldGeneration:
+    """A geração de um diretório (`current/` ou `judged/<ref>/generation/`).
+
+    Lê o `MANIFEST.json` **antes** de qualquer tabela e monta a geração **só** por
+    `GoldGeneration.from_stored` — dono único da leitura (`read_generation` e
+    `read_judged_generation`; technical 8.2 Task 03).
+
+    Raises:
+        GoldManifestNotFoundError: `MANIFEST.json` ausente.
+        GoldGenerationCorruptError: manifesto ilegível, tabela desconhecida ou com arquivo
+            ausente, ou a montagem do `from_stored` recusa a geração.
+    """
+    manifest_path = directory / MANIFEST_NAME
+    if not manifest_path.is_file():
+        raise GoldManifestNotFoundError(f"no gold generation for {partition}")
+    manifest = _read_manifest(manifest_path)
+    if not isinstance(manifest, dict):
+        raise GoldGenerationCorruptError(f"{MANIFEST_NAME} is not a JSON object")
+    listed = manifest.get("rows_by_table")
+    if not isinstance(listed, dict):
+        raise GoldGenerationCorruptError(f"{MANIFEST_NAME} has no rows_by_table table")
+    rows_by_table: dict[str, list[dict[str, object]]] = {}
+    for name, count in listed.items():
+        if name not in GOLD_SCHEMAS:  # antes de montar caminho com o nome lido
+            raise GoldGenerationCorruptError(f"unknown gold table {name!r} in the manifest")
+        path = directory / f"{name}.parquet"
+        if not path.is_file():
+            raise GoldGenerationCorruptError(f"table file {path.name} is missing")
+        rows_by_table[name] = [] if count == 0 else _read_rows(path)
+    return GoldGeneration.from_stored(manifest, rows_by_table, partition=partition)
+
+
 class ParquetGoldStore:
     """Satisfaz o port `GoldStore`: geração inteira por partição, manifesto por último."""
 
@@ -224,25 +259,7 @@ class ParquetGoldStore:
             GoldGenerationCorruptError: manifesto ilegível, tabela desconhecida ou com
                 arquivo ausente, ou a montagem do `from_stored` recusa a geração.
         """
-        current = self.current_dir(partition)
-        manifest_path = current / MANIFEST_NAME
-        if not manifest_path.is_file():
-            raise GoldManifestNotFoundError(f"no gold generation for {partition}")
-        manifest = _read_manifest(manifest_path)
-        if not isinstance(manifest, dict):
-            raise GoldGenerationCorruptError(f"{MANIFEST_NAME} is not a JSON object")
-        listed = manifest.get("rows_by_table")
-        if not isinstance(listed, dict):
-            raise GoldGenerationCorruptError(f"{MANIFEST_NAME} has no rows_by_table table")
-        rows_by_table: dict[str, list[dict[str, object]]] = {}
-        for name, count in listed.items():
-            if name not in GOLD_SCHEMAS:  # antes de montar caminho com o nome lido
-                raise GoldGenerationCorruptError(f"unknown gold table {name!r} in the manifest")
-            path = current / f"{name}.parquet"
-            if not path.is_file():
-                raise GoldGenerationCorruptError(f"table file {path.name} is missing")
-            rows_by_table[name] = [] if count == 0 else _read_rows(path)
-        return GoldGeneration.from_stored(manifest, rows_by_table, partition=partition)
+        return _read_generation_dir(self.current_dir(partition), partition)
 
     # -- geração julgada (Stage 8.1, port `JudgedGenerationStore`) ----------------------
 
@@ -329,6 +346,26 @@ class ParquetGoldStore:
         if sealed is None:  # pragma: no cover — acabou de ser selada
             raise JudgedGenerationTamperedError(f"{preregistration_ref}: sealed copy vanished")
         return sealed
+
+    def read_judged_generation(
+        self, *, partition: GoldPartition, preregistration_ref: str
+    ) -> GoldGeneration:
+        """A cópia selada como `GoldGeneration`: `find` (integridade) e depois a leitura.
+
+        Raises:
+            JudgedGenerationNotFoundError: sem `judged/<ref>/`.
+            JudgedGenerationTamperedError: a cópia não confere com o `CONTENTS.sha256`, ou
+                o manifesto/tabela da cópia é ilegível ou incoerente.
+        """
+        if self.find(partition=partition, preregistration_ref=preregistration_ref) is None:
+            raise JudgedGenerationNotFoundError(
+                f"no judged copy of {preregistration_ref} for {partition}"
+            )
+        directory = self._judged_dir(partition, preregistration_ref) / GENERATION_DIR
+        try:
+            return _read_generation_dir(directory, partition)
+        except (GoldManifestNotFoundError, GoldGenerationCorruptError) as error:
+            raise JudgedGenerationTamperedError(f"{preregistration_ref}: {error}") from error
 
     def judged_refs(self, *, partition: GoldPartition) -> tuple[str, ...]:
         """As referências com cópia selada (diretórios de `judged/` sem prefixo `.`)."""
