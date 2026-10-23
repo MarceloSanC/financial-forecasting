@@ -42,8 +42,12 @@ necessarily differs for a re-execution. The port `JudgedGenerationStore` has
    decisions, labels, timestamps), R3 (floats depending on random numbers: MCS
    and block-sensitivity p-values, Christoffersen Monte Carlo p-values, H3
    bootstrap bounds), R2 (other floats), from a declared map; floats compared by
-   bits; per class the number compared, the number different and max |Δ|,
-   reported also when zero.
+   bits; per class the number compared, the number different and max |Δ|
+   (numeric only; non-numeric R1 reports the count of differences), reported
+   also when zero. The map is complete: every column of every
+   `GoldTableSchema` has a declared class (completeness test, no fallback by
+   type). `bit_identical` also requires both result-layer digests to equal the
+   `expected_result_digest` read from the attempt log.
 3. **Scorecard.** `as_mapping()` of both sides without `started_at`/`finished_at`
    inside `manifest_read`; equal, with max |Δ| over numeric leaves.
 4. **Where.** `compare_reproduction` (pure, `evaluation/application/use_cases/`)
@@ -51,7 +55,9 @@ necessarily differs for a re-execution. The port `JudgedGenerationStore` has
    `JudgedGenerationStore.read_judged_generation(partition, preregistration_ref)`
    with fake, contract suite and the `ParquetGoldStore` real; CLI
    `audit-reproduction` (read-only, no lock, refuses equal roots, checks the copy
-   digest against the committed `.judged.toml`, exit 0 only when bit-identical).
+   digest against the committed `.judged.toml`, reads the reproduced scorecard
+   from `<reproduced>/reproduction/scorecard.json` written by the driver of ADR
+   8.2.0001 and never recomputes it, exit 0 only when bit-identical).
 5. **No R2 tolerance yet.** u_q and the R2 tolerance (R-ENV) are not implemented:
    no second environment exists (ADR 8.2.0001).
 
@@ -87,8 +93,8 @@ necessarily differs for a re-execution. The port `JudgedGenerationStore` has
 - One more port method (fake parity, contract test) and one CLI subcommand.
 
 ### Neutral / trade-offs accepted
-- The class map must be kept in sync with new gold tables (a table without a
-  declared class falls back to R1/R2 by type; R3 is opt-in by name).
+- The class map must be kept in sync with new gold tables; the completeness
+  test fails when a column has no declared class.
 
 ## References
 

@@ -48,8 +48,20 @@ record is the report with the hashes. The prior files sit in the git-ignored
    hashed; any mismatch or missing file fails (never skips).
 5. **Regression oracle.** The test declares, per comparison, the expected
    classification (within tolerance / explained with category / not explained)
-   and asserts the recomputed one equals it; the report mirrors that table.
+   and asserts the recomputed one equals it, and that the declared table equals
+   the table parsed from `docs/reports/equivalence_audit.md` (editing one
+   without the other fails, with a visible diff). The documented command uses
+   `-rs` so the skip reason is shown.
 6. **Never regenerates.** The test writes neither the registry nor the report.
+   The hash-check function has an always-on unit test (`tmp_path`, runs in CI).
+7. **What "before any value" means.** No metric, loss, p-value, sign, verdict or
+   realized-target value of the prior evidence is read before the registry
+   commit; shape metadata (schema, counts, dates, ids, definition labels) is
+   allowed — doc §5.2 protects the comparison set against the *new* numbers
+   (concept 8.2 D11). What defines the comparison set (common baselines and
+   their source, variants, sign convention, seed aggregation, u_q, the A1
+   point-wise rule) is fixed in the concept (D12, D13) or in the registry
+   commit, before values are read.
 
 ## Alternatives considered
 
