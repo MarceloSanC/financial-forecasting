@@ -44,16 +44,12 @@ class TestGbmTrainingParamsDefaults:
 
 class TestGbmTrainingParamsValidation:
     @pytest.mark.parametrize("num_boost_round_max", [0, -1])
-    def test_non_positive_ceiling_raises_naming_the_field(
-        self, num_boost_round_max: int
-    ) -> None:
+    def test_non_positive_ceiling_raises_naming_the_field(self, num_boost_round_max: int) -> None:
         with pytest.raises(ValueError, match="num_boost_round_max"):
             GbmTrainingParams(seed=_SEED, num_boost_round_max=num_boost_round_max)
 
     @pytest.mark.parametrize("learning_rate", [0.0, -0.1])
-    def test_non_positive_learning_rate_raises_naming_the_field(
-        self, learning_rate: float
-    ) -> None:
+    def test_non_positive_learning_rate_raises_naming_the_field(self, learning_rate: float) -> None:
         with pytest.raises(ValueError, match="learning_rate"):
             GbmTrainingParams(seed=_SEED, learning_rate=learning_rate)
 

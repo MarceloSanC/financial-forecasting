@@ -372,14 +372,10 @@ def _validate_command(command: RunTftSweepCommand) -> None:
         )
     if not command.horizons:
         raise ValueError("horizons must be non-empty (C2)")
-    if any(h < 1 for h in command.horizons) or len(set(command.horizons)) != len(
-        command.horizons
-    ):
+    if any(h < 1 for h in command.horizons) or len(set(command.horizons)) != len(command.horizons):
         raise ValueError(f"horizons must be unique and >= 1; got {command.horizons} (C2)")
     if max(command.horizons) > command.scope.max_horizon:
         raise ValueError(
             f"max(horizons)={max(command.horizons)} exceeds "
             f"scope.max_horizon={command.scope.max_horizon} (C2)"
         )
-
-

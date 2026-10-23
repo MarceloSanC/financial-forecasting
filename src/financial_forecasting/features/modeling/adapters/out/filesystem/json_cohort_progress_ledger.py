@@ -99,9 +99,7 @@ class JsonCohortProgressLedger:
             unit: {run: int(rows) for run, rows in runs.items()} for unit, runs in units.items()
         }
 
-    def mark_completed(
-        self, cohort_id: str, unit_key: str, rows_by_run: Mapping[str, int]
-    ) -> None:
+    def mark_completed(self, cohort_id: str, unit_key: str, rows_by_run: Mapping[str, int]) -> None:
         state = self._read(cohort_id, _PROGRESS_FILE)
         units = state.setdefault("units", {})
         units[unit_key] = {run: int(rows) for run, rows in rows_by_run.items()}
@@ -125,9 +123,7 @@ class JsonCohortProgressLedger:
 
     # -- sweeps ---------------------------------------------------------------
 
-    def record_sweep_result(
-        self, scope_id: str, model: str, result: Mapping[str, object]
-    ) -> None:
+    def record_sweep_result(self, scope_id: str, model: str, result: Mapping[str, object]) -> None:
         state = self._read(scope_id, _SWEEPS_FILE)
         state[model] = dict(result)
         self._write(scope_id, _SWEEPS_FILE, state)

@@ -54,7 +54,5 @@ class ConfigSignature:
         `created_at/started_at/ended_at/timestamp` e delega ao
         `hasher.hash_mapping`.
         """
-        cleaned = {
-            key: item for key, item in config.items() if key not in _VOLATILE_KEYS
-        }
+        cleaned = {key: item for key, item in config.items() if key not in _VOLATILE_KEYS}
         return cls(value=hasher.hash_mapping(cleaned))

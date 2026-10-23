@@ -806,13 +806,11 @@ Não há mais T2: o `check-block` por Checkpoint C saiu com a ADR 0.0.0059
 (`uv run pre-commit install`). Num host sem `uv`, ele não existe em nenhum
 clone nem worktree, e o `commit-msg` avisa disso a cada commit (issue #199).
 Nesse caso o T1 roda no container, só nos arquivos da Task:
-`uv run --no-sync ruff check <arquivos>` e `uv run --no-sync mypy` (as
-versões do `make lint` e do `make typecheck`), mais
-`uvx ruff@0.6.9 format <arquivos>`, o mesmo formatador que o hook rodaria.
-Nenhuma das duas versões do ruff aceita o estilo já commitado no repo inteiro
-(a #222 alinha os pins). Por isso o formato roda só nos arquivos da Task, e
-nunca com a lista vazia, que formataria o repo inteiro. O `uvx` baixa o ruff
-na primeira chamada de cada container e precisa de rede.
+`uv run --no-sync ruff format <arquivos>`, `uv run --no-sync ruff check <arquivos>`
+e `uv run --no-sync mypy`. São os mesmos comandos que os hooks rodariam: desde a
+#222 os hooks de ruff e mypy são `local` e chamam o venv, com a versão do
+`uv.lock` que o `make lint` (que inclui `ruff format --check`) e o
+`make typecheck` usam. Não há pin próprio do formatador para lembrar.
 
 **Plano de gates** (escrito na Fase 3B, em §1 do `technical.md`; revisado no
 Passo 7 / Checkpoint B):

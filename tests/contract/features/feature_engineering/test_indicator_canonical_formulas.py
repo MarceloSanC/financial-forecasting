@@ -252,12 +252,12 @@ def test_warmup_region_is_nan_before_first_finite(
     """
     produced = _column(adapter_rows, name)
     assert math.isnan(produced[0]), f"{name} deveria ser NaN na barra 0 (warmup)"
-    assert math.isnan(
-        produced[last_nan_index]
-    ), f"{name} deveria ser NaN na barra {last_nan_index} (última do warmup)"
-    assert math.isfinite(
-        produced[last_nan_index + 1]
-    ), f"{name} deveria ser finito na barra {last_nan_index + 1} (primeira pós-warmup)"
+    assert math.isnan(produced[last_nan_index]), (
+        f"{name} deveria ser NaN na barra {last_nan_index} (última do warmup)"
+    )
+    assert math.isfinite(produced[last_nan_index + 1]), (
+        f"{name} deveria ser finito na barra {last_nan_index + 1} (primeira pós-warmup)"
+    )
 
 
 @pytest.mark.contract

@@ -65,9 +65,7 @@ def test_distinct_keys_are_all_kept() -> None:
     b = _Prediction("2020-03-01", 7, fold_index=0, tag="b")  # mesmo ts, horizonte !=
     c = _Prediction("2020-03-02", 1, fold_index=0, tag="c")
 
-    result = deduplicate_operationally_latest(
-        [a, b, c], alignment_key=_key, operational_rank=_rank
-    )
+    result = deduplicate_operationally_latest([a, b, c], alignment_key=_key, operational_rank=_rank)
 
     assert set(result) == {a, b, c}
 
@@ -93,16 +91,12 @@ def test_tie_on_rank_raises() -> None:
     b = _Prediction("2020-03-01", 1, fold_index=3, tag="b")
 
     with pytest.raises(ValueError, match="ambiguous operationally-latest"):
-        deduplicate_operationally_latest(
-            [a, b], alignment_key=_key, operational_rank=_rank
-        )
+        deduplicate_operationally_latest([a, b], alignment_key=_key, operational_rank=_rank)
 
 
 @pytest.mark.unit
 def test_empty_input_returns_empty_tuple() -> None:
     """Sem registros, retorna tupla vazia."""
-    result = deduplicate_operationally_latest(
-        [], alignment_key=_key, operational_rank=_rank
-    )
+    result = deduplicate_operationally_latest([], alignment_key=_key, operational_rank=_rank)
 
     assert result == ()

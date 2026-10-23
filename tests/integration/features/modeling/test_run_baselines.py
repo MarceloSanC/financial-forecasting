@@ -98,9 +98,7 @@ _DIM_RUN = "dim_run"
 
 def _xnys_sessions() -> tuple[date, ...]:
     """120 sessões XNYS REAIS a partir de 2021-01-04 (grade densa da 3.5)."""
-    window = ExchangeCalendarsProvider().sessions(
-        start=date(2021, 1, 4), end=date(2021, 7, 30)
-    )
+    window = ExchangeCalendarsProvider().sessions(start=date(2021, 1, 4), end=date(2021, 7, 30))
     assert len(window.sessions) >= _N_SESSIONS
     return window.sessions[:_N_SESSIONS]
 
@@ -115,9 +113,7 @@ def _seed_dataset(data_root: Path, sessions: Sequence[date]) -> None:
     """Materializa o parquet no layout físico da 3.5 (diretório-por-asset)."""
     frame = pd.DataFrame(
         {
-            "timestamp": [
-                datetime(day.year, day.month, day.day, tzinfo=UTC) for day in sessions
-            ],
+            "timestamp": [datetime(day.year, day.month, day.day, tzinfo=UTC) for day in sessions],
             "asset_id": [_ASSET] * len(sessions),
             "target_return": list(_returns(len(sessions))),
             # Colunas de modelagem: o grid único as exige também das baselines (5.5 D11).
@@ -179,9 +175,7 @@ def pipeline(tmp_path_factory: pytest.TempPathFactory) -> _PipelineRun:
         )
     )
     result = deps.run_baselines(_command())
-    iso = tuple(
-        datetime(day.year, day.month, day.day, tzinfo=UTC).isoformat() for day in sessions
-    )
+    iso = tuple(datetime(day.year, day.month, day.day, tzinfo=UTC).isoformat() for day in sessions)
     return _PipelineRun(deps=deps, result=result, iso_timestamps=iso)
 
 
@@ -298,9 +292,7 @@ def test_e2e_c6_tail_skips_counted_and_nothing_fabricated(pipeline: _PipelineRun
 
     rows = pipeline.facts()
     max_idx = _N_SESSIONS - 1
-    assert all(
-        int(str(r["decision_idx"])) + int(str(r["horizon"])) <= max_idx for r in rows
-    )
+    assert all(int(str(r["decision_idx"])) + int(str(r["horizon"])) <= max_idx for r in rows)
     # Contagem exata: o que está no silver é o que os summaries reportam (A5).
     assert len(rows) == sum(summary.rows_written for summary in pipeline.result.runs)
 

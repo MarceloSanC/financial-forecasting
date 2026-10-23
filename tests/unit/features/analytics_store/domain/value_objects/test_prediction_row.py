@@ -114,9 +114,7 @@ def test_decision_idx_must_be_a_non_negative_int(decision_idx: object) -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize(
-    "quantile_level", [0.0, 1.0, -0.1, 1.5, float("nan"), True, "0.5", None]
-)
+@pytest.mark.parametrize("quantile_level", [0.0, 1.0, -0.1, 1.5, float("nan"), True, "0.5", None])
 def test_quantile_level_must_be_in_the_open_unit_interval(quantile_level: object) -> None:
     """#160: o nível entra na PK — fora de (0, 1) (ou não-número) é recusado."""
     with pytest.raises(ValueError, match=r"quantile_level must be in \(0, 1\)"):
