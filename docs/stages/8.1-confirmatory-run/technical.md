@@ -1588,4 +1588,21 @@ seguem verdes. O ADR 8.1.0004 foi reescrito com redação única nos itens 1, 2e
 `decision:` do frontmatter cita o `prior_live_result_digest`, e o histórico das emendas
 ficou numa seção própria.
 
+### 2026-10-23 — [measurement] etapa-r — intenção da tentativa 1 da corrida confirmatória — Claude (sessão Windows)
+**Contexto:** R1 verde (`ONLY_DOCS_SINCE_GATE2`, `SAME_IMAGE`, `60 60 []`, nenhum container
+no `data_root`, sem `gold/` nem `.writer.lock`; pré-voo com `git status` vazio, `dirty false`,
+`non-code diff []`; r3 resolvida como `aapl_confirmatory-r3-00fd83d9cd39 2026-10-21T17:41:23+00:00`).
+R2: `infer` avulso com `60 runs (60 strict, 0 tolerance); calib rows written 0, verified 211680`
+(08:49:09Z → 09:04:18Z); backup `data/backups/aapl-pre-8.1-20261023-084758` com `BACKUP_OK`
+(311 arquivos; sha256 da listagem `e4c774570767c5679a11347beabd9ea872b53101acb8c77ada5a64bc2e50d5e6`).
+**Tentativa 1:**
+- HEAD (`GATE2`): `d3b4990950e33d2b8da5158dcdf3035bd446ca4d`
+- `code.src` `4d2b2540a10f5cbb2f59164bba3262224d572d7b`; `code.uv_lock` `0f36050a0044db5f05ca9037e23c4425220cb82b`
+- `platform` `Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.41`; `cpu_capability` `AVX2`
+- `IMAGE_ID` `sha256:b69a7620e7bd8449369bde2f46e903c5f46c25e9efb3597f452af3272e0a8f45`
+- hora UTC da intenção: 2026-10-23T09:05Z; `$RES` = `--cpus 6 --memory 8g --memory-swap 8g`
+- tempo esperado: `infer` ≈ 15–20 min + refresh/scorecard/cópia ≈ 10,5 min (perna "hash ligado" da Task 17)
+- tipo: **1ª execução** (nem replay A15 nem pós-registro A16)
+- `--break-stale-lock`: não; `--deviation`: não
+
 <!-- END: post-execution -->
