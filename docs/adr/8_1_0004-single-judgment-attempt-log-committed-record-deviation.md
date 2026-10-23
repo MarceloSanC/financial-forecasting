@@ -5,9 +5,9 @@ when-use: Reference before re-running `evaluate` after an interrupted or failed 
 keywords: [adr, evaluation, confirmatory-run, re-judgment, forking-paths, attempt-log, write-ahead, deviation, judged-record, data-root, git-ignored, cross-check, replay]
 status: accepted
 created_at: 2026-10-22
-updated_at: 2026-10-22
+updated_at: 2026-10-23
 adr_id: 8.1.0004
-decision: Numbers exist from the moment `RefreshGold` starts, not from the seal; so before E1 the use case appends an attempt entry (ref, commit, code.src, code.uv_lock, R-BIT environment keys, started_at, deviation text if any, silver_content of a prior live generation; after E1 a second line with the silver_content read) to a write-ahead attempt log of the partition, and G4 refuses — before any effect — when the partition has a sealed copy, an attempt or a live `current/` generation of another revision, when a committed `<name>-r*.judged.toml` names another revision or names this one without a sealed copy of the same digest, or when an earlier unsealed attempt of the same revision ran other code or another R-BIT environment and no `[deviation]` justification is given; after E1 a different input (silver_content, dataset fingerprint) than the earlier attempt's, or a result different from the earlier live generation with code, environment and input equal, stops with a `[finding]` and nothing is sealed; the durable source is git — the runbook commits each real attempt's intention in the technical §7 before running.
+decision: Numbers exist from the moment `RefreshGold` starts, not from the seal; so before E1 the use case appends an attempt entry (ref, commit, code.src, code.uv_lock, R-BIT environment keys, started_at, deviation text if any, silver_content of a prior live generation; after E1 a second line with the silver_content read) to a write-ahead attempt log of the partition, and G4 refuses — before any effect — when the partition has a sealed copy, an attempt or a live `current/` generation of another revision, when a committed `<name>-r*.judged.toml` names another revision or names this one without a sealed copy of the same digest, or when an earlier unsealed attempt of the same revision ran other code or another R-BIT environment and no `[deviation]` justification is given; after E1 the attempt records the input it read and the digest of the result layer it published, and a different input or a different result than any attempt since the last `[deviation]` stops with a `[finding]` and nothing is sealed — a recorded divergence makes `--deviation` mandatory from then on (amended 2026-10-23, Checkpoint C block 5); the durable source is git — the runbook commits each real attempt's intention in the technical §7 before running.
 context_stage: 8.1-confirmatory-run
 bounded_context: evaluation
 ---
@@ -117,6 +117,43 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
    erases the local attempt log, but not the committed intentions, so an
    attempt is never invisible to a reviewer of the repository.
 4. **No code path deletes** the attempt log, a sealed copy or a `.judged.toml`.
+
+### Amendment 2026-10-23 — the reference is every attempt since the last deviation (Checkpoint C 8.1, block 5)
+
+The first implementation compared the new generation with the **live** one in
+`current/`, which the next refresh replaces, and neutralized the manifest
+timestamps by copying the generation's own `started_at`. That failed both ways:
+every legitimate re-run after an E1–E3 crash diverged, because `RefreshGold`
+stamps `started_at` from the Clock (CC5-1). And after one divergence the
+second run's generation became the new reference, so a third run could seal it
+without a deviation (CC5-2). The same happened when `current/` was deleted by
+hand. This amendment replaces items 2e and 2b (the remaining items stand):
+
+- The `input_read` line also records `result_digest`: the sha256 of the
+  **result layer** of the generation the refresh published. That layer is
+  every table by value plus `manifest.as_mapping()` **without** the
+  `started_at`/`finished_at` keys. The keys are dropped, never replaced by
+  another instant. It is integrity for comparing attempts, like the copy's
+  sha256 (ADR 7.1.0004), not a call to the `Hasher` port.
+- **Segment.** The reference of a re-run without `--deviation` is the
+  segment of this revision's log that starts at the last `started` line with a
+  deviation. Without any such line, the segment is the whole log.
+- **2e (G4).** Without `--deviation`: every `started` line of the segment must
+  carry the current `code.*` (`PriorAttemptCodeChangedError`) and `env.*`
+  (`PriorAttemptEnvironmentChangedError`). A segment whose `input_read` lines
+  hold more than one `result_digest` is a **recorded divergence**, and the run
+  stops with `PriorAttemptDivergenceError` before any effect. From then on only
+  `--deviation` re-runs.
+- **2b (after E1).** The `input_read` line is written first, so a refusal
+  still records the input and the result. Then, without `--deviation`, the new
+  input must equal the input of **every** `input_read` line of the segment
+  (`PriorAttemptInputChangedError`), and the new `result_digest` must equal
+  each of them (`PriorAttemptDivergenceError`, an R-BIT failure and a stop for
+  diagnosis).
+- The live generation in `current/` is no longer the reference of any
+  comparison. G4(d) still refuses a live generation of another revision, or one
+  of this revision with no attempt recorded. The started line still records
+  its `silver_content` as provenance.
 
 ## Alternatives considered
 
