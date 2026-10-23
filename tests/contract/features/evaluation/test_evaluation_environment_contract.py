@@ -236,3 +236,27 @@ def test_modeling_probe_required_keys_unchanged() -> None:
         "code.cohort_file",
         "code_dirty",
     )
+
+
+def test_unmapped_or_missing_code_key_refuses_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CC4-2: chave `code.*` fora do mapa ou chave mapeada ausente não passam caladas."""
+    extra = InMemoryRuntimeEnvironmentProbe(**{"code.extra": "tree-extra"})
+    with pytest.raises(RuntimeError, match=r"'code\.extra' is not mapped"):
+        _real(tmp_path / "a", monkeypatch, probe=extra).snapshot()
+
+    missing = _real(tmp_path / "b", monkeypatch)
+    missing._probe_keys["code.gone"] = "code.gone"
+    with pytest.raises(RuntimeError, match=r"lacks the mapped code keys \['code\.gone'\]"):
+        missing.snapshot()
+
+
+@pytest.mark.parametrize("dirty", ["True", "", "yes"])
+def test_dirty_flag_outside_true_false_refuses_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dirty: str
+) -> None:
+    """CC4-2: sujeira do probe fora de "true"/"false" nunca vira "limpo"."""
+    probe = InMemoryRuntimeEnvironmentProbe(**{DIRTY_KEY: dirty})
+    with pytest.raises(RuntimeError, match="must be 'true' or 'false'"):
+        _real(tmp_path, monkeypatch, probe=probe).snapshot()

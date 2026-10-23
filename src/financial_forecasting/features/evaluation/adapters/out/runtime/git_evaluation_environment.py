@@ -10,8 +10,11 @@ de chave do `evaluation`:
 - o probe da 5.5, recebido do composition root junto com o mapa chave-do-probe →
   chave-do-evaluation (`probe_keys`: as de código, que viram `code.*`) e a chave de
   sujeira do probe (`probe_dirty_key` → `code_dirty`); as demais chaves do probe viram
-  `env.probe.<chave>`. Este módulo não importa o `modeling` (como o hash de `src/` é
-  calculado continua sendo só do probe);
+  `env.probe.<chave>`. Fail-closed (Checkpoint C 8.1, CC4-2): chave mapeada ausente da
+  foto do probe, chave `code.*` do probe fora do mapa (mudança de código não pode virar
+  mudança de ambiente no I13) ou sujeira fora de `"true"`/`"false"` → `RuntimeError`.
+  Este módulo não importa o `modeling` (como o hash de `src/` é calculado continua sendo
+  só do probe);
 - `env.image_id` (obrigatório: sem ele → `MissingImageIdError`, antes de tocar o git),
   `env.platform` (`platform.platform()`), `env.cpu_count` (`os.cpu_count()`),
   `env.cpu_capability` (função injetada; no composition root, a do torch — o
@@ -105,7 +108,9 @@ class GitEvaluationEnvironment:
 
         Raises:
             MissingImageIdError: `image_id` ausente ou vazio.
-            RuntimeError: git indisponível ou fora de um repositório.
+            RuntimeError: git indisponível ou fora de um repositório; foto do probe sem
+                uma chave mapeada, com chave `code.*` fora do mapa ou com sujeira fora de
+                `"true"`/`"false"`.
         """
         if not self._image_id:
             raise MissingImageIdError(
@@ -120,11 +125,26 @@ class GitEvaluationEnvironment:
             COMMIT_KEY: commit,
             PREREGISTRATION_DIRTY_KEY: TRUE if status else FALSE,
         }
-        for key, value in self._probe.snapshot().items():
+        probe_photo = self._probe.snapshot()
+        missing = sorted(set(self._probe_keys) - set(probe_photo))
+        if missing:
+            raise RuntimeError(f"the probe snapshot lacks the mapped code keys {missing}")
+        for key, value in probe_photo.items():
             if key == self._probe_dirty_key:
-                photo[CODE_DIRTY_KEY] = TRUE if value == TRUE else FALSE
+                if value not in {TRUE, FALSE}:
+                    raise RuntimeError(
+                        f"the probe {key!r} must be {TRUE!r} or {FALSE!r}, got {value!r}"
+                    )
+                photo[CODE_DIRTY_KEY] = value
+            elif key in self._probe_keys:
+                photo[self._probe_keys[key]] = value
+            elif key.startswith(CODE_PREFIX):
+                raise RuntimeError(
+                    f"the probe code key {key!r} is not mapped (it would be recorded as "
+                    "environment, not code)"
+                )
             else:
-                photo[self._probe_keys.get(key, probe_key(key))] = value
+                photo[probe_key(key)] = value
         if CODE_DIRTY_KEY not in photo:
             raise RuntimeError(f"the probe snapshot has no {self._probe_dirty_key!r} key")
         photo[IMAGE_ID_KEY] = self._image_id
