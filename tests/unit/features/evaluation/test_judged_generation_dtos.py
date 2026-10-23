@@ -69,6 +69,7 @@ def _input_read(**changes: object) -> JudgedAttempt:
         "preregistration_ref": _REF,
         "silver_content": SAMPLE_SILVER_CONTENT,
         "dataset_fingerprint": _C,
+        "result_digest": _A,
     }
     fields.update(changes)
     return JudgedAttempt(**fields)
@@ -156,6 +157,7 @@ def test_attempt_round_trip_started_and_input_read() -> None:
         "preregistration_ref",
         "silver_content",
         "dataset_fingerprint",
+        "result_digest",
     }
 
 
@@ -169,6 +171,8 @@ def test_attempt_round_trip_started_and_input_read() -> None:
         pytest.param(
             lambda: _input_read(dataset_fingerprint="x"), "dataset_fingerprint", id="ir-fp"
         ),
+        pytest.param(lambda: _input_read(result_digest=None), "result_digest", id="ir-no-result"),
+        pytest.param(lambda: _input_read(result_digest="A" * 64), "result_digest", id="ir-result"),
         pytest.param(lambda: _input_read(commit=_COMMIT), "cannot carry", id="ir-commit"),
         pytest.param(lambda: _started(code=None), "attempt code must be", id="st-no-code"),
         pytest.param(lambda: _started(environment={}), "attempt environment", id="st-no-env"),
@@ -284,3 +288,43 @@ def test_judged_ref_cannot_collide_with_the_layout(ref: str) -> None:
     with pytest.raises(ValueError, match="collides with the judged/ layout"):
         check_judged_ref(ref)
     assert check_judged_ref(_REF) == _REF
+
+
+@pytest.mark.unit
+def test_result_layer_digest_ignores_only_the_clock_instants() -> None:
+    """CC5-1: o digest não vê `started_at`/`finished_at`; vê qualquer outro valor."""
+    from financial_forecasting.features.evaluation.application.dtos.judged_generation import (  # noqa: PLC0415
+        result_layer_digest,
+    )
+    from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (  # noqa: PLC0415
+        GoldGeneration,
+        GoldTable,
+    )
+
+    manifest = _manifest(rows_by_table={"gold_dm_results": 1})
+    table = GoldTable(name="gold_dm_results", key=("horizon",), rows=({"horizon": 1, "x": 0.5},))
+    base = GoldGeneration(manifest=manifest, tables={"gold_dm_results": table})
+    later = dataclasses.replace(
+        manifest,
+        started_at=manifest.started_at.replace(hour=13),
+        finished_at=manifest.finished_at.replace(hour=14),
+    )
+    other_value = GoldTable(
+        name="gold_dm_results", key=("horizon",), rows=({"horizon": 1, "x": 0.25},)
+    )
+
+    digest = result_layer_digest(base)
+    assert len(digest) == 64  # noqa: PLR2004
+    assert result_layer_digest(GoldGeneration(manifest=later, tables=base.tables)) == digest
+    assert (
+        result_layer_digest(
+            GoldGeneration(manifest=manifest, tables={"gold_dm_results": other_value})
+        )
+        != digest
+    )
+    assert (
+        result_layer_digest(
+            GoldGeneration(manifest=dataclasses.replace(manifest, n_runs=7), tables=base.tables)
+        )
+        != digest
+    )

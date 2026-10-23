@@ -19,16 +19,21 @@ confere igualdades de identidade e grava; **não calcula nenhum número** (I1). 
   (sem refresh, scorecard nem escrita); (c) tentativas de outra revisão →
   `JudgedGenerationExistsError`; (d) geração viva — de outra revisão →
   `JudgedGenerationExistsError`; desta sem tentativa registrada →
-  `JudgedGenerationTamperedError`; (e) tentativas desta revisão com outro `code.*` →
-  `PriorAttemptCodeChangedError` ou outro `env.*` → `PriorAttemptEnvironmentChangedError`,
-  salvo com `--deviation`;
+  `JudgedGenerationTamperedError`; (e) sem `--deviation`, contra **o trecho desde o
+  último desvio** (as tentativas desta revisão a partir da última `started` com
+  `deviation`, ou todas se nenhuma tem): outro `code.*` → `PriorAttemptCodeChangedError`;
+  outro `env.*` → `PriorAttemptEnvironmentChangedError`; uma divergência já registrada no
+  trecho (`result_digest` diferentes entre si) → `PriorAttemptDivergenceError` — daí em
+  diante só com `--deviation`;
 - registro **write-ahead** da tentativa (`started`, com a foto e o `silver_content` da
   geração viva desta revisão, se houver) → **E1** `refresh_gold(refresh_command_from(plan,
-  ref))` → registro `input_read` (a entrada lida) → conferências pós-E1: (i) entrada ≠ a
-  da última tentativa desta revisão sem `--deviation` → `PriorAttemptInputChangedError`;
-  (ii) geração viva anterior desta revisão com código, ambiente e entrada iguais e
-  geração nova diferente na camada de resultado (tabelas por valor; manifesto sem
-  `started_at`/`finished_at`) → `PriorAttemptDivergenceError` (falha do R-BIT);
+  ref))` → registro `input_read` (a entrada lida e o `result_layer_digest` da geração
+  publicada: tabelas por valor e manifesto sem `started_at`/`finished_at`) →
+  conferências pós-E1, sem `--deviation` e contra **toda** tentativa do trecho: (i)
+  entrada diferente → `PriorAttemptInputChangedError`; (ii) resultado diferente →
+  `PriorAttemptDivergenceError` (falha do R-BIT; a linha `input_read` gravada antes da
+  recusa deixa a divergência registrada). A geração viva em `current/` não é a referência
+  da comparação (Checkpoint C 8.1 bloco 5, CC5-1..3);
 - **E2** scorecard, só com refresh `COMPLETED`; `manifest_read` tem de ser o manifesto
   publicado (`JudgedGenerationMismatchError`, I8);
 - **E3** `preserve(expected_manifest=result.manifest)` com o `run_record.json` e o JSON
@@ -69,6 +74,7 @@ from financial_forecasting.features.evaluation.application.dtos.judged_generatio
     AttemptPhase,
     JudgedAttempt,
     JudgedGeneration,
+    result_layer_digest,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldGeneration,
@@ -137,18 +143,24 @@ def _prefixed(snapshot: Mapping[str, str], prefix: str) -> dict[str, str]:
     return {key: snapshot[key] for key in sorted(snapshot) if key.startswith(prefix)}
 
 
-def _result_layer(generation: GoldGeneration) -> tuple[GoldManifest, Mapping[str, object]]:
-    """A geração sem os timestamps do manifesto (ADR 8.1.0004 item 2b-ii)."""
-    instant = generation.manifest.started_at
-    manifest = dataclasses.replace(generation.manifest, started_at=instant, finished_at=instant)
-    return manifest, dict(generation.tables)
+def _since_last_deviation(attempts: Sequence[JudgedAttempt]) -> tuple[JudgedAttempt, ...]:
+    """As linhas a partir da última `started` com `deviation` (todas, se nenhuma tem)."""
+    start = 0
+    for index, attempt in enumerate(attempts):
+        if attempt.phase is AttemptPhase.STARTED and attempt.deviation is not None:
+            start = index
+    return tuple(attempts[start:])
 
 
 @dataclasses.dataclass(frozen=True)
 class _Prior:
-    """O que o G4 leu da partição antes de qualquer efeito."""
+    """O que o G4 leu da partição antes de qualquer efeito.
 
-    attempts: tuple[JudgedAttempt, ...]
+    `segment` são as linhas desta revisão desde o último desvio — a referência das
+    conferências sem `--deviation`.
+    """
+
+    segment: tuple[JudgedAttempt, ...]
     live: GoldGeneration | None
 
 
@@ -252,7 +264,7 @@ class RunConfirmatoryEvaluation:
                 attestation_body=attestation_body(sealed),
             )
         prior = self._check_prior(command, partition, snapshot)
-        logger.info("step=G4 attempts=%d live=%s", len(prior.attempts), prior.live is not None)
+        logger.info("step=G4 segment=%d live=%s", len(prior.segment), prior.live is not None)
 
         started_at = self._clock.now()
         attempt_id = started_at.isoformat()
@@ -275,18 +287,9 @@ class RunConfirmatoryEvaluation:
         logger.info("step=attempt phase=started attempt_id=%s", attempt_id)
         result = self._refresh_gold(refresh_command)
         manifest = result.manifest
-        self._judged_store.record_attempt(
-            partition=partition,
-            attempt=JudgedAttempt(
-                phase=AttemptPhase.INPUT_READ,
-                attempt_id=attempt_id,
-                preregistration_ref=ref,
-                silver_content=manifest.silver_content,
-                dataset_fingerprint=manifest.dataset_fingerprint.value,
-            ),
-        )
+        read_back = self._judged_store_input(partition, attempt_id, ref, manifest)
         logger.info("step=E1 status=%s tables=%d", result.status.value, len(result.rows_by_table))
-        self._check_after_refresh(command, snapshot, partition, prior, manifest)
+        self._check_after_refresh(command, prior, read_back)
 
         scorecard = None
         if result.status is RefreshStatus.COMPLETED:
@@ -370,7 +373,7 @@ class RunConfirmatoryEvaluation:
         partition: GoldPartition,
         snapshot: Mapping[str, str],
     ) -> _Prior:
-        """G4 (c)-(e): tentativas e geração viva, contra a foto atual."""
+        """G4 (c)-(e): tentativas e geração viva; o trecho desde o último desvio."""
         ref = command.preregistration_ref
         attempts = self._judged_store.attempts(partition=partition)
         others = sorted({a.preregistration_ref for a in attempts if a.preregistration_ref != ref})
@@ -393,8 +396,9 @@ class RunConfirmatoryEvaluation:
                     f"the live generation of {partition} has no recorded attempt (an "
                     "unrecorded refresh)"
                 )
+        segment = _since_last_deviation(attempts)
         if command.deviation is None:
-            started = [a for a in attempts if a.phase is AttemptPhase.STARTED]
+            started = [a for a in segment if a.phase is AttemptPhase.STARTED]
             code, environment = _prefixed(snapshot, CODE_PREFIX), _prefixed(snapshot, ENV_PREFIX)
             if any(dict(a.code or {}) != code for a in started):
                 raise PriorAttemptCodeChangedError(
@@ -405,47 +409,54 @@ class RunConfirmatoryEvaluation:
                     f"an earlier attempt of {ref} ran in another environment; re-running "
                     "needs --deviation"
                 )
-        return _Prior(attempts=attempts, live=live)
+            results = {a.result_digest for a in segment if a.phase is AttemptPhase.INPUT_READ}
+            if len(results) > 1:
+                raise PriorAttemptDivergenceError(
+                    f"the attempts of {ref} already diverged in the result layer (R-BIT "
+                    "failure recorded); re-running needs --deviation"
+                )
+        return _Prior(segment=segment, live=live)
+
+    def _judged_store_input(
+        self, partition: GoldPartition, attempt_id: str, ref: str, manifest: GoldManifest
+    ) -> JudgedAttempt:
+        """Grava a linha `input_read`: a entrada lida e o resultado publicado pelo E1."""
+        line = JudgedAttempt(
+            phase=AttemptPhase.INPUT_READ,
+            attempt_id=attempt_id,
+            preregistration_ref=ref,
+            silver_content=manifest.silver_content,
+            dataset_fingerprint=manifest.dataset_fingerprint.value,
+            result_digest=result_layer_digest(
+                self._gold_reader.read_generation(partition=partition)
+            ),
+        )
+        self._judged_store.record_attempt(partition=partition, attempt=line)
+        return line
 
     def _check_after_refresh(
         self,
         command: RunConfirmatoryEvaluationCommand,
-        snapshot: Mapping[str, str],
-        partition: GoldPartition,
         prior: _Prior,
-        manifest: GoldManifest,
+        read_back: JudgedAttempt,
     ) -> None:
-        """2b (i)-(ii): entrada contra a tentativa anterior; geração contra a viva anterior."""
-        new_input = (manifest.silver_content, manifest.dataset_fingerprint.value)
-        inputs = [a for a in prior.attempts if a.phase is AttemptPhase.INPUT_READ]
-        if inputs and command.deviation is None:
-            last = inputs[-1]
-            if (last.silver_content, last.dataset_fingerprint) != new_input:
-                raise PriorAttemptInputChangedError(
-                    f"the refresh read another input than the attempt {last.attempt_id} of "
-                    f"{command.preregistration_ref}; re-running needs --deviation"
-                )
-        live = prior.live
-        if live is None or not _same_code_and_environment(prior.attempts, snapshot):
+        """2b (i)-(ii): entrada e resultado contra toda tentativa do trecho, sem desvio."""
+        if command.deviation is not None:
             return
-        live_input = (live.manifest.silver_content, live.manifest.dataset_fingerprint.value)
-        if live_input != new_input:
-            return
-        if _result_layer(live) != _result_layer(
-            self._gold_reader.read_generation(partition=partition)
-        ):
-            raise PriorAttemptDivergenceError(
-                f"the new generation of {partition} differs from the earlier live one with "
-                "the same code, environment and input (R-BIT failure: stop for diagnosis)"
+        earlier = [a for a in prior.segment if a.phase is AttemptPhase.INPUT_READ]
+        new_input = (read_back.silver_content, read_back.dataset_fingerprint)
+        changed = [
+            a.attempt_id for a in earlier if (a.silver_content, a.dataset_fingerprint) != new_input
+        ]
+        if changed:
+            raise PriorAttemptInputChangedError(
+                f"the refresh read another input than the attempts {changed} of "
+                f"{command.preregistration_ref}; re-running needs --deviation"
             )
-
-
-def _same_code_and_environment(
-    attempts: Sequence[JudgedAttempt], snapshot: Mapping[str, str]
-) -> bool:
-    code, environment = _prefixed(snapshot, CODE_PREFIX), _prefixed(snapshot, ENV_PREFIX)
-    return all(
-        dict(a.code or {}) == code and dict(a.environment or {}) == environment
-        for a in attempts
-        if a.phase is AttemptPhase.STARTED
-    )
+        diverged = [a.attempt_id for a in earlier if a.result_digest != read_back.result_digest]
+        if diverged:
+            raise PriorAttemptDivergenceError(
+                f"the new generation of {command.preregistration_ref} differs in the result "
+                f"layer from the attempts {diverged} with the same code, environment and input "
+                "(R-BIT failure: stop for diagnosis)"
+            )

@@ -1,9 +1,12 @@
 """Fakes dos Protocols locais do `RunConfirmatoryEvaluation` (Stage 8.1 Task 13).
 
 - `FakeGoldRefresh` — satisfaz `GoldRefresh`: publica no `InMemoryGoldStore` a próxima
-  geração da fila (`generations`; a última se repete) e devolve o `RefreshGoldResult`
-  com o manifesto publicado, como o `RefreshGold`; `error` ergue antes de publicar
-  (falha no E1 com `current/` intacto); `calls` registra os comandos.
+  geração da fila (`generations`; a última se repete) com `started_at`/`finished_at`
+  carimbados pelo `Clock` a cada chamada, como o `RefreshGold` (paridade: duas corridas
+  das mesmas entradas têm instantes diferentes — Checkpoint C 8.1 bloco 5, CC5-1), e
+  devolve o `RefreshGoldResult` com o manifesto publicado (`published` guarda cada um);
+  `error` ergue antes de publicar (falha no E1 com `current/` intacto); `calls` registra
+  os comandos.
 - `FakeScorecardBuilder` — satisfaz `ScorecardBuilder`: delega ao scorecard real
   (`delegate`, montado pelo teste sobre os fakes) e pode trocar o `manifest_read`
   (`manifest_read`, A6b) ou erguer (`error`, ex. `GoldGenerationCorruptError`);
@@ -26,6 +29,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     RefreshGoldCommand,
     RefreshGoldResult,
 )
+from financial_forecasting.shared.application.ports.out.clock import Clock
 from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
 
 
@@ -37,12 +41,15 @@ class FakeGoldRefresh:
         store: InMemoryGoldStore,
         generations: Sequence[GoldGeneration],
         *,
+        clock: Clock,
         failed_checks: tuple[FailedCheck, ...] = (),
         error: Exception | None = None,
     ) -> None:
         if not generations:
             raise ValueError("FakeGoldRefresh needs at least one generation")
         self._store = store
+        self._clock = clock
+        self.published: list[GoldManifest] = []
         self.generations = list(generations)
         self.failed_checks = failed_checks
         self.error = error
@@ -54,7 +61,11 @@ class FakeGoldRefresh:
             raise self.error
         index = min(len(self.calls), len(self.generations)) - 1
         generation = self.generations[index]
-        manifest = generation.manifest
+        started_at = self._clock.now()
+        manifest = dataclasses.replace(
+            generation.manifest, started_at=started_at, finished_at=self._clock.now()
+        )
+        self.published.append(manifest)
         self._store.publish(
             partition=manifest.partition, tables=list(generation.tables.values()), manifest=manifest
         )

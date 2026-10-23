@@ -282,3 +282,43 @@ def test_blocked_world_seals_without_scorecard_then_already_judged(blocked: _Jud
     assert again.status is ConfirmatoryRunStatus.ALREADY_JUDGED
     assert again.refresh_status is RefreshStatus.BLOCKED
     assert again.attestation_body == first.attestation_body
+
+
+def test_crash_in_e3_then_real_rerun_is_judged(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CC5-1 real: queda no E3 e re-execução com o mesmo código, ambiente e entrada → JUDGED.
+
+    O `RefreshGold` real carimba `started_at`/`finished_at` pelo `SystemClock`: as duas
+    gerações têm instantes diferentes e a mesma camada de resultado.
+    """
+    root = tmp_path_factory.mktemp("crash-e3")
+    world = _world(root)
+    r2_plan = world.plans[2]
+    _write_attribution(world.deps, r2_plan, _SUSTAINED, str(_HASH))
+    _write_ablation(world.deps, r2_plan, "ablation-crash", _SUSTAINED)
+    plan, reference = _r3(world, cohort_id="ablation-crash")
+    _freeze(root, {**plan.as_payload()}, 3)
+    store = world.deps.refresh_gold._gold_store  # type: ignore[attr-defined]
+    real_preserve = store.preserve
+    calls: list[int] = []
+
+    def crash_once(**kwargs: object) -> JudgedGeneration:
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError("power loss during E3")
+        return real_preserve(**kwargs)  # type: ignore[no-any-return]
+
+    monkeypatch.setattr(store, "preserve", crash_once)
+    with pytest.raises(OSError, match="power loss"):
+        _run(world, plan.name, reference)
+    first_live = store.read_generation(partition=_PARTITION).manifest
+
+    result = _run(world, plan.name, reference)
+
+    assert result.status is ConfirmatoryRunStatus.JUDGED
+    second_live = store.read_generation(partition=_PARTITION).manifest
+    assert second_live.started_at > first_live.started_at
+    attempts = store.attempts(partition=_PARTITION)
+    assert [a.phase for a in attempts] == [AttemptPhase.STARTED, AttemptPhase.INPUT_READ] * 2
+    assert len({a.result_digest for a in attempts if a.phase is AttemptPhase.INPUT_READ}) == 1

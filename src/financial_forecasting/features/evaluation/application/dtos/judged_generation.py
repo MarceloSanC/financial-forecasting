@@ -15,7 +15,11 @@ DTOs de aplicação **frozen** (concept 8.1 §4, D5, D12; ADRs `8_1_0003` itens 
 - `AttemptPhase` / `JudgedAttempt` — uma linha de `ATTEMPTS.jsonl`: `started` (antes do
   E1, com código e ambiente) e `input_read` (logo depois do E1, com a entrada lida); as
   duas linhas de uma tentativa compartilham o `attempt_id` (= `started_at` ISO da
-  `started`). `attempts_jsonl` / `parse_attempts_jsonl` são a serialização do arquivo.
+  `started`). `attempts_jsonl` / `parse_attempts_jsonl` são a serialização do arquivo;
+- `result_layer_digest` — o digest da **camada de resultado** de uma geração (tabelas por
+  valor e manifesto sem `started_at`/`finished_at`), gravado na linha `input_read`: é o
+  que as re-execuções sem `--deviation` têm de reproduzir (I13; ADR 8.1.0004 item 2b,
+  emenda do Checkpoint C 8.1 bloco 5).
 
 `hashlib` sobre bytes de arquivo não é chamada do port `Hasher` (precedente ADR
 7.1.0004): a integridade da cópia é sha256 dos bytes, verificável por `sha256sum -c`.
@@ -35,6 +39,7 @@ from typing import Final
 
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     MANIFEST_NAME,
+    GoldGeneration,
     GoldManifest,
     GoldPartition,
     RefreshStatus,
@@ -199,6 +204,40 @@ def verify_listing(listing: bytes, actual: Mapping[str, str]) -> dict[str, str]:
     return listed
 
 
+RESULT_EXCLUDED_KEYS: Final = frozenset({"started_at", "finished_at"})
+"""As chaves do manifesto fora da camada de resultado: os instantes do `Clock`."""
+
+
+def result_layer_digest(generation: GoldGeneration) -> str:
+    """sha256 hex da camada de resultado da geração (ADR 8.1.0004 item 2b).
+
+    Payload: o `manifest.as_mapping()` **sem** as chaves de `RESULT_EXCLUDED_KEYS` (as
+    chaves somem; nenhum instante é trocado por outro) e cada tabela pelo nome, com as
+    linhas na ordem da chave; JSON com `sort_keys`, separadores fixos e `allow_nan=False`.
+    Dois refreshes das mesmas entradas no mesmo código e ambiente dão o mesmo digest
+    (R-BIT); qualquer valor diferente numa tabela ou no manifesto o muda. Integridade de
+    comparação entre tentativas, como o sha256 da cópia (ADR 7.1.0004): não é chamada do
+    port `Hasher`.
+    """
+    manifest = {
+        key: value
+        for key, value in generation.manifest.as_mapping().items()
+        if key not in RESULT_EXCLUDED_KEYS
+    }
+    tables = {
+        name: [dict(row) for row in generation.tables[name].rows]
+        for name in sorted(generation.tables)
+    }
+    payload = json.dumps(
+        {"manifest": manifest, "tables": tables},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def document_bytes(document: Mapping[str, object]) -> bytes:
     """Os bytes de um documento JSON da cópia (`sort_keys`, `indent=2`, LF final)."""
     return (json.dumps(document, sort_keys=True, indent=2) + "\n").encode("utf-8")
@@ -340,6 +379,7 @@ _INPUT_READ_KEYS: Final = (
     "preregistration_ref",
     "silver_content",
     "dataset_fingerprint",
+    "result_digest",
 )
 _STARTED_ONLY: Final = (
     "commit",
@@ -349,7 +389,7 @@ _STARTED_ONLY: Final = (
     "deviation",
     "prior_live_silver_content",
 )
-_INPUT_READ_ONLY: Final = ("silver_content", "dataset_fingerprint")
+_INPUT_READ_ONLY: Final = ("silver_content", "dataset_fingerprint", "result_digest")
 
 
 def _check_prefixed_map(value: object, *, prefix: str, field: str) -> Mapping[str, str]:
@@ -371,8 +411,8 @@ class JudgedAttempt:
     `env.*`), `started_at` (com fuso; `attempt_id` = `started_at.isoformat()`),
     `deviation` (texto ou `None`) e `prior_live_silver_content` (da geração viva desta
     revisão antes do E1, ou `None`). `input_read` carrega `silver_content` e
-    `dataset_fingerprint` (sha256 hex) do manifesto novo. Os campos da outra fase ficam
-    `None`.
+    `dataset_fingerprint` (sha256 hex) do manifesto novo e `result_digest` (sha256 hex,
+    `result_layer_digest` da geração publicada). Os campos da outra fase ficam `None`.
 
     Raises:
         ValueError: campo da fase ausente ou inválido, ou campo da outra fase presente.
@@ -389,6 +429,7 @@ class JudgedAttempt:
     prior_live_silver_content: SilverContent | None = None
     silver_content: SilverContent | None = None
     dataset_fingerprint: str | None = None
+    result_digest: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.phase, AttemptPhase):
@@ -440,6 +481,7 @@ class JudgedAttempt:
                 f"an input_read attempt line needs a SilverContent, got {self.silver_content!r}"
             )
         validate_sha256_hex(self.dataset_fingerprint, field="attempt dataset_fingerprint")
+        validate_sha256_hex(self.result_digest, field="attempt result_digest")
 
     def as_mapping(self) -> dict[str, object]:
         """A linha JSON-safe (só as chaves da fase)."""
@@ -464,6 +506,7 @@ class JudgedAttempt:
             "preregistration_ref": self.preregistration_ref,
             "silver_content": self.silver_content.as_mapping(),
             "dataset_fingerprint": self.dataset_fingerprint,
+            "result_digest": self.result_digest,
         }
 
     @classmethod
@@ -493,6 +536,7 @@ class JudgedAttempt:
                 **common,  # type: ignore[arg-type]
                 silver_content=SilverContent.from_mapping(mapping["silver_content"]),  # type: ignore[arg-type]
                 dataset_fingerprint=mapping["dataset_fingerprint"],  # type: ignore[arg-type]
+                result_digest=mapping["result_digest"],  # type: ignore[arg-type]
             )
         started_at = mapping["started_at"]
         if not isinstance(started_at, str):

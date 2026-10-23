@@ -37,7 +37,7 @@ from financial_forecasting.features.evaluation.application.dtos.confirmatory_sco
     PreregistrationNotAnchoredError,
 )
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
-    GOLD_MCS_RESULTS,
+    GOLD_QUALITY_CHECKS,
 )
 from financial_forecasting.features.evaluation.application.dtos.judged_generation import (
     CONTENTS_NAME,
@@ -46,6 +46,7 @@ from financial_forecasting.features.evaluation.application.dtos.judged_generatio
     SCORECARD_DOCUMENT,
     AttemptPhase,
     JudgedAttempt,
+    result_layer_digest,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     FailedCheck,
@@ -177,7 +178,7 @@ class _World:
         self.environment = InMemoryEvaluationEnvironment()
         self.lock = InMemoryEvaluationWriterLock()
         self.clock = _TickClock()
-        self.refresh = FakeGoldRefresh(self.store, [self.generation()])
+        self.refresh = FakeGoldRefresh(self.store, [self.generation()], clock=self.clock)
         scorecard = BuildConfirmatoryScorecard(
             source=self.source,
             reader=InMemoryGoldGenerationReader(self.store),
@@ -265,13 +266,21 @@ def _started(world: _World, reference: str, **changes: object) -> JudgedAttempt:
     return JudgedAttempt(**fields)
 
 
-def _input_read(world: _World, silver: SilverContent, fingerprint: str) -> JudgedAttempt:
+def _input_read(
+    world: _World,
+    silver: SilverContent,
+    fingerprint: str,
+    *,
+    minutes: int = 5,
+    result_digest: str | None = None,
+) -> JudgedAttempt:
     return JudgedAttempt(
         phase=AttemptPhase.INPUT_READ,
-        attempt_id=(STARTED_AT + timedelta(minutes=5)).isoformat(),
+        attempt_id=(STARTED_AT + timedelta(minutes=minutes)).isoformat(),
         preregistration_ref=world.ref,
         silver_content=silver,
         dataset_fingerprint=fingerprint,
+        result_digest=result_digest or result_layer_digest(world.generation()),
     )
 
 
@@ -547,7 +556,7 @@ def test_divergent_generation_with_equal_code_env_input_raises_and_seals_nothing
     with pytest.raises(GoldGenerationCorruptError):
         world.run()  # 1ª tentativa: geração viva desta revisão, nada selado
     stored = world.stored()
-    assert stored.set_cell(GOLD_MCS_RESULTS.name, lambda _row: True, "block_size", 7)
+    assert stored.set_cell(GOLD_QUALITY_CHECKS.name, lambda _row: True, "detail", "changed")
     world.refresh.generations = [stored.generation()]
     world.scorecard.error = None
 
@@ -694,7 +703,9 @@ def _blocked_world() -> _World:
     blocked = world.generation(
         status=RefreshStatus.BLOCKED, checks=[("degeneracy_check", "error", "fail")]
     )
-    world.refresh = FakeGoldRefresh(world.store, [blocked], failed_checks=(_FAILED,))
+    world.refresh = FakeGoldRefresh(
+        world.store, [blocked], clock=world.clock, failed_checks=(_FAILED,)
+    )
     return world
 
 
@@ -806,7 +817,7 @@ def test_judged_returns_scorecard_digest_and_body() -> None:
     assert sealed is not None
     assert result.status is ConfirmatoryRunStatus.JUDGED
     assert result.scorecard is not None
-    assert result.scorecard.manifest_read == world.refresh.generations[0].manifest
+    assert result.scorecard.manifest_read == world.refresh.published[0]
     assert sealed.documents[SCORECARD_DOCUMENT] == result.scorecard.as_mapping()
     assert result.generation_digest == sealed.generation_digest
     assert result.attestation_body == attestation_body(sealed)
@@ -834,3 +845,106 @@ def test_rerun_after_crash_records_the_live_silver_content() -> None:
     ]
     live = world.refresh.generations[0].manifest.silver_content
     assert [a.prior_live_silver_content for a in started] == [None, live]
+
+
+# --- CC5 (Checkpoint C bloco 5): referência = toda tentativa desde o último desvio -------
+
+
+def _diverged_world() -> _World:
+    """1ª tentativa cai depois do E1; a 2ª publica outro resultado e é recusada."""
+    world = _World()
+    world.scorecard.error = GoldGenerationCorruptError("crash after E1")
+    with pytest.raises(GoldGenerationCorruptError):
+        world.run()
+    stored = world.stored()
+    assert stored.set_cell(GOLD_QUALITY_CHECKS.name, lambda _row: True, "detail", "changed")
+    world.refresh.generations = [stored.generation()]
+    world.scorecard.error = None
+    with pytest.raises(PriorAttemptDivergenceError):
+        world.run()
+    return world
+
+
+def test_rerun_with_new_clock_instants_is_not_a_divergence() -> None:
+    """CC5-1: a 2ª tentativa tem outros `started_at`/`finished_at` e o mesmo resultado."""
+    world = _World()
+    world.scorecard.error = GoldGenerationCorruptError("crash after E1")
+    with pytest.raises(GoldGenerationCorruptError):
+        world.run()
+    world.scorecard.error = None
+
+    result = world.run()
+
+    assert result.status is ConfirmatoryRunStatus.JUDGED
+    first, second = world.refresh.published
+    assert (first.started_at, first.finished_at) != (second.started_at, second.finished_at)
+    digests = {
+        a.result_digest
+        for a in world.judged.attempts(partition=world.partition)
+        if a.phase is AttemptPhase.INPUT_READ
+    }
+    assert len(digests) == 1
+
+
+def test_third_run_after_divergence_needs_deviation() -> None:
+    """CC5-2: divergência registrada → a 3ª corrida sem `--deviation` é recusada no G4."""
+    world = _diverged_world()
+    before = world.effects()
+
+    with pytest.raises(PriorAttemptDivergenceError, match="already diverged"):
+        world.run()  # o mesmo resultado da 2ª: sem a referência viva, ainda é recusado
+
+    assert world.effects() == before  # recusa antes de qualquer efeito
+    result = world.run(deviation=_DEVIATION)
+    assert result.status is ConfirmatoryRunStatus.JUDGED
+
+
+def test_deleting_the_live_generation_does_not_disable_the_comparison() -> None:
+    """CC5-2 (variante): sem `current/`, a referência continua sendo o log de tentativas."""
+    world = _World()
+    world.scorecard.error = GoldGenerationCorruptError("crash after E1")
+    with pytest.raises(GoldGenerationCorruptError):
+        world.run()
+    world.store._generations.clear()  # apagar current/ à mão
+    stored = world.stored()
+    assert stored.set_cell(GOLD_QUALITY_CHECKS.name, lambda _row: True, "detail", "changed")
+    world.refresh.generations = [stored.generation()]
+    world.scorecard.error = None
+
+    with pytest.raises(PriorAttemptDivergenceError, match="R-BIT"):
+        world.run()
+    assert world.judged.preserves == 0
+
+
+def test_input_differs_from_the_first_attempt_not_only_the_last() -> None:
+    """CC5-3: a entrada é conferida contra TODA tentativa do trecho, não só a última."""
+    world = _World()
+    fingerprint = world.generation().manifest.dataset_fingerprint.value
+    live_silver = world.generation().manifest.silver_content
+    for minutes, silver in ((1, _OTHER_SILVER), (2, live_silver)):
+        at = STARTED_AT + timedelta(minutes=minutes)
+        world.judged.record_attempt(
+            partition=world.partition,
+            attempt=_started(world, world.ref, attempt_id=at.isoformat(), started_at=at),
+        )
+        world.judged.record_attempt(
+            partition=world.partition,
+            attempt=_input_read(world, silver, fingerprint, minutes=minutes),
+        )
+
+    with pytest.raises(PriorAttemptInputChangedError, match="another input"):
+        world.run()  # igual à última (2ª), diferente da 1ª
+    assert world.judged.preserves == 0
+
+
+def test_deviation_starts_a_new_reference_segment() -> None:
+    """Depois de uma tentativa com `--deviation`, a referência são as tentativas dela em diante."""
+    world = _diverged_world()
+    world.judged.fail_writes = {CONTENTS_NAME}
+    with pytest.raises(OSError):
+        world.run(deviation=_DEVIATION)  # desvio registrado; cai no E3
+    world.judged.fail_writes = set()
+
+    result = world.run()  # sem desvio: o trecho começa na tentativa com desvio
+
+    assert result.status is ConfirmatoryRunStatus.JUDGED
