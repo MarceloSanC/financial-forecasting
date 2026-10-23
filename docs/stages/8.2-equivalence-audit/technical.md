@@ -1600,4 +1600,57 @@ venv congelado) sobre `096a2e9b`: início 2026-10-23T19:14:15Z, fim 19:54:45Z, e
 (substitui o `0d422aab…` da E0 no `etapa-82.env`). Esta entrada só toca o `technical.md`; os
 blobs do bloco "HEAD íntegro" seguem os do `GATE1`.
 
+### 2026-10-23 — [measurement] E2 — pré-voo da reprodução em `060537fc` — Claude (executor das Etapas)
+**Contexto:** venv congelado declarado (vi) antes do item 1. Bloco "HEAD íntegro" (HEAD
+`cedd4511`, `GATE1` `096a2e9b`):
+```
+WT_CLEAN
+BLOB scripts/reproduce_judged_generation.py 855aaa02744f30d13dcae74beea1274bb95b7aff
+BLOB scripts/reproduction_evidence.py 960598f5229765f68b2102c3622d35aaa4e166d2
+BLOB tests/equivalence/prior_evidence.py f04e2f2a8699d05512725c563cad93d267148a76
+```
+Item 1 (worktree destacada `repro-060537fc`): `TREE_AT_JUDGED`, `ENV_IGNORED`, `TREE_CLEAN`;
+`DOTENV_SHA=408e44ff45f7883e2540d2e38650dea3f61d8e36a9a96bb51c6bce9f28bfd69b`.
+Item 2: `SAME_IMAGE`, `NO_FF82`, `UV_LOCK_SAME_AS_HEAD=yes`.
+Item 3: `LISTING_IS_REGISTERED`, `BACKUP_OK`, `RESTORE_OK`, `DISPOSABLE_INPUT_ONLY`
+(descartável `data/reproductions/aapl-r3-20261023-190339`: `bronze inference processed raw silver`).
+Item 4: `JUDGED_COPY_OK`, `DIGEST_OK`; `live-before.sha256sum` com 355 arquivos;
+`current/MANIFEST.json` `56d3ee1c…` e `judged/ATTEMPTS.jsonl` `320def2b…`. O `grep` de
+exibição do runbook (`' gold/…'`) não casa no Git Bash: o `sha256sum` do host grava o marcador
+binário (`<hex> *gold/…`); as duas linhas foram exibidas com `grep -E 'MANIFEST|ATTEMPTS'`. Só
+exibição — o `sha256sum -c` da E3/E4 lê esse formato.
+Item 5:
+```
+exit 0
+060537fc7069b38a318bb5cf839d84b7767b1b4f
+0
+600000 100000
+6.18.54.1-microsoft-standard-WSL2
+CONTAINER_AT_JUDGED / CONTAINER_TREE_CLEAN / CPU_MAX_6 / SAME_KERNEL
+exit 0   (freeze: 172 linhas)
+FREEZE_E2=0c95c798bd37701400d62f8b2f17e4504277fc71b91d64566b34091eb328035f
+```
+Item 6 (`--check`; `env-equal … --preregistration-ref "$REF"`, emenda do §7): `exit 0`,
+`CHECK_WROTE_NOTHING`, `ENV_EQUAL`, `exit 0`. Foto: `commit 060537fc…`, `code.src 4d2b2540…`,
+`code.uv_lock 0f36050a…`, `code.cohort_file 6d7c8b82…`, `code_dirty false`,
+`preregistration_dirty false`, `env.image_id b69a7620…`, `env.probe.python 3.12.13`,
+`env.probe.torch 2.13.0+cpu`, `env.probe.torch_threads 6`, `env.cpu_count 12`.
+Item 7 (R-BIT-COMMIT): `exit 0`, `Python 3.12.13`, 15 `AST_EQUAL`, `files 15 ast_diff 0`.
+`64b8a17d..HEAD -- src/` (acréscimos da 8.2): `M cli.py`, `M composition_root.py`,
+`M evaluation_commands.py`, `M parquet_gold_store.py`, `A dtos/reproduction_comparison.py`,
+`M ports/out/judged_generation_store.py`, `A use_cases/audit_reproduction.py`,
+`A use_cases/reproduction_comparison.py` — fora do caminho refresh/scorecard, salvo o
+`parquet_gold_store.py` (ver o `[deviation]` abaixo).
+Item 8 (A3b): T1 verde da Task 07 e o ponto 1 (`test_reproduction_process_independence.py`
+no `make check` do `GATE1`, `8966 passed`).
+
+### 2026-10-23 — [deviation] E2 item 7 — redação do A7 para o `parquet_gold_store.py` — Claude (executor das Etapas)
+**Contexto:** o A7 do concept pede cada acréscimo de `src/` desde `64b8a17d` "justificado como
+fora do caminho de refresh/scorecard"; o `parquet_gold_store.py` está no caminho de leitura do
+scorecard (`BuildConfirmatoryScorecard(reader=gold_store)`).
+**Razão:** a Task 03 só extrai `_read_generation_dir` da `read_generation`, sem mudar
+comportamento (suíte de contrato do `GoldGenerationReader` verde no ponto 1); e o claim é o da
+execução em `060537fc`, onde o arquivo não tem a mudança. A justificativa do A7 para esse arquivo
+lê-se "no caminho de leitura, sem mudança de comportamento, fora do claim".
+
 <!-- END: post-execution -->
