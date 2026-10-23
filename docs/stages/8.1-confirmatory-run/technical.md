@@ -1631,4 +1631,86 @@ R8 `TAG_OK` e um comentário na #211; R9 `aapl_confirmatory-r3.judged.toml` comm
 - tipo: **pós-registro (A16)** — esperado `ALREADY_JUDGED` com o mesmo digest (G4 lê o `.judged.toml`)
 - `--break-stale-lock`: não; `--deviation`: não
 
+### 2026-10-23 — [measurement] etapa-r — evidência da corrida confirmatória real (A12–A16) — Claude (sessão Windows)
+**Contexto:** Etapa R executada pelo runbook, sem `--break-stale-lock` nem `--deviation`, com
+`$RES` = `--cpus 6 --memory 8g --memory-swap 8g`. Desfecho: **`JUDGED`** (refresh `COMPLETED`).
+
+**R1 (A12):** `git status` vazio; `ONLY_DOCS_SINCE_GATE2` (`GATE2` =
+`d3b4990950e33d2b8da5158dcdf3035bd446ca4d`); `SAME_IMAGE`; nenhum container no `data_root`;
+`data/cohorts/aapl` com `bronze inference processed raw silver` (sem `gold/`, sem
+`.writer.lock`); entrada `[measurement] Task 17` presente; checkpoints `60 60 []`. Pré-voo
+(`preflight.txt`):
+```
+d3b4990950e33d2b8da5158dcdf3035bd446ca4d
+dirty false
+non-code diff []
+code.src 4d2b2540a10f5cbb2f59164bba3262224d572d7b
+code.uv_lock 0f36050a0044db5f05ca9037e23c4425220cb82b
+platform Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.41
+cpu_capability AVX2
+```
+r3 resolvida: `aapl_confirmatory-r3-00fd83d9cd39 2026-10-21T17:41:23+00:00`.
+
+**R2 (D10):** `infer` avulso 08:49:09Z → 09:04:18Z, exit 0:
+`inference aapl_confirmatory-r0-665f45d9169a: 60 runs (60 strict, 0 tolerance); calib rows written 0, verified 211680`
+(60 linhas `run`, todas `max|d| 0.000e+00`). Backup `data/backups/aapl-pre-8.1-20261023-084758`
+(311 arquivos), `BACKUP_OK`; sha256 da listagem
+`e4c774570767c5679a11347beabd9ea872b53101acb8c77ada5a64bc2e50d5e6`.
+
+**Execuções do `evaluate`** (intenções em `060537fc`, `baf3d89a`, `8175285e`):
+
+| # | janela UTC | exit | `inference` | `evaluation` |
+|---|---|---|---|---|
+| 1 | 09:05:14 → 09:34:18 | 0 | `60 runs (60 strict, 0 tolerance); calib rows written 0, verified 211680` | `JUDGED generation_digest 96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539 partition AAPL/aapl_confirmatory-r0-665f45d9169a` |
+| 2 | 09:35:29 → 09:50:40 | 0 | idem | `ALREADY_JUDGED generation_digest 96c05413…e539` (G2 `baf3d89a`) |
+| 3 | 09:52:58 → 10:08:18 | 0 | idem | `ALREADY_JUDGED generation_digest 96c05413…e539` (G2 `8175285e`) |
+
+A hora "09:37Z" da intenção 2 foi estimada antes do commit; o `evaluate` 2 começou 09:35:29Z,
+depois do commit da intenção (`baf3d89a`). Mesmo critério na intenção 3 (09:55Z estimado,
+início 09:52:58Z, depois de `8175285e`).
+
+**Tempos por etapa do refresh** (tentativa 1, `.err`; G1 09:20:16, G2 `commit=060537fc…`,
+G3 `writer_lock=acquired`, G4 `segment=0 live=False`, `started` 09:20:22): `read_runs` 0,1 s;
+`read_facts` 17,2 s; `read_realized` 0,8 s; `assemble` 2,8 s; `preconditions` 0,8 s; `checks`
+0,1 s; `reports` 5,7 s; `mcs` 3,2 s; `profiles` 162,3 s; `mcs_blocks` 3,3 s; `conformal` 5,9 s;
+`h3` 624,9 s; `build` 0,8 s; `publish` 1,0 s; E1 09:34:13 (`COMPLETED tables=19`), E2 09:34:15
+(`academic_decision_ready=True`), E3 09:34:16 (`JUDGED`). Refresh ≈ 13,9 min (o `h3` real
+levou 625 s contra 407 s do sintético da Task 17; dentro de 3× o esperado).
+
+**Conferências do A13:** manifesto `started_at` `2026-10-23T09:20:22.425400+00:00` (>
+âncora); `silver_content.tables` = `dim_run`, `fact_oos_predictions`,
+`fact_permuted_predictions`, `fact_vsn_weights`, `realized` (digest
+`7ac4c759c966b8e1914cd33492a8a598a3b57bcb63eff1e80e9ede1bd02a74e2`, 1095 unidades); scorecard
+com `preregistration_ref` = r3, `verdict`, `academic_decision_ready` e `readiness_reasons`;
+`rows_by_table`: `gold_h3_reading` 1, `gold_conformal_corrections` 1440,
+`gold_conformal_coverage` 704. `judged/<ref>/` com `CONTENTS.sha256` (22 linhas),
+`generation/`, scorecard e `run_record.json` (2 tentativas listadas).
+
+**`ATTEMPTS.jsonl`** (2 linhas, sha256 `320def2b01946a7f0d8064d0ece30aea6eed2a2d7cc1ebc82852106d21484fc9`;
+as duas execuções `ALREADY_JUDGED` não acrescentaram linha). A linha `input_read` tem 177 KB
+por causa do `silver_content.units`; vai aqui sem `units` (o registro inteiro está selado no
+`run_record.json` da cópia julgada e no backup do R7):
+```
+{"attempt_id": "2026-10-23T09:20:22.405228+00:00", "code": {"code.cohort_file": "6d7c8b82ef98cf27cabc985c53b710dbfba303ea", "code.src": "4d2b2540a10f5cbb2f59164bba3262224d572d7b", "code.uv_lock": "0f36050a0044db5f05ca9037e23c4425220cb82b"}, "commit": "060537fc7069b38a318bb5cf839d84b7767b1b4f", "deviation": null, "environment": {"env.cpu_capability": "AVX2", "env.cpu_count": "12", "env.image_id": "sha256:b69a7620e7bd8449369bde2f46e903c5f46c25e9efb3597f452af3272e0a8f45", "env.lib.arch": "8.0.0", "env.lib.duckdb": "1.5.4", "env.lib.mapie": "1.5.0", "env.lib.scikit-learn": "1.9.0", "env.lib.scipy": "1.18.0", "env.lib.scoringrules": "0.11.0", "env.lib.statsmodels": "0.15.0", "env.platform": "Linux-6.18.54.1-microsoft-standard-WSL2-x86_64-with-glibc2.41", "env.probe.cpu": "x86_64/12", "env.probe.device": "cpu", "env.probe.exchange-calendars": "4.13.2", "env.probe.lightgbm": "4.7.0", "env.probe.lightning": "2.6.5", "env.probe.numpy": "2.5.0", "env.probe.optuna": "4.9.0", "env.probe.pandas": "2.3.3", "env.probe.pyarrow": "24.0.0", "env.probe.python": "3.12.13", "env.probe.pytorch-forecasting": "1.8.0", "env.probe.statsforecast": "2.1.1", "env.probe.torch": "2.13.0+cpu", "env.probe.torch_threads": "6"}, "phase": "started", "preregistration_ref": "aapl_confirmatory-r3-00fd83d9cd39", "prior_live_result_digest": null, "prior_live_silver_content": null, "started_at": "2026-10-23T09:20:22.405228+00:00"}
+{"attempt_id": "2026-10-23T09:20:22.405228+00:00", "dataset_fingerprint": "00e4406dcd96658d557f7d4d86face9874fac42385e3cb182d54c5d2286695bd", "phase": "input_read", "preregistration_ref": "aapl_confirmatory-r3-00fd83d9cd39", "result_digest": "7c7940d4f77ff772212d5ddc392ee46e5f46cebe06506c17a20885b7f0e31b7e", "silver_content": {"digest": "7ac4c759c966b8e1914cd33492a8a598a3b57bcb63eff1e80e9ede1bd02a74e2", "tables": {"dim_run": "89411f19f462ab987038fc691c8a094e9bee40d8a80ea0bf22b1d5d284ce859a", "fact_oos_predictions": "b7a925e5a00f3c1e84ee59acacaa900c483de93e73f1f80c7cae49de271eb17e", "fact_permuted_predictions": "254e6dc045f871dd2eb853d8980b7e9cc9e8ca6488251d872d03c222c7f9f355", "fact_vsn_weights": "a01488a63875b8c860c4bccc87abd9fe9c7149c7e5dc247cc7cea1debf5c06ba", "realized": "0a8cf2397236452b3606f8352eebcdc41887a056a8f8d66aa0f4c618ad1e0c96"}, "units": "<1095 unidades omitidas>"}}
+```
+
+**R5 (A14):** `CONTENTS_OK`, `DIGEST_OK` (repetido depois da 3ª execução: `CONTENTS_OK`).
+**R6 (A15):** `REPLAY_OK`, `BODY_SAME`, `NO_NEW_EFFECT` (`MANIFEST.json` de `current/`
+sha256 `56d3ee1cb31e266e6ec67c7310d09f8329a1d732b5596c028573ec23cbeddb86`; 2 linhas de
+tentativa); a 3ª execução também deu corpo igual e nenhum efeito novo.
+**R7:** `data/backups/judged-aapl_confirmatory-r3-00fd83d9cd39-20261023-084758` (23 arquivos),
+`JUDGED_BACKUP_OK`; sha256 da listagem
+`ebaadfc4440b400dc9d1fe8c9eb6e42e73f3edb0659e429c5eb2aa151a6613f3`.
+**R8 (A16):** branch enviada; tag `confirmatory-run/aapl_confirmatory-r3-00fd83d9cd39` em
+`060537fc7069b38a318bb5cf839d84b7767b1b4f` (commit do `run_record.json`), `TAG_OK`; um
+comentário com o digest na #211:
+<https://github.com/MarceloSanC/financial-forecasting/issues/211#issuecomment-6362212743>,
+`created_at` `2026-10-23T09:51:53Z` (`COMMENT_AFTER_ANCHOR`).
+**R9:** `config/preregistration/aapl_confirmatory-r3.judged.toml` commitado em `d632a28b`, lido
+pelo `TomlPreregistrationSource` real (1 registro, campos iguais ao `etapa-r.env`); 3ª
+execução `RECORD_REPLAY_OK`. Depois dela, `docker ps --filter name=ff81` vazio e nenhum
+`.writer.lock` no `data_root`.
+**Conta para:** A12–A16.
+
 <!-- END: post-execution -->
