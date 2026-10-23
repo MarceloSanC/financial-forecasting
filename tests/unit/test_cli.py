@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import io
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
@@ -662,3 +663,272 @@ def test_attribute_refuses_a_cohort_other_than_the_ablation_base(tmp_path: Path)
     assert code == _EXIT_ERROR
     assert "declares base cohort_hash" in err.getvalue()
     assert not (tmp_path / "d" / ".writer.lock").exists()
+
+
+@pytest.mark.unit
+def test_infer_with_summary_prints_the_same_lines_and_returns_the_summary(tmp_path: Path) -> None:
+    """Stage 8.1 Task 15: as linhas do `infer` e o resumo como dado (D1)."""
+    commands: Any = cli.importlib.import_module(_INFERENCE_COMMANDS)
+
+    def outcome(run: str, mode: str, diff: float, written: int, verified: int) -> SimpleNamespace:
+        return SimpleNamespace(
+            run_id=run,
+            fold_index=0,
+            seed=1,
+            reproduction_mode=mode,
+            test_values_compared=7,
+            max_abs_diff=diff,
+            max_normalized_diff=diff / 2,
+            calib_rows_written=written,
+            calib_rows_verified=verified,
+        )
+
+    result = SimpleNamespace(
+        cohort_id="synthetic-r0",
+        outcomes=(
+            outcome("run-a", "strict", 0.0, 3, 0),
+            outcome("run-b", "tolerance", 2.5e-7, 0, 4),
+            outcome("run-c", "strict", 1e-9, 1, 5),
+        ),
+    )
+    commands_seen: list[object] = []
+
+    def run_inference_for(path: Path, device: str) -> Callable[[object], SimpleNamespace]:
+        def run(command: object) -> SimpleNamespace:
+            commands_seen.append(command)
+            return result
+
+        return run
+
+    spec = _frozen()
+    summary_out, infer_out = io.StringIO(), io.StringIO()
+
+    summary = commands.infer_with_summary(
+        run_inference_for, spec, tmp_path / "c.toml", out=summary_out, break_stale_lock=True
+    )
+    code = commands.infer(
+        run_inference_for, spec, tmp_path / "c.toml", out=infer_out, break_stale_lock=True
+    )
+
+    assert code == 0
+    assert summary_out.getvalue() == infer_out.getvalue()
+    assert summary_out.getvalue().endswith(
+        "inference synthetic-r0: 3 runs (2 strict, 1 tolerance); calib rows written 4, verified 9\n"
+    )
+    assert dict(summary) == {
+        "runs": 3,
+        "strict": 2,
+        "tolerance": 1,
+        "max_abs_diff": 2.5e-7,
+        "calib_rows_written": 4,
+        "calib_rows_verified": 9,
+    }
+    assert commands_seen[0].break_stale_lock is True  # type: ignore[attr-defined]
+    empty = SimpleNamespace(cohort_id="synthetic-r0", outcomes=())
+    result = empty
+    assert (
+        commands.infer_with_summary(
+            run_inference_for, spec, tmp_path / "c.toml", out=io.StringIO()
+        )["max_abs_diff"]
+        == 0.0
+    )
+
+
+# -- Stage 8.1, Task 16: subcomando `evaluate` -------------------------------------------
+
+_EVALUATION_COMMANDS = (
+    "financial_forecasting.features.evaluation.adapters.in.cli.evaluation_commands"
+)
+_REF = "synthetic_plan-r3-0123456789ab"
+_SUMMARY = {
+    "runs": 2,
+    "strict": 2,
+    "tolerance": 0,
+    "max_abs_diff": 0.0,
+    "calib_rows_written": 0,
+    "calib_rows_verified": 6,
+}
+
+
+def _evaluate_argv(tmp_path: Path, cohort: Path, *extra: str) -> list[str]:
+    return [
+        "evaluate",
+        "--data-root",
+        str(tmp_path / "d"),
+        "--cohort",
+        str(cohort),
+        "--preregistration",
+        "synthetic_plan",
+        "--revision",
+        "3",
+        "--preregistration-ref",
+        _REF,
+        *extra,
+    ]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("missing", ["--preregistration", "--revision", "--preregistration-ref"])
+def test_evaluate_requires_preregistration_revision_and_ref(
+    missing: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = _evaluate_argv(tmp_path, tmp_path / "c.toml")
+    index = argv.index(missing)
+    del argv[index : index + 2]
+
+    with pytest.raises(SystemExit) as exc:
+        cli.main(argv, wiring=_wiring(tmp_path))
+
+    assert exc.value.code == _EXIT_ERROR  # erro de uso do argparse
+    assert missing in capsys.readouterr().err
+
+
+@pytest.mark.unit
+def test_evaluate_dispatch_runs_infer_then_use_case_with_its_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    inference: Any = cli.importlib.import_module(_INFERENCE_COMMANDS)
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    events: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_infer_with_summary(
+        run_inference_for: object, spec: object, path: Path, **kwargs: object
+    ) -> dict[str, object]:
+        events.append(("infer", {"spec": spec, "path": path, **kwargs}))
+        return dict(_SUMMARY)
+
+    def fake_evaluate(use_case: object, **kwargs: object) -> int:
+        events.append(("evaluate", {"use_case": use_case, **kwargs}))
+        return 0
+
+    monkeypatch.setattr(inference, "infer_with_summary", fake_infer_with_summary)
+    monkeypatch.setattr(evaluation, "evaluate", fake_evaluate)
+    cohort = _cohort(tmp_path, frozen=True)
+    out = io.StringIO()
+
+    code = cli.main(
+        _evaluate_argv(tmp_path, cohort, "--break-stale-lock", "--deviation", "[deviation] x"),
+        wiring=_wiring(tmp_path),
+        out=out,
+    )
+
+    assert code == 0
+    assert [name for name, _ in events] == ["infer", "evaluate"]
+    infer_call, evaluate_call = events[0][1], events[1][1]
+    assert infer_call["spec"] == _frozen()
+    assert infer_call["path"] == cohort
+    assert infer_call["break_stale_lock"] is True
+    assert infer_call["out"] is out
+    assert type(evaluate_call["use_case"]).__name__ == "RunConfirmatoryEvaluation"
+    assert evaluate_call["inference_summary"] == _SUMMARY
+    assert (evaluate_call["name"], evaluate_call["revision"]) == ("synthetic_plan", 3)
+    assert evaluate_call["preregistration_ref"] == _REF
+    assert evaluate_call["deviation"] == "[deviation] x"
+    assert evaluate_call["break_stale_lock"] is True
+    assert evaluate_call["out"] is out
+
+
+@pytest.mark.unit
+def test_evaluate_infer_failure_never_calls_the_use_case_exit_2(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    called: list[object] = []
+    monkeypatch.setattr(evaluation, "evaluate", lambda *args, **kwargs: called.append(args))
+    err = io.StringIO()
+
+    # cohort em rascunho: o `RunInference` real ergue C1 (`CohortNotFrozenError`)
+    code = cli.main(
+        _evaluate_argv(tmp_path, _cohort(tmp_path)),
+        wiring=_wiring(tmp_path),
+        out=io.StringIO(),
+        err=err,
+    )
+
+    assert code == _EXIT_ERROR
+    assert "error: CohortNotFrozenError" in err.getvalue()
+    assert called == []
+    assert not (tmp_path / "d" / "gold").exists()
+
+
+@pytest.mark.unit
+def test_evaluate_prints_status_digest_and_attestation() -> None:
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    dtos: Any = cli.importlib.import_module(
+        "financial_forecasting.features.evaluation.application.dtos.confirmatory_run"
+    )
+    refresh: Any = cli.importlib.import_module(
+        "financial_forecasting.features.evaluation.application.dtos.refresh_gold"
+    )
+    commands: list[Any] = []
+
+    def use_case(command: object) -> object:
+        commands.append(command)
+        return dtos.RunConfirmatoryEvaluationResult(
+            status=dtos.ConfirmatoryRunStatus.BLOCKED,
+            preregistration_ref=_REF,
+            partition=refresh.GoldPartition("AAPL", "synthetic_cohort-r0-000000000000"),
+            generation_digest="e" * 64,
+            refresh_status=refresh.RefreshStatus.BLOCKED,
+            scorecard=None,
+            failed_checks=(),
+            attestation_body="## Corrida confirmatória\n\n- status: `BLOCKED`\n",
+        )
+
+    out = io.StringIO()
+
+    code = evaluation.evaluate(
+        use_case,
+        name="synthetic_plan",
+        revision=3,
+        preregistration_ref=_REF,
+        inference_summary=_SUMMARY,
+        break_stale_lock=False,
+        deviation=None,
+        out=out,
+    )
+
+    assert code == 0
+    assert out.getvalue() == (
+        f"evaluation {_REF}: BLOCKED generation_digest {'e' * 64} "
+        "partition AAPL/synthetic_cohort-r0-000000000000\n"
+        "--- attestation ---\n"
+        "## Corrida confirmatória\n\n- status: `BLOCKED`\n"
+    )
+    assert commands[0].inference_summary == dtos.InferenceSummary.from_mapping(_SUMMARY)
+    assert (commands[0].name, commands[0].revision) == ("synthetic_plan", 3)
+
+
+@pytest.mark.unit
+def test_evaluate_use_case_error_exits_2_naming_the_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Erro do use case depois do `infer`: exit 2 com o nome do erro e sem corpo impresso."""
+    inference: Any = cli.importlib.import_module(_INFERENCE_COMMANDS)
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    store: Any = cli.importlib.import_module(
+        "financial_forecasting.features.evaluation.application.ports.out.judged_generation_store"
+    )
+    monkeypatch.setattr(inference, "infer_with_summary", lambda *args, **kwargs: dict(_SUMMARY))
+    real_evaluate = evaluation.evaluate
+
+    def failing_use_case(command: object) -> object:
+        raise store.JudgedGenerationExistsError("x")
+
+    monkeypatch.setattr(
+        evaluation,
+        "evaluate",
+        lambda use_case, **kwargs: real_evaluate(failing_use_case, **kwargs),
+    )
+    out, err = io.StringIO(), io.StringIO()
+
+    code = cli.main(
+        _evaluate_argv(tmp_path, _cohort(tmp_path, frozen=True)),
+        wiring=_wiring(tmp_path),
+        out=out,
+        err=err,
+    )
+
+    assert code == _EXIT_ERROR
+    assert "error: JudgedGenerationExistsError: x" in err.getvalue()
+    assert "--- attestation ---" not in out.getvalue()

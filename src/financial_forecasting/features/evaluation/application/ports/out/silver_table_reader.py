@@ -16,6 +16,17 @@ Contrato de `read(layer=..., table=..., filters=...)`:
 - partição sem dados → sequência vazia; `(layer, table)` desconhecido → `ApplicationError`;
 - os tipos do schema silver são preservados (`guardrail_applied` `int` 0/1, `seed`
   `int` ou `None`, timestamps ISO `str`).
+
+Contrato de `columns(layer=..., table=...)` (Stage 8.1, ADR 8.1.0002 item 2b):
+
+- devolve, para **toda** coluna do schema silver da tabela (inclusive as de
+  proveniência de escrita, como `created_at_utc`), o par `(tipo, nulável)` com tipo
+  em `"int"`/`"float"`/`"str"`/`"bool"` — só tipos embutidos, para o `evaluation` não
+  conhecer o schema pandera do `analytics_store`;
+- é o **tipo declarado**, dono único no schema do silver, não o tipo em runtime que o
+  `read` entrega (o leitor real troca NaN por `None` e pode entregar inteiro anulável
+  como float); o `SilverContentHash` canoniza as linhas por ele;
+- `(layer, table)` desconhecido → `ApplicationError`, como no `read`.
 """
 
 from __future__ import annotations
@@ -35,4 +46,8 @@ class SilverTableReader(Protocol):
         filters: Mapping[str, object] | None = None,
     ) -> Sequence[Mapping[str, object]]:
         """Linhas da tabela nas partições de `filters` (superconjunto permitido)."""
+        ...
+
+    def columns(self, *, layer: str, table: str) -> Mapping[str, tuple[str, bool]]:
+        """Coluna → (tipo declarado, nulável) de toda coluna do schema da tabela."""
         ...

@@ -16,9 +16,11 @@ DTOs de aplicação **frozen** (concept 6.4 §4 "Application", C2, C3, I16, I17;
   table's key" (ADR `6_4_0005` item 5); valores só `str`/`int`/`float` finito/`bool`/
   `None`;
 - `GoldManifest` — o que identifica uma geração (ADR `6_4_0005` item 8), com
-  `as_mapping()` como a única serialização (JSON-safe);
+  `as_mapping()` como a única serialização (JSON-safe); desde a 8.1 carrega também
+  `silver_content`, a identidade do silver consumido (ADR `8_1_0002` item 4),
+  obrigatório na leitura;
 - `GoldInputs` — o que os builders mapeiam; `FailedCheck`/`failed_checks_of` e
-  `RefreshGoldResult` — o que o use case devolve.
+  `RefreshGoldResult` — o que o use case devolve (com o `manifest` publicado, 8.1).
 """
 
 from __future__ import annotations
@@ -36,6 +38,9 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
     CONFIRMATORY_TABLES,
     GOLD_SCHEMAS,
     GoldTableSchema,
+)
+from financial_forecasting.features.evaluation.application.dtos.silver_content import (
+    SilverContent,
 )
 from financial_forecasting.features.evaluation.domain.services.christoffersen_test import (
     validate_draws_and_seed,
@@ -359,7 +364,8 @@ class RefreshGoldCommand:
 
     Raises:
         ValueError: identificador inválido (C3), `horizons` vazio/repetido/não-`tuple`,
-            `window_deficits` não-`Mapping` ou `parameters` de outro tipo.
+            `window_deficits` não-`Mapping`, `parameters` de outro tipo ou cohort da
+            ablação de H3 igual ao próprio cohort.
     """
 
     asset: str
@@ -381,6 +387,14 @@ class RefreshGoldCommand:
         object.__setattr__(self, "window_deficits", MappingProxyType(dict(self.window_deficits)))
         if not isinstance(self.parameters, RefreshParameters):
             raise ValueError(f"parameters must be RefreshParameters, got {self.parameters!r}")
+        h3 = self.parameters.h3_parameters
+        if h3 is not None and h3.ablation_cohort_id == self.parent_sweep_id:
+            # Stage 8.1 (Checkpoint C bloco 2, CC2-2): o `dim_run` da ablação é outra
+            # leitura (e outra unidade do hash do silver) que o do cohort julgado
+            raise ValueError(
+                f"the h3 ablation cohort_id {h3.ablation_cohort_id!r} must differ from the "
+                "cohort's parent_sweep_id"
+            )
         # o fingerprint congelado do cohort (ADR 6.4.0009 item 5); o formato hex é do VO
         _check_text(self.dataset_fingerprint, field="dataset_fingerprint")
 
@@ -492,6 +506,8 @@ class GoldManifest:
     build_order: tuple[str, ...]
     started_at: datetime
     finished_at: datetime
+    # Stage 8.1 (ADR 8.1.0002 item 4): identidade do silver consumido pelo refresh
+    silver_content: SilverContent
 
     def __post_init__(self) -> None:
         """Tipos e contagens; mapas guardados como cópias somente-leitura."""
@@ -524,6 +540,8 @@ class GoldManifest:
         for name in ("horizons", "build_order"):
             if not isinstance(getattr(self, name), tuple):
                 raise ValueError(f"{name} must be a tuple, got {getattr(self, name)!r}")
+        if not isinstance(self.silver_content, SilverContent):
+            raise ValueError(f"silver_content must be a SilverContent, got {self.silver_content!r}")
 
     def _check_times(self) -> None:
         for name in ("started_at", "finished_at"):
@@ -559,6 +577,7 @@ class GoldManifest:
             "build_order": list(self.build_order),
             "started_at": self.started_at.isoformat(),
             "finished_at": self.finished_at.isoformat(),
+            "silver_content": self.silver_content.as_mapping(),
         }
 
     @classmethod
@@ -603,8 +622,13 @@ class GoldManifest:
             build_order=tuple(_as_list(fields["build_order"], field="build_order")),  # type: ignore[arg-type]
             started_at=_as_datetime(fields["started_at"], field="started_at"),
             finished_at=_as_datetime(fields["finished_at"], field="finished_at"),
+            silver_content=SilverContent.from_mapping(fields["silver_content"]),  # type: ignore[arg-type]
         )
 
+
+MANIFEST_NAME: Final = "MANIFEST.json"
+"""O arquivo do manifesto de uma geração do gold — dono único do nome (o `ParquetGoldStore`
+grava em `current/`, a cópia julgada o leva em `generation/`; Checkpoint C 8.1, CC3-4)."""
 
 _MANIFEST_KEYS = (
     "status",
@@ -622,6 +646,7 @@ _MANIFEST_KEYS = (
     "build_order",
     "started_at",
     "finished_at",
+    "silver_content",
 )
 _REALIZED_KEYS = ("n_sessions", "returns_fsum", "first_timestamp", "last_timestamp")
 
@@ -1227,3 +1252,7 @@ class RefreshGoldResult:
     # Stage 7.2 (CA15; C4-6): unidades (fold, seed, h) DISTINTAS com alguma linha `error`
     # do port, não linhas (uma unidade tem pares x variantes linhas).
     conformal_error_units: int
+    # Stage 8.1 (concept §4, I8): o manifesto publicado, para o orquestrador conferir a
+    # cópia. Fora da igualdade: carrega os timestamps do `Clock`, e dois refreshes das
+    # mesmas entradas têm o mesmo resultado (I16; technical 8.1 §7 [decision]).
+    manifest: GoldManifest = field(compare=False)

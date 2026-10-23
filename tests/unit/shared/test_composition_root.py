@@ -31,6 +31,7 @@ from financial_forecasting.composition_root import (
     _LazyPfTftTrainer,
     _LazyStatsforecastBaselineForecaster,
     _tft_trainer_factory,
+    _torch_cpu_capability,
     wire_dependencies,
 )
 from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
@@ -57,6 +58,9 @@ from financial_forecasting.features.analytics_store.application.use_cases.persis
 from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
     ParquetGoldStore,
 )
+from financial_forecasting.features.evaluation.adapters.out.runtime.git_evaluation_environment import (  # noqa: E501
+    GitEvaluationEnvironment,
+)
 from financial_forecasting.features.evaluation.adapters.out.toml.toml_preregistration_source import (  # noqa: E501
     TomlPreregistrationSource,
 )
@@ -66,6 +70,9 @@ from financial_forecasting.features.evaluation.application.use_cases.build_confi
 )
 from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
     RefreshGold,
+)
+from financial_forecasting.features.evaluation.application.use_cases.run_confirmatory_evaluation import (  # noqa: E501
+    RunConfirmatoryEvaluation,
 )
 from financial_forecasting.features.feature_engineering.adapters.out.duckdb.asof_join_adapter import (  # noqa: E501
     AsofJoinDuckdbAdapter,
@@ -1077,3 +1084,92 @@ def test_permutation_inference_wires_no_evaluation_use_case(tmp_path: Path) -> N
         "predict_tft_attribution_from_checkpoints" in modules
     )  # o percurso entra nos use cases fornecedores
     assert not [m for m in modules if m.startswith("financial_forecasting.features.evaluation")]
+
+
+@pytest.mark.unit
+def test_run_confirmatory_evaluation_for_wires_the_same_gold_store_source_and_ledger(
+    tmp_path: Path,
+) -> None:
+    """Stage 8.1 Task 14: os MESMOS source, hasher, refresh, scorecard, gold store e ledger."""
+    settings = _inference_settings(tmp_path).model_copy(update={"image_id": "sha256:" + "d" * 64})
+    deps = wire_dependencies(settings=settings)
+
+    use_case = deps.run_confirmatory_evaluation_for(tmp_path / "c.toml", "cpu")
+
+    assert isinstance(use_case, RunConfirmatoryEvaluation)
+    assert use_case._source is deps.build_confirmatory_scorecard._source
+    assert isinstance(use_case._source, TomlPreregistrationSource)
+    assert use_case._hasher is deps.hasher
+    assert use_case._refresh_gold is deps.refresh_gold
+    assert use_case._build_scorecard is deps.build_confirmatory_scorecard
+    gold_store = deps.refresh_gold._gold_store
+    assert isinstance(gold_store, ParquetGoldStore)
+    assert use_case._judged_store is gold_store
+    assert use_case._gold_reader is gold_store
+    assert use_case._writer_lock is deps.cohort_ledger
+    assert isinstance(use_case._clock, SystemClock)
+    environment = use_case._environment
+    assert isinstance(environment, GitEvaluationEnvironment)
+    assert isinstance(environment._probe, GitRuntimeEnvironmentProbe)
+    assert environment._probe_keys == {
+        "code.src": "code.src",
+        "code.uv_lock": "code.uv_lock",
+        "code.cohort_file": "code.cohort_file",
+    }
+    assert environment._probe_dirty_key == "code_dirty"
+    assert environment._image_id == "sha256:" + "d" * 64
+    assert environment._cpu_capability is _torch_cpu_capability
+    assert environment._preregistration_dir == "config/preregistration"
+
+
+@pytest.mark.unit
+def test_run_confirmatory_evaluation_for_uses_the_injected_probe(tmp_path: Path) -> None:
+    calls: list[tuple[Path, str]] = []
+    fake_probe = InMemoryRuntimeEnvironmentProbe()
+
+    def factory(cohort_path: Path, device: str) -> InMemoryRuntimeEnvironmentProbe:
+        calls.append((cohort_path, device))
+        return fake_probe
+
+    deps = wire_dependencies(settings=_inference_settings(tmp_path), runtime_probe_factory=factory)
+
+    use_case = deps.run_confirmatory_evaluation_for(tmp_path / "c.toml", "cpu")
+
+    assert use_case._environment._probe is fake_probe  # type: ignore[attr-defined]
+    assert use_case._environment._image_id is None  # type: ignore[attr-defined]
+    assert calls == [(tmp_path / "c.toml", "cpu")]
+
+
+@pytest.mark.unit
+def test_cpu_capability_is_lazy(tmp_path: Path) -> None:
+    """Montar a fábrica da corrida não põe `torch` em `sys.modules` (processo limpo)."""
+    script = textwrap.dedent(
+        f"""
+        import sys
+        from pathlib import Path
+        from financial_forecasting.composition_root import wire_dependencies
+        from financial_forecasting.shared.infrastructure.config.settings import Settings
+        root = Path({str(tmp_path)!r})
+        deps = wire_dependencies(
+            settings=Settings(
+                _env_file=None,
+                data_root=root / "d",
+                artifacts_root=root / "a",
+                repo_root=root,
+                mlflow_tracking_uri="sqlite:///" + str(root / "mlruns.db"),
+                image_id="sha256:" + "d" * 64,
+            )
+        )
+        use_case = deps.run_confirmatory_evaluation_for(root / "c.toml", "cpu")
+        print(type(use_case).__name__)
+        print("torch" in sys.modules)
+        """
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=True
+    )
+
+    name, leaked = completed.stdout.strip().splitlines()[-2:]
+    assert name == RunConfirmatoryEvaluation.__name__
+    assert leaked == "False"

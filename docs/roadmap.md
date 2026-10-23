@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-10-22
-last_reviewed_at: 2026-10-22
+updated_at: 2026-10-23
+last_reviewed_at: 2026-10-23
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -69,7 +69,7 @@ graph LR
 | 5 | Modelagem, baselines e treino | TFT re-treinado + GBM quantílico + baselines naive/estatísticos sobre walk-forward purgado/embargoado; cohort confirmatório AAPL | done | 5.1–5.5 |
 | 6 | Núcleo estatístico confirmatório | Pipeline gold confirmatória: pinball/CRPS/DM/MCS/Holm/PICP-Christoffersen + gates + scorecard pré-registrado, no domínio e validada por oráculo | done | 6.1–6.6 |
 | 7 | Inferência, conformal, explicabilidade e API | Motor de inferência + conformal CQR (benchmark) + explicabilidade (VSN/permutação/ablação) servidos por API fina | done | 7.1–7.4 |
-| 8 | Reprodução, equivalência e relatório | Protocolo completo em AAPL; equivalência vs evidência anterior auditada; plots e dossiê de rastreabilidade | not_started | 8.1–8.3 |
+| 8 | Reprodução, equivalência e relatório | Protocolo completo em AAPL; equivalência vs evidência anterior auditada; plots e dossiê de rastreabilidade | in_progress | 8.1–8.3 |
 
 **Legenda de status (Step):** `not_started`, `in_progress`, `blocked`, `done`, `deprecated`.
 
@@ -109,7 +109,7 @@ graph LR
 | `7.2-conformal-cqr` | inference | multi (domain + application + adapters/out; + evaluation) | vertical | done | 7.1, 5.1 |
 | `7.3-explainability` | inference | multi (modeling + inference + analytics_store + evaluation; Windows + Linux) | vertical | done | 7.1, 6.1, 7.2 |
 | `7.4-inference-api` | inference | multi (domain + application + adapters/in/http; + evaluation application; shared http) | vertical | done | 7.2, 7.3 |
-| `8.1-confirmatory-run` | evaluation | application (orquestração) | vertical | draft | 6.5, 6.6, 7.1, 7.2, 7.3 |
+| `8.1-confirmatory-run` | evaluation | multi (orquestração) | vertical | done | 6.5, 6.6, 7.1, 7.2, 7.3 |
 | `8.2-equivalence-audit` | evaluation | application + tests | vertical | draft | 8.1 |
 | `8.3-plots-and-final-report` | evaluation | adapters/out + docs | vertical | draft | 8.2 |
 
@@ -1191,7 +1191,7 @@ Roda o protocolo confirmatório completo em AAPL, audita equivalência vs evidê
 
 **Descrição humana:** Orquestração ponta-a-ponta do confirmatório: do cohort treinado (5.5) → métricas/inferência (Step 6) → scorecard pré-registrado, gerando os artefatos gold confirmatórios e o veredito mecânico por H1/H2/H3.
 
-**Notas da 6.5/6.6:** a dependência da Stage **6.6** está satisfeita (issue #129; os perfis de séries novas saem em oito tabelas gold na mesma geração e no perfil do scorecard, nunca no veredito). A 8.1 **julga pela revisão ancorada mais recente da cadeia** do `aapl_confirmatory`: a r2 da 7.2 (bloco `[conformal]`, ancorada na #158; ADR 7.2.0001), ou a r3 se a 7.3 emendar para H3 — `refresh_command_from(rN, ref)` e `BuildConfirmatoryScorecard(revision=N)`. A r1 (`aapl_confirmatory-r1-bfa8028498ca`, #129) segue na cadeia. Depende também do pré-registro de H3 (7.3), ancorado antes da corrida. O conformal chega pronto da 7.2: o `RefreshGold` derivado da r2 já publica `gold_conformal_corrections` e `gold_conformal_coverage` na mesma geração (ADR 7.2.0003); a 8.1 só executa. O refresh do gold é chamado com `refresh_command_from(plano, ref)` (derivação única do comando); o `ScorecardResult.as_mapping()` é gravado **fora** de `current/`, em `gold/asset=<a>/parent_sweep_id=<p>/scorecard/<preregistration_ref>/` (como `gold_model_comparison_confirmatory_scorecard`, registrando o manifesto lido); o primeiro refresh confirmatório posta um comentário na issue da Stage (fecho da ordem, ADR 6.5.0003 item 4).
+**Notas da 6.5/6.6:** a dependência da Stage **6.6** está satisfeita (issue #129; os perfis de séries novas saem em oito tabelas gold na mesma geração e no perfil do scorecard, nunca no veredito). A 8.1 **julga pela revisão ancorada mais recente da cadeia** do `aapl_confirmatory`: a r2 da 7.2 (bloco `[conformal]`, ancorada na #158; ADR 7.2.0001), ou a r3 se a 7.3 emendar para H3 — `refresh_command_from(rN, ref)` e `BuildConfirmatoryScorecard(revision=N)`. A r1 (`aapl_confirmatory-r1-bfa8028498ca`, #129) segue na cadeia. Depende também do pré-registro de H3 (7.3), ancorado antes da corrida. O conformal chega pronto da 7.2: o `RefreshGold` derivado da r2 já publica `gold_conformal_corrections` e `gold_conformal_coverage` na mesma geração (ADR 7.2.0003); a 8.1 só executa. O refresh do gold é chamado com `refresh_command_from(plano, ref)` (derivação única do comando); o `ScorecardResult.as_mapping()` é gravado **fora** de `current/`, em `gold/asset=<a>/parent_sweep_id=<p>/judged/<preregistration_ref>/` (como `gold_model_comparison_confirmatory_scorecard`, ao lado da cópia selada da geração julgada — concept 8.1 D5, ADR 8.1.0003; o caminho `scorecard/<ref>/` foi refinado porque o diretório guarda a geração inteira); o primeiro refresh confirmatório posta um comentário na issue da Stage (fecho da ordem, ADR 6.5.0003 item 4), como passo de runbook depois do selo.
 
 **Issue bloqueada pela 8.1 — #58** (calendário na `FeatureRegistry` com `tft_typing=known`): só entra depois da 8.1. Incluir `day_of_week`/`month` em `FEATURE_SPECS` muda o `feature_set_hash` (`7df0e1b4…`) congelado no cohort ancorado (`cohort/aapl_confirmatory-r0-665f45d9169a`) e referenciado pelos pré-registros r0/r1; o executor do cohort e a inferência da 7.1 passariam a recusar o cohort já treinado, e voltar exigiria revisão nova do cohort, re-treino completo e emenda do pré-registro — por uma refatoração que não muda nenhuma predição. Em aberto para quando entrar: qual `family` o calendário recebe (fora das 4 do ADR 0.0.0016) e como isso conversa com a partição de famílias da ablação da 7.3.
 
@@ -1201,17 +1201,33 @@ Roda o protocolo confirmatório completo em AAPL, audita equivalência vs evidê
 ```yaml
 stage_id: 8.1-confirmatory-run
 bounded_context: evaluation
-camada_alvo: application (orquestração)
+camada_alvo: multi (shared/domain + application + adapters/out + adapters/in/cli)  # orquestração; concept 8.1
 arquivos_a_criar:
   - src/financial_forecasting/features/evaluation/application/use_cases/run_confirmatory_evaluation.py
   - tests/integration/features/evaluation/test_run_confirmatory_evaluation.py
-contratos_introduzidos: [RunConfirmatoryEvaluation (use case), geração julgada preservada com hash de conteúdo, hash de conteúdo do silver lido — a forma (inclusive se o hash do silver pede um VO de identidade novo, ADR 6.4.0005 item 9) é decisão do concept da 8.1]
+  # concept 8.1 (ADRs 8.1.0001–8.1.0003); caminhos exatos de DTOs, fakes, adapters e testes: technical 8.1
+  - src/financial_forecasting/shared/domain/value_objects/silver_content_hash.py
+  - src/financial_forecasting/features/evaluation/application/ports/out/{judged_generation_store.py, evaluation_environment.py, evaluation_writer_lock.py}
+  - src/financial_forecasting/features/evaluation/adapters/out/  # real do EvaluationEnvironment (o JudgedGenerationStore é satisfeito pelo ParquetGoldStore, em arquivos_a_modificar)
+  - src/financial_forecasting/features/evaluation/adapters/in/cli/  # comando `evaluate`
+  - config/preregistration/aapl_confirmatory-r3.judged.toml  # registro de atestação, na corrida real
+arquivos_a_modificar:
+  - src/financial_forecasting/features/evaluation/application/use_cases/{refresh_gold.py, build_confirmatory_scorecard.py}
+  - src/financial_forecasting/features/evaluation/application/dtos/refresh_gold.py  # GoldManifest.silver_content, RefreshGoldResult.manifest
+  - src/financial_forecasting/features/evaluation/adapters/out/duckdb/parquet_gold_store.py
+  - src/financial_forecasting/{cli.py, composition_root.py}  # encadeamento infer → evaluate no cli.py
+  - src/financial_forecasting/features/evaluation/application/ports/out/{silver_table_reader.py, preregistration_source.py}  # columns(); judged_records()
+  - src/financial_forecasting/features/evaluation/adapters/out/toml/toml_preregistration_source.py
+  - src/financial_forecasting/features/analytics_store/adapters/out/parquet/parquet_analytics_repository.py  # columns() pelo SilverTable
+  - src/financial_forecasting/features/inference/adapters/in/cli/inference_commands.py  # função nova infer_with_summary; infer inalterado
+  - docs/LAYOUT.md  # §7: SilverContentHash entre os VOs de identidade
+contratos_introduzidos: [RunConfirmatoryEvaluation (use case; status JUDGED/BLOCKED/ALREADY_JUDGED, uma geração julgada por partição — ADR 8.1.0001), resolve_judged_revision (extraído do BuildConfirmatoryScorecard), SilverContentHash (VO de identidade em shared, floats exatos, linhas consumidas pelo RefreshGold — ADR 8.1.0002) e GoldManifest.silver_content, JudgedGenerationStore (port-out satisfeito pelo ParquetGoldStore; cópia selada em judged/<preregistration_ref>/ com CONTENTS.sha256 — ADR 8.1.0003; registro write-ahead de tentativas e .judged.toml commitado como verdade cruzada — ADR 8.1.0004), EvaluationEnvironment e EvaluationWriterLock (ports do consumidor), subcomando `evaluate` (infer da 7.1 encadeado antes do use case), registro <nome>-r<rev>.judged.toml]
 contratos_consumidos: [BuildConfirmatoryScorecard e refresh_command_from (6.5), RefreshGold (6.4), RunInference / subcomando `infer` idempotente (7.1), tabelas gold conformais do RefreshGold e revisão r2 (7.2), tabelas gold de H3 publicadas pelo RefreshGold derivado da revisão ancorada mais recente, com o bloco [h3] da r3 (7.3, ADR 7.3.0001), predições permutadas e pesos da VSN no silver (`attribute` completo) e cohort de ablação congelado e treinado (7.3), tabelas de perfil (6.6)]
 definition_of_done: "Pipeline confirmatória roda do cohort persistido até o scorecard sem re-treino; veredito mecânico H1/H2/H3 produzido; conformal incluído como eixo comparativo; tudo rastreável por run_id + hash de pré-registro + hash de conteúdo das tabelas do silver lidas; a geração julgada (gold + manifesto + scorecard) é preservada numa cópia imutável com hash do conteúdo antes de qualquer outro refresh da partição (requisitos de fronteira 8.1 → 8.2 do doc de domínio de reprodução §4.5)."
 non_goals: [equivalência (8.2), plots (8.3)]
-complexidade_estimada: M
+complexidade_estimada: L  # ≈ 12 Tasks + gate de custo + corrida real (concept 8.1 §12)
 gate_mode: strict
-skills_hint: [composition-root, hex-arch-python]
+skills_hint: [orchestrator-design, composition-root, hex-arch-python, pytest-with-fakes, repository-pattern, data-shape-evidence]
 ```
 
 #### Stage 8.2 — `8.2-equivalence-audit`
@@ -1299,6 +1315,9 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 | 2026-10-21 | Bloco da 7.4 alinhado ao concept: serve as predições de teste gravadas (sem ports de checkpoint nem partição `calib`), `ServeInference` no lugar de `RunInferencePort`, port `ServingGoldReader` com leitor `ReadServingGold` no evaluation (aresta evaluation → inference como exceção declarada ao ADR 0.0.0053), handler `ApplicationError → 500`; camada multi e arquivos completos; `gate_mode: batch` justificado; atualização contínua fora (job agendado) | Concept 7.4 (issue #201; ADRs 7.4.0001–7.4.0002) |
 | 2026-10-22 | Stage `7.4-inference-api` `done`; Step 7 `done` (última Stage do step). `POST /inference/run` serve as predições de teste gravadas do candidato, uma entrada por seed, com o intervalo conformal da variante de registro e a leitura de H3 lidos do gold por port do consumidor (`ServingGoldReader` ← `ReadServingGold` do evaluation; aresta evaluation → inference declarada, 41 → 42); 404 "não há dados para o pedido solicitado"; gold ausente → blocos `unavailable`. Execução real (CA12): 200 em 1,46 s com 20/20 membros iguais ao `value_guardrail` gravado e gold não publicado; D15: pedido com gold sintético do tamanho do real em ≤ 2,51 s (sem cache). Follow-ups #202 (job agendado), #203, #204 | Fechamento da Stage 7.4 (issue #201; ADRs 7.4.0001–7.4.0002; technical 7.4 §7) |
 | 2026-10-22 | Gate de domínio do Step 8: doc [`reproduction-equivalence-and-reporting`](./domain/evaluation/reproduction-equivalence-and-reporting.md) aceito; a 8.2 faz as duas comparações — reprodução da própria corrida (claim citável) e equivalência interna com a evidência anterior na interseção comum, com a evidência anterior congelada por hash; lacuna "tolerância de equivalência (8.2)" fechada. Bloco da 8.2 emendado: descrição, DoD com (i) reprodução da corrida da 8.1 a partir dos artefatos persistidos e (ii) equivalência interna; `non_goals` passa a "bit-identical vs evidência anterior" (a reprodução da própria corrida é bit a bit no ambiente registrado); relatório de reprodução em `arquivos_a_criar`; teste de equivalência fora do CI; ROADMAP-5 ajustada. Bloco da 8.1: DoD e contratos ganham as obrigações que o doc de domínio impõe (cópia imutável + hash da geração julgada antes de qualquer refresh; hash de conteúdo do silver lido, forma decidida no concept da 8.1). Decisão B2 do humano (ADR 0.0.0062): tolerância numérica no alvo e no código de métrica, sentido nos números do modelo; overview §2, ASSUM-4 e R-REPRO-1 emendados na redação; status de Stages e do Step inalterado | Gate de domínio do Step 8 (issue #208; ADRs 0.0.0060, 0.0.0061 e 0.0.0062; decisões B1 e B2 do humano) |
+| 2026-10-22 | Bloco da 8.1 refinado pelo concept: arquivos a criar e a modificar, contratos (use case com três status e uma geração julgada por partição; resolução da revisão extraída do scorecard; VO `SilverContentHash` no manifesto do gold; `JudgedGenerationStore`; ports de ambiente e lock; subcomando `evaluate` com o `infer` antes); caminho do scorecard refinado de `scorecard/<ref>/` para `judged/<ref>/` (cópia selada da geração inteira); comentário de atestação como passo de runbook depois do selo | Concept 8.1 (issue #211; ADRs 8.1.0001–8.1.0003) |
+| 2026-10-22 | Bloco da 8.1 alinhado ao Checkpoint A do concept: `camada_alvo` multi, complexidade L, `skills_hint` ampliado; arquivos a modificar do leitor do silver (`columns`), do source do pré-registro (`judged_records`), do repositório do `analytics_store` e do `infer`; contratos com o registro de tentativas e o `.judged.toml` como verdade cruzada | Checkpoint A da 8.1, rodada 1 (CA-11; ADR 8.1.0004) |
+| 2026-10-23 | Stage `8.1-confirmatory-run` `done`; Step 8 `in_progress`. `RunConfirmatoryEvaluation` (CLI `evaluate` encadeado ao `infer`) julgou o cohort `aapl_confirmatory-r0` pela r3 (`aapl_confirmatory-r3-00fd83d9cd39`): status `JUDGED`, generation_digest `96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539`; H1 passa em h+1 e h+7; H2 h+1 `beats_naive_only` e h+7 `beats_naive_ties_strong` (vencedor primário `tft_quantile`); sucesso do estudo (≥ 1 horizonte): sim. Geração julgada selada em `judged/<ref>/` com `CONTENTS.sha256` + backup; hash de conteúdo do silver no manifesto (`SilverContentHash`); tag `confirmatory-run/aapl_confirmatory-r3-00fd83d9cd39`, comentário na #211 (issuecomment-6362212743), `config/preregistration/aapl_confirmatory-r3.judged.toml`. Re-execução só com mesmo código, ambiente, entrada e resultado; senão `--deviation` (ADR 8.1.0004). Libera #58 e #163 | Fechamento da Stage 8.1 (issue #211; ADRs 8.1.0001–8.1.0004; technical 8.1 §7) |
 
 ## Próxima revisão de roadmap
 

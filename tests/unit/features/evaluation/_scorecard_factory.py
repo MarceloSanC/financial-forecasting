@@ -70,6 +70,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.scorecard_ev
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
     DatasetContentFingerprint,
 )
+from tests.unit.features.evaluation._silver_content import SAMPLE_SILVER_CONTENT
 
 REFERENCE = "test_plan-r0-0123456789ab"
 T_POINTS = 250
@@ -198,6 +199,7 @@ def make_stored(  # noqa: PLR0913 — um eixo por parâmetro da geração sinté
         build_order=tuple(name.removeprefix("gold_") for name in rows),
         started_at=started_at,
         finished_at=started_at,
+        silver_content=SAMPLE_SILVER_CONTENT,
     ).as_mapping()
     return StoredGold(manifest=manifest, rows=rows, partition=partition)
 

@@ -28,7 +28,6 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb import (
     parquet_gold_store as parquet_gold_store_module,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
-    MANIFEST_NAME,
     ParquetGoldStore,
 )
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
@@ -38,6 +37,7 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
     GOLD_SCHEMAS,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    MANIFEST_NAME,
     GoldGeneration,
     GoldManifest,
     GoldPartition,
@@ -63,6 +63,7 @@ from tests.fakes.features.evaluation.in_memory_gold_generation_reader import (
     InMemoryGoldGenerationReader,
 )
 from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
+from tests.unit.features.evaluation._silver_content import SAMPLE_SILVER_CONTENT
 
 _PARTITION = GoldPartition("AAPL", "sweep-01")
 _REF = "test_plan-r0-0123456789ab"
@@ -168,6 +169,7 @@ def _generation(
         build_order=tuple(table.name.removeprefix("gold_") for table in tables),
         started_at=_NOW,
         finished_at=_NOW,
+        silver_content=SAMPLE_SILVER_CONTENT,
     )
     return tables, manifest
 

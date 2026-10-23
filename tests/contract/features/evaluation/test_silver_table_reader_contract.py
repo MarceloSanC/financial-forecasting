@@ -6,6 +6,10 @@ pós-filtra); partição ausente → vazio; tabela desconhecida → `Application
 preservados (`guardrail_applied` `int`, `seed` `None`/`int`). As linhas são gravadas
 nas duas pernas — na real, `dim_run` num único lote misto de `seed` `None`/`int`
 (issue #119). Sem `skipif`.
+
+Stage 8.1 (ADR 8.1.0002 item 2b): `columns` declara o tipo e a nulabilidade de toda
+coluna das quatro tabelas que o refresh lê; o fake tem de devolver exatamente o mesmo
+que o real (é o que prova o espelho).
 """
 
 from __future__ import annotations
@@ -172,3 +176,48 @@ def test_values_round_trip(reader: SilverTableReader) -> None:
         assert facts[run_id]["guardrail_applied"] == expected
     assert facts["run-b"]["quantile_level"] == 0.75  # noqa: PLR2004 — o nível gravado
     assert facts["run-a"]["target_timestamp_utc"] == "2024-01-08T00:00:00+00:00"
+
+
+_REFRESH_TABLES = (
+    "dim_run",
+    "fact_oos_predictions",
+    "fact_permuted_predictions",
+    "fact_vsn_weights",
+)
+_FACT_TABLES = _REFRESH_TABLES[1:]
+_KINDS = {"int", "float", "str", "bool"}
+
+
+@pytest.mark.contract
+def test_columns_declares_every_schema_column_with_kind_and_nullability(
+    reader: SilverTableReader,
+) -> None:
+    declared = {table: reader.columns(layer=_SILVER, table=table) for table in _REFRESH_TABLES}
+
+    for columns in declared.values():
+        assert columns
+        assert {kind for kind, _ in columns.values()} <= _KINDS
+        assert all(type(nullable) is bool for _, nullable in columns.values())
+    assert declared["dim_run"]["seed"] == ("int", True)
+    assert declared["dim_run"]["parent_sweep_id"] == ("str", True)
+    assert "created_at_utc" in declared["dim_run"]
+    for table in _FACT_TABLES:
+        assert declared[table]["year"] == ("int", False)
+    assert declared["fact_oos_predictions"]["quantile_level"] == ("float", False)
+    assert declared["fact_permuted_predictions"]["quantile_level"] == ("float", False)
+    assert declared["fact_vsn_weights"]["weight"] == ("float", False)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("table", _REFRESH_TABLES)
+def test_fake_columns_equal_real_columns(table: str, tmp_path: Path) -> None:
+    fake = _fake(tmp_path).columns(layer=_SILVER, table=table)
+    real = _real(tmp_path).columns(layer=_SILVER, table=table)
+
+    assert dict(fake) == dict(real)
+
+
+@pytest.mark.contract
+def test_columns_of_unknown_table_raises_application_error(reader: SilverTableReader) -> None:
+    with pytest.raises(ApplicationError, match="Unknown silver"):
+        reader.columns(layer=_SILVER, table="gold_nothing")

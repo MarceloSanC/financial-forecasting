@@ -264,6 +264,7 @@ def _refresh(world: _World, revision: int, port: ConformalCalibration | None = N
             gold_store=wired._gold_store,
             builders=wired._builders,
             conformal_calibration=port,
+            hasher=wired._hasher,
         )
     plan, reference = world.plans[revision], world.references[revision]
     refresh = use_case(refresh_command_from(plan, reference))

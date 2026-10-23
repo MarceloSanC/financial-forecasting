@@ -15,8 +15,10 @@ próprio adapter. O VALOR do esquema (byte-compat com hashes persistidos) fica
 pinado à parte em `test_hasher_golden.py`; aqui ficam as propriedades.
 """
 
+import json
 import math
 from collections.abc import Callable
+from hashlib import sha256
 
 import pytest
 
@@ -207,3 +209,24 @@ def test_hash_text_is_deterministic(hasher: Hasher) -> None:
 def test_hash_text_is_order_sensitive(hasher: Hasher) -> None:
     """hash_text sensível à ordem: 'a|b' != 'b|a'."""
     assert hasher.hash_text("a|b") != hasher.hash_text("b|a")
+
+
+@pytest.mark.contract
+def test_streamed_hash_equals_one_shot_json_on_large_payload(hasher: Hasher) -> None:
+    """Hash em streaming (Stage 8.1): os bytes são os do `json.dumps` de uma vez só.
+
+    O payload passa de vários blocos de streaming (~1 Mi caracteres cada) e mistura
+    texto unicode, aninhamento, `None`, `bool`, `int` e float já na precisão declarada.
+    """
+    rows = [f'{{"i":{i},"s":"ação-\u2028-{i}"}}' for i in range(120_000)]
+    payload: dict[str, object] = {
+        "rows": rows,
+        "z": {"b": [1, True, None, 0.25], "a": "ç"},
+        "n": -3,
+    }
+    one_shot = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    )
+    assert len(one_shot) > 3 * 2**20
+
+    assert hasher.hash_mapping(payload) == sha256(one_shot.encode("utf-8")).hexdigest()

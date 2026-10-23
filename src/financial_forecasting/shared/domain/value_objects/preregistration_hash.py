@@ -19,48 +19,24 @@ campo float, mas só o VO do plano sabe o tipo declarado de cada campo; ele
 coage antes de montar o payload (ADR 6.5.0001 item 2). Este VO hasheia o que
 recebe: `{"x": 0}` e `{"x": 0.0}` dão hashes diferentes aqui.
 
+A codificação tem dono único em `shared/domain/services/exact_float.py`
+(compartilhada com o `SilverContentHash`, ADR 8.1.0002 item 1).
+
 O hash é delegado ao port `Hasher`; o type hint usa `TYPE_CHECKING` para
 preservar a pureza do domínio (o Protocol é satisfeito por duck-typing).
 """
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from financial_forecasting.shared.domain.services.exact_float import encode_floats
 from financial_forecasting.shared.domain.services.sha256_hex import validate_sha256_hex
 
 if TYPE_CHECKING:
     from financial_forecasting.shared.application.ports.out.hasher import Hasher
-
-_FLOAT_PREFIX = "float:"
-
-
-def _encode_floats(value: object) -> object:
-    """Cópia do valor com todo `float` trocado por `"float:<repr>"`.
-
-    Percorre mapeamentos, listas e tuplas; não muta a entrada. Float não finito
-    ergue `ValueError` (mesmo contrato fail-fast do hasher canônico, que deixaria
-    de vê-lo depois da codificação).
-    """
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, float):
-        if not math.isfinite(value):
-            raise ValueError(f"valor float não-finito não é hasheável: {value!r}")
-        return f"{_FLOAT_PREFIX}{value!r}"
-    if isinstance(value, Mapping):
-        return _encode_mapping(value)
-    if isinstance(value, list | tuple):
-        return [_encode_floats(item) for item in value]
-    return value
-
-
-def _encode_mapping(mapping: Mapping[str, object]) -> dict[str, object]:
-    """Cópia do mapeamento com os floats codificados (ver `_encode_floats`)."""
-    return {key: _encode_floats(item) for key, item in mapping.items()}
 
 
 @dataclass(frozen=True)
@@ -80,4 +56,5 @@ class PreregistrationHash:
     @classmethod
     def compute(cls, *, hasher: Hasher, payload: Mapping[str, object]) -> PreregistrationHash:
         """Calcula o hash do payload inteiro depois de codificar cada float."""
-        return cls(value=hasher.hash_mapping(_encode_mapping(payload)))
+        encoded = {key: encode_floats(item) for key, item in payload.items()}
+        return cls(value=hasher.hash_mapping(encoded))

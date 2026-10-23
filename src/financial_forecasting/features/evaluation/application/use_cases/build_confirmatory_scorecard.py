@@ -1,7 +1,8 @@
 """Use case `BuildConfirmatoryScorecard` — o scorecard confirmatório de uma revisão (Stage 6.5).
 
 Concept 6.5 §4, I5, I6, I12, I13, C2-C5, C7, C10, C11; ADRs `6_5_0002` item 4,
-`6_5_0003` item 3, `6_5_0007` item 8. `__call__(command)`, nesta ordem (I5):
+`6_5_0003` item 3, `6_5_0007` item 8. `__call__(command)`, nesta ordem (I5) — os
+passos 1-3 são o `resolve_judged_revision` (dono único desde a Stage 8.1, A3):
 
 1. lê as revisões 0..r do plano (`PreregistrationSource`) e monta cada
    `Preregistration` (C1/C2 propagam); **cadeia** — `name`/`revision` do payload iguais
@@ -32,14 +33,12 @@ do schema é corrupção nomeada (`GoldGenerationCorruptError`).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Final
 
 from financial_forecasting.features.evaluation.application.dtos.confirmatory_scorecard import (
     BuildConfirmatoryScorecardCommand,
     GoldNotReadyError,
-    PreregistrationChainError,
-    PreregistrationHashMismatchError,
-    PreregistrationNotAnchoredError,
     ReadinessReason,
     ScorecardResult,
     refresh_command_from,
@@ -60,9 +59,11 @@ from financial_forecasting.features.evaluation.application.ports.out.gold_genera
     GoldGenerationReader,
 )
 from financial_forecasting.features.evaluation.application.ports.out.preregistration_source import (
-    ANCHOR_TAG_PREFIX,
     PreregistrationAnchor,
     PreregistrationSource,
+)
+from financial_forecasting.features.evaluation.application.use_cases.judged_revision import (
+    resolve_judged_revision,
 )
 from financial_forecasting.features.evaluation.application.use_cases.scorecard_evidence import (
     evidence_from_generation,
@@ -91,9 +92,6 @@ from financial_forecasting.features.evaluation.domain.value_objects.quality_chec
     CheckSeverity,
 )
 from financial_forecasting.shared.application.ports.out.hasher import Hasher
-from financial_forecasting.shared.domain.value_objects.preregistration_hash import (
-    PreregistrationHash,
-)
 
 REQUIRED_CHECKS: Final = frozenset({DEGENERACY_CHECK, ALIGNMENT_CHECK, STATISTICAL_PRECONDITIONS})
 """Os checks de que o veredito precisa (ADR 6.5.0007 item 8)."""
@@ -150,35 +148,15 @@ class BuildConfirmatoryScorecard:
             GoldNotReadyError: gold `BLOCKED` (C7).
             PreregistrationMismatchError: gold de outro plano ou cohort (C8).
         """
-        records = [
-            self._source.read(name=command.name, revision=revision)
-            for revision in range(command.revision + 1)
-        ]
-        plans = [Preregistration.from_mapping(record.payload) for record in records]
-        chain = self._chain(command, plans)
-        if chain[-1] != command.preregistration_ref:
-            raise PreregistrationHashMismatchError(
-                f"revision {command.revision} of {command.name!r} hashes to {chain[-1]!r}, "
-                f"the command expects {command.preregistration_ref!r}"
-            )
-        unanchored = [revision for revision, record in enumerate(records) if record.anchor is None]
-        anchor = records[-1].anchor
-        if unanchored or anchor is None:
-            raise PreregistrationNotAnchoredError(
-                f"revisions {unanchored} of {command.name!r} have no anchor"
-            )
-        mismatched = [
-            revision
-            for revision, (record, reference) in enumerate(zip(records, chain, strict=True))
-            if record.anchor is not None and record.anchor.tag != f"{ANCHOR_TAG_PREFIX}{reference}"
-        ]
-        if mismatched:
-            raise PreregistrationNotAnchoredError(
-                f"the anchors of revisions {mismatched} of {command.name!r} are not the tags "
-                f"of their computed references (an anchor must match its revision)"
-            )
-        judged = plans[-1]
-        derived = refresh_command_from(judged, chain[-1])
+        revision = resolve_judged_revision(
+            source=self._source,
+            hasher=self._hasher,
+            name=command.name,
+            revision=command.revision,
+            preregistration_ref=command.preregistration_ref,
+        )
+        judged, chain, anchor = revision.plan, revision.chain, revision.anchor
+        derived = refresh_command_from(judged, revision.reference)
         generation = self._reader.read_generation(partition=derived.partition)
         if generation.manifest.status is RefreshStatus.BLOCKED:
             raise GoldNotReadyError(_failed_checks(generation))
@@ -187,10 +165,10 @@ class BuildConfirmatoryScorecard:
         profile = build_profile(
             prereg=judged, evidence=evidence, verdict=verdict, generation=generation
         )
-        reasons = self._readiness(generation, anchor, plans)
+        reasons = self._readiness(generation, anchor, revision.plans)
         return ScorecardResult(
-            preregistration_ref=chain[-1],
-            revision_chain=tuple(chain),
+            preregistration_ref=revision.reference,
+            revision_chain=chain,
             anchor=anchor,
             blinding_statement=judged.blinding_statement,
             manifest_read=generation.manifest,
@@ -200,32 +178,11 @@ class BuildConfirmatoryScorecard:
             readiness_reasons=reasons,
         )
 
-    def _chain(
-        self, command: BuildConfirmatoryScorecardCommand, plans: list[Preregistration]
-    ) -> list[str]:
-        references: list[str] = []
-        for revision, plan in enumerate(plans):
-            if (plan.name, plan.revision) != (command.name, revision):
-                raise PreregistrationChainError(
-                    f"the file of revision {revision} of {command.name!r} declares "
-                    f"name={plan.name!r}, revision={plan.revision}"
-                )
-            if revision > 0:
-                amends = None if plan.amendment is None else plan.amendment.amends
-                if amends != references[-1]:
-                    raise PreregistrationChainError(
-                        f"revision {revision} amends {amends!r}, the previous "
-                        f"revision is {references[-1]!r}"
-                    )
-            digest = PreregistrationHash.compute(hasher=self._hasher, payload=plan.as_payload())
-            references.append(plan.reference(digest))
-        return references
-
     @staticmethod
     def _readiness(
         generation: GoldGeneration,
         anchor: PreregistrationAnchor,
-        plans: list[Preregistration],
+        plans: Sequence[Preregistration],
     ) -> tuple[ReadinessReason, ...]:
         reasons: list[ReadinessReason] = []
         if _required_check_skipped(generation):

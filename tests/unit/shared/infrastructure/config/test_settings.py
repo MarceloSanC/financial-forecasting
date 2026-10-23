@@ -124,3 +124,14 @@ def test_get_settings_is_cached() -> None:
     second = get_settings()
 
     assert first is second
+
+
+@pytest.mark.unit
+def test_image_id_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stage 8.1: `IMAGE_ID` no ambiente vira `image_id`; sem ele, `None`."""
+    monkeypatch.delenv("IMAGE_ID", raising=False)
+    assert Settings(_env_file=None).image_id is None
+
+    monkeypatch.setenv("IMAGE_ID", "sha256:" + "d" * 64)
+
+    assert Settings(_env_file=None).image_id == "sha256:" + "d" * 64

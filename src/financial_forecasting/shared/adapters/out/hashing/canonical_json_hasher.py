@@ -39,6 +39,10 @@ precisão necessária para discriminar datasets distintos.
 """
 
 
+_STREAM_CHUNK_CHARS = 1 << 20
+"""Caracteres de JSON acumulados antes de cada `sha256.update` (streaming do hash)."""
+
+
 def _canonicalize(value: object) -> object:
     """Canonicaliza recursivamente um valor antes da serialização JSON.
 
@@ -63,16 +67,32 @@ class CanonicalJsonHasher:
     """Hasher canônico determinístico via JSON ordenado + sha256."""
 
     def hash_mapping(self, payload: Mapping[str, object]) -> str:
-        """sha256 hex sobre o JSON canônico do mapping (ver módulo)."""
+        """sha256 hex sobre o JSON canônico do mapping (ver módulo).
+
+        O JSON é hasheado em streaming (`iterencode`, blocos de ~1 Mi caracteres): os
+        bytes são os mesmos do `json.dumps` com os mesmos parâmetros (golden inalterado),
+        sem materializar o texto inteiro nem a sua cópia UTF-8 — um payload grande (a
+        unidade do `SilverContentHash`, Stage 8.1) custaria duas cópias dele em memória.
+        """
         canonical = _canonicalize(payload)
-        text = json.dumps(
-            canonical,
+        encoder = json.JSONEncoder(
             sort_keys=True,
             separators=(",", ":"),
             ensure_ascii=False,
             allow_nan=False,
         )
-        return sha256(text.encode("utf-8")).hexdigest()
+        digest = sha256()
+        buffer: list[str] = []
+        size = 0
+        for chunk in encoder.iterencode(canonical):
+            buffer.append(chunk)
+            size += len(chunk)
+            if size >= _STREAM_CHUNK_CHARS:
+                digest.update("".join(buffer).encode("utf-8"))
+                buffer.clear()
+                size = 0
+        digest.update("".join(buffer).encode("utf-8"))
+        return digest.hexdigest()
 
     def hash_text(self, text: str) -> str:
         """sha256 hex sobre os bytes UTF-8 do texto (sensível à ordem)."""

@@ -34,6 +34,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
 )
 from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
     RefreshGold,
+    _ConsumedSilver,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.ablation_run_losses import (
     AblationRunLosses,
@@ -55,6 +56,7 @@ from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher imp
 )
 from tests.fakes.features.evaluation.fake_conformal_calibration import FakeConformalCalibration
 from tests.fakes.features.evaluation.fake_mcs_backend import FakeMcsBackend
+from tests.fakes.features.evaluation.fake_silver_table_reader import SILVER_COLUMNS
 from tests.fakes.features.evaluation.fake_training_grid_reader import FakeTrainingGridReader
 from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
 from tests.fakes.shared.in_memory_clock import FakeClock
@@ -166,6 +168,10 @@ class _GeneratingReader:
         self.rows += len(rows)
         return rows
 
+    def columns(self, *, layer: str, table: str) -> Mapping[str, tuple[str, bool]]:
+        """Tipos declarados do fake (Stage 8.1): mantém o leitor no Protocol."""
+        return SILVER_COLUMNS[table]
+
     def _generate(self, table: str, wanted: Mapping[str, object]) -> Iterator[dict]:  # type: ignore[type-arg]  # noqa: PLR0912 — um ramo por tabela
         if table == "dim_run":
             for run in self._ablation:
@@ -200,6 +206,7 @@ class _GeneratingReader:
                     grid = _grid(run.seed or 0, decision, horizon, 0.001 * k)
                     for level, value in zip(_LEVELS, grid, strict=True):
                         row = _fact(run, horizon, decision, level, value)
+                        del row["split"]  # fora do schema das permutadas (hash da 8.1)
                         row.update(
                             permuted_family=family,
                             permutation_index=k,
@@ -238,7 +245,13 @@ def _use_case(reader: _GeneratingReader, builders: Sequence[object] = ()) -> Ref
         gold_store=InMemoryGoldStore(),
         builders=list(builders),  # type: ignore[arg-type]
         conformal_calibration=FakeConformalCalibration(),
+        hasher=CanonicalJsonHasher(),
     )
+
+
+def _consumed(reader: _GeneratingReader) -> _ConsumedSilver:
+    """O acumulador do hash do silver da chamada (Stage 8.1): entra na medição."""
+    return _ConsumedSilver(reader, CanonicalJsonHasher())
 
 
 def _run(run_id: str, model: str, seed: int, fold: int, feature_set: str) -> CohortRun:
@@ -274,7 +287,9 @@ def test_ablation_partition_read_once_per_year_at_real_size() -> None:
 
     tracemalloc.start()
     try:
-        reductions = use_case._ablation_reductions(_PARTITION, runs, _YEARS, _REALIZED, _LEVELS)
+        reductions = use_case._ablation_reductions(
+            _PARTITION, runs, _YEARS, _REALIZED, _LEVELS, _consumed(reader)
+        )
         _, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()
@@ -380,6 +395,7 @@ def probe(seeds: int) -> dict[str, object]:
         parameters=parameters,
         realized=_REALIZED,
         h3=h3,
+        consumed=_consumed(reader),
     )
     inputs = dataclasses.replace(base_inputs, parameters=parameters, h3_reports=reports)
     tables = [builder.build(inputs) for builder in builders]

@@ -19,6 +19,10 @@ do novo.
 Satisfaz também, por duck-typing, o port `CohortLedger` do slice `inference`
 (Stage 7.1) — subconjunto exato deste port: `acquire_writer`, `release_writer` e
 `environment`. Nenhum import muda.
+
+Satisfaz também, por duck-typing, o port `EvaluationWriterLock` do slice `evaluation`
+(Stage 8.1, concept 8.1 D8): `acquire_writer` e `release_writer`, o lock de escritor
+único durante a corrida confirmatória. Nenhum import muda.
 """
 
 from __future__ import annotations

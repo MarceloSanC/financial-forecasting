@@ -31,10 +31,10 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb import (
     parquet_gold_store as parquet_gold_store_module,
 )
 from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
-    MANIFEST_NAME,
     ParquetGoldStore,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    MANIFEST_NAME,
     GoldManifest,
     GoldPartition,
     GoldTable,
@@ -54,6 +54,7 @@ from financial_forecasting.shared.domain.value_objects.dataset_content_fingerpri
     DatasetContentFingerprint,
 )
 from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
+from tests.unit.features.evaluation._silver_content import SAMPLE_SILVER_CONTENT
 
 Generation = tuple[dict[str, object], dict[str, list[dict[str, object]]]]
 
@@ -170,6 +171,7 @@ def _manifest(
         build_order=tuple(table.name.removeprefix("gold_") for table in tables),
         started_at=_NOW,
         finished_at=_NOW,
+        silver_content=SAMPLE_SILVER_CONTENT,
     )
 
 

@@ -101,6 +101,15 @@ class Settings(BaseSettings):
     # `data/cohorts/aapl`). Override por env (`SERVING_COHORT_FILE`).
     serving_cohort_file: Path | None = None
 
+    # ---------------------------------------------------------------------------
+    # Id da imagem Docker da corrida confirmatória (Stage 8.1 / ADR 8.1.0003 item 6)
+    # ---------------------------------------------------------------------------
+    # O id (`docker image inspect`) da imagem em que o `evaluate` roda, gravado no
+    # registro de execução (a tag `:dev` é mutável). Sem ele, a foto do ambiente da
+    # corrida é recusada (`MissingImageIdError`). Override por env (`IMAGE_ID`),
+    # passado pelo runbook.
+    image_id: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:
