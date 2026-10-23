@@ -10,6 +10,7 @@ import hashlib
 from pathlib import Path
 
 import pyarrow as pa
+import pyarrow.dataset as pa_dataset
 import pyarrow.parquet as pq
 import pytest
 
@@ -201,8 +202,11 @@ def test_builder_reads_footer_only(oracle: Path, monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(pq, "read_pandas", forbidden)
     monkeypatch.setattr(pq.ParquetFile, "read_row_group", forbidden)
     monkeypatch.setattr(pq.ParquetFile, "iter_batches", forbidden)
-    # `pyarrow.Table.to_pylist` é tipo imutável (extensão C): sem `read_table`/`read`
-    # nenhuma `Table` com valores chega a existir no gerador
+    monkeypatch.setattr(pq.ParquetFile, "read_row_groups", forbidden)
+    monkeypatch.setattr(pq, "ParquetDataset", forbidden)  # CC3-2
+    monkeypatch.setattr(pa_dataset, "dataset", forbidden)  # CC3-2
+    # `pyarrow.Table.to_pylist` e `Dataset.to_table` são tipos imutáveis (extensão C): sem as
+    # portas acima nenhuma `Table` ou `Dataset` com valores chega a existir no gerador
 
     text = build_registry(oracle_root=oracle, paths=(_GOLD,))
     verify_registered_files(oracle_root=oracle, registry=parse_registry(text))
