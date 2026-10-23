@@ -12,7 +12,9 @@ por valor:
   `key` + `read_columns` do `GoldTableSchema` (technical 8.2 §1);
 - `IdentityComparison`, `ClassComparison`, `TableComparison`, `ScorecardComparison` e
   `ReproductionComparison` — o resultado do comparador `compare_reproduction`, com
-  `bit_identical` composto (identidade, digests, tabelas e scorecard).
+  `bit_identical` composto (identidade, digests, tabelas e scorecard);
+- `AuditReproductionCommand` — o pedido do use case `AuditReproduction` (Task 04): a
+  revisão julgada e o scorecard reproduzido já lido do `reproduction/scorecard.json`.
 """
 
 from __future__ import annotations
@@ -465,3 +467,33 @@ class ReproductionComparison:
             and self.tables_equal
             and self.scorecard.equal
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class AuditReproductionCommand:
+    """O pedido da auditoria: a revisão julgada e o scorecard reproduzido (ADR 8.2.0002 item 4).
+
+    `reproduced_scorecard` é o JSON lido de `<reproduzida>/reproduction/scorecard.json` pelo
+    adapter de entrada — o use case nunca recalcula o scorecard.
+
+    Raises:
+        ValueError: `name` ou `preregistration_ref` vazios; `revision` não-`int`, `bool` ou
+            negativa; `reproduced_scorecard` que não é `Mapping`.
+    """
+
+    name: str
+    revision: int
+    preregistration_ref: str
+    reproduced_scorecard: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        for name in ("name", "preregistration_ref"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"{name} must be a non-empty str, got {value!r}")
+        validate_int_at_least(self.revision, minimum=0, field="revision")
+        if not isinstance(self.reproduced_scorecard, Mapping):
+            raise ValueError(
+                "reproduced_scorecard must be a Mapping, got "
+                f"{type(self.reproduced_scorecard).__name__}"
+            )
