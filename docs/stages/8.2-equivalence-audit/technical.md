@@ -1359,4 +1359,23 @@ Vocabulário fechado (CONVENTIONS §3.4): `decision` (ou `decision:E` /
 `decision:C`), `finding`, `deviation`, `measurement`. Outra tag no cabeçalho de
 entrada é recusada por `scripts/check_technical_postexec.py`.
 
+### 2026-10-23 — [decision:C] Task 01, forma do `ClassComparison`/`ReproductionComparison` — Claude (executor)
+**Contexto:** o §1 pede `max_abs_diff = None` para R1 não numérica e validação na
+construção, mas uma classe de uma tabela mistura colunas numéricas (inteiros) e
+rótulos; sem saber quantos pares numéricos houve, o DTO não distingue "None
+legítimo" de "max esquecido".
+**Pergunta:** como o DTO valida o max |Δ| sem conhecer as colunas?
+**Opções:**
+- A — só checar `max_abs_diff >= 0` quando presente.
+- B — campo `numeric` (pares com os dois lados numéricos não-`bool`): `max_abs_diff`
+  é `None` sse `numeric = 0`, e `0.0` quando `different = 0`. ✅ recomendada
+**Decisão:** B. Também derivados (não campos): `IdentityComparison.equal`,
+`ScorecardComparison.equal` (`different = 0`), `ReproductionComparison.totals` (soma
+das tabelas; max dos max) e `bit_identical`; `TableComparison` recusa
+`keys_equal = false` sem diferença R1 (a linha de chave só de um lado conta 1 em R1).
+Colunas float da chave (`level_low`, `lower_level`, `band_level`…) ficam R2 e
+`block_estimates` (texto) R1, pela regra de tipo do concept §4.
+**Razão:** reversível barato, sem âncora explícita no §1: impede DTO incoerente
+(contagem e max que se contradizem) sem mudar o contrato do concept §4.
+
 <!-- END: post-execution -->
