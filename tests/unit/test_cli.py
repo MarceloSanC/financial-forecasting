@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import io
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
@@ -662,3 +663,72 @@ def test_attribute_refuses_a_cohort_other_than_the_ablation_base(tmp_path: Path)
     assert code == _EXIT_ERROR
     assert "declares base cohort_hash" in err.getvalue()
     assert not (tmp_path / "d" / ".writer.lock").exists()
+
+
+@pytest.mark.unit
+def test_infer_with_summary_prints_the_same_lines_and_returns_the_summary(tmp_path: Path) -> None:
+    """Stage 8.1 Task 15: as linhas do `infer` e o resumo como dado (D1)."""
+    commands: Any = cli.importlib.import_module(_INFERENCE_COMMANDS)
+
+    def outcome(run: str, mode: str, diff: float, written: int, verified: int) -> SimpleNamespace:
+        return SimpleNamespace(
+            run_id=run,
+            fold_index=0,
+            seed=1,
+            reproduction_mode=mode,
+            test_values_compared=7,
+            max_abs_diff=diff,
+            max_normalized_diff=diff / 2,
+            calib_rows_written=written,
+            calib_rows_verified=verified,
+        )
+
+    result = SimpleNamespace(
+        cohort_id="synthetic-r0",
+        outcomes=(
+            outcome("run-a", "strict", 0.0, 3, 0),
+            outcome("run-b", "tolerance", 2.5e-7, 0, 4),
+            outcome("run-c", "strict", 1e-9, 1, 5),
+        ),
+    )
+    commands_seen: list[object] = []
+
+    def run_inference_for(path: Path, device: str) -> Callable[[object], SimpleNamespace]:
+        def run(command: object) -> SimpleNamespace:
+            commands_seen.append(command)
+            return result
+
+        return run
+
+    spec = _frozen()
+    summary_out, infer_out = io.StringIO(), io.StringIO()
+
+    summary = commands.infer_with_summary(
+        run_inference_for, spec, tmp_path / "c.toml", out=summary_out, break_stale_lock=True
+    )
+    code = commands.infer(
+        run_inference_for, spec, tmp_path / "c.toml", out=infer_out, break_stale_lock=True
+    )
+
+    assert code == 0
+    assert summary_out.getvalue() == infer_out.getvalue()
+    assert summary_out.getvalue().endswith(
+        "inference synthetic-r0: 3 runs (2 strict, 1 tolerance); calib rows written 4, verified 9\n"
+    )
+    assert dict(summary) == {
+        "runs": 3,
+        "strict": 2,
+        "tolerance": 1,
+        "max_abs_diff": 2.5e-7,
+        "calib_rows_written": 4,
+        "calib_rows_verified": 9,
+    }
+    assert commands_seen[0].break_stale_lock is True  # type: ignore[attr-defined]
+    empty = SimpleNamespace(cohort_id="synthetic-r0", outcomes=())
+    result = empty
+    assert (
+        commands.infer_with_summary(
+            run_inference_for, spec, tmp_path / "c.toml", out=io.StringIO()
+        )["max_abs_diff"]
+        == 0.0
+    )

@@ -11,6 +11,12 @@ do composition root e imprime uma linha por run e uma de resumo (o contrato de s
 da Etapa E, technical 7.1 §1). Erros (`ApplicationError`, `ValueError`) sobem para o
 `main`, que os traduz em mensagem e exit 2.
 
+`infer_with_summary` (Stage 8.1, D1) é o corpo do `infer`: imprime as mesmas linhas e
+devolve o resumo como dado (`runs`, `strict`, `tolerance`, `max_abs_diff` = o maior
+|Δ| dos runs, `calib_rows_written`, `calib_rows_verified`), que o `cli.py` passa à
+corrida confirmatória do `evaluation` sem que um slice importe o outro. O `infer` a
+chama e devolve `0`: o contrato do comando não muda.
+
 O `attribute` recebe a partição de famílias já lida pelo `cli.py` (o `[partition]` do
 arquivo de ablação, pelo loader do `modeling`): este slice nunca importa o loader do
 `modeling` (technical 7.3 §1). Saída: uma linha por run e uma de resumo (technical 7.3
@@ -55,6 +61,27 @@ def infer(  # noqa: PLR0913 — opções coesas do subcomando
     cross_environment: str | None = None,
 ) -> int:
     """Roda a inferência do cohort e imprime o desfecho de cada run; devolve 0."""
+    infer_with_summary(
+        run_inference_for,
+        spec,
+        cohort_path,
+        out=out,
+        break_stale_lock=break_stale_lock,
+        cross_environment=cross_environment,
+    )
+    return 0
+
+
+def infer_with_summary(  # noqa: PLR0913 — as mesmas opções do `infer`
+    run_inference_for: Callable[[Path, str], RunInference],
+    spec: CohortSpec,
+    cohort_path: Path,
+    *,
+    out: TextIO,
+    break_stale_lock: bool = False,
+    cross_environment: str | None = None,
+) -> Mapping[str, object]:
+    """O `infer` que devolve o resumo da inferência (ver docstring do módulo)."""
     run_inference = run_inference_for(cohort_path, spec.device)
     result = run_inference(
         RunInferenceCommand(
@@ -78,7 +105,14 @@ def infer(  # noqa: PLR0913 — opções coesas do subcomando
         f"inference {result.cohort_id}: {total} runs ({strict} strict, "
         f"{total - strict} tolerance); calib rows written {written}, verified {verified}\n"
     )
-    return 0
+    return {
+        "runs": total,
+        "strict": strict,
+        "tolerance": total - strict,
+        "max_abs_diff": max((outcome.max_abs_diff for outcome in result.outcomes), default=0.0),
+        "calib_rows_written": written,
+        "calib_rows_verified": verified,
+    }
 
 
 _VERIFIED = "verified"
