@@ -1,7 +1,9 @@
 """Testes do `SilverContentAccumulator` e do DTO `SilverContent` (Stage 8.1 Task 03).
 
-Critérios A2 (lógica de unidades e de quem muda o quê, com tipos do fake) e I6. Contra
-o `CanonicalJsonHasher` real (puro, sem I/O; o port `Hasher` não tem fake — issue #70).
+Critérios A2 (lógica de unidades e de quem muda o quê, com tipos do fake) e I6. Com o
+`FloatRefusingHasher` (dublê stdlib do `Hasher`, sem fake por desenho — issue #70; o gate
+de pureza proíbe importar o adapter real): além do hash, prova que nenhum `float` cru
+chega ao hasher. O comportamento contra o `CanonicalJsonHasher` real fica na integração.
 """
 
 from __future__ import annotations
@@ -22,13 +24,11 @@ from financial_forecasting.features.evaluation.application.use_cases.silver_cont
 from financial_forecasting.features.evaluation.domain.value_objects.realized_returns import (
     RealizedReturns,
 )
-from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
-    CanonicalJsonHasher,
-)
 from financial_forecasting.shared.domain.value_objects.silver_content_hash import (
     SilverContentHash,
 )
 from tests.fakes.features.evaluation.fake_silver_table_reader import SILVER_COLUMNS
+from tests.unit.features.evaluation._preregistration_payload import FloatRefusingHasher
 
 _OOS = "fact_oos_predictions"
 _SWEEP = "aapl_confirmatory-r0"
@@ -86,7 +86,7 @@ _FACTS = [
 
 
 def _accumulator() -> SilverContentAccumulator:
-    return SilverContentAccumulator(hasher=CanonicalJsonHasher())
+    return SilverContentAccumulator(hasher=FloatRefusingHasher())
 
 
 def _content(
@@ -165,7 +165,7 @@ def test_changing_one_row_changes_only_its_unit_its_table_and_total() -> None:
 @pytest.mark.unit
 def test_realized_unit_uses_declared_str_and_float_kinds() -> None:
     expected = SilverContentHash.of_unit(
-        hasher=CanonicalJsonHasher(),
+        hasher=FloatRefusingHasher(),
         table=REALIZED_TABLE,
         columns={"timestamp": ("str", False), "target_return": ("float", False)},
         rows=[

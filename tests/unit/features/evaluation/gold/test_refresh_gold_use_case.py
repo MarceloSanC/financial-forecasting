@@ -109,9 +109,6 @@ from financial_forecasting.features.modeling.domain.services.training_grid impor
     TrainingGrid,
     build_training_grid,
 )
-from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
-    CanonicalJsonHasher,
-)
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
     DatasetContentFingerprint,
 )
@@ -129,6 +126,7 @@ from tests.fakes.features.evaluation.fake_training_grid_reader import FakeTraini
 from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
 from tests.fakes.shared.in_memory_clock import FakeClock
 from tests.unit.features.evaluation._conformal_parameters import conformal_block
+from tests.unit.features.evaluation._preregistration_payload import FloatRefusingHasher
 from tests.unit.features.evaluation._profile_parameters import profile_parameters
 from tests.unit.features.evaluation.gold._cohort_factory import (
     Cohort,
@@ -433,7 +431,7 @@ def _harness(  # noqa: PLR0913 — um parâmetro por colaborador trocável (keyw
         gold_store=gold,
         builders=builders(log),
         conformal_calibration=port,
-        hasher=CanonicalJsonHasher(),
+        hasher=FloatRefusingHasher(),
     )
     return _Harness(use_case, reader, grid, backend, gold, log, _fingerprint(cohort), port)
 
@@ -474,7 +472,7 @@ def test_graph_checked_before_read() -> None:
             gold_store=_SpyStoreGold(log),
             builders=cyclic(log),
             conformal_calibration=FakeConformalCalibration(),
-            hasher=CanonicalJsonHasher(),
+            hasher=FloatRefusingHasher(),
         )
     assert log.events == []
     assert _harness().use_case.build_order[0] == _QUALITY
