@@ -90,8 +90,8 @@ class TrainingGrid:
     def matrix(self, names: Sequence[str]) -> tuple[tuple[float, ...], ...]:
         """Matriz linha-a-linha das colunas `names`, na ordem pedida."""
         selected = [self.columns[name] for name in names]
-        return tuple(zip(*selected, strict=True)) if selected else tuple(
-            () for _ in self.timestamps
+        return (
+            tuple(zip(*selected, strict=True)) if selected else tuple(() for _ in self.timestamps)
         )
 
 

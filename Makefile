@@ -155,8 +155,11 @@ check-block: $(STATIC_GATES) docs-check
 # ---------------------------------------------------------------------------
 # lint — verifica estilo e regras sem modificar arquivos
 # ---------------------------------------------------------------------------
+# `ruff format --check` entra no gate (issue #222): sem ele o estilo commitado não
+# seguia versão nenhuma do formatador. Corrigir com `make fmt`.
 lint:
 	uv run ruff check src/ tests/ scripts/ .claude/hooks/
+	uv run ruff format --check src/ tests/ scripts/ .claude/hooks/
 
 # ---------------------------------------------------------------------------
 # fmt — formata e corrige automaticamente o que for possível
@@ -168,8 +171,11 @@ fmt:
 # ---------------------------------------------------------------------------
 # typecheck — checagem estática de tipos
 # ---------------------------------------------------------------------------
+# Alvos em `[tool.mypy] files` do pyproject (fonte única: src + tests/contract +
+# tests/fakes, issue #204). O hook do pre-commit roda este mesmo `uv run mypy`
+# (hook `local`, issue #222): mesma versão, mesmos alvos.
 typecheck:
-	uv run mypy src/
+	uv run mypy
 
 # ---------------------------------------------------------------------------
 # layout-check — valida regras de dependência (docs/LAYOUT.md §3)
@@ -222,8 +228,9 @@ arch-ast:
 # toda Stage tem issue correspondente no backlog do GitHub (CONVENTIONS
 # §3 + GIT-WORKFLOW.md §Princípios fundamentais #1; best-effort — pula se
 # `gh` não está autenticado), (3) que todo ADR declara um
-# `bounded_context` do conjunto do roadmap (CONVENTIONS §2), (4) que
-# concept tocando concern transversal declara o teste da solução mais
+# `bounded_context` do conjunto do roadmap (CONVENTIONS §2), (3b) que
+# nenhum número de ADR se repete e o `adr_id` bate com o nome do arquivo
+# (CONVENTIONS §1, issue #190), (4) que concept tocando concern transversal declara o teste da solução mais
 # direta no §12 (RUNBOOK Passo 1b/5) e (5) que os docs normativos vivos
 # (docs/ + templates + runbooks + os SKILL.md de .claude/skills/) não
 # carregam padrões conhecidos de drift (ponteiros/frases defasadas).
@@ -232,6 +239,7 @@ docs-check:
 	uv run python scripts/check_technical_postexec.py
 	uv run python scripts/check_stage_issue.py
 	uv run python scripts/check_adr_bounded_context.py
+	uv run python scripts/check_adr_numbering.py
 	uv run python scripts/check_concept_directness.py
 	uv run python scripts/check_docs_pointers.py
 	uv run python scripts/check_harness.py

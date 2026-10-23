@@ -109,6 +109,13 @@ Comentários e docstrings permanecem em português (conforme §4 de commits/PR).
   `N_M` no filename basta para distinguir). Usam `N.M = 0.0` fixo —
   nome do arquivo `0_0_NNNN-<slug>.md`; `adr_id: 0.0.NNNN`. `NNNN`
   sequencial dentro do prefixo `0_0`.
+- **Gate de numeração de ADR:** `scripts/check_adr_numbering.py` (em
+  `make docs-check`) recusa dois arquivos com o mesmo prefixo
+  `N_M_NNNN` ou o mesmo `adr_id`, `adr_id` que não bate com o prefixo
+  do nome e nome fora do padrão `N_M_NNNN-<slug>.md`. Duas branches em
+  voo que escolheram o mesmo número só colidem depois que uma delas
+  mergeia: a outra vê o gate falhar no rebase e renumera o seu ADR
+  (issue #190).
 
 ---
 

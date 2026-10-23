@@ -509,8 +509,7 @@ def _check_permuted(
         raise _Undefined(f"run {run.run_id}: seed {reduction.seed} != dim_run {run.seed}")
     if tuple(reduction.identity) != horizons:
         raise _Undefined(
-            f"run {run.run_id}: identity horizons {list(reduction.identity)} != "
-            f"{list(horizons)}"
+            f"run {run.run_id}: identity horizons {list(reduction.identity)} != {list(horizons)}"
         )
     expected = {
         (f, k, h)

@@ -310,6 +310,17 @@ def test_main_denies_with_hook_output(
     assert "### BC / camada" in out["permissionDecisionReason"]
 
 
+def test_payload_with_utf8_bom_is_read(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Pipe do Windows PowerShell 5.1 prefixa BOM; sem `utf-8-sig` o hook calava (fail open)."""
+    command = 'gh issue create --title "x" --body "sem campos"'
+    payload = json.dumps({"tool_input": {"command": command}, "cwd": str(CWD)})
+    assert _run_main(monkeypatch, ("﻿" + payload).encode("utf-8")) == 0
+    out = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny"
+
+
 def test_main_is_silent_when_command_passes(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

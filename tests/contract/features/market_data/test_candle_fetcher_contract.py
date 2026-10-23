@@ -184,8 +184,9 @@ def _unavailable_yfinance(_tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> C
     def _download(*_args: object, **_kwargs: object) -> pd.DataFrame:
         raise YFRateLimitError
 
-    monkeypatch.setattr(yfinance_module.yf, "download", _download)
-    monkeypatch.setattr(yfinance_module.sleep_time, "sleep", lambda _s: None)
+    # alvo em string: `yf`/`sleep_time` são imports do adapter, não reexportados
+    monkeypatch.setattr(f"{yfinance_module.__name__}.yf.download", _download)
+    monkeypatch.setattr(f"{yfinance_module.__name__}.sleep_time.sleep", lambda _s: None)
     return YfinanceCandleFetcher(max_retries=0, retry_delay=0.0)
 
 

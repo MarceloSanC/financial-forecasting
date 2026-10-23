@@ -36,7 +36,7 @@ IGNORE = {
     "dist",
     "build",
     "node_modules",
-    "tree.txt",   # evita auto-referência ao próprio output
+    "tree.txt",  # evita auto-referência ao próprio output
     ".DS_Store",
 }
 

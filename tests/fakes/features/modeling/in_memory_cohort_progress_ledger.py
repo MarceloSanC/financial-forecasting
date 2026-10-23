@@ -44,9 +44,7 @@ class InMemoryCohortProgressLedger:
     def completed_units(self, cohort_id: str) -> Mapping[str, Mapping[str, int]]:
         return {unit: dict(rows) for unit, rows in self._units.get(cohort_id, {}).items()}
 
-    def mark_completed(
-        self, cohort_id: str, unit_key: str, rows_by_run: Mapping[str, int]
-    ) -> None:
+    def mark_completed(self, cohort_id: str, unit_key: str, rows_by_run: Mapping[str, int]) -> None:
         self._units.setdefault(cohort_id, {})[unit_key] = dict(rows_by_run)
 
     def environment(self, cohort_id: str) -> Mapping[str, str] | None:
@@ -62,9 +60,7 @@ class InMemoryCohortProgressLedger:
     def run_started_at(self, cohort_id: str) -> str | None:
         return self._started_at.get(cohort_id)
 
-    def record_sweep_result(
-        self, scope_id: str, model: str, result: Mapping[str, object]
-    ) -> None:
+    def record_sweep_result(self, scope_id: str, model: str, result: Mapping[str, object]) -> None:
         # Mesma ida e volta JSON do adapter real (tuplas viram listas; chaves, texto).
         self._sweeps.setdefault(scope_id, {})[model] = json.loads(json.dumps(dict(result)))
 

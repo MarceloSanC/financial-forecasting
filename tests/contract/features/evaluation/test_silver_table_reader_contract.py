@@ -99,7 +99,7 @@ def reader(request: pytest.FixtureRequest, tmp_path: Path) -> SilverTableReader:
     return READERS[request.param](tmp_path)
 
 
-def _ids(rows: Sequence[Row]) -> list[object]:
+def _ids(rows: Sequence[Row]) -> list[str]:
     return sorted(str(row["run_id"]) for row in rows)
 
 

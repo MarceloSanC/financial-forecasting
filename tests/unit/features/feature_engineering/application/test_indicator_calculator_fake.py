@@ -3,9 +3,9 @@
 Prova que:
 
 - O `FakeIndicatorCalculator` satisfaz o `Protocol` `IndicatorCalculator` por
-  duck-typing — atribuível a uma variável tipada `IndicatorCalculator` (mypy --strict
-  confirma; aqui também em runtime via `isinstance` contra o `runtime_checkable`?
-  o Protocol não é runtime_checkable, então a prova de tipo é o mypy + o uso).
+  duck-typing. A prova estrutural é a fixture tipada pelo port na suíte de contrato
+  (`tests/contract/features/feature_engineering/test_indicator_calculator_contract.py`,
+  checada no `make typecheck`); aqui a prova é o uso por um consumidor tipado.
 - Um CONSUMIDOR genérico (função que tipa `IndicatorCalculator`) usa o fake SEM
   importar `pandas` — a `application` é testável sem infra externa
   (skill `pytest-with-fakes`).

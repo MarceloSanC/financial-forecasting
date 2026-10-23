@@ -263,18 +263,29 @@ def test_tft_seeds_and_null_seed_baselines_coexist_in_one_cohort(
     index, seed_run = leg
     for seed in (11, 22, 2**40):
         seed_run(
-            cohort_id=_COHORT, model_version="tft_quantile", seed=seed,
-            run_id=_rid(f"run-tft-{seed}"), fold="0", decisions=_decisions(1, [2]),
+            cohort_id=_COHORT,
+            model_version="tft_quantile",
+            seed=seed,
+            run_id=_rid(f"run-tft-{seed}"),
+            fold="0",
+            decisions=_decisions(1, [2]),
         )
     seed_run(
-        cohort_id=_COHORT, model_version="baseline_ar1", seed=None,
-        run_id=_rid("run-ar1"), fold="0", decisions=_decisions(1, [2]),
+        cohort_id=_COHORT,
+        model_version="baseline_ar1",
+        seed=None,
+        run_id=_rid("run-ar1"),
+        fold="0",
+        decisions=_decisions(1, [2]),
     )
 
     runs = _read(index)
 
     assert set(runs) == {
-        ("tft_quantile", 11), ("tft_quantile", 22), ("tft_quantile", 2**40), ("baseline_ar1", None)
+        ("tft_quantile", 11),
+        ("tft_quantile", 22),
+        ("tft_quantile", 2**40),
+        ("baseline_ar1", None),
     }
 
 
@@ -353,12 +364,20 @@ def test_calib_rows_do_not_change_counts_or_targets(
 ) -> None:
     index, seed_run, seed_calib = calib_leg
     seed_run(
-        cohort_id=_COHORT, model_version="tft_quantile", seed=11,
-        run_id=_rid("run-f0"), fold="0", decisions=_decisions(1, [2, 3]) + _decisions(7, [2, 3]),
+        cohort_id=_COHORT,
+        model_version="tft_quantile",
+        seed=11,
+        run_id=_rid("run-f0"),
+        fold="0",
+        decisions=_decisions(1, [2, 3]) + _decisions(7, [2, 3]),
     )
     seed_run(
-        cohort_id=_COHORT, model_version="baseline_ar1", seed=None,
-        run_id=_rid("run-ar1"), fold="0", decisions=_decisions(1, [2]),
+        cohort_id=_COHORT,
+        model_version="baseline_ar1",
+        seed=None,
+        run_id=_rid("run-ar1"),
+        fold="0",
+        decisions=_decisions(1, [2]),
     )
     without_calib = _read(index)
 
@@ -375,8 +394,12 @@ def test_calib_only_run_counts_as_orphan(
 ) -> None:
     index, seed_run, seed_calib = calib_leg
     seed_run(
-        cohort_id=_COHORT, model_version="tft_quantile", seed=11,
-        run_id=_rid("run-calib-only"), fold="1", decisions=[],
+        cohort_id=_COHORT,
+        model_version="tft_quantile",
+        seed=11,
+        run_id=_rid("run-calib-only"),
+        fold="1",
+        decisions=[],
     )
     seed_calib(model_version="tft_quantile", seed=11, run_id=_rid("run-calib-only"), fold="1")
 

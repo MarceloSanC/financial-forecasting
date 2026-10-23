@@ -2,8 +2,8 @@
 
 Os quatro ports têm a forma de um port já existente de outro slice e reaproveitam
 o fake e o real dele (technical 7.1 §1). Cada fixture é TIPADA PELO PROTOCOL DO
-INFERENCE — é o mypy sobre estas fixtures que prova que fake e real satisfazem o
-port do consumidor. O `check_port_coverage.py` indexa fakes por nome de classe e
+INFERENCE — é o mypy do `make typecheck` sobre estas fixtures que prova que fake e
+real satisfazem o port do consumidor. O `check_port_coverage.py` indexa fakes por nome de classe e
 é vácuo para homônimos (§1); o teste do gate amarra esta suíte a cada um.
 
 - `RuntimeEnvironmentProbe`: `InMemoryRuntimeEnvironmentProbe` /

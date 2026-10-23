@@ -1,6 +1,7 @@
 """Contrato dos ports do consumidor da atribuição do `inference` (Stage 7.3, Task 16; CA9).
 
-Duas pernas por port, tipadas pelo Protocol DO INFERENCE (o mypy prova a conformidade):
+Duas pernas por port, tipadas pelo Protocol DO INFERENCE (o mypy do `make typecheck` prova a
+conformidade):
 
 - `CheckpointAttributionPredictor`: `InMemoryCheckpointAttributionPredictor` /
   `PredictTftAttributionFromCheckpoints` sobre o cohort sintético da 7.1 com os fakes do

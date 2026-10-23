@@ -129,8 +129,7 @@ def _max_block_estimate(methods: Sequence[FamilyLossDifferentials], backend: Blo
                     estimates.append(backend.optimal_block_length(series=series))
                 except ArithmeticError as exc:
                     raise _BootstrapUndefined(
-                        f"{differentials.method} ({family}, {horizon}): "
-                        f"{type(exc).__name__}: {exc}"
+                        f"{differentials.method} ({family}, {horizon}): {type(exc).__name__}: {exc}"
                     ) from None
     return max(estimates)
 

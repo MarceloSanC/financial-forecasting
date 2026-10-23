@@ -5,7 +5,7 @@ when-use: Reference when asking how the family permutation is applied to the TFT
 keywords: [adr, h3, permutation-importance, tensor-permutation, collate, dataloader, vsn, interpret-output, consumer-owned-port, silver, fact_permuted_predictions, fact_vsn_weights, identity-pass, reproduction, torch, modeling, inference]
 status: accepted
 created_at: 2026-10-18
-updated_at: 2026-10-18
+updated_at: 2026-10-22
 adr_id: 7.3.0002
 decision: An inference use case RunPermutationInference resolves the confirmatory checkpoints, generates the family permutation plan in the inference domain and calls a consumer port satisfied by the modeling use case PredictTftAttributionFromCheckpoints, whose PfTftTrainer method loads the checkpoint bytes once and, through the same prediction dataset and a collate wrapper of the same dataloader, emits the identity grid, the grid with each family's whole encoder window swapped between the fold's test decisions for each of the K_p permutations, and the per-decision encoder VSN weights; identity and permuted grids go to a new silver table fact_permuted_predictions and the VSN weights to fact_vsn_weights, both written by analytics_store use cases; the refresh never runs torch; the VSN extractor is not an inference adapter.
 context_stage: 7.3-explainability
@@ -13,6 +13,8 @@ bounded_context: inference
 ---
 
 # ADR 7.3.0002 — Permuted predictions and VSN through the modeling port, persisted in silver
+
+> ⚠️ **Errata (2026-10-22, issue #171):** "Alternative C" attributes the rejection of the within-time shuffle to Hooker, Mentch & Zhou (2021). That source does not deal with time series; the rejection is a decision of this project, by analogy to its extrapolation argument — see the errata of [ADR 0.0.0007](./0_0_0007-h3-family-contribution-across-horizons.md) and row B12.6 of [the TCC citation audit](../audits/tcc-citation-support.md). The rejection of Alternative C and every decision of this ADR are unchanged.
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 

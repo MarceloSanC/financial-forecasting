@@ -50,9 +50,7 @@ def _weekday_sessions(count: int, *, start: date = date(2021, 1, 4)) -> tuple[da
 def _split() -> tuple:
     sessions = _weekday_sessions(50)
     scope = ScopeSpec(asset_id="AAPL", feature_set_name="tft_v1", max_horizon=2)
-    folds = WalkForwardSplitter(
-        TradingCalendar(TradingSessions(sessions=sessions))
-    ).split(
+    folds = WalkForwardSplitter(TradingCalendar(TradingSessions(sessions=sessions))).split(
         sessions,
         scope,
         n_folds=2,

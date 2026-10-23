@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -141,6 +142,138 @@ def test_allows_feature_branch_push_from_worktree(command: str) -> None:
 )
 def test_blocks_any_push_from_main_checkout(command: str) -> None:
     assert _reason(command, cwd=MAIN) is not None
+
+
+# --- passo 7 do fechamento autônomo (limpeza a partir do checkout principal) ------------
+
+_REPO = _HOOK.parents[2]
+_STEP7_DOCS = (
+    _REPO / "docs" / "GIT-WORKFLOW.md",
+    _REPO / ".claude" / "skills" / "git-versioning-pointer" / "SKILL.md",
+    _REPO / ".claude" / "skills" / "issue-audit" / "SKILL.md",
+    _REPO / ".claude" / "skills" / "stage-audit" / "SKILL.md",
+)
+_PLACEHOLDERS = {"<branch>": "feat/1-x", "<sha-remoto>": HEAD}
+_WORKTREE_RM_CALLS = 2  # a limpeza normal e a do fallback, ambas com --delete-remote
+
+
+def _documented_step7() -> list[str]:
+    """Comandos do passo 7 (com o fallback 7a-7c) como o GIT-WORKFLOW os manda rodar."""
+    text = _STEP7_DOCS[0].read_text(encoding="utf-8")
+    block = text.split("# 7. Limpeza", 1)[1].split("# 8. ", 1)[0]
+    found: list[str] = []
+    for raw in block.splitlines():
+        line = re.sub(r"\s+#.*$", "", raw).strip()
+        if not line or line.startswith("#"):
+            continue
+        for placeholder, value in _PLACEHOLDERS.items():
+            line = line.replace(placeholder, value)
+        found.append(line)
+    return found
+
+
+def test_step7_documents_the_temporary_worktree_fallback() -> None:
+    commands = _documented_step7()
+    remove = "python scripts/worktree-rm.py feat/1-x --no-docker --delete-remote"
+    assert commands.count(remove) == _WORKTREE_RM_CALLS
+    assert f"git merge-base --is-ancestor {HEAD} origin/develop" in commands
+    assert any(c.startswith("python scripts/worktree-new.py feat/1-x") for c in commands)
+    assert not any(" push" in c for c in commands)
+
+
+def test_documented_step7_passes_publish_guard_from_main_checkout() -> None:
+    commands = _documented_step7()
+    assert commands
+    assert [c for c in commands if _reason(c, cwd=MAIN) is not None] == []
+    assert _reason("\n".join(commands), cwd=MAIN) is None
+
+
+def test_old_step7_fallback_is_refused_from_main_checkout() -> None:
+    found = _reason("git push origin --delete feat/1-x", cwd=MAIN)
+    assert found is not None
+    assert "checkout principal" in found
+
+
+@pytest.mark.parametrize("doc", _STEP7_DOCS, ids=lambda p: p.parent.name)
+def test_no_doc_tells_to_delete_remote_by_push_from_main_checkout(doc: Path) -> None:
+    lines = doc.read_text(encoding="utf-8").splitlines()
+    offending = [ln for ln in lines if "push origin --delete" in ln and "nunca" not in ln]
+    assert offending == []
+
+
+@pytest.mark.parametrize("doc", _STEP7_DOCS, ids=lambda p: p.parent.name)
+def test_no_doc_removes_a_branch_worktree_without_delete_remote(doc: Path) -> None:
+    # sem --delete-remote na 1ª chamada a remota sobra e o hook recusa apagá-la depois
+    lines = doc.read_text(encoding="utf-8").splitlines()
+    offending = [
+        ln
+        for ln in lines
+        if "scripts/worktree-rm.py <branch>" in ln and "--delete-remote" not in ln
+    ]
+    assert offending == []
+
+
+# --- passo 8 do fechamento autônomo (sincronizar o develop local sem pull) --------------
+
+_SYNC_DEVELOP = "git fetch --prune origin && git merge --ff-only origin/develop"
+_PROCESS_DOCS = (
+    _REPO / "CLAUDE.md",
+    _REPO / "docs" / "GIT-WORKFLOW.md",
+    _REPO / "docs" / "CONVENTIONS.md",
+    *sorted((_REPO / "docs").glob("RUNBOOK-*.md")),
+    *sorted((_REPO / "docs").glob("PROMPT-*.md")),
+    *sorted((_REPO / ".claude" / "skills").rglob("*.md")),
+)
+# `git sync` (§Aliases) faz pull só em `main`, com --ff-only: fora do alvo desta varredura
+_PULL_ON_MAIN = re.compile(r"git pull --ff-only origin main\b")
+
+
+def _process_doc_id(doc: Path) -> str:
+    return doc.relative_to(_REPO).as_posix()
+
+
+def _git_workflow_section(heading: str) -> str:
+    text = _STEP7_DOCS[0].read_text(encoding="utf-8")
+    return re.split(r"\n#{2,3} ", text.split(heading, 1)[1], maxsplit=1)[0]
+
+
+def test_documented_step8_is_the_sync_pair_and_passes_publish_guard_from_main() -> None:
+    step8 = _git_workflow_section("### Fechamento autônomo").split("# 8. ", 1)[1]
+    assert _SYNC_DEVELOP in step8.split("# 9. ", 1)[0]
+    assert _reason(_SYNC_DEVELOP, cwd=MAIN) is None
+
+
+@pytest.mark.parametrize(
+    "section",
+    ["### Etapa 7: Cleanup", "## Quick reference"],
+)
+def test_cleanup_sections_sync_develop_like_step8(section: str) -> None:
+    body = _git_workflow_section(section)
+    if section == "## Quick reference":
+        body = body.split("# Cleanup", 1)[1]
+    assert _SYNC_DEVELOP in body
+    assert "git checkout develop" not in body
+
+
+@pytest.mark.parametrize("doc", _PROCESS_DOCS, ids=_process_doc_id)
+def test_no_process_doc_tells_to_pull_develop(doc: Path) -> None:
+    # pull com commit local não enviado cria merge commit silencioso no develop
+    lines = doc.read_text(encoding="utf-8").splitlines()
+    offending = [
+        ln
+        for ln in lines
+        if re.search(r"\bgit pull\b", ln)
+        and not _PULL_ON_MAIN.search(ln)
+        and "nunca" not in ln.lower()
+    ]
+    assert offending == []
+
+
+@pytest.mark.parametrize("doc", _PROCESS_DOCS, ids=_process_doc_id)
+def test_no_process_doc_checks_out_develop_in_main_checkout(doc: Path) -> None:
+    # o checkout principal já fica sempre em develop: o checkout é ruído
+    lines = doc.read_text(encoding="utf-8").splitlines()
+    assert [ln for ln in lines if "git checkout develop" in ln] == []
 
 
 def test_git_dash_c_redirects_to_worktree() -> None:
@@ -364,6 +497,23 @@ def test_process_denies_push_on_a_later_line(tmp_path: Path) -> None:
             env=env,
         )
         assert ('"deny"' in result.stdout) is denied
+
+
+def test_payload_with_utf8_bom_is_read(tmp_path: Path) -> None:
+    """Pipe do Windows PowerShell 5.1 prefixa BOM; sem `utf-8-sig` o hook calava (fail open)."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    subprocess.run(["git", "init", "-q", "-b", "develop", str(tmp_path)], check=True, env=env)
+    payload = json.dumps({"tool_input": {"command": "git push"}, "cwd": str(tmp_path)})
+    result = subprocess.run(
+        [sys.executable, str(_HOOK)],
+        input=("﻿" + payload).encode("utf-8"),
+        capture_output=True,
+        check=True,
+        timeout=60,
+        env=env,
+    )
+    out = json.loads(result.stdout.decode("utf-8"))["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny"
 
 
 def test_hook_is_registered_on_pre_tool_use_for_bash_and_powershell() -> None:

@@ -156,13 +156,15 @@ def test_i11_nan_monitor_labels_equal_pre_removed_pairs() -> None:
     """NaN no monitor == pares pré-removidos (o eval nativo converteria em 0)."""
     nan = float("nan")
     polluted = {
-        h: (nan, *_MONITOR_LABELS[h][1:_N_MONITOR // 2], nan,
-            *_MONITOR_LABELS[h][_N_MONITOR // 2 + 1:])
+        h: (
+            nan,
+            *_MONITOR_LABELS[h][1 : _N_MONITOR // 2],
+            nan,
+            *_MONITOR_LABELS[h][_N_MONITOR // 2 + 1 :],
+        )
         for h in _HORIZONS
     }
-    finite_mask = [
-        i for i in range(_N_MONITOR) if i not in (0, _N_MONITOR // 2)
-    ]
+    finite_mask = [i for i in range(_N_MONITOR) if i not in (0, _N_MONITOR // 2)]
 
     with_nan = _train(LightgbmQuantileTrainer(), monitor_labels=polluted)
     pre_removed = LightgbmQuantileTrainer().train_and_predict(

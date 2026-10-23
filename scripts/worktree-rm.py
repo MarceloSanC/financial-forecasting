@@ -43,6 +43,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # helpers de IO / processo
 # ---------------------------------------------------------------------------
 
+
 def _force_utf8_stdio() -> None:
     for stream in (sys.stdout, sys.stderr):
         if stream.encoding and stream.encoding.lower() == "utf-8":
@@ -51,8 +52,9 @@ def _force_utf8_stdio() -> None:
             stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
 
 
-def _run(cmd: list[str], *, cwd: Path | None = None, check: bool = True,
-         capture: bool = False) -> subprocess.CompletedProcess[str]:
+def _run(
+    cmd: list[str], *, cwd: Path | None = None, check: bool = True, capture: bool = False
+) -> subprocess.CompletedProcess[str]:
     printable = " ".join(cmd)
     if not capture:
         print(f"  $ {printable}")
@@ -98,6 +100,7 @@ def _warn(msg: str) -> None:
 # git helpers
 # ---------------------------------------------------------------------------
 
+
 def git_top() -> Path:
     cp = _run(["git", "rev-parse", "--show-toplevel"], capture=True)
     return Path(cp.stdout.strip()).resolve()
@@ -114,7 +117,9 @@ def compute_worktree_path(repo_root: Path, branch: str, override: str | None) ->
 def check_worktree_registered(wt_path: Path) -> bool:
     cp = subprocess.run(
         ["git", "worktree", "list", "--porcelain"],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     for line in cp.stdout.splitlines():
         if (
@@ -129,7 +134,10 @@ def check_sync(wt_path: Path, branch: str) -> None:
     """Falha se a worktree tiver commits não pushados ou arquivos sujos."""
     cp = subprocess.run(
         ["git", "status", "--porcelain"],
-        cwd=str(wt_path), capture_output=True, text=True, check=False,
+        cwd=str(wt_path),
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if cp.stdout.strip():
         _fail(
@@ -138,10 +146,13 @@ def check_sync(wt_path: Path, branch: str) -> None:
         )
 
     # Verifica se a branch remota existe antes de checar divergência.
-    remote_exists = subprocess.run(
-        ["git", "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{branch}"],
-        check=False,
-    ).returncode == 0
+    remote_exists = (
+        subprocess.run(
+            ["git", "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{branch}"],
+            check=False,
+        ).returncode
+        == 0
+    )
 
     if not remote_exists:
         _warn(
@@ -152,7 +163,10 @@ def check_sync(wt_path: Path, branch: str) -> None:
 
     cp = subprocess.run(
         ["git", "log", f"origin/{branch}..HEAD", "--oneline"],
-        cwd=str(wt_path), capture_output=True, text=True, check=False,
+        cwd=str(wt_path),
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if cp.stdout.strip():
         _fail(
@@ -167,10 +181,16 @@ def check_sync(wt_path: Path, branch: str) -> None:
 # docker helpers
 # ---------------------------------------------------------------------------
 
+
 def _docker_available() -> bool:
-    return subprocess.run(
-        ["docker", "info"], capture_output=True, check=False,
-    ).returncode == 0
+    return (
+        subprocess.run(
+            ["docker", "info"],
+            capture_output=True,
+            check=False,
+        ).returncode
+        == 0
+    )
 
 
 def _path_variants(p: Path) -> list[str]:
@@ -197,10 +217,18 @@ def find_containers_for_worktree(wt_path: Path) -> list[dict]:
     for label_key in label_keys:
         for path_variant in _path_variants(wt_path):
             cp = subprocess.run(
-                ["docker", "ps", "-a",
-                 "--filter", f"label={label_key}={path_variant}",
-                 "--format", "{{json .}}"],
-                capture_output=True, text=True, check=False,
+                [
+                    "docker",
+                    "ps",
+                    "-a",
+                    "--filter",
+                    f"label={label_key}={path_variant}",
+                    "--format",
+                    "{{json .}}",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
             )
             for raw_line in cp.stdout.splitlines():
                 line = raw_line.strip()
@@ -220,10 +248,16 @@ def find_containers_for_worktree(wt_path: Path) -> list[dict]:
 def get_container_volumes(container_id: str) -> list[str]:
     """Retorna nomes de volumes nomeados montados no container."""
     cp = subprocess.run(
-        ["docker", "inspect", container_id,
-         "--format",
-         "{{range .Mounts}}{{if eq .Type \"volume\"}}{{.Name}}\n{{end}}{{end}}"],
-        capture_output=True, text=True, check=False,
+        [
+            "docker",
+            "inspect",
+            container_id,
+            "--format",
+            '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}\n{{end}}{{end}}',
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     return [v.strip() for v in cp.stdout.splitlines() if v.strip()]
 
@@ -232,7 +266,7 @@ def _confirm(prompt: str, expected: str) -> bool:
     """Exibe `prompt`, aguarda input e retorna True só se o usuário digitou `expected`."""
     print()
     print(f"  {prompt}")
-    print(f"  Digite exatamente  \"{expected}\"  para confirmar, ou Enter para pular:")
+    print(f'  Digite exatamente  "{expected}"  para confirmar, ou Enter para pular:')
     try:
         answer = input("  > ").strip()
     except (EOFError, KeyboardInterrupt):
@@ -266,10 +300,10 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:  # noqa: PLR0912, P
             _info(f"container: {name} ({cid[:12]}) [{state}]")
             if not dry_run:
                 if "running" in state.lower() or state.lower().startswith("up"):
-                    subprocess.run(["docker", "stop", cid],
-                                   capture_output=True, check=False)
-                cp = subprocess.run(["docker", "rm", cid],
-                                    capture_output=True, text=True, check=False)
+                    subprocess.run(["docker", "stop", cid], capture_output=True, check=False)
+                cp = subprocess.run(
+                    ["docker", "rm", cid], capture_output=True, text=True, check=False
+                )
                 if cp.returncode == 0:
                     _info(f"  → removido: {name}")
                 else:
@@ -292,7 +326,9 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:  # noqa: PLR0912, P
                 for vol in sorted(all_volumes):
                     cp = subprocess.run(
                         ["docker", "volume", "rm", vol],
-                        capture_output=True, text=True, check=False,
+                        capture_output=True,
+                        text=True,
+                        check=False,
                     )
                     if cp.returncode == 0:
                         _info(f"volume removido: {vol}")
@@ -305,7 +341,8 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:  # noqa: PLR0912, P
     image = "financial_forecasting-app:dev"
     cp_img = subprocess.run(
         ["docker", "image", "inspect", image],
-        capture_output=True, check=False,
+        capture_output=True,
+        check=False,
     )
     if cp_img.returncode == 0:
         print()
@@ -320,7 +357,9 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:  # noqa: PLR0912, P
         ):
             cp = subprocess.run(
                 ["docker", "rmi", image],
-                capture_output=True, text=True, check=False,
+                capture_output=True,
+                text=True,
+                check=False,
             )
             if cp.returncode == 0:
                 _info(f"imagem removida: {image}")
@@ -334,8 +373,11 @@ def docker_cleanup(wt_path: Path, *, dry_run: bool) -> None:  # noqa: PLR0912, P
 # git cleanup
 # ---------------------------------------------------------------------------
 
+
 def remove_worktree_git(
-    wt_path: Path, branch: str, *,
+    wt_path: Path,
+    branch: str,
+    *,
     dry_run: bool,
     delete_remote: bool,
     force: bool,
@@ -351,7 +393,9 @@ def remove_worktree_git(
     # Remove worktree.
     cp = subprocess.run(
         ["git", "worktree", "remove", str(wt_path)],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if cp.returncode != 0:
         if force:
@@ -371,7 +415,9 @@ def remove_worktree_git(
     # Deleta branch local (safe: -d não remove branch não mergeada).
     cp = subprocess.run(
         ["git", "branch", "-d", branch],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if cp.returncode != 0:
         _warn(
@@ -387,7 +433,9 @@ def remove_worktree_git(
     if delete_remote:
         cp = subprocess.run(
             ["git", "push", "origin", "--delete", branch],
-            capture_output=True, text=True, check=False,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         if cp.returncode == 0:
             _info(f"branch remota origin/{branch} deletada")
@@ -396,7 +444,9 @@ def remove_worktree_git(
 
     subprocess.run(
         ["git", "remote", "prune", "origin"],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     _info("refs remotas obsoletas prunadas")
 
@@ -404,6 +454,7 @@ def remove_worktree_git(
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -415,23 +466,28 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Nome completo da branch (ex.: feat/42-add-google-login).",
     )
     parser.add_argument(
-        "--path", default=None,
+        "--path",
+        default=None,
         help="Override do path da worktree (default: ../<repo>-worktrees/<slug>).",
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Mostra o que seria feito sem executar nenhuma ação.",
     )
     parser.add_argument(
-        "--force", action="store_true",
+        "--force",
+        action="store_true",
         help="Pula verificações de sync e força remoção mesmo se não mergeada.",
     )
     parser.add_argument(
-        "--delete-remote", action="store_true",
+        "--delete-remote",
+        action="store_true",
         help="Deleta também a branch em origin (git push origin --delete).",
     )
     parser.add_argument(
-        "--no-docker", action="store_true",
+        "--no-docker",
+        action="store_true",
         help="Pula limpeza de containers e volumes Docker.",
     )
     return parser
@@ -446,10 +502,7 @@ def main() -> int:
 
     _section("1. Localizando worktree")
     if not check_worktree_registered(wt_path):
-        _fail(
-            f"worktree não registrada no git: {wt_path}\n"
-            "Verifique com `git worktree list`."
-        )
+        _fail(f"worktree não registrada no git: {wt_path}\nVerifique com `git worktree list`.")
     _info(f"worktree: {wt_path}")
     _info(f"branch:   {args.branch}")
     if args.dry_run:
@@ -469,7 +522,8 @@ def main() -> int:
 
     _section("4. Removendo worktree e branch git")
     remove_worktree_git(
-        wt_path, args.branch,
+        wt_path,
+        args.branch,
         dry_run=args.dry_run,
         delete_remote=args.delete_remote,
         force=args.force,

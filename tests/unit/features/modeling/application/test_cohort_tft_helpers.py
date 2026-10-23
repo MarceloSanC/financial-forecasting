@@ -420,7 +420,10 @@ class _SpyUnits:
         return RunBaselinesResult(
             runs=tuple(
                 BaselineRunSummary(
-                    run_id=r, model_version=b.model_version, fold_index=0, rows_written=1,
+                    run_id=r,
+                    model_version=b.model_version,
+                    fold_index=0,
+                    rows_written=1,
                     rows_skipped=0,
                 )
                 for b in command.specs
@@ -432,8 +435,12 @@ class _SpyUnits:
         return TrainGbmQuantileResult(
             runs=tuple(
                 GbmRunSummary(
-                    run_id=r, model_version="gbm_quantile", fold_index=0, rows_written=1,
-                    rows_skipped=0, best_iteration_by_horizon={1: 1},
+                    run_id=r,
+                    model_version="gbm_quantile",
+                    fold_index=0,
+                    rows_written=1,
+                    rows_skipped=0,
+                    best_iteration_by_horizon={1: 1},
                 )
                 for r in self._persist(command, "gbm_quantile", command.params.seed)
             )
@@ -444,9 +451,17 @@ class _SpyUnits:
         return TrainTftResult(
             runs=tuple(
                 TftRunSummary(
-                    run_id=r, model_version="tft_quantile", fold_index=0, rows_written=1,
-                    rows_skipped=0, best_epoch=1, best_val_loss=0.1, fitted_decision_count=1,
-                    monitored_decision_count=1, artifact_path="x", tracking_run_id="t",
+                    run_id=r,
+                    model_version="tft_quantile",
+                    fold_index=0,
+                    rows_written=1,
+                    rows_skipped=0,
+                    best_epoch=1,
+                    best_val_loss=0.1,
+                    fitted_decision_count=1,
+                    monitored_decision_count=1,
+                    artifact_path="x",
+                    tracking_run_id="t",
                 )
                 for r in self._persist(command, "tft_quantile", command.params.seed)
             )

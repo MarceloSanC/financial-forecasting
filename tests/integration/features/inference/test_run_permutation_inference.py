@@ -382,9 +382,9 @@ def test_second_attribute_verifies_all_and_writes_zero(outcome: _Outcome) -> Non
         run_id = line.split()[1]
         assert ": strict identity compared 0 " in line, line
         assert " max|d| 0.000e+00 max|d|/s 0.000e+00 " in line, line
-        assert line.endswith(
-            f"permuted verified {permuted[run_id]} vsn verified {vsn[run_id]}"
-        ), line
+        assert line.endswith(f"permuted verified {permuted[run_id]} vsn verified {vsn[run_id]}"), (
+            line
+        )
     total = len(lines)
     assert outcome.second.strip().splitlines()[-1] == (
         f"attribution {outcome.cohort_id}: {total} runs ({total} strict, 0 tolerance); "

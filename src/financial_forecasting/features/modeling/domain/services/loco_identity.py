@@ -49,7 +49,6 @@ def configuration_of(excluded_family: str | None) -> str:
         return FULL_CONFIGURATION
     if excluded_family not in TFT_FAMILIES:
         raise ValueError(
-            f"excluded_family must be one of {list(TFT_FAMILIES)} or None, "
-            f"got {excluded_family!r}"
+            f"excluded_family must be one of {list(TFT_FAMILIES)} or None, got {excluded_family!r}"
         )
     return f"{_MINUS}{excluded_family}"

@@ -55,7 +55,10 @@ e `docs/roadmap.md` aprovados; Stage anterior (se houver) já mergeada.
 
 - [ ] `gh` instalado e autenticado.
 - [ ] Working tree limpo (`git status`).
-- [ ] Branch `develop` atualizada (`git pull origin develop`).
+- [ ] Checkout principal em `develop`, sincronizado com
+      `git fetch --prune origin` + `git merge --ff-only origin/develop`
+      (nunca `git pull`; ver [GIT-WORKFLOW](./GIT-WORKFLOW.md) §"Fechamento
+      autônomo pela auditoria", passo 8).
 - [ ] `docs/roadmap.md` define a Stage `N.M` com todos os campos da
       "Descrição para IA" preenchidos (ver template em
       `templates/roadmap.md`).
@@ -296,11 +299,15 @@ Issue-first é princípio bloqueante ([`./GIT-WORKFLOW.md`](./GIT-WORKFLOW.md)
 $issue = "<num-issue>"          # ex: 42 — confirmado por gh issue view
 $N_M_kebab = "$N-$M"            # ex: 2-3
 
-git checkout develop
-git pull origin develop
-git checkout -b "feat/$issue-$N_M_kebab-$slug"
+# Do checkout principal (sempre em develop): o script faz `git fetch --prune origin`
+# e cria a branch a partir de origin/develop — sem checkout nem pull
+python scripts/worktree-new.py "feat/$issue-$N_M_kebab-$slug" --no-setup --no-vscode
 # Exemplo: feat/42-2-3-s3-source-adapter
 ```
+
+Os passos seguintes rodam dentro da worktree criada
+([`./GIT-WORKFLOW.md`](./GIT-WORKFLOW.md) §"Branches em voo"); `git checkout -b`
+no checkout principal é recusado pelo `git_guard`.
 
 ### Passo 3 — Criar pasta da Stage
 
@@ -795,6 +802,16 @@ isso ele **não** roda por Task nem por bloco, e sim nos poucos pontos que o
 Não há mais T2: o `check-block` por Checkpoint C saiu com a ADR 0.0.0059
 (a numeração das demais camadas foi mantida para não quebrar referências).
 
+**T1 sem o hook `pre-commit`.** O hook só existe onde `make setup` rodou
+(`uv run pre-commit install`). Num host sem `uv`, ele não existe em nenhum
+clone nem worktree, e o `commit-msg` avisa disso a cada commit (issue #199).
+Nesse caso o T1 roda no container, só nos arquivos da Task:
+`uv run --no-sync ruff format <arquivos>`, `uv run --no-sync ruff check <arquivos>`
+e `uv run --no-sync mypy`. São os mesmos comandos que os hooks rodariam: desde a
+#222 os hooks de ruff e mypy são `local` e chamam o venv, com a versão do
+`uv.lock` que o `make lint` (que inclui `ruff format --check`) e o
+`make typecheck` usam. Não há pin próprio do formatador para lembrar.
+
 **Plano de gates** (escrito na Fase 3B, em §1 do `technical.md`; revisado no
 Passo 7 / Checkpoint B):
 
@@ -923,10 +940,13 @@ F da skill). Procedimento e paradas: **fonte única em
 
 ### Passo 12 — Cleanup
 
+No checkout principal (já em `develop`), o par do passo 8 de
+[GIT-WORKFLOW](./GIT-WORKFLOW.md) §"Fechamento autônomo pela auditoria" —
+nunca `git pull`:
+
 ```powershell
-git checkout develop
-git pull origin develop
-git remote prune origin
+git fetch --prune origin; if ($?) { git merge --ff-only origin/develop }
+# falha do ff-only = develop local com commit não enviado → NÃO usar pull; reportar
 ```
 
 Próxima Stage: voltar ao Passo 1 com a próxima `N.M` do roadmap.

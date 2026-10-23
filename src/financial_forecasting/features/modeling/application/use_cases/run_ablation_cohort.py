@@ -206,8 +206,7 @@ class RunAblationCohort:
             )
         if spec.device != self._trainer_device:
             raise AblationDeclarationError(
-                f"device {spec.device!r} declared, but the trainer runs on "
-                f"{self._trainer_device!r}"
+                f"device {spec.device!r} declared, but the trainer runs on {self._trainer_device!r}"
             )
         cohort_hash = CohortHash.compute(hasher=self._hasher, payload=spec.hash_payload())
         cohort_id = spec.cohort_id(cohort_hash)

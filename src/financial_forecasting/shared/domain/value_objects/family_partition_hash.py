@@ -59,8 +59,7 @@ def canonical_partition(partition: object) -> dict[str, list[str]]:
             _check_text(feature, field=f"partition.{family} feature")
             if feature in seen:
                 raise ValueError(
-                    f"partition: feature {feature!r} repeated (in {seen[feature]!r} and "
-                    f"{family!r})"
+                    f"partition: feature {feature!r} repeated (in {seen[feature]!r} and {family!r})"
                 )
             seen[feature] = family
         canonical[family] = sorted(features)

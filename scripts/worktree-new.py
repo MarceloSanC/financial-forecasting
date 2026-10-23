@@ -64,8 +64,17 @@ ISSUE_GUARD = ROOT / ".claude" / "hooks" / "issue_guard.py"
 
 # Tipos aceitos no prefixo do branch — espelha CONVENTIONS.md §4.
 BRANCH_TYPES = {
-    "feat", "fix", "refactor", "test", "docs", "style",
-    "perf", "chore", "ci", "build", "hotfix",
+    "feat",
+    "fix",
+    "refactor",
+    "test",
+    "docs",
+    "style",
+    "perf",
+    "chore",
+    "ci",
+    "build",
+    "hotfix",
 }
 
 # Slug do branch: <tipo>/<num>-<slug>  ou  <tipo>/<num>-<N-M>-<slug>
@@ -84,6 +93,7 @@ BRANCH_MAX_LEN = 60
 # helpers de IO / processo
 # ---------------------------------------------------------------------------
 
+
 def _force_utf8_stdio() -> None:
     """Garante UTF-8 em stdout/stderr (Windows defaulta cp1252)."""
     for stream in (sys.stdout, sys.stderr):
@@ -93,8 +103,9 @@ def _force_utf8_stdio() -> None:
             stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
 
 
-def _run(cmd: list[str], *, cwd: Path | None = None, check: bool = True,
-         capture: bool = False) -> subprocess.CompletedProcess[str]:
+def _run(
+    cmd: list[str], *, cwd: Path | None = None, check: bool = True, capture: bool = False
+) -> subprocess.CompletedProcess[str]:
     """Wrapper de subprocess.run com mensagens claras de falha."""
     printable = " ".join(cmd)
     if not capture:
@@ -111,8 +122,7 @@ def _run(cmd: list[str], *, cwd: Path | None = None, check: bool = True,
         print(f"ERRO: executável não encontrado: {cmd[0]} ({e})", file=sys.stderr)
         sys.exit(2)
     except subprocess.CalledProcessError as e:
-        print(f"ERRO: comando falhou (exit {e.returncode}): {printable}",
-              file=sys.stderr)
+        print(f"ERRO: comando falhou (exit {e.returncode}): {printable}", file=sys.stderr)
         if capture and e.stdout:
             print(e.stdout, file=sys.stderr)
         if capture and e.stderr:
@@ -138,14 +148,14 @@ def _fail(msg: str, *, exit_code: int = 1) -> None:
 # validação de nome de branch
 # ---------------------------------------------------------------------------
 
+
 def parse_branch(branch: str) -> dict[str, str]:
     """Valida e decompõe o nome do branch conforme CONVENTIONS.md §4.
 
     Retorna dict com keys: type, num, stage (pode ser ''), slug, full.
     """
     if len(branch) > BRANCH_MAX_LEN:
-        _fail(f"branch tem {len(branch)} chars (limite {BRANCH_MAX_LEN}). "
-              "Use slug mais curto.")
+        _fail(f"branch tem {len(branch)} chars (limite {BRANCH_MAX_LEN}). Use slug mais curto.")
     m = _BRANCH_RE.match(branch)
     if m is None:
         _fail(
@@ -160,8 +170,10 @@ def parse_branch(branch: str) -> dict[str, str]:
         )
     parts = m.groupdict()
     if parts["type"] not in BRANCH_TYPES:
-        _fail(f"tipo de branch inválido: {parts['type']!r}. "
-              f"Use um de: {', '.join(sorted(BRANCH_TYPES))}")
+        _fail(
+            f"tipo de branch inválido: {parts['type']!r}. "
+            f"Use um de: {', '.join(sorted(BRANCH_TYPES))}"
+        )
     parts["stage"] = parts["stage"] or ""
     parts["full"] = branch
     return parts
@@ -175,6 +187,7 @@ def default_base(branch_type: str) -> str:
 # ---------------------------------------------------------------------------
 # git / gh helpers
 # ---------------------------------------------------------------------------
+
 
 def git_top() -> Path:
     """Raiz do worktree principal (não da worktree atual, se aninhada)."""
@@ -190,14 +203,20 @@ def git_common_dir() -> Path:
 
 def branch_exists(branch: str) -> tuple[bool, bool]:
     """Retorna (local_exists, remote_exists)."""
-    local = subprocess.run(
-        ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
-        check=False,
-    ).returncode == 0
-    remote = subprocess.run(
-        ["git", "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{branch}"],
-        check=False,
-    ).returncode == 0
+    local = (
+        subprocess.run(
+            ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
+            check=False,
+        ).returncode
+        == 0
+    )
+    remote = (
+        subprocess.run(
+            ["git", "show-ref", "--verify", "--quiet", f"refs/remotes/origin/{branch}"],
+            check=False,
+        ).returncode
+        == 0
+    )
     return local, remote
 
 
@@ -205,7 +224,10 @@ def gh_available() -> bool:
     if shutil.which("gh") is None:
         return False
     cp = subprocess.run(
-        ["gh", "auth", "status"], capture_output=True, text=True, check=False,
+        ["gh", "auth", "status"],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     return cp.returncode == 0
 
@@ -213,7 +235,9 @@ def gh_available() -> bool:
 def gh_issue_exists(num: int) -> bool:
     cp = subprocess.run(
         ["gh", "issue", "view", str(num), "--json", "number,state"],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if cp.returncode != 0:
         return False
@@ -246,14 +270,14 @@ def gh_issue_create(title: str, body: str) -> int:
     last_line = cp.stdout.strip().splitlines()[-1]
     m = re.search(r"/issues/(\d+)\s*$", last_line)
     if m is None:
-        _fail(f"não foi possível extrair o número da issue criada: {last_line!r}",
-              exit_code=2)
+        _fail(f"não foi possível extrair o número da issue criada: {last_line!r}", exit_code=2)
     return int(m.group(1))
 
 
 # ---------------------------------------------------------------------------
 # passos principais
 # ---------------------------------------------------------------------------
+
 
 def ensure_issue(num: int, *, create_title: str | None, create_body: str | None) -> int:
     """Garante que a issue existe; cria se solicitado. Retorna o número final."""
@@ -288,8 +312,10 @@ def ensure_issue(num: int, *, create_title: str | None, create_body: str | None)
             return num
 
     if num == 0:
-        _fail("nome de branch sem número de issue (use `<tipo>/<num>-<slug>` ou "
-              "`--create-issue --issue-title ...` para criar uma).")
+        _fail(
+            "nome de branch sem número de issue (use `<tipo>/<num>-<slug>` ou "
+            "`--create-issue --issue-title ...` para criar uma)."
+        )
 
     if not gh_issue_exists(num):
         _fail(
@@ -312,8 +338,9 @@ def compute_worktree_path(repo_root: Path, branch: str, override: str | None) ->
     return (parent / slug).resolve()
 
 
-def create_worktree(branch: str, base: str, path: Path,
-                    local_exists: bool, remote_exists: bool) -> None:
+def create_worktree(
+    branch: str, base: str, path: Path, local_exists: bool, remote_exists: bool
+) -> None:
     """`git worktree add` saindo de origin/<base> ou da branch existente."""
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -322,12 +349,10 @@ def create_worktree(branch: str, base: str, path: Path,
         _run(["git", "worktree", "add", str(path), branch])
     elif remote_exists:
         _info(f"branch remota existe (origin/{branch}) — checkout com tracking")
-        _run(["git", "worktree", "add", "--track",
-              "-b", branch, str(path), f"origin/{branch}"])
+        _run(["git", "worktree", "add", "--track", "-b", branch, str(path), f"origin/{branch}"])
     else:
         _info(f"criando branch {branch} a partir de origin/{base}")
-        _run(["git", "worktree", "add",
-              "-b", branch, str(path), f"origin/{base}"])
+        _run(["git", "worktree", "add", "-b", branch, str(path), f"origin/{base}"])
 
 
 def copy_env_files(src: Path, dst: Path) -> None:
@@ -346,8 +371,7 @@ def setup_env(path: Path, use_make: bool) -> None:
         return
 
     if shutil.which("uv") is None:
-        print("  AVISO: `uv` não encontrado no PATH — pulando setup do venv.",
-              file=sys.stderr)
+        print("  AVISO: `uv` não encontrado no PATH — pulando setup do venv.", file=sys.stderr)
         return
     _info("`make` indisponível — usando `uv` direto")
     # `uv sync --locked` e não `uv pip install`: só a interface de projeto
@@ -355,11 +379,21 @@ def setup_env(path: Path, use_make: bool) -> None:
     # revisado no PR. `uv sync` cria o venv sozinho (o `uv venv` era redundante).
     _run(["uv", "sync", "--locked", "--extra", "dev"], cwd=path)
     if (path / ".pre-commit-config.yaml").is_file():
-        _run(["uv", "run", "pre-commit", "install",
-              "--install-hooks",
-              "--hook-type", "pre-commit",
-              "--hook-type", "commit-msg"],
-             cwd=path, check=False)
+        _run(
+            [
+                "uv",
+                "run",
+                "pre-commit",
+                "install",
+                "--install-hooks",
+                "--hook-type",
+                "pre-commit",
+                "--hook-type",
+                "commit-msg",
+            ],
+            cwd=path,
+            check=False,
+        )
 
 
 def open_vscode(path: Path) -> None:
@@ -389,7 +423,9 @@ def _list_worktree_paths() -> list[Path]:
     """Caminhos de todas as worktrees registradas (inclui a principal)."""
     cp = subprocess.run(
         ["git", "worktree", "list", "--porcelain"],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if cp.returncode != 0:
         return []
@@ -449,8 +485,7 @@ def assign_worktree_ports(new_wt: Path) -> dict[str, int]:
                 used[key].add(candidate)
                 break
         else:
-            _fail(f"sem porta livre para {key} dentro de "
-                  f"+{PORT_OFFSET_MAX} do default {default}.")
+            _fail(f"sem porta livre para {key} dentro de +{PORT_OFFSET_MAX} do default {default}.")
     return chosen
 
 
@@ -477,8 +512,7 @@ def write_worktree_env_ports(wt_path: Path, ports: dict[str, int]) -> None:
         if out_lines and out_lines[-1].strip():
             out_lines.append("")
         out_lines.append(
-            "# Portas auto-geradas para esta worktree paralela "
-            "(scripts/worktree-new.py)"
+            "# Portas auto-geradas para esta worktree paralela (scripts/worktree-new.py)"
         )
         for key in PORT_DEFAULTS:
             if key in pending:
@@ -493,6 +527,7 @@ def write_worktree_env_ports(wt_path: Path, ports: dict[str, int]) -> None:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -501,52 +536,60 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "branch",
         help="Nome completo da branch (ex.: feat/42-add-google-login). "
-             "Para criar a issue dentro do script, use `<tipo>/-<slug>` "
-             "(sem número) + --create-issue --issue-title.",
+        "Para criar a issue dentro do script, use `<tipo>/-<slug>` "
+        "(sem número) + --create-issue --issue-title.",
     )
     parser.add_argument(
-        "--base", default=None,
+        "--base",
+        default=None,
         help="Branch base remota (default: develop; main para hotfix/).",
     )
     parser.add_argument(
-        "--path", default=None,
-        help="Override do diretório da worktree "
-             "(default: ../<repo>-worktrees/<branch-slug>).",
+        "--path",
+        default=None,
+        help="Override do diretório da worktree (default: ../<repo>-worktrees/<branch-slug>).",
     )
     parser.add_argument(
-        "--create-issue", action="store_true",
+        "--create-issue",
+        action="store_true",
         help="Cria a issue via `gh issue create` antes (precisa de --issue-title).",
     )
-    parser.add_argument("--issue-title", default=None,
-                        help="Título da issue a criar (Conventional PT).")
-    parser.add_argument("--issue-body", default=None,
-                        help="Corpo da issue a criar (markdown PT). Obrigatório com "
-                             "--create-issue: precisa de `### BC / camada` e "
-                             "`### Depende de` com valor (GIT-WORKFLOW.md §Etapa 1).")
-    parser.add_argument("--no-setup", action="store_true",
-                        help="Pula `make setup` na nova worktree.")
-    parser.add_argument("--no-env", action="store_true",
-                        help="Não copia .env / .env.local do checkout principal.")
-    parser.add_argument("--no-port-assign", action="store_true",
-                        help="Não escreve APP_PORT/POSTGRES_PORT/REDIS_PORT no "
-                             ".env da worktree (default: gera portas livres).")
-    parser.add_argument("--no-vscode", action="store_true",
-                        help="Não abre VS Code ao final.")
-    parser.add_argument("--no-fetch", action="store_true",
-                        help="Pula `git fetch --prune origin` (assume base já fresca).")
+    parser.add_argument(
+        "--issue-title", default=None, help="Título da issue a criar (Conventional PT)."
+    )
+    parser.add_argument(
+        "--issue-body",
+        default=None,
+        help="Corpo da issue a criar (markdown PT). Obrigatório com "
+        "--create-issue: precisa de `### BC / camada` e "
+        "`### Depende de` com valor (GIT-WORKFLOW.md §Etapa 1).",
+    )
+    parser.add_argument(
+        "--no-setup", action="store_true", help="Pula `make setup` na nova worktree."
+    )
+    parser.add_argument(
+        "--no-env", action="store_true", help="Não copia .env / .env.local do checkout principal."
+    )
+    parser.add_argument(
+        "--no-port-assign",
+        action="store_true",
+        help="Não escreve APP_PORT/POSTGRES_PORT/REDIS_PORT no "
+        ".env da worktree (default: gera portas livres).",
+    )
+    parser.add_argument("--no-vscode", action="store_true", help="Não abre VS Code ao final.")
+    parser.add_argument(
+        "--no-fetch",
+        action="store_true",
+        help="Pula `git fetch --prune origin` (assume base já fresca).",
+    )
     return parser
 
 
-def _validate_branch(branch: str, *, create_issue: bool
-                     ) -> tuple[dict[str, str], int, bool]:
+def _validate_branch(branch: str, *, create_issue: bool) -> tuple[dict[str, str], int, bool]:
     """Valida o nome do branch (aceita placeholder `<tipo>/-<slug>` se
     --create-issue). Retorna (parts, num, create_mode_no_num).
     """
-    create_mode_no_num = (
-        create_issue
-        and "/" in branch
-        and branch.split("/", 1)[1].startswith("-")
-    )
+    create_mode_no_num = create_issue and "/" in branch and branch.split("/", 1)[1].startswith("-")
     if create_mode_no_num:
         tipo, rest = branch.split("/", 1)
         # "feat/-add-foo" → "feat/0-add-foo" só pra passar no regex
@@ -589,13 +632,16 @@ def main() -> int:
     args = _build_parser().parse_args()
 
     parts, num, create_mode_no_num = _validate_branch(
-        args.branch, create_issue=args.create_issue,
+        args.branch,
+        create_issue=args.create_issue,
     )
     base = args.base or default_base(parts["type"])
 
     _section("1. Validando nome do branch")
-    _info(f"tipo={parts['type']}  num={num or '(será criado)'}  "
-          f"stage={parts['stage'] or '-'}  slug={parts['slug']}")
+    _info(
+        f"tipo={parts['type']}  num={num or '(será criado)'}  "
+        f"stage={parts['stage'] or '-'}  slug={parts['slug']}"
+    )
     _info(f"base remota: origin/{base}")
 
     _section("2. Verificando repositório git")
@@ -615,9 +661,7 @@ def main() -> int:
         create_body=args.issue_body,
     )
 
-    final_branch = (
-        _assemble_branch(parts, final_num) if create_mode_no_num else args.branch
-    )
+    final_branch = _assemble_branch(parts, final_num) if create_mode_no_num else args.branch
     if create_mode_no_num:
         _info(f"nome final do branch: {final_branch}")
 

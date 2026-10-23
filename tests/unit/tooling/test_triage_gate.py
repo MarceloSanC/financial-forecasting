@@ -7,6 +7,8 @@ Casos reais: as mensagens de fim de turno vêm das sessões da Stage 5.4 e da #7
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -53,6 +55,17 @@ def test_ask_with_unclassified_header_is_denied() -> None:
     assert out is not None
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "q1?" in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_payload_with_utf8_bom_is_read(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Pipe do Windows PowerShell 5.1 prefixa BOM; sem `utf-8-sig` o hook calava (fail open)."""
+    raw = ("﻿" + json.dumps(_ask("B2 — Horizon"))).encode("utf-8")
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(raw), encoding="utf-8"))
+    assert tg.main() == 0
+    out = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "deny"
 
 
 def test_other_tools_are_ignored() -> None:

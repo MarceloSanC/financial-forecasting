@@ -81,9 +81,9 @@ def test_appending_future_bars_does_not_change_past(
         for name in INDICATOR_SPECS:
             before = rows_original[i][name]
             after = rows_extended[i][name]
-            assert (
-                before == after
-            ), f"leakage at bar {i} for {name!r}: {before} != {after} after appending future bars"
+            assert before == after, (
+                f"leakage at bar {i} for {name!r}: {before} != {after} after appending future bars"
+            )
 
 
 @pytest.mark.contract
@@ -101,9 +101,9 @@ def test_unordered_input_yields_same_result_as_ordered(
     assert len(rows_ordered) == len(rows_shuffled)
     for i in range(_COMPARE_FROM, _N_ORIGINAL):
         for name in INDICATOR_SPECS:
-            assert (
-                rows_ordered[i][name] == rows_shuffled[i][name]
-            ), f"order-dependence at bar {i} for {name!r}: sort_values (I9) not applied"
+            assert rows_ordered[i][name] == rows_shuffled[i][name], (
+                f"order-dependence at bar {i} for {name!r}: sort_values (I9) not applied"
+            )
 
 
 @pytest.mark.contract

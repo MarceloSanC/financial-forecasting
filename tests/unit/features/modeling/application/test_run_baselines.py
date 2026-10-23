@@ -103,9 +103,7 @@ _TEST_SIZE = 3
 _N_SPECS = 5
 _COHORT_ID = "cohort-h2"
 
-_SCOPE = ScopeSpec(
-    asset_id="TEST", feature_set_name="fs_test", max_horizon=2, cohort_id=_COHORT_ID
-)
+_SCOPE = ScopeSpec(asset_id="TEST", feature_set_name="fs_test", max_horizon=2, cohort_id=_COHORT_ID)
 
 
 # Instante do `created_at_utc` write-time (fixo, UTC).
@@ -256,9 +254,7 @@ def test_happy_path_predictions_long_grid_complete_and_aligned() -> None:
     assert all(levels == set(_LEVELS) for levels in grids.values())
     # I2: target_timestamp_utc = dataset_timestamps[decision_idx + horizon],
     # resolvido exclusivamente pelo persister 4.3 (indexação por sessão).
-    iso = [
-        datetime(day.year, day.month, day.day, tzinfo=UTC).isoformat() for day in _SESSIONS
-    ]
+    iso = [datetime(day.year, day.month, day.day, tzinfo=UTC).isoformat() for day in _SESSIONS]
     for row in rows:
         decision_idx = int(str(row["decision_idx"]))
         horizon = int(str(row["horizon"]))
@@ -384,9 +380,7 @@ class _OverlappingSplitter(WalkForwardSplitter):
         return self._folds
 
 
-def _fold_with_test(
-    fold_index: int, train_end: int, test_slice: slice
-) -> FoldSplit:
+def _fold_with_test(fold_index: int, train_end: int, test_slice: slice) -> FoldSplit:
     """FoldSplit válido (blocos ordenados) com bloco test escolhido a dedo."""
     iso = [day.isoformat() for day in _SESSIONS]
     return FoldSplit(
@@ -439,15 +433,12 @@ def test_i6_wiring_lossy_dedup_raises_through_use_case(
     no namespace de `run_baselines` devolvendo menos entradas -> o `ValueError`
     com a mensagem I6 do helper propaga pela invocação normal.
     """
-    def _lossy_dedup(
-        records: Sequence[object], **_kwargs: object
-    ) -> tuple[object, ...]:
+
+    def _lossy_dedup(records: Sequence[object], **_kwargs: object) -> tuple[object, ...]:
         materialized = tuple(records)
         return materialized[:-1]  # colapsa 1 entrada SILENCIOSAMENTE (o bug I6)
 
-    monkeypatch.setattr(
-        run_baselines_module, "deduplicate_operationally_latest", _lossy_dedup
-    )
+    monkeypatch.setattr(run_baselines_module, "deduplicate_operationally_latest", _lossy_dedup)
     use_case, _ = _build()
 
     with pytest.raises(ValueError, match=r"dedup removed 1 aligned-point entries"):

@@ -1,47 +1,45 @@
-# Hooks mínimos que espelham `make check` (ruff + mypy) e validam a
-# mensagem de commit contra docs/CONVENTIONS.md §4 e docs/GIT-WORKFLOW.md.
+# Hooks que espelham `make check` (ruff + mypy) e validam a mensagem de commit
+# contra docs/CONVENTIONS.md §4 e docs/GIT-WORKFLOW.md.
+#
+# Fonte única de versão (issue #222): ruff e mypy rodam pelo `uv run` do venv do
+# projeto, a mesma versão (travada no `uv.lock`) e a mesma config (`pyproject.toml`)
+# que `make lint`/`make typecheck` usam. Nada de `repo:` remoto com `rev:` próprio:
+# um pin aqui diverge do `uv.lock` em silêncio (a #199 mediu ruff 0.6.9 × 0.15.20 e
+# mypy 1.11.2 × 2.1.0). `tests/architecture/test_pre_commit_hooks_parity.py` reprova
+# a volta de um hook de ruff/mypy com versão própria.
 #
 # Instalação (uma vez por clone — automatizada em `make setup`):
 #     uv run pre-commit install --install-hooks --hook-type pre-commit --hook-type commit-msg
 
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
-    hooks:
-      - id: ruff-format
-      - id: ruff
-        # `--extend-ignore ANN101,ANN102`: o pin v0.6.9 ainda enforça anotação de
-        # `self`/`cls` (ANN101/ANN102), regras DEPRECADAS e removidas no ruff
-        # corrente (>=0.15) que o projeto resolve em `make check`. Sem o ignore, o
-        # hook diverge do gate autoritativo (`make lint`) e do estilo já commitado
-        # (fakes/VOs da Stage 1.4 omitem a anotação de `self`). Reversível: cai
-        # quando o pin for atualizado. Ver technical 1.5 §7 [deviation].
-        args: [--fix, --extend-ignore, "ANN101,ANN102"]
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.2
-    hooks:
-      - id: mypy
-        files: ^src/
-        args: [--strict]
-        additional_dependencies:
-          - fastapi>=0.111
-          - uvicorn[standard]>=0.29
-          - sqlalchemy>=2.0
-          - alembic>=1.13
-          - pydantic>=2.7
-          - pydantic-settings>=2.3
-          # Storage medalhão (Stage 2.1): mantém o hook mypy alinhado ao
-          # `make check` (uv run mypy no venv do projeto). Sem pyarrow no env
-          # isolado do hook, `pq.write_table` vira `Any` e o hook acusaria o
-          # `# type: ignore[no-untyped-call]` (necessário no venv) como unused.
-          - pandas>=2.2
-          - pyarrow>=16.0
-          - duckdb>=1.0
-          - pandera>=0.20
-
   - repo: local
     hooks:
+      # Mesmos diretórios de `make lint`/`make fmt`.
+      - id: ruff-format
+        name: ruff format (venv do projeto)
+        entry: uv run ruff format
+        language: system
+        types_or: [python, pyi]
+        files: ^(src|tests|scripts|\.claude/hooks)/
+
+      - id: ruff
+        name: ruff check --fix (venv do projeto)
+        entry: uv run ruff check --fix
+        language: system
+        types_or: [python, pyi]
+        files: ^(src|tests|scripts|\.claude/hooks)/
+
+      # `pass_filenames: false`: roda o mesmo `uv run mypy` de `make typecheck`, com
+      # os alvos de `[tool.mypy] files` do pyproject. O `files:` abaixo só decide
+      # quando o hook dispara (mudança em algo que o mypy checa ou na config dele).
+      - id: mypy
+        name: mypy (venv do projeto, alvos do pyproject)
+        entry: uv run mypy
+        language: system
+        pass_filenames: false
+        require_serial: true
+        files: ^(src/|tests/contract/|tests/fakes/|pyproject\.toml$)
+
       - id: check-commit-msg
         name: check-commit-msg (Conventional Commits + reserved gates)
         entry: python scripts/check_commit_msg.py
