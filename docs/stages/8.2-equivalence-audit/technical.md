@@ -1585,4 +1585,19 @@ guarda `SCAFFOLD_AS_GATE1` da E4 reprovaria: pela linha `FAIL_SCAFFOLD_CHANGED` 
 falhar", `make check` extra (antes da E2, fora do venv congelado) sobre o commit do registro,
 que passa a ser o `GATE1`.
 
+### 2026-10-23 — [measurement] E1 — `make check` extra e `GATE1` novo — Claude (executor das Etapas)
+**Contexto:** antes do `make check` extra, a revisão do `543e602a` achou o esperado do
+`test_prior_reader_reads_only_registered_columns_and_filters` tautológico (`prior_columns` dos
+dois lados). Commit `096a2e9b` (`test(evaluation): … [8.2/--]`, só
+`tests/equivalence/test_audit_table_render.py`): esperado literal `FILTER_COLUMNS` +
+`VALUE_COLUMNS`, mais o rótulo só no `gold_oos` e só depois da E1, parametrizado `before_e1`
+/`after_e1` por monkeypatch; mutação (`prior_columns` sem o rótulo) reprova o `after_e1`.
+Forma do teste, nenhum valor lido.
+`make check` extra (container `ff82-check`, imagem `:dev`, `UV_NO_SYNC`, antes da E2 e fora do
+venv congelado) sobre `096a2e9b`: início 2026-10-23T19:14:15Z, fim 19:54:45Z, exit 0,
+`8966 passed, 30 skipped`, coverage 98,68 %. Nada commitado entre o `096a2e9b` e o fim.
+**Razão:** linha `FAIL_SCAFFOLD_CHANGED` do "Se falhar": `GATE1 := 096a2e9be7452fd3989abf9896300d6fc99dda0e`
+(substitui o `0d422aab…` da E0 no `etapa-82.env`). Esta entrada só toca o `technical.md`; os
+blobs do bloco "HEAD íntegro" seguem os do `GATE1`.
+
 <!-- END: post-execution -->
