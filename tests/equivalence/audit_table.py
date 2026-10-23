@@ -351,8 +351,15 @@ def classification(
 
 
 def recomputed_matches(rows: Sequence[AuditRow], declared: Sequence[Declared]) -> bool:
-    """Ids, tipos e status recomputados = os declarados (a classificação humana à parte)."""
-    return [(r.id, r.kind, r.status) for r in rows] == [(d.id, d.kind, d.status) for d in declared]
+    """Ids, tipos e status recomputados = os declarados; numa linha não comparada, também o
+    motivo (`not_compared:<motivo>` = o recomputado). A explicação de uma falha é humana."""
+    if [(r.id, r.kind, r.status) for r in rows] != [(d.id, d.kind, d.status) for d in declared]:
+        return False
+    return all(
+        d.classification == default_classification(r)
+        for r, d in zip(rows, declared, strict=True)
+        if r.status in _NOT_COMPARED
+    )
 
 
 # --- guardas e precisão -----------------------------------------------------------------------
@@ -554,7 +561,7 @@ def a10_rows(prior: PriorSide, a1_ok: Mapping[int, bool] | None = None) -> list[
             sample = by_run.get((metric["run_id"], horizon), [])
             for column in cs.VALUE_COLUMNS[path]:
                 audited = _a10_row(prior, path, column, metric, sample, size_column)
-                if a1_ok is not None and not a1_ok.get(horizon, False):
+                if a1_ok is not None and not a1_ok.get(horizon, True):
                     audited = AuditRow(
                         audited.id,
                         horizon,
@@ -702,6 +709,19 @@ def a11_rows(
     y_prior = prior_realized(prior.tables[cs.GOLD_OOS])
     old_candidate = prior_grid(prior.tables[cs.GOLD_OOS], cs.PRIOR_CANDIDATE_LABELS)
     new_candidate = new_grid(official, official.candidate)
+    if not cs.COMMON_BASELINES:
+        rows.append(
+            AuditRow(
+                "A11/baselines/none",
+                0,
+                KIND_SIGN,
+                "tabela de baselines comuns",
+                "COMMON_BASELINES vazio (D12 a: zero comuns)",
+                "-",
+                RawStatus.NOT_REALIZABLE,
+                "no_common_baseline",
+            )
+        )
     for horizon in cs.HORIZONS:
         shared = common.get(horizon, ())
         if not shared:
@@ -718,7 +738,7 @@ def a11_rows(
                 )
             )
             continue
-        if not a1_ok.get(horizon, False):
+        if not a1_ok.get(horizon, True):
             rows.append(
                 AuditRow(
                     f"A11/h{horizon}/stopped",
@@ -842,7 +862,8 @@ def compute_rows(prior: PriorSide, official: OfficialSide) -> tuple[AuditRow, ..
     """As linhas A9, A10 e A11 a partir dos dois lados já lidos (guarda da E1 primeiro)."""
     check_e1_fixed(prior)
     a9, common = a9_rows(prior, official)
-    a1_ok = {row.horizon: row.status is RawStatus.WITHIN_TOLERANCE for row in a9}
+    # A1 fora para a comparação de modelo do horizonte; T∩ vazio tem a sua própria linha
+    a1_ok = {row.horizon: row.status is not RawStatus.OUT_OF_TOLERANCE for row in a9}
     return (*a9, *a10_rows(prior, a1_ok), *a11_rows(prior, official, common, a1_ok))
 
 

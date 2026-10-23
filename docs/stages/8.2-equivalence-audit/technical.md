@@ -1468,4 +1468,26 @@ M5 variante raw no candidato anterior: 1 failed, 19 passed, 1 warning in 7.60s
 **Razão:** correções in-scope do andaime, sem mudar concept nem ADR; o runbook (§1–§6
 congelados) fica reconciliado por esta entrada.
 
+### 2026-10-23 — [deviation] re-auditoria de testes (rodada b): l3, m, n e registro da tabela vazia — Claude (executor)
+**Contexto:** a re-auditoria independente em `0d9ede0f` viu sobreviverem l3 (linha nova na
+tabela da §5.6 do doc passava), m (`_model_predictions` sem a conferência do silver) e n
+(T∩ vazio num horizonte sem a sua linha). Correções em `[8.2/task-11-fix]`:
+- o teste da aplicabilidade extrai a tabela inteira do doc e afirma igualdade de CONJUNTO
+  com `APPLICABILITY_TEXT` nos dois sentidos;
+- `_model_predictions` exercitado com silver sintético (leitor de duck typing) e
+  `silver_content` julgado divergente numa unidade `fact_oos_predictions|…`;
+- `compute_rows` com h=7 sem predição nova: A9 e `A11/h7/stopped` = `empty_intersection`
+  (motivo `empty_intersection`). Para isso, o "A1 fora" que para A10/A11 passou a ser só
+  `out_of_tolerance` (T∩ vazio não é A1 fora; o A10 do horizonte segue calculado);
+- `recomputed_matches` confere também o motivo de `not_compared:<motivo>`;
+- com `COMMON_BASELINES` vazio, a linha `A11/baselines/none` (`not_compared:no_common_baseline`)
+  registra a tabela de baselines vazia (A11, D12 a).
+**Mutações (aplicadas, `pytest tests/equivalence/test_audit_table_render.py`, revertidas):**
+```
+l3 linha nova na tabela da §5.6 do doc: 1 failed, 23 passed, 1 warning in 7.58s
+m sem conferência do silver oficial: 1 failed, 23 passed, 1 warning in 7.60s
+n T∩ vazio sem a sua linha: 1 failed, 23 passed, 1 warning in 7.75s
+```
+**Razão:** cobertura in-scope do andaime antes do ponto 1 do plano de gates.
+
 <!-- END: post-execution -->

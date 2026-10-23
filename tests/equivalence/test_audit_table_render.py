@@ -23,13 +23,24 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
 from financial_forecasting.features.evaluation.application.dtos.silver_content import (
     SilverContent,
 )
+from financial_forecasting.features.evaluation.application.use_cases.silver_content_accumulator import (  # noqa: E501
+    SilverContentAccumulator,
+)
 from financial_forecasting.features.evaluation.domain.services.wilson_band import (
     wilson_interval,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.realized_returns import (
     RealizedReturns,
 )
-from tests.equivalence import audit_table
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
+from financial_forecasting.shared.domain.value_objects.silver_content_hash import (
+    KIND_FLOAT,
+    KIND_INT,
+    KIND_STR,
+)
+from tests.equivalence import audit_table, readers
 from tests.equivalence import comparison_set as cs
 from tests.equivalence.audit_table import (
     APPLICABILITY,
@@ -99,13 +110,17 @@ def test_applicability_is_the_section_5_6_table() -> None:
     """Transcrição literal da tabela "Aplicabilidade por comparação" do doc de domínio §5.6."""
     doc = Path(__file__).resolve().parents[2] / "docs" / "domain" / "evaluation"
     text = (doc / "reproduction-equivalence-and-reporting.md").read_text(encoding="utf-8")
-    for comparison, categories in APPLICABILITY_TEXT.values():
-        line = next(
-            item.strip()
-            for item in text.splitlines()
-            if item.strip().startswith(f"| {comparison} |")
-        )
-        assert line == f"| {comparison} | {'; '.join(categories)} |"
+    lines = [line.strip() for line in text.splitlines()]
+    start = lines.index("| Comparação | Categorias que podem explicá-la |")
+    assert lines[start + 1] == "|---|---|"
+    table: set[tuple[str, tuple[str, ...]]] = set()
+    for line in lines[start + 2 :]:
+        if not line.startswith("|"):
+            break
+        comparison, categories = (cell.strip() for cell in line.strip("|").split("|"))
+        table.add((comparison, tuple(c.strip() for c in categories.split(";"))))
+    # igualdade de CONJUNTO nos dois sentidos: linha nova no doc (ou no código) reprova
+    assert table == set(APPLICABILITY_TEXT.values())
     assert APPLICABILITY[KIND_A1] == {"alvo"}
     assert "convencao_empate" in APPLICABILITY[KIND_A2_PICP]
     assert "escala" not in APPLICABILITY[KIND_A2_PICP]
@@ -559,6 +574,136 @@ def test_compute_rows_refuses_repeated_new_predictions() -> None:
 
     with pytest.raises(ValueError, match="repeated prediction"):
         compute_rows(_prior_side(), broken)
+
+
+@pytest.mark.usefixtures("e1_fixed")
+def test_horizon_without_new_predictions_is_an_empty_intersection() -> None:
+    """Re-auditoria (n): sem predição nova num horizonte, T∩ vazio é registrado, não comparado."""
+    official = _official_side()
+    only_h1 = tuple(r for r in official.predictions if r["horizon"] == 1)
+    rows = compute_rows(
+        _prior_side(), OfficialSide(**{**official.__dict__, "predictions": only_h1})
+    )
+
+    by_id = {row.id: row for row in rows}
+    assert by_id["A9/h7/realized"].status is RawStatus.EMPTY_INTERSECTION
+    assert by_id["A9/h7/realized"].values == "T∩=0 out=0 max_abs_diff=None"
+    stopped = by_id["A11/h7/stopped"]
+    assert (stopped.status, stopped.reason) == (RawStatus.EMPTY_INTERSECTION, "empty_intersection")
+    stem = Path(cs.GOLD_METRICS_BY_RUN).stem
+    # sem A1 fora, o A10 de h=7 é calculado (a amostra do run anterior existe por si)
+    assert by_id[f"A10/{stem}/BTSF_w7_s1-h7/h7/picp_raw"].reason == "sample"
+    assert [d.classification for d in classification(rows) if d.id == "A11/h7/stopped"] == [
+        "not_compared:empty_intersection"
+    ]
+
+
+@pytest.mark.usefixtures("e1_fixed")
+def test_empty_common_baselines_are_registered(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A11: zero baselines comuns → a tabela vazia é registrada numa linha, não omitida."""
+    monkeypatch.setattr(cs, "COMMON_BASELINES", ())
+
+    rows = compute_rows(_prior_side(), _official_side())
+
+    empty = [row for row in rows if row.id == "A11/baselines/none"]
+    assert len(empty) == 1
+    assert (empty[0].status, empty[0].reason) == (RawStatus.NOT_REALIZABLE, "no_common_baseline")
+    assert not any("/baseline_zero_return/" in row.id for row in rows)
+    assert "not_compared:no_common_baseline" in render(rows)
+
+
+@pytest.mark.usefixtures("e1_fixed")
+def test_declared_not_compared_reason_must_match_the_recomputed_one() -> None:
+    rows = compute_rows(_prior_side(), _official_side())
+    declared = classification(rows)
+    assert recomputed_matches(rows, declared)
+
+    wrong = tuple(
+        Declared(d.id, d.kind, d.status, "not_compared:sample") if d.id == "A11/h7/stopped" else d
+        for d in declared
+    )
+
+    assert not recomputed_matches(rows, wrong)
+
+
+class _FakeSilver:
+    """Leitor silver sintético (duck typing do `ParquetAnalyticsRepository`)."""
+
+    def __init__(self, tables: dict[str, list[dict[str, object]]]) -> None:
+        self._tables = tables
+
+    def read(self, *, layer: str, table: str, filters: object = None) -> list[dict[str, object]]:
+        return [dict(row) for row in self._tables[table]]
+
+    def columns(self, *, layer: str, table: str) -> dict[str, tuple[str, bool]]:
+        sample = self._tables[table][0]
+        kinds = {int: KIND_INT, float: KIND_FLOAT, str: KIND_STR}
+        return {name: (kinds[type(value)], False) for name, value in sample.items()}
+
+
+def _silver() -> _FakeSilver:
+    dim_run = [
+        {
+            "asset": "AAPL",
+            "parent_sweep_id": "sweep-01",
+            "run_id": run,
+            "model_version": model,
+            "seed": seed,
+            "feature_set_name": "fs",
+        }
+        for run, model, seed in (("r1", "tft_quantile", 1), ("r2", "baseline_ar1", 0))
+    ]
+    facts = [
+        {
+            "asset": "AAPL",
+            "feature_set_name": "fs",
+            "run_id": run,
+            "year": 2024,
+            "split": "test",
+            "horizon": 1,
+            "target_timestamp_utc": _TS[0],
+            "quantile_level": level,
+            "value_guardrail": 0.1,
+        }
+        for run in ("r1", "r2")
+        for level in (0.1, 0.5, 0.9, 0.98)
+    ]
+    return _FakeSilver({"dim_run": dim_run, "fact_oos_predictions": facts})
+
+
+def _consumed(silver: _FakeSilver) -> SilverContent:
+    """O `silver_content` que a cópia julgada gravou para este silver (mesmo pós-filtro)."""
+    accumulator = SilverContentAccumulator(hasher=CanonicalJsonHasher())
+    accumulator.add_dim_run(
+        columns=silver.columns(layer="silver", table="dim_run"),
+        parent_sweep_id="sweep-01",
+        rows=silver.read(layer="silver", table="dim_run"),
+    )
+    accumulator.add_facts(
+        table="fact_oos_predictions",
+        columns=silver.columns(layer="silver", table="fact_oos_predictions"),
+        rows=silver.read(layer="silver", table="fact_oos_predictions"),
+    )
+    return accumulator.result()
+
+
+def test_official_predictions_are_checked_against_the_judged_silver() -> None:
+    """Re-auditoria (m): o `_model_predictions` confere o silver lido contra a cópia julgada."""
+    silver, partition = _silver(), GoldPartition("AAPL", "sweep-01")
+    consumed = _consumed(silver)
+
+    points = readers._model_predictions(silver, partition, frozenset({"tft_quantile"}), consumed)  # type: ignore[arg-type]
+
+    assert sorted(float(str(p["level"])) for p in points) == [
+        0.1,
+        0.5,
+        0.9,
+    ]  # só o candidato, níveis comuns
+    tampered = dict(consumed.units)
+    tampered["fact_oos_predictions|r2|2024"] = "9" * 64
+    judged = SilverContent(digest=consumed.digest, tables=consumed.tables, units=tampered)
+    with pytest.raises(OfficialSilverMismatchError, match="fact_oos_predictions"):
+        readers._model_predictions(silver, partition, frozenset({"tft_quantile"}), judged)  # type: ignore[arg-type]
 
 
 def test_compute_rows_requires_the_e1(monkeypatch: pytest.MonkeyPatch) -> None:
