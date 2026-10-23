@@ -1653,4 +1653,21 @@ comportamento (suíte de contrato do `GoldGenerationReader` verde no ponto 1); e
 execução em `060537fc`, onde o arquivo não tem a mudança. A justificativa do A7 para esse arquivo
 lê-se "no caminho de leitura, sem mudança de comportamento, fora do claim".
 
+### 2026-10-23 — [measurement] E3 — reprodução real e auditoria — Claude (executor das Etapas)
+**Contexto:** bloco "HEAD íntegro" (HEAD `c2fa50bb`): `WT_CLEAN` e as mesmas três linhas `BLOB`
+da E2. Corrida destacada `ff82-repro` (imagem pelo id), 20:08:36Z → 20:22:49Z (14,2 min):
+```
+repro.exit 0 / repro.state "0 false"
+reproduction aapl_confirmatory-r3-00fd83d9cd39: refresh COMPLETED tables 19
+reproduction aapl_confirmatory-r3-00fd83d9cd39: scorecard sha256 25b3e0a6e279c96aee1c825cdf1891a863c252064f4cc17ca0f14683a96d3ebf
+REFRESH_COMPLETED / REPRO_FILES / ENV_EQUAL / SNAPSHOT_SAME_AS_CHECK / NO_JUDGMENT_IN_DISPOSABLE
+```
+(o `repro.err` saiu vazio: sem linhas `_timed`; o tempo é o do `docker inspect`.)
+Item 2: `exit 0`, `FREEZE_SAME` (`0c95c798…` = `FREEZE_E2`). Item 3 (`audit-reproduction`):
+`exit 0`, `bit_identical true`, os três `result_digest` = `7c7940d4…`, identidade igual nos 4
+campos; `R1 882727/0/0.0`, `R2 288671/0/0.0`, `R3 1856/0/0.0`; 19 tabelas com `keys_equal true`;
+`scorecard equal true leaves 66117 different 0`. `BIT_IDENTICAL`. Item 4: `LIVE_INTACT`.
+Item 5: `docs/reports/reproduction_audit.md` (claim (a) afirmado, (b) citado da 7.1, (c) não
+executado; tabelas por classe e por tabela).
+
 <!-- END: post-execution -->
