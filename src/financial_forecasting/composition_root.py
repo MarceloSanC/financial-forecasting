@@ -76,6 +76,16 @@ router por `importlib` (`in` é keyword), troca o provedor do use case quando h�
 (montado UMA vez, na subida) e inclui o router: o `shared/http` importa só esta
 composition root (LAYOUT §6). `FastAPI` só sob `TYPE_CHECKING` — a CLI não importa
 fastapi por aqui.
+
+Stage 8.1 (Task 14): a fábrica `run_confirmatory_evaluation_for(cohort_path, device)`
+monta o `RunConfirmatoryEvaluation` com o MESMO `TomlPreregistrationSource` do scorecard,
+o MESMO hasher, o `refresh_gold` e o `build_confirmatory_scorecard` já wirados, o MESMO
+`ParquetGoldStore` (como `JudgedGenerationStore` e `GoldGenerationReader`), o ledger do
+cohort (como `EvaluationWriterLock`, por duck typing) e o `GitEvaluationEnvironment` sobre
+`runtime_probe_for(cohort_path, device)`, com o mapa das chaves de código e a chave de
+sujeira do probe (`CODE_KEYS`, `DIRTY_KEY` — importados do `modeling` só aqui), o
+`Settings.image_id` e a capacidade de CPU do torch por função lazy (montar a fábrica não
+importa `torch`).
 """
 
 import importlib
@@ -167,6 +177,9 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
 from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
     ParquetGoldStore,
 )
+from financial_forecasting.features.evaluation.adapters.out.runtime.git_evaluation_environment import (  # noqa: E501
+    GitEvaluationEnvironment,
+)
 from financial_forecasting.features.evaluation.adapters.out.toml.toml_preregistration_source import (  # noqa: E501
     TomlPreregistrationSource,
 )
@@ -181,6 +194,9 @@ from financial_forecasting.features.evaluation.application.use_cases.read_servin
 )
 from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
     RefreshGold,
+)
+from financial_forecasting.features.evaluation.application.use_cases.run_confirmatory_evaluation import (  # noqa: E501
+    RunConfirmatoryEvaluation,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.bootstrap_indices import (
     BootstrapIndices,
@@ -290,7 +306,9 @@ from financial_forecasting.features.modeling.application.ports.out.quantile_mode
     QuantileTrainingResult,
 )
 from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
+    CODE_KEYS,
     CPU_DEVICE,
+    DIRTY_KEY,
     RuntimeEnvironmentProbe,
 )
 from financial_forecasting.features.modeling.application.ports.out.tft_checkpoint_predictor import (
@@ -446,6 +464,17 @@ def _accelerator_for(device: str) -> str:
 
 # Fábrica do probe de ambiente: (caminho do arquivo do cohort, device) → probe.
 RuntimeProbeFactory = Callable[[Path, str], RuntimeEnvironmentProbe]
+
+
+def _torch_cpu_capability() -> str:
+    """A capacidade de CPU do torch (ADR 7.1.0003 item 2), com `import torch` lazy.
+
+    Injetada no `GitEvaluationEnvironment` (Stage 8.1): o `evaluation` não importa
+    `torch`, e montar a fábrica da corrida não o carrega — só a primeira foto.
+    """
+    import torch  # lazy: torch só na foto do ambiente
+
+    return str(torch.backends.cpu.get_cpu_capability())
 
 
 class _LazyFinbertSentimentModel:
@@ -716,6 +745,59 @@ def serve_inference_factory(
     return serve_inference_for
 
 
+def confirmatory_wiring(  # noqa: PLR0913 — os colaboradores do scorecard e da corrida
+    *,
+    repo_root: Path,
+    runtime_probe_for: RuntimeProbeFactory,
+    image_id: str | None,
+    hasher: Hasher,
+    refresh_gold: RefreshGold,
+    gold_store: ParquetGoldStore,
+    writer_lock: CohortProgressLedger,
+) -> tuple[BuildConfirmatoryScorecard, Callable[[Path, str], RunConfirmatoryEvaluation]]:
+    """O scorecard (Stage 6.5) e a fábrica da corrida confirmatória (Stage 8.1, Task 14).
+
+    O scorecard lê a geração viva pelo MESMO `ParquetGoldStore` do refresh (real do port
+    `GoldGenerationReader`, ADR 6.5.0005) e o pré-registro de
+    `<repo_root>/config/preregistration/` (ADR 6.5.0001), com o MESMO hasher que calcula o
+    `preregistration_ref`. A corrida, por arquivo e device do cohort, usa os MESMOS
+    source, hasher, refresh, scorecard e `ParquetGoldStore` (cópia julgada e geração viva,
+    ADR 8.1.0003 item 1); o lock é o ledger do cohort, o mesmo do `infer` (D8). O ambiente
+    é o probe da 5.5 do cohort com as chaves de código mapeadas para os nomes do
+    `evaluation` (as mesmas, `code.*`), a chave de sujeira do probe, o id da imagem do
+    `Settings` e a capacidade de CPU do torch, lazy (ADR 8.1.0003 item 6).
+    """
+    preregistration_dir = repo_root / "config" / "preregistration"
+    source = TomlPreregistrationSource(root=preregistration_dir)
+    build_scorecard = BuildConfirmatoryScorecard(source=source, reader=gold_store, hasher=hasher)
+
+    def run_confirmatory_evaluation_for(
+        cohort_path: Path, device: str
+    ) -> RunConfirmatoryEvaluation:
+        environment = GitEvaluationEnvironment(
+            repo_root=repo_root,
+            probe=runtime_probe_for(cohort_path, device),
+            probe_keys={key: key for key in CODE_KEYS},
+            probe_dirty_key=DIRTY_KEY,
+            image_id=image_id,
+            cpu_capability=_torch_cpu_capability,
+            preregistration_dir=preregistration_dir,
+        )
+        return RunConfirmatoryEvaluation(
+            source=source,
+            hasher=hasher,
+            refresh_gold=refresh_gold,
+            build_scorecard=build_scorecard,
+            judged_store=gold_store,
+            gold_reader=gold_store,
+            environment=environment,
+            writer_lock=writer_lock,
+            clock=SystemClock(),
+        )
+
+    return build_scorecard, run_confirmatory_evaluation_for
+
+
 def dump_ablation_spec(spec: "AblationCohortSpec") -> str:
     """O TOML do spec de ablação (`ablation_cohort_file.dump_ablation_cohort`)."""
     ablation_file = importlib.import_module(f"{_MODELING_CLI}.ablation_cohort_file")
@@ -931,6 +1013,9 @@ class ApplicationDependencies:
     # BC inference (Stage 7.4, Task 07): o use case da API de inferência, por arquivo de
     # cohort (montado uma vez pelo `register_http_routes`, na subida da app).
     serve_inference_for: Callable[[Path], ServeInference]
+    # BC evaluation (Stage 8.1, Task 14): a corrida confirmatória, por arquivo e device do
+    # cohort (o probe do ambiente depende do caminho, como em `run_inference_for`).
+    run_confirmatory_evaluation_for: Callable[[Path, str], RunConfirmatoryEvaluation]
 
 
 def wire_dependencies(
@@ -1298,10 +1383,15 @@ def wire_dependencies(
     # pelo MESMO `ParquetGoldStore` do refresh (real do port `GoldGenerationReader`,
     # ADR 6.5.0005) e o pré-registro de `<repo_root>/config/preregistration/` (ADR
     # 6.5.0001), com o MESMO hasher que calcula o `preregistration_ref`.
-    build_confirmatory_scorecard = BuildConfirmatoryScorecard(
-        source=TomlPreregistrationSource(root=cfg.repo_root / "config" / "preregistration"),
-        reader=gold_store,
+    # Stage 8.1 (Task 14): a corrida confirmatória sai junto, sobre o MESMO source.
+    build_confirmatory_scorecard, run_confirmatory_evaluation_for = confirmatory_wiring(
+        repo_root=repo_root,
+        runtime_probe_for=runtime_probe_for,
+        image_id=cfg.image_id,
         hasher=hasher,
+        refresh_gold=refresh_gold,
+        gold_store=gold_store,
+        writer_lock=cohort_ledger,
     )
 
     return ApplicationDependencies(
@@ -1342,6 +1432,7 @@ def wire_dependencies(
         serve_inference_for=serve_inference_factory(
             hasher=hasher, silver=analytics_repository, gold_store=gold_store
         ),
+        run_confirmatory_evaluation_for=run_confirmatory_evaluation_for,
     )
 
 
