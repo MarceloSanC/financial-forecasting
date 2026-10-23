@@ -34,11 +34,13 @@ from financial_forecasting.features.evaluation.application.ports.out.evaluation_
     CODE_DIRTY_KEY,
     COMMIT_KEY,
     CPU_CAPABILITY_KEY,
+    GOLD_LIBRARIES,
     IMAGE_ID_KEY,
     PREREGISTRATION_DIRTY_KEY,
     REQUIRED_KEYS,
     EvaluationEnvironment,
     MissingImageIdError,
+    library_key,
     probe_key,
 )
 from financial_forecasting.features.modeling.application.ports.out.runtime_environment_probe import (  # noqa: E501
@@ -260,3 +262,74 @@ def test_dirty_flag_outside_true_false_refuses_snapshot(
     probe = InMemoryRuntimeEnvironmentProbe(**{DIRTY_KEY: dirty})
     with pytest.raises(RuntimeError, match="must be 'true' or 'false'"):
         _real(tmp_path, monkeypatch, probe=probe).snapshot()
+
+
+def test_preregistration_dir_outside_repository_is_refused(tmp_path: Path) -> None:
+    """Diretório absoluto fora do `repo_root` não vira caminho relativo silencioso."""
+    with pytest.raises(ValueError, match="is outside the repository"):
+        GitEvaluationEnvironment(
+            repo_root=tmp_path / "repo",
+            probe=InMemoryRuntimeEnvironmentProbe(),
+            probe_keys={key: key for key in CODE_KEYS},
+            probe_dirty_key=DIRTY_KEY,
+            image_id=_IMAGE,
+            cpu_capability=lambda: "AVX2",
+            preregistration_dir=tmp_path / "elsewhere" / _PREREGISTRATION,
+        )
+
+
+def test_probe_without_dirty_key_refuses_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Probe sem a chave de sujeira não deixa `code_dirty` de fora da foto."""
+    environment = _real(tmp_path, monkeypatch)
+    environment._probe_dirty_key = "code_dirty_renamed"
+    with pytest.raises(RuntimeError, match="has no 'code_dirty_renamed' key"):
+        environment.snapshot()
+
+
+def test_absent_library_is_recorded_as_absent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Biblioteca do gold não instalada vira `"absent"`, não erro nem chave sumida."""
+    environment = _real(tmp_path, monkeypatch)
+    monkeypatch.setattr(real_module, "GOLD_LIBRARIES", (*GOLD_LIBRARIES, "no-such-dist-ff"))
+
+    assert environment.snapshot()[library_key("no-such-dist-ff")] == "absent"
+
+
+def test_outside_a_git_repository_is_an_explicit_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fora de um repositório git, a foto falha com `RuntimeError` (identidade obrigatória)."""
+    for variable in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"):
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    environment = GitEvaluationEnvironment(
+        repo_root=plain,
+        probe=InMemoryRuntimeEnvironmentProbe(),
+        probe_keys={key: key for key in CODE_KEYS},
+        probe_dirty_key=DIRTY_KEY,
+        image_id=_IMAGE,
+        cpu_capability=lambda: "AVX2",
+        preregistration_dir=_PREREGISTRATION,
+    )
+
+    with pytest.raises(RuntimeError, match=r"git unavailable \(rev-parse HEAD\)"):
+        environment.snapshot()
+
+
+def test_git_binary_missing_is_an_explicit_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sem o executável `git` (OSError), a foto falha com `RuntimeError`."""
+    environment = _real(tmp_path, monkeypatch)
+
+    def _no_git(*_args: object, **_kwargs: object) -> object:
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(subprocess, "run", _no_git)
+    with pytest.raises(RuntimeError, match="git unavailable"):
+        environment.snapshot()
