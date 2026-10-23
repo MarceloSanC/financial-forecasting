@@ -229,3 +229,51 @@ def test_created_at_utc_declared_in_dim_run_does_not_change_units() -> None:
 
     assert "created_at_utc" in SILVER_COLUMNS["dim_run"]
     assert _content(dim_runs=rewritten) == _content()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("parts", "message"),
+    [
+        pytest.param((), "at least one part", id="no-parts"),
+        pytest.param(("dim_run", True), "must be str or int", id="bool-part"),
+        pytest.param(("dim_run", 1.5), "must be str or int", id="float-part"),
+        pytest.param(("dim_run", None), "must be str or int", id="none-part"),
+        pytest.param(("dim_run", ""), "non-empty and free of", id="empty-part"),
+        pytest.param(("dim_run", "a|b"), "non-empty and free of", id="separator-part"),
+    ],
+)
+def test_unit_key_rejects_bad_parts(parts: tuple[object, ...], message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        unit_key(*parts)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        pytest.param({"tables": ["dim_run"]}, "tables must be a Mapping, got list", id="tables"),
+        pytest.param({"units": "dim_run|s"}, "units must be a Mapping, got str", id="units"),
+        pytest.param({"tables": {"": _HEX}}, "tables keys must be non-empty str", id="empty"),
+        pytest.param({"units": {1: _HEX}}, "units keys must be non-empty str", id="int-key"),
+        pytest.param({"digest": 1}, "digest must be a str", id="digest-int"),
+    ],
+)
+def test_silver_content_from_mapping_rejects_bad_values(
+    changes: dict[str, object], message: str
+) -> None:
+    mapping = {**_content().as_mapping(), **changes}
+
+    with pytest.raises(ValueError, match=message):
+        SilverContent.from_mapping(mapping)
+
+
+@pytest.mark.unit
+def test_silver_content_from_mapping_rejects_non_mapping_and_freezes_sorted() -> None:
+    with pytest.raises(ValueError, match="silver_content must be a Mapping, got list"):
+        SilverContent.from_mapping([("digest", _HEX)])  # type: ignore[arg-type]
+
+    content = SilverContent(digest=_HEX, tables={"b": _HEX, "a": _HEX}, units={})
+    assert list(content.tables) == ["a", "b"]
+    with pytest.raises(TypeError):
+        content.tables["c"] = _HEX  # type: ignore[index]
