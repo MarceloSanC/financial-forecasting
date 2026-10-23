@@ -5,7 +5,7 @@ when-use: Reference when asking where conformal intervals are stored, who calls 
 keywords: [adr, conformal, cqr, on-demand, silver, gold, refresh-gold, consumer-owned-port, use-case, assembly, refresh-parameters, manifest, gold-tables]
 status: accepted
 created_at: 2026-10-17
-updated_at: 2026-10-17
+updated_at: 2026-10-23
 adr_id: 7.2.0003
 decision: Conformal corrections and limits are never persisted in silver; RefreshGold assembles, from the silver rows it already reads and the realized training grid, one unit per (fold, seed, horizon) of the candidate (split = "calib" rows as calib, split = "test" rows as test), calls the inference use case CalibrateConformal through a ConformalCalibration port declared in evaluation/application/ports/out (its command/result DTOs cross as one declared data edge), measures coverage with ConformalCoverage, and publishes gold_conformal_corrections and gold_conformal_coverage in the same generation, with the r2 [conformal] block carried by RefreshParameters and the manifest; a unit that cannot be computed becomes an undefined or error row and never aborts the refresh.
 context_stage: 7.2-conformal-cqr
@@ -13,6 +13,8 @@ bounded_context: inference
 ---
 
 # ADR 7.2.0003 — Conformal intervals on demand, gold via RefreshGold
+
+> ⚠️ **Errata (2026-10-23, issue #223):** item 5 of "Decision" reads "each `error` adds 1 to `RefreshGoldResult.conformal_error_units`". The count is **per unit, not per row**: `conformal_error_units` is the number of distinct `(fold, seed, horizon)` units with at least one `error` row returned by the port — a unit carries pairs × variants rows, so it adds 1 however many of its rows are `error`. This is what `conformal_reports_from` in `refresh_gold.py` and the comment of `RefreshGoldResult` implement. Every decision of this ADR is unchanged — see technical 7.2 §7, `[decision] task-19-fix`, C4-6.
 
 > ADRs are written and consumed in **English**, even when the rest of the project docs are in Portuguese. This keeps them grep-friendly and reusable across projects.
 
