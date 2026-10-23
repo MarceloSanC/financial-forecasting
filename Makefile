@@ -169,8 +169,8 @@ fmt:
 # typecheck — checagem estática de tipos
 # ---------------------------------------------------------------------------
 # Alvos em `[tool.mypy] files` do pyproject (fonte única: src + tests/contract +
-# tests/fakes, issue #204). O hook do pre-commit segue só em `src/`: o env isolado
-# dele não tem numpy/torch/pytest e inverteria os `type: ignore` dos testes.
+# tests/fakes, issue #204). O hook do pre-commit roda este mesmo `uv run mypy`
+# (hook `local`, issue #222): mesma versão, mesmos alvos.
 typecheck:
 	uv run mypy
 
