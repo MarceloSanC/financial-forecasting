@@ -1507,4 +1507,37 @@ geração nova tem de ser igual à geração viva anterior". Agora a referência
 resultado de toda tentativa do trecho, sem `current/`. O concept está `done`, e esta
 sessão não o editou. A regra vigente é a do ADR emendado.
 
+### 2026-10-23 — [measurement] Task 17 — gate de custo do hash do silver (A17, D11): aprovado — Claude (sessão Windows)
+**Contexto:** `test_silver_hash_cost_measurement.py` (opt-in `MEASURE_SILVER_HASH_COST=1`)
+roda no HEAD `4c3ee5f8` mais o arquivo do teste, com `--cpus 6 --memory 8g --memory-swap 8g`.
+O silver é **sintético**, gravado pelo `ParquetAnalyticsRepository` real com a forma do
+concept §3: 96 runs confirmatórios, 300 de ablação, 6 folds de 251 decisões, h ∈ {1, 7},
+7 níveis, K_p = 10 e 59 variáveis da VSN. O plano é a r3 sintética com `[conformal]` e
+`[h3]`, e o `RefreshGold` vem do composition root. Duas pernas, cada uma num subprocesso:
+hash desligado (`of_unit`/`combine` constantes) e hash ligado.
+
+**Saída bruta** (`pytest -s`; avisos de depreciação omitidos; log inteiro no scratchpad
+da sessão):
+```
+silver: fact_oos_predictions fs_all 549024 | fs_all_ablation 1054200 |
+        fact_permuted_predictions 8644440 | fact_vsn_weights 888540 | escrita 269 s
+off: COMPLETED wall_s 443.0 peak_bytes 1324261376 units 903 failed_checks []
+     steps_s read_facts 8.6, assemble 2.3, preconditions 2.8, reports 5.5, mcs 3.0,
+             profiles 183.8, mcs_blocks 3.1, conformal 5.9, h3 226.5, build 0.7, publish 0.3
+on:  COMPLETED wall_s 630.1 peak_bytes 1350377472 units 903 failed_checks []
+     steps_s read_facts 16.0, assemble 2.3, preconditions 2.6, reports 5.5, mcs 3.0,
+             profiles 183.0, mcs_blocks 3.0, conformal 6.0, h3 407.0, build 0.9, publish 0.3
+tables (on): dim_run, fact_oos_predictions, fact_permuted_predictions, fact_vsn_weights, realized
+rows_by_table (iguais nas duas pernas): gold_h3_importance 256, gold_h3_reading 1,
+  gold_h3_shares 8, gold_h3_vsn 63, gold_conformal_corrections 1440,
+  gold_conformal_coverage 704, … (19 tabelas)
+1 passed in 1370.53s (0:22:50)
+```
+**Veredito D11:** o pico da perna ligada foi 1,26 GiB, abaixo do limite de 6 GiB. O
+acréscimo de tempo do hash foi 630,1 − 443,0 = 187,1 s (3,1 min), abaixo de 30 min. Quase
+todo o acréscimo está no `h3` (+180 s, as 8,6 M linhas de permutadas) e no `read_facts`
+(+7 s). O plano B não é necessário. As contagens sintéticas ficam a menos de 0,4 % das do
+§3 (o cohort real tem decisões a mais na borda dos folds).
+**Conta para:** A17, pré-condição do A12.
+
 <!-- END: post-execution -->
