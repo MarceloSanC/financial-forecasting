@@ -1698,4 +1698,28 @@ correção (restringir o esperado às unidades dos runs do cohort, ou exigir as 
 T1, revisão e `make check` extra (`[deviation]`) e `GATE1` novo antes de repetir a E4 desde o
 passo 1 (linha `FAIL_SCAFFOLD_CHANGED`). E2/E3 seguem válidas (não dependem do andaime).
 
+### 2026-10-23 — [deviation] E4 — `check_silver_units` só com as unidades do cohort — Claude (executor das Etapas)
+**Contexto:** o `[finding]` acima. Autorizado pela coordenadora (`[decision:C]`, caminho do "Se
+falhar" do andaime; nenhum valor lido). Correção `0e59b9f9` (`[8.2/task-11-fix]`):
+- `check_silver_units(read, consumed, partition, run_ids)`: o esperado (lado julgado) leva só
+  `dim_run|<cohort>` e as unidades `fact_oos_predictions|<run_id>|<ano>` dos `run_ids` do cohort
+  (os mesmos que o `_model_predictions` lê); o lado lido entra inteiro (ler unidade da ablação
+  conta como "a mais"). Nunca as da ablação no esperado.
+- testes: o unitário do `check_silver_units` ganha unidades de ablação no julgado (passa) e a
+  leitura de uma unidade de ablação (falha); o do `_model_predictions` passa com
+  `dim_run|ablation-01` e unidades `fact_oos_predictions` de ablação no julgado e ergue
+  `OfficialSilverMismatchError` com a unidade do cohort adulterada.
+**Mutações (aplicadas, `pytest tests/equivalence/test_audit_table_render.py`, revertidas):**
+```
+m  conferência desligada no _model_predictions: 1 failed, 24 passed, 1 warning in 7.65s
+m2 esperado incluindo a ablação (cohort_only=False): 2 failed, 23 passed, 1 warning in 7.58s
+corrigido: 25 passed, 1 warning in 0.51s
+```
+**T1:** `ruff format --check`/`ruff check` dos dois arquivos e `mypy` verdes (551 arquivos);
+`pytest tests/equivalence tests/architecture -n 4 --dist loadgroup`: `448 passed, 1 skipped`
+(o opt-in, com o motivo). Uma primeira rodada com `-n 4` **sem** `--dist loadgroup` deu 25
+falhas só em `tests/architecture` (fixtures que injetam arquivo em `src/` se atropelando entre
+workers; árvore limpa depois) — forma do comando, não do código; o `make check` usa
+`loadgroup`. Pendente: revisão independente, `make check` extra e `GATE1` novo antes da E4.
+
 <!-- END: post-execution -->
