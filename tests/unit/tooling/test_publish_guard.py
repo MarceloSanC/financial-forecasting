@@ -213,6 +213,69 @@ def test_no_doc_removes_a_branch_worktree_without_delete_remote(doc: Path) -> No
     assert offending == []
 
 
+# --- passo 8 do fechamento autônomo (sincronizar o develop local sem pull) --------------
+
+_SYNC_DEVELOP = "git fetch --prune origin && git merge --ff-only origin/develop"
+_PROCESS_DOCS = (
+    _REPO / "CLAUDE.md",
+    _REPO / "docs" / "GIT-WORKFLOW.md",
+    _REPO / "docs" / "CONVENTIONS.md",
+    *sorted((_REPO / "docs").glob("RUNBOOK-*.md")),
+    *sorted((_REPO / "docs").glob("PROMPT-*.md")),
+    *sorted((_REPO / ".claude" / "skills").rglob("*.md")),
+)
+# `git sync` (§Aliases) faz pull só em `main`, com --ff-only: fora do alvo desta varredura
+_PULL_ON_MAIN = re.compile(r"git pull --ff-only origin main\b")
+
+
+def _process_doc_id(doc: Path) -> str:
+    return doc.relative_to(_REPO).as_posix()
+
+
+def _git_workflow_section(heading: str) -> str:
+    text = _STEP7_DOCS[0].read_text(encoding="utf-8")
+    return re.split(r"\n#{2,3} ", text.split(heading, 1)[1], maxsplit=1)[0]
+
+
+def test_documented_step8_is_the_sync_pair_and_passes_publish_guard_from_main() -> None:
+    step8 = _git_workflow_section("### Fechamento autônomo").split("# 8. ", 1)[1]
+    assert _SYNC_DEVELOP in step8.split("# 9. ", 1)[0]
+    assert _reason(_SYNC_DEVELOP, cwd=MAIN) is None
+
+
+@pytest.mark.parametrize(
+    "section",
+    ["### Etapa 7: Cleanup", "## Quick reference"],
+)
+def test_cleanup_sections_sync_develop_like_step8(section: str) -> None:
+    body = _git_workflow_section(section)
+    if section == "## Quick reference":
+        body = body.split("# Cleanup", 1)[1]
+    assert _SYNC_DEVELOP in body
+    assert "git checkout develop" not in body
+
+
+@pytest.mark.parametrize("doc", _PROCESS_DOCS, ids=_process_doc_id)
+def test_no_process_doc_tells_to_pull_develop(doc: Path) -> None:
+    # pull com commit local não enviado cria merge commit silencioso no develop
+    lines = doc.read_text(encoding="utf-8").splitlines()
+    offending = [
+        ln
+        for ln in lines
+        if re.search(r"\bgit pull\b", ln)
+        and not _PULL_ON_MAIN.search(ln)
+        and "nunca" not in ln.lower()
+    ]
+    assert offending == []
+
+
+@pytest.mark.parametrize("doc", _PROCESS_DOCS, ids=_process_doc_id)
+def test_no_process_doc_checks_out_develop_in_main_checkout(doc: Path) -> None:
+    # o checkout principal já fica sempre em develop: o checkout é ruído
+    lines = doc.read_text(encoding="utf-8").splitlines()
+    assert [ln for ln in lines if "git checkout develop" in ln] == []
+
+
 def test_git_dash_c_redirects_to_worktree() -> None:
     assert _reason(f"git -C {WORKTREE} push", cwd=MAIN) is None
 

@@ -319,18 +319,17 @@ gh issue create --title "feat: adicionar login com Google" --body-file corpo.md
 
 ### Etapa 2: Criar branch
 
-Atualizar `develop`:
+Criar branch e worktree a partir do título da issue (slug **em inglês**, ver §Princípios
+fundamentais #3), do checkout principal:
 ```bash
-git checkout develop
-git pull origin develop
+python scripts/worktree-new.py feat/42-add-google-login --no-setup --no-vscode
 ```
 
-Criar branch a partir do título da issue (slug **em inglês**, ver §Princípios fundamentais #3):
-```bash
-git checkout -b feat/42-add-google-login
-```
+O script faz `git fetch --prune origin` e cria a branch a partir de `origin/develop`, então não é
+preciso atualizar o `develop` local antes. Nada de `git checkout -b` no checkout principal (o
+`git_guard` recusa; ver §"Branches em voo").
 
-**Gate:** `git branch --show-current` mostra o nome correto.
+**Gate:** `git -C <worktree> branch --show-current` mostra o nome correto.
 
 ### Etapa 3: Implementar (loop)
 
@@ -468,11 +467,16 @@ auditoria" (Etapa 7).
 
 ### Etapa 7: Cleanup
 
+No checkout principal (já em `develop`; não há `checkout` a fazer), o mesmo par do passo 8 de
+§"Fechamento autônomo pela auditoria":
+
 ```bash
-git checkout develop
-git pull origin develop
-git remote prune origin
+git fetch --prune origin && git merge --ff-only origin/develop
+#    falha do ff-only = develop local com commit não enviado → NÃO usar pull; reportar
 ```
+
+O `--prune` do fetch já cobre o antigo `git remote prune origin`. Nunca `git pull`: com commit
+local não enviado, ele cria um merge commit silencioso no `develop`.
 
 Verificar:
 - [ ] Issue fechada automaticamente
@@ -767,11 +771,11 @@ Procedimento:
      do `technical.md` já estão fechadas.
    - Não pedir review ainda. PR draft existe para travar a posição
      do trabalho, não para consumir tempo de revisor.
-4. **Voltar para `develop`** (ou `main` em hotfix) e criar a branch
-   nova:
+4. **Criar a branch nova na sua própria worktree**, a partir do
+   checkout principal (o script sai de `origin/develop` já atualizado,
+   ou de `origin/main` em hotfix — sem `checkout` nem `pull`):
    ```bash
-   git checkout develop && git pull
-   git checkout -b feat/<num-issue>-<N-M>-<slug>   # a nova
+   python scripts/worktree-new.py feat/<num-issue>-<N-M>-<slug> --no-setup --no-vscode   # a nova
    ```
 5. **Implementar a nova branch ao fim** — PR contra `develop`,
    review, merge normal.
@@ -820,7 +824,7 @@ Review acelerado mas **NUNCA pulado**.
 
 Após merge em main, fazer back-merge em develop:
 ```bash
-git checkout develop && git pull
+git fetch --prune origin && git merge --ff-only origin/develop   # sincroniza o develop (passo 8; nunca pull)
 git merge main
 git push
 ```
@@ -934,9 +938,8 @@ gh pr merge <num> --merge --delete-branch  # sem worktree; com worktree ver §Fe
 git sync                                 # atualiza main local
 gh pr create --base main --head develop  # criar release PR
 
-# Cleanup
-git checkout develop && git pull
-git remote prune origin
+# Cleanup (checkout principal, já em develop; passo 8 do §Fechamento autônomo — nunca pull)
+git fetch --prune origin && git merge --ff-only origin/develop
 ```
 
 ---
