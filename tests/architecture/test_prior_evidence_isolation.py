@@ -1,7 +1,8 @@
 """A evidência anterior nunca é entrada oficial (Stage 8.2, Task 08; concept I7, A14).
 
 Pela AST de todo módulo de `src/financial_forecasting/` (um nome em comentário não conta):
-nenhum `import`/`from` de `tests` (o andaime de `tests/equivalence/` incluído) e nenhum
+nenhum `import`/`from` de `tests` (o andaime de `tests/equivalence/` incluído), nenhum nome
+de módulo `tests`/`tests.*` como texto (import dinâmico, CC3-4) e nenhum
 literal de texto com `data/analytics` ou `phase_b` (a raiz e o cohort da evidência
 anterior). O contrato `src-no-tests` do `import-linter` (Task 09) espelha a parte de import.
 """
@@ -40,6 +41,11 @@ def isolation_violations(source: str, *, name: str) -> list[str]:
                 for literal in _FORBIDDEN_LITERALS
                 if literal in node.value
             ]
+            # CC3-4: import dinâmico (`importlib.import_module("tests...")`, `__import__`)
+            # escapa do import-linter; o nome do pacote como texto denuncia
+            text = node.value
+            if text == _FORBIDDEN_PACKAGE or text.startswith(f"{_FORBIDDEN_PACKAGE}."):
+                found.append(f"{name}:{node.lineno} module-name {text!r}")
     return found
 
 
@@ -66,6 +72,11 @@ def test_no_src_module_reads_prior_evidence_or_imports_the_scaffold() -> None:
         ("import tests\n", "imports tests"),
         ('ROOT = "data/analytics/gold"\n', "literal 'data/analytics'"),
         ('COHORT = f"phase_b_{x}"\n', "literal 'phase_b'"),
+        (
+            'importlib.import_module("tests.equivalence.readers")\n',
+            "module-name 'tests.equivalence.readers'",
+        ),
+        ('__import__("tests")\n', "module-name 'tests'"),
     ],
 )
 def test_isolation_detector_flags_violations(source: str, expected: str) -> None:
@@ -81,6 +92,8 @@ def test_isolation_detector_flags_violations(source: str, expected: str) -> None
         "from .tests import x\n",
         "# data/analytics only in a comment\nx = 1\n",
         'x = "data/analytic"\n',
+        'x = "tests are good"\n',
+        'x = "testsuite.module"\n',
     ],
 )
 def test_isolation_detector_ignores_non_violations(source: str) -> None:
