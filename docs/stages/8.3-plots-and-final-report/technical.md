@@ -1501,4 +1501,74 @@ repositório git com `config/` commitado.
 **Razão:** abaixo do limiar de pergunta — helper de teste, mesmo mundo, só o campo que o
 D9 exige.
 
+### 2026-10-24 — [measurement] Task 15, varredura dos `[finding]` abertos (A12) — Claude (executor)
+**Contexto:** a Task 15 e o A12 mandam varrer os `[finding]` do §7 dos technical das Stages
+5.5, 6.x, 7.x, 8.1 e 8.2 parte (i) e registrar aberto × resolvido com a evidência; os
+abertos entram no `docs/reports/dossier_register.toml` com `kind = "finding"`,
+`status = "open"`.
+**Medição:** `grep -n "^### .*\[finding"` nos §7 de `docs/stages/{5.5-*,6.*,7.*,8.1-*,8.2-*}/technical.md`
+mais `grep -n "\[finding\]"` fora de cabeçalho (achados embutidos em outra entrada); cada
+entrada lida inteira e cruzada com as entradas posteriores da mesma §7, a auditoria da
+Stage, o `git log` e o estado das issues citadas (`gh issue view`, 2026-10-24). Duas
+sondas no container (imagem `financial_forecasting-app:dev`, `uv run --no-sync mypy
+--strict`): os três arquivos da entrada 8.1 Task 02 → `Found 1 error in 1 file`
+(`test_h3_refresh_memory.py:351`); `test_refresh_gold_dtos.py` → `Found 28 errors in 1 file`.
+Critério de resolução: entrada posterior (mesma §7 ou auditoria) que declara o conserto, ou
+a própria entrada que registra a correção já aplicada, ou issue/commit/documento fechado
+com ponteiro verificável. Resolução parcial conta como aberto. 7.1 e 6.6 não têm
+`[finding]`. Contagem: 5.5 7 (1 aberto); 6.1 1 (0); 6.2 1 (0); 6.3 2 (0); 6.4 9 (0);
+6.5 3 (1); 7.2 4 (0); 7.3 3 (0); 7.4 2 (0); 8.1 6 (2); 8.2 parte (i) 0. **Total 38, 4
+abertos.**
+
+| Stage | `[finding]` | status | evidência | ponteiro |
+|---|---|---|---|---|
+| 5.5 | Task 14, perda de early_stop do LightGBM não bit a bit | resolvido | entrada seguinte (correção do diagnóstico) a substitui | — |
+| 5.5 | Task 14, correção do diagnóstico | resolvido | a própria entrada: `stable_objective` arredonda o objetivo a 12 dígitos (correção aplicada) | — |
+| 5.5 | Task 28, hash do cohort `8` × `8.0` | resolvido | a própria entrada: `task-17-fix` em `CohortSpec.hash_payload` | — |
+| 5.5 | Task 33, notícia depois do fechamento do último dia | resolvido | a própria entrada: folga de 14 dias + teste de regressão | — |
+| 5.5 | Task 33, `materialize` não re-executável sobre bronze | resolvido | recusa é o comportamento certo; rollback e troubleshooting em `docs/runbooks/confirmatory-cohort-aapl.md` (l. 307, 315) | — |
+| 5.5 | Task 34, sweep não retoma no meio do estudo | aberto | limitação declarada; nenhuma entrada posterior | `docs/stages/5.5-confirmatory-retrain/technical.md#2026-09-28--finding-task-34--sweep-interrompido-pelo-desligamento-do-host-não-retoma-no-meio-do-estudo--claude-opus-55` |
+| 5.5 | A3 com os params congelados (embutido no `[measurement]` Task 34) | resolvido | a própria entrada: fixture na escala do fold 0, `4 passed` | — |
+| 6.1 | A12, DoD da 6.1 depende da 5.5 em `develop` | resolvido | 5.5 mergeada; `docs/roadmap.md` l. 765 traz "métricas de **calibração**" | — |
+| 6.2 | Task 03, `CoverageSeries` adota `_timestamps` | resolvido | `03a95907` (#118/task-02), issue #118 fechada | — |
+| 6.3 | `CoverageSeries` adota `_horizon`/`_timestamps` | resolvido | `03a95907` (#118/task-02), issue #118 fechada | — |
+| 6.3 | A10/C8, teste de proveniência da 6.2 ausente | resolvido | `[decision]` "A10/C8 fechado depois do merge da 6.2" da mesma §7 (l. 1873) | — |
+| 6.4 | Checkpoint C bloco 1 (I3), tipo de `reps` | resolvido | `[decision]` Task 07 da mesma §7 (`parameters_owner_messages`) | — |
+| 6.4 | Task 08, leitura do gold sem partição hive | resolvido | `[decision]` Task 12 (e2e lê com `hive_partitioning = false`) e `[deviation]` Task 13 da mesma §7; nota "Leitura do gold (nota da 6.4)" no roadmap §Stage 6.5 | — |
+| 6.4 | Encaminhamentos do concept §7 para a 6.5/8.3 | resolvido | 6.5 `done`: o scorecard lê o gold e recebe `preregistration_ref` e parâmetros do plano (roadmap §Stage 6.5) | — |
+| 6.4 | "int ≥ 0" `window_deficits` para a #118 | resolvido | #118 fechada; `series_assembly.py:314` usa `validate_int_at_least(..., minimum=0)` | — |
+| 6.4 | Testes de log com logger desligado | resolvido | issue #125 fechada (import-linter em subprocess) | — |
+| 6.4 | "int ≥ 0" `grid_trimmed_prefix` para a #118 | resolvido | #118 fechada; `quality_checks/registry.py:86` usa `validate_int_at_least` | — |
+| 6.4 | Medição no cohort real: nada a encaminhar | resolvido | a própria entrada encerra sem pendência | — |
+| 6.4 | Exposição de cegamento (B-ORDEM) | resolvido | decisão humana ADR 6.5.0010 P1 (vai ao registro como `pre_anchor`) | — |
+| 6.4 | §3 "Resíduo herdado" | resolvido | a própria entrada: issue #123 / PR #124 | — |
+| 6.5 | Checkpoint B r1 (T-F11), falsa reprovação ≈ 5 % | resolvido | entrada "Correção da faixa" da mesma §7; issue #131 fechada | — |
+| 6.5 | Checkpoint C bloco 1 (A5), fronteira `lower == nominal` sem teste | aberto | encaminhado à "sessão mestra" no fechamento da 6.5; nenhum teste nem issue posterior | `docs/stages/6.5-preregistration-and-scorecard/technical.md#2026-09-30--finding-checkpoint-c-bloco-1-a5-fronteira-lower--nominal-do-wilsonband-sem-teste-na-63--claude-opus-55` |
+| 6.5 | Correção da faixa da falsa reprovação (L1) | resolvido | espelho `docs/preregistration/aapl_confirmatory.md` l. 62–63 declara ≈ 5 % e 0,0506 em n = 1 512 | — |
+| 7.2 | ambiente, versão do uv da imagem × CI | resolvido | issue #198 fechada | — |
+| 7.2 | ambiente, 2 falhas fora do escopo no `make check` | resolvido | entrada posterior da mesma §7 (l. 1864–1867, "fecha sem ação") | — |
+| 7.2 | tooling, `index.lock` velho | resolvido | issue #199 fechada | — |
+| 7.2 | ponto B, `test_arch_check_changed` corre | resolvido | a própria entrada (fix `[7.2/--]`) e a rodada seguinte (l. 2015) | — |
+| 7.3 | tooling, deriva do formatador | resolvido | issue #222 fechada (`15c0ed66` reformata com o ruff do venv; hooks pelo `uv run`) | — |
+| 7.3 | tooling, correção do achado anterior | resolvido | issue #222 fechada (idem) | — |
+| 7.3 | auditoria de testes da fase Windows | resolvido | a própria entrada: um commit por achado, mutantes mortos | — |
+| 7.4 | mypy strict alcança `_gold_inputs.py` | resolvido | a própria entrada; issue #203 fechada | — |
+| 7.4 | Checkpoint C3-4, numeração das skills `dmls-chNN` | resolvido | `[deviation]` F7 da auditoria (mesma §7) reclassifica como desvio aplicado (`59981a65`) | — |
+| 8.1 | Task 02, erros de mypy pré-existentes em `tests/` | aberto | parcial: #204 cobriu `tests/contract`; segue 1 erro em `tests/integration` (sonda acima) | `docs/stages/8.1-confirmatory-run/technical.md#2026-10-22--finding-task-02--erros-de-mypy-pré-existentes-em-tests--claude-sessão-windows` |
+| 8.1 | Task 08, erros de mypy em `test_refresh_gold_dtos.py` | aberto | `tests/unit` fora do escopo da #204; 28 erros (sonda acima) | `docs/stages/8.1-confirmatory-run/technical.md#2026-10-22--finding-task-08--erros-de-mypy-pré-existentes-em-test_refresh_gold_dtospy--claude-sessão-windows` |
+| 8.1 | `PYTEST_PAR` por variável de ambiente não vale | resolvido | os technical seguintes passam o valor como argumento do make (8.2 §1 l. 301; 8.3 §1) | — |
+| 8.1 | 3 falhas do 2º `make check` | resolvido | a própria entrada (`0fa4259`, `ea119d4`, `75374a5`) | — |
+| 8.1 | Checkpoint C bloco 4 | resolvido | a própria entrada (`c21eaa14`, `5500ade4`) | — |
+| 8.1 | auditoria, erratas O1/O2 e cobertura | resolvido | F1 corrigido (`9af1bbb3`, `062b8a8b`); O1/O2 entram no registro como `deviation` | — |
+
+**Fora da varredura (8.2 parte (ii), tocam a evidência anterior → `internal`):** `[finding]`
+E4 passo 1 do andaime (resolvido pelo `[deviation]` E4, `0e59b9f9`); `[finding]` D-M6
+embutido no `[measurement]` E4 (resolvido pela emenda B3, ADR 8.2.0004); `[finding]` PICP
+80 % embutido no `[measurement]` E4 refeita (sem resolução); `[finding]` erratas F2–F5 da
+auditoria (F2 corrigido em `aad29ebc`, F5 sem dono). Todos entram no registro como
+`internal`; a 8.2 parte (i) (E2/E3) não tem `[finding]`.
+**Razão:** prova do A12 ("todo `[finding]` aberto da cadeia citável"); o teste
+`test_every_open_finding_of_the_sweep_is_in_the_register` lê as linhas `aberto` desta tabela
+e exige cada ponteiro no registro.
+
 <!-- END: post-execution -->
