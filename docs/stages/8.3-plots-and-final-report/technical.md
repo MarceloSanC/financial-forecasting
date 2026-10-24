@@ -2016,4 +2016,60 @@ real, porque nenhuma das duas gerações ergueu `ReportSourceMismatchError`. O 2
 **Mutação:** sem o fix (testes novos aplicados, `src/` no HEAD anterior), `8 failed, 40 passed` nos dois arquivos de unit do dossiê e do use case; com o fix, todos verdes.
 **Razão:** o claim de reprodução depende de o commit citado ser o código que rodou; o indicador persistido passa a aparecer no texto citável. Os artefatos em `docs/reports/` ficam como estão até a Etapa R ser refeita (o `code.src` muda com este fix).
 
+### 2026-10-24 — [deviation] Etapa R (4ª tentativa), R2 item 3 sobre saídas já commitadas — Claude (executor da Etapa R)
+**Contexto:** a R2 item 3 confere `test "$(wc -l < written.txt)" = 22`. Isso supõe que nenhuma
+saída esteja no repositório. Nesta tentativa as 22 saídas já estão commitadas (`5130da7b`), e o
+`git status` lista só os caminhos que a regeneração alterou.
+**O que mudou:** a contagem de 22 continua no `OUTPUT_22` (`sha256sum` dos 22 arquivos). A
+checagem de caminhos passou a ser:
+- todo caminho alterado está entre os 22 (`ONLY_REPORTS_WRITTEN`, mesma regex);
+- nenhum caminho novo nem removido, só ` M ` (`ONLY_MODIFIED`).
+**Razão:** abaixo do limiar de pergunta. É a mesma garantia (nada escrito fora de
+`docs/reports/`) para o caso que o runbook não previu, sem afrouxar nenhuma outra checagem.
+
+### 2026-10-24 — [measurement] Etapa R (4ª tentativa), R1 e R2: regeneração depois do fix do indicador de árvore limpa — Claude (executor da Etapa R)
+**Contexto:** a auditoria (F1) levou ao fix `a14c39fa` e ao §7 `741c5a14`. Como o fix muda
+`src/`, o `code.src` e o dossiê citável de `5130da7b` ficaram defasados. Antes da R1, o HEAD
+era `741c5a14` e a árvore estava limpa.
+**Medição:**
+- **Ambiente:** `GATE1 = 741c5a14769a73b803777b361f953d72462ca85a` (`make check` verde: 9295 passed,
+  cobertura 99 %, `EXIT=0`). `IMAGE_ID = sha256:b69a7620…8f45`, a mesma das tentativas anteriores.
+- **R1:** `WT_CLEAN`, `SRC_AS_GATE1`, `REGISTER_COMMITTED`, `COHORT_TAG_OK`, `ABLATION_COHORT_TAG_OK`,
+  `CODE_SRC = 9763b31699b981cd768d0cc48fe7ad174444ed02`.
+- **R2:**
+  - `JUDGED_COPY_OK`, `DIGEST_OK`, `RECORD_OK`, 355 arquivos, `NO_FF83`.
+  - `ff83-gen1` com estado `0 false` e `GEN1_FIGURES_10`.
+  - As linhas `report`/`figure` do `gen1.out` são idênticas às da 3ª tentativa (`DATA_DIGESTS_SAME`):
+    mesmo `generation_digest 96c05413…e539`, os mesmos dez `data_digest` e `register_entries 35`.
+  - `OUTPUT_22`, `DATA_INTACT`, `ONLY_REPORTS_WRITTEN`, `ONLY_MODIFIED`, `RECORDS_CODE_SRC`, `exit 0` /
+    `HITS 0` / `CITABLE_CLEAN`.
+- **O que mudou contra `5130da7b`:** 12 arquivos.
+  - Os dez `.json`: uma linha cada, `code.src` de `a92759b6…` para `9763b316…`.
+  - O citável: `code.src` em três linhas e duas linhas novas no bloco da corrida julgada,
+    `| árvore limpa no commit do código | sim (code_dirty = false) |` e
+    `| árvore limpa do pré-registro | sim (preregistration_dirty = false) |`.
+  - O interno: só a linha "Como regenerar" com o novo `code.src`.
+  - Os dez PDFs ficaram com o mesmo sha256 da 3ª tentativa, então não houve nova leitura de
+    forma.
+- **sha256 novos:**
+```
+d8c3b3c43d73a620d53a0d5817c13a6e54bb8fea8f3bdbc81f4b950381d58cb6 *figures/dm_candidate_vs_comparators.json
+4f160cd2706b3ce2319b5a547810c9ec8d49e4a2ea8dcd68099a020bdd6b3a0d *figures/h3_family_importance.json
+4d1908865ce0a1c5ba6c2452fdf17231a0d0135e7b3d7340858d1a88a6e6b5ab *figures/loss_differential_acf.json
+259670ea0f9f77c6f2254ee40e09f05d9cbd8f7592fcbe8092d759c22add1a1b *figures/native_vs_conformal.json
+6d4b564a004a1074c36d544edb8a44d22523e70965f91af3acd8cc065afb0cd8 *figures/oos_fan_chart.json
+2283d976fe7591415a3db7847d7c5fdeb6d071e4071d2ffdab8d925c1b36c4ed *figures/picp_mpiw_plot.json
+16a24f2e64fc8b1a7f5d9e9b8570f1f148f0bb99ba03e1100c15bad6557ae6de *figures/quantile_score_plot.json
+c6ad3e772e82d5051455cfe417ac3bcd204653c112cc47b7f960029d91d1eb4a *figures/reliability_diagram.json
+a5c0ca7142a908201add9754edfc938c3a36e1406dc4fa5cc9fbed2b43e85cd8 *figures/sharpness_diagram.json
+53dc6c16a27321ef6bfbf82358c56b75a3a830d801e0e3d73b79896f667059dd *figures/vsn_weights.json
+79a0bcbcc775b1acfd67ae1738fd51c38fc8db72613a7d74ebf0ede6f448ea35 *final_traceability_dossier.md
+203cf37fe33950d11aed99c9ea5515cab6da0cefa94fdc8988f466c3063a8f9d *final_traceability_dossier_internal.md
+```
+- **Escopo do indicador:** a árvore limpa do gerador da 8.3 é garantida pelo `DirtyCodeError`
+  (o gerador recusa árvore suja), e o `code.src` registrado em cada figura identifica o código.
+  O dossiê mostra o indicador da corrida julgada (achado baixo da revisão).
+**Razão:** prova da R2 sobre o código corrigido. O fix muda só o texto do dossiê e o `code.src`;
+nenhum dado plotado mudou (mesmos `data_digest` e os mesmos PDFs).
+
 <!-- END: post-execution -->

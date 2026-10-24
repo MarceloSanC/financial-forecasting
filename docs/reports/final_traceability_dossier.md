@@ -1,6 +1,6 @@
 # Dossiê final de rastreabilidade
 
-Como regenerar: regenerar em qualquer commit com code.src = a92759b6c813518d72588be2704340b5110636ea: `report-artifacts --data-root <data_root> --cohort <arquivo de cohort> --preregistration aapl_confirmatory --revision 3 --preregistration-ref aapl_confirmatory-r3-00fd83d9cd39`.
+Como regenerar: regenerar em qualquer commit com code.src = 9763b31699b981cd768d0cc48fe7ad174444ed02: `report-artifacts --data-root <data_root> --cohort <arquivo de cohort> --preregistration aapl_confirmatory --revision 3 --preregistration-ref aapl_confirmatory-r3-00fd83d9cd39`.
 
 ## Ponteiros das afirmações do texto
 
@@ -429,6 +429,8 @@ Fonte: [`docs/stages/8.3-plots-and-final-report/concept.md#contexto`](../stages/
 |---|---|
 | commit | 060537fc7069b38a318bb5cf839d84b7767b1b4f |
 | início (persistido) | 2026-10-23T09:20:22.405228+00:00 |
+| árvore limpa no commit do código | sim (code_dirty = false) |
+| árvore limpa do pré-registro | sim (preregistration_dirty = false) |
 | code.cohort_file | 6d7c8b82ef98cf27cabc985c53b710dbfba303ea |
 | code.src | 4d2b2540a10f5cbb2f59164bba3262224d572d7b |
 | code.uv_lock | 0f36050a0044db5f05ca9037e23c4425220cb82b |
@@ -437,9 +439,9 @@ Fonte: [`docs/stages/8.3-plots-and-final-report/concept.md#contexto`](../stages/
 
 | campo | valor |
 |---|---|
-| code.src | a92759b6c813518d72588be2704340b5110636ea |
+| code.src | 9763b31699b981cd768d0cc48fe7ad174444ed02 |
 | code.uv_lock | 0ff8a4dfe837fbb76c5d619b240f918e519c0dd7 |
-| regra | regenerar em qualquer commit com code.src = a92759b6c813518d72588be2704340b5110636ea |
+| regra | regenerar em qualquer commit com code.src = 9763b31699b981cd768d0cc48fe7ad174444ed02 |
 | comando | report-artifacts --data-root <data_root> --cohort <arquivo de cohort> --preregistration aapl_confirmatory --revision 3 --preregistration-ref aapl_confirmatory-r3-00fd83d9cd39 |
 
 ## Seeds de cada etapa aleatória

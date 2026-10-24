@@ -1,6 +1,6 @@
 # Interno, fora do texto do TCC — dossiê final de rastreabilidade
 
-Como regenerar: regenerar em qualquer commit com code.src = a92759b6c813518d72588be2704340b5110636ea: `report-artifacts --data-root <data_root> --cohort <arquivo de cohort> --preregistration aapl_confirmatory --revision 3 --preregistration-ref aapl_confirmatory-r3-00fd83d9cd39`.
+Como regenerar: regenerar em qualquer commit com code.src = 9763b31699b981cd768d0cc48fe7ad174444ed02: `report-artifacts --data-root <data_root> --cohort <arquivo de cohort> --preregistration aapl_confirmatory --revision 3 --preregistration-ref aapl_confirmatory-r3-00fd83d9cd39`.
 
 ## Interno, fora do texto do TCC
 
