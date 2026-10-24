@@ -1107,6 +1107,17 @@ _REAL_VIOLATION_CASES = (
         },
         id="evaluation-no-matplotlib-leak:toml-adapter-imports-matplotlib",
     ),
+    # Task 12 (A15 "import em `adapters/out/reports/` reprova"; CB-1): o pacote do sink
+    # existe agora; o adapter de arquivos não desenha nada.
+    pytest.param(
+        "evaluation-no-matplotlib-leak",
+        {
+            "features/evaluation/adapters/out/reports/_arch_taint_mpl.py": (
+                "from matplotlib.figure import Figure  # violação temporária\n\n_use = Figure\n"
+            )
+        },
+        id="evaluation-no-matplotlib-leak:reports-adapter-imports-matplotlib",
+    ),
 )
 
 
