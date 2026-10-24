@@ -1732,4 +1732,72 @@ três coisas: revisão independente do fix, `make check` novo e `GATE1` novo.
 **Razão:** destrava a Etapa R a partir da R1 com o mesmo `IMAGE_ID`
 (`sha256:b69a7620…8f45`). Este commit só toca o §7, fora do diff da R1.
 
+### 2026-10-24 — [finding] Etapa R (2ª tentativa), R2 item 4: `FAIL_LAYOUT` em três figuras — Claude (executor da Etapa R)
+**Contexto:** a Etapa R recomeçou da R1 com `GATE1 = 357e6d14…` e o mesmo `IMAGE_ID`. A R2
+item 4 manda abrir cada PDF e conferir só a forma, sem decidir nada (skill `dataviz`, passo
+7). Uma colisão ou um rótulo cortado cai na linha `FAIL_LAYOUT`: DESCARTE, e o ajuste do
+renderer é mudança de `src/`.
+**Medição:**
+- **R1:** `WT_CLEAN`, `SRC_AS_GATE1`, `REGISTER_COMMITTED`, `COHORT_TAG_OK`, `ABLATION_COHORT_TAG_OK`,
+  `CODE_SRC = 291175bb256c4f60f056758bcae59a52976e5af4`.
+- **R2 item 1:** `JUDGED_COPY_OK`, `DIGEST_OK`, `RECORD_OK`, 355 arquivos, `NO_FF83`.
+- **R2 item 2:** `gen1.state` = `0 false` e `GEN1_FIGURES_10`. O `gen1.out` tem 1 112 linhas; 1 100 são
+  do `fontTools.subset`, e o arquivo completo fica no scratchpad. Estas são as linhas de contrato:
+```
+report aapl_confirmatory-r3-00fd83d9cd39: generation_digest 96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539 figures 10 register_entries 35
+figure reliability_diagram data_digest 92320bf22151cd08c7484466bccff854f7034333089de0e84d5f692c400f3a51
+figure quantile_score_plot data_digest 1dee7acefecc1df244b5e7c55c1b32a5ef0e5f97eb5796cf7a49af866beff11e
+figure sharpness_diagram data_digest 9c3f327a5f93a0c9d2e6a29567da0655b552ed81250b261f01cd4cd25920ff06
+figure picp_mpiw_plot data_digest bcfd53ece66a8e9d28a148a5c260a8239bc72e1657d792c5ed1fe309409bedcd
+figure dm_candidate_vs_comparators data_digest 9d6d0dc210f0a770efc3bc3ac7a50915530862f4066cc293096c5cfed9c949a5
+figure oos_fan_chart data_digest 88a6ede5a7e53ad7f129fc5e64f9fb6ad671d6474cd73ac71b9f447489a8c62d
+figure loss_differential_acf data_digest 01443b683465d9360b5d32ac087b18d082ee9e530d73a5703ebbd7e751cf1b0a
+figure h3_family_importance data_digest 07aec2dba5e26180acb7ae6aeb8abc9fb7ec66fbb56560bf8c1c38bf8875c386
+figure vsn_weights data_digest 1574ad8ac24713c74c40f010ee85144d7c31eada8959c287b1d5a07f03f65bee
+figure native_vs_conformal data_digest c75ad2eabf561bcd55d6d90627836ec6ff5eda84a6487d3f9c153290edeeeb8a
+dossier citable final_traceability_dossier.md internal final_traceability_dossier_internal.md
+```
+- **R2 item 3:** `OUTPUT_22`, `DATA_INTACT`, `ONLY_REPORTS_WRITTEN`, `RECORDS_CODE_SRC`, `exit 0`/`HITS 0`/
+  `CITABLE_CLEAN`. Os dez PDFs têm uma página cada e nenhum tem `/CreationDate`. `omitted_models` =
+  `[baseline_zero_return, baseline_historical_mean]` só em `picp_mpiw_plot` e
+  `sharpness_diagram`, e `[]` nas outras oito figuras.
+- **R2 item 4 (forma):**
+  - `sharpness_diagram`: a entrada da legenda do `tft_quantile` passa da borda direita da página
+    ("…seed 10) [descritiv"). O rótulo de estatuto dessa série fica invisível, porque o texto
+    lista as dez seeds empilhadas. O marcador do `baseline_ar1`, primeira entrada da legenda,
+    também sai cortado na borda esquerda.
+  - `dm_candidate_vs_comparators`: o rótulo do eixo x ("comparador") sai cortado na borda de
+    baixo, e o tick "baseline_historical_quantiles", girado, colide com ele nos dois painéis.
+  - `h3_family_importance`: o rótulo do eixo y do painel h+1 (`I_f(h)`) sai cortado na borda
+    esquerda (só "_" aparece). Na legenda, os pares "I_f(h), permutation"/"I_f(h), loco" e
+    "perfil por seed, permutation"/"s_f(h+1), permutation" têm o mesmo marcador e a mesma cor,
+    sem diferença visível. A nota de leitura do H3 termina em "famílias concordantes =",
+    sem valor depois do sinal.
+  - Fora da linha `FAIL_LAYOUT`, só cosmético: `vsn_weights` repete a nota
+    ("horizonte-invariante: horizonte-invariante").
+  - As outras seis figuras não têm colisão nem corte visível.
+- **Estabilização:** cópia das 22 saídas no scratchpad (`gen1-layout-fail/`, fora do repo).
+  DESCARTE → `DISCARDED`; `DATA_INTACT` depois do descarte; `NO_FF83`. Nada da geração foi
+  commitado.
+- **Contagem do registro (pedido da sessão mestra):** `docs/reports/dossier_register.toml`
+  tem 35 `[[entry]]` desde o único commit dele (`9376bf4c`). Por `kind`: 4 `deviation`,
+  4 `environment`, 4 `finding`, 14 `internal`, 3 `pre_anchor`, 6 `reproduction` (soma 35). O
+  parser reporta `register_entries 35`. Nenhum doc nem teste fixa 36, e
+  `test_register_has_inherited_citable_items` (a lista fechada do A12) está verde no gate. O
+  "36" do relato da Task 15 é erro de contagem do relato, não falta no registro; o registro
+  não foi editado.
+**Direção sugerida:** é ajuste do `MatplotlibFigureRenderer` (`src/`; linha
+`FAIL_SRC_CHANGED_SINCE_GATE1`), com revisão, `make check` e `GATE1` novos e recomeço da R1.
+Pontos a decidir no fix:
+(a) quebra de linha ou redução do rótulo longo da legenda, e a caixa da legenda dentro da
+página;
+(b) espaço para o rótulo do eixo x abaixo dos ticks girados, e para o rótulo do eixo y;
+(c) codificação distinta (marcador/cor/hachura) entre as séries do H3 que hoje coincidem;
+(d) a nota "famílias concordantes =" vazia: conferir se é lista vazia no gold, que pede texto
+explícito (por exemplo "nenhuma"), ou defeito de formatação. É conteúdo do use case, e não
+foi lido valor para decidir.
+Stage candidata: a própria 8.3, antes do fechamento.
+**Razão:** parada dura da R2 item 4. A checagem de forma é o único gate dessas falhas: os
+testes de smoke conferem página e bytes, não recorte de texto.
+
 <!-- END: post-execution -->
