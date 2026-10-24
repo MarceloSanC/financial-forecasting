@@ -1935,4 +1935,26 @@ E         +A11/h1/candidate/nominal_side_80 model_nominal_side divergent_sense n
 NEGATIVE_PROOF_OK
 ```
 
+### 2026-10-24 — [finding] auditoria da Stage — erratas F2–F5 — Claude (auditoria da Stage)
+**Contexto:** a auditoria da 8.2 aprovou a Stage sem bloqueante e listou erratas. O concept
+está `done` e não é editado; elas ficam registradas aqui.
+- **F2 (errata, corrigido no ADR em `aad29ebc`):** o ADR 8.2.0004 e o registro B3 do concept
+  (D13, emenda pós-execução) dizem "nenhum número de modelo do anterior calculado". Leia-se
+  "nenhum número de modelo do anterior foi **visto ou reportado**". Na E4 em `bec99bdf`, o
+  `a10_rows` calculava m_A/m_ant em memória e sobrescrevia a linha com `not_compared:A1` antes
+  de renderizar; os valores nunca foram impressos.
+- **F3 (evidência):** o log do `make check` extra em `096a2e9b` não foi preservado; a evidência
+  dele é só a entrada correspondente deste §7.
+- **F4 (errata de medição):** a D-M5 do concept previu T∩ menor em h=7 (243 de 250 datas na
+  amostra de 2023). A E4 deu T∩ = 937 em h=7, igual ao h=1. A amostra de 2023 não representava a
+  janela: a diferença vinha do recorte por ano, não da interseção.
+- **F5 (justificativa):** os `# type: ignore[arg-type]` do andaime (`tests/equivalence/audit_table.py`
+  l. 547, 554, 855–863; `tests/equivalence/test_audit_table_render.py` l. 334, 809, 827) existem
+  porque o `isinstance` sobre os elementos de uma lista não estreita o tipo da lista para o mypy
+  (linhas de `Mapping[str, object]` passadas a funções que esperam `Sequence[float]`/`float`). O
+  `tests/equivalence/` está fora do `files` do mypy (`pyproject.toml`: `src`, `tests/contract`,
+  `tests/fakes`), então os ignores não são cobrados por nenhum gate. Anotar cada linha com o
+  motivo fica para quem tocar o andaime de novo; não muda comportamento.
+**Conta para:** gate de saída (erratas da auditoria).
+
 <!-- END: post-execution -->
