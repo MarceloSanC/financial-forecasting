@@ -55,6 +55,7 @@ from tests.equivalence.audit_table import (
     KIND_SIGN,
     AuditRow,
     Declared,
+    a9_rows,
     check_classification,
     classification,
     compute_rows,
@@ -585,6 +586,64 @@ def test_compute_rows_refuses_repeated_new_predictions() -> None:
 
     with pytest.raises(ValueError, match="repeated prediction"):
         compute_rows(_prior_side(), broken)
+
+
+_F32_TS = tuple(f"2024-02-0{day}T00:00:00+00:00" for day in (1, 2, 5, 6, 7))
+_F32_Y = (0.5, -0.25, 0.125, 0.75)  # float32-exatos; o 5º ponto (fora de T∩) é 0.1
+
+
+def _a9_world(*, extra_y: float | None) -> tuple[PriorSide, OfficialSide]:
+    """y_ant em T∩ float32-exatos; y_novo = y_ant + 2⁻³⁰ (dentro do meio ulp de float32, fora
+    do de double); `extra_y` é um y_ant do mesmo horizonte num timestamp fora de T∩."""
+    prior_y = [*_F32_Y, *([] if extra_y is None else [extra_y])]
+    oos = [
+        {
+            _LABEL: "BTSF_w2_s1",
+            "seed": 1,
+            "horizon": 1,
+            "config_signature": "cfg",
+            cs.TIMESTAMP_COLUMN: _F32_TS[i],
+            "y_true": y,
+        }
+        for i, y in enumerate(prior_y)
+    ]
+    prior = PriorSide(
+        tables={cs.GOLD_OOS: oos},
+        column_types={cs.GOLD_OOS: {"y_true": "double"}},
+        source_ids=frozenset(),
+    )
+    official = OfficialSide(
+        partition=GoldPartition("AAPL", "sweep-01"),
+        preregistration_ref="plan-r3-0123456789ab",
+        candidate="tft_quantile",
+        realized=RealizedReturns(
+            timestamps=_F32_TS[:4], returns=tuple(y + 2.0**-30 for y in _F32_Y)
+        ),
+        predictions=tuple(
+            {"model": "tft_quantile", "seed": 1, "horizon": 1, "target_timestamp": ts}
+            for ts in _F32_TS[:4]
+        ),
+        dm_rows=(),
+    )
+    return prior, official
+
+
+@pytest.mark.usefixtures("e1_fixed")
+def test_a1_float32_precondition_covers_the_whole_horizon_not_only_the_intersection() -> None:
+    """B3 (ADR 8.2.0004): um y_ant fora de T∩ não float32-exato derruba a regra float32."""
+    rows, common = a9_rows(*_a9_world(extra_y=None))
+    h1 = rows[0]
+    assert len(common[1]) == 4  # noqa: PLR2004
+    assert h1.status is RawStatus.WITHIN_TOLERANCE
+    assert "float32_exact=4/4 rule=float32" in h1.values
+    assert cs.A1_FLOAT32_DEVIATION in h1.tolerance
+
+    rows, common = a9_rows(*_a9_world(extra_y=0.1))
+    h1 = rows[0]
+    assert len(common[1]) == 4  # noqa: PLR2004 — o 5º ponto não entra em T∩
+    assert h1.status is RawStatus.OUT_OF_TOLERANCE
+    assert "float32_exact=4/5 rule=double" in h1.values
+    assert cs.A1_FLOAT32_DEVIATION not in h1.tolerance
 
 
 @pytest.mark.usefixtures("e1_fixed")
