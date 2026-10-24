@@ -1571,4 +1571,57 @@ auditoria (F2 corrigido em `aad29ebc`, F5 sem dono). Todos entram no registro co
 `test_every_open_finding_of_the_sweep_is_in_the_register` lê as linhas `aberto` desta tabela
 e exige cada ponteiro no registro.
 
+### 2026-10-24 — [deviation] Checkpoint C final (bloco 4), CC4-1..CC4-3 — Claude (executor)
+**Contexto:** a revisão de `75fb57b6..5f70a5cf` não teve bloqueante; uma média e duas baixas
+de código.
+**O que mudou:**
+- **CC4-1** (média, cobertura): o e2e `test_report_artifacts_cli.py` ganhou
+  `test_revision_sha256_is_the_hash_of_each_committed_toml` (o sha256 de r0 a r3 no citável =
+  `PreregistrationHash.compute` de cada TOML commitado, com o `CanonicalJsonHasher`; o prefixo
+  de 12 é o sufixo da referência; a da r3 é a ref julgada) e
+  `test_split_fingerprint_of_the_silver_reaches_the_citable_run_rows` (o `split_fingerprint`
+  gravado no `dim_run` aparece na linha de cada run).
+- **CC4-2** (baixa, contrato): `VerifiedSilver.split_fingerprints` sem default e com valor
+  `str` (`dim_run.split_fingerprint` é `nullable=False`); linha do `dim_run` sem o campo →
+  `ReportSourceMismatchError` antes do hash, e run sem fingerprint no `build_dossier` →
+  `ReportSourceMismatchError` (nada de "—").
+- **CC4-3** (baixa, regra duplicada): `JudgedRevision.digests` (o sha256 de cada revisão,
+  calculado uma vez em `resolve_judged_revision`); o use case repassa `resolved.digests` em
+  vez de recalcular o `PreregistrationHash`.
+**Razão:** abaixo do limiar de pergunta — cobertura e dono único, sem mudar contrato de port
+nem dado lido.
+
+### 2026-10-24 — [deviation] Checkpoint C final (bloco 4), CC4-4: tags de cohort na Etapa R — Claude (executor)
+**Contexto:** o CC4-4 (baixa, processo) apontou que a R1 não confere as tags `cohort/<id>`
+que o dossiê cita (bloco "Tags do cohort"). O §2 é histórico aprovado e não muda; a
+conferência entra aqui e é executada na R1 da Etapa R, logo depois de `REGISTER_COMMITTED`.
+**O que muda (comandos literais, mesmo `$WTH` da R1):**
+```
+git -C "$WTH" rev-parse -q --verify "refs/tags/cohort/aapl_confirmatory-r0-665f45d9169a" >/dev/null || { echo FAIL_COHORT_TAG; exit 1; }; echo COHORT_TAG_OK
+git -C "$WTH" rev-parse -q --verify "refs/tags/cohort/aapl_ablation-r0-8a2d1de2dd8c" >/dev/null || { echo FAIL_ABLATION_COHORT_TAG; exit 1; }; echo ABLATION_COHORT_TAG_OK
+```
+**Razão:** a tag é o que o dossiê aponta como âncora do cohort (convenção do freeze, ADR
+5.5.0001); conferir que existe é uma linha a mais da R1, sem mudar a geração.
+
+### 2026-10-24 — [measurement] auditoria de testes, mutação d1 do `blinding_statement` — Claude (executor)
+**Contexto:** a auditoria de testes mostrou que a mutação d1 (`statement` →
+`statement.strip()` na linha do bloco de cegamento, `report_dossier._blinding_blocks`)
+**sobrevivia** (0 failed): o `BLINDING` dos testes não tem espaço nem LF nas pontas. Teste
+novo `test_report_dossier.py::test_blinding_statement_keeps_edge_and_inner_whitespace`:
+declaração com LF e espaços nas pontas e espaço duplo no meio; igualdade exata da linha e o
+Markdown citável contém o texto byte a byte no bloco cercado (`**blinding_statement:**`,
+abertura `text`, o texto, fechamento).
+**Medição:** container `financial_forecasting-app:dev`, mutação aplicada por `sed` na árvore
+e revertida por `git checkout --` em seguida:
+```
+# com a mutação d1
+FAILED tests/unit/features/evaluation/test_report_dossier.py::test_blinding_statement_keeps_edge_and_inner_whitespace
+1 failed, 20 passed, 1 warning in 10.25s
+E       AssertionError: assert 'Declaração  ...egunda linha.' == '\n  Declaraç...da linha.  \n'
+# revertida
+21 passed, 1 warning in 3.00s
+```
+**Razão:** o D9 (transcrição byte a byte) passa a ter teste que mata a normalização de
+espaço nas pontas; só o teste novo cai sob a mutação.
+
 <!-- END: post-execution -->
