@@ -279,6 +279,25 @@ def test_reading_label_status_from_h3_reading(world: ReportWorld) -> None:
 
 
 @pytest.mark.unit
+def test_reading_note_names_no_agreeing_family_explicitly(world: ReportWorld) -> None:
+    """`agreeing_families = ""` (nenhuma concorda) → "nenhuma", nunca "=" sem valor."""
+    note = _reading_panel_note(world)
+    assert note.endswith("famílias concordantes = nenhuma")
+
+
+@pytest.mark.unit
+def test_reading_note_lists_agreeing_families(world: ReportWorld) -> None:
+    (row,) = world.rows["gold_h3_reading"]
+    row["agreeing_families"] = "price,technical"
+    assert _reading_panel_note(world).endswith("famílias concordantes = price, technical")
+
+
+def _reading_panel_note(world: ReportWorld) -> str:
+    panel = next(p for p in h3_figure(world.inputs()).spec.panels if p.panel_id == "h1_vs_h7")
+    return panel.label.note or ""
+
+
+@pytest.mark.unit
 def test_h1_h7_side_by_side_and_comparison_panel(world: ReportWorld) -> None:
     spec = h3_figure(world.inputs()).spec
     assert [(p.panel_id, p.scope, p.horizon) for p in spec.panels] == [

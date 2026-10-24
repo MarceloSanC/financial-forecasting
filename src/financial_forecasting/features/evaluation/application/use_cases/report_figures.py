@@ -1644,12 +1644,15 @@ def _reading_note(inputs: ReportInputs) -> str:
     row = rows[0]
     permutation = col_bool_or_none(row, schema, "heterogeneous_permutation")
     ablation = col_bool_or_none(row, schema, "heterogeneous_ablation")
+    # o builder grava as famílias como "a,b" ordenado e "" quando nenhuma concorda
+    agreeing = col_str_or_none(row, schema, "agreeing_families")
+    families = ", ".join(agreeing.split(",")) if agreeing else "nenhuma"
     return (
         f"leitura ({col_str(row, schema, 'reading_rule')}): "
         f"{col_str_or_none(row, schema, 'label')} [{col_str_or_none(row, schema, 'status')}]; "
         f"heterogênea na permutação = {permutation}, na ablação = {ablation}; "
         f"sustentada = {col_bool_or_none(row, schema, 'sustained')}; "
-        f"famílias concordantes = {col_str_or_none(row, schema, 'agreeing_families')}"
+        f"famílias concordantes = {families}"
     )
 
 
