@@ -3,7 +3,7 @@ title: Concept — Stage 8.2 — Reprodução da corrida confirmatória e equiva
 description: (i) reprodução bit a bit da geração julgada da 8.1 no commit dela (060537fc), a partir do backup de entrada restaurado num data_root descartável, com RefreshGold e BuildConfirmatoryScorecard direto e comparação por classe contra a cópia julgada; (ii) auditoria interna de equivalência com a evidência anterior congelada por hash, na interseção comum, com tolerância numérica no alvo e no código de métrica e tolerância de sentido nos números do modelo, por um andaime fora do src/ e um teste opt-in fora do CI
 when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; antes de rodar a reprodução ou ler qualquer valor da evidência anterior; ao consumir a cópia julgada na 8.3; ao questionar por que a reprodução roda em 060537fc e não no HEAD, por que não passa pelo RunConfirmatoryEvaluation, ou por que o teste de equivalência pula no CI
 keywords: [concept, reproduction, equivalence, evaluation, judged-generation, bit-identical, r-bit, r-bit-commit, eq-hash, eq-inter, eq-must, eq-desc, eq-expl, eq-andaime, prior-evidence, oracle, scaffold, result-layer]
-status: done
+status: draft
 created_at: 2026-10-23
 updated_at: 2026-10-23
 stage_id: 8.2-equivalence-audit
