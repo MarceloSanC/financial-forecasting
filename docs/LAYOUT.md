@@ -81,6 +81,9 @@ tests/
 ├── fixtures/                       # Dados de teste versionados (lidos só por integration)
 │   ├── r_oracle/                   # Oráculo R: <unidade>.{json,R,sessionInfo.txt} + Dockerfile (ADR 6.2.0006)
 │   └── nexcp_oracle/               # Oráculo NexCP: gerador + JSON do `splitCP_LS` dos autores (ADR 7.2.0002)
+├── equivalence/                    # Andaime INTERINO da 8.2 (ADR 8.2.0003): registro de hashes,
+│                                   #   leitores e regras da equivalência contra a evidência anterior
+│                                   #   (`data/analytics/`); teste opt-in; nada de src/ o importa (§3)
 └── architecture/                   # Testes dos próprios gates (import-linter, layout, fake-parity, port-coverage, arch-ast)
 
 migrations/
@@ -127,6 +130,14 @@ adapters  →  application  →  domain
 - `shared/domain/` — mesmas regras de `domain/`
 - `shared/application/` — mesmas regras de `application/`
 - `shared/infrastructure/` — pode usar qualquer lib externa; é instanciado no composition_root
+
+### Código de produção e `tests/`
+
+- **Nenhum módulo de `src/` importa `tests/`** (fakes, fixtures ou o andaime
+  `tests/equivalence/`). A evidência anterior nunca é entrada oficial (concept 8.2 I7,
+  ADR 8.2.0003 item 2). Espelhada no contrato `src-no-tests` do `.importlinter` e no
+  teste AST `tests/architecture/test_prior_evidence_isolation.py` (que também barra
+  literais `data/analytics`/`phase_b` em `src/`).
 
 > **Trocar uma dependência operacional** (provedor LLM, banco, scheduler)
 > sem quebrar o port nem perder o rastro de decisão: ver

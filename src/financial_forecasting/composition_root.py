@@ -186,6 +186,10 @@ from financial_forecasting.features.evaluation.adapters.out.toml.toml_preregistr
 from financial_forecasting.features.evaluation.application.ports.out.mcs_backend import (
     McsBackend,
 )
+from financial_forecasting.features.evaluation.application.use_cases.audit_reproduction import (
+    AuditReproduction,
+    EqualReproductionRootsError,
+)
 from financial_forecasting.features.evaluation.application.use_cases.build_confirmatory_scorecard import (  # noqa: E501
     BuildConfirmatoryScorecard,
 )
@@ -796,6 +800,36 @@ def confirmatory_wiring(  # noqa: PLR0913 — os colaboradores do scorecard e da
         )
 
     return build_scorecard, run_confirmatory_evaluation_for
+
+
+def wire_reproduction_audit(
+    settings: Settings, *, judged_data_root: Path, reproduced_data_root: Path
+) -> AuditReproduction:
+    """O `AuditReproduction` do `audit-reproduction` (Stage 8.2; ADR 8.2.0002 item 4).
+
+    Só leitura e sem o grafo inteiro do `wire_dependencies` (nada de ledger, MLflow ou
+    lock): um `ParquetGoldStore` por raiz — a julgada (cópia selada, registro de tentativas)
+    e a reproduzida (geração viva do driver) —, o `TomlPreregistrationSource` de
+    `<repo_root>/config/preregistration/` e o `CanonicalJsonHasher` que calcula o
+    `preregistration_ref`.
+
+    Dono único da recusa de raízes iguais (Checkpoint C 8.2 bloco 2, CC2-1): o `cli.py`
+    só chama.
+
+    Raises:
+        EqualReproductionRootsError: as duas raízes são a mesma (após `resolve()`), antes de
+            montar qualquer adapter.
+    """
+    if Path(judged_data_root).resolve() == Path(reproduced_data_root).resolve():
+        raise EqualReproductionRootsError(
+            f"--judged-data-root and --reproduced-data-root are the same root {judged_data_root}"
+        )
+    return AuditReproduction(
+        source=TomlPreregistrationSource(root=settings.repo_root / "config" / "preregistration"),
+        hasher=CanonicalJsonHasher(),
+        judged_store=ParquetGoldStore(judged_data_root),
+        reproduced_reader=ParquetGoldStore(reproduced_data_root),
+    )
 
 
 def dump_ablation_spec(spec: "AblationCohortSpec") -> str:

@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-10-23
-last_reviewed_at: 2026-10-23
+updated_at: 2026-10-24
+last_reviewed_at: 2026-10-24
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -110,7 +110,7 @@ graph LR
 | `7.3-explainability` | inference | multi (modeling + inference + analytics_store + evaluation; Windows + Linux) | vertical | done | 7.1, 6.1, 7.2 |
 | `7.4-inference-api` | inference | multi (domain + application + adapters/in/http; + evaluation application; shared http) | vertical | done | 7.2, 7.3 |
 | `8.1-confirmatory-run` | evaluation | multi (orquestração) | vertical | done | 6.5, 6.6, 7.1, 7.2, 7.3 |
-| `8.2-equivalence-audit` | evaluation | application + tests | vertical | draft | 8.1 |
+| `8.2-equivalence-audit` | evaluation | multi (application + adapters + tests) | vertical | done | 8.1 |
 | `8.3-plots-and-final-report` | evaluation | adapters/out + docs | vertical | draft | 8.2 |
 
 **Legenda de status (Stage):** `draft`, `in_progress`, `review`, `done`, `archived`.
@@ -1238,21 +1238,29 @@ skills_hint: [orchestrator-design, composition-root, hex-arch-python, pytest-wit
 ```yaml
 stage_id: 8.2-equivalence-audit
 bounded_context: evaluation
-camada_alvo: application + tests
+camada_alvo: multi (application + adapters/out + adapters/in/cli + tests)  # concept 8.2 §4
 arquivos_a_criar:
-  - tests/equivalence/test_official_vs_prior_evidence.py   # pulado sem o oráculo hasheado; fora do CI (doc de domínio §5.7)
+  - src/financial_forecasting/features/evaluation/application/use_cases/reproduction_comparison.py   # compare_reproduction (ADR 8.2.0002)
+  - src/financial_forecasting/features/evaluation/application/dtos/reproduction_comparison.py        # ReproductionComparison
+  - tests/equivalence/test_official_vs_prior_evidence.py   # opt-in, pulado sem o oráculo hasheado; fora do CI (doc de domínio §5.7; ADR 8.2.0003)
+  - docs/reports/prior_evidence_registry.toml               # EQ-HASH: commitado antes de qualquer leitura de valor (ADR 8.2.0003)
   - docs/reports/equivalence_audit.md
   - docs/reports/reproduction_audit.md                     # resultado da reprodução (i), classe por classe
-  # o registro de hashes da evidência anterior e o modo de re-executar a cadeia em destino separado: o technical da 8.2 fixa
+  - scripts/reproduce_judged_generation.py                 # driver: refresh + scorecard na árvore de 060537fc (ADR 8.2.0001), com smoke test
+  # leitores do andaime em tests/equivalence/ e testes unit/contrato/integração: lista fechada no technical da 8.2
 # o espelho docs/preregistration/aapl_confirmatory.md só recebe seções acrescentadas por revisão (ADR 6.5.0001 item 6)
-arquivos_a_modificar: []
-contratos_introduzidos: []
-contratos_consumidos: [RunConfirmatoryEvaluation (8.1), geração julgada preservada e hash de conteúdo do silver (8.1)]
-definition_of_done: "(i) Reprodução da corrida da 8.1 a partir dos artefatos persistidos, sem re-treino, em destino separado: bit a bit no ambiente registrado contra a geração julgada preservada (entre ambientes, por classe — doc de domínio §4.3), resultado documentado; (ii) equivalência interna vs evidência anterior congelada por hash: alvo e código de métrica dentro da tolerância declarada (ASSUM-4), números do modelo dentro da tolerância de sentido (ADR 0.0.0062) com deltas documentados, divergências de sentido explicadas pela teoria (não 'bate com o antigo') ou registradas como não explicadas; relatórios de reprodução e de equivalência commitados."
-non_goals: [bit-identical vs evidência anterior, reabrir metodologia, mencionar a evidência anterior no texto do TCC]
+arquivos_a_modificar:
+  - src/financial_forecasting/features/evaluation/application/ports/out/judged_generation_store.py   # read_judged_generation
+  - src/financial_forecasting/features/evaluation/adapters/out/duckdb/parquet_gold_store.py       # real do read_judged_generation
+  - tests/fakes/features/evaluation/in_memory_judged_generation_store.py e tests/contract/features/evaluation/test_judged_generation_store_contract.py
+  - src/financial_forecasting/cli.py, src/financial_forecasting/features/evaluation/adapters/in/cli/evaluation_commands.py e src/financial_forecasting/composition_root.py   # subcomando audit-reproduction (só leitura)
+contratos_introduzidos: [JudgedGenerationStore.read_judged_generation (port-out, método novo; reusado pela 8.3), compare_reproduction + ReproductionComparison (application), driver `scripts/reproduce_judged_generation.py` (grava `reproduction/scorecard.json` e `environment.json` no data_root descartável), subcomando `audit-reproduction` (só leitura, nunca recalcula), registro de hashes da evidência anterior `docs/reports/prior_evidence_registry.toml`]
+contratos_consumidos: [RefreshGold (6.4) e BuildConfirmatoryScorecard + refresh_command_from + resolve_judged_revision (6.5/8.1), na árvore de 060537fc, sobre um data_root descartável restaurado do backup de entrada — sem RunConfirmatoryEvaluation (ADR 8.2.0001); geração julgada preservada, hash de conteúdo do silver, ATTEMPTS.jsonl (result_digest), run_record.json, .judged.toml com os backups e result_layer_digest (8.1)]
+definition_of_done: "(i) Reprodução da corrida da 8.1 a partir dos artefatos persistidos, sem re-treino, em destino separado: bit a bit no ambiente registrado contra a geração julgada preservada (entre ambientes, por classe — doc de domínio §4.3 — só se houver segundo ambiente, doc §4.7), resultado documentado; (ii) equivalência interna vs evidência anterior congelada por hash: alvo e código de métrica dentro da tolerância declarada (ASSUM-4), números do modelo dentro da tolerância de sentido (ADR 0.0.0062) com deltas documentados, divergências de sentido explicadas pela teoria (não 'bate com o antigo') ou registradas como não explicadas; relatórios de reprodução e de equivalência commitados."
+non_goals: [bit-identical vs evidência anterior, reabrir metodologia, mencionar a evidência anterior no texto do TCC, reprodução entre ambientes (um único ambiente — concept 8.2 D4)]
 complexidade_estimada: M
 gate_mode: strict
-skills_hint: [hex-arch-python]
+skills_hint: [hex-arch-python, pytest-with-fakes, data-shape-evidence, orchestrator-design]
 ```
 
 #### Stage 8.3 — `8.3-plots-and-final-report`
@@ -1318,6 +1326,8 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 | 2026-10-22 | Bloco da 8.1 refinado pelo concept: arquivos a criar e a modificar, contratos (use case com três status e uma geração julgada por partição; resolução da revisão extraída do scorecard; VO `SilverContentHash` no manifesto do gold; `JudgedGenerationStore`; ports de ambiente e lock; subcomando `evaluate` com o `infer` antes); caminho do scorecard refinado de `scorecard/<ref>/` para `judged/<ref>/` (cópia selada da geração inteira); comentário de atestação como passo de runbook depois do selo | Concept 8.1 (issue #211; ADRs 8.1.0001–8.1.0003) |
 | 2026-10-22 | Bloco da 8.1 alinhado ao Checkpoint A do concept: `camada_alvo` multi, complexidade L, `skills_hint` ampliado; arquivos a modificar do leitor do silver (`columns`), do source do pré-registro (`judged_records`), do repositório do `analytics_store` e do `infer`; contratos com o registro de tentativas e o `.judged.toml` como verdade cruzada | Checkpoint A da 8.1, rodada 1 (CA-11; ADR 8.1.0004) |
 | 2026-10-23 | Stage `8.1-confirmatory-run` `done`; Step 8 `in_progress`. `RunConfirmatoryEvaluation` (CLI `evaluate` encadeado ao `infer`) julgou o cohort `aapl_confirmatory-r0` pela r3 (`aapl_confirmatory-r3-00fd83d9cd39`): status `JUDGED`, generation_digest `96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539`; H1 passa em h+1 e h+7; H2 h+1 `beats_naive_only` e h+7 `beats_naive_ties_strong` (vencedor primário `tft_quantile`); sucesso do estudo (≥ 1 horizonte): sim. Geração julgada selada em `judged/<ref>/` com `CONTENTS.sha256` + backup; hash de conteúdo do silver no manifesto (`SilverContentHash`); tag `confirmatory-run/aapl_confirmatory-r3-00fd83d9cd39`, comentário na #211 (issuecomment-6362212743), `config/preregistration/aapl_confirmatory-r3.judged.toml`. Re-execução só com mesmo código, ambiente, entrada e resultado; senão `--deviation` (ADR 8.1.0004). Libera #58 e #163 | Fechamento da Stage 8.1 (issue #211; ADRs 8.1.0001–8.1.0004; technical 8.1 §7) |
+| 2026-10-23 | Bloco da 8.2 refinado pelo concept: `contratos_consumidos` deixa de citar `RunConfirmatoryEvaluation` — a reprodução roda `RefreshGold` + `BuildConfirmatoryScorecard` na árvore de `060537fc` sobre um `data_root` descartável restaurado do backup de entrada, sem `judged/`, `ATTEMPTS.jsonl` nem a partição viva; contratos introduzidos (leitor da cópia julgada no `JudgedGenerationStore`, `compare_reproduction` + `ReproductionComparison`, subcomando `audit-reproduction`, registro de hashes da evidência anterior) e o driver `scripts/reproduce_judged_generation.py` que roda refresh + scorecard na árvore de `060537fc` (Checkpoint A); arquivos a criar/modificar, `camada_alvo` multi, `skills_hint` ampliado; reprodução entre ambientes nos non_goals (um único ambiente) | Concept 8.2 (issue #232; ADRs 8.2.0001–8.2.0003) |
+| 2026-10-24 | Stage `8.2-equivalence-audit` `done`; Step 8 segue `in_progress`. (i) Reprodução da corrida confirmatória da 8.1 a partir dos artefatos persistidos, em `060537fc`, num `data_root` descartável (driver `scripts/reproduce_judged_generation.py`; subcomando só-leitura `audit-reproduction`): `BIT_IDENTICAL` — 19 tabelas, 0 diferenças em R1 882 727 / R2 288 671 / R3 1 856 valores, scorecard 66 117 folhas iguais, `result_digest` `7c7940d4…` igual ao da tentativa julgada, partição viva intacta; claim (a) afirmado, (c) entre ambientes não executado ([`reproduction_audit.md`](./reports/reproduction_audit.md)). (ii) Equivalência interna vs evidência anterior (só no repositório; [`equivalence_audit.md`](./reports/equivalence_audit.md)): registro de hashes commitado antes de qualquer valor; alvo anterior gravado com precisão float32 → decisão humana B3 (ADR 8.2.0004) — A1 pela precisão efetiva, passa em h+1 e h+7; código de métrica (A2) igual em 630/630 linhas comparáveis por horizonte; números do modelo: deltas de pinball ~1e-5, PICP 80 % do candidato novo 0,85 vs 0,78–0,79 do anterior com lado do nominal divergente → `[finding]` não explicado (não bloqueia; doc §5.6); sem baseline comum. Contrato import-linter `src-no-tests` | Fechamento da Stage 8.2 (issue #232; ADRs 8.2.0001–8.2.0004; technical 8.2 §7) |
 
 ## Próxima revisão de roadmap
 

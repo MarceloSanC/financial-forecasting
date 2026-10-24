@@ -17,19 +17,44 @@ technical 8.1 §1 "Saída do `evaluate`"; `<ref>` = a `preregistration_ref`):
 
 `BLOCKED` e `ALREADY_JUDGED` são desfechos (exit 0); erros (`ApplicationError`,
 `ValueError`) sobem para o `main`, que os traduz em mensagem e exit 2.
+
+Stage 8.2: `audit-reproduction` (só leitura; ADR 8.2.0002 item 4) — lê o scorecard
+reproduzido de `<reproduzida>/reproduction/scorecard.json` (gravado pelo driver da
+reprodução; **nunca recalcula**), chama o `AuditReproduction` e imprime (contrato da E3,
+technical 8.2 §1):
+
+    reproduction <ref>: bit_identical <true|false> partition <asset>/<parent_sweep_id>
+    result_digest judged <hex> reproduced <hex> expected <hex>
+    identity <campo> judged <v> reproduced <v> equal <true|false>      (4 linhas)
+    class <R1|R2|R3> compared <n> different <n> max_abs_diff <repr>     (totais)
+    table <nome> rows <n>/<n> keys_equal <bool> R1 <c>/<d>/<m> R2 <c>/<d>/<m> R3 <c>/<d>/<m>
+    scorecard equal <bool> leaves <n> different <n> max_abs_diff <repr>
+
+Exit 0 só com `bit_identical`, 1 com diferença (como o `EXIT_MISMATCH` do `verify`); erro
+sobe para o `main` (exit 2).
 """
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Final
 
 from financial_forecasting.features.evaluation.application.dtos.confirmatory_run import (
     InferenceSummary,
     RunConfirmatoryEvaluationCommand,
 )
+from financial_forecasting.features.evaluation.application.dtos.reproduction_comparison import (
+    AuditReproductionCommand,
+    ClassComparison,
+    ReproductionComparison,
+)
+from financial_forecasting.features.evaluation.application.use_cases.audit_reproduction import (
+    ReproductionAuditError,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
+    from pathlib import Path
     from typing import TextIO
 
     from financial_forecasting.features.evaluation.application.use_cases.run_confirmatory_evaluation import (  # noqa: E501
@@ -37,6 +62,11 @@ if TYPE_CHECKING:
     )
 
 ATTESTATION_SEPARATOR: Final = "--- attestation ---"
+REPRODUCTION_DIR: Final = "reproduction"
+"""O diretório fixo do driver da reprodução no `data_root` descartável (ADR 8.2.0001)."""
+REPRODUCTION_SCORECARD: Final = "scorecard.json"
+"""O scorecard reproduzido (`document_bytes(scorecard.as_mapping())`) em `REPRODUCTION_DIR`."""
+EXIT_DIFFERENT: Final = 1
 
 
 def evaluate(  # noqa: PLR0913 — opções coesas do subcomando
@@ -70,3 +100,81 @@ def evaluate(  # noqa: PLR0913 — opções coesas do subcomando
     out.write(f"{ATTESTATION_SEPARATOR}\n")
     out.write(result.attestation_body)
     return 0
+
+
+def _bool(value: bool) -> str:
+    return "true" if value else "false"
+
+
+def _counts(item: ClassComparison) -> str:
+    return f"{item.compared}/{item.different}/{item.max_abs_diff!r}"
+
+
+def _report_lines(comparison: ReproductionComparison) -> list[str]:
+    partition = comparison.partition
+    lines = [
+        f"reproduction {comparison.preregistration_ref}: bit_identical "
+        f"{_bool(comparison.bit_identical)} partition "
+        f"{partition.asset}/{partition.parent_sweep_id}",
+        f"result_digest judged {comparison.judged_result_digest} reproduced "
+        f"{comparison.reproduced_result_digest} expected {comparison.expected_result_digest}",
+    ]
+    lines += [
+        f"identity {item.field} judged {item.judged} reproduced {item.reproduced} "
+        f"equal {_bool(item.equal)}"
+        for item in comparison.identity
+    ]
+    lines += [
+        f"class {item.reproduction_class.value} compared {item.compared} different "
+        f"{item.different} max_abs_diff {item.max_abs_diff!r}"
+        for item in comparison.totals
+    ]
+    lines += [
+        f"table {table.name} rows {table.judged_rows}/{table.reproduced_rows} keys_equal "
+        f"{_bool(table.keys_equal)} "
+        + " ".join(f"{item.reproduction_class.value} {_counts(item)}" for item in table.classes)
+        for table in comparison.tables
+    ]
+    scorecard = comparison.scorecard
+    lines.append(
+        f"scorecard equal {_bool(scorecard.equal)} leaves {scorecard.leaves} different "
+        f"{scorecard.different} max_abs_diff {scorecard.max_abs_diff!r}"
+    )
+    return lines
+
+
+def read_reproduced_scorecard(reproduced_data_root: Path) -> Mapping[str, object]:
+    """O JSON de `<reproduzida>/reproduction/scorecard.json`, gravado pelo driver.
+
+    Raises:
+        ReproductionAuditError: arquivo ausente ou JSON que não é objeto.
+    """
+    path = reproduced_data_root / REPRODUCTION_DIR / REPRODUCTION_SCORECARD
+    if not path.is_file():
+        raise ReproductionAuditError(f"no reproduced scorecard at {path}")
+    document = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(document, dict):
+        raise ReproductionAuditError(f"{path} is not a JSON object")
+    return document
+
+
+def audit_reproduction(  # noqa: PLR0913 — opções coesas do subcomando
+    audit: Callable[[AuditReproductionCommand], ReproductionComparison],
+    *,
+    reproduced_data_root: Path,
+    name: str,
+    revision: int,
+    preregistration_ref: str,
+    out: TextIO,
+) -> int:
+    """Compara a reprodução com a cópia julgada e imprime; 0 só com `bit_identical`, senão 1."""
+    comparison = audit(
+        AuditReproductionCommand(
+            name=name,
+            revision=revision,
+            preregistration_ref=preregistration_ref,
+            reproduced_scorecard=read_reproduced_scorecard(reproduced_data_root),
+        )
+    )
+    out.write("".join(f"{line}\n" for line in _report_lines(comparison)))
+    return 0 if comparison.bit_identical else EXIT_DIFFERENT

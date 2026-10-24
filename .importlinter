@@ -740,3 +740,20 @@ ignore_imports =
 # uma aresta, o ignore correspondente deixa de casar e o build cobra a remoção
 # da linha. É o que faz esta lista encolher sozinha em vez de virar sedimento.
 unmatched_ignore_imports_alerting = error
+
+# -----------------------------------------------------------------------------
+# Contrato 16 — src-no-tests (type = forbidden) — Stage 8.2 (CB-1 do Checkpoint B; A14)
+# LAYOUT §3 "Código de produção e `tests/`": nenhum módulo de `src/` importa `tests/`
+# (fakes, fixtures ou o andaime interino `tests/equivalence/` que lê a evidência
+# anterior). A evidência anterior nunca é entrada oficial (concept 8.2 I7; ADR 8.2.0003
+# item 2). `tests` é pacote fora do `root_package`: entra como módulo externo (ok com
+# `include_external_packages = True`). O teste AST
+# `tests/architecture/test_prior_evidence_isolation.py` cobre também os literais.
+[importlinter:contract:src-no-tests]
+name = Nenhum módulo de src importa tests (andaime da equivalência incluído)
+type = forbidden
+source_modules =
+    financial_forecasting
+forbidden_modules =
+    tests
+allow_indirect_imports = False

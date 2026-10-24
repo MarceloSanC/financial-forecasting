@@ -8,6 +8,14 @@ determinísticos, então o digest se repete entre execuções. Os documentos, a 
 `application/dtos/judged_generation.py` que o `ParquetGoldStore` usa; o `find` monta a
 cópia por `judged_generation_from`, a mesma conferência do real.
 
+`read_judged_generation` (Stage 8.2) confere a cópia pelo `find` e relê os bytes SELADOS
+de `generation/` — o manifesto e as linhas JSON de cada `<tabela>.parquet` —, montados pelo
+dono único `GoldGeneration.from_stored`, como o real relê os arquivos de
+`judged/<ref>/generation/` (Checkpoint C 8.2 bloco 1, CC1-1): arquivo trocado com a listagem
+regravada coerente e ilegível → `JudgedGenerationTamperedError` nas duas pernas. A ida e
+volta JSON não perde tipo: as células do `GoldTable` são só `None`, `bool`, `int`, `str` e
+`float` finito (o `repr` do float volta bit a bit) e o manifesto já é JSON-safe.
+
 Contadores: `preserves` (selagens concluídas) e `recorded` (linhas de tentativa).
 Ganchos da suíte de contrato: `tamper` (troca ou remove um arquivo selado),
 `rewrite_contents` (regrava a listagem coerente com os arquivos atuais),
@@ -35,6 +43,8 @@ from financial_forecasting.features.evaluation.application.dtos.judged_generatio
     judged_generation_from,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    GoldGeneration,
+    GoldGenerationCorruptError,
     GoldManifest,
     GoldManifestNotFoundError,
     GoldPartition,
@@ -42,6 +52,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
 from financial_forecasting.features.evaluation.application.ports.out.judged_generation_store import (  # noqa: E501
     JudgedGenerationExistsError,
     JudgedGenerationMismatchError,
+    JudgedGenerationNotFoundError,
     JudgedGenerationTamperedError,
 )
 from tests.fakes.features.evaluation.in_memory_gold_store import InMemoryGoldStore
@@ -133,6 +144,26 @@ class InMemoryJudgedGenerationStore:
         sealed = self.find(partition=partition, preregistration_ref=preregistration_ref)
         assert sealed is not None
         return sealed
+
+    def read_judged_generation(
+        self, *, partition: GoldPartition, preregistration_ref: str
+    ) -> GoldGeneration:
+        if self.find(partition=partition, preregistration_ref=preregistration_ref) is None:
+            raise JudgedGenerationNotFoundError(
+                f"no judged copy of {preregistration_ref} for {partition}"
+            )
+        files = self._sealed[partition, preregistration_ref]
+        prefix, suffix = f"{GENERATION_DIR}/", ".parquet"
+        try:
+            manifest = json.loads(files[GENERATION_MANIFEST])
+            rows_by_table = {
+                path.removeprefix(prefix).removesuffix(suffix): json.loads(data)["rows"]
+                for path, data in files.items()
+                if path.startswith(prefix) and path.endswith(suffix)
+            }
+            return GoldGeneration.from_stored(manifest, rows_by_table, partition=partition)
+        except (KeyError, TypeError, ValueError, GoldGenerationCorruptError) as error:
+            raise JudgedGenerationTamperedError(f"{preregistration_ref}: {error}") from error
 
     def judged_refs(self, *, partition: GoldPartition) -> tuple[str, ...]:
         return tuple(sorted(ref for owner, ref in self._sealed if owner == partition))

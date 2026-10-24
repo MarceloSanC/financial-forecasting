@@ -1,0 +1,303 @@
+"""Comparações da equivalência: A1, A2, sentido e DM (Stage 8.2; regras puras).
+
+Concept 8.2 D8, D12, D13; doc §5.4-§5.5. As métricas (m_novo e m_A) saem dos serviços de
+domínio existentes — `pinball_score.mean_pinball`, `coverage_series.is_inside_closed`,
+`wilson_band.wilson_interval`; nenhuma métrica nova (concept §12 item vi).
+
+- **A1** (D13): todo ponto de T∩ com |y_novo - y_ant| ≤ 2⁻⁵³·|y_ant| (y_ant = 0 ⇒ igualdade
+  exata); contagem fora e max |Δ|. Emenda B3 (ADR 8.2.0004): se TODO y_ant do horizonte é
+  finito e exatamente representável em float32, o critério é `float32(y_novo) == y_ant`;
+
+- **A2** (D12 e): |m_A - m_ant| ≤ max(1e-9·max(|m_A|, |m_ant|, u_q), 2⁻⁵³·|m_ant|), com u_q
+  por grandeza (pinball = a própria pinball; MPIW = média de |largura|; PICP = 1); amostra
+  não reconstruível (`n_samples`/`n_obs` ≠ pontos lidos) → `not_realizable`;
+- **sentido** (doc §5.5): sinal com zero exato como sinal próprio; lado do nominal do PICP
+  80 % contra a banda de Wilson 95 %; DM com d̄ normalizado para candidato - baseline e
+  rejeição = p não ajustado ≤ alpha do lado (D8).
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Sequence
+from dataclasses import dataclass
+from enum import StrEnum
+
+import numpy as np
+
+from financial_forecasting.features.evaluation.domain.services.pinball_score import (
+    mean_pinball,
+)
+from financial_forecasting.features.evaluation.domain.services.wilson_band import (
+    wilson_interval,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
+    is_inside_closed,
+)
+from tests.equivalence.comparison_set import (
+    A1_HALF_ULP,
+    NOMINAL_80,
+    R2_RELATIVE,
+    STORAGE_HALF_ULP_DOUBLE,
+    WILSON_BAND_LEVEL,
+)
+
+
+class RawStatus(StrEnum):
+    """A classificação recomputada de uma comparação (antes da explicação da §5.6)."""
+
+    WITHIN_TOLERANCE = "within_tolerance"
+    OUT_OF_TOLERANCE = "out_of_tolerance"
+    NOT_REALIZABLE = "not_realizable"
+    EMPTY_INTERSECTION = "empty_intersection"
+    SAME_SENSE = "same_sense"
+    DIVERGENT_SENSE = "divergent_sense"
+
+
+# --- A1 -----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class A1Result:
+    """A1 de um horizonte: pontos em T∩, fora da regra aplicada e max |Δ|.
+
+    `n_out_double` e `max_rel_diff` são informação: o resultado sob a regra ORIGINAL de
+    `double` do D13 e o max |Δ|/|y_ant| (y_ant ≠ 0), qualquer que seja a regra aplicada.
+    """
+
+    n_points: int
+    n_out: int
+    max_abs_diff: float | None
+    status: RawStatus
+    n_out_double: int = 0
+    max_rel_diff: float | None = None
+
+
+def a1_within(y_new: float, y_prior: float, *, half_ulp: float = A1_HALF_ULP) -> bool:
+    """|y_novo - y_ant| ≤ meio ulp·|y_ant| (2⁻⁵³ para `double`; y_ant = 0 ⇒ igualdade exata).
+
+    Fail-closed: y_novo ou y_ant não finito ⇒ falso (`inf <= 2⁻⁵³·inf` seria verdadeiro).
+    """
+    if not (math.isfinite(y_new) and math.isfinite(y_prior)):
+        return False
+    return abs(y_new - y_prior) <= half_ulp * abs(y_prior)
+
+
+def float32_exact(y: float) -> bool:
+    """y é finito e exatamente representável em float32 (`float(np.float32(y)) == y`)."""
+    return math.isfinite(y) and float(np.float32(y)) == y
+
+
+def a1_float32_match(y_new: float, y_prior: float) -> bool:
+    """Critério float32 do A1 (B3): y_ant é o arredondamento de y_novo ao float32 mais próximo.
+
+    `float(np.float32(y_novo)) == y_ant` — o meio ulp com a direção certa (na fronteira de
+    expoente o ulp para baixo é metade do de cima) e o empate para o par (ties-to-even).
+    Fail-closed: y_novo ou y_ant não finito ⇒ falso.
+    """
+    if not (math.isfinite(y_new) and math.isfinite(y_prior)):
+        return False
+    with np.errstate(over="ignore"):
+        return float(np.float32(y_new)) == y_prior
+
+
+@dataclass(frozen=True)
+class A1Rule:
+    """Regra do A1 de um horizonte (B3, ADR 8.2.0004): a de float32 só com a pré-condição.
+
+    `float32` vale sse há y_ant e TODO y_ant do horizonte (não só os de T∩) é finito e
+    exatamente representável em float32 (`n_exact == n_prior`); senão vale a regra de
+    `double` do D13.
+    """
+
+    float32: bool
+    n_exact: int
+    n_prior: int
+
+
+def a1_rule(prior_values: Sequence[float]) -> A1Rule:
+    """A pré-condição da regra float32 sobre os y_ant do horizonte (contagem representável)."""
+    n_exact = sum(float32_exact(value) for value in prior_values)
+    n_prior = len(prior_values)
+    return A1Rule(float32=n_prior > 0 and n_exact == n_prior, n_exact=n_exact, n_prior=n_prior)
+
+
+def a1_check(
+    pairs: Sequence[tuple[float, float]],
+    *,
+    half_ulp: float = A1_HALF_ULP,
+    rule: A1Rule | None = None,
+) -> A1Result:
+    """A1 sobre os pares (y_novo, y_ant) de T∩ de um horizonte.
+
+    Com `rule.float32` (pré-condição B3 satisfeita), `float32(y_novo) == y_ant` ponto a
+    ponto (`a1_float32_match`); senão, |Δ| ≤ `half_ulp`·|y_ant| (meio ulp do tipo registrado
+    de y_ant, D13). Nas duas, um valor não finito conta como fora (fail-closed).
+    """
+    if not pairs:
+        return A1Result(0, 0, None, RawStatus.EMPTY_INTERSECTION)
+    n_out_double = sum(not a1_within(new, prior, half_ulp=half_ulp) for new, prior in pairs)
+    if rule is not None and rule.float32:
+        n_out = sum(not a1_float32_match(new, prior) for new, prior in pairs)
+    else:
+        n_out = n_out_double
+    max_abs_diff = max(abs(new - prior) for new, prior in pairs)
+    relative = [abs(new - prior) / abs(prior) for new, prior in pairs if prior != 0]
+    status = RawStatus.WITHIN_TOLERANCE if n_out == 0 else RawStatus.OUT_OF_TOLERANCE
+    return A1Result(
+        len(pairs),
+        n_out,
+        max_abs_diff,
+        status,
+        n_out_double=n_out_double,
+        max_rel_diff=max(relative) if relative else None,
+    )
+
+
+# --- A2 -----------------------------------------------------------------------------------
+
+
+def u_q_pinball(pinball: float) -> float:
+    """u_q da pinball por nível: média de |termo| — os termos são ≥ 0, logo a própria pinball."""
+    return abs(pinball)
+
+
+def u_q_mpiw(widths: Sequence[float]) -> float:
+    """u_q do MPIW: média de |largura|."""
+    return math.fsum(abs(width) for width in widths) / len(widths)
+
+
+U_Q_PICP: float = 1.0
+"""u_q de uma cobertura (adimensional limitada)."""
+
+
+def a2_tolerance(
+    *, m_a: float, m_ant: float, u_q: float, storage_half_ulp: float = STORAGE_HALF_ULP_DOUBLE
+) -> float:
+    """max(1e-9·max(|m_A|, |m_ant|, u_q), meio ulp do tipo de m_ant·|m_ant|) — D12 e."""
+    r2 = R2_RELATIVE * max(abs(m_a), abs(m_ant), u_q)
+    return max(r2, storage_half_ulp * abs(m_ant))
+
+
+@dataclass(frozen=True)
+class A2Result:
+    """A2 de uma grandeza: m_A, m_ant, |Δ|, tolerância e classificação."""
+
+    m_a: float | None
+    m_ant: float
+    abs_diff: float | None
+    tolerance: float | None
+    status: RawStatus
+
+
+def a2_compare(  # noqa: PLR0913 — m_A, m_ant, u_q, amostra e precisão do tipo
+    *,
+    m_a: float,
+    m_ant: float,
+    u_q: float,
+    n_recorded: int,
+    n_points: int,
+    storage_half_ulp: float = STORAGE_HALF_ULP_DOUBLE,
+) -> A2Result:
+    """m_A contra m_ant; a amostra do anterior tem de ser a reconstruída (`n_recorded`)."""
+    if n_recorded != n_points:
+        return A2Result(None, m_ant, None, None, RawStatus.NOT_REALIZABLE)
+    tolerance = a2_tolerance(m_a=m_a, m_ant=m_ant, u_q=u_q, storage_half_ulp=storage_half_ulp)
+    diff = abs(m_a - m_ant)
+    status = RawStatus.WITHIN_TOLERANCE if diff <= tolerance else RawStatus.OUT_OF_TOLERANCE
+    return A2Result(m_a, m_ant, diff, tolerance, status)
+
+
+# --- métricas pelo código novo (m_novo e m_A) --------------------------------------------
+
+
+def pinball_at(realized: Sequence[float], quantiles: Sequence[float], level: float) -> float:
+    """P̄_τ pelo `mean_pinball` do domínio."""
+    return mean_pinball(realized=realized, quantiles=quantiles, level=level)
+
+
+@dataclass(frozen=True)
+class PairMeasures:
+    """PICP, MPIW e insumos (cobertos, pontos, larguras) de um par numa série."""
+
+    covered: int
+    n_points: int
+    picp: float
+    mpiw: float
+    widths: tuple[float, ...]
+
+
+def pair_measures(
+    realized: Sequence[float], lows: Sequence[float], highs: Sequence[float]
+) -> PairMeasures:
+    """Cobertura pelo intervalo fechado do domínio (`is_inside_closed`) e largura média."""
+    if not realized or not (len(realized) == len(lows) == len(highs)):
+        raise ValueError("pair measures need aligned, non-empty series")
+    covered = sum(
+        is_inside_closed(y, low, high) for y, low, high in zip(realized, lows, highs, strict=True)
+    )
+    widths = tuple(high - low for low, high in zip(lows, highs, strict=True))
+    n = len(realized)
+    return PairMeasures(covered, n, covered / n, math.fsum(widths) / n, widths)
+
+
+# --- sentido -----------------------------------------------------------------------------
+
+
+def sign(value: float) -> int:
+    """-1, 0 ou +1 — o zero exato é sinal próprio."""
+    return (value > 0) - (value < 0)
+
+
+def signed_delta(m_new: float, m_a: float) -> float:
+    """Delta com sinal m_novo - m_A (EQ-DESC: reportado, sem limiar)."""
+    return m_new - m_a
+
+
+def side_of_nominal(
+    *, count: float, n: float, nominal: float = NOMINAL_80, band_level: float = WILSON_BAND_LEVEL
+) -> str:
+    """Posição do nominal frente à banda de Wilson da cobertura: `below`, `inside`, `above`.
+
+    `count` pode ser real (média de contagens entre seeds). `inside` = o veredito
+    `lower ≤ nominal ≤ upper` do `WilsonBandReport`.
+    """
+    lower, upper = wilson_interval(count=count, n=n, band_level=band_level)
+    if nominal < lower:
+        return "below"
+    if nominal > upper:
+        return "above"
+    return "inside"
+
+
+def sense_cell(new: object, prior: object) -> RawStatus:
+    """Igual ou divergente — comparação categórica de uma célula de sentido."""
+    return RawStatus.SAME_SENSE if new == prior else RawStatus.DIVERGENT_SENSE
+
+
+# --- DM (D8) -------------------------------------------------------------------------------
+
+_CONVENTIONS = {"candidate_minus_baseline": 1.0, "baseline_minus_candidate": -1.0}
+
+
+def normalized_mean_diff(value: float, convention: str) -> float:
+    """d̄ normalizado para perda(candidato) - perda(baseline), pela convenção do lado.
+
+    Raises:
+        ValueError: convenção desconhecida.
+    """
+    if convention not in _CONVENTIONS:
+        raise ValueError(f"unknown DM sign convention {convention!r}")
+    return _CONVENTIONS[convention] * value
+
+
+def dm_rejected(p_value: float, alpha: float) -> bool:
+    """Rejeição ao alpha do lado com o p NÃO ajustado (sem Holm — D8)."""
+    return p_value <= alpha
+
+
+def dm_sense(
+    *, mean_diff: float, convention: str, p_value: float, alpha: float
+) -> tuple[int, bool]:
+    """(sinal de d̄ normalizado, rejeição) de um lado."""
+    return sign(normalized_mean_diff(mean_diff, convention)), dm_rejected(p_value, alpha)

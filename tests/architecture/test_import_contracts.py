@@ -128,6 +128,9 @@ _EXPECTED_CONTRACTS = (
     # `check_layout.py` só barra adapter<->adapter — nenhum gate cobria import
     # cross-BC até aqui.
     "bc-independence",
+    # Stage 8.2 (CB-1 do Checkpoint B; A14): nenhum módulo de src/ importa tests/ — o
+    # andaime da equivalência (`tests/equivalence/`) incluído (ADR 8.2.0003 item 2).
+    "src-no-tests",
 )
 
 
@@ -1076,6 +1079,17 @@ _REAL_VIOLATION_CASES = (
             )
         },
         id="bc-independence:other-evaluation-module-imports-serving-gold-dtos",
+    ),
+    # Stage 8.2 (A14): um módulo de src/ que importa o andaime da equivalência reprova
+    # `src-no-tests` (ADR 8.2.0003 item 2).
+    pytest.param(
+        "src-no-tests",
+        {
+            "features/evaluation/application/use_cases/_arch_audit_taint_eq.py": (
+                "from tests.equivalence import prior_evidence\n\n_use = prior_evidence\n"
+            )
+        },
+        id="src-no-tests:evaluation-imports-equivalence-scaffold",
     ),
 )
 

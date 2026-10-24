@@ -12,6 +12,11 @@ Port do **consumidor** (concept 8.1 §4, D5, D12; ADRs `8_1_0003` itens 1-5b e
   contra `expected_manifest` (diferente → `JudgedGenerationMismatchError`, staging
   removido), grava os documentos (`document_bytes`), grava `CONTENTS.sha256` **por
   último** e troca o staging para `judged/<ref>/`; falha de escrita propaga e não sela;
+- `read_judged_generation(partition, preregistration_ref)` (Stage 8.2) — a cópia lida como
+  `GoldGeneration` (tabelas + `MANIFEST.json` de `judged/<ref>/generation/`), depois de
+  conferir o `CONTENTS.sha256` como o `find`; sem cópia → `JudgedGenerationNotFoundError`;
+  é o leitor da reprodução (8.2) e dos gráficos da 8.3, que nunca leem `current/`
+  (ADR 8.2.0002 item 4);
 - `judged_refs(partition)` — as referências seladas (nunca o staging nem o log);
 - `record_attempt(partition, attempt)` / `attempts(partition)` — o log write-ahead
   `judged/ATTEMPTS.jsonl`, na ordem de gravação.
@@ -40,6 +45,7 @@ from financial_forecasting.features.evaluation.application.dtos.judged_generatio
     JudgedGeneration,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    GoldGeneration,
     GoldManifest,
     GoldPartition,
 )
@@ -56,6 +62,10 @@ class JudgedGenerationMismatchError(ApplicationError):
 
 class JudgedGenerationExistsError(ApplicationError):
     """Já existe uma geração julgada (ou tentativa) que impede selar esta (D12)."""
+
+
+class JudgedGenerationNotFoundError(ApplicationError):
+    """A partição não tem cópia selada da referência pedida (Stage 8.2)."""
 
 
 class JudgedGenerationStore(Protocol):
@@ -86,6 +96,22 @@ class JudgedGenerationStore(Protocol):
             JudgedGenerationMismatchError: o manifesto copiado ≠ `expected_manifest`.
             GoldManifestNotFoundError: a partição não tem geração viva.
             OSError: falha de escrita (nada é selado).
+        """
+        ...
+
+    def read_judged_generation(
+        self, *, partition: GoldPartition, preregistration_ref: str
+    ) -> GoldGeneration:
+        """A cópia selada como `GoldGeneration`, conferida como no `find` (Stage 8.2).
+
+        Verifica o `CONTENTS.sha256` (arquivo faltando, a mais ou com hash diferente) e só
+        então lê as tabelas e o manifesto de `judged/<ref>/generation/`, montados pelo dono
+        único `GoldGeneration.from_stored`; independe de `current/`.
+
+        Raises:
+            JudgedGenerationNotFoundError: não há `judged/<ref>/` na partição.
+            JudgedGenerationTamperedError: a cópia não confere com o `CONTENTS.sha256`, é de
+                outra referência/partição, ou tem manifesto/tabela ilegível.
         """
         ...
 

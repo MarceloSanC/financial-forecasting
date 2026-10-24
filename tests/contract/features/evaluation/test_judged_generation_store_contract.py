@@ -4,7 +4,9 @@ Prova (concept 8.1 A6, D5, D12, I9; ADRs 8.1.0003 itens 3-5b e 8.1.0004 item 1) 
 implementação copia a geração viva, sela com `CONTENTS.sha256` por último, relê
 conferindo o digest, recusa adulteração, nunca sobrescreve uma cópia selada, não sela
 nada quando o manifesto diverge ou a escrita falha, limpa o staging sobrante e guarda o
-log de tentativas em ordem.
+log de tentativas em ordem. Stage 8.2 (concept A5): `read_judged_generation` devolve a
+geração preservada (tabelas, linhas, manifesto e `result_layer_digest`), mesmo depois de
+uma nova publicação, e recusa cópia ausente, adulterada ou movida.
 
 Pernas (*harness*): `fake` (`InMemoryJudgedGenerationStore` sobre o `InMemoryGoldStore`)
 e `parquet` (o `ParquetGoldStore` num `tmp_path`, que satisfaz `GoldStore` e
@@ -17,6 +19,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import shutil
 import subprocess
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -40,8 +43,10 @@ from financial_forecasting.features.evaluation.application.dtos.judged_generatio
     JudgedAttempt,
     contents_listing,
     generation_digest_of,
+    result_layer_digest,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    GoldGeneration,
     GoldManifest,
     GoldManifestNotFoundError,
     GoldTable,
@@ -52,8 +57,12 @@ from financial_forecasting.features.evaluation.application.ports.out.gold_store 
 from financial_forecasting.features.evaluation.application.ports.out.judged_generation_store import (  # noqa: E501
     JudgedGenerationExistsError,
     JudgedGenerationMismatchError,
+    JudgedGenerationNotFoundError,
     JudgedGenerationStore,
     JudgedGenerationTamperedError,
+)
+from tests.contract.features.evaluation.test_gold_generation_reader_contract import (
+    _generation as _readable_generation,
 )
 from tests.contract.features.evaluation.test_gold_store_contract import (
     _PARTITION,
@@ -444,6 +453,135 @@ def test_reference_colliding_with_the_layout_is_refused(harness: Harness, ref: s
     assert harness.judged.judged_refs(partition=_PARTITION) == ()
 
 
+# --- leitura da cópia como geração (Stage 8.2, concept A5) -------------------------------
+
+
+def _publish_readable(
+    harness: Harness, ref: str = _REF, *, n_runs: int | None = None
+) -> tuple[list[GoldTable], GoldManifest]:
+    """Uma geração `COMPLETED` legível pelo `from_stored` (as 19 tabelas), da revisão `ref`."""
+    tables, manifest = _readable_generation()
+    manifest = dataclasses.replace(
+        manifest,
+        parameters=dataclasses.replace(manifest.parameters, preregistration_ref=ref),
+        n_runs=manifest.n_runs if n_runs is None else n_runs,
+    )
+    harness.gold.publish(partition=_PARTITION, tables=tables, manifest=manifest)
+    return tables, manifest
+
+
+def _read_judged(harness: Harness, ref: str = _REF) -> GoldGeneration:
+    return harness.judged.read_judged_generation(partition=_PARTITION, preregistration_ref=ref)
+
+
+def _as_live(tables: list[GoldTable], manifest: GoldManifest) -> GoldGeneration:
+    """A geração viva no momento do `preserve`, montada pelo dono único."""
+    return GoldGeneration.from_stored(
+        manifest.as_mapping(),
+        {table.name: list(table.rows) for table in tables},
+        partition=_PARTITION,
+    )
+
+
+@pytest.mark.contract
+def test_read_judged_generation_equals_the_generation_preserved(harness: Harness) -> None:
+    tables, manifest = _publish_readable(harness)
+    _preserve(harness, manifest)
+    live = _as_live(tables, manifest)
+
+    judged = _read_judged(harness)
+
+    assert judged.manifest == manifest
+    assert set(judged.tables) == set(live.tables)
+    for name, table in live.tables.items():
+        assert judged.tables[name].key == table.key
+        assert [dict(row) for row in judged.tables[name].rows] == [dict(r) for r in table.rows]
+    assert result_layer_digest(judged) == result_layer_digest(live)
+
+
+@pytest.mark.contract
+def test_read_judged_generation_after_new_publish_returns_the_judged_one(
+    harness: Harness,
+) -> None:
+    tables, manifest = _publish_readable(harness)
+    _preserve(harness, manifest)
+    digest = result_layer_digest(_as_live(tables, manifest))
+    _publish_readable(harness, n_runs=manifest.n_runs + 5)
+
+    judged = _read_judged(harness)
+
+    assert judged.manifest == manifest
+    assert result_layer_digest(judged) == digest
+
+
+@pytest.mark.contract
+def test_read_judged_generation_without_copy_raises_not_found(harness: Harness) -> None:
+    with pytest.raises(JudgedGenerationNotFoundError, match=_REF):
+        _read_judged(harness)
+    _, manifest = _publish_readable(harness)
+    with pytest.raises(JudgedGenerationNotFoundError, match=_REF):
+        _read_judged(harness)
+    _preserve(harness, manifest)
+    with pytest.raises(JudgedGenerationNotFoundError, match=_OTHER_REF):
+        _read_judged(harness, _OTHER_REF)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("damage", ["altered", "missing", "extra", "empty_generation"])
+def test_read_judged_generation_refuses_tampered_copy(harness: Harness, damage: str) -> None:
+    """O mesmo parametrize do `find`: a leitura confere o `CONTENTS.sha256` antes."""
+    _, manifest = _publish_readable(harness)
+    _preserve(harness, manifest)
+    table = f"{GENERATION_DIR}/{_TABLE}.parquet"
+    if damage == "altered":
+        original = harness.sealed_bytes(_REF, table)
+        harness.tamper(_REF, table, bytes([original[0] ^ 0x01]) + original[1:])
+    elif damage == "missing":
+        harness.tamper(_REF, table, None)
+    elif damage == "extra":
+        harness.tamper(_REF, f"{GENERATION_DIR}/notes.parquet", b"added after the seal")
+    else:
+        for name in harness.live_files():
+            harness.tamper(_REF, f"{GENERATION_DIR}/{name}", None)
+
+    with pytest.raises(JudgedGenerationTamperedError, match=_REF):
+        _read_judged(harness)
+
+
+@pytest.mark.contract
+def test_read_judged_generation_refuses_copy_moved_to_another_reference(
+    harness: Harness,
+) -> None:
+    _, manifest = _publish_readable(harness)
+    _preserve(harness, manifest)
+    harness.move(_REF, _OTHER_REF)
+
+    with pytest.raises(JudgedGenerationTamperedError, match="the manifest is for"):
+        _read_judged(harness, _OTHER_REF)
+    with pytest.raises(JudgedGenerationNotFoundError):
+        _read_judged(harness)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("path", [f"{_TABLE}.parquet", "MANIFEST.json"])
+def test_read_judged_generation_refuses_unreadable_file_in_coherently_resealed_copy(
+    harness: Harness, path: str
+) -> None:
+    """Listagem regravada coerente, mas o arquivo da cópia não se lê: adulteração (CC1-1)."""
+    _, manifest = _publish_readable(harness)
+    _preserve(harness, manifest)
+    harness.tamper(_REF, f"{GENERATION_DIR}/{path}", b"neither parquet nor json")
+    harness.rewrite_contents(_REF)
+    if path == "MANIFEST.json":
+        with pytest.raises(JudgedGenerationTamperedError, match=_REF):
+            _find(harness)  # o find já relê o manifesto
+    else:
+        assert _find(harness) is not None  # a integridade da listagem confere
+
+    with pytest.raises(JudgedGenerationTamperedError, match=_REF):
+        _read_judged(harness)
+
+
 # --- referências e tentativas ------------------------------------------------------------
 
 
@@ -552,3 +690,19 @@ def test_preregistration_ref_validated_as_path_identifier(
     with pytest.raises(ValueError, match="preregistration_ref must match"):
         _preserve(harness, manifest, ref)
     assert not harness.judged_root.exists()
+
+
+@pytest.mark.contract
+def test_real_reads_generation_dir_even_without_current(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    harness = _real(tmp_path, monkeypatch)
+    _, manifest = _publish_readable(harness)
+    _preserve(harness, manifest)
+    shutil.rmtree(harness.store.current_dir(_PARTITION))
+
+    judged = _read_judged(harness)
+
+    assert judged.manifest == manifest
+    with pytest.raises(GoldManifestNotFoundError):
+        harness.store.read_generation(partition=_PARTITION)
