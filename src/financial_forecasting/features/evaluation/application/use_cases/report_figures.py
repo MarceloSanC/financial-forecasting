@@ -26,11 +26,16 @@ Regras comuns:
 
 from __future__ import annotations
 
+import math
+import statistics
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Final
 
+from financial_forecasting.features.evaluation.application.dtos.confirmatory_scorecard import (
+    refresh_command_from,
+)
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
     GOLD_CALIBRATION_TABLE,
     GOLD_CONFORMAL_COVERAGE,
@@ -73,9 +78,30 @@ from financial_forecasting.features.evaluation.application.dtos.report_artifacts
     SourceKind,
     SourceRef,
     StatusLabel,
+    fan_chart_seed_note,
+)
+from financial_forecasting.features.evaluation.application.dtos.silver_content import (
+    REALIZED_TABLE,
+    UNIT_KEY_SEPARATOR,
+)
+from financial_forecasting.features.evaluation.application.use_cases.report_silver import (
+    FACT_TABLE,
+    VerifiedSilver,
+)
+from financial_forecasting.features.evaluation.application.use_cases.silver_content_accumulator import (  # noqa: E501
+    DIM_RUN_TABLE,
+)
+from financial_forecasting.features.evaluation.domain.services.coverage_metrics import (
+    CoverageMetrics,
+)
+from financial_forecasting.features.evaluation.domain.services.series_assembly import (
+    SeriesAssembly,
 )
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_real_number,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
+    HorizonSamples,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.family_loss_differentials import (  # noqa: E501
     H3_HORIZONS,
@@ -1652,6 +1678,286 @@ def vsn_figure(inputs: ReportInputs) -> FigureAssembly:
         _gold(schema.name, ("name", "p10", "p50", "p90", "label", "status"), kind=VSN_FAMILY_KIND),
     )
     return FigureAssembly(spec=_spec("vsn_weights", [panel], (VSN_NOTE,)), sources=sources)
+
+
+# --------------------------------------------------------------------------------------
+# Figuras do silver: sharpness diagram e fan chart (D4, I6)
+# --------------------------------------------------------------------------------------
+
+SHARPNESS_NOTE: Final = FIGURE_CATALOG["sharpness_diagram"].required_notes[0]
+_TEST_SPLIT: Final = "test"
+
+
+def _assembled(inputs: ReportInputs, silver: VerifiedSilver) -> Mapping[int, HorizonSamples]:
+    """As amostras por horizonte pelo dono do refresh, com os mesmos argumentos."""
+    command = refresh_command_from(inputs.plan, inputs.preregistration_ref)
+    assembled = SeriesAssembly.assemble(
+        silver.records,
+        silver.runs,
+        silver.realized,
+        horizons=command.horizons,
+        window_deficits=command.window_deficits,
+        required_models=frozenset({inputs.plan.candidate}),
+    )
+    if assembled.alignment.findings:
+        raise ReportSourceMismatchError(
+            f"the verified silver does not assemble: {len(assembled.alignment.findings)} "
+            "alignment findings"
+        )
+    return {samples.horizon: samples for samples in assembled.horizons}
+
+
+def degenerate_key(model: str, seed: Seed, horizon: int, pair: tuple[float, float]) -> str:
+    """Chave de `excluded_degenerate`: `<modelo>|<seed>|h<h>|<τ_l>-<τ_u>`."""
+    return f"{model}|{seed}|h{horizon}|{pair[0]}-{pair[1]}"
+
+
+def _box(widths: Sequence[float]) -> tuple[float, float, float, float, float] | None:
+    """Mínimo, quartis e máximo das larguras (exibição declarada no I3, GBR 2007 §3.3)."""
+    if not widths:
+        return None
+    if len(widths) == 1:
+        only = widths[0]
+        return only, only, only, only, only
+    q1, median, q3 = statistics.quantiles(widths, n=4, method="inclusive")
+    return min(widths), q1, median, q3, max(widths)
+
+
+def sharpness_figure(inputs: ReportInputs, silver: VerifiedSilver) -> FigureAssembly:
+    """Caixas das larguras u - l por par, modelo, seed e horizonte (D13 linha 3).
+
+    As larguras saem de `CoverageMetrics.interval_widths` sobre as séries `full` (máscara
+    não-degenerada do MPIW); a média desenhada `fsum(widths) / len(widths)` tem de ser
+    **exatamente** o `mpiw` `model_full` do gold. Os degenerados excluídos vão à legenda e
+    ao registro (`excluded_degenerate`).
+
+    Raises:
+        ReportSourceMismatchError: o silver não monta ou a média difere do `mpiw` do gold.
+    """
+    tolerance = inputs.plan.h1_gate.degeneracy_tolerance
+    by_horizon = _assembled(inputs, silver)
+    excluded: dict[str, int] = {}
+    panels: list[PanelSpec] = []
+    for horizon in inputs.plan.horizons:
+        samples = by_horizon[horizon]
+        series: list[SeriesSpec] = []
+        for model in samples.models:
+            for seed, full in zip(samples.seeds[model], samples.full[model], strict=True):
+                boxes: list[tuple[float, float, float, float, float] | None] = []
+                labels: list[str] = []
+                counts: list[str] = []
+                for pair in full.symmetric_pairs:
+                    widths = CoverageMetrics.interval_widths(full, tolerance=tolerance, pair=pair)
+                    gold = _metric(
+                        inputs,
+                        model=model,
+                        seed=seed,
+                        horizon=horizon,
+                        sample=GATE_SAMPLE,
+                        metric="mpiw",
+                        level_low=pair[0],
+                        level_high=pair[1],
+                    )
+                    drawn = math.fsum(widths) / len(widths) if widths else None
+                    if drawn != gold:
+                        raise ReportSourceMismatchError(
+                            f"sharpness mean width differs from gold mpiw model_full at "
+                            f"model={model}, seed={seed}, horizon={horizon}, pair {pair}"
+                        )
+                    degenerate = full.n_points - len(widths)
+                    excluded[degenerate_key(model, seed, horizon, pair)] = degenerate
+                    boxes.append(_box(widths))
+                    labels.append(pair_text(pair))
+                    counts.append(f"{pair_text(pair)}: {degenerate}")
+                series.append(
+                    SeriesSpec(
+                        series_id=f"{model}|{seed}",
+                        kind=SeriesKind.BOXES,
+                        name=f"{model} ({_seed_text(seed)})",
+                        model=model,
+                        label=ElementLabel(
+                            status=StatusLabel.DESCRIPTIVE,
+                            note="degenerados excluídos pela máscara do MPIW — "
+                            + "; ".join(counts),
+                        ),
+                        x=tuple(labels),
+                        y=tuple(None if b is None else b[2] for b in boxes),
+                        low=tuple(None if b is None else b[1] for b in boxes),
+                        high=tuple(None if b is None else b[3] for b in boxes),
+                        whisker_low=tuple(None if b is None else b[0] for b in boxes),
+                        whisker_high=tuple(None if b is None else b[4] for b in boxes),
+                    )
+                )
+        panels.append(
+            _panel(
+                inputs,
+                horizon,
+                series,
+                x_label="par (τ_l-τ_u)",
+                y_label="largura u - l",
+                label=_DESCRIPTIVE,
+            )
+        )
+    sources = (
+        SourceRef(
+            kind=SourceKind.SILVER_TABLE,
+            name=FACT_TABLE,
+            filter={"split": _TEST_SPLIT, "value": "value_guardrail"},
+            fields=("quantile_level", "value_guardrail", "target_timestamp_utc"),
+        ),
+        SourceRef(
+            kind=SourceKind.REALIZED, name=REALIZED_TABLE, filter={}, fields=("target_return",)
+        ),
+        _gold(GOLD_METRICS_BY_RUN.name, ("value",), sample=GATE_SAMPLE, metric="mpiw"),
+    )
+    return FigureAssembly(
+        spec=_spec("sharpness_diagram", panels, (SHARPNESS_NOTE,)),
+        sources=sources,
+        silver_units=silver.units,
+        excluded_degenerate=excluded,
+    )
+
+
+def _fan_seed(inputs: ReportInputs, silver: VerifiedSilver, cohort_seeds: Sequence[int]) -> int:
+    """A primeira seed da revisão julgada, igual à lista do cohort (I6); sem fallback."""
+    candidate = inputs.plan.candidate
+    seeds = inputs.plan.seeds[candidate].seeds
+    if seeds is None or tuple(seeds) != tuple(cohort_seeds):
+        raise ReportSourceMismatchError(
+            "the cohort file seeds differ from the judged revision [seeds] of the candidate"
+        )
+    seed = seeds[0]
+    if not any(
+        r.model == candidate and r.seed == seed and r.split == _TEST_SPLIT for r in silver.records
+    ):
+        raise ReportSourceMismatchError(f"seed {seed} of the candidate has no test predictions")
+    return seed
+
+
+def _fan_units(silver: VerifiedSilver, run_ids: frozenset[str]) -> dict[str, str]:
+    def keep(key: str) -> bool:
+        parts = key.split(UNIT_KEY_SEPARATOR)
+        if parts[0] == FACT_TABLE:
+            return len(parts) > 1 and parts[1] in run_ids
+        return parts[0] in {DIM_RUN_TABLE, REALIZED_TABLE}
+
+    return {key: digest for key, digest in silver.units.items() if keep(key)}
+
+
+def fan_chart_figure(
+    inputs: ReportInputs, silver: VerifiedSilver, cohort_seeds: Sequence[int]
+) -> FigureAssembly:
+    """Realizado sobre as faixas dos pares simétricos do candidato, uma seed (I6; D13).
+
+    Seed = a primeira de `[seeds].tft_quantile` da revisão julgada; a lista tem de ser a
+    do arquivo de cohort. Quantis = a grade pontuada (`scored_values`, `value_guardrail`)
+    da série `full`; realizado = `series.realized`; cortes de fold pelo run de cada alvo.
+    Nunca a média dos quantis entre seeds.
+
+    Raises:
+        ReportSourceMismatchError: seeds diferentes, seed sem predições ou silver que não
+            monta.
+    """
+    candidate = inputs.plan.candidate
+    seed = _fan_seed(inputs, silver, cohort_seeds)
+    by_horizon = _assembled(inputs, silver)
+    panels: list[PanelSpec] = []
+    for horizon in inputs.plan.horizons:
+        samples = by_horizon[horizon]
+        seeds = samples.seeds[candidate]
+        full = samples.full[candidate][seeds.index(seed)]
+        targets = full.target_timestamps
+        points = range(full.n_points)
+        series: list[SeriesSpec] = []
+        for (low_level, high_level), (k_low, k_high) in zip(
+            full.symmetric_pairs, full.symmetric_pair_indices, strict=True
+        ):
+            series.append(
+                SeriesSpec(
+                    series_id=f"band|{pair_text((low_level, high_level))}",
+                    kind=SeriesKind.BAND,
+                    name=f"faixa {pair_text((low_level, high_level))}",
+                    model=candidate,
+                    label=_DESCRIPTIVE,
+                    x=targets,
+                    y=tuple(None for _ in points),
+                    low=tuple(full.scored_values(i)[k_low] for i in points),
+                    high=tuple(full.scored_values(i)[k_high] for i in points),
+                )
+            )
+        if MEDIAN_LEVEL in full.levels:
+            k_median = full.levels.index(MEDIAN_LEVEL)
+            series.append(
+                SeriesSpec(
+                    series_id="median",
+                    kind=SeriesKind.LINE,
+                    name="mediana (τ = 0,5)",
+                    model=candidate,
+                    label=_DESCRIPTIVE,
+                    x=targets,
+                    y=tuple(full.scored_values(i)[k_median] for i in points),
+                )
+            )
+        series.append(
+            SeriesSpec(
+                series_id="realized",
+                kind=SeriesKind.LINE,
+                name="realizado y_t",
+                label=_DESCRIPTIVE,
+                x=targets,
+                y=full.realized,
+            )
+        )
+        fold_of = {
+            r.target_timestamp: r.fold
+            for r in silver.records
+            if r.model == candidate
+            and r.seed == seed
+            and r.horizon == horizon
+            and r.split == _TEST_SPLIT
+        }
+        cuts = tuple(_fold_cuts(targets, [fold_of.get(t) for t in targets]))
+        if cuts:
+            series.append(
+                SeriesSpec(
+                    series_id="fold_cuts",
+                    kind=SeriesKind.VLINES,
+                    name="corte de fold",
+                    label=_DESCRIPTIVE,
+                    x=cuts,
+                    y=tuple(None for _ in cuts),
+                )
+            )
+        panels.append(
+            _panel(
+                inputs,
+                horizon,
+                series,
+                x_label="target_timestamp",
+                y_label="retorno",
+                label=ElementLabel(status=StatusLabel.DESCRIPTIVE, note=fan_chart_seed_note(seed)),
+            )
+        )
+    run_ids = frozenset(
+        run.run_id for run in silver.runs if run.model == candidate and run.seed == seed
+    )
+    sources = (
+        SourceRef(
+            kind=SourceKind.SILVER_TABLE,
+            name=FACT_TABLE,
+            filter={"model": candidate, "seed": seed, "split": _TEST_SPLIT},
+            fields=("quantile_level", "value_guardrail", "target_timestamp_utc"),
+        ),
+        SourceRef(
+            kind=SourceKind.REALIZED, name=REALIZED_TABLE, filter={}, fields=("target_return",)
+        ),
+        SourceRef(kind=SourceKind.SILVER_TABLE, name=DIM_RUN_TABLE, filter={}, fields=("fold",)),
+    )
+    return FigureAssembly(
+        spec=_spec("oos_fan_chart", panels, (fan_chart_seed_note(seed),)),
+        sources=sources,
+        silver_units=_fan_units(silver, run_ids),
+    )
 
 
 FigureBuilder = Callable[[ReportInputs], FigureAssembly]

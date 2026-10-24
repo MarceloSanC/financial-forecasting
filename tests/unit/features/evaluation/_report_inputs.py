@@ -18,6 +18,8 @@ errada do mapa do D13 muda o valor desenhado.
 from __future__ import annotations
 
 import copy
+import dataclasses
+import math
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -59,6 +61,15 @@ from financial_forecasting.features.evaluation.application.use_cases.report_figu
     symmetric_pairs,
     tail_kind,
 )
+from financial_forecasting.features.evaluation.application.use_cases.report_silver import (
+    VerifiedSilver,
+)
+from financial_forecasting.features.evaluation.domain.services.coverage_metrics import (
+    CoverageMetrics,
+)
+from financial_forecasting.features.evaluation.domain.services.series_assembly import (
+    SeriesAssembly,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
     Preregistration,
 )
@@ -67,6 +78,12 @@ from financial_forecasting.shared.domain.value_objects.dataset_content_fingerpri
 )
 from tests.unit.features.evaluation._preregistration_payload import r3_payload
 from tests.unit.features.evaluation._silver_content import SAMPLE_SILVER_CONTENT
+from tests.unit.features.evaluation.gold._cohort_factory import (
+    at_point,
+    make_cohort,
+    replace_records,
+    targets_of,
+)
 
 REFERENCE = "test_plan-r3-0123456789ab"
 LEVELS = (0.1, 0.25, 0.5, 0.75, 0.9)
@@ -703,3 +720,76 @@ def make_world(h1_passed: Mapping[int, bool] | None = None) -> ReportWorld:
     rows.update(_h3_rows(plan, base))
     passed = {1: True, 7: False} if h1_passed is None else dict(h1_passed)
     return ReportWorld(plan=plan, rows=rows, scorecard=make_scorecard(plan, rows, passed))
+
+
+# --------------------------------------------------------------------------------------
+# Silver conferido coerente com o gold (Task 08)
+# --------------------------------------------------------------------------------------
+
+SILVER_SEEDS: Mapping[str, tuple[Seed, ...]] = {
+    "tft_quantile": CANDIDATE_SEEDS,
+    "baseline_zero_return": (None,),
+    "gbm_quantile": (0,),
+}
+DEGENERATE_POINTS: Mapping[tuple[str, Seed, int], int] = {
+    ("tft_quantile", 1, 1): 2,
+    ("tft_quantile", 2, 7): 1,
+    ("gbm_quantile", 0, 7): 3,
+}
+"""Pontos colapsados de propósito (os N primeiros alvos da série): fora da máscara do MPIW."""
+_COLLAPSED = 0.001
+
+
+def make_silver(world: ReportWorld) -> VerifiedSilver:
+    """Silver sintético com degenerados e o `mpiw` `model_full` do gold recalculado dele.
+
+    O gold do mundo passa a ter, para os modelos do silver, o `mpiw` que o
+    `CoverageMetrics` dá sobre as mesmas séries `full` (a coerência do refresh real).
+    """
+    plan = world.plan
+    command = refresh_command_from(plan, world.reference)
+    cohort = make_cohort(seeds=SILVER_SEEDS, horizons=plan.horizons, levels=LEVELS)
+    for (model, seed, h), count in DEGENERATE_POINTS.items():
+        for target in targets_of(cohort, model, seed, h)[:count]:
+            cohort = replace_records(
+                cohort,
+                at_point(model, seed, h, target),
+                lambda r: dataclasses.replace(
+                    r, value_raw=_COLLAPSED, value_guardrail=_COLLAPSED, guardrail_applied=False
+                ),
+            )
+    assembled = SeriesAssembly.assemble(
+        cohort.records,
+        cohort.runs,
+        cohort.realized,
+        horizons=command.horizons,
+        window_deficits=command.window_deficits,
+        required_models=frozenset({plan.candidate}),
+    )
+    assert not assembled.alignment.findings, assembled.alignment.findings
+    tolerance = plan.h1_gate.degeneracy_tolerance
+    for samples in assembled.horizons:
+        for model in samples.models:
+            for seed, full in zip(samples.seeds[model], samples.full[model], strict=True):
+                for pair in full.symmetric_pairs:
+                    widths = CoverageMetrics.interval_widths(full, tolerance=tolerance, pair=pair)
+                    for row in world.where(
+                        GOLD_METRICS_BY_RUN.name,
+                        model=model,
+                        seed=seed,
+                        horizon=samples.horizon,
+                        sample="model_full",
+                        metric="mpiw",
+                        level_low=pair[0],
+                        level_high=pair[1],
+                    ):
+                        row["value"] = math.fsum(widths) / len(widths)
+    units = {
+        f"fact_oos_predictions|{run.run_id}|2024": sha256(run.run_id.encode()).hexdigest()
+        for run in cohort.runs
+    }
+    units[f"dim_run|{command.partition.parent_sweep_id}"] = "d1" * 32
+    units[f"realized|{command.partition.asset}"] = "7e" * 32
+    return VerifiedSilver(
+        runs=cohort.runs, records=cohort.records, realized=cohort.realized, units=units
+    )
