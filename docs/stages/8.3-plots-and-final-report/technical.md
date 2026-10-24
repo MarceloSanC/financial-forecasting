@@ -1664,4 +1664,56 @@ Stage candidata: a própria 8.3 (fix antes do fechamento).
 **Razão:** parada dura do runbook. Nenhuma figura é ajustada para "passar" (I3), e o
 executor da Etapa R não altera `src/`.
 
+### 2026-10-24 — [deviation] fix do achado da Etapa R: baselines pontuais omitidos e declarados nas figuras de intervalo — Claude (executor)
+**Contexto:** o `[finding]` acima (R2 geração 1). Decisão da sessão mestra `[decision:C]`
+(doc evaluation §6.6; o concept D13 é emendado por outro agente): nas figuras de intervalo,
+modelo sem **nenhuma** linha `mpiw`/`picp` no gold é omitido, com a omissão declarada por
+modelo na legenda e no registro; linha parcial continua erro (fail-closed).
+**O que mudou (`040c4006`, `[8.3/task-08-fix]`):**
+- `report_figures.point_forecast_models(inputs)`: os modelos do plano sem nenhuma linha de
+  `gold_metrics_by_run` com `metric ∈ {picp, mpiw}`; candidato nessa lista →
+  `ReportSourceMismatchError`. `omitted_model_note(model)` é a frase da legenda.
+- **sharpness** e **PICP × MPIW** pulam esses modelos e põem uma nota por modelo nas notas da
+  spec (entra no `data_digest`); `FigureAssembly.omitted_models` recusa omissão sem a sua nota
+  (dono único da declaração). Os demais lookups por chave seguem iguais: modelo com alguma
+  linha de intervalo e um par/amostra/seed faltando recusa pelo `_one`.
+- **nativo × conformal**: só lê o candidato; candidato sem intervalo recusa (nada a omitir).
+  A fonte `gold_metrics_by_run` do sharpness (filtro `sample`/`metric`) não muda.
+- `FigureRecord.omitted_models` (obrigatório; `<id>.json` ganha a chave) e a linha
+  "modelos omitidos (sem picp/mpiw no gold)" no bloco de cada figura do dossiê. A lista
+  fechada `omissions` do catálogo (A16) não muda.
+- Mundo sintético (`_report_inputs.POINT_FORECAST_MODELS`: `baseline_historical_mean` e
+  `baseline_zero_return` sem `picp`/`mpiw`, como no gold real) e e2e (os dois baselines com
+  grade de Dirac no silver: o refresh real não grava `picp`/`mpiw` deles; os registros do
+  sharpness e do PICP × MPIW listam os dois e o dossiê citável traz a linha). Testes novos:
+  omissão declarada (figuras, use case, e2e), parcial → erro (figuras e use case, nada
+  escrito), candidato sem intervalo, omissão sem nota recusada, `omitted_models` no DTO.
+**Mutações** (container, `report_figures.py` mutado e restaurado, `git diff` limpo depois):
+```
+== m1-picp-silent (pula o modelo sem nota nem omitted_models)
+FAILED test_report_figures_calibration.py::test_picp_mpiw_omits_point_forecast_models_and_declares_them
+FAILED test_generate_report_artifacts.py::test_point_forecast_models_omitted_and_declared_in_the_records
+2 failed, 70 passed
+== m2-sharp-silent (idem no sharpness)
+FAILED test_report_figures_silver.py::test_point_forecast_model_omitted_and_declared
+FAILED test_generate_report_artifacts.py::test_point_forecast_models_omitted_and_declared_in_the_records
+2 failed, 70 passed
+== m3-picp-partial (lookup que falha vira ponto pulado)
+FAILED test_report_figures_calibration.py::test_picp_mpiw_partial_interval_rows_raise
+FAILED test_report_figures_calibration.py::test_point_forecast_models_only_without_any_interval_row
+FAILED test_generate_report_artifacts.py::test_partial_interval_rows_write_nothing
+3 failed, 69 passed
+== m4-partial-as-point (só mpiw common h+1 conta como "tem intervalo")
+FAILED test_report_figures_calibration.py::test_point_forecast_models_only_without_any_interval_row
+FAILED test_generate_report_artifacts.py::test_partial_interval_rows_write_nothing
+2 failed, 70 passed
+RESTORED True
+```
+T1: testes unit de evaluation e o contrato do sink 3160 passed; `tests/architecture` + e2e
+`test_report_artifacts_cli.py` + `test_run_confirmatory_evaluation.py` 416 passed; ruff e
+mypy de `src/` verdes.
+**Razão:** decisão `[decision:C]` da sessão mestra aplicada sem afrouxar o fail-closed; a
+mudança de `src/` pede revisão, `make check` e `GATE1` novos antes de recomeçar a Etapa R
+da R1 (linha `FAIL_SRC_CHANGED_SINCE_GATE1`).
+
 <!-- END: post-execution -->
