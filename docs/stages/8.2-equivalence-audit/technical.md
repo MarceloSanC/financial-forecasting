@@ -1722,4 +1722,11 @@ falhas só em `tests/architecture` (fixtures que injetam arquivo em `src/` se at
 workers; árvore limpa depois) — forma do comando, não do código; o `make check` usa
 `loadgroup`. Pendente: revisão independente, `make check` extra e `GATE1` novo antes da E4.
 
+### 2026-10-23 — [measurement] E4 — fix revisado, `make check` extra e `GATE1` novo — Claude (executor das Etapas)
+**Contexto:** revisão independente do fix `0e59b9f9`: aprovado (um achado médio de cobertura de
+teste, tratado depois da E5 só com testes). `make check` extra sobre `bec99bdf` (coordenadora):
+`EXIT=0`, `8966 passed, 30 skipped`, coverage 98,68 %.
+**Razão:** linha `FAIL_SCAFFOLD_CHANGED`: `GATE1 := bec99bdf60a075e78b181791b357dfe6cd8735b3`
+no `etapa-82.env`. Esta entrada só toca o `technical.md`; a E4 recomeça do passo 1.
+
 <!-- END: post-execution -->
