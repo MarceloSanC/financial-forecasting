@@ -5,8 +5,10 @@ confina `matplotlib` ao adapter de plots, mas a exceção do pacote de plots dei
 qualquer submódulo — inclusive `matplotlib.pyplot`, que carrega estado global (figura
 corrente, backend do processo) e quebraria o determinismo do PDF. A guarda lê o AST de
 todo `src/**/*.py`, **inclusive** `features/evaluation/adapters/out/plots/`, e reprova as
-três formas: `import matplotlib.pyplot`, `from matplotlib import pyplot` e
-`from matplotlib.pyplot import …`. Um auto-teste sobre fonte sintética prova que a guarda
+formas estáticas — `import matplotlib.pyplot`, `from matplotlib import pyplot` e
+`from matplotlib.pyplot import …` — e as dinâmicas
+`importlib.import_module("matplotlib.pyplot")` e `__import__("matplotlib.pyplot")`
+(CC1-2). Um auto-teste sobre fonte sintética prova que a guarda
 acusa cada forma (sem ele, uma guarda vazia passaria verde).
 """
 
@@ -20,13 +22,33 @@ import pytest
 _REPO = Path(__file__).resolve().parents[2]
 _SRC = _REPO / "src"
 _PYPLOT = "matplotlib.pyplot"
+_DYNAMIC_IMPORTS = frozenset({"import_module", "__import__"})
+
+
+def _is_pyplot(name: str) -> bool:
+    return name == _PYPLOT or name.startswith(f"{_PYPLOT}.")
+
+
+def _dynamic_pyplot(node: ast.Call) -> bool:
+    """`import_module("matplotlib.pyplot…")` (qualquer qualificação) ou `__import__(…)`."""
+    func = node.func
+    name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+    first = node.args[0] if node.args else None
+    return (
+        name in _DYNAMIC_IMPORTS
+        and isinstance(first, ast.Constant)
+        and isinstance(first.value, str)
+        and _is_pyplot(first.value)
+    )
 
 
 def _pyplot_imports(tree: ast.AST) -> list[int]:
-    """Linhas que importam `matplotlib.pyplot`, em qualquer das três formas."""
+    """Linhas que importam `matplotlib.pyplot`, nas formas estáticas e dinâmicas."""
     lines: list[int] = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
+        if isinstance(node, ast.Call) and _dynamic_pyplot(node):
+            lines.append(node.lineno)
+        elif isinstance(node, ast.Import):
             if any(
                 alias.name == _PYPLOT or alias.name.startswith(f"{_PYPLOT}.")
                 for alias in node.names
@@ -66,8 +88,12 @@ def test_pyplot_guard_catches_every_import_form() -> None:
         "import matplotlib\n"
         "from matplotlib.figure import Figure\n"
         "from matplotlib import rc_context\n"
+        "import importlib\n"
+        "importlib.import_module('matplotlib.pyplot')\n"
+        "__import__('matplotlib.pyplot')\n"
+        "importlib.import_module('matplotlib.figure')\n"
     )
-    assert _pyplot_imports(ast.parse(source)) == [1, 2, 3]
+    assert sorted(_pyplot_imports(ast.parse(source))) == [1, 2, 3, 8, 9]
 
 
 @pytest.mark.unit
