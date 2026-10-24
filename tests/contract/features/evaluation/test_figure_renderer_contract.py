@@ -3,8 +3,10 @@
 Pernas `[fake, real]`: `InMemoryFigureRenderer` e `MatplotlibFigureRenderer`. As duas
 devolvem bytes que começam com `%PDF`, iguais para a mesma spec e diferentes para dado
 diferente, e a identidade traz o formato. Só no real: bytes iguais entre dois
-subprocessos com `PYTHONHASHSEED` diferentes, sem `/CreationDate`, fontes TrueType
-embutidas (`/FontFile2`, nenhuma `Type3`), uma página e recusa de modelo sem estilo fixo.
+subprocessos com `PYTHONHASHSEED` diferentes, bytes iguais sob ruído de último bit do
+solver do layout restrito (o kiwisolver varia entre chamadas no mesmo processo), sem
+`/CreationDate`, fontes TrueType embutidas (`/FontFile2`, nenhuma `Type3`), uma página e
+recusa de modelo sem estilo fixo.
 """
 
 from __future__ import annotations
@@ -14,10 +16,14 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from matplotlib import layout_engine
+from matplotlib.figure import Figure
+from matplotlib.transforms import Bbox
 
 from financial_forecasting.features.evaluation.adapters.out.plots.matplotlib_figure_renderer import (  # noqa: E501
     MatplotlibFigureRenderer,
@@ -132,6 +138,43 @@ def test_bytes_equal_across_subprocesses_with_different_hash_seeds() -> None:
         digests.append(result.stdout.strip())
     local = hashlib.sha256(MatplotlibFigureRenderer().render(sample_spec())).hexdigest()
     assert digests[0] == digests[1] == local
+
+
+_SOLVER_NOISE = 1e-15
+"""Ordem do ruído de arredondamento do kiwisolver visto no PDF real (fundo do rodapé
+`-2.4e-16` vs `0.0` entre duas chamadas no mesmo processo)."""
+_CONSTRAINED_LAYOUT: Callable[..., object] = vars(layout_engine)["do_constrained_layout"]
+
+
+def _noisy_constrained_layout(sign: float) -> Callable[..., object]:
+    """O layout restrito real, seguido de um ruído de último bit com o sinal dado.
+
+    Reproduz de forma determinística o que o solver faz ao acaso: as mesmas posições, a
+    menos de ~1e-15 para cima ou para baixo, em toda subfigura e todo eixo.
+    """
+
+    def run(figure: Figure, *args: object, **kwargs: object) -> object:
+        result = _CONSTRAINED_LAYOUT(figure, *args, **kwargs)
+        subfigures = list(figure.subfigs)
+        for sub in subfigures:
+            subfigures += sub.subfigs
+            sub.bbox_relative.set_points(sub.bbox_relative.get_points() + sign * _SOLVER_NOISE)
+        for ax in figure.get_axes():
+            points = ax.get_position(original=False).get_points() + sign * _SOLVER_NOISE
+            ax.set_position(Bbox(points), which="active")
+        return result
+
+    return run
+
+
+@pytest.mark.contract
+def test_bytes_ignore_layout_solver_rounding_noise(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ruído de último bit no resultado do layout restrito não muda um byte do PDF."""
+    rendered = []
+    for sign in (-1.0, 1.0, -1.0):
+        monkeypatch.setattr(layout_engine, "do_constrained_layout", _noisy_constrained_layout(sign))
+        rendered.append(MatplotlibFigureRenderer().render(sample_spec()))
+    assert rendered[0] == rendered[1] == rendered[2]
 
 
 @pytest.mark.contract

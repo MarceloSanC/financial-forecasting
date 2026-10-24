@@ -3,7 +3,8 @@
 Sobre as dez specs sintéticas e specs mínimas: séries distintas com estilos distintos (cor,
 marcador, vazado), rótulos de legenda que cabem numa coluna da página, rodapé sem nota
 repetida, e todo texto e eixo dentro da página (nada cortado nas bordas), medido nas caixas
-renderizadas.
+renderizadas; e o PDF do conformal com os mesmos bytes em renderizações repetidas no mesmo
+processo (o ruído do solver do layout restrito variava entre chamadas).
 """
 
 from __future__ import annotations
@@ -329,3 +330,16 @@ def test_every_text_inside_the_page(specs: list[FigureSpec]) -> None:
         with rc_context(_RC):  # type: ignore[arg-type]
             figure = renderer._draw(spec)
             assert _outside(figure) == [], spec.figure_id
+
+
+def test_native_vs_conformal_same_bytes_in_repeated_renders(specs: list[FigureSpec]) -> None:
+    """A mesma spec, renderizada várias vezes no mesmo processo, dá os mesmos bytes.
+
+    Sem fixar o layout (`freeze_layout`), o fundo da faixa do rodapé saía `-0` ou `0` ao
+    acaso (~1 em 10 renderizações desta spec); o contrato do port cobre a causa de forma
+    determinística (ruído injetado no solver), este teste a cobre com o solver real.
+    """
+    spec = next(s for s in specs if s.figure_id == "native_vs_conformal")
+    renderer = MatplotlibFigureRenderer()
+    first = renderer.render(spec)
+    assert all(renderer.render(spec) == first for _ in range(30))

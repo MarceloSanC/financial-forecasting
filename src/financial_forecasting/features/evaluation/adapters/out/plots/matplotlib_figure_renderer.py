@@ -3,8 +3,9 @@
 ADR `8_3_0003`: `matplotlib.figure.Figure` + `FigureCanvasPdf`, **sem `pyplot`** e sem
 estado global; `rc_context` com `pdf.fonttype = 42` (TrueType embutida) e `DejaVu Sans`
 (embarcada no matplotlib — nenhuma fonte do sistema); `savefig(format="pdf",
-metadata={"CreationDate": None})`. A mesma `FigureSpec`, no mesmo ambiente, dá os mesmos
-bytes em qualquer chamada e processo.
+metadata={"CreationDate": None})`; o layout restrito roda uma vez e fica fixado numa grade
+(`freeze_layout`: o solver tem ruído de último bit entre chamadas). A mesma `FigureSpec`, no
+mesmo ambiente, dá os mesmos bytes em qualquer chamada e processo.
 
 O adapter **só desenha o que a spec traz** — um eixo por painel, uma marca por
 `SeriesKind` —, nunca recalcula (as caixas usam `Axes.bxp` com as estatísticas da spec).
@@ -35,6 +36,8 @@ from matplotlib.artist import Artist
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_pdf import FigureCanvasPdf
 from matplotlib.figure import Figure, SubFigure
+from matplotlib.text import Text
+from matplotlib.transforms import Bbox
 
 from financial_forecasting.features.evaluation.application.dtos.report_artifacts import (
     FigureSpec,
@@ -87,6 +90,8 @@ _Z_OBSERVED: Final = 2.0
 _Z_MODEL_LINE: Final = 3.0
 _DODGE: Final = 0.3
 """Largura total do deslocamento lateral dos intervalos de um painel categórico."""
+_LAYOUT_GRID: Final = 1e-6
+"""Grade (fração da figura, ~0,0005 pt) das posições fixadas depois do layout restrito."""
 _SEQUENTIAL: Final = "cividis"
 _WIDTH_IN: Final = 6.3
 _PANEL_HEIGHT_IN: Final = 2.6
@@ -330,6 +335,43 @@ def _legend(band: SubFigure, axes: Sequence[Sequence[Axes]]) -> None:
         )
 
 
+def _snap(value: float) -> float:
+    """`value` na grade `_LAYOUT_GRID` da fração da figura, sem zero negativo."""
+    return round(float(value) / _LAYOUT_GRID) * _LAYOUT_GRID + 0.0
+
+
+def _snapped(box: Bbox) -> Bbox:
+    return Bbox([[_snap(box.x0), _snap(box.y0)], [_snap(box.x1), _snap(box.y1)]])
+
+
+def freeze_layout(figure: Figure) -> None:
+    """Roda o layout restrito uma vez, fixa o resultado na grade e desliga o motor.
+
+    O solver do layout restrito (kiwisolver) devolve posições com ruído de arredondamento
+    no último bit que muda de uma chamada para outra no MESMO processo (a ordem interna das
+    variáveis do solver segue endereços de memória): o fundo da faixa do rodapé sai
+    `-2.4e-16` numa chamada e `0.0` noutra, e o PDF escreve `-0` vs `0` — bytes diferentes
+    para a mesma spec. Cada posição decidida pelo layout (caixas das subfiguras, posição dos
+    eixos, título da faixa dos painéis) vai para a grade `_LAYOUT_GRID` (sem zero negativo) e
+    o `savefig` desenha sem rodar o solver de novo; tudo a jusante é aritmética determinística
+    sobre essas posições.
+    """
+    figure.draw_without_rendering()
+    subfigures = list(figure.subfigs)
+    for sub in subfigures:
+        subfigures += sub.subfigs
+        sub.bbox_relative.set_points(_snapped(sub.bbox_relative).get_points())
+    for ax in figure.get_axes():
+        ax.set_position(_snapped(ax.get_position(original=False)), which="both")
+    for owner in [figure, *subfigures]:
+        # o título que o layout posiciona (o matplotlib não tem acessor público do artista)
+        title = getattr(owner, "_suptitle", None)
+        if isinstance(title, Text):
+            x, y = title.get_position()
+            title.set_position((_snap(x), _snap(y)))
+    figure.set_layout_engine("none")
+
+
 class MatplotlibFigureRenderer:
     """Satisfaz `FigureRenderer`: uma página PDF por `FigureSpec`."""
 
@@ -358,6 +400,7 @@ class MatplotlibFigureRenderer:
             raise ValueError(f"models without a fixed style: {unknown}")
         with rc_context(_RC):  # type: ignore[arg-type]
             canvas_figure = self._draw(figure)
+            freeze_layout(canvas_figure)
             buffer = io.BytesIO()
             canvas_figure.savefig(buffer, format="pdf", metadata={"CreationDate": None})
         return buffer.getvalue()
