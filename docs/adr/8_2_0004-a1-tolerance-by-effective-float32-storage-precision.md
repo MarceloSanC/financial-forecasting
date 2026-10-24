@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-23
 updated_at: 2026-10-23
 adr_id: 8.2.0004
-decision: A1 passes at a point when |y_new − y_prior| ≤ half an ulp of float32 at that point, provided every y_prior of the intersection is exactly representable in float32 (checked; if any is not, the double rule of concept D13 applies unchanged); human decision B3 (option 2) on issue #232, taken after the A1 diagnosis and before any model number of the prior evidence was computed; the model comparison (A10/A11) that A1 now unblocks is labelled in the internal report as a post-hoc deviation.
+decision: Under the verified precondition that every y_prior of the horizon is finite and exactly representable in float32 (and y_new finite), A1 passes at a point exactly when float32(y_new) == y_prior — the round-to-nearest-even float32 of y_new, i.e. half an ulp of float32 with the right direction and ties-to-even; otherwise the double rule of concept D13 applies unchanged for that horizon; the result under the original double rule is also reported; human decision B3 (option 2) on issue #232, taken after the A1 diagnosis and before any model number of the prior evidence was computed; the model comparison (A10/A11) that A1 now unblocks is labelled in the internal report as a post-hoc deviation.
 context_stage: 8.2-equivalence-audit
 bounded_context: evaluation
 ---
@@ -40,17 +40,27 @@ explained as category "alvo"; by D13 the model comparison (A10/A11) was marked
 Human decision B3, option 2 ("emendar A1 já"), registered on issue #232
 (comment of 2026-10-23):
 
-1. **Tolerance.** A1 passes at a point when |y_new − y_prior| ≤ ½ ulp of
-   float32 at that point — the prior's **effective** storage precision, which
-   is what doc §5.4 asks for ("dentro da precisão de armazenamento do anterior").
-2. **Precondition (checked).** Every y_prior in T∩ is exactly representable in
-   float32 (`float(np.float32(y)) == y`). If any point fails it, the double
-   rule of D13 applies unchanged for that horizon.
+1. **Tolerance.** The prior's **effective** storage precision is float32,
+   which is what doc §5.4 asks for ("dentro da precisão de armazenamento do
+   anterior"): half an ulp of float32 at the point.
+2. **Precondition (checked, per horizon).** Every y_prior **of the horizon** is
+   finite and exactly representable in float32 (`float(np.float32(y)) == y`),
+   and every y_new is finite. If any point fails it, the double rule of D13
+   applies unchanged for that horizon.
+2b. **Exact criterion (refinement within B3, [decision:C]).** Under the
+   precondition, A1 passes at a point exactly when `float32(y_new) == y_prior`
+   (y_prior is the nearest float32 to y_new). This is item 1 with the right
+   direction and ties-to-even; a symmetric bound built from `np.spacing` (the
+   ulp *above*) would be wrong at powers of two, where the ulp below is half
+   the ulp above. max |Δ| and max |Δ|/|y| are reported as information only.
+2c. **Original rule also reported.** The A1 result under the double rule of
+   D13 is reported next to the float32 result.
 3. **Order.** The amendment is committed before any model number of the prior
    evidence is computed; E4/E5 are re-run under it.
-4. **Labelling.** The internal report labels the model comparison (A10/A11)
-   that A1 now unblocks as a **post-hoc deviation** (rule changed after seeing
-   the A1 diagnosis), with this ADR as the reference.
+4. **Labelling.** In the internal report, every A10/A11 row of a horizon
+   judged under the float32 rule carries the label of **post-A1 deviation**
+   (rule changed after seeing the A1 diagnosis), with this ADR as the
+   reference.
 
 ## Alternatives considered
 
