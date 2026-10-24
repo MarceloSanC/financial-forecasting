@@ -495,6 +495,10 @@ def _figure_blocks(records: Sequence[FigureRecord]) -> list[DossierBlock]:
                 for source in record.sources
             ),
             ("omissões declaradas", "; ".join(record.omissions) or "nenhuma"),
+            (
+                "modelos omitidos (sem picp/mpiw no gold)",
+                ", ".join(record.omitted_models) or "nenhum",
+            ),
             ("unidades do silver", str(len(record.silver_units))),
         ]
         blocks.append(

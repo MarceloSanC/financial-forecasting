@@ -606,8 +606,9 @@ class FigureRecord:
     Raises:
         ValueError: id fora do catálogo, digest inválido, revisão negativa, fonte ausente,
             unidade do silver com digest inválido, contagem de degenerados negativa,
-            omissões diferentes das do catálogo, `code` sem exatamente `code.src` e
-            `code.uv_lock`, chave de commit/instante ou caminho absoluto.
+            omissões diferentes das do catálogo, modelo omitido repetido, `code` sem
+            exatamente `code.src` e `code.uv_lock`, chave de commit/instante ou caminho
+            absoluto.
     """
 
     figure_id: str
@@ -620,6 +621,7 @@ class FigureRecord:
     silver_units: Mapping[str, str]
     excluded_degenerate: Mapping[str, int]
     omissions: tuple[str, ...]
+    omitted_models: tuple[str, ...]
     code: Mapping[str, str]
     renderer: Mapping[str, str]
 
@@ -652,6 +654,9 @@ class FigureRecord:
         _str_tuple(self.omissions, field="omissions")
         if self.omissions != FIGURE_CATALOG[self.figure_id].omissions:
             raise ValueError(f"record {self.figure_id!r} omissions differ from the catalog")
+        _str_tuple(self.omitted_models, field="omitted_models")
+        if len(set(self.omitted_models)) != len(self.omitted_models):
+            raise ValueError(f"omitted_models repeat a model: {list(self.omitted_models)}")
         code = _frozen_str_map(self.code, field="code", structural=True)
         if set(code) != CODE_RECORD_KEYS:
             raise ValueError(
@@ -678,6 +683,7 @@ class FigureRecord:
             "silver_units": dict(self.silver_units),
             "excluded_degenerate": dict(self.excluded_degenerate),
             "omissions": list(self.omissions),
+            "omitted_models": list(self.omitted_models),
             "code": dict(self.code),
             "renderer": dict(self.renderer),
         }

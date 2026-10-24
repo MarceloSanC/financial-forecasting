@@ -58,6 +58,7 @@ from financial_forecasting.features.evaluation.application.use_cases.generate_re
     GenerateReportArtifacts,
 )
 from financial_forecasting.features.evaluation.application.use_cases.report_figures import (
+    omitted_model_note,
     reliability_figure,
     sharpness_figure,
 )
@@ -109,6 +110,7 @@ from tests.unit.features.evaluation._preregistration_payload import (
 )
 from tests.unit.features.evaluation._report_inputs import (
     CANDIDATE_SEEDS,
+    POINT_FORECAST_MODELS,
     ReportWorld,
     make_silver,
     make_world,
@@ -457,6 +459,42 @@ def test_records_carry_data_digest_generation_digest_code_and_renderer(harness: 
 
     changed = _make(mutate_world=bump).run()
     assert dict(changed.figures)["quantile_score_plot"] != digests["quantile_score_plot"]  # type: ignore[attr-defined]
+
+
+def test_point_forecast_models_omitted_and_declared_in_the_records(harness: _World) -> None:
+    """Fix da Etapa R: os baselines sem linha picp/mpiw saem das figuras de intervalo, com a
+    omissão no registro de cada figura e nas notas da spec (o dado plotado)."""
+    harness.run()
+    records = harness.sink.records
+    interval = {"picp_mpiw_plot", "sharpness_diagram"}
+    expected = tuple(m for m in harness.world.plan.models if m in POINT_FORECAST_MODELS)
+    for figure_id, record in records.items():
+        assert record.omitted_models == (expected if figure_id in interval else ()), figure_id
+        assert record.as_mapping()["omitted_models"] == list(record.omitted_models)
+    specs = {fid: content for fid, content, _ in harness.sink.figures}
+    assert set(specs) >= interval
+    for figure_id in interval:
+        for model in expected:
+            assert omitted_model_note(model).encode() in specs[figure_id], (figure_id, model)
+
+
+def test_partial_interval_rows_write_nothing() -> None:
+    def drop_one(world: ReportWorld) -> None:
+        world.rows["gold_metrics_by_run"] = [
+            row
+            for row in world.rows["gold_metrics_by_run"]
+            if not (
+                row["model"] == "gbm_quantile"
+                and row["metric"] == "mpiw"
+                and row["sample"] == "common"
+                and row["horizon"] == 1
+            )
+        ]
+
+    world = _make(mutate_world=drop_one)
+    with pytest.raises(ReportSourceMismatchError, match="gbm_quantile"):
+        world.run()
+    assert world.nothing_happened()
 
 
 def test_confirmatory_label_on_gate_tails_and_dm_rows_where_h1_passes(

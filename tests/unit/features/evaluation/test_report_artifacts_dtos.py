@@ -159,6 +159,7 @@ def _record(figure_id: str = "quantile_score_plot", **overrides: object) -> Figu
         "silver_units": {},
         "excluded_degenerate": {},
         "omissions": FIGURE_CATALOG[figure_id].omissions,
+        "omitted_models": (),
         "code": {"code.src": _SHA, "code.uv_lock": _SHA_B},
         "renderer": {"format": "pdf", "renderer": "in-memory"},
     }
@@ -376,6 +377,7 @@ def test_record_as_mapping_fields_and_no_commit_or_time() -> None:
         "silver_units",
         "excluded_degenerate",
         "omissions",
+        "omitted_models",
         "code",
         "renderer",
     }
@@ -423,6 +425,16 @@ def test_record_silver_units_and_degenerate_counts() -> None:
         _record(silver_units={"dim_run|c": "x"})
     with pytest.raises(ValueError, match="excluded_degenerate"):
         _record(excluded_degenerate={"k": -1})
+
+
+@pytest.mark.unit
+def test_record_carries_omitted_models_and_refuses_repeats() -> None:
+    record = _record("sharpness_diagram", omitted_models=("baseline_historical_mean",))
+    assert record.as_mapping()["omitted_models"] == ["baseline_historical_mean"]
+    with pytest.raises(ValueError, match="omitted_models"):
+        _record("sharpness_diagram", omitted_models=("m", "m"))
+    with pytest.raises(ValueError, match="omitted_models"):
+        _record("sharpness_diagram", omitted_models=["m"])
 
 
 @pytest.mark.unit

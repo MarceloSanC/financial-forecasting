@@ -21,13 +21,16 @@ from financial_forecasting.features.evaluation.application.dtos.report_artifacts
 from financial_forecasting.features.evaluation.application.use_cases.report_figures import (
     FigureAssembly,
     native_vs_conformal_figure,
+    omitted_model_note,
     picp_mpiw_figure,
+    point_forecast_models,
     quantile_score_figure,
     reliability_figure,
 )
 from tests.unit.features.evaluation._report_inputs import (
     CANDIDATE_SEEDS,
     LEVELS,
+    POINT_FORECAST_MODELS,
     VARIANTS,
     ReportWorld,
     make_world,
@@ -312,6 +315,77 @@ def test_nominal_reference_line_1_minus_2_tau_low(world: ReportWorld) -> None:
     series = _panel_series(picp_mpiw_figure(world.inputs()).spec, "h1")
     assert series["nominal|0,1-0,9"].y == (pytest.approx(0.8),)
     assert series["nominal|0,25-0,75"].y == (0.5,)
+
+
+@pytest.mark.unit
+def test_picp_mpiw_omits_point_forecast_models_and_declares_them(world: ReportWorld) -> None:
+    """Modelos sem nenhuma linha picp/mpiw no gold: fora dos pontos, uma nota por modelo e
+    `omitted_models` no registro (doc evaluation §6.6)."""
+    assembly = picp_mpiw_figure(world.inputs())
+    assert set(assembly.omitted_models) == POINT_FORECAST_MODELS
+    for horizon in (1, 7):
+        series = _panel_series(assembly.spec, f"h{horizon}")
+        assert not POINT_FORECAST_MODELS & set(series)
+        assert {"baseline_ar1", "gbm_quantile", _CANDIDATE} <= set(series)
+    for model in POINT_FORECAST_MODELS:
+        assert omitted_model_note(model) in assembly.spec.notes
+
+
+@pytest.mark.unit
+def test_picp_mpiw_partial_interval_rows_raise(world: ReportWorld) -> None:
+    """Alguma linha picp/mpiw do modelo e uma faltando (um par de uma seed): recusa."""
+    world.rows["gold_metrics_by_run"] = [
+        row
+        for row in world.rows["gold_metrics_by_run"]
+        if not (
+            row["model"] == "baseline_ar1"
+            and row["sample"] == "common"
+            and row["metric"] == "picp"
+            and row["horizon"] == 1
+            and row["level_low"] == 0.25  # noqa: PLR2004
+        )
+    ]
+    with pytest.raises(ReportSourceMismatchError, match="baseline_ar1"):
+        picp_mpiw_figure(world.inputs())
+
+
+@pytest.mark.unit
+def test_point_forecast_models_only_without_any_interval_row(world: ReportWorld) -> None:
+    assert set(point_forecast_models(world.inputs())) == POINT_FORECAST_MODELS
+    world.rows["gold_metrics_by_run"] = [
+        row
+        for row in world.rows["gold_metrics_by_run"]
+        if not (row["model"] == "baseline_ar1" and row["metric"] == "mpiw")
+    ]
+    # ainda tem picp: não é pontual; a falta do mpiw é parcial e recusa no lookup
+    assert "baseline_ar1" not in point_forecast_models(world.inputs())
+    with pytest.raises(ReportSourceMismatchError, match="baseline_ar1"):
+        picp_mpiw_figure(world.inputs())
+
+
+@pytest.mark.unit
+def test_candidate_without_interval_rows_raises(world: ReportWorld) -> None:
+    world.rows["gold_metrics_by_run"] = [
+        row
+        for row in world.rows["gold_metrics_by_run"]
+        if not (row["model"] == _CANDIDATE and row["metric"] in {"picp", "mpiw"})
+    ]
+    with pytest.raises(ReportSourceMismatchError, match="candidate"):
+        point_forecast_models(world.inputs())
+
+
+@pytest.mark.unit
+def test_assembly_refuses_an_undeclared_omission(world: ReportWorld) -> None:
+    spec = picp_mpiw_figure(world.inputs()).spec
+    bare = FigureSpec(
+        figure_id=spec.figure_id,
+        title=spec.title,
+        panels=spec.panels,
+        notes=FIGURE_CATALOG["picp_mpiw_plot"].required_notes,
+        omissions=spec.omissions,
+    )
+    with pytest.raises(ValueError, match="without a note"):
+        FigureAssembly(spec=bare, sources=(), omitted_models=("baseline_zero_return",))
 
 
 @pytest.mark.unit

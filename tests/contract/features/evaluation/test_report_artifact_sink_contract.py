@@ -74,6 +74,7 @@ def _record(figure_id: str) -> FigureRecord:
         silver_units={},
         excluded_degenerate={},
         omissions=FIGURE_CATALOG[figure_id].omissions,
+        omitted_models=(),
         code={"code.src": "a" * 64, "code.uv_lock": "b" * 64},
         renderer={"format": "pdf"},
     )

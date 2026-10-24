@@ -132,6 +132,8 @@ LOWER_TAIL: Final = "lower_tail"
 UPPER_TAIL: Final = "upper_tail"
 PAIR_KIND: Final = "pair"
 MEDIAN_LEVEL: Final = 0.5
+INTERVAL_METRICS: Final = frozenset({"picp", "mpiw"})
+"""As métricas de intervalo de `gold_metrics_by_run` que as figuras de intervalo leem."""
 
 _CONFIRMATORY = ElementLabel(status=StatusLabel.CONFIRMATORY)
 _PROFILE = ElementLabel(status=StatusLabel.DESCRIPTIVE_PROFILE)
@@ -176,15 +178,30 @@ class FigureAssembly:
     """Uma figura montada: a spec, as fontes lidas e o que vai só ao registro.
 
     `silver_units` (fan chart e sharpness) e `excluded_degenerate` (sharpness) ficam vazios
-    nas figuras do gold.
+    nas figuras do gold. `omitted_models` são os modelos sem nenhuma linha `picp`/`mpiw` no
+    gold, fora das figuras de intervalo (`point_forecast_models`); cada um tem a sua frase
+    (`omitted_model_note`) nas notas da spec — omissão sem declaração não constrói.
+
+    Raises:
+        ValueError: modelo omitido repetido ou sem a sua frase nas notas da spec.
     """
 
     spec: FigureSpec
     sources: tuple[SourceRef, ...]
     silver_units: Mapping[str, str] = field(default_factory=dict)
     excluded_degenerate: Mapping[str, int] = field(default_factory=dict)
+    omitted_models: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        if len(set(self.omitted_models)) != len(self.omitted_models):
+            raise ValueError(f"omitted_models repeat a model: {list(self.omitted_models)}")
+        undeclared = [
+            model
+            for model in self.omitted_models
+            if omitted_model_note(model) not in self.spec.notes
+        ]
+        if undeclared:
+            raise ValueError(f"omitted models without a note in the figure: {undeclared}")
         object.__setattr__(self, "silver_units", MappingProxyType(dict(self.silver_units)))
         object.__setattr__(
             self, "excluded_degenerate", MappingProxyType(dict(self.excluded_degenerate))
@@ -194,6 +211,40 @@ class FigureAssembly:
 # --------------------------------------------------------------------------------------
 # Leitura (gold e scorecard)
 # --------------------------------------------------------------------------------------
+
+
+def point_forecast_models(inputs: ReportInputs) -> tuple[str, ...]:
+    """Os modelos do plano sem **nenhuma** linha `picp`/`mpiw` em `gold_metrics_by_run`.
+
+    São os baselines pontuais (intervalo degenerado em toda série: o gate de degeneração
+    invalida a calibração e o gold não grava cobertura, doc evaluation §6.6). As figuras de
+    intervalo os omitem e declaram a omissão por modelo (legenda e registro). Um modelo com
+    **alguma** linha de intervalo não entra aqui: falta de par, amostra ou seed segue
+    recusada pelo lookup por chave (fail-closed).
+
+    Raises:
+        ReportSourceMismatchError: o candidato não tem linha de intervalo.
+    """
+    schema = GOLD_METRICS_BY_RUN
+    with_interval = {
+        col(row, schema, "model")
+        for row in inputs.generation.table(schema).rows
+        if col(row, schema, "metric") in INTERVAL_METRICS
+    }
+    missing = tuple(model for model in inputs.plan.models if model not in with_interval)
+    if inputs.plan.candidate in missing:
+        raise ReportSourceMismatchError(
+            f"{schema.name}: the candidate {inputs.plan.candidate} has no picp/mpiw rows"
+        )
+    return missing
+
+
+def omitted_model_note(model: str) -> str:
+    """A frase da omissão de um modelo pontual nas figuras de intervalo (legenda)."""
+    return (
+        f"{model} omitido: o gold não tem linha picp/mpiw do modelo "
+        "(previsão pontual, intervalo degenerado em toda a série)"
+    )
 
 
 def _rows(inputs: ReportInputs, schema: GoldTableSchema, **where: object) -> list[Row]:
@@ -757,14 +808,21 @@ PICP_MPIW_NOTE: Final = FIGURE_CATALOG["picp_mpiw_plot"].required_notes[0]
 
 
 def picp_mpiw_figure(inputs: ReportInputs) -> FigureAssembly:
-    """Um ponto por (modelo, par, seed) e horizonte; nominal 1 - 2τ_l (D13 linha 4)."""
+    """Um ponto por (modelo, par, seed) e horizonte; nominal 1 - 2τ_l (D13 linha 4).
+
+    Modelo sem nenhuma linha `picp`/`mpiw` no gold (`point_forecast_models`) fica fora,
+    declarado na legenda e em `omitted_models`; linha parcial recusa (`_one`).
+    """
     pairs = symmetric_pairs(inputs.plan.quantile_levels)
     candidate = inputs.plan.candidate
+    omitted = point_forecast_models(inputs)
     panels: list[PanelSpec] = []
     for horizon in inputs.plan.horizons:
         profile = horizon_entry(inputs.scorecard, "profile", horizon)
         series: list[SeriesSpec] = []
         for model in inputs.plan.models:
+            if model in omitted:
+                continue
             xs: list[float | None] = []
             ys: list[float | None] = []
             texts: list[str] = []
@@ -838,7 +896,10 @@ def picp_mpiw_figure(inputs: ReportInputs) -> FigureAssembly:
             metric="picp|mpiw",
         ),
     )
-    return FigureAssembly(spec=_spec("picp_mpiw_plot", panels, (PICP_MPIW_NOTE,)), sources=sources)
+    notes = (PICP_MPIW_NOTE, *(omitted_model_note(model) for model in omitted))
+    return FigureAssembly(
+        spec=_spec("picp_mpiw_plot", panels, notes), sources=sources, omitted_models=omitted
+    )
 
 
 def _xy_series(
@@ -1185,7 +1246,10 @@ def _nominal(pairs: Sequence[tuple[float, float]]) -> SeriesSpec:
 
 
 def native_vs_conformal_figure(inputs: ReportInputs) -> FigureAssembly:
-    """ĉ por cauda, PICP e MPIW do nativo (mesma máscara) e do CQR (D13 última linha)."""
+    """ĉ por cauda, PICP e MPIW do nativo (mesma máscara) e do CQR (D13 última linha).
+
+    O nativo é só o candidato; candidato sem linha `picp`/`mpiw` recusa (nada a omitir).
+    """
     conformal = inputs.plan.conformal
     if conformal is None:
         raise ReportSourceMismatchError("the judged revision has no [conformal] block")
@@ -1774,18 +1838,22 @@ def sharpness_figure(inputs: ReportInputs, silver: VerifiedSilver) -> FigureAsse
     As larguras saem de `CoverageMetrics.interval_widths` sobre as séries `full` (máscara
     não-degenerada do MPIW); a média desenhada `fsum(widths) / len(widths)` tem de ser
     **exatamente** o `mpiw` `model_full` do gold. Os degenerados excluídos vão à legenda e
-    ao registro (`excluded_degenerate`).
+    ao registro (`excluded_degenerate`). Modelo sem nenhuma linha `picp`/`mpiw` no gold
+    (`point_forecast_models`) fica fora, declarado na legenda e em `omitted_models`.
 
     Raises:
         ReportSourceMismatchError: o silver não monta ou a média difere do `mpiw` do gold.
     """
     by_horizon = _assembled(inputs, silver)
+    omitted = point_forecast_models(inputs)
     excluded: dict[str, int] = {}
     panels: list[PanelSpec] = []
     for horizon in inputs.plan.horizons:
         samples = by_horizon[horizon]
         series: list[SeriesSpec] = []
         for model in samples.models:
+            if model in omitted:
+                continue
             members = list(zip(samples.seeds[model], samples.full[model], strict=True))
             # o candidato empilha as larguras de todas as seeds (réplicas, B-SEEDS; D4); os
             # comparadores têm uma série por seed (uma só, no cohort)
@@ -1854,10 +1922,15 @@ def sharpness_figure(inputs: ReportInputs, silver: VerifiedSilver) -> FigureAsse
         _gold(GOLD_METRICS_BY_RUN.name, ("value",), sample=GATE_SAMPLE, metric="mpiw"),
     )
     return FigureAssembly(
-        spec=_spec("sharpness_diagram", panels, (SHARPNESS_NOTE,)),
+        spec=_spec(
+            "sharpness_diagram",
+            panels,
+            (SHARPNESS_NOTE, *(omitted_model_note(model) for model in omitted)),
+        ),
         sources=sources,
         silver_units=silver.units,
         excluded_degenerate=excluded,
+        omitted_models=omitted,
     )
 
 

@@ -25,6 +25,7 @@ from financial_forecasting.features.evaluation.application.dtos.report_artifacts
 from financial_forecasting.features.evaluation.application.use_cases.report_figures import (
     degenerate_key,
     fan_chart_figure,
+    omitted_model_note,
     sharpness_figure,
 )
 from financial_forecasting.features.evaluation.application.use_cases.report_silver import (
@@ -154,15 +155,15 @@ def test_candidate_seeds_stacked_with_legend(world: ReportWorld, silver: Verifie
 def test_mpiw_mismatch_raises(world: ReportWorld, silver: VerifiedSilver) -> None:
     (row,) = world.where(
         "gold_metrics_by_run",
-        model="baseline_zero_return",
-        seed=None,
+        model="gbm_quantile",
+        seed=0,
         horizon=7,
         sample="model_full",
         metric="mpiw",
         level_low=0.25,
     )
     row["value"] = float(row["value"]) + 1e-15  # type: ignore[arg-type]
-    with pytest.raises(ReportSourceMismatchError, match="baseline_zero_return"):
+    with pytest.raises(ReportSourceMismatchError, match="gbm_quantile"):
         sharpness_figure(world.inputs(), silver)
 
 
@@ -180,8 +181,45 @@ def test_sharpness_returns_excluded_degenerate_counts(
     for (model, seed, h), count in DEGENERATE_POINTS.items():
         for pair in ((0.1, 0.9), (0.25, 0.75)):
             assert excluded[degenerate_key(model, seed, h, pair)] == count
-    assert excluded[degenerate_key("baseline_zero_return", None, 1, (0.1, 0.9))] == 0
+    assert excluded[degenerate_key("gbm_quantile", 0, 1, (0.1, 0.9))] == 0
+    assert not any(key.startswith("baseline_zero_return|") for key in excluded)
     assert "tft_quantile|1|h1|0.1-0.9" in excluded
+
+
+@pytest.mark.unit
+def test_point_forecast_model_omitted_and_declared(
+    world: ReportWorld, silver: VerifiedSilver
+) -> None:
+    """Baseline pontual do silver sem linha picp/mpiw no gold: fora das caixas, declarado
+    na legenda (nota) e no registro (`omitted_models`)."""
+    assert any(run.model == "baseline_zero_return" for run in silver.runs)
+    assembly = sharpness_figure(world.inputs(), silver)
+    for horizon in (1, 7):
+        series = _panel(assembly.spec, f"h{horizon}")
+        assert not any(sid.startswith("baseline_zero_return") for sid in series)
+        assert "gbm_quantile|0" in series
+    assert set(assembly.omitted_models) == {"baseline_historical_mean", "baseline_zero_return"}
+    for model in assembly.omitted_models:
+        assert omitted_model_note(model) in assembly.spec.notes
+
+
+@pytest.mark.unit
+def test_partial_interval_rows_still_raise(world: ReportWorld, silver: VerifiedSilver) -> None:
+    """Modelo com alguma linha de intervalo e um par faltando: recusa (fail-closed)."""
+    rows = world.rows["gold_metrics_by_run"]
+    world.rows["gold_metrics_by_run"] = [
+        row
+        for row in rows
+        if not (
+            row["model"] == "gbm_quantile"
+            and row["sample"] == "model_full"
+            and row["metric"] == "mpiw"
+            and row["horizon"] == 7  # noqa: PLR2004
+            and row["level_low"] == 0.25  # noqa: PLR2004
+        )
+    ]
+    with pytest.raises(ReportSourceMismatchError, match="gbm_quantile"):
+        sharpness_figure(world.inputs(), silver)
 
 
 # ---------------------------------------------------------------------------- fan chart

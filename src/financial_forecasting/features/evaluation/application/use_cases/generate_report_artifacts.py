@@ -225,6 +225,7 @@ class GenerateReportArtifacts:
                 silver_units=assembly.silver_units,
                 excluded_degenerate=assembly.excluded_degenerate,
                 omissions=assembly.spec.omissions,
+                omitted_models=assembly.omitted_models,
                 code=code,
                 renderer=identity,
             )

@@ -24,6 +24,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+import pyarrow.parquet as pq
 import pytest
 
 from financial_forecasting import cli
@@ -49,9 +50,13 @@ from financial_forecasting.shared.infrastructure.config.settings import Settings
 from tests.fakes.features.modeling.in_memory_runtime_environment_probe import (
     InMemoryRuntimeEnvironmentProbe,
 )
+from tests.integration.features.evaluation import (
+    test_conformal_refresh_end_to_end as _conformal_e2e,
+)
 from tests.integration.features.evaluation.test_build_confirmatory_scorecard import (
     _ASSET,
     _plan_payload,
+    _quantiles,
     _write_dataset,
 )
 from tests.integration.features.evaluation.test_conformal_refresh_end_to_end import (
@@ -92,6 +97,19 @@ _EXIT_ERROR = 2
 _IMAGE = "sha256:" + "d" * 64
 _BLINDING = "Nenhum número confirmatório foi lido antes da âncora (mundo sintético)."
 _GIT_VARIABLES = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR")
+_POINT_FORECAST = ("baseline_zero_return", "baseline_historical_mean")
+"""Baselines pontuais do mundo (grade de Dirac): como no gold real, sem linha picp/mpiw."""
+_INTERVAL_FIGURES = frozenset({"picp_mpiw_plot", "sharpness_diagram"})
+
+
+def _point_or_interval_quantiles(
+    model: str, seed: int | None, horizon: int, target: int
+) -> list[float]:
+    """A grade do e2e, com os baselines pontuais colapsados no centro (Dirac)."""
+    grid = _quantiles(model, seed, horizon, target)
+    return [grid[len(grid) // 2]] * len(grid) if model in _POINT_FORECAST else grid
+
+
 _PARTITION_DIR = Path("gold") / f"asset={_ASSET}" / f"parent_sweep_id={_COHORT}"
 _PROBE = InMemoryRuntimeEnvironmentProbe()
 _REPORT = re.compile(
@@ -186,6 +204,7 @@ def base(tmp_path_factory: pytest.TempPathFactory) -> _Base:
     with pytest.MonkeyPatch.context() as patch:
         for variable in _GIT_VARIABLES:
             patch.delenv(variable, raising=False)
+        patch.setattr(_conformal_e2e, "_quantiles", _point_or_interval_quantiles)
         judged = _blinded_judged_world(root)
         folder = root / "config" / "preregistration"
         digest = judged.first.generation_digest
@@ -411,3 +430,25 @@ def test_split_fingerprint_of_the_silver_reaches_the_citable_run_rows(world: _Co
         assert runs[str(row["run_id"])].endswith(
             f"; split_fingerprint {row['split_fingerprint']}"
         ), row["run_id"]
+
+
+def test_point_forecast_baselines_omitted_and_declared_in_interval_figures(world: _Copy) -> None:
+    """Fix da Etapa R: os baselines de Dirac não têm linha picp/mpiw no gold julgado; as
+    figuras de intervalo os omitem e declaram (registro `omitted_models` e nota da spec)."""
+    copy = world.data / _PARTITION_DIR / "judged" / world.base.reference / "generation"
+    metrics = pq.read_table(copy / "gold_metrics_by_run.parquet", partitioning=None).to_pylist()
+    with_interval = {row["model"] for row in metrics if row["metric"] in {"picp", "mpiw"}}
+    assert not with_interval & set(_POINT_FORECAST)
+    assert {row["model"] for row in metrics} >= set(_POINT_FORECAST)
+    code, _, err = world.run()
+    assert code == 0, err
+    citable = (world.output / "final_traceability_dossier.md").read_text(encoding="utf-8")
+    for figure_id in FIGURE_IDS:
+        record = json.loads(
+            (world.output / "figures" / f"{figure_id}.json").read_text(encoding="utf-8")
+        )
+        omitted = set(record["omitted_models"])
+        assert omitted == (set(_POINT_FORECAST) if figure_id in _INTERVAL_FIGURES else set())
+        if figure_id in _INTERVAL_FIGURES:
+            row = ", ".join(record["omitted_models"])
+            assert f"| modelos omitidos (sem picp/mpiw no gold) | {row} |" in citable

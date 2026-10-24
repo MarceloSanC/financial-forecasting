@@ -200,6 +200,13 @@ def _row(schema: GoldTableSchema, base: Row, **values: object) -> Row:
 # --------------------------------------------------------------------------------------
 
 
+POINT_FORECAST_MODELS: frozenset[str] = frozenset(
+    {"baseline_historical_mean", "baseline_zero_return"}
+)
+"""Baselines pontuais do mundo: como no gold real, nenhuma linha `picp`/`mpiw` (o gate de
+degeneração invalida a cobertura de uma série toda degenerada)."""
+
+
 def _metrics_rows(plan: Preregistration, base: Row) -> list[Row]:
     rows: list[Row] = []
     for h in plan.horizons:
@@ -221,6 +228,8 @@ def _metrics_rows(plan: Preregistration, base: Row) -> list[Row]:
                             )
                         )
                     for low, high in symmetric_pairs(plan.quantile_levels):
+                        if model in POINT_FORECAST_MODELS:
+                            break
                         for metric in ("picp", "mpiw"):
                             rows.append(
                                 _row(
