@@ -1873,5 +1873,9 @@ loadgroup`: `453 passed, 1 skipped` (antes do caso inf/inf, que só acrescenta u
 **Texto a reconciliar (fora deste executor):** o ADR 8.2.0004 (Decision 2) e a emenda do D13 no
 concept dizem "todo y_ant de T∩"; o implementado é "todo y_ant **do horizonte**" e o critério
 exato acima — avisado à coordenadora para o autor dos docs.
+Re-verificação: na regra de `double`, `a1_within` aceitava y_ant = inf (`inf <= 2⁻⁵³·inf`);
+agora exige os dois finitos (fail-closed). Testes com y_ant = ±inf/NaN na regra de `double`;
+mutação mH (guarda removida): `1 failed, 73 passed, 1 skipped`; T1 `tests/equivalence
+tests/architecture --dist loadgroup`: `453 passed, 1 skipped`; ruff e mypy verdes.
 
 <!-- END: post-execution -->
