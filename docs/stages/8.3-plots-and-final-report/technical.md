@@ -204,8 +204,8 @@ Todas `[decision:C]` de forma (degrau 1: convenção do próprio código ou prec
   `equivalence[_-]audit\.md` (e `equivalence_audit` fora de um caminho
   `8.2-equivalence-audit/`); os demais termos ficam como no A17. Uma única constante
   `CITABLE_FORBIDDEN_PATTERNS` (regex, `re.IGNORECASE`) em `dtos/report_artifacts.py`
-  é usada pelo teste da Task 09, pelo e2e da Task 14 e reproduzida literalmente no
-  `grep` da R2. Não muda o objetivo do critério (nada da evidência anterior no
+  é usada pelo teste da Task 09, pelo e2e da Task 14 e **executada** pela R2 no
+  container (`find_forbidden`), nunca copiada como regex. Não muda o objetivo do critério (nada da evidência anterior no
   citável); registrado aqui porque o concept está `done`.
 - **`TraceabilityDossier`** (frozen): `sections: tuple[DossierSection, ...]`;
   `DossierSection`: `section_id`, `title`, `visibility` (`citable` | `internal`),
@@ -523,10 +523,24 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   (as quatro âncoras declaradas passam como `deviation`/`reproduction`);
   `test_internal_entry_may_point_anywhere`; `test_dossier_sections_closed`
   (`CITABLE_SECTIONS` = lista literal das 13 linhas do doc §7 menos a última);
-  `test_command_and_result_validation`.
+  `test_command_and_result_validation`;
+  `test_check_artifacts_accepts_ten_catalog_ids_with_pdf_bytes_and_matching_records`,
+  `test_check_artifacts_rejects_duplicate_id`, `test_check_artifacts_rejects_missing_or_unknown_id`,
+  `test_check_artifacts_rejects_non_pdf_bytes`, `test_check_artifacts_rejects_record_of_other_id`;
+  `test_forbidden_patterns_match_each_a17_term` (relatório `equivalence_audit.md`,
+  `prior_evidence`, `tests/equivalence`, `8.2.0003`/`8_2_0004`/`8-2-0003`,
+  `prior_candidate_labels`, "evidência anterior", "projeto anterior", ponteiro à §5 do
+  `reproduction_audit.md`; sem caixa, `_` ≡ `-`),
+  `test_forbidden_patterns_spare_citable_82_anchors` (caminho
+  `docs/stages/8.2-equivalence-audit/technical.md#…` das âncoras citáveis não casa),
+  `test_find_forbidden_returns_matches_in_text`.
 - **O que fazer:** os DTOs, enums, `FIGURE_CATALOG`, `CITABLE_SECTIONS`,
   `CITABLE_82_ANCHORS` e erros do §1, com validação na construção (`ValueError`) e
-  `as_mapping()` JSON-safe. Só stdlib (`hashlib`, `json`).
+  `as_mapping()` JSON-safe; `check_artifacts(figures, dossier)` (validação da escrita,
+  dono único — §1); `CITABLE_FORBIDDEN_PATTERNS` (tupla de `re.Pattern` compilados com
+  `re.IGNORECASE`, refinamento do A17 do §1, com lookbehind que poupa
+  `8.2-equivalence-audit/`) e `find_forbidden(text) -> tuple[str, ...]` (os trechos que
+  casam). Só stdlib (`hashlib`, `json`, `re`).
 - **Critério de aceite:** A11 (forma do registro, `data_digest` pelo dono único), A16
   (omissões fechadas no tipo), A17 (1ª barreira), base do A1/A5/A12.
 - **Verificação (T1):** `pytest tests/unit/features/evaluation/test_report_artifacts_dtos.py -q --no-cov`
@@ -688,8 +702,10 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
     `test_no_if_or_sf_interval_drawn`.
   - VSN: `test_only_kind_family_rows`; `test_single_horizon_invariant_panel_with_note`.
   - `test_stage_8_3_regression_guards.py::test_report_figures_imports_no_inferential_service`
-    (AST de `report_figures.py`, `report_silver.py`, `report_dossier.py`,
-    `dossier_markdown.py` e `generate_report_artifacts.py`; **lista PERMITIDA** de
+    (AST dos módulos da lista `GUARDED_MODULES` do teste — nesta Task
+    `report_figures.py` e `report_silver.py`; a Task 09 acrescenta `report_dossier.py` e
+    `dossier_markdown.py`, a Task 10 `generate_report_artifacts.py`, cada uma com o arquivo
+    de teste na sua lista e no T1 — N1; **lista PERMITIDA** de
     `features.evaluation.domain.services` (CB-6): só `series_assembly` e
     `coverage_metrics` (e `degeneracy_gate`, se a montagem o chamar diretamente);
     qualquer outro módulo de `domain.services` reprova — cobre `diebold_mariano`,
@@ -731,6 +747,9 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
     seed 2 discriminante: nenhum valor da seed 2 aparece).
   - `test_silver_units_of_each_figure` (fan chart só as unidades da seed resolvida +
     `dim_run` + `realized`; sharpness todas).
+  - `test_sharpness_returns_excluded_degenerate_counts` (o fake tem degenerados
+    conhecidos por (modelo, seed, horizonte, par): a contagem devolvida é exatamente
+    `len(série) − len(widths)` de cada um, com a chave do §1).
 - **O que fazer:** `sharpness_figure(inputs, silver)` e `fan_chart_figure(inputs,
   silver, cohort_seeds)` pelo §1 ("Silver das figuras por ponto"): `SeriesAssembly`
   sobre `silver.records/runs/realized`, `CoverageMetrics.interval_widths`, seed =
@@ -739,6 +758,12 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   `statistics.quantiles(widths, n=4, method="inclusive")` (transformação de exibição
   declarada no I3, "caixa/quantis das larguras"); o renderer só desenha o que a spec
   traz (`Axes.bxp`), nunca recalcula.
+  **Fluxo da contagem de degenerados (D4, CB-8):** toda função de figura devolve
+  `FigureAssembly(spec, sources, silver_units, excluded_degenerate)`;
+  `sharpness_figure` preenche `excluded_degenerate` (as demais devolvem vazio) e põe a
+  mesma contagem na legenda da série; o use case (Task 10) copia
+  `excluded_degenerate` para o `FigureRecord` — afirmado em
+  `test_records_carry_data_digest_generation_digest_code_and_renderer` (Task 10).
 - **Critério de aceite:** A7 (sharpness), A8.
 - **Verificação (T1):** `pytest tests/unit/features/evaluation/test_report_figures_silver.py tests/unit/features/evaluation/test_report_figures_inference.py tests/unit/features/evaluation/test_report_figures_calibration.py -q --no-cov`
 - **Commit:** `feat(evaluation): sharpness e fan chart do silver conferido, seed pré-declarada [8.3/task-08]`
@@ -751,6 +776,8 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   - `src/financial_forecasting/features/evaluation/application/use_cases/report_dossier.py`
   - `src/financial_forecasting/features/evaluation/application/use_cases/dossier_markdown.py`
   - `tests/unit/features/evaluation/test_report_dossier.py`
+- **Arquivos a modificar:** `tests/architecture/test_stage_8_3_regression_guards.py`
+  (`report_dossier.py` e `dossier_markdown.py` em `GUARDED_MODULES` — N1)
 - **Testes primeiro** (fontes sintéticas: cadeia r0–r3 do
   `InMemoryPreregistrationSource`, `JudgedRecord`, tentativas `started`/`input_read`,
   `run_record` e scorecard `Mapping`, `dim_run`, registros de figura, registro curado):
@@ -782,7 +809,7 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   -> TraceabilityDossier` (puro) e `render(dossier, visibility) -> str` (puro, dono
   único do Markdown), com as camadas do D8 mapeadas em `CITABLE_SECTIONS`.
 - **Critério de aceite:** A12, A17 (2ª barreira e completude do interno).
-- **Verificação (T1):** `pytest tests/unit/features/evaluation/test_report_dossier.py -q --no-cov`
+- **Verificação (T1):** `pytest tests/unit/features/evaluation/test_report_dossier.py tests/architecture/test_stage_8_3_regression_guards.py -q --no-cov`
 - **Commit:** `feat(evaluation): dossiê de rastreabilidade citável e interno a partir das fontes [8.3/task-09]`
 
 ---
@@ -795,7 +822,9 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   - `tests/unit/features/evaluation/test_generate_report_artifacts.py`
 - **Arquivos a modificar:**
   `src/financial_forecasting/features/evaluation/application/use_cases/audit_reproduction.py`
-  (passa a chamar `judged_copy`; comportamento e erros iguais)
+  (passa a chamar `judged_copy`; comportamento e erros iguais);
+  `tests/architecture/test_stage_8_3_regression_guards.py` (`generate_report_artifacts.py`
+  em `GUARDED_MODULES` — N1)
 - **Testes primeiro** (`InMemoryPreregistrationSource` com `add_judged`,
   `InMemoryJudgedGenerationStore`, `InMemoryGoldGenerationReader` com `current/`
   **diferente** da cópia, `FakeSilverTableReader`, `FakeTrainingGridReader`,
@@ -813,7 +842,8 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   `test_dm_mismatch_writes_nothing`; `test_seed_mismatch_writes_nothing`;
   `test_nothing_rendered_when_any_build_step_fails` (renderer com 0 chamadas);
   `test_records_carry_data_digest_generation_digest_code_and_renderer` (A11; mudar um
-  valor do gold falso muda o `data_digest` daquela figura);
+  valor do gold falso muda o `data_digest` daquela figura; o registro do sharpness tem
+  `excluded_degenerate` igual ao devolvido pela montagem e os demais vazio — CB-8);
   `test_sink_failure_propagates` (I9 do lado do use case);
   `test_result_lists_ids_and_digests`; `test_audit_reproduction_still_uses_same_errors`
   (o teste existente `test_audit_reproduction.py` roda inteiro no T1).
@@ -825,7 +855,7 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   `generation.manifest.silver_content`; (4) dez specs + registros + dossiê; (5)
   `renderer.render` de cada spec e **uma** `sink.write`.
 - **Critério de aceite:** A1, A2, A3, A11, A13 (árvore suja), I9; base do A14.
-- **Verificação (T1):** `pytest tests/unit/features/evaluation/test_generate_report_artifacts.py tests/unit/features/evaluation/test_audit_reproduction.py tests/integration/features/evaluation/test_audit_reproduction_cli.py tests/integration/features/evaluation/test_reproduction_process_independence.py -q --no-cov`
+- **Verificação (T1):** `pytest tests/unit/features/evaluation/test_generate_report_artifacts.py tests/unit/features/evaluation/test_audit_reproduction.py tests/architecture/test_stage_8_3_regression_guards.py tests/integration/features/evaluation/test_audit_reproduction_cli.py tests/integration/features/evaluation/test_reproduction_process_independence.py -q --no-cov`
 - **Commit:** `feat(evaluation): use case que gera figuras e dossiê da cópia julgada [8.3/task-10]`
 
 ---
@@ -1046,7 +1076,7 @@ GEN="uv run --no-sync python -m financial_forecasting.cli report-artifacts --dat
 EOF
 ```
 
-**R1 — HEAD íntegro (roda no início da R2 e da R4).**
+**R1 — HEAD íntegro (roda no início da R2 e da R3).**
 ```bash
 set -eu; SCRATCH=<…>; . "$SCRATCH/etapa-83.env" || exit 1
 test -z "$(git -C "$WTH" status --porcelain)" || { echo FAIL_WT_DIRTY; exit 1; }; echo WT_CLEAN
@@ -1078,7 +1108,7 @@ printf 'CODE_SRC=%s\n' "$(git -C "$WTH" rev-parse HEAD:src)" >> "$SCRATCH/etapa-
 3. *Saídas e data intacto:*
    ```bash
    set -eu; SCRATCH=<…>; . "$SCRATCH/etapa-83.env" || exit 1
-   (cd "$WTH/docs/reports" && sha256sum figures/*.pdf figures/*.json final_traceability_dossier.md final_traceability_dossier_internal.md) > "$SCRATCH/out-gen1.sha256sum"
+   (cd "$WTH/docs/reports" && sha256sum figures/*.pdf figures/*.json final_traceability_dossier.md final_traceability_dossier_internal.md) > "$SCRATCH/out-gen1.sha256sum" || { echo FAIL_OUTPUT_MISSING; exit 1; }
    test "$(wc -l < "$SCRATCH/out-gen1.sha256sum")" = 22 || { echo FAIL_OUTPUT_COUNT; exit 1; }; echo OUTPUT_22
    (cd "$LIVE" && find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum) > "$SCRATCH/live-after1.sha256sum"
    diff -q "$SCRATCH/live-before.sha256sum" "$SCRATCH/live-after1.sha256sum" || { echo FAIL_DATA_CHANGED; exit 1; }; echo DATA_INTACT
@@ -1086,7 +1116,8 @@ printf 'CODE_SRC=%s\n' "$(git -C "$WTH" rev-parse HEAD:src)" >> "$SCRATCH/etapa-
    test "$(wc -l < "$SCRATCH/written.txt")" = 22 || { echo FAIL_UNEXPECTED_PATHS; exit 1; }
    grep -vxE 'docs/reports/figures/[a-z0-9_]+\.(pdf|json)|docs/reports/final_traceability_dossier(_internal)?\.md' "$SCRATCH/written.txt" && { echo FAIL_UNEXPECTED_PATHS; exit 1; }; echo ONLY_REPORTS_WRITTEN
    for f in "$WTH"/docs/reports/figures/*.json; do grep -q "\"code.src\": \"$CODE_SRC\"" "$f" || { echo "FAIL_CODE_SRC $f"; exit 1; }; done; echo RECORDS_CODE_SRC
-   grep -qiE 'equivalence[_-]audit\.md|prior[_-]evidence|tests/equivalence|8[._]2[._]000[34]|prior[_-]candidate[_-]labels|evid[eê]ncia anterior|projeto anterior' "$WTH/docs/reports/final_traceability_dossier.md" && { echo FAIL_CITABLE_LEAK; exit 1; }; echo CITABLE_CLEAN   # = CITABLE_FORBIDDEN_PATTERNS (refinamento do A17, §1)
+   MSYS_NO_PATHCONV=1 docker run --rm $RES -v $WTD:/app:ro -v financial-forecasting_app-venv:/app/.venv -w /app -e UV_NO_SYNC=1 "$IMAGE_ID" sh -c "uv run --no-sync python -c \"import sys; from pathlib import Path; from financial_forecasting.features.evaluation.application.dtos.report_artifacts import find_forbidden; hits = find_forbidden(Path('docs/reports/final_traceability_dossier.md').read_text(encoding='utf-8')); print('HITS', len(hits)); sys.exit(1 if hits else 0)\"" > "$SCRATCH/citable-scan.txt" && rc=0 || rc=$?
+   echo "exit $rc"; cat "$SCRATCH/citable-scan.txt"; test "$rc" = 0 || { echo FAIL_CITABLE_LEAK; exit 1; }; echo CITABLE_CLEAN   # a PRÓPRIA CITABLE_FORBIDDEN_PATTERNS (Task 02), nunca regex copiada
    ```
 4. *Leitura humana mínima (sem decidir nada):* abrir cada PDF e conferir só forma
    (sem colisão de rótulos, uma página, rótulo de estatuto visível, frases do I11) —
@@ -1102,7 +1133,7 @@ printf 'CODE_SRC=%s\n' "$(git -C "$WTH" rev-parse HEAD:src)" >> "$SCRATCH/etapa-
 na R2 item 2 (`ff83-gen2`), e:
 ```bash
 set -eu; SCRATCH=<…>; . "$SCRATCH/etapa-83.env" || exit 1
-(cd "$WTH/docs/reports" && sha256sum figures/*.pdf figures/*.json final_traceability_dossier.md final_traceability_dossier_internal.md) > "$SCRATCH/out-gen2.sha256sum"
+(cd "$WTH/docs/reports" && sha256sum figures/*.pdf figures/*.json final_traceability_dossier.md final_traceability_dossier_internal.md) > "$SCRATCH/out-gen2.sha256sum" || { echo FAIL_GEN2_OUTPUT_MISSING; exit 1; }
 diff -q "$SCRATCH/out-gen1.sha256sum" "$SCRATCH/out-gen2.sha256sum" || { echo FAIL_NOT_DETERMINISTIC; exit 1; }; echo SAME_SHA256SUM
 test -z "$(git -C "$WTH" status --porcelain)" || { echo FAIL_REGEN_DIFFERS_FROM_COMMIT; exit 1; }; echo REGEN_EQUALS_COMMIT
 (cd "$LIVE" && find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum) > "$SCRATCH/live-after2.sha256sum"
@@ -1135,6 +1166,9 @@ test -z "$(git -C "$WTH" status --porcelain)" || { echo FAIL_DISCARD; exit 1; };
 | exit 2 `MissingImageIdError` | `IMAGE_ID` não chegou ao container | corrigir `ENVS`; repetir sem gate |
 | exit 2 `ReportArtifactsError` | sem `.judged.toml`, scorecard ou `input_read` | parar; `[finding]` (a cópia julgada não é a esperada) |
 | exit 2 `ValueError` do parser | registro curado malformado ou ponteiro proibido | corrigir `dossier_register.toml`, T1 de `tests/architecture/test_stage_8_3_repo_files.py`, commit `docs(evaluation)`, R1 (o `GATE1` continua: o registro está fora do diff da R1) |
+| registro curado muda **depois** da R2 (qualquer motivo) | o dossiê commitado deixa de corresponder ao registro | `GATE1` continua, mas **refazer R1–R4**: regenerar e commitar os artefatos num commit **novo** (nunca amend); só mudança em §7 ou no roadmap dispensa regenerar (N2) |
+| `FAIL_DISCARD` | o DESCARTE não deixou a árvore limpa (arquivo fora dos caminhos de saída) | parar; listar `git status --porcelain`; nada fora de `docs/reports/` gerado pela Etapa é apagado sem decisão do coordenador |
+| `FAIL_OUTPUT_MISSING`/`FAIL_GEN2_OUTPUT_MISSING` | `sha256sum` sem algum dos 22 arquivos | parar; DESCARTE; tratar como `FAIL_GEN1_FIGURES` (saída incompleta) |
 | `FAIL_GEN1_FIGURES`/`FAIL_OUTPUT_COUNT`/`FAIL_UNEXPECTED_PATHS`/`FAIL_CODE_SRC` | saída incompleta, caminho inesperado ou registro com outro `code.src` | parar; DESCARTE; defeito de `src/` → linha `FAIL_SRC_CHANGED_SINCE_GATE1` |
 | `FAIL_GEN2_*` (mesmas checagens na geração 2) | falha só na 2ª geração | parar; não commitar nada da 2ª; DESCARTE das mudanças (o commit da 1ª fica) e diagnóstico como `FAIL_NOT_DETERMINISTIC` |
 | `FAIL_SRC_CHANGED_SINCE_GATE1` | `src/`/lock/`.importlinter` mudou depois do ponto 1 | revisão independente do fix + novo `make check` + `GATE1` novo; recomeçar da R1 |
