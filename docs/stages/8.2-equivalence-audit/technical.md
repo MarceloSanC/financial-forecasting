@@ -1729,4 +1729,38 @@ teste, tratado depois da E5 só com testes). `make check` extra sobre `bec99bdf`
 **Razão:** linha `FAIL_SCAFFOLD_CHANGED`: `GATE1 := bec99bdf60a075e78b181791b357dfe6cd8735b3`
 no `etapa-82.env`. Esta entrada só toca o `technical.md`; a E4 recomeça do passo 1.
 
+### 2026-10-23 — [measurement] E4 — tabela de equivalência e diagnóstico D13 do A1 — Claude (executor das Etapas)
+**Contexto:** passo 1 (HEAD `09b9906b`, `GATE1` `bec99bdf`):
+```
+SCAFFOLD_AS_GATE1
+exit 0          (python -m tests.equivalence.audit_table; 2483 linhas)
+LIVE_INTACT
+SCAFFOLD_WROTE_NOTHING
+```
+Passo 2: T∩ = 937 em h=1 (2022-03-30 → 2025-12-22) e em h=7 (2022-04-07 → 2025-12-31); o h=7
+**não** ficou menor (os 937 timestamps do anterior caem em sessões do lado novo). A1 fora nos dois
+horizontes: `out=934`, `max_abs_diff=3.67589654548528e-09` (tolerância meio ulp de `double`
+= 1,11e-16·|y_ant|). Pela regra, A10 (1 230 linhas por horizonte) e A11 (`A11/h1/stopped`,
+`A11/h7/stopped`) ficam `not_compared:A1`; `A11/baselines/none` = `not_compared:no_common_baseline`.
+Diagnóstico D13 na ordem (sonda `diag_a1.py` no scratchpad, fora do repo, raízes `:ro`):
+```
+prior y_true type double
+h=1: |Δ| max 3.676e-09, mediana 1.389e-10; rel max 5.829e-08 (0.978·2^-24), mediana 2.021e-08
+     y_ant == float32(y_novo): 937/937; float32(y_ant) == float32(y_novo): 937/937
+     y_ant float32-exato: 937/937; y_novo float32-exato: 3/937; sinal igual 937/937; corr 1.0
+     |log1p(y_ant) − y_novo| max 9.30e-03
+h=7: idem (rel max 0.978·2^-24; 937/937 nas três igualdades)
+```
+(1) definição multi-passo, (2) ajuste de preço e (3) mapeamento de timestamp descartados
+(iguais em float32 ponto a ponto); (4) caminho float32 confirmado: o anterior gravou o realizado
+arredondado para float32 num `double`. Passo 3: A9/h1 e A9/h7 → `explained:alvo` ((a) diferença
+concreta: alvo anterior em precisão float32; (b) |Δ| ≤ 2⁻²⁴·|y|, observado 0,978·2⁻²⁴, sem viés;
+(c) localizado no A1); nenhuma linha `out_of_tolerance`/`divergent_sense` além delas (as demais
+não foram comparadas). Sem indício de defeito na pipeline nova (é o lado mais preciso).
+**[finding]:** a premissa de D-M6 ("os dois lados gravam `double` — o caminho float32 não se
+aplica ao alvo") não vale para os valores: o tipo físico é `double`, mas a precisão efetiva do
+alvo anterior é float32; com o critério D13 não afrouxado, a comparação de modelo (A10/A11) não
+roda nesta auditoria. Não bloqueia a 8.2 nem o veredito da 8.1 (doc §5.6). Passo 4:
+`docs/reports/equivalence_audit.md`.
+
 <!-- END: post-execution -->
