@@ -1,6 +1,6 @@
 ---
 title: Concept — Stage 8.3 — Plots canônicos da geração julgada e dossiê final de rastreabilidade
-description: Gera, a partir da cópia julgada da 8.1 (judged/<ref>/, lida pelo read_judged_generation da 8.2) e do silver conferido contra o silver_content dela, as dez figuras do catálogo §6.2 do doc de domínio de reprodução (PDF vetorial determinístico, rótulo de estatuto por elemento, nenhum teste novo), um registro de origem por figura (hash do dado plotado + generation_digest + tabela/chave + commit) e o dossiê final de rastreabilidade com todos os itens do §7, pelo use case GenerateReportArtifacts e o subcomando report-artifacts
+description: Gera, a partir da cópia julgada da 8.1 (judged/<ref>/, lida pelo read_judged_generation da 8.2) e do silver conferido contra o silver_content dela, as dez figuras do catálogo §6.2 do doc de domínio de reprodução (PDF vetorial determinístico, rótulo de estatuto por elemento, nenhum teste novo), um registro de origem por figura (hash do dado plotado + generation_digest + tabela/chave + code.src), omissões declaradas em lista fechada para o que o gold não persiste, e o dossiê final de rastreabilidade com os itens do §7 em dois arquivos (citável e interno, este com tudo que toca a evidência anterior), pelo use case GenerateReportArtifacts e o subcomando report-artifacts
 when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; antes de desenhar qualquer gráfico do gold julgado ou escrever o dossiê; ao questionar por que são dez figuras e não cinco, por que o DM é candidato × comparadores, por que a prova de origem é o hash do dado e não o da imagem, ou por que o fan chart usa a seed 1
 keywords: [concept, plots, report, dossier, traceability, evaluation, judged-generation, p8-rot, p8-fan, p8-persist, dossie, matplotlib, deterministic-pdf, figure-record, data-digest, silver-content, sandve]
 status: draft
@@ -61,17 +61,22 @@ depends_on: [8.2-equivalence-audit]
 - **Registro de origem por figura** (`<figura>.json` ao lado do PDF):
   `generation_digest`, revisão, partição, fontes (tabela ou documento,
   filtro de chave, campos), unidades do silver usadas com o digest de
-  cada uma, **hash do dado plotado** (`data_digest`), commit do gerador e
-  identidade do renderizador (D5).
-- **Dossiê final de rastreabilidade**
+  cada uma, **hash do dado plotado** (`data_digest`), identidade do código
+  do gerador (`code.src`, `code.uv_lock`) e identidade do renderizador (D5).
+- **Omissões declaradas**: os elementos do catálogo que o gold julgado não
+  persiste ficam fora, numa **lista fechada por figura** (D13), registrada
+  em cada registro de figura e verificada por teste.
+- **Dossiê final de rastreabilidade** em dois arquivos (D8): o **citável**
   `docs/reports/final_traceability_dossier.md`, gerado pelo mesmo use case,
   em camadas (veredito → afirmação → identidade → detalhe; Sandve Rule 8),
-  com todos os itens da tabela do doc §7 (D8).
+  com todas as linhas da tabela do doc §7 salvo a última; e o **interno**
+  `docs/reports/final_traceability_dossier_internal.md` (linha "Interno,
+  fora do texto do TCC" do §7 e tudo que toca a evidência anterior).
 - **Registro curado de desvios e achados**
   `docs/reports/dossier_register.toml` (versionado, editado à mão), que
   alimenta as seções do dossiê que não estão em dado persistido: desvios,
   `[finding]`s abertos, computação pré-âncora, ambientes de treino e de
-  ablação, resultado da reprodução, ponteiro interno da equivalência (D8).
+  ablação, resultado da reprodução, notas internas (D8).
 - Use case `GenerateReportArtifacts`, ports de saída `FigureRenderer` e
   `ReportArtifactSink`, adapter matplotlib, adapter de arquivo, subcomando
   `report-artifacts` e wiring no composition root.
@@ -91,8 +96,10 @@ depends_on: [8.2-equivalence-audit]
 - Gráficos exploratórios extras (doc §8.2 deixa para o technical; esta
   Stage não cria nenhum — o catálogo basta para o texto).
 - Qualquer gráfico ou número comparado com a evidência anterior (P-EDIT;
-  doc §9 item 2). O dossiê só aponta, em seção interna, o
-  `equivalence_audit.md` e o registro de hashes.
+  doc §9 item 2). Só o dossiê **interno** (arquivo separado) aponta o
+  `equivalence_audit.md`, o registro de hashes e os desvios/achados da
+  parte (ii) da 8.2.
+- Editar artefatos da 8.2 (`reproduction_audit.md` incluído).
 - Reprodução entre ambientes, re-julgamento, mudança no veredito ou no
   pré-registro.
 - Rule 10 de Sandve (publicar dados e scripts): aspiração, decisão do
@@ -156,14 +163,22 @@ aponta.
   `silver_content`, inclusive as 600 dos runs da ablação que ele não lia
   (technical 8.2 §7, `[finding]` E4 passo 1). A conferência da 8.3 compara
   só as unidades dos runs que lê (D4).
-- **Notas herdadas que o dossiê lista.** Da 8.1: erratas O1 (a corrida rodou
-  em `060537fc`, filho do `GATE2` `d3b49909`; `code.src`/`code.uv_lock`
-  iguais) e O2 (2 linhas de 1 tentativa), F1 (cobertura); entre `060537fc` e
-  o HEAD, `src/` mudou só por formatação do ruff e um trecho de docstring
-  (`code.src` difere; concept 8.2 §3). Da 8.2: decisão humana B3 (ADR
-  8.2.0004, A1 pela precisão efetiva float32) e o `[deviation]` B3; o
-  `[finding]` do PICP 80 % do candidato (lado do nominal divergente do
-  anterior, não explicado, não bloqueia — interno); erratas F2–F5.
+- **Notas herdadas que o dossiê lista.** **Citável:** da 8.1, erratas O1 (a
+  corrida rodou em `060537fc`, filho do `GATE2` `d3b49909`;
+  `code.src`/`code.uv_lock` iguais) e O2 (2 linhas de 1 tentativa); entre
+  `060537fc` e o HEAD, `src/` mudou só por formatação do ruff e um trecho de
+  docstring (`code.src` difere; concept 8.2 §3); da 8.2 parte (i), os
+  `[deviation]` da reprodução (E2 item 7, redação do A7 para o
+  `parquet_gold_store.py`; `env-equal` com `--preregistration-ref`).
+  **Interno** (tocam a evidência anterior; P-EDIT): decisão humana B3 (ADR
+  8.2.0004) e os `[deviation]` B3; o `[finding]` do PICP 80 % do candidato
+  (lado do nominal divergente do anterior); erratas F2–F5 da 8.2; o
+  `[finding]`/`[deviation]` E4 do andaime.
+- **`reproduction_audit.md` §5** lista o blob de
+  `tests/equivalence/prior_evidence.py` (l. 106). O dossiê citável aponta
+  só as §1–§4 desse relatório (claim, identidade, `result_digest`,
+  comparação por classe) e repete os números do claim; o interno registra
+  o limite. O artefato da 8.2 não é editado.
 - **TCC.** `text/Main.tex` carrega `graphicx` (l. 70); o template guarda
   imagem ao lado do capítulo (`text/3_Revisao_Teorica/10anos_campus_site.jpg`).
 
@@ -229,7 +244,8 @@ aponta.
       def render(self, figure: FigureSpec) -> bytes: ...   # PDF, determinístico
       def identity(self) -> Mapping[str, str]: ...         # ex.: {"matplotlib": "3.11.0", "format": "pdf"}
   ```
-  Real: `MatplotlibFigureRenderer` (`adapters/out/plots/`); fake:
+  Real: `MatplotlibFigureRenderer` (`adapters/out/plots/`), com
+  `identity()` contendo também a versão do FreeType; fake:
   `InMemoryFigureRenderer` (bytes = serialização da spec).
 - **`ReportArtifactSink`** (port-out, `application/ports/out/report_artifact_sink.py`)
   ```python
@@ -242,7 +258,9 @@ aponta.
   Uma chamada com tudo (tudo ou nada, I9). Real: `FilesystemReportSink`
   (`adapters/out/reports/`), que grava `figures/<id>.pdf`,
   `figures/<id>.json` (registro, `sort_keys`, LF) e renderiza o dossiê em
-  Markdown, num staging trocado no fim; fake: `InMemoryReportSink`.
+  dois Markdown (citável e interno; o `TraceabilityDossier` separa as
+  seções por visibilidade), num staging trocado no fim; fake:
+  `InMemoryReportSink`.
 - **Subcomando `report-artifacts`** (`adapters/in/cli/evaluation_commands.py`
   + `cli.py` + `composition_root.py`): `--preregistration-ref`,
   `--output` (padrão `docs/reports`), `--register` (padrão
@@ -251,8 +269,11 @@ aponta.
 - **`docs/reports/dossier_register.toml`** — entradas
   `[[entry]] kind ∈ {deviation, finding, pre_anchor, environment, reproduction, internal}`,
   `title`, `summary`, `pointer` (caminho/âncora de technical §7, ADR, relatório).
-- Artefatos: `docs/reports/figures/<id>.pdf` + `<id>.json` (10 pares) e
-  `docs/reports/final_traceability_dossier.md`.
+  `internal` vai só para o dossiê interno; os demais kinds, só para o
+  citável.
+- Artefatos: `docs/reports/figures/<id>.pdf` + `<id>.json` (10 pares),
+  `docs/reports/final_traceability_dossier.md` (citável) e
+  `docs/reports/final_traceability_dossier_internal.md` (interno).
 
 ### Consumidos
 - **`JudgedGenerationStore.find` e `.read_judged_generation`** — 8.1/8.2
@@ -277,45 +298,69 @@ aponta.
   `read_judged_generation`; o `generation_digest` do `find` é igual ao do
   `.judged.toml` commitado. Nenhum caminho do use case chama
   `GoldGenerationReader.read_generation` (`current/`).
-- **I2 — Silver por unidade.** O conjunto de unidades lidas
-  (`dim_run|<cohort>`, `fact_oos_predictions|<run_id>|<ano>` dos runs lidos,
-  `realized|AAPL`) tem digest igual ao do `silver_content` julgado,
-  unidade a unidade; para cada run lido, as chaves `<tabela>|<run_id>|*`
-  lidas são exatamente as julgadas. Unidades julgadas de runs não lidos
-  (ablação) não entram no esperado (lição da 8.2).
+- **I2 — Silver por unidade.** O esperado é formado **por par (tabela,
+  `run_id`) efetivamente lido**: para cada par lido, as chaves
+  `<tabela>|<run_id>|*` do `silver_content` julgado (todas as do par, e só
+  elas), mais `dim_run|<cohort>` e `realized|AAPL`. O digest de cada unidade
+  lida é calculado sobre **todas** as linhas da unidade, **antes** de
+  qualquer filtro por `split` (o refresh hasheia `test` e `calib`). Igualdade
+  exata de chaves e digests. Unidades julgadas de pares não lidos — runs da
+  ablação, e `fact_permuted_predictions`/`fact_vsn_weights` dos runs do
+  candidato, que compartilham o `run_id` — não entram no esperado (lição do
+  `[finding]` E4 da 8.2).
 - **I3 — Nenhum teste novo.** As figuras só selecionam, reordenam e aplicam
-  as transformações que o doc prescreve para a figura: média entre seeds
-  (B-SEEDS, doc §6.1 item 4), largura u − l por ponto, quantis/caixa das
-  larguras (sharpness, GBR 2007 §3.3). Bandas, p-valores, decisões, ACF e
-  poder vêm persistidos (gold ou scorecard). Um elemento sem fonte
-  persistida **não é desenhado** e o registro lista a omissão. O módulo de
-  montagem não importa serviço inferencial do domínio (DM, Holm, MCS,
-  Wilson, gate H1, potência, ACF, CUSUM).
-- **I4 — Confirmatório só onde a árvore se aplica.** Os elementos
-  confirmatórios (caudas 0,1/0,9 do candidato na variante do gate, banda
-  97,5 %, poder; linha do DM com p bruto e Holm) têm os valores **lidos do
-  scorecard** (o que foi julgado) e o rótulo confirmatório **só** nos
-  horizontes com H1 aprovado no scorecard; onde H1 reprova, a linha do DM é
-  "descritivo (perfil) — H2 não aplicável".
+  as transformações de exibição declaradas no mapa do D13: troca de sinal
+  ou complemento (1 − taxa) para orientar o eixo, razão de contagens médias
+  já persistidas, largura u − l por ponto e caixa/quantis das larguras
+  (sharpness, GBR 2007 §3.3). Bandas, p-valores, decisões, ACF, poder,
+  médias e extremos entre seeds vêm persistidos (gold ou scorecard). Não se
+  recalcula Wilson, quantil de Beta, cobertura numa máscara nova nem
+  agregação que o gold/scorecard não guardou; o que falta é **omissão
+  declarada** na lista fechada do D13 (nada é omitido fora dela, e nada da
+  lista é desenhado). O módulo de montagem não importa serviço inferencial
+  do domínio (DM, Holm, MCS, Wilson, gate H1, potência, ACF, CUSUM, Beta).
+- **I4 — Confirmatório só onde a árvore se aplica.** Calibração: as caudas
+  0,1/0,9 do candidato na variante do gate, a banda 97,5 % e o poder vêm de
+  `verdict.horizons[h].h1` e `profile.horizons[h].power` do scorecard. DM:
+  p bruto, `adjusted_p_value` e `rejected` vêm de `gold_dm_results` na linha
+  `variance_estimator = "rectangular"` (estimador primário, ADR 6.5.0006),
+  `candidate = tft_quantile`, comparadores da família; `adjusted_p_value` e
+  `rejected` são **conferidos** contra `profile.horizons[h].dm` (estimador
+  retangular) do scorecard — divergência → erro, nada escrito. O rótulo
+  confirmatório vale **só** onde `verdict.horizons[h].h1.passed`; onde H1
+  reprova, a linha do DM é "descritivo (perfil) — H2 não aplicável".
 - **I5 — Por horizonte.** Nenhuma série ou número mistura horizontes.
 - **I6 — Fan chart com a seed pré-declarada.** A seed é a primeira de
   `[seeds].tft_quantile` da revisão julgada (r3: `[1, …, 10]` → **seed 1**;
   a mesma lista do `config/cohorts/aapl_confirmatory.toml`), com a legenda
   "seed 1, ilustrativa; as métricas usam a média entre seeds"; nunca média
   dos quantis entre seeds. Os quantis desenhados são os da grade que o gold
-  pontua (`value_guardrail`, montada pelo mesmo dono do refresh).
+  pontua (`value_guardrail`, montada pelo mesmo dono do refresh). A lista
+  `seeds` do `config/cohorts/aapl_confirmatory.toml` tem de ser igual à
+  `[seeds].tft_quantile` da revisão julgada (o doc aponta o cohort como
+  fonte da seed); diferente → erro.
 - **I7 — Prova de origem é o dado.** O registro de cada figura carrega
-  `data_digest`, `generation_digest`, fontes e commit; o sha256 do PDF, se
-  presente, é informativo ("identifica o arquivo nesta geração; não é prova
-  de origem").
-- **I8 — Determinismo.** Mesmo dado, mesmo commit e mesma imagem → bytes
-  idênticos de todos os PDFs, registros e do dossiê. Nada de instante,
-  host ou caminho absoluto em nenhum artefato (proveniência excluída, doc
-  §2.2); data de criação do PDF removida.
+  `data_digest`, `generation_digest`, fontes, omissões e `code.src`/
+  `code.uv_lock`; o sha256 do PDF, se presente, é informativo ("identifica
+  o arquivo nesta geração; não é prova de origem").
+- **I8 — Determinismo.** Mesmo dado, mesmo `code.src`/`code.uv_lock` e
+  mesma imagem → bytes idênticos de todos os PDFs, registros e dos dois
+  dossiês. Nada de instante, host, caminho absoluto ou **hash do commit
+  HEAD** nos artefatos (commitar as saídas cria um commit novo e não pode
+  mudá-las; o `code.src` identifica o estado exato do `src/`, Sandve Rule 4);
+  o dossiê diz "regenerar em qualquer commit com `code.src = <x>`". Data de
+  criação do PDF removida; fontes TrueType embutidas (`pdf.fonttype 42`).
 - **I9 — Tudo ou nada.** Falha antes da escrita → nada escrito; a escrita
   troca o staging inteiro de uma vez.
 - **I10 — Gerador limpo.** `code_dirty = "true"` no snapshot → recusa: uma
-  figura commitada precisa de commit que a reproduza (Sandve Rule 4).
+  figura commitada precisa de um estado de código que a reproduza (Sandve
+  Rule 4). O probe do `EvaluationEnvironment` usa o mesmo arquivo de cohort
+  da 8.1 (`config/cohorts/aapl_confirmatory.toml`, chave `code.cohort_file`).
+- **I12 — Dossiê citável sem a evidência anterior** (P-EDIT; doc §7 última
+  linha, §9 item 2): nenhuma seção do arquivo citável cita
+  `equivalence_audit`, `prior_evidence`, `tests/equivalence`, ADRs
+  8.2.0003/8.2.0004, "evidência anterior" ou "projeto anterior", nem aponta
+  a §5 do `reproduction_audit.md`; tudo isso vai ao arquivo interno.
 - **I11 — Rótulos e frases obrigatórias** (doc §2.3, §6.2): conformal
   "cobertura empírica (não garantida)" em todo painel; H3 em linguagem
   estritamente descritiva; VSN "horizonte-invariante"; PICP × MPIW "o
@@ -333,6 +378,8 @@ aponta.
 | Unidade do silver/realizado com digest diferente, faltando ou a mais para um run lido | `SilverContentMismatchError` com as chaves (sem valores), nada escrito |
 | Scorecard ausente na cópia (geração `BLOCKED`) | erro: sem veredito não há figura confirmatória nem dossiê |
 | Coluna lida ausente/tipo errado | erro de leitura do `col_*` (já existente), nada escrito |
+| `adjusted_p_value`/`rejected` do `gold_dm_results` ≠ scorecard | erro, nada escrito |
+| Seeds do cohort ≠ `[seeds].tft_quantile` da revisão julgada, ou seed 1 sem predições | erro, nada escrito |
 | Árvore do gerador suja | `DirtyCodeError` (reuso do 8.1), nada escrito |
 | Registro curado malformado (kind fora da lista, campo faltando) | erro no CLI antes do use case |
 | Falha de escrita no meio | staging removido; saída anterior intacta |
@@ -370,7 +417,11 @@ pelo humano e está ancorada (D9).
   `GoldTableSchema`; as colunas novas lidas por nome (ex.: `p_value` do DM,
   `wilson_lower`/`wilson_upper` da calibração) entram no `read_columns` do
   schema, dono único ("nenhuma outra coluna é lida por nome fora deste
-  schema" — docstring de `gold_schema.py`).
+  schema" — docstring de `gold_schema.py`). Cuidado (Checkpoint A): o
+  `conformal_coverage._empty_row` monta as linhas vazias a partir do
+  `read_columns` e `test_conformal_gold_builders.py:95` compara com um
+  literal; o `GOLD_CONFORMAL_COVERAGE` não precisa de coluna nova (as do
+  D13 já estão lá) e não é tocado.
 - `[decision:C] D3 — Degrau 1 (convenção do próprio código, ADR 6.5.0005 itens 2-3) · Reversível: sim`
 
 ### D4 — Silver das duas figuras por ponto, conferido por unidade
@@ -379,10 +430,15 @@ pelo humano e está ancorada (D9).
   pós-filtro do refresh: `asset` e `run_id` do cohort) e o realizado pelo
   `TrainingGridReader`; recalculam o digest de cada unidade lida pelo
   `SilverContentAccumulator` (dono único) e exigem igualdade com o
-  `silver_content` julgado só para as unidades dos runs lidos (I2).
-  Sharpness do candidato: larguras de todas as seeds empilhadas (réplicas,
-  B-SEEDS; a média da distribuição empilhada é o MPIW médio entre seeds que
-  o perfil reporta), legenda declara o empilhamento.
+  `silver_content` julgado só para os pares (tabela, `run_id`) lidos (I2).
+  Sharpness: larguras u − l de `value_guardrail` dos pares simétricos,
+  `split = "test"`, amostra **model_full** (toda a série do modelo/seed),
+  pontos degenerados incluídos (largura 0 é dado); candidato com as larguras
+  de todas as seeds empilhadas (réplicas, B-SEEDS), legenda declara o
+  empilhamento. Consistência exigida: a média das larguras de cada
+  (modelo, seed, par, horizonte) é igual ao `mpiw` de `gold_metrics_by_run`
+  na amostra `model_full` — teste no fake e conferência na execução real
+  (divergência → erro: a figura não estaria desenhando o que o gold mediu).
 - `[decision:C] D4 — Escolha: silver conferido contra o silver_content julgado · Alternativas: só gold (fan chart e sharpness impossíveis); silver sem conferência · Degrau 1: doc §6.1 item 1 (silver "identificados pelo hash de conteúdo — §4.5"); Sandve 2013 Rule 7 · Reversível: sim`
 - **ADR:** [`8.3.0002`](../../adr/8_3_0002-figure-provenance-by-data-digest-and-verified-silver-units.md)
 
@@ -390,19 +446,26 @@ pelo humano e está ancorada (D9).
 - **O quê:** `<id>.json` por figura com `data_digest` (sha256 da
   `FigureSpec` canônica), `generation_digest`, revisão, partição, fontes
   (`SourceRef`: tabela ou documento, filtro de chave, campos), unidades do
-  silver com digest, commit do gerador e `renderer.identity()`. O hash da
+  silver com digest, omissões (D13), `code.src`/`code.uv_lock` do gerador
+  (não o commit HEAD, I8) e `renderer.identity()`. O hash da
   imagem não é prova: os bytes mudam com matplotlib/FreeType mesmo com o
   dado igual.
-- `[decision:E] D5 — Escolha: hash do dado + generation_digest + fontes + commit · Alternativas: hash do PDF (baseline de imagem) · Base: Sandve 2013 Rule 7 ("note which data formed the basis of a given plot and how this data could be reconstructed"); pytest-mpl (imagem muda com versão de matplotlib/FreeType — issue #234 §Referências) · Reversível: sim`
+- `[decision:E] D5 — Escolha: hash do dado + generation_digest + fontes + code.src/code.uv_lock · Alternativas: hash do PDF (baseline de imagem) · Base: Sandve 2013 Rule 7 ("note which data formed the basis of a given plot and how this data could be reconstructed"); pytest-mpl (imagem muda com versão de matplotlib/FreeType — issue #234 §Referências) · Reversível: sim`
 - **ADR:** [`8.3.0002`](../../adr/8_3_0002-figure-provenance-by-data-digest-and-verified-silver-units.md)
 
 ### D6 — matplotlib direto, API orientada a objeto, confinado ao adapter
 - **O quê:** `matplotlib>=3.11,<3.12` em `dependencies` (pin por minor, o
   lock trava 3.11.0 — postura de todos os blocos do `pyproject.toml`);
-  contrato import-linter `evaluation-no-matplotlib-leak` (matplotlib só em
-  `features/evaluation/adapters/out/plots/`); o adapter usa
-  `matplotlib.figure.Figure` com backend PDF e `rc_context`, sem `pyplot`
-  nem estado global. Hoje matplotlib só chega transitivo via mlflow e
+  contrato import-linter `evaluation-no-matplotlib-leak` do tipo
+  `forbidden` cujas `source_modules` listam **todos** os módulos de
+  `financial_forecasting` exceto `features.evaluation.adapters.out.plots`
+  (os demais adapters do evaluation, inclusive `reports`, os outros slices,
+  `shared`, `cli`, `composition_root`, `main`), com
+  `allow_indirect_imports = true` (o composition root monta o adapter de
+  plots sem importar matplotlib); teste de arquitetura (AST) que proíbe
+  `matplotlib.pyplot` em todo o `src/`, inclusive no adapter de plots; o
+  adapter usa `matplotlib.figure.Figure` com backend PDF e `rc_context`,
+  sem estado global; `.importlinter` entra nos arquivos a modificar. Hoje matplotlib só chega transitivo via mlflow e
   nenhum código o importa — depender de transitiva é frágil.
 - `[decision:E] D6 — Base: issue #234 §Síntese ([E] dependência direta); pyproject.toml (convenção de pin e de gate de vazamento por lib) · Reversível: sim`
 - **ADR:** [`8.3.0003`](../../adr/8_3_0003-deterministic-vector-pdf-with-matplotlib-in-docs-reports-figures.md)
@@ -410,7 +473,8 @@ pelo humano e está ancorada (D9).
 ### D7 — PDF vetorial determinístico, paleta para daltônicos, figuras em `docs/reports/figures/`
 - **O quê:** (a) só PDF (vetorial para o `graphicx`); (b) `savefig(...,
   format="pdf", metadata={"CreationDate": None})` explícito (não
-  `SOURCE_DATE_EPOCH`, que é estado global do processo); sem SVG/PNG, então
+  `SOURCE_DATE_EPOCH`, que é estado global do processo), `pdf.fonttype 42`
+  no `rc_context`; sem SVG/PNG, então
   `svg.hashsalt` e `Software` do PNG não se aplicam; (c) heatmap e escalas
   sequenciais em `cividis` (alternativa `viridis`); séries com um mapa
   **fixo** modelo → cor de ciclo amigável a daltônicos, validado pelo
@@ -435,8 +499,17 @@ pelo humano e está ancorada (D9).
   H1 por horizonte com o poder declarado, H2 por horizonte, vencedor
   primário, critério "≥ 1 horizonte", leitura de H3, benchmark conformal;
   (2) identidade da entrada; (3) cadeia do pré-registro e cegamento; (4)
-  geração julgada; (5) ambiente, commits e seeds; (6) figuras; (7)
-  reprodução; (8) desvios e achados; (9) interno, fora do texto.
+  geração julgada; (5) ambiente, commits e seeds; (6) figuras (com as
+  omissões do D13); (7) reprodução — claim (a), R1/R2/R3 com comparados,
+  diferentes e max |Δ|, imagem e commit `060537fc`, ponteiro às §1–§4 do
+  `reproduction_audit.md`; (8) desvios e achados da cadeia citável. A
+  camada (9), **interna**, vai para um **arquivo separado**
+  (`final_traceability_dossier_internal.md`): registro de hashes da
+  evidência anterior, `equivalence_audit.md`, B3/ADR 8.2.0004, `[finding]`
+  do PICP, erratas F2–F5, E4 do andaime e o limite da §5 do
+  `reproduction_audit.md` (I12). Arquivo separado, e não seção, porque o
+  TCC "se reconstrói pelo caminho que o dossiê aponta" (§2): o citável
+  tem de poder ser apontado inteiro.
 - `[decision:C] D8 — Escolha: gerado + registro curado · Alternativas: dossiê escrito à mão a partir de saídas de comando (precedente reproduction_audit.md); tudo gerado sem registro (desvios embutidos em código) · Degrau 3: Sandve 2013 Rules 1, 5, 8, 9 (registro sem transcrição, camadas, ponteiro); doc §7 (DOSSIE) · Reversível: sim`
 - **ADR:** [`8.3.0004`](../../adr/8_3_0004-dossier-generated-from-persisted-sources-plus-curated-register.md)
 
@@ -474,6 +547,50 @@ pelo humano e está ancorada (D9).
   `silver_content` é o `evaluation` (ADR 8.1.0002); não é concern de outro
   slice capturado aqui.
 
+### D13 — Mapa figura → fonte persistida e omissões (lista fechada)
+- **O quê:** cada figura lê exatamente as fontes abaixo (Checkpoint A,
+  DT-5). Convenções comuns: `candidate = tft_quantile`; família de
+  comparadores = `[comparators]` da revisão julgada; "filtro do gate" = os
+  valores de `sample`, `includes_degenerate` e `dgt_offset` que o
+  `scorecard_profile` usa para o gate (constantes do dono único, não
+  reescritas); "perfil 95 %" = `band_level` = `profile_band_level` da
+  revisão; scorecard = documento julgado (`as_mapping()`); ĉ(τ) de uma cauda
+  superior = 1 − taxa de violação, e a banda idem (limites trocados).
+
+| Figura | Fonte (tabela/documento → filtro → campo) | Omissões declaradas |
+|---|---|---|
+| Reliability por τ | **confirmatório:** scorecard `verdict.horizons[h].h1.lower_band`/`upper_band` (estimativa, limites, `band_level` 0,975) e `.passed`, `profile.horizons[h].power`; **descritivo, candidato:** scorecard `profile.horizons[h].calibration_95` (filtro do gate, `kind` de cauda, por nível) → ĉ = `mean_violations`/`mean_observed` (razão das contagens médias persistidas, B-SEEDS) + pontos por seed de `gold_calibration_table` (mesmo filtro, perfil 95 %) → `violation_rate`; **descritivo, baselines (seed nula) e GBM (seed 0):** `gold_calibration_table` (filtro do gate, perfil 95 %) → `wilson_estimate`, `wilson_lower`, `wilson_upper` | τ = 0,5 (sem linha de calibração); banda de Wilson do candidato nos níveis fora do gate e da média entre seeds (o gold só a tem por seed; a dispersão por seed é desenhada no lugar) |
+| Quantile score | `gold_metrics_by_run` `sample = common`, `metric = pinball`, `level_low = τ` → `value` por seed; média/mín/máx do candidato de `profile.horizons[h].descriptors` (mesmas chaves) | nenhuma |
+| Sharpness | silver `fact_oos_predictions` (`value_guardrail`, `split = test`, pares simétricos) conferido (D4); consistência com `gold_metrics_by_run` `sample = model_full`, `metric = mpiw` | nenhuma |
+| PICP × MPIW | `gold_metrics_by_run` `sample = common`, `metric ∈ {picp, mpiw}`, por par → `value` por seed (dispersão entre seeds = pontos por seed); média/mín/máx do candidato de `profile.horizons[h].descriptors`; reta do nominal 1 − 2τ_l | nenhuma |
+| DM candidato × comparadores | `gold_dm_results` `variance_estimator = rectangular`, `candidate = tft_quantile`, comparador da família → `p_value` (bruto), `adjusted_p_value`, `rejected`; conferidos contra `profile.horizons[h].dm` (I4); rótulo por `verdict.horizons[h].h1.passed` | nenhuma (comparador × comparador não existe por construção) |
+| Série OOS / fan chart | silver `fact_oos_predictions` do candidato, seed 1, `split = test`, `value_guardrail` dos pares simétricos e da mediana; realizado pelo `TrainingGridReader`; cortes de fold do `dim_run` | nenhuma |
+| d_t + ACF | `gold_loss_differentials` (pares com o candidato e um comparador da família) → `differential`, `fold`; `gold_differential_acf` (mesmos pares) → `acf` por `lag` | faixa de confiança da ACF (±1,96/√n não persistida) |
+| Importância por família / H3 | `gold_h3_shares` (por `method` e `family`) → `share_h1`, `share_h7`, `delta`, `lower`, `upper`, `status`; `gold_h3_importance` (por `method`, `family`, `horizon`) → `importance` por seed × `permutation_index`, desenhada como **réplicas** (dispersão descritiva rotulada); `gold_h3_reading` → leitura C4/C5, `label`, `status` | intervalo bootstrap de I_f(h) e de s_f(h) (o gold só tem o de Δ_f); I_f(h) agregado pela `seed_aggregation` de H3 (não persistido; as réplicas o substituem) |
+| Pesos da VSN | `gold_h3_vsn` → `family`, `p10`, `p50`, `p90`, `label`, `status` | nenhuma |
+| Nativo × conformal | `gold_conformal_coverage` (duas variantes, por par/cauda, `seed` nula = média entre seeds e por seed) → `coverage`/`mean_of_seed_coverages`, `mpiw`, `wilson_lower`, `wilson_upper`, `label`; nominal | **série nativa** na mesma máscara/n do conformal (não persistida; a nativa de outras amostras não é pareada — inference §4.11 exige o mesmo n, pontos alinhados); **referência de dispersão Beta** agregada (o gold só tem `beta_mean`/`beta_sd` por fold × seed × cauda; agregar ou tirar quantis seria cálculo novo) |
+
+- **Nenhuma omissão toca elemento confirmatório:** os elementos
+  confirmatórios do catálogo (caudas do gate com banda 97,5 % e poder; linha
+  do DM com p bruto e Holm) estão todos persistidos. As omissões são de
+  elementos descritivos, e o doc §6.1 item 5 manda omitir em vez de
+  calcular ("não exige teste que o gold não tenha persistido"). A legenda do
+  nativo × conformal diz que a comparação com o nativo pareado não foi
+  persistida e aponta as figuras de calibração e PICP × MPIW (outra
+  amostra, não pareada).
+- `[decision:E] D13 — Escolha: omitir o não persistido, lista fechada por figura, ou desenhar valores persistidos por seed como dispersão rotulada · Alternativas: recalcular Wilson/Beta/cobertura/agregação de H3 na 8.3; desenhar o nativo de outra amostra como se fosse pareado · Base: doc §6.1 itens 1 e 5; inference §4.11 ("banda de Wilson com o mesmo n (pontos alinhados, nunca S·T)"); Checkpoint A r1 (DT-1/DT-2/DT-3/CA-4) · Reversível: sim`
+- `[decision:C] D13(sample) — common nas figuras que comparam modelos (quantile score, PICP × MPIW: pontos alinhados, evaluation §6.7); model_full e o filtro do gate na calibração e no sharpness (a amostra do gate e do MPIW por modelo) · Degrau 1 · Reversível: sim`
+
+### D14 — Sinal de d_t
+- **O quê:** o gold guarda o par em ordem (`model_a`, `model_b`) do
+  builder, com o candidato em qualquer lado; a figura desenha sempre
+  d_t = L_candidato − L_comparador (negativo = candidato com perda menor, o
+  sentido do DM unilateral), trocando o sinal de `differential` quando o
+  candidato é `model_b`. A convenção de `differential` (L_a − L_b) é
+  conferida no builder pelo technical e fixada por teste. Só os pares
+  (candidato, comparador da família) entram; a ACF não depende do sinal.
+- `[decision:C] D14 — Degrau 1: evaluation §6.1–§6.2 (direção "candidato com perda menor"); Checkpoint A DT-7 · Reversível: sim`
+
 ## 8. Integrações
 
 ### Internas (com outras Stages/módulos)
@@ -492,14 +609,16 @@ pelo humano e está ancorada (D9).
 
 | Risco | Probabilidade | Impacto | Mitigação |
 |---|---|---|---|
-| PDF não determinístico (fonte embutida, ordem de objetos) mesmo com `CreationDate None` | B | M | contrato do renderer (A9) e A14 (duas gerações reais, listagem sha256 igual); falhando, fixar fonte e `rcParams` no `rc_context` |
-| Esperado do silver incluir unidades não lidas (ablação) — repete o `[finding]` da 8.2 | M | M | I2 + teste com unidades de ablação no julgado (passa) e unidade do cohort adulterada (falha) |
-| Valor confirmatório recalculado em vez de lido do scorecard | M | A | I3/I4 + teste de importação (A6) + teste que confronta o elemento com o campo do scorecard |
-| Coluna nova no `read_columns` quebrar leitores existentes | B | M | `make check` completo; colunas já gravadas pelos builders |
+| PDF não determinístico (fonte embutida, ordem de objetos, hash de `str` do processo) mesmo com `CreationDate None` | B | M | `pdf.fonttype 42`; contrato do renderer compara bytes entre dois subprocessos com `PYTHONHASHSEED` diferentes (A9) e A14 (duas gerações reais, listagem sha256 igual) |
+| Esperado do silver incluir unidades não lidas (ablação; permutadas/VSN do mesmo `run_id`) — repete o `[finding]` E4 da 8.2 | M | M | I2 por par (tabela, `run_id`) + A4 com essas unidades só no julgado (passa) |
+| Valor confirmatório recalculado em vez de lido | M | A | I3/I4 + teste de importação (A6) + confronto com o scorecard e conferência DM gold × scorecard |
+| Omissão silenciosa ou recálculo para "completar" uma figura | M | A | lista fechada do D13 no código e no teste (A16) |
+| Coluna nova no `read_columns` quebrar leitores existentes | B | M | `make check` completo; `GOLD_CONFORMAL_COVERAGE` não é tocado (D3) |
 | Memória ao ler o silver inteiro do cohort | M | B | o refresh já lê o mesmo volume em `--memory 8g`; ler por `feature_set_name` como o refresh |
 | Registro curado esquecer um desvio | M | M | A12 lista fechada dos itens herdados (§3) verificada por teste |
-| Dossiê ou figura citar número da evidência anterior | B | A | P-EDIT: seção interna só com ponteiros; nenhuma figura lê `tests/equivalence` nem `data/analytics` (import-linter `src-no-tests` já existe) |
+| Dossiê citável expor a evidência anterior (direto ou pelo `reproduction_audit.md` §5) | M | A | arquivo interno separado (D8), I12 e A17 |
 | Figura com mais estatutos do que rótulos | M | M | `ElementLabel` obrigatório em toda série (construção do DTO recusa série sem rótulo) |
+| Regenerar depois de commitar as saídas mudar os bytes | M | M | nenhum hash de commit nos artefatos, só `code.src`/`code.uv_lock` (I8) |
 
 ## 11. Critérios de aceitação
 
@@ -512,77 +631,125 @@ pelo humano e está ancorada (D9).
   `read_generation` — teste unitário.
 - [ ] **A3 — Cópia conferida.** `generation_digest` ≠ `.judged.toml`, cópia
   adulterada ou ausente → erro e o sink falso não recebe nenhuma escrita.
-- [ ] **A4 — Silver por unidade.** Unidade do cohort alterada, faltando ou a
-  mais (e realizado alterado) → `SilverContentMismatchError` sem escrita;
-  unidades de ablação presentes só no julgado → passa.
+- [ ] **A4 — Silver por unidade.** Unidade do cohort alterada (inclusive
+  numa linha `split = calib`), faltando ou a mais, e realizado alterado →
+  `SilverContentMismatchError` sem escrita; unidades presentes só no
+  julgado de pares não lidos — runs da ablação e
+  `fact_permuted_predictions`/`fact_vsn_weights` com o mesmo `run_id` do
+  candidato → passa.
 - [ ] **A5 — Rótulos.** Com scorecard falso em que H1 passa em h+1 e reprova
   em h+7: elementos confirmatórios só em h+1, linha do DM de h+7
   "descritivo (perfil) — H2 não aplicável"; as frases obrigatórias do I11
   presentes nas figuras certas — teste unitário.
 - [ ] **A6 — Nenhum teste novo.** Teste de importação: o módulo de montagem
   não importa `diebold_mariano`, `holm_correction`, `model_confidence_set`,
-  `wilson_band`, `h1_gate`, `h1_gate_power`, `differential_stationarity`;
-  os elementos confirmatórios igualam os campos do scorecard falso; elemento
-  sem fonte persistida é omitido e listado no registro.
+  `wilson_band`, `h1_gate`, `h1_gate_power`, `differential_stationarity`
+  nem serviço de Beta/conformal; os elementos confirmatórios da calibração
+  igualam `verdict.horizons[h].h1` e `profile.horizons[h].power` do
+  scorecard falso; o p bruto do DM sai de `gold_dm_results.p_value` na linha
+  retangular, e `adjusted_p_value`/`rejected` divergentes do scorecard →
+  erro.
 - [ ] **A7 — Dado plotado.** Para cada uma das dez figuras, teste unitário
   confronta as séries da `FigureSpec` com os valores fixados no gold/silver
-  falso (chave e campo certos, média entre seeds onde o doc manda).
+  falso, com fakes **discriminantes**: valores distintos por `sample`,
+  `includes_degenerate`, `band_level`, `variance_estimator` (Bartlett ≠
+  retangular), horizonte e seed, de modo que ler a linha errada do mapa do
+  D13 reprova; sinal de d_t pelo D14 (candidato como `model_a` e como
+  `model_b`); sharpness: média das larguras = `mpiw` `model_full` do fake.
 - [ ] **A8 — Fan chart.** Usa só a seed 1 (primeira de `[seeds].tft_quantile`
-  da revisão julgada), quantis `value_guardrail` dos pares simétricos,
-  cortes de fold marcados e a legenda do I6; com a seed 1 removida do silver
-  falso, erro (não cai em outra seed nem em média).
+  da revisão julgada, igual à lista `seeds` do cohort), quantis
+  `value_guardrail` dos pares simétricos, cortes de fold marcados e a
+  legenda do I6; seed 1 ausente do silver falso ou listas de seeds
+  diferentes → erro (não cai em outra seed nem em média).
 - [ ] **A9 — Renderer determinístico.** Contrato do `FigureRenderer` (fake e
-  real): a mesma `FigureSpec` → bytes idênticos em duas chamadas; real começa
-  com `%PDF` e não contém `/CreationDate`.
+  real): a mesma `FigureSpec` → bytes idênticos em duas chamadas e, no real,
+  entre dois subprocessos com `PYTHONHASHSEED` diferentes; o real começa com
+  `%PDF`, não contém `/CreationDate` e `identity()` traz as versões do
+  matplotlib e do FreeType.
 - [ ] **A10 — Smoke de geração.** As dez `FigureSpec` sintéticas renderizam
   pelo adapter real sem erro, uma página cada — teste de integração.
 - [ ] **A11 — Registro por figura.** Cada `<id>.json` tem `data_digest` igual
   ao sha256 de `FigureSpec.canonical_bytes()`, `generation_digest`, revisão,
-  partição, fontes, unidades do silver (fan chart e sharpness), commit e
-  identidade do renderizador; mudar um valor do gold falso muda o
-  `data_digest`.
-- [ ] **A12 — Dossiê completo.** O dossiê renderizado tem uma seção por
-  linha da tabela do doc §7 (lista fechada no teste), o `blinding_statement`
+  partição, fontes, omissões, unidades do silver (fan chart e sharpness),
+  `code.src`, `code.uv_lock` e identidade do renderizador, e nenhum hash de
+  commit nem instante; mudar um valor do gold falso muda o `data_digest`.
+- [ ] **A12 — Dossiê citável completo.** Tem uma seção por linha da tabela do
+  doc §7 menos a última (lista fechada no teste), o `blinding_statement`
   transcrito byte a byte da revisão julgada, o poder declarado ao lado de
   cada claim de H1, um ponteiro (tabela/documento, chave, campo) por
-  afirmação do veredito (H1×2, H2×2, vencedor, sucesso, H3, conformal) e, do
-  registro curado, no mínimo: B3/ADR 8.2.0004, o `[finding]` do PICP da 8.2
-  (seção interna), as erratas O1/O2 da 8.1 e F2–F5 da 8.2, a nota do
-  `code.src` (formatação) e o ponteiro do `reproduction_audit.md` com
-  `generation_digest` e `result_digest`.
+  afirmação do veredito (H1×2, H2×2, vencedor, sucesso, H3, conformal), a
+  linha da reprodução (claim (a); R1/R2/R3 com comparados, diferentes e max
+  |Δ|; imagem; commit `060537fc`; `generation_digest`; `result_digest`;
+  ponteiro às §1–§4 do `reproduction_audit.md`) e, do registro curado, no
+  mínimo: as erratas O1/O2 da 8.1, a nota do `code.src` (formatação) e os
+  `[deviation]` da reprodução da 8.2 (E2 item 7; `env-equal`).
 - [ ] **A13 — Recusas do CLI e do gerador.** Árvore suja → `DirtyCodeError`
   sem escrita; registro curado malformado → erro antes do use case; falha
   de escrita no meio → staging removido, saída anterior intacta.
 - [ ] **A14 — Execução real.** `report-artifacts --preregistration-ref
   aapl_confirmatory-r3-00fd83d9cd39` no ambiente Docker, sobre a cópia
   julgada (`96c05413…e539`): dez PDFs + dez registros em
-  `docs/reports/figures/` e o dossiê, commitados; uma segunda geração no
-  mesmo commit e imagem dá listagem `sha256sum` idêntica de todos os
-  artefatos; listagem sha256 de `data/` (gold e silver da partição) igual
-  antes e depois (só leitura).
+  `docs/reports/figures/` e os dois dossiês, commitados; uma segunda geração
+  **depois do commit das saídas** (mesmo `code.src` e imagem) dá listagem
+  `sha256sum` idêntica de todos os artefatos; a consistência do sharpness
+  com o `mpiw` vale no dado real; listagem sha256 de `data/` (gold e silver
+  da partição) igual antes e depois (só leitura).
 - [ ] **A15 — Dependência e gates.** `matplotlib>=3.11,<3.12` em
-  `dependencies`; contrato import-linter que confina matplotlib ao adapter
-  de plots, com prova de quebra; `make check` verde.
+  `dependencies`; contrato import-linter que proíbe matplotlib em todos os
+  módulos fora de `features.evaluation.adapters.out.plots`, com prova de
+  quebra (import em `adapters/out/reports/` reprova); teste AST que reprova
+  `matplotlib.pyplot` em qualquer arquivo de `src/`; `make check` verde.
+- [ ] **A16 — Omissões fechadas.** O conjunto de omissões de cada
+  `FigureSpec` é exatamente o da coluna "Omissões declaradas" do D13 (teste
+  com a lista literal), e nenhuma série desenha elemento dessa lista.
+- [ ] **A17 — Citável limpo, interno completo.** Teste: o dossiê citável não
+  contém `equivalence_audit`, `prior_evidence`, `tests/equivalence`,
+  `8.2.0003`, `8.2.0004`, `8_2_0003`, `8_2_0004`, "evidência anterior",
+  "projeto anterior" nem ponteiro à §5 do `reproduction_audit.md`, e não
+  recebe entrada `internal`; o interno contém o registro de hashes da
+  evidência anterior, o `equivalence_audit.md`, B3/ADR 8.2.0004, o
+  `[finding]` do PICP, as erratas F2–F5, o E4 do andaime e o limite da §5
+  do `reproduction_audit.md`.
 
 ## 12. Checklist de validação interna
 
 - [x] Todos os contratos introduzidos têm assinatura definida? — §4.
-- [x] Toda decisão em §7 tem fonte rastreável? — D1–D12 com âncora.
+- [x] Toda decisão em §7 tem fonte rastreável? — D1–D14 com âncora.
 - [x] Toda integração externa tem contrato definido (interface, formato, auth)? — matplotlib só atrás do `FigureRenderer`; arquivo atrás do `ReportArtifactSink`.
 - [x] Decisões com alternativa real descartada têm ADR escrito? — 8.3.0001–8.3.0004.
 - [x] Dependências de Stages anteriores estão satisfeitas (`done`)? — 8.2 `done` (roadmap, Histórico 2026-10-24).
-- [x] Stage cabe em ~3–12 Tasks (ver [`CONVENTIONS.md`](../../CONVENTIONS.md) §6)? — estimativa 12–13 (DTOs/ports/fakes; montagem por grupo de figuras; conferência do silver; dossiê; renderer; sink; CLI/wiring; dependência e contrato; execução real); a contagem é referência, não gate.
+- [x] Stage cabe em ~3–12 Tasks (ver [`CONVENTIONS.md`](../../CONVENTIONS.md) §6)? — estimativa 12–13 (DTOs/ports/fakes; montagem por grupo de figuras; conferência do silver; dossiê; renderer; sink; CLI/wiring; dependência e contratos; execução real); a contagem é referência, não gate.
 - [x] Riscos críticos têm mitigação plausível? — §10.
 - [x] Cada mecanismo novo passou pelo **teste da solução mais direta**: não é caso especial/tipo/métrica novo remendando, local, um sintoma que recorre em outros consumidores e teria tratamento mais simples/geral em outra camada (concern compartilhado). Captura assim → piso declarado + issue, não solução local. — a identidade/fingerprint do dado não é reinventada: a conferência reusa o `SilverContentAccumulator` e o `silver_content` do manifesto (dono único no `evaluation`, ADR 8.1.0002), e a prova da cópia reusa `generation_digest` + `.judged.toml`; o registro por figura só agrega esses identificadores com o hash do dado plotado (D12).
-- [x] Nenhuma figura introduz teste, banda ou p-valor que o gold não persistiu? — I3, A6.
+- [x] Nenhuma figura introduz teste, banda ou p-valor que o gold não persistiu? — I3, D13, A6, A16.
+- [x] Nenhuma omissão do D13 retira elemento confirmatório? — sim; os confirmatórios estão persistidos (D13).
 
 ## 13. Questões em aberto
 
-Nenhuma crítica. Ficam para o technical (doc §8.2): o mapa exato figura →
-(tabela/documento, filtro, campo), inclusive qual linha do scorecard carrega
-cada banda e o poder; o nome de arquivo de cada figura; o estilo
-(tamanho, fonte, `rcParams`) dentro do D7; a forma do Markdown do dossiê
-dentro das camadas do D8.
+Nenhuma crítica. Ficam para o technical (doc §8.2): o nome de arquivo de
+cada figura; o estilo (tamanho, fonte, demais `rcParams`) dentro do D7; a
+forma do Markdown dos dois dossiês dentro das camadas do D8; a confirmação,
+no builder, da convenção de `differential` (D14).
+
+### Checkpoint A, rodada 1 — disposição
+
+| Achado | Disposição |
+|---|---|
+| DT-1 banda do candidato por nível; τ = 0,5 | corrigido: D13 (mapa + omissão fechada; dispersão por seed; ĉ pela razão das contagens médias do perfil), A7, A16 |
+| DT-2 nativo na mesma máscara; Beta agregada | corrigido: omissões do D13 (`[decision:E]`, doc §6.1 item 5 + inference §4.11), A16 |
+| DT-3 IC de I_f/s_f; agregação de H3 | corrigido: omissões do D13; réplicas por seed × permutação; s_f = `share_h*` do gold (A7) |
+| DT-4 / CA-1 p bruto do DM | corrigido: I4, D13, A6 (p de `gold_dm_results` retangular; Holm/decisão conferidos contra o scorecard) |
+| DT-5 eixos de seleção | corrigido: D13 fixa (tabela, filtro, campo) por figura; A7 com fakes discriminantes |
+| DT-6 sharpness | corrigido: D4 (coluna, split, amostra, degenerados) e consistência com `mpiw` (A7, A14) |
+| DT-7 sinal de d_t; faixa da ACF | corrigido: D14; faixa como omissão do D13 |
+| DT-8 determinismo só no processo | corrigido: A9 (subprocessos com `PYTHONHASHSEED`), `pdf.fonttype 42`, FreeType no `identity()` |
+| DT-9 commit no registro | corrigido: I8/I10, D5, A11, A14 (`code.src`/`code.uv_lock`, sem hash de commit; cohort file declarado) |
+| CA-2 evidência anterior no dossiê | corrigido: arquivo interno separado (D8, I12, A17); `reproduction_audit.md` §5 não apontado, limite no interno, sem editar a 8.2 |
+| CA-3 esperado do silver | corrigido: I2 por par (tabela, `run_id`), hash antes do filtro por split, A4; ADR 8.3.0002 item 3 emendado |
+| CA-4 omissões declaradas agora | corrigido: D13 + A16 |
+| CA-5 linha da reprodução | corrigido: D8 camada (7), A12 |
+| CA-6 confinamento do matplotlib | corrigido: D6 (forbidden com todos os módulos fora de `plots`, indiretos permitidos; AST contra `pyplot`), A15; `.importlinter` no roadmap |
+| Nota CA (seeds do cohort = r3) | corrigido: I6, A8 |
 
 ## 14. Referências
 
