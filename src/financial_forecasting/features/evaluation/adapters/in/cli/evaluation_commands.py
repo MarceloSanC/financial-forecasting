@@ -32,16 +32,26 @@ technical 8.2 §1):
 
 Exit 0 só com `bit_identical`, 1 com diferença (como o `EXIT_MISMATCH` do `verify`); erro
 sobe para o `main` (exit 2).
+
+Stage 8.3: `report-artifacts` — parseia o registro curado (`dossier_register`, fronteira),
+chama o `GenerateReportArtifacts` e imprime a ref, o `generation_digest`, o `data_digest`
+de cada figura e os nomes dos dois dossiês (contrato da Etapa R, technical 8.3 §1).
 """
 
 from __future__ import annotations
 
+import importlib
 import json
 from typing import TYPE_CHECKING, Final
 
 from financial_forecasting.features.evaluation.application.dtos.confirmatory_run import (
     InferenceSummary,
     RunConfirmatoryEvaluationCommand,
+)
+from financial_forecasting.features.evaluation.application.dtos.report_artifacts import (
+    DossierEntry,
+    GenerateReportArtifactsCommand,
+    ReportArtifactsResult,
 )
 from financial_forecasting.features.evaluation.application.dtos.reproduction_comparison import (
     AuditReproductionCommand,
@@ -50,6 +60,10 @@ from financial_forecasting.features.evaluation.application.dtos.reproduction_com
 )
 from financial_forecasting.features.evaluation.application.use_cases.audit_reproduction import (
     ReproductionAuditError,
+)
+from financial_forecasting.features.evaluation.application.use_cases.dossier_markdown import (
+    CITABLE_FILE,
+    INTERNAL_FILE,
 )
 
 if TYPE_CHECKING:
@@ -178,3 +192,50 @@ def audit_reproduction(  # noqa: PLR0913 — opções coesas do subcomando
     )
     out.write("".join(f"{line}\n" for line in _report_lines(comparison)))
     return 0 if comparison.bit_identical else EXIT_DIFFERENT
+
+
+# --- Stage 8.3: report-artifacts ----------------------------------------------------------
+
+_DOSSIER_REGISTER = "dossier_register"
+"""Módulo irmão do parser do registro curado (o pacote `in` é keyword: `importlib`)."""
+
+
+def report_artifacts(  # noqa: PLR0913 — opções coesas do subcomando
+    generate: Callable[[GenerateReportArtifactsCommand], ReportArtifactsResult],
+    *,
+    register_path: Path,
+    name: str,
+    revision: int,
+    preregistration_ref: str,
+    cohort_seeds: tuple[int, ...],
+    out: TextIO,
+) -> int:
+    """Parseia o registro curado (fronteira), gera figuras e dossiê e imprime; devolve 0.
+
+    Saída (contrato do technical 8.3 §1 "Subcomando"):
+
+        report <ref>: generation_digest <64 hex> figures 10 register_entries <n>
+        figure <id> data_digest <64 hex>                  (10 linhas, ordem do catálogo)
+        dossier citable final_traceability_dossier.md internal (o arquivo _internal.md)
+
+    Registro malformado ergue `ValueError` antes do use case (o `main` traduz em exit 2).
+    """
+    parser = importlib.import_module(f"{__package__}.{_DOSSIER_REGISTER}")
+    register: tuple[DossierEntry, ...] = parser.load_register(register_path)
+    result = generate(
+        GenerateReportArtifactsCommand(
+            name=name,
+            revision=revision,
+            preregistration_ref=preregistration_ref,
+            cohort_seeds=tuple(cohort_seeds),
+            register=register,
+        )
+    )
+    lines = [
+        f"report {result.preregistration_ref}: generation_digest {result.generation_digest} "
+        f"figures {len(result.figures)} register_entries {result.register_entries}",
+        *(f"figure {figure_id} data_digest {digest}" for figure_id, digest in result.figures),
+        f"dossier citable {CITABLE_FILE} internal {INTERNAL_FILE}",
+    ]
+    out.write("".join(f"{line}\n" for line in lines))
+    return 0

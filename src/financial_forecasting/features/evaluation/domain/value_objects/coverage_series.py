@@ -116,8 +116,7 @@ class CoverageSeries:
         Fonte única da regra par → colunas do vetor pontuado: os serviços (IS, gate,
         cobertura) indexam `scored_values(i)` por aqui, sem remontar a regra.
         """
-        size = len(self.levels)
-        return tuple((k, size - 1 - k) for k in range(size) if self.levels[k] < MEDIAN_LEVEL)
+        return symmetric_pair_indices_of(self.levels)
 
     @property
     def guardrail_applied_rate(self) -> float:
@@ -179,6 +178,16 @@ class CoverageSeries:
                 )
             if not is_finite_number(realized):
                 raise ValueError(f"point {index}: realized value must be finite, got {realized}")
+
+
+def symmetric_pair_indices_of(levels: tuple[float, ...]) -> tuple[tuple[int, int], ...]:
+    """Colunas `(k, K-1-k)` dos pares simétricos de uma grade (τ_k < 0,5) — dono da regra.
+
+    A `CoverageSeries.symmetric_pair_indices` e quem só tem a grade (as figuras da 8.3, que
+    leem o gold e não uma série) usam esta mesma escrita.
+    """
+    size = len(levels)
+    return tuple((k, size - 1 - k) for k in range(size) if levels[k] < MEDIAN_LEVEL)
 
 
 def is_symmetric_pair(lower_level: float, upper_level: float) -> bool:

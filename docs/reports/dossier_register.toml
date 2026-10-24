@@ -1,0 +1,268 @@
+# Registro curado de desvios e achados do dossiê final (Stage 8.3, D8; ADR 8.3.0004).
+#
+# O que é: as entradas que o `report-artifacts` não tira de dado persistido — desvios,
+# `[finding]` abertos, computação pré-âncora, ambientes, resultado da reprodução e notas
+# internas. O use case `GenerateReportArtifacts` lê este arquivo (parser
+# `adapters/in/cli/dossier_register.py`) e o transcreve nos dois dossiês.
+#
+# Como editar (à mão, versionado):
+#   [[entry]]
+#   kind = "deviation"   # deviation | finding | pre_anchor | environment | reproduction | internal
+#   title = "…"
+#   summary = "…"        # descreve o fato; nunca número de modelo da evidência de 2025
+#   pointer = "docs/…/arquivo.md#âncora"   # caminho relativo ao repo, normalizado; âncora no
+#                                          # estilo GitHub de um cabeçalho real do arquivo
+#   status = "open"      # só (e obrigatório) em kind = "finding"
+#
+# Visibilidade (A17): `kind = "internal"` vai só para `final_traceability_dossier_internal.md`;
+# todo outro kind é citável e vai para `final_traceability_dossier.md`.
+#   1ª barreira (pela fonte, no `DossierEntry`): entrada citável não aponta para
+#      `docs/stages/8.2-*` (salvo as âncoras de `CITABLE_82_ANCHORS`), o relatório da
+#      equivalência interna, o registro de hashes, os ADRs 8.2.0003/8.2.0004 nem o
+#      andaime em `tests/`.
+#   2ª barreira (pelo texto, `find_forbidden`): título, resumo e ponteiro de entrada
+#      citável não casam `CITABLE_FORBIDDEN_PATTERNS`.
+# O teste `tests/architecture/test_stage_8_3_repo_files.py` confere o parse, os itens
+# herdados obrigatórios (A12), as âncoras e as duas barreiras.
+#
+# `[finding]` aberto (A12): entrada `[finding]` da §7 de um technical das Stages 5.5, 6.x,
+# 7.x, 8.1 ou 8.2 parte (i) sem entrada posterior que a resolva. A varredura está no §7 do
+# technical da 8.3 ([measurement] Task 15); os resolvidos não entram aqui.
+
+# --------------------------------------------------------------------------------------
+# Desvios da cadeia citável
+# --------------------------------------------------------------------------------------
+
+[[entry]]
+kind = "deviation"
+title = "Errata O1 da 8.1: commit da corrida confirmatória"
+summary = "A intenção 1 da Etapa R registra o HEAD d3b49909 (GATE2), mas a corrida rodou em 060537fc, o commit da própria intenção (filho de d3b49909, só §7). code.src e code.uv_lock são os mesmos; o commit do run_record.json e a tag apontam 060537fc. A identidade de código da geração julgada não muda."
+pointer = "docs/stages/8.1-confirmatory-run/technical.md#2026-10-23--finding-auditoria-da-stage--erratas-da-evidência-da-etapa-r-e-cobertura-por-arquivo--claude-auditoria-da-stage"
+
+[[entry]]
+kind = "deviation"
+title = "Errata O2 da 8.1: tentativas do run_record"
+summary = "\"run_record (2 tentativas listadas)\" na evidência da Etapa R quer dizer 2 linhas (started e input_read) de 1 tentativa, como mostra o ATTEMPTS.jsonl."
+pointer = "docs/stages/8.1-confirmatory-run/technical.md#2026-10-23--finding-auditoria-da-stage--erratas-da-evidência-da-etapa-r-e-cobertura-por-arquivo--claude-auditoria-da-stage"
+
+[[entry]]
+kind = "deviation"
+title = "Reprodução, E2 item 7: redação do A7 para o parquet_gold_store.py"
+summary = "Desvio de redação do critério A7 na pré-verificação da reprodução, registrado na Etapa E2."
+pointer = "docs/stages/8.2-equivalence-audit/technical.md#2026-10-23--deviation-e2-item-7--redação-do-a7-para-o-parquet_gold_storepy--claude-executor-das-etapas"
+
+[[entry]]
+kind = "deviation"
+title = "Reprodução: env-equal com --preregistration-ref obrigatória"
+summary = "A conferência de ambiente (env-equal) passou a exigir --preregistration-ref para comparar com a linha started da ref certa; emenda do runbook das Etapas E2/E3."
+pointer = "docs/stages/8.2-equivalence-audit/technical.md#2026-10-23--deviation-env-equal-com---preregistration-ref-obrigatória-emenda-do-runbook-e2e3--claude-executor"
+
+# --------------------------------------------------------------------------------------
+# [finding] abertos (varredura da Task 15)
+# --------------------------------------------------------------------------------------
+
+[[entry]]
+kind = "finding"
+status = "open"
+title = "5.5: sweep retomável por modelo, não por trial"
+summary = "O estudo do Optuna vive em memória e o sweep só grava ao fim dos trials; uma queda no meio perde o estudo (o sweep do cohort foi refeito do zero com a mesma sampler_seed). Retomar trial a trial exigiria persistir o estudo; nenhuma Stage posterior tratou."
+pointer = "docs/stages/5.5-confirmatory-retrain/technical.md#2026-09-28--finding-task-34--sweep-interrompido-pelo-desligamento-do-host-não-retoma-no-meio-do-estudo--claude-opus-55"
+
+[[entry]]
+kind = "finding"
+status = "open"
+title = "6.5: fronteira lower == nominal do WilsonBand sem teste"
+summary = "Nenhum caso de tests/unit/features/evaluation/test_wilson_band.py tem um limite de Wilson exatamente igual ao nominal; a troca de <= por < no veredito sobrevive. A regra está certa (banda que toca o nominal contém); falta o teste no dono."
+pointer = "docs/stages/6.5-preregistration-and-scorecard/technical.md#2026-09-30--finding-checkpoint-c-bloco-1-a5-fronteira-lower--nominal-do-wilsonband-sem-teste-na-63--claude-opus-55"
+
+[[entry]]
+kind = "finding"
+status = "open"
+title = "8.1: erro de mypy pré-existente em teste de integração"
+summary = "Dos 3 erros da Task 02, o do contrato saiu com a issue #204 (mypy sobre tests/contract e tests/fakes); o de _cohort_factory.py não reaparece. Segue 1 erro attr-defined em tests/integration/features/evaluation/test_h3_refresh_memory.py, fora do escopo do mypy do make check (medido em 2026-10-24)."
+pointer = "docs/stages/8.1-confirmatory-run/technical.md#2026-10-22--finding-task-02--erros-de-mypy-pré-existentes-em-tests--claude-sessão-windows"
+
+[[entry]]
+kind = "finding"
+status = "open"
+title = "8.1: erros de mypy pré-existentes em test_refresh_gold_dtos.py"
+summary = "tests/unit/features/evaluation/gold/test_refresh_gold_dtos.py segue com 28 erros de mypy strict (call-arg, arg-type, attr-defined, unused-ignore); tests/unit fica fora do escopo do mypy do make check, então nenhum gate os cobra (medido em 2026-10-24)."
+pointer = "docs/stages/8.1-confirmatory-run/technical.md#2026-10-22--finding-task-08--erros-de-mypy-pré-existentes-em-test_refresh_gold_dtospy--claude-sessão-windows"
+
+# --------------------------------------------------------------------------------------
+# Computação pré-âncora e cegamento (D9)
+# --------------------------------------------------------------------------------------
+
+[[entry]]
+kind = "pre_anchor"
+title = "Computação das tabelas confirmatórias antes do pré-registro (6.4, Task 15)"
+summary = "A medição da Task 15 da 6.4 rodou o RefreshGold até COMPLETED sobre uma cópia do cohort r0 antes do pré-registro, num container efêmero; foram impressos só status, contagens, durações e o resumo do realizado, nenhum valor de métrica, p-valor ou taxa."
+pointer = "docs/stages/6.4-gold-builders-and-quality-gates/technical.md#2026-09-29--finding-exposição-de-cegamento-b-ordem-na-medição-real-da-task-15--claude-opus-55"
+
+[[entry]]
+kind = "pre_anchor"
+title = "Decisão humana 6.5-P1: a computação fica como registrada"
+summary = "r0 segue o cohort julgado, sem novo treino; nenhum artefato pode afirmar que nenhuma métrica foi calculada sobre r0; blinding_statement opcional no pré-registro (ADR 6.5.0010, P1)."
+pointer = "docs/adr/6_5_0010-human-decisions-blinding-threshold-deviation-winner.md#decision"
+
+[[entry]]
+kind = "pre_anchor"
+title = "O que a prova de ordem cobre (ADR 6.5.0003 item 4)"
+summary = "A ordem provada é âncora do cohort < âncora do pré-registro < primeiro refresh confirmatório (8.1), mais a 6.5 sem métrica sobre o cohort; no statement is made about computations before it."
+pointer = "docs/adr/6_5_0003-anchor-by-tag-and-issue-comment-and-order-check.md#decision"
+
+# --------------------------------------------------------------------------------------
+# Ambientes e identidade do código
+# --------------------------------------------------------------------------------------
+
+[[entry]]
+kind = "environment"
+title = "Treino confirmatório em CPU"
+summary = "O cohort confirmatório AAPL foi treinado em CPU (decisão do passo 6 do runbook: n_trials = 60, seeds 1..10, CPU), na imagem de dev com torch 2.13.0+cpu; o ambiente registrado (versões, CPU, threads do torch) está no snapshot do cohort."
+pointer = "docs/runbooks/confirmatory-cohort-aapl.md#step-6--human-decisions-p-executed-for-real-task-33"
+
+[[entry]]
+kind = "environment"
+title = "Reprodução do cohort publicado"
+summary = "Como reproduzir o cohort publicado e onde está o ambiente registrado (versões de bibliotecas, CPU, threads do torch)."
+pointer = "docs/runbooks/confirmatory-cohort-aapl.md#reproduce-the-published-cohort"
+
+[[entry]]
+kind = "environment"
+title = "Ablação treinada em Linux com GPU (ROCm)"
+summary = "O cohort de ablação (H3) foi treinado em Linux com GPU ROCm: o device e o torch_build entram no hash do spec da ablação e o snapshot ganha chaves de hardware observadas; os checkpoints confirmatórios seguem CPU (ADR 7.3.0004)."
+pointer = "docs/adr/7_3_0004-device-per-trainer-instance-torch-build-declared.md#decision"
+
+[[entry]]
+kind = "environment"
+title = "code.src do HEAD difere do da corrida só por formatação"
+summary = "Entre 060537fc (corrida julgada) e o HEAD, src/ mudou só por formatação do ruff e um trecho de docstring: o code.src difere, o comportamento não. A reprodução bit a bit rodou na árvore de 060537fc."
+pointer = "docs/stages/8.3-plots-and-final-report/concept.md#contexto"
+
+# --------------------------------------------------------------------------------------
+# Reprodução (claim (a))
+# --------------------------------------------------------------------------------------
+
+[[entry]]
+kind = "reproduction"
+title = "Claim (a): reprodução bit a bit sem re-treino"
+summary = "No ambiente registrado da corrida e na árvore de 060537fc, silver -> gold -> scorecard refeito a partir dos dados persistidos reproduz a geração julgada bit a bit (19 tabelas gold e o scorecard). R1: 882 727 comparados, 0 diferentes, max |Δ| 0.0; R2: 288 671, 0, 0.0; R3: 1 856, 0, 0.0. Imagem sha256:b69a7620e7bd8449369bde2f46e903c5f46c25e9efb3597f452af3272e0a8f45."
+pointer = "docs/reports/reproduction_audit.md#1-claim"
+
+[[entry]]
+kind = "reproduction"
+title = "Identidade da reprodução"
+summary = "preregistration_ref, partição, silver_content.digest e dataset_fingerprint iguais entre a geração julgada e a reproduzida; generation_digest 96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539."
+pointer = "docs/reports/reproduction_audit.md#2-identidade"
+
+[[entry]]
+kind = "reproduction"
+title = "result_digest da reprodução"
+summary = "result_digest julgado, reproduzido e esperado (input_read do ATTEMPTS.jsonl) iguais: 7c7940d4f77ff772212d5ddc392ee46e5f46cebe06506c17a20885b7f0e31b7e; audit-reproduction exit 0, bit_identical true."
+pointer = "docs/reports/reproduction_audit.md#3-result_digest"
+
+[[entry]]
+kind = "reproduction"
+title = "Comparação por classe e por tabela"
+summary = "R1/R2/R3 por tabela gold, todas com chaves iguais e 0 diferentes; scorecard igual (66 117 folhas, 0 diferentes)."
+pointer = "docs/reports/reproduction_audit.md#4-comparação-por-classe-e-por-tabela"
+
+[[entry]]
+kind = "reproduction"
+title = "Pré-voo da reprodução em 060537fc (E2)"
+summary = "Saídas literais da pré-verificação da reprodução: árvore de 060537fc, ambiente igual ao da linha started da ref."
+pointer = "docs/stages/8.2-equivalence-audit/technical.md#2026-10-23--measurement-e2--pré-voo-da-reprodução-em-060537fc--claude-executor-das-etapas"
+
+[[entry]]
+kind = "reproduction"
+title = "Reprodução real e auditoria (E3)"
+summary = "Saídas literais da reprodução real e do audit-reproduction."
+pointer = "docs/stages/8.2-equivalence-audit/technical.md#2026-10-23--measurement-e3--reprodução-real-e-auditoria--claude-executor-das-etapas"
+
+# --------------------------------------------------------------------------------------
+# Interno (fora do texto do TCC; tocam a evidência anterior — P-EDIT)
+# --------------------------------------------------------------------------------------
+
+[[entry]]
+kind = "internal"
+title = "Registro de hashes da evidência anterior"
+summary = "Hashes dos arquivos da evidência de 2025 usados pela equivalência interna."
+pointer = "docs/reports/prior_evidence_registry.toml"
+
+[[entry]]
+kind = "internal"
+title = "Relatório da equivalência interna"
+summary = "Tabela de equivalência entre a pipeline nova e a evidência anterior (8.2 parte (ii))."
+pointer = "docs/reports/equivalence_audit.md"
+
+[[entry]]
+kind = "internal"
+title = "ADR 8.2.0003: andaime da evidência anterior em tests/"
+summary = "Andaime da equivalência em tests/equivalence/, com registro de hashes e teste opt-in."
+pointer = "docs/adr/8_2_0003-prior-evidence-scaffold-in-tests-with-hash-registry-and-opt-in-test.md"
+
+[[entry]]
+kind = "internal"
+title = "Decisão humana B3 (ADR 8.2.0004): tolerância do A1 pela precisão float32 efetiva"
+summary = "Emenda do A1: meio ulp de float32 com pré-condição, decidida pelo humano."
+pointer = "docs/adr/8_2_0004-a1-tolerance-by-effective-float32-storage-precision.md"
+
+[[entry]]
+kind = "internal"
+title = "[deviation] B3: emenda do A1"
+summary = "Aplicação da emenda B3 (meio ulp de float32 com pré-condição)."
+pointer = "docs/stages/8.2-equivalence-audit/technical.md#2026-10-23--deviation-b3--emenda-do-a1-meio-ulp-de-float32-com-pré-condição-adr-820004--claude-executor-das-etapas"
+
+[[entry]]
+kind = "internal"
+title = "[deviation] B3 refinada"
+summary = "Critério float32 exato, fail-closed e rótulo propagado."
+pointer = "docs/stages/8.2-equivalence-audit/technical.md#2026-10-23--deviation-b3-refinada--critério-float32-exato-fail-closed-e-rótulo-propagado--claude-executor-das-etapas"
+
+[[entry]]
+kind = "internal"
+title = "[finding] precisão float32 do alvo anterior (D-M6)"
+summary = "A premissa de D-M6 não vale para os valores: o alvo anterior tem precisão efetiva float32 num double; com o critério D13 a comparação de modelo não rodou na primeira E4. Resolvido pela emenda B3."
+pointer = "docs/stages/8.2-equivalence-audit/technical.md#2026-10-23--measurement-e4--tabela-de-equivalência-e-diagnóstico-d13-do-a1--claude-executor-das-etapas"
+
+[[entry]]
+kind = "internal"
+title = "[finding] PICP 80 % do candidato: lado do nominal divergente"
+summary = "Na E4 refeita com B3, o lado do nominal do PICP 80 % do candidato diverge do anterior nos dois horizontes (not_explained): divergência de modelo, não de código nem de alvo; não bloqueia a 8.2 nem o veredito da 8.1. Sem resolução posterior."
+pointer = "docs/stages/8.2-equivalence-audit/technical.md#2026-10-24--measurement-e4-refeita-com-b3--tabela-de-equivalência--claude-executor-das-etapas"
+
+[[entry]]
+kind = "internal"
+title = "Erratas F2–F5 da auditoria da 8.2"
+summary = "F2 (ADR 8.2.0004: nenhum número de modelo do anterior visto ou reportado; corrigido em aad29ebc), F3 (log do make check extra não preservado), F4 (T∩ de h=7 igual ao de h=1), F5 (type: ignore do andaime fora do escopo do mypy; anotar fica para quem tocar o andaime)."
+pointer = "docs/stages/8.2-equivalence-audit/technical.md#2026-10-24--finding-auditoria-da-stage--erratas-f2f5--claude-auditoria-da-stage"
+
+[[entry]]
+kind = "internal"
+title = "[finding] E4 do andaime: FAIL_AUDIT_TABLE por OfficialSilverMismatchError"
+summary = "O esperado do andaime tomava todas as unidades fact_oos_predictions do silver_content, inclusive as 600 da ablação que ele não lia; nenhum valor do anterior foi visto. Resolvido pelo [deviation] E4."
+pointer = "docs/stages/8.2-equivalence-audit/technical.md#2026-10-23--finding-e4-passo-1--fail_audit_table-por-officialsilvermismatcherror-do-andaime--claude-executor-das-etapas"
+
+[[entry]]
+kind = "internal"
+title = "[deviation] E4: check_silver_units só com as unidades do cohort"
+summary = "Correção 0e59b9f9: o esperado leva só dim_run do cohort e as unidades dos runs do cohort."
+pointer = "docs/stages/8.2-equivalence-audit/technical.md#2026-10-23--deviation-e4--check_silver_units-só-com-as-unidades-do-cohort--claude-executor-das-etapas"
+
+[[entry]]
+kind = "internal"
+title = "[deviation] PRIOR_CANDIDATE_LABELS no comparison_set.py"
+summary = "Rótulos do candidato da evidência anterior no conjunto de comparação do andaime (Task 11 da 8.2)."
+pointer = "docs/stages/8.2-equivalence-audit/technical.md#2026-10-23--deviation-task-11-prior_candidate_labels-no-comparison_setpy--claude-executor"
+
+[[entry]]
+kind = "internal"
+title = "[deviation] Checkpoint C final (bloco 4), CC4-1..CC4-8 no andaime"
+summary = "Correções do Checkpoint C final aplicadas ao andaime da equivalência."
+pointer = "docs/stages/8.2-equivalence-audit/technical.md#2026-10-23--deviation-checkpoint-c-final-bloco-4-cc4-1cc4-8-no-andaime--claude-executor"
+
+[[entry]]
+kind = "internal"
+title = "Limite da §5 do reproduction_audit.md"
+summary = "A §5 (Ambiente) do relatório de reprodução lista o blob de tests/equivalence/prior_evidence.py (l. 106); por isso o dossiê citável aponta só as §1–§4. O artefato da 8.2 não é editado."
+pointer = "docs/reports/reproduction_audit.md#5-ambiente"

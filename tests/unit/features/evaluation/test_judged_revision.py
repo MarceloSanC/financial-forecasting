@@ -106,6 +106,22 @@ def test_returns_every_record_plan_and_the_chain() -> None:
 
 
 @pytest.mark.unit
+def test_digests_are_the_payload_hash_of_each_revision() -> None:
+    """CC4-3: o sha256 de cada revisão sai da resolução (dono único), não recalculado fora."""
+    source, reference0, reference1 = _source()
+
+    judged = _resolve(source, reference1)
+
+    expected = tuple(
+        PreregistrationHash.compute(hasher=FloatRefusingHasher(), payload=plan.as_payload()).value
+        for plan in judged.plans
+    )
+    assert judged.digests == expected
+    for digest, reference in zip(judged.digests, (reference0, reference1), strict=True):
+        assert reference.endswith(f"-{digest[:12]}")
+
+
+@pytest.mark.unit
 def test_broken_chain_raises_chain_error() -> None:
     source, _, reference1 = _source(r1_amends=_WRONG)
 
@@ -157,7 +173,19 @@ def test_judged_revision_requires_aligned_non_empty_chain() -> None:
 
     with pytest.raises(ValueError, match="same length"):
         JudgedRevision(
-            records=judged.records, plans=judged.plans[:1], chain=judged.chain, anchor=judged.anchor
+            records=judged.records,
+            plans=judged.plans[:1],
+            chain=judged.chain,
+            anchor=judged.anchor,
+            digests=judged.digests,
+        )
+    with pytest.raises(ValueError, match="same length"):
+        JudgedRevision(
+            records=judged.records,
+            plans=judged.plans,
+            chain=judged.chain,
+            anchor=judged.anchor,
+            digests=judged.digests[:1],
         )
     with pytest.raises(ValueError, match="non-empty"):
-        JudgedRevision(records=(), plans=(), chain=(), anchor=judged.anchor)
+        JudgedRevision(records=(), plans=(), chain=(), anchor=judged.anchor, digests=())

@@ -58,6 +58,12 @@ from financial_forecasting.features.analytics_store.application.use_cases.persis
 from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
     ParquetGoldStore,
 )
+from financial_forecasting.features.evaluation.adapters.out.plots.matplotlib_figure_renderer import (  # noqa: E501
+    MatplotlibFigureRenderer,
+)
+from financial_forecasting.features.evaluation.adapters.out.reports.filesystem_report_sink import (
+    FilesystemReportSink,
+)
 from financial_forecasting.features.evaluation.adapters.out.runtime.git_evaluation_environment import (  # noqa: E501
     GitEvaluationEnvironment,
 )
@@ -67,6 +73,9 @@ from financial_forecasting.features.evaluation.adapters.out.toml.toml_preregistr
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import GoldPartition
 from financial_forecasting.features.evaluation.application.use_cases.build_confirmatory_scorecard import (  # noqa: E501
     BuildConfirmatoryScorecard,
+)
+from financial_forecasting.features.evaluation.application.use_cases.generate_report_artifacts import (  # noqa: E501
+    GenerateReportArtifacts,
 )
 from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
     RefreshGold,
@@ -1173,3 +1182,33 @@ def test_cpu_capability_is_lazy(tmp_path: Path) -> None:
     name, leaked = completed.stdout.strip().splitlines()[-2:]
     assert name == RunConfirmatoryEvaluation.__name__
     assert leaked == "False"
+
+
+@pytest.mark.unit
+def test_report_artifacts_wiring_uses_real_collaborators(tmp_path: Path) -> None:
+    """Stage 8.3 Task 13 (CB-10): o gold store, o silver e a grade do refresh; o mesmo
+    ambiente da corrida; o renderer matplotlib e o sink de arquivos no diretório pedido."""
+    settings = _inference_settings(tmp_path).model_copy(update={"image_id": "sha256:" + "d" * 64})
+    deps = wire_dependencies(settings=settings)
+    output = tmp_path / "docs" / "reports"
+
+    use_case = deps.generate_report_artifacts_for(tmp_path / "c.toml", "cpu", output)
+
+    assert isinstance(use_case, GenerateReportArtifacts)
+    gold_store = deps.refresh_gold._gold_store
+    assert isinstance(gold_store, ParquetGoldStore)
+    assert use_case._judged_store is gold_store
+    assert isinstance(use_case._source, TomlPreregistrationSource)
+    assert isinstance(use_case._silver_reader, ParquetAnalyticsRepository)
+    assert use_case._silver_reader is deps.analytics_repository
+    assert isinstance(use_case._grid_reader, ReadTrainingGrid)
+    assert use_case._grid_reader is deps.refresh_gold._grid_reader
+    assert use_case._hasher is deps.hasher
+    environment = use_case._environment
+    assert isinstance(environment, GitEvaluationEnvironment)
+    assert isinstance(environment._probe, GitRuntimeEnvironmentProbe)
+    assert environment._probe_dirty_key == "code_dirty"
+    assert environment._image_id == "sha256:" + "d" * 64
+    assert isinstance(use_case._renderer, MatplotlibFigureRenderer)
+    assert isinstance(use_case._sink, FilesystemReportSink)
+    assert use_case._sink._output == output

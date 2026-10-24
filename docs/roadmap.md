@@ -111,7 +111,7 @@ graph LR
 | `7.4-inference-api` | inference | multi (domain + application + adapters/in/http; + evaluation application; shared http) | vertical | done | 7.2, 7.3 |
 | `8.1-confirmatory-run` | evaluation | multi (orquestração) | vertical | done | 6.5, 6.6, 7.1, 7.2, 7.3 |
 | `8.2-equivalence-audit` | evaluation | multi (application + adapters + tests) | vertical | done | 8.1 |
-| `8.3-plots-and-final-report` | evaluation | adapters/out + docs | vertical | draft | 8.2 |
+| `8.3-plots-and-final-report` | evaluation | multi (application + adapters/out + adapters/in/cli + docs) | vertical | done | 8.2 |
 
 **Legenda de status (Stage):** `draft`, `in_progress`, `review`, `done`, `archived`.
 
@@ -1265,25 +1265,36 @@ skills_hint: [hex-arch-python, pytest-with-fakes, data-shape-evidence, orchestra
 
 #### Stage 8.3 — `8.3-plots-and-final-report`
 
-**Descrição humana:** Plots canônicos (calibração, DM p-value matrix, MPIW-vs-PICP, série OOS, importância por família) + dossiê final de rastreabilidade (run_ids, fingerprints, hashes). Insumo do texto do TCC.
+**Descrição humana:** As dez figuras do catálogo do [doc de domínio](./domain/evaluation/reproduction-equivalence-and-reporting.md) §6.2 (reliability por τ, quantile score, sharpness, PICP × MPIW, DM candidato × comparadores, série OOS/fan chart, diferencial d_t + ACF, importância por família/H3, pesos da VSN, nativo × conformal), desenhadas da cópia julgada da 8.1 com rótulo de estatuto por elemento e um registro de origem por figura (hash do dado), + dossiê final de rastreabilidade com todos os itens do §7 (concept 8.3; ADRs 8.3.0001–8.3.0004). Insumo do texto do TCC.
 
 **Descrição para IA:**
 ```yaml
 stage_id: 8.3-plots-and-final-report
 bounded_context: evaluation
-camada_alvo: adapters/out + docs
+camada_alvo: multi (application + adapters/out + adapters/in/cli + docs)  # concept 8.3 D11
 arquivos_a_criar:
-  - src/financial_forecasting/features/evaluation/adapters/out/plots/{calibration_plot.py, dm_matrix_plot.py, picp_mpiw_plot.py, oos_series_plot.py, contribution_plot.py}
-  - src/financial_forecasting/features/evaluation/application/use_cases/generate_report_artifacts.py
-  - docs/reports/final_traceability_dossier.md
-  - tests/integration/features/evaluation/test_generate_report_artifacts.py
-contratos_introduzidos: [GenerateReportArtifacts (use case)]
-contratos_consumidos: [gold tables (6.4), scorecard (6.5), tabelas gold de H3 (7.3)]
-definition_of_done: "Plots canônicos gerados a partir de gold persistido (reconstruíveis sem re-treino); dossiê final lista run_ids/fingerprints/hash de pré-registro de cada decisão; pronto para o texto."
-non_goals: [redação do TCC, dashboards interativos]
+  - src/financial_forecasting/features/evaluation/application/use_cases/generate_report_artifacts.py   # + módulos de montagem das figuras e do dossiê (puros); caminhos exatos: technical 8.3
+  - src/financial_forecasting/features/evaluation/application/dtos/report_artifacts.py                # FigureSpec, FigureRecord, TraceabilityDossier, comando/resultado, SilverContentMismatchError
+  - src/financial_forecasting/features/evaluation/application/ports/out/{figure_renderer.py, report_artifact_sink.py}
+  - src/financial_forecasting/features/evaluation/adapters/out/plots/        # MatplotlibFigureRenderer (único lugar com matplotlib)
+  - src/financial_forecasting/features/evaluation/adapters/out/reports/      # FilesystemReportSink (PDF + registro JSON + dossiê Markdown, staging)
+  - tests/fakes/features/evaluation/ (renderer e sink em memória), tests/contract/features/evaluation/ (renderer determinístico), tests/integration/features/evaluation/test_generate_report_artifacts.py (smoke)
+  - docs/reports/figures/<id>.pdf + <id>.json   # 10 pares, commitados (ADR 8.3.0003)
+  - docs/reports/final_traceability_dossier.md  # citável, gerado (ADR 8.3.0004)
+  - docs/reports/final_traceability_dossier_internal.md  # interno (evidência anterior; P-EDIT), gerado
+  - docs/reports/dossier_register.toml          # registro curado de desvios/achados (ADR 8.3.0004)
+arquivos_a_modificar:
+  - src/financial_forecasting/features/evaluation/application/dtos/gold_schema.py   # read_columns das colunas lidas pelas figuras (D3)
+  - src/financial_forecasting/{cli.py, composition_root.py} e src/financial_forecasting/features/evaluation/adapters/in/cli/evaluation_commands.py   # subcomando report-artifacts
+  - pyproject.toml (matplotlib>=3.11,<3.12 direto) e uv.lock
+  - .importlinter   # contrato evaluation-no-matplotlib-leak (todos os módulos fora de adapters/out/plots); + teste AST contra matplotlib.pyplot em tests/architecture/
+contratos_introduzidos: [GenerateReportArtifacts (use case), FigureRenderer e ReportArtifactSink (port-out), FigureSpec/FigureRecord/TraceabilityDossier (DTOs; data_digest = sha256 da FigureSpec canônica), subcomando `report-artifacts`, registro curado docs/reports/dossier_register.toml]
+contratos_consumidos: [JudgedGenerationStore.find e read_judged_generation (8.1/8.2; nunca current/), .judged.toml e ATTEMPTS.jsonl (8.1), scorecard gravado (6.5/6.6), tabelas gold de perfil, conformais e de H3 (6.4/6.6/7.2/7.3), PreregistrationSource (cadeia r0–r3, blinding_statement, seeds), SilverTableReader + TrainingGridReader + SilverContentAccumulator (silver das figuras por ponto, conferido unidade a unidade contra o silver_content julgado — ADR 8.3.0002), EvaluationEnvironment (8.1)]
+definition_of_done: "As dez figuras do catálogo §6.2 geradas da cópia julgada (e do silver conferido contra o silver_content dela), sem re-treino e sem teste novo, em PDF com bytes iguais em duas gerações no mesmo ambiente, cada uma com registro de origem (data_digest, generation_digest, tabela/chave, commit); dossiê final com todos os itens do doc §7 (identidades, cadeia do pré-registro e cegamento, poder declarado, ambiente, seeds, desvios e achados, ponteiro por afirmação, reprodução); execução real commitada; pronto para o texto."
+non_goals: [redação do TCC e edição de text/, dashboards interativos, DM comparador × comparador ou qualquer teste/banda não persistido, gráficos exploratórios extras, qualquer comparação com a evidência anterior (P-EDIT)]
 complexidade_estimada: M
 gate_mode: batch
-skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
+skills_hint: [hex-arch-python, pytest-with-fakes, composition-root, dmls-ch05-model-development-and-evaluation, dataviz]
 ```
 
 ---
@@ -1328,6 +1339,8 @@ skills_hint: [hex-arch-python, dmls-ch05-model-development-and-evaluation]
 | 2026-10-23 | Stage `8.1-confirmatory-run` `done`; Step 8 `in_progress`. `RunConfirmatoryEvaluation` (CLI `evaluate` encadeado ao `infer`) julgou o cohort `aapl_confirmatory-r0` pela r3 (`aapl_confirmatory-r3-00fd83d9cd39`): status `JUDGED`, generation_digest `96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539`; H1 passa em h+1 e h+7; H2 h+1 `beats_naive_only` e h+7 `beats_naive_ties_strong` (vencedor primário `tft_quantile`); sucesso do estudo (≥ 1 horizonte): sim. Geração julgada selada em `judged/<ref>/` com `CONTENTS.sha256` + backup; hash de conteúdo do silver no manifesto (`SilverContentHash`); tag `confirmatory-run/aapl_confirmatory-r3-00fd83d9cd39`, comentário na #211 (issuecomment-6362212743), `config/preregistration/aapl_confirmatory-r3.judged.toml`. Re-execução só com mesmo código, ambiente, entrada e resultado; senão `--deviation` (ADR 8.1.0004). Libera #58 e #163 | Fechamento da Stage 8.1 (issue #211; ADRs 8.1.0001–8.1.0004; technical 8.1 §7) |
 | 2026-10-23 | Bloco da 8.2 refinado pelo concept: `contratos_consumidos` deixa de citar `RunConfirmatoryEvaluation` — a reprodução roda `RefreshGold` + `BuildConfirmatoryScorecard` na árvore de `060537fc` sobre um `data_root` descartável restaurado do backup de entrada, sem `judged/`, `ATTEMPTS.jsonl` nem a partição viva; contratos introduzidos (leitor da cópia julgada no `JudgedGenerationStore`, `compare_reproduction` + `ReproductionComparison`, subcomando `audit-reproduction`, registro de hashes da evidência anterior) e o driver `scripts/reproduce_judged_generation.py` que roda refresh + scorecard na árvore de `060537fc` (Checkpoint A); arquivos a criar/modificar, `camada_alvo` multi, `skills_hint` ampliado; reprodução entre ambientes nos non_goals (um único ambiente) | Concept 8.2 (issue #232; ADRs 8.2.0001–8.2.0003) |
 | 2026-10-24 | Stage `8.2-equivalence-audit` `done`; Step 8 segue `in_progress`. (i) Reprodução da corrida confirmatória da 8.1 a partir dos artefatos persistidos, em `060537fc`, num `data_root` descartável (driver `scripts/reproduce_judged_generation.py`; subcomando só-leitura `audit-reproduction`): `BIT_IDENTICAL` — 19 tabelas, 0 diferenças em R1 882 727 / R2 288 671 / R3 1 856 valores, scorecard 66 117 folhas iguais, `result_digest` `7c7940d4…` igual ao da tentativa julgada, partição viva intacta; claim (a) afirmado, (c) entre ambientes não executado ([`reproduction_audit.md`](./reports/reproduction_audit.md)). (ii) Equivalência interna vs evidência anterior (só no repositório; [`equivalence_audit.md`](./reports/equivalence_audit.md)): registro de hashes commitado antes de qualquer valor; alvo anterior gravado com precisão float32 → decisão humana B3 (ADR 8.2.0004) — A1 pela precisão efetiva, passa em h+1 e h+7; código de métrica (A2) igual em 630/630 linhas comparáveis por horizonte; números do modelo: deltas de pinball ~1e-5, PICP 80 % do candidato novo 0,85 vs 0,78–0,79 do anterior com lado do nominal divergente → `[finding]` não explicado (não bloqueia; doc §5.6); sem baseline comum. Contrato import-linter `src-no-tests` | Fechamento da Stage 8.2 (issue #232; ADRs 8.2.0001–8.2.0004; technical 8.2 §7) |
+| 2026-10-24 | Bloco da 8.3 refinado pelo concept: as dez figuras do catálogo §6.2 do doc de domínio no lugar dos cinco arquivos (inclui quantile score, sharpness, d_t + ACF, VSN e nativo × conformal); `dm_matrix_plot` vira DM candidato × comparadores (comparador × comparador proibido); `contratos_consumidos` passa a `read_judged_generation` (8.2) e ao silver conferido contra o `silver_content` julgado; `camada_alvo` multi; ports `FigureRenderer`/`ReportArtifactSink`, registro por figura pelo hash do dado, PDF determinístico em `docs/reports/figures/`, matplotlib direto, dossiê gerado + registro curado, subcomando `report-artifacts`; DoD e non_goals emendados. Checkpoint A r1: dossiê interno em arquivo separado (evidência anterior fora do citável), omissões declaradas do que o gold não persiste, `.importlinter` nos arquivos a modificar | Concept 8.3 (issue #234; ADRs 8.3.0001–8.3.0004) |
+| 2026-10-24 | Stage `8.3-plots-and-final-report` `done`; Step 8 segue `in_progress` até a auditoria. As dez figuras do catálogo do doc de domínio §6.2 geradas da cópia julgada da 8.1 (`generation_digest` `96c05413…`) com rótulo de estatuto por elemento e registro de origem por figura (`data_digest`, `generation_digest`, `code.src`), mais o dossiê final citável e o interno (`docs/reports/`); geração real commitada e segunda geração com sha256 idênticos, `data/` intacto. Desvios de execução no §7 do technical: baselines pontuais omitidos e declarados nas figuras de intervalo (regra BP), layout das figuras refeito com conferência visual, e layout congelado numa grade de 1e-6 para o PDF ser byte-idêntico (ruído de último bit do solver de layout). |
 
 ## Próxima revisão de roadmap
 

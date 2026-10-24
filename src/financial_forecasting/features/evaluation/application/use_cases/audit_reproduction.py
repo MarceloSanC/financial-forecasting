@@ -26,7 +26,6 @@ from financial_forecasting.features.evaluation.application.dtos.confirmatory_sco
 )
 from financial_forecasting.features.evaluation.application.dtos.judged_generation import (
     SCORECARD_DOCUMENT,
-    AttemptPhase,
     JudgedGeneration,
 )
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
@@ -40,12 +39,14 @@ from financial_forecasting.features.evaluation.application.ports.out.gold_genera
     GoldGenerationReader,
 )
 from financial_forecasting.features.evaluation.application.ports.out.judged_generation_store import (  # noqa: E501
-    JudgedGenerationNotFoundError,
     JudgedGenerationStore,
-    JudgedGenerationTamperedError,
 )
 from financial_forecasting.features.evaluation.application.ports.out.preregistration_source import (
     PreregistrationSource,
+)
+from financial_forecasting.features.evaluation.application.use_cases.judged_copy import (
+    last_input_read_digest,
+    sealed_matching_record,
 )
 from financial_forecasting.features.evaluation.application.use_cases.judged_revision import (
     resolve_judged_revision,
@@ -126,35 +127,22 @@ class AuditReproduction:
     def _sealed_matching_record(
         self, command: AuditReproductionCommand, partition: GoldPartition
     ) -> JudgedGeneration:
-        """A cópia selada, cujo digest o `.judged.toml` da referência nomeia."""
+        """A cópia selada, cujo digest o `.judged.toml` da referência nomeia (`judged_copy`)."""
         ref = command.preregistration_ref
-        records = [
-            record
-            for record in self._source.judged_records(name=command.name)
-            if record.preregistration_ref == ref
-        ]
-        if not records:
-            raise ReproductionAuditError(f"no committed judged record of {ref}")
-        sealed = self._judged_store.find(partition=partition, preregistration_ref=ref)
+        sealed = sealed_matching_record(
+            source=self._source,
+            judged_store=self._judged_store,
+            name=command.name,
+            preregistration_ref=ref,
+            partition=partition,
+        )
         if sealed is None:
-            raise JudgedGenerationNotFoundError(f"no judged copy of {ref} for {partition}")
-        for record in records:
-            if record.generation_digest != sealed.generation_digest:
-                raise JudgedGenerationTamperedError(
-                    f"the committed record of {ref} names digest {record.generation_digest}, "
-                    f"the sealed copy has {sealed.generation_digest}"
-                )
+            raise ReproductionAuditError(f"no committed judged record of {ref}")
         return sealed
 
     def _expected_result_digest(self, partition: GoldPartition, ref: str) -> str:
-        """O `result_digest` da última linha `input_read` da referência."""
-        digests = [
-            attempt.result_digest
-            for attempt in self._judged_store.attempts(partition=partition)
-            if attempt.phase is AttemptPhase.INPUT_READ
-            and attempt.preregistration_ref == ref
-            and attempt.result_digest is not None
-        ]
-        if not digests:
+        """O `result_digest` da última linha `input_read` da referência (`judged_copy`)."""
+        digest = last_input_read_digest(self._judged_store.attempts(partition=partition), ref)
+        if digest is None:
             raise ReproductionAuditError(f"no input_read attempt line of {ref}")
-        return digests[-1]
+        return digest
