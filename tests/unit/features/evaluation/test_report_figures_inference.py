@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import pytest
 
+from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
+    GoldGenerationCorruptError,
+)
 from financial_forecasting.features.evaluation.application.dtos.report_artifacts import (
     FIGURE_CATALOG,
     FigureSpec,
@@ -290,6 +293,15 @@ def test_reading_note_lists_agreeing_families(world: ReportWorld) -> None:
     (row,) = world.rows["gold_h3_reading"]
     row["agreeing_families"] = "price,technical"
     assert _reading_panel_note(world).endswith("famílias concordantes = price, technical")
+
+
+@pytest.mark.unit
+def test_reading_note_rejects_null_agreeing_families(world: ReportWorld) -> None:
+    """NULL não é "nenhuma": geração corrompida, falha explícita (só "" vira "nenhuma")."""
+    (row,) = world.rows["gold_h3_reading"]
+    row["agreeing_families"] = None
+    with pytest.raises(GoldGenerationCorruptError, match="agreeing_families"):
+        _reading_panel_note(world)
 
 
 def _reading_panel_note(world: ReportWorld) -> str:
