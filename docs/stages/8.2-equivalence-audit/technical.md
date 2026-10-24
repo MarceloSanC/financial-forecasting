@@ -1885,4 +1885,31 @@ sobre `49604d25` (coordenadora): `EXIT=0`, `8971 passed, 30 skipped`, coverage 9
 do passo 1 e a E5 regenera o `DECLARED` do novo relatório; a E4 anterior (`1a9eeb87`) e a E5
 (`d37fb097`, `a0afccd4`) ficam substituídas.
 
+### 2026-10-24 — [measurement] E4 (refeita com B3) — tabela de equivalência — Claude (executor das Etapas)
+**Contexto:** passo 1 (HEAD `daee0775`, `GATE1` `49604d25`):
+```
+SCAFFOLD_AS_GATE1
+exit 0          (python -m tests.equivalence.audit_table; 2493 linhas)
+LIVE_INTACT
+SCAFFOLD_WROTE_NOTHING
+```
+Passo 2 (A9): h=1 e h=7 com T∩ = 937, pré-condição `float32_exact=937/937`, `rule=float32`,
+`out=0` → `within_tolerance`; sob a regra original de `double`: `out_double=934`,
+`max_rel=5.829409373791458e-08`; max |Δ| 3,676e-9. Rótulo pós-A1 em toda linha A10/A11 de h=1 e
+h=7.
+A10 (A2), por horizonte: 630 linhas comparadas, **todas** `within_tolerance` (candidato e
+`historical_quantiles` nos dois `gold_prediction_*`, candidato no `phase_b_marginal_coverage`);
+600 `not_compared:sample` — os baselines pontuais `zero_return_v1` e
+`historical_mean_rolling_v1` têm m_ant nulo no anterior (sonda `diag_a10.py` no scratchpad: 15
+runs de cada por horizonte e arquivo com `pinball_q10_raw` `NoneType`, amostra completa).
+A11, deltas m_novo − m_A (h=1 / h=7): pinball q10 −2,52e-5 / −6,52e-5; q50 −6,46e-5 / −6,38e-5;
+q90 +4,12e-5 / +1,94e-5; PICP 80 +0,0645 / +0,0591 (novo 0,847 / 0,848; m_A 0,783 / 0,789); MPIW
+80 +0,00657 / +0,00603. Lado do nominal: novo `below` (sobrecobertura), anterior `inside` →
+`divergent_sense` nos dois. Baselines comuns: zero (`not_compared:no_common_baseline`); DM não
+comparado.
+Passo 3: lado do nominal — alvo não se aplica (A1 passou), agregação de seeds não explica (mesma
+B-SEEDS nos dois lados em T∩; a categoria prevê efeito na pinball), nenhum defeito referenciado →
+`not_explained`. **[finding]** divergência de modelo (não de código nem de alvo), não bloqueia a
+8.2 nem o veredito da 8.1 (doc §5.6). Passo 4: `docs/reports/equivalence_audit.md` reescrito.
+
 <!-- END: post-execution -->
