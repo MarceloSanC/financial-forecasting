@@ -107,6 +107,7 @@ from financial_forecasting.features.evaluation.domain.value_objects.assembled_co
 )
 from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
     CoverageSeries,
+    symmetric_pair_indices_of,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.family_loss_differentials import (  # noqa: E501
     H3_HORIZONS,
@@ -321,9 +322,9 @@ def _seed_text(seed: Seed) -> str:
 
 
 def symmetric_pairs(levels: Sequence[float]) -> tuple[tuple[float, float], ...]:
-    """Pares `(levels[k], levels[K-1-k])` com τ_l < 0,5 — a regra da `CoverageSeries`."""
-    size = len(levels)
-    return tuple((levels[k], levels[size - 1 - k]) for k in range(size) if levels[k] < MEDIAN_LEVEL)
+    """Pares `(τ_l, τ_u)` da grade pela regra do dono (`symmetric_pair_indices_of`)."""
+    grid = tuple(levels)
+    return tuple((grid[low], grid[high]) for low, high in symmetric_pair_indices_of(grid))
 
 
 def _panel(  # noqa: PLR0913 — o painel e os seus rótulos
