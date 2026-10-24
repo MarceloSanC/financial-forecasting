@@ -1149,3 +1149,215 @@ def test_audit_reproduction_without_scorecard_file_raises(tmp_path: Path) -> Non
 
     assert type(exc.value).__name__ == "ReproductionAuditError"
     assert called == []
+
+
+# --- report-artifacts (Stage 8.3, Task 13) ----------------------------------------------
+
+_REPORT_REF = "synthetic_plan-r3-0123456789ab"
+_DIGEST = "ab" * 32
+
+
+def _report_argv(tmp_path: Path, cohort: Path, *extra: str) -> list[str]:
+    return [
+        "report-artifacts",
+        "--data-root",
+        str(tmp_path / "d"),
+        "--cohort",
+        str(cohort),
+        "--preregistration",
+        "synthetic_plan",
+        "--revision",
+        "3",
+        "--preregistration-ref",
+        _REPORT_REF,
+        *extra,
+    ]
+
+
+def _register_file(tmp_path: Path, text: str) -> Path:
+    path = tmp_path / "register.toml"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+_VALID_REGISTER = (
+    "[[entry]]\n"
+    'kind = "deviation"\n'
+    'title = "Errata"\n'
+    'summary = "s"\n'
+    'pointer = "docs/stages/8.1-confirmatory-run/technical.md#o1"\n'
+)
+
+
+class _FakeGenerate:
+    """O use case falso: guarda o comando e devolve um resultado com as dez figuras."""
+
+    def __init__(self) -> None:
+        self.commands: list[Any] = []
+
+    def __call__(self, command: Any) -> object:  # noqa: ANN401 — o DTO vem por importlib
+        dtos: Any = cli.importlib.import_module(
+            "financial_forecasting.features.evaluation.application.dtos.report_artifacts"
+        )
+        self.commands.append(command)
+        return dtos.ReportArtifactsResult(
+            preregistration_ref=command.preregistration_ref,
+            generation_digest=_DIGEST,
+            figures=tuple((fid, _DIGEST) for fid in dtos.FIGURE_IDS),
+            register_entries=len(command.register),
+        )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "missing",
+    ["--preregistration", "--revision", "--preregistration-ref", "--data-root", "--cohort"],
+)
+def test_report_artifacts_requires_ref_name_revision_root_and_cohort(
+    missing: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    argv = _report_argv(tmp_path, tmp_path / "c.toml")
+    index = argv.index(missing)
+    del argv[index : index + 2]
+    with pytest.raises(SystemExit) as exc:
+        cli.main(argv, wiring=_wiring(tmp_path))
+    assert exc.value.code == _EXIT_ERROR
+    assert missing in capsys.readouterr().err
+
+
+@pytest.mark.unit
+def test_report_artifacts_defaults_output_and_register_under_repo_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        evaluation,
+        "report_artifacts",
+        lambda use_case, **kwargs: calls.append({"use_case": use_case, **kwargs}) or 0,
+    )
+    code = cli.main(
+        _report_argv(tmp_path, _cohort(tmp_path, frozen=True)), wiring=_wiring(tmp_path)
+    )
+    assert code == 0
+    (call,) = calls
+    assert call["register_path"] == tmp_path / "docs" / "reports" / "dossier_register.toml"
+    assert type(call["use_case"]).__name__ == "GenerateReportArtifacts"
+    assert call["use_case"]._sink._output == tmp_path / "docs" / "reports"
+    assert (call["name"], call["revision"], call["preregistration_ref"]) == (
+        "synthetic_plan",
+        3,
+        _REPORT_REF,
+    )
+
+    calls.clear()
+    output, register = tmp_path / "out", tmp_path / "reg.toml"
+    cli.main(
+        _report_argv(
+            tmp_path,
+            _cohort(tmp_path, frozen=True),
+            "--output",
+            str(output),
+            "--register",
+            str(register),
+        ),
+        wiring=_wiring(tmp_path),
+    )
+    assert calls[0]["register_path"] == register
+    assert calls[0]["use_case"]._sink._output == output
+
+
+@pytest.mark.unit
+def test_cohort_seeds_passed_from_cohort_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        evaluation, "report_artifacts", lambda use_case, **kwargs: calls.append(kwargs) or 0
+    )
+    cohort = _cohort(tmp_path, frozen=True)
+    cli.main(_report_argv(tmp_path, cohort), wiring=_wiring(tmp_path))
+    assert calls[0]["cohort_seeds"] == tuple(cohort_file.load(cohort).seeds)
+
+
+@pytest.mark.unit
+def test_malformed_register_exits_2_before_use_case(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    real = evaluation.report_artifacts
+    fake = _FakeGenerate()
+    monkeypatch.setattr(
+        evaluation, "report_artifacts", lambda use_case, **kwargs: real(fake, **kwargs)
+    )
+    register = _register_file(tmp_path, '[[entry]]\nkind = "opinion"\ntitle = "t"\n')
+    err = io.StringIO()
+    code = cli.main(
+        _report_argv(tmp_path, _cohort(tmp_path, frozen=True), "--register", str(register)),
+        wiring=_wiring(tmp_path),
+        err=err,
+    )
+    assert code == _EXIT_ERROR
+    assert "error: ValueError: dossier register entry 0" in err.getvalue()
+    assert fake.commands == []
+
+
+@pytest.mark.unit
+def test_report_artifacts_prints_contract_lines(tmp_path: Path) -> None:
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    dtos: Any = cli.importlib.import_module(
+        "financial_forecasting.features.evaluation.application.dtos.report_artifacts"
+    )
+    fake, out = _FakeGenerate(), io.StringIO()
+    code = evaluation.report_artifacts(
+        fake,
+        register_path=_register_file(tmp_path, _VALID_REGISTER),
+        name="synthetic_plan",
+        revision=3,
+        preregistration_ref=_REPORT_REF,
+        cohort_seeds=(1, 2),
+        out=out,
+    )
+    assert code == 0
+    lines = out.getvalue().splitlines()
+    assert lines[0] == (
+        f"report {_REPORT_REF}: generation_digest {_DIGEST} figures 10 register_entries 1"
+    )
+    assert lines[1:11] == [f"figure {fid} data_digest {_DIGEST}" for fid in dtos.FIGURE_IDS]
+    assert lines[11] == (
+        "dossier citable final_traceability_dossier.md "
+        "internal final_traceability_dossier_internal.md"
+    )
+    (command,) = fake.commands
+    assert command.cohort_seeds == (1, 2)
+    assert command.register[0].title == "Errata"
+
+
+@pytest.mark.unit
+def test_report_artifacts_exit_2_on_application_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    dtos: Any = cli.importlib.import_module(
+        "financial_forecasting.features.evaluation.application.dtos.report_artifacts"
+    )
+    real = evaluation.report_artifacts
+
+    def failing(command: object) -> object:
+        raise dtos.ReportArtifactsError("no committed judged record")
+
+    monkeypatch.setattr(
+        evaluation, "report_artifacts", lambda use_case, **kwargs: real(failing, **kwargs)
+    )
+    register = _register_file(tmp_path, _VALID_REGISTER)
+    out, err = io.StringIO(), io.StringIO()
+    code = cli.main(
+        _report_argv(tmp_path, _cohort(tmp_path, frozen=True), "--register", str(register)),
+        wiring=_wiring(tmp_path),
+        out=out,
+        err=err,
+    )
+    assert code == _EXIT_ERROR
+    assert "error: ReportArtifactsError: no committed judged record" in err.getvalue()
+    assert out.getvalue() == ""

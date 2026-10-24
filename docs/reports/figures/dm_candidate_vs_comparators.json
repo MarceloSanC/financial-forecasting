@@ -1,0 +1,61 @@
+{
+  "code": {
+    "code.src": "9763b31699b981cd768d0cc48fe7ad174444ed02",
+    "code.uv_lock": "0ff8a4dfe837fbb76c5d619b240f918e519c0dd7"
+  },
+  "data_digest": "9d6d0dc210f0a770efc3bc3ac7a50915530862f4066cc293096c5cfed9c949a5",
+  "excluded_degenerate": {},
+  "figure_id": "dm_candidate_vs_comparators",
+  "generation_digest": "96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539",
+  "omissions": [],
+  "omitted_models": [],
+  "partition": {
+    "asset": "AAPL",
+    "parent_sweep_id": "aapl_confirmatory-r0-665f45d9169a"
+  },
+  "preregistration_ref": "aapl_confirmatory-r3-00fd83d9cd39",
+  "renderer": {
+    "format": "pdf",
+    "freetype": "2.14.3",
+    "matplotlib": "3.11.0"
+  },
+  "revision": 3,
+  "silver_units": {},
+  "sources": [
+    {
+      "fields": [
+        "p_value",
+        "adjusted_p_value",
+        "rejected"
+      ],
+      "filter": {
+        "candidate": "tft_quantile",
+        "variance_estimator": "rectangular"
+      },
+      "kind": "gold_table",
+      "name": "gold_dm_results"
+    },
+    {
+      "fields": [
+        "adjusted_p_value",
+        "rejected"
+      ],
+      "filter": {
+        "estimator": "rectangular",
+        "path": "profile.horizons[].dm"
+      },
+      "kind": "document",
+      "name": "gold_model_comparison_confirmatory_scorecard.json"
+    },
+    {
+      "fields": [
+        "passed"
+      ],
+      "filter": {
+        "path": "verdict.horizons[].h1"
+      },
+      "kind": "document",
+      "name": "gold_model_comparison_confirmatory_scorecard.json"
+    }
+  ]
+}

@@ -692,6 +692,16 @@ class GoldManifestNotFoundError(ApplicationError):
     """A partição não tem geração publicada (sem `MANIFEST.json`; C6, ADR 6.5.0005)."""
 
 
+class GridFingerprintMismatchError(ApplicationError):
+    """A grade lida não é a do cohort: o fingerprint diverge do congelado (C10).
+
+    Espelha o `DatasetMismatchError` da corrida confirmatória (ADR 6.4.0009 item 5): o
+    dado não é aquele sobre o qual o cohort treinou, então não há série a julgar. Mora no
+    DTO (Stage 8.3, CC2-6) para o leitor do silver das figuras não importar o módulo do
+    `RefreshGold`; o `use_cases.refresh_gold` o reexporta.
+    """
+
+
 class GoldGenerationCorruptError(ApplicationError):
     """A geração lida não se sustenta (C6, ADR 6.5.0005 item 5).
 

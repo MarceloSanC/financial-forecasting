@@ -86,6 +86,14 @@ cohort (como `EvaluationWriterLock`, por duck typing) e o `GitEvaluationEnvironm
 sujeira do probe (`CODE_KEYS`, `DIRTY_KEY` — importados do `modeling` só aqui), o
 `Settings.image_id` e a capacidade de CPU do torch por função lazy (montar a fábrica não
 importa `torch`).
+
+Stage 8.3 (Task 13): a fábrica `generate_report_artifacts_for(cohort_path, device,
+output_dir)` monta o `GenerateReportArtifacts` por `report_artifacts_wiring`, como a
+corrida: o MESMO `ParquetGoldStore` (como `JudgedGenerationStore`), o MESMO
+`TomlPreregistrationSource`, o `ParquetAnalyticsRepository` (como `SilverTableReader`), o
+`ReadTrainingGrid` do refresh (como `TrainingGridReader`), o MESMO hasher, o
+`GitEvaluationEnvironment` igual ao da corrida, o `MatplotlibFigureRenderer` e o
+`FilesystemReportSink(output_dir)`.
 """
 
 import importlib
@@ -177,6 +185,12 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.gold_builders
 from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_store import (
     ParquetGoldStore,
 )
+from financial_forecasting.features.evaluation.adapters.out.plots.matplotlib_figure_renderer import (  # noqa: E501
+    MatplotlibFigureRenderer,
+)
+from financial_forecasting.features.evaluation.adapters.out.reports.filesystem_report_sink import (
+    FilesystemReportSink,
+)
 from financial_forecasting.features.evaluation.adapters.out.runtime.git_evaluation_environment import (  # noqa: E501
     GitEvaluationEnvironment,
 )
@@ -192,6 +206,9 @@ from financial_forecasting.features.evaluation.application.use_cases.audit_repro
 )
 from financial_forecasting.features.evaluation.application.use_cases.build_confirmatory_scorecard import (  # noqa: E501
     BuildConfirmatoryScorecard,
+)
+from financial_forecasting.features.evaluation.application.use_cases.generate_report_artifacts import (  # noqa: E501
+    GenerateReportArtifacts,
 )
 from financial_forecasting.features.evaluation.application.use_cases.read_serving_gold import (
     ReadServingGold,
@@ -778,14 +795,12 @@ def confirmatory_wiring(  # noqa: PLR0913 — os colaboradores do scorecard e da
     def run_confirmatory_evaluation_for(
         cohort_path: Path, device: str
     ) -> RunConfirmatoryEvaluation:
-        environment = GitEvaluationEnvironment(
+        environment = _evaluation_environment(
             repo_root=repo_root,
-            probe=runtime_probe_for(cohort_path, device),
-            probe_keys={key: key for key in CODE_KEYS},
-            probe_dirty_key=DIRTY_KEY,
+            runtime_probe_for=runtime_probe_for,
             image_id=image_id,
-            cpu_capability=_torch_cpu_capability,
-            preregistration_dir=preregistration_dir,
+            cohort_path=cohort_path,
+            device=device,
         )
         return RunConfirmatoryEvaluation(
             source=source,
@@ -800,6 +815,66 @@ def confirmatory_wiring(  # noqa: PLR0913 — os colaboradores do scorecard e da
         )
 
     return build_scorecard, run_confirmatory_evaluation_for
+
+
+def _evaluation_environment(
+    *,
+    repo_root: Path,
+    runtime_probe_for: RuntimeProbeFactory,
+    image_id: str | None,
+    cohort_path: Path,
+    device: str,
+) -> GitEvaluationEnvironment:
+    """O ambiente da corrida confirmatória (8.1) — o mesmo para o gerador da 8.3."""
+    return GitEvaluationEnvironment(
+        repo_root=repo_root,
+        probe=runtime_probe_for(cohort_path, device),
+        probe_keys={key: key for key in CODE_KEYS},
+        probe_dirty_key=DIRTY_KEY,
+        image_id=image_id,
+        cpu_capability=_torch_cpu_capability,
+        preregistration_dir=repo_root / "config" / "preregistration",
+    )
+
+
+def report_artifacts_wiring(  # noqa: PLR0913 — os colaboradores do gerador (concept 8.3 §4)
+    *,
+    repo_root: Path,
+    runtime_probe_for: RuntimeProbeFactory,
+    image_id: str | None,
+    hasher: Hasher,
+    gold_store: ParquetGoldStore,
+    silver_reader: ParquetAnalyticsRepository,
+    grid_reader: ReadTrainingGrid,
+) -> Callable[[Path, str, Path], GenerateReportArtifacts]:
+    """A fábrica do `GenerateReportArtifacts` (Stage 8.3, Task 13; ver o docstring do módulo).
+
+    Só leitura sobre `data/`; a única escrita é a do `FilesystemReportSink` no diretório
+    pedido (padrão `<repo_root>/docs/reports`, decidido no `cli.py`).
+    """
+    source = TomlPreregistrationSource(root=repo_root / "config" / "preregistration")
+
+    def generate_report_artifacts_for(
+        cohort_path: Path, device: str, output_dir: Path
+    ) -> GenerateReportArtifacts:
+        return GenerateReportArtifacts(
+            judged_store=gold_store,
+            preregistration_source=source,
+            silver_reader=silver_reader,
+            grid_reader=grid_reader,
+            hasher=hasher,
+            environment=_evaluation_environment(
+                repo_root=repo_root,
+                runtime_probe_for=runtime_probe_for,
+                image_id=image_id,
+                cohort_path=cohort_path,
+                device=device,
+            ),
+            renderer=MatplotlibFigureRenderer(),
+            sink=FilesystemReportSink(output_dir),
+        )
+
+    return generate_report_artifacts_for
 
 
 def wire_reproduction_audit(
@@ -1050,9 +1125,12 @@ class ApplicationDependencies:
     # BC evaluation (Stage 8.1, Task 14): a corrida confirmatória, por arquivo e device do
     # cohort (o probe do ambiente depende do caminho, como em `run_inference_for`).
     run_confirmatory_evaluation_for: Callable[[Path, str], RunConfirmatoryEvaluation]
+    # BC evaluation (Stage 8.3, Task 13): figuras e dossiê da cópia julgada, por arquivo e
+    # device do cohort (o probe do ambiente) e diretório de saída.
+    generate_report_artifacts_for: Callable[[Path, str, Path], GenerateReportArtifacts]
 
 
-def wire_dependencies(
+def wire_dependencies(  # noqa: PLR0915 — o grafo inteiro, um bloco por BC
     settings: Settings | None = None,
     *,
     sentiment_model: SentimentModel | None = None,
@@ -1377,9 +1455,10 @@ def wire_dependencies(
     # O `ArchMcs` entra atrás do proxy lazy e o gold vai para `<data_root>/gold/` (ADR
     # 6.4.0005). A ordem dos builders é validada no construtor (C1: falha no wiring).
     gold_store = ParquetGoldStore(cfg.data_root)
+    grid_reader = ReadTrainingGrid(store=store, columns=columns, hasher=hasher)
     refresh_gold = RefreshGold(
         silver_reader=analytics_repository,
-        grid_reader=ReadTrainingGrid(store=store, columns=columns, hasher=hasher),
+        grid_reader=grid_reader,
         clock=SystemClock(),
         mcs_backend=_LazyArchMcs(),
         gold_store=gold_store,
@@ -1467,6 +1546,16 @@ def wire_dependencies(
             hasher=hasher, silver=analytics_repository, gold_store=gold_store
         ),
         run_confirmatory_evaluation_for=run_confirmatory_evaluation_for,
+        # BC evaluation (Stage 8.3, Task 13): os MESMOS gold store, silver e grade do refresh
+        generate_report_artifacts_for=report_artifacts_wiring(
+            repo_root=repo_root,
+            runtime_probe_for=runtime_probe_for,
+            image_id=cfg.image_id,
+            hasher=hasher,
+            gold_store=gold_store,
+            silver_reader=analytics_repository,
+            grid_reader=grid_reader,
+        ),
     )
 
 

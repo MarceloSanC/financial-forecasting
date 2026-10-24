@@ -52,19 +52,24 @@ class JudgedRevision:
         plans: os planos montados de cada registro, na mesma ordem.
         chain: a referência calculada de cada revisão, na mesma ordem.
         anchor: a âncora da revisão julgada.
+        digests: o sha256 do payload de cada revisão (`PreregistrationHash`), na mesma
+            ordem — calculado uma vez na resolução; o prefixo de 12 é o sufixo da
+            referência (dono único; o dossiê da 8.3 o transcreve, CC4-3).
     """
 
     records: tuple[PreregistrationRecord, ...]
     plans: tuple[Preregistration, ...]
     chain: tuple[str, ...]
     anchor: PreregistrationAnchor
+    digests: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        sizes = {len(self.records), len(self.plans), len(self.chain)}
+        sizes = {len(self.records), len(self.plans), len(self.chain), len(self.digests)}
         if len(sizes) != 1 or not self.chain:
             raise ValueError(
-                "records, plans and chain must be non-empty and of the same length, got "
-                f"{len(self.records)}, {len(self.plans)}, {len(self.chain)}"
+                "records, plans, chain and digests must be non-empty and of the same length, "
+                f"got {len(self.records)}, {len(self.plans)}, {len(self.chain)}, "
+                f"{len(self.digests)}"
             )
 
     @property
@@ -96,7 +101,7 @@ def resolve_judged_revision(
     """
     records = [source.read(name=name, revision=index) for index in range(revision + 1)]
     plans = [Preregistration.from_mapping(record.payload) for record in records]
-    chain = _chain(name, plans, hasher)
+    chain, digests = _chain(name, plans, hasher)
     if chain[-1] != preregistration_ref:
         raise PreregistrationHashMismatchError(
             f"revision {revision} of {name!r} hashes to {chain[-1]!r}, "
@@ -117,12 +122,17 @@ def resolve_judged_revision(
             f"of their computed references (an anchor must match its revision)"
         )
     return JudgedRevision(
-        records=tuple(records), plans=tuple(plans), chain=tuple(chain), anchor=anchor
+        records=tuple(records),
+        plans=tuple(plans),
+        chain=tuple(chain),
+        anchor=anchor,
+        digests=tuple(digests),
     )
 
 
-def _chain(name: str, plans: list[Preregistration], hasher: Hasher) -> list[str]:
+def _chain(name: str, plans: list[Preregistration], hasher: Hasher) -> tuple[list[str], list[str]]:
     references: list[str] = []
+    digests: list[str] = []
     for revision, plan in enumerate(plans):
         if (plan.name, plan.revision) != (name, revision):
             raise PreregistrationChainError(
@@ -138,4 +148,5 @@ def _chain(name: str, plans: list[Preregistration], hasher: Hasher) -> list[str]
                 )
         digest = PreregistrationHash.compute(hasher=hasher, payload=plan.as_payload())
         references.append(plan.reference(digest))
-    return references
+        digests.append(digest.value)
+    return references, digests

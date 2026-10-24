@@ -1,0 +1,49 @@
+{
+  "code": {
+    "code.src": "9763b31699b981cd768d0cc48fe7ad174444ed02",
+    "code.uv_lock": "0ff8a4dfe837fbb76c5d619b240f918e519c0dd7"
+  },
+  "data_digest": "01443b683465d9360b5d32ac087b18d082ee9e530d73a5703ebbd7e751cf1b0a",
+  "excluded_degenerate": {},
+  "figure_id": "loss_differential_acf",
+  "generation_digest": "96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539",
+  "omissions": [
+    "faixa de confian\u00e7a da ACF (\u00b11,96/\u221an n\u00e3o persistida)"
+  ],
+  "omitted_models": [],
+  "partition": {
+    "asset": "AAPL",
+    "parent_sweep_id": "aapl_confirmatory-r0-665f45d9169a"
+  },
+  "preregistration_ref": "aapl_confirmatory-r3-00fd83d9cd39",
+  "renderer": {
+    "format": "pdf",
+    "freetype": "2.14.3",
+    "matplotlib": "3.11.0"
+  },
+  "revision": 3,
+  "silver_units": {},
+  "sources": [
+    {
+      "fields": [
+        "differential",
+        "fold"
+      ],
+      "filter": {
+        "pairs": "candidate x family comparator"
+      },
+      "kind": "gold_table",
+      "name": "gold_loss_differentials"
+    },
+    {
+      "fields": [
+        "acf"
+      ],
+      "filter": {
+        "pairs": "candidate x family comparator"
+      },
+      "kind": "gold_table",
+      "name": "gold_differential_acf"
+    }
+  ]
+}

@@ -26,6 +26,12 @@ Stage 8.2: `audit-reproduction --judged-data-root <dir> --reproduced-data-root <
 `composition_root.wire_reproduction_audit` (que recusa as duas raízes iguais, após
 `resolve()`, antes de montar qualquer adapter), com `Settings(**settings_overrides)` (o
 `repo_root` do pré-registro). Exit 0 só com `bit_identical`, 1 com diferença, 2 em erro.
+Stage 8.3: `report-artifacts --data-root <dir> --cohort <toml> --preregistration <nome>
+--revision <r> --preregistration-ref <ref> [--output <dir>] [--register <toml>]` — figuras
+canônicas e dossiê da cópia julgada; só leitura sobre `data/` (sem lock). O cohort é lido
+aqui (seeds e device); `--output` padrão `<repo_root>/docs/reports` e `--register` padrão
+`<repo_root>/docs/reports/dossier_register.toml`; o registro é parseado pelo comando do
+`evaluation` (fronteira) antes do use case.
 `--data-root` é obrigatório nos demais, sem default: o dado de um cohort vive
 isolado em `data/cohorts/<nome>/` (concept D10) e um default silencioso poderia
 misturá-lo com o `data/` de desenvolvimento.
@@ -99,6 +105,9 @@ _EXIT_ERROR = 2
 _ABLATION_PREFIX = "ablation-"
 _INFERENCE_SUBCOMMANDS = frozenset({"infer", "attribute"})
 _AUDIT_REPRODUCTION = "audit-reproduction"
+_REPORT_ARTIFACTS = "report-artifacts"
+_REPORTS_DIR = Path("docs") / "reports"
+_REGISTER_FILE = "dossier_register.toml"
 
 
 class MissingSentimentExtraError(ApplicationError):
@@ -208,6 +217,29 @@ def _parser() -> argparse.ArgumentParser:
     ablation_freeze.add_argument(
         "--seeds", type=_seed_list, required=True, help="seeds do cohort, ex.: 1,2,3"
     )
+    # Stage 8.3: só leitura sobre `data/` — pelo helper, sem lock
+    report = add(
+        _REPORT_ARTIFACTS, "gera as figuras canônicas e o dossiê da cópia julgada", lock=False
+    )
+    report.add_argument(
+        "--preregistration", required=True, metavar="NOME", help="nome do plano pré-registrado"
+    )
+    report.add_argument("--revision", type=int, required=True, help="revisão julgada do plano")
+    report.add_argument(
+        "--preregistration-ref",
+        required=True,
+        metavar="REF",
+        help="referência esperada da revisão (<nome>-r<rev>-<hash12>)",
+    )
+    report.add_argument(
+        "--output", type=Path, default=None, help="diretório de saída (padrão docs/reports)"
+    )
+    report.add_argument(
+        "--register",
+        type=Path,
+        default=None,
+        help="registro curado (padrão docs/reports/dossier_register.toml)",
+    )
     # Stage 8.2: só leitura, sem `--data-root`/`--cohort`/lock — fora do helper `add()`
     audit = commands.add_parser(
         _AUDIT_REPRODUCTION, help="compara a geração reproduzida com a cópia julgada"
@@ -284,6 +316,8 @@ def main(  # noqa: PLR0911 — um return por família de subcomando
                 _dispatch_evaluate if args.command == "evaluate" else _dispatch_inference_command
             )
             return dispatch(args, deps, cohort_file, stdout)
+        if args.command == _REPORT_ARTIFACTS:
+            return _dispatch_report_artifacts(args, deps, settings, cohort_file, stdout)
         if args.command.startswith(_ABLATION_PREFIX):
             return _dispatch_ablation_command(args, deps, stdout)
         return _dispatch_cohort_command(args, deps, cohort_file, stdout)
@@ -316,6 +350,32 @@ def _dispatch_audit_reproduction(args: argparse.Namespace, injected: CliWiring, 
         name=args.preregistration,
         revision=args.revision,
         preregistration_ref=args.preregistration_ref,
+        out=out,
+    )
+    return exit_code
+
+
+def _dispatch_report_artifacts(
+    args: argparse.Namespace,
+    deps: ApplicationDependencies,
+    settings: Settings,
+    cohort_file: ModuleType,
+    out: TextIO,
+) -> int:
+    """`report-artifacts` (8.3): seeds e device do cohort lidos aqui (o `evaluation` não
+    importa o `modeling`); saída e registro com padrão sob o `repo_root`."""
+    spec = cohort_file.load(args.cohort)
+    reports = Path(settings.repo_root) / _REPORTS_DIR
+    output: Path = args.output if args.output is not None else reports
+    register: Path = args.register if args.register is not None else reports / _REGISTER_FILE
+    evaluation = importlib.import_module(_EVALUATION_COMMANDS)
+    exit_code: int = evaluation.report_artifacts(
+        deps.generate_report_artifacts_for(args.cohort, spec.device, output),
+        register_path=register,
+        name=args.preregistration,
+        revision=args.revision,
+        preregistration_ref=args.preregistration_ref,
+        cohort_seeds=tuple(spec.seeds),
         out=out,
     )
     return exit_code

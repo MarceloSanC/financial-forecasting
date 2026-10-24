@@ -141,6 +141,15 @@ dependencies = [
     # acima: a perna real do contrato roda no CI, sem `skipif`. Pinado por minor; o
     # uv.lock trava o patch.
     "mapie>=1.5,<1.6",
+    # Renderização das figuras canônicas — Stage 8.3 / ADR 8.3.0003
+    # Vive SÓ em features/evaluation/adapters/out/plots/ (atrás do port-out
+    # `FigureRenderer`, API orientada a objeto: `Figure` + backend PDF, sem `pyplot`);
+    # o gate import-linter `evaluation-no-matplotlib-leak` reprova import de matplotlib
+    # em qualquer outro módulo de src/, e um teste AST reprova `matplotlib.pyplot` em
+    # todo o src/. Já vinha transitivo (3.11.0 via mlflow); aqui vira declarado, porque
+    # depender de transitiva é frágil. Pinado por minor (os bytes do PDF mudam entre
+    # versões); o uv.lock trava o patch.
+    "matplotlib>=3.11,<3.12",
 ]
 
 [project.optional-dependencies]
