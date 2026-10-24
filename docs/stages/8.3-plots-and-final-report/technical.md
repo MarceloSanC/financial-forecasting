@@ -1846,4 +1846,40 @@ a lista.
 **Razão:** destrava a linha `FAIL_LAYOUT`; mudança de `src/` pede revisão, `make check` e
 `GATE1` novos antes de recomeçar a Etapa R da R1.
 
+### 2026-10-24 — [deviation] revisão do fix de layout: faixas, y_t, nota NULL do H3 e nota de vários painéis — Claude (executor)
+**Contexto:** revisão independente de `357e6d14..0404ed91` (o `[deviation]` acima). Quatro
+achados; decisões de forma `[decision:C]` dentro do ADR 8.3.0003; dado plotado intacto.
+**O que mudou:**
+1. **[Médio] Fan chart** (`matplotlib_figure_renderer`): as três faixas recebiam estilos
+   "distintos" só no marcador, que faixa não desenha (amostras idênticas na legenda), e a
+   linha tracejada grossa do y_t cobria a mediana. Agora `figure_looks` garante unicidade
+   pelo atributo **desenhado** de cada tipo — faixa (cor, alpha, hachura) na ordem de
+   `_BAND_FILLS` (0,12 / 0,24 / 0,36, depois hachura), linha (cor, estilo), marca (cor,
+   marcador, vazado) —, e a linha sem modelo (o observado) sai fina (0,4), contínua e com
+   z-order entre as faixas (1) e as linhas de modelo (3). O teste de estilos distintos passou
+   a medir os artistas renderizados (preenchimento com alpha, hachura, cor, padrão de traço,
+   marcador); com o renderer de `0404ed91` ele, o de faixas aninhadas, o de y_t abaixo da
+   mediana e o de nota compartilhada **falham** (mutação conferida).
+2. **[Baixo] Nota do H3** (`report_figures._reading_note`): `agreeing_families` lido com
+   `col_str` — NULL é geração corrompida (`GoldGenerationCorruptError`), só `""` vira
+   "nenhuma"; teste unit do NULL ao lado dos de `""` e da lista.
+3. **[Baixo] Nota de vários painéis** (`footer_lines`): a mesma nota em vários painéis sai uma
+   vez prefixada por todos ("h+1, h+7: …"); idem nota da mesma série ("h+1, h+7 — série: …",
+   visível nas contagens de degenerados do sharpness real). Testes: nota compartilhada e notas
+   distintas por painel.
+4. **[Baixo] H3, tudo cinza:** séries sem modelo alternam dois tons neutros por tipo
+   (`#4d4d4d`, `#8c8c8c`), sem abrir mão do marcador distinto (os tons contam como uma cor
+   na unicidade); intervalos de várias séries na mesma categoria saem lado a lado
+   (`_DODGE`), como as barras — Δ_f da permutação e do LOCO deixam de se sobrepor. Frases do
+   catálogo intactas.
+**Prévia real:** worktree destacada descartável em `c44d519c` (árvore limpa), `/data` só
+leitura, mesma imagem `sha256:b69a7620…8f45`, `report-artifacts` com os argumentos da R2
+item 2 e `--output` no scratchpad: exit 0, 10 linhas `figure`, os dez `data_digest` iguais
+aos da prévia anterior. PNG (Agg) aberto do fan chart (três faixas distinguíveis, mediana
+visível sobre o y_t fino), do H3 (Δ_f e I_f das duas famílias de método distinguíveis;
+rodapé termina em "famílias concordantes = nenhuma") e do sharpness (notas de série
+deduplicadas com "h+1, h+7 — …"). Worktree removida.
+**Razão:** os achados da revisão; mudança de `src/` pede `make check` e `GATE1` novos antes
+de recomeçar a Etapa R da R1.
+
 <!-- END: post-execution -->
