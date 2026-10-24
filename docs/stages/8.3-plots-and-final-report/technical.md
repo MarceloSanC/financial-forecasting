@@ -3,7 +3,7 @@ title: Technical — Stage 8.3 — Plots canônicos da geração julgada e dossi
 description: Plano de execução da Stage 8.3 em 15 Tasks inside-out (1 Task = 1 commit) — matplotlib direto confinado ao adapter de plots, DTOs do dado plotado e do registro por figura, read_columns ampliado, ports e fakes do renderer e do sink, leitura do silver conferida por unidade, montagem pura das dez figuras em três grupos, dossiê citável e interno, use case GenerateReportArtifacts, renderer matplotlib determinístico, sink com staging, parser do registro curado e subcomando report-artifacts, e2e sintético e o registro curado — e a Etapa real R0–R4 (geração sobre a cópia julgada 96c05413…, saídas commitadas, segunda geração com sha256sum idêntico, data/ intacto)
 when-use: Consultar durante a Fase 4 (execução) da Stage 8.3; cada Task tem arquivos (lista fechada), testes a escrever primeiro, critério de aceite do concept que cobre e verificação; a Etapa R traz o runbook da geração real com a tabela "Se falhar"
 keywords: [technical, plano de execução, plots, report, dossier, traceability, evaluation, judged-generation, matplotlib, deterministic-pdf, figure-record, data-digest, silver-content, report-artifacts, p8-rot]
-status: draft
+status: done
 created_at: 2026-10-24
 updated_at: 2026-10-24
 stage_id: 8.3-plots-and-final-report
