@@ -3,7 +3,8 @@
 Sobre as dez specs sintéticas e specs mínimas: séries distintas com estilos distintos (cor,
 marcador, vazado), rótulos de legenda que cabem numa coluna da página, rodapé sem nota
 repetida, e todo texto e eixo dentro da página (nada cortado nas bordas), medido nas caixas
-renderizadas; e o PDF do conformal com os mesmos bytes em renderizações repetidas no mesmo
+renderizadas; os dois Δ_f do H3 em tons neutros distintos, intervalos da mesma categoria
+lado a lado, e o PDF do conformal com os mesmos bytes em renderizações repetidas no mesmo
 processo (o ruído do solver do layout restrito variava entre chamadas).
 """
 
@@ -22,6 +23,7 @@ from matplotlib.lines import Line2D
 from financial_forecasting.features.evaluation.adapters.out.plots.matplotlib_figure_renderer import (  # noqa: E501
     _BAND_FILLS,
     _LEGEND_WRAP,
+    _NEUTRALS,
     _RC,
     MatplotlibFigureRenderer,
     figure_looks,
@@ -330,6 +332,47 @@ def test_every_text_inside_the_page(specs: list[FigureSpec]) -> None:
         with rc_context(_RC):  # type: ignore[arg-type]
             figure = renderer._draw(spec)
             assert _outside(figure) == [], spec.figure_id
+
+
+def test_h3_delta_series_are_drawn_in_distinct_neutral_tones(specs: list[FigureSpec]) -> None:
+    """Δ_f da permutação e do LOCO (séries sem modelo): os dois tons de `_NEUTRALS`."""
+    h3 = next(s for s in specs if s.figure_id == "h3_family_importance")
+    drawn = _drawn_by_label(h3)
+    colors = [look[1] for label, look in drawn.items() if label.startswith("Δ_f")]
+    assert len(colors) == 2  # noqa: PLR2004 — os dois métodos do H3
+    assert colors[0] != colors[1]
+    assert set(colors) == {to_rgba(tone) for tone in _NEUTRALS}
+
+
+def _interval(series_id: str, model: str) -> SeriesSpec:
+    return SeriesSpec(
+        series_id=series_id,
+        kind=SeriesKind.INTERVAL,
+        name=series_id,
+        model=model,
+        label=_DESCRIPTIVE,
+        x=("a", "b"),
+        y=(0.0, 0.1),
+        low=(-0.1, 0.0),
+        high=(0.1, 0.2),
+    )
+
+
+def test_intervals_sharing_a_category_are_dodged() -> None:
+    """Dois intervalos na mesma categoria ficam lado a lado, simétricos em torno dela."""
+    spec = _spec((_interval("a", "tft_quantile"), _interval("b", "gbm_quantile")))
+    with rc_context(_RC):  # type: ignore[arg-type]
+        figure = MatplotlibFigureRenderer()._draw(spec)
+    (ax,) = figure.get_axes()
+    xs = [
+        [float(x) for x in container.lines[0].get_xdata()]
+        for container in ax.containers
+        if isinstance(container, ErrorbarContainer)
+    ]
+    assert len(xs) == 2  # noqa: PLR2004
+    for category, (left, right) in enumerate(zip(*xs, strict=True)):
+        assert left < right
+        assert (left + right) / 2 == pytest.approx(category)
 
 
 def test_native_vs_conformal_same_bytes_in_repeated_renders(specs: list[FigureSpec]) -> None:
