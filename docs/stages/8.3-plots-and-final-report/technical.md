@@ -1488,4 +1488,17 @@ e a lista de elementos confirmatórios do use case. O concept é emendado por ou
 **Razão:** correção de rótulo para a fonte superior, pedida pelo revisor; sem mudar dado
 lido nem contrato de port.
 
+### 2026-10-24 — [deviation] Task 14, mundo julgado da 8.1 refeito com `blinding_statement` — Claude (executor)
+**Contexto:** a Task 14 pede o `_judged_world` de `test_run_confirmatory_evaluation.py`, mas
+o plano sintético dele não tem `blinding_statement`, e o dossiê o transcreve (D9) — a
+geração recusaria com `ReportSourceMismatchError`. O plano entra no hash, então o campo não
+pode ser acrescentado depois.
+**O que mudou:** `test_report_artifacts_cli.py` remonta o mesmo mundo com os mesmos helpers
+(`_write_dataset`, `_plan_payload`, `_freeze`, `_write_silver`, `_write_attribution`,
+`_write_ablation`, `_r3`, `_run`, `_record`), acrescentando o `blinding_statement` na r0
+(herdado pelas emendas). O caminho é a CLI real (sem o fallback da Task); a raiz vira
+repositório git com `config/` commitado.
+**Razão:** abaixo do limiar de pergunta — helper de teste, mesmo mundo, só o campo que o
+D9 exige.
+
 <!-- END: post-execution -->
