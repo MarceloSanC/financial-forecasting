@@ -27,7 +27,7 @@ equivalência — um filtro diferente produz digest diferente e recusa.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final
 
@@ -89,6 +89,8 @@ class VerifiedSilver:
     records: tuple[ForecastRecord, ...]
     realized: RealizedReturns
     units: Mapping[str, str]
+    split_fingerprints: Mapping[str, str | None] = field(default_factory=dict)
+    """`run_id` → `split_fingerprint` do `dim_run` (identidade da entrada no dossiê, doc §7)."""
 
     def __post_init__(self) -> None:
         if not isinstance(self.runs, tuple) or not isinstance(self.records, tuple):
@@ -96,6 +98,11 @@ class VerifiedSilver:
         if not isinstance(self.realized, RealizedReturns):
             raise ValueError("realized must be a RealizedReturns")
         object.__setattr__(self, "units", MappingProxyType(dict(sorted(self.units.items()))))
+        object.__setattr__(
+            self,
+            "split_fingerprints",
+            MappingProxyType(dict(sorted(self.split_fingerprints.items()))),
+        )
 
 
 def read_verified_silver(  # noqa: PLR0913 — os colaboradores e as referências da conferência
@@ -115,7 +122,7 @@ def read_verified_silver(  # noqa: PLR0913 — os colaboradores e as referência
         SilverContentMismatchError: alguma unidade difere, falta ou sobra.
     """
     accumulator = SilverContentAccumulator(hasher=hasher)
-    runs = _read_runs(silver_reader, partition, accumulator)
+    runs, split_fingerprints = _read_runs(silver_reader, partition, accumulator)
     records = _read_records(silver_reader, partition, runs, accumulator)
     realized = _read_realized(grid_reader, partition.asset, expected_fingerprint, accumulator)
     read_units = accumulator.result().units
@@ -126,7 +133,13 @@ def read_verified_silver(  # noqa: PLR0913 — os colaboradores e as referência
         parent_sweep_id=partition.parent_sweep_id,
         asset=partition.asset,
     )
-    return VerifiedSilver(runs=runs, records=records, realized=realized, units=read_units)
+    return VerifiedSilver(
+        runs=runs,
+        records=records,
+        realized=realized,
+        units=read_units,
+        split_fingerprints=split_fingerprints,
+    )
 
 
 def _check_units(
@@ -156,7 +169,7 @@ def _check_units(
 
 def _read_runs(
     reader: SilverTableReader, partition: GoldPartition, accumulator: SilverContentAccumulator
-) -> tuple[CohortRun, ...]:
+) -> tuple[tuple[CohortRun, ...], dict[str, str | None]]:
     rows = [
         row
         for row in reader.read(
@@ -185,7 +198,13 @@ def _read_runs(
         )
         for row in rows
     )
-    return tuple(sorted(runs, key=lambda run: run.run_id))
+    fingerprints = {
+        str(row["run_id"]): None
+        if row.get("split_fingerprint") is None
+        else str(row["split_fingerprint"])
+        for row in rows
+    }
+    return tuple(sorted(runs, key=lambda run: run.run_id)), fingerprints
 
 
 def _read_records(

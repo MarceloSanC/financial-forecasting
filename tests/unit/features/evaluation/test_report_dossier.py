@@ -67,7 +67,7 @@ from tests.unit.features.evaluation._silver_content import SAMPLE_SILVER_CONTENT
 
 BLINDING = (
     "Declaração de cegamento: nenhum número confirmatório foi lido antes da âncora.\n"
-    'Ressalva "literal" | com acento — e quebra de linha.'
+    'Ressalva "literal" | com acento — e quebra de linha, e `crase` literal.'
 )
 REF = "test_plan-r3-0123456789ab"
 CODE_SRC = "c5" * 32
@@ -78,6 +78,7 @@ GENERATION_DIGEST = "96" * 32
 IMAGE = "sha256:" + "ab" * 32
 STARTED_AT = datetime(2026, 10, 20, 9, 30, tzinfo=UTC)
 _CHAIN = tuple(f"test_plan-r{r}-0123456789ab" for r in range(4))
+_DIGESTS = tuple(f"{r}a" * 32 for r in range(4))
 _82 = "docs/stages/8.2-equivalence-audit/technical.md"
 
 
@@ -246,6 +247,7 @@ def _build(**overrides: object) -> TraceabilityDossier:
         "judged_record": _judged_record(),
         "attempts": _attempts(),
         "result_digest": RESULT_DIGEST,
+        "revision_digests": _DIGESTS,
         "run_record": {"seeds": {"gold": "manifest", "training": "cohort spec"}},
         "scorecard": _scorecard(),
         "manifest": world.generation().manifest,
@@ -259,6 +261,7 @@ def _build(**overrides: object) -> TraceabilityDossier:
                 config_signature="cfg",
             ),
         ),
+        "split_fingerprints": {"run-1": "5f" * 32},
         "records": tuple(
             _figure_record(fid) for fid in ("reliability_diagram", "loss_differential_acf")
         ),
@@ -359,7 +362,7 @@ def test_reproduction_section_has_claim_identities_and_pointer_to_sections_1_to_
     rows = dict(blocks[0].rows)
     assert rows["generation_digest"] == GENERATION_DIGEST
     assert rows["result_digest"] == RESULT_DIGEST
-    assert rows["commit do .judged.toml"] == "06" * 20
+    assert rows["commit da corrida (registrado no .judged.toml)"] == "06" * 20
     assert rows["imagem"] == IMAGE
     assert blocks[0].pointer == "docs/reports/reproduction_audit.md#1-claim"
     assert [b.heading for b in blocks[1:]] == ["Reprodução R1/R2/R3"]
@@ -494,3 +497,43 @@ def test_missing_started_attempt_raises() -> None:
 
     with pytest.raises(ReportSourceMismatchError, match="started"):
         _build(attempts=_attempts()[1:])
+
+
+@pytest.mark.unit
+def test_identity_and_chain_fields_of_doc_section_7_rows_1_and_2(
+    dossier: TraceabilityDossier,
+) -> None:
+    """CC3-1: por campo — run_id/config_signature/split_fingerprint, fingerprint do
+    dataset, silver, feature_set_hash, cohorts com hashes e tags; e o sha256 de cada r."""
+    identity = {b.heading: dict(b.rows) for b in _section(dossier, "identity")}
+    entry = identity["Entrada"]
+    assert entry["cohort"].startswith("test_cohort-r0-0123456789ab (hash ")
+    assert entry["fingerprint do dataset"]
+    assert entry["hash de conteúdo do silver lido"]
+    assert entry["feature_set_hash"]
+    assert entry["cohort da ablação"].startswith("synthetic_ablation_r0_b2b2b2b2b2b2 (hash ")
+    tags = identity["Tags do cohort (convenção do freeze)"]
+    assert tags == {
+        "tag do cohort": "cohort/test_cohort-r0-0123456789ab",
+        "tag do cohort da ablação": "cohort/synthetic_ablation_r0_b2b2b2b2b2b2",
+    }
+    runs = identity["Runs do cohort (dim_run)"]
+    assert runs["run-1"].endswith(f"config_signature cfg; split_fingerprint {'5f' * 32}")
+    chain = {b.heading: dict(b.rows) for b in _section(dossier, "preregistration_chain")}
+    for revision in range(4):
+        assert chain[f"r{revision}"]["sha256 da revisão"] == _DIGESTS[revision]
+        assert chain[f"r{revision}"]["preregistration_ref"] == _CHAIN[revision]
+    seeds = _all_rows(_section(dossier, "seeds"))
+    assert seeds["referência (gold)"] == "manifest"
+
+
+@pytest.mark.unit
+def test_run_record_without_seeds_reference_raises() -> None:
+    from financial_forecasting.features.evaluation.application.dtos.report_artifacts import (  # noqa: PLC0415
+        ReportSourceMismatchError,
+    )
+
+    with pytest.raises(ReportSourceMismatchError, match="seeds"):
+        _build(run_record={})
+    with pytest.raises(ReportSourceMismatchError, match="sha256"):
+        _build(revision_digests=_DIGESTS[:3])

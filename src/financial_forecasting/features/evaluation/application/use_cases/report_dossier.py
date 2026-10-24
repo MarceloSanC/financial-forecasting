@@ -23,7 +23,6 @@ from typing import Final
 
 from financial_forecasting.features.evaluation.application.dtos.confirmatory_run import (
     RUN_RECORD_SEEDS,
-    SEEDS_REFERENCE,
 )
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
     GOLD_CONFORMAL_COVERAGE,
@@ -61,6 +60,7 @@ from financial_forecasting.features.evaluation.application.use_cases.judged_revi
 )
 from financial_forecasting.features.evaluation.domain.value_objects.cohort_run import CohortRun
 
+JUDGED_COMMIT_LABEL: Final = "commit da corrida (registrado no .judged.toml)"
 REGENERATE_HEADING: Final = "Como regenerar"
 """O bloco de `code_commits` cujo `comando` o Markdown repete no topo dos dois arquivos."""
 ORDERING_CAVEAT: Final = (
@@ -69,6 +69,9 @@ ORDERING_CAVEAT: Final = (
 )
 CODE_SRC: Final = "code.src"
 CODE_UV_LOCK: Final = "code.uv_lock"
+COHORT_TAG_PREFIX: Final = "cohort/"
+"""A tag git do freeze de um cohort (`cohort/<cohort_id>`; ADRs 5.5.0001 e 7.3.0006)."""
+_ADR_COHORT_TAG: Final = "docs/adr/5_5_0001-frozen-hashed-cohort-spec.md"
 _ADR_ORDER: Final = "docs/adr/6_5_0003-anchor-by-tag-and-issue-comment-and-order-check.md"
 _REPRODUCTION_AUDIT: Final = "docs/reports/reproduction_audit.md"
 
@@ -249,7 +252,10 @@ def _power_blocks(scorecard: Mapping[str, object]) -> list[DossierBlock]:
 
 
 def _identity_blocks(
-    plan_chain: JudgedRevision, manifest: GoldManifest, runs: Sequence[CohortRun]
+    plan_chain: JudgedRevision,
+    manifest: GoldManifest,
+    runs: Sequence[CohortRun],
+    split_fingerprints: Mapping[str, str | None],
 ) -> list[DossierBlock]:
     plan = plan_chain.plan
     rows: list[Row] = [
@@ -270,19 +276,33 @@ def _identity_blocks(
         (
             run.run_id,
             f"{run.model}; seed {_text(run.seed)}; fold {_text(run.fold)}; "
-            f"feature_set {run.feature_set_name}; config_signature {run.config_signature}",
+            f"feature_set {run.feature_set_name}; config_signature {run.config_signature}; "
+            f"split_fingerprint {_text(split_fingerprints.get(run.run_id))}",
         )
         for run in sorted(runs, key=lambda r: r.run_id)
     ]
-    return [_block("Entrada", rows), _block("Runs do cohort (dim_run)", run_rows)]
+    tags: list[Row] = [("tag do cohort", f"{COHORT_TAG_PREFIX}{plan.cohort.cohort_id}")]
+    if plan.h3 is not None:
+        tags.append(
+            ("tag do cohort da ablação", f"{COHORT_TAG_PREFIX}{plan.h3.ablation_cohort_id}")
+        )
+    return [
+        _block("Entrada", rows),
+        _block("Tags do cohort (convenção do freeze)", tags, _ADR_COHORT_TAG),
+        _block("Runs do cohort (dim_run)", run_rows),
+    ]
 
 
-def _chain_blocks(plan_chain: JudgedRevision) -> list[DossierBlock]:
+def _chain_blocks(
+    plan_chain: JudgedRevision, revision_digests: Sequence[str]
+) -> list[DossierBlock]:
+    if len(revision_digests) != len(plan_chain.chain):
+        raise ReportSourceMismatchError("one sha256 per revision of the chain is required")
     blocks: list[DossierBlock] = []
-    for index, (record, plan, reference) in enumerate(
-        zip(plan_chain.records, plan_chain.plans, plan_chain.chain, strict=True)
+    for index, (record, plan, reference, digest) in enumerate(
+        zip(plan_chain.records, plan_chain.plans, plan_chain.chain, revision_digests, strict=True)
     ):
-        rows: list[Row] = [("preregistration_ref", reference)]
+        rows: list[Row] = [("preregistration_ref", reference), ("sha256 da revisão", digest)]
         anchor = record.anchor
         if anchor is not None:
             rows += [
@@ -357,7 +377,7 @@ def _judged_blocks(
                     "motivos",
                     ", ".join(map(str, reasons)) if isinstance(reasons, list) and reasons else "—",
                 ),
-                ("commit da corrida", judged_record.commit),
+                (JUDGED_COMMIT_LABEL, judged_record.commit),
                 ("tag", judged_record.tag),
                 ("comentário de atestação", judged_record.comment_url),
                 ("instante do comentário", judged_record.commented_at.isoformat()),
@@ -446,9 +466,10 @@ def _seed_blocks(
             ("bootstrap de H3", str(plan.h3.bootstrap_seed)),
             ("ablação de H3", ", ".join(map(str, plan.h3.ablation_seeds))),
         ]
-    reference = run_record.get(RUN_RECORD_SEEDS, SEEDS_REFERENCE)
-    if isinstance(reference, Mapping):
-        rows += [(f"referência ({key})", str(value)) for key, value in sorted(reference.items())]
+    reference = run_record.get(RUN_RECORD_SEEDS)
+    if not isinstance(reference, Mapping):
+        raise ReportSourceMismatchError(f"run_record.json lacks the {RUN_RECORD_SEEDS} mapping")
+    rows += [(f"referência ({key})", str(value)) for key, value in sorted(reference.items())]
     return [_block("Seeds", rows)]
 
 
@@ -492,7 +513,7 @@ def _reproduction_blocks(
             [
                 ("generation_digest", judged_record.generation_digest),
                 ("result_digest", result_digest),
-                ("commit do .judged.toml", judged_record.commit),
+                (JUDGED_COMMIT_LABEL, judged_record.commit),
                 ("imagem", environment.get(IMAGE_ID_KEY, "—")),
             ],
             f"{_REPRODUCTION_AUDIT}#1-claim",
@@ -507,10 +528,12 @@ def build_dossier(  # noqa: PLR0913 — as fontes persistidas do dossiê (D8), u
     judged_record: JudgedRecord,
     attempts: Sequence[JudgedAttempt],
     result_digest: str,
+    revision_digests: Sequence[str],
     run_record: Mapping[str, object],
     scorecard: Mapping[str, object],
     manifest: GoldManifest,
     runs: Sequence[CohortRun],
+    split_fingerprints: Mapping[str, str | None],
     records: Sequence[FigureRecord],
     register: Sequence[DossierEntry],
     snapshot: Mapping[str, str],
@@ -518,7 +541,9 @@ def build_dossier(  # noqa: PLR0913 — as fontes persistidas do dossiê (D8), u
     """O dossiê citável (seções de `CITABLE_SECTIONS`) e o interno, das fontes persistidas.
 
     `result_digest` é o da última `input_read` da referência (dono:
-    `judged_copy.last_input_read_digest`, chamado pelo use case).
+    `judged_copy.last_input_read_digest`, chamado pelo use case); `revision_digests` é o
+    sha256 do payload de cada revisão da cadeia (`PreregistrationHash`, calculado pelo use
+    case); `split_fingerprints` vem do `dim_run` lido (`VerifiedSilver`).
 
     Raises:
         ReportSourceMismatchError: scorecard fora da forma, sem tentativa `started` da
@@ -536,8 +561,8 @@ def build_dossier(  # noqa: PLR0913 — as fontes persistidas do dossiê (D8), u
     content: dict[str, list[DossierBlock]] = {
         "claim_pointers": _claim_blocks(scorecard),
         "declared_power": _power_blocks(scorecard),
-        "identity": _identity_blocks(plan_chain, manifest, runs),
-        "preregistration_chain": _chain_blocks(plan_chain),
+        "identity": _identity_blocks(plan_chain, manifest, runs, split_fingerprints),
+        "preregistration_chain": _chain_blocks(plan_chain, revision_digests),
         "pre_anchor_computation": _pre_anchor_blocks(register),
         "blinding_statement": _blinding_blocks(plan_chain),
         "judged_generation": _judged_blocks(plan_chain, judged_record, scorecard, manifest),

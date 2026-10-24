@@ -4,9 +4,9 @@
 não a duplica — `check_fake_parity`). Forma: título; o parágrafo de como regenerar (o
 comando literal do bloco `REGENERATE_HEADING`); um `##` por seção na ordem do dossiê; um
 `###` por bloco; tabela `| campo | valor |`; `Fonte:` com o ponteiro como link relativo a
-`docs/reports/`. Valor de várias linhas ou com `|` sai **literal** num bloco cercado, fora
-da tabela — o `blinding_statement` é transcrito byte a byte (D9). LF; termina em `\\n`. O
-interno começa (título) com o aviso "Interno, fora do texto do TCC".
+`docs/reports/`. Valor de várias linhas, com `|` ou com crase sai **literal** num bloco
+cercado, fora da tabela — o `blinding_statement` é transcrito byte a byte (D9). LF;
+termina em `\\n`. O interno começa (título) com o aviso "Interno, fora do texto do TCC".
 """
 
 from __future__ import annotations
@@ -44,7 +44,8 @@ def link_target(pointer: str) -> str:
 
 
 def _is_verbatim(value: str) -> bool:
-    return "\n" in value or "|" in value
+    """Valor que uma célula de tabela não transcreve byte a byte (D9; CC3-2)."""
+    return "\n" in value or "|" in value or "`" in value
 
 
 def _fence(value: str) -> str:
@@ -58,7 +59,7 @@ def _block_lines(block: DossierBlock) -> list[str]:
     verbatim = [(field, value) for field, value in block.rows if _is_verbatim(value)]
     if table:
         lines += ["| campo | valor |", "|---|---|"]
-        lines += [f"| {field} | {value.replace('`', '')} |" for field, value in table]
+        lines += [f"| {field} | {value} |" for field, value in table]
         lines.append("")
     for field, value in verbatim:
         fence = _fence(value)
