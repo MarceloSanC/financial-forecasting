@@ -1912,4 +1912,27 @@ B-SEEDS nos dois lados em T∩; a categoria prevê efeito na pinball), nenhum de
 `not_explained`. **[finding]** divergência de modelo (não de código nem de alvo), não bloqueia a
 8.2 nem o veredito da 8.1 (doc §5.6). Passo 4: `docs/reports/equivalence_audit.md` reescrito.
 
+### 2026-10-24 — [measurement] E5 (refeita com B3) — teste opt-in da equivalência — Claude (executor das Etapas)
+**Contexto:** passo 1: `DECLARED` regenerado do relatório da E4 refeita (2 475 linhas; o arquivo
+partiu da versão sem `DECLARED` de `1a9eeb87`). T1 da Task 11: ruff e mypy verdes; `pytest
+tests/equivalence/ -rs`: `74 passed, 1 skipped` (`SKIPPED … opt-in: set EQUIVALENCE_ORACLE_ROOT
+and EQUIVALENCE_OFFICIAL_ROOT …`). Commits `6d5f2952` (relatório + §7) e `b31e8f3c` (teste).
+Passo 3, com o oráculo, árvore commitada:
+```
+exit 0
+1 passed, 1 warning in 29.56s
+TEST_NEVER_WRITES
+LIVE_INTACT
+```
+Prova negativa (`A11/h1/candidate/nominal_side_80` `not_explained` → `explained:agregacao_seeds`,
+não commitada):
+```
+exit 1
+E       AssertionError: --- declared
+E         -A11/h1/candidate/nominal_side_80 model_nominal_side divergent_sense explained:agregacao_seeds
+E         +A11/h1/candidate/nominal_side_80 model_nominal_side divergent_sense not_explained
+1 failed, 1 warning in 35.93s
+NEGATIVE_PROOF_OK
+```
+
 <!-- END: post-execution -->
