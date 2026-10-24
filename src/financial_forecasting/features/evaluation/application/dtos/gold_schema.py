@@ -7,7 +7,9 @@ itens 2-3). Antes cada builder da 6.4 tinha a sua chave privada (`_KEY`) e o nom
 - `name` — o nome da tabela gravada (`gold_<builder>`);
 - `key` — as colunas do grão (a ordem das linhas; technical 6.4 §1 "Tabelas gold");
 - `read_columns` — as colunas fora da chave que o scorecard e o perfil leem por
-  nome; nenhuma outra coluna é lida por nome fora deste schema.
+  nome; nenhuma outra coluna é lida por nome fora deste schema. A Stage 8.3 (D3)
+  acrescenta, no fim das tuplas, as colunas que as figuras canônicas leem por nome
+  (`violation_rate` e a banda de Wilson da calibração; o `p_value` bruto do DM).
 
 Consumidores: os quinze builders (`build` devolve a tabela com `name`/`key` daqui) e
 `GoldGeneration.from_stored` (monta cada tabela lida com a chave daqui).
@@ -63,6 +65,11 @@ GOLD_CALIBRATION_TABLE: Final = GoldTableSchema(
         "p_ind",
         "p_cc",
         "independence_status",
+        # Stage 8.3 (D3): lidas pelo reliability diagram e pelo nativo vs. conformal.
+        "violation_rate",
+        "wilson_estimate",
+        "wilson_lower",
+        "wilson_upper",
     ),
 )
 GOLD_DM_RESULTS: Final = GoldTableSchema(
@@ -76,6 +83,8 @@ GOLD_DM_RESULTS: Final = GoldTableSchema(
         "rejected",
         "fallback_applied",
         "alpha",
+        # Stage 8.3 (D3): o p bruto da célula do DM (heatmap candidato vs. comparadores).
+        "p_value",
     ),
 )
 GOLD_MCS_RESULTS: Final = GoldTableSchema(
