@@ -1390,4 +1390,20 @@ um elemento com um rótulo de estatuto, sem duas séries que o renderer teria de
 links do Markdown resolvem no repositório; exigir a frase na construção fecha o I11 no
 tipo, como o §1 já faz com as omissões.
 
+### 2026-10-24 — [decision:C] Task 06, forma das quatro figuras de calibração e cobertura — Claude (executor)
+**Contexto:** o D13 fixa fontes e omissões, mas não a disposição das séries; o
+`FigureAssembly` (§1, Task 08) já é preciso aqui, porque cada função devolve as
+`SourceRef` que leu.
+**Pergunta:** como dispor as séries sem cálculo novo?
+**Opções:**
+- A — um painel por horizonte em todas, misturando ĉ, PICP e MPIW no mesmo eixo do
+  nativo × conformal.
+- B — um painel por horizonte; no nativo × conformal, dois por horizonte (ĉ por cauda e
+  PICP; MPIW), x categórico por cauda/par; seeds como uma série de pontos por modelo com
+  o rótulo da seed em `text`; o poder declarado na nota do rótulo das caudas do gate;
+  `FigureAssembly` introduzido já nesta Task (campos do silver vazios). ✅ recomendada
+**Decisão:** B.
+**Razão:** reversível barato; uma grandeza por eixo y (ADR 8.3.0003 item 4) e nenhum
+número novo — só seleção, complemento e razão de contagens médias (I3).
+
 <!-- END: post-execution -->
