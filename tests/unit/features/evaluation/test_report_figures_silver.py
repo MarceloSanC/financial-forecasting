@@ -123,7 +123,7 @@ def test_mean_of_drawn_widths_equals_gold_mpiw_model_full_exactly(
 def test_degenerate_rows_excluded_and_counted_in_legend(
     world: ReportWorld, silver: VerifiedSilver
 ) -> None:
-    box = _panel(sharpness_figure(world.inputs(), silver).spec, "h1")[f"{_CANDIDATE}|1"]
+    box = _panel(sharpness_figure(world.inputs(), silver).spec, "h1")[f"{_CANDIDATE}|stacked"]
     full = _full(world, silver, _CANDIDATE, 1, 1)
     widths = CoverageMetrics.interval_widths(full, tolerance=_TOLERANCE, pair=(0.1, 0.9))
     assert full.n_points - len(widths) == DEGENERATE_POINTS[(_CANDIDATE, 1, 1)]
@@ -133,9 +133,21 @@ def test_degenerate_rows_excluded_and_counted_in_legend(
 
 @pytest.mark.unit
 def test_candidate_seeds_stacked_with_legend(world: ReportWorld, silver: VerifiedSilver) -> None:
+    # CC2-2 (concept D4): uma caixa por par sobre as larguras de todas as seeds empilhadas
     series = _panel(sharpness_figure(world.inputs(), silver).spec, "h7")
+    assert not any(f"{_CANDIDATE}|{seed}" in series for seed in CANDIDATE_SEEDS)
+    box = series[f"{_CANDIDATE}|stacked"]
+    assert box.name == f"{_CANDIDATE} (larguras de 2 seeds empilhadas: seed 1, seed 2)"
+    stacked: list[float] = []
     for seed in CANDIDATE_SEEDS:
-        assert series[f"{_CANDIDATE}|{seed}"].name == f"{_CANDIDATE} (seed {seed})"
+        full = _full(world, silver, _CANDIDATE, seed, 7)
+        stacked += CoverageMetrics.interval_widths(full, tolerance=_TOLERANCE, pair=(0.1, 0.9))
+    q1, median, q3 = statistics.quantiles(stacked, n=4, method="inclusive")
+    index = box.x.index("0,1-0,9")
+    assert (box.whisker_low[index], box.low[index], box.y[index]) == (min(stacked), q1, median)  # type: ignore[index]
+    assert (box.high[index], box.whisker_high[index]) == (q3, max(stacked))  # type: ignore[index]
+    assert "0,1-0,9: 1" in (box.label.note or "")  # o degenerado da seed 2 em h+7
+    assert series["gbm_quantile|0"].name == "gbm_quantile (seed 0)"
 
 
 @pytest.mark.unit

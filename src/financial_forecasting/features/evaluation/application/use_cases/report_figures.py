@@ -105,6 +105,9 @@ from financial_forecasting.features.evaluation.domain.value_objects._finite_numb
 from financial_forecasting.features.evaluation.domain.value_objects.assembled_cohort import (
     HorizonSamples,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.coverage_series import (
+    CoverageSeries,
+)
 from financial_forecasting.features.evaluation.domain.value_objects.family_loss_differentials import (  # noqa: E501
     H3_HORIZONS,
     H3_METHODS,
@@ -1728,8 +1731,44 @@ def _box(widths: Sequence[float]) -> tuple[float, float, float, float, float] | 
     return min(widths), q1, median, q3, max(widths)
 
 
+def _verified_widths(  # noqa: PLR0913 — a série e a chave do mpiw do gold
+    inputs: ReportInputs,
+    model: str,
+    seed: Seed,
+    horizon: int,
+    full: CoverageSeries,
+    pair: tuple[float, float],
+) -> list[float]:
+    """As larguras não-degeneradas da série; a média tem de ser o `mpiw` `model_full`."""
+    widths = list(
+        CoverageMetrics.interval_widths(
+            full, tolerance=inputs.plan.h1_gate.degeneracy_tolerance, pair=pair
+        )
+    )
+    gold = _metric(
+        inputs,
+        model=model,
+        seed=seed,
+        horizon=horizon,
+        sample=GATE_SAMPLE,
+        metric="mpiw",
+        level_low=pair[0],
+        level_high=pair[1],
+    )
+    drawn = math.fsum(widths) / len(widths) if widths else None
+    if drawn != gold:
+        raise ReportSourceMismatchError(
+            f"sharpness mean width differs from gold mpiw model_full at "
+            f"model={model}, seed={seed}, horizon={horizon}, pair {pair}"
+        )
+    return widths
+
+
 def sharpness_figure(inputs: ReportInputs, silver: VerifiedSilver) -> FigureAssembly:
-    """Caixas das larguras u - l por par, modelo, seed e horizonte (D13 linha 3).
+    """Caixas das larguras u - l por par, modelo e horizonte (D13 linha 3; D4).
+
+    O candidato tem uma caixa por par com as larguras de **todas** as seeds empilhadas
+    (réplicas, B-SEEDS; a legenda declara o empilhamento); cada comparador, uma por seed.
 
     As larguras saem de `CoverageMetrics.interval_widths` sobre as séries `full` (máscara
     não-degenerada do MPIW); a média desenhada `fsum(widths) / len(widths)` tem de ser
@@ -1739,7 +1778,6 @@ def sharpness_figure(inputs: ReportInputs, silver: VerifiedSilver) -> FigureAsse
     Raises:
         ReportSourceMismatchError: o silver não monta ou a média difere do `mpiw` do gold.
     """
-    tolerance = inputs.plan.h1_gate.degeneracy_tolerance
     by_horizon = _assembled(inputs, silver)
     excluded: dict[str, int] = {}
     panels: list[PanelSpec] = []
@@ -1747,45 +1785,44 @@ def sharpness_figure(inputs: ReportInputs, silver: VerifiedSilver) -> FigureAsse
         samples = by_horizon[horizon]
         series: list[SeriesSpec] = []
         for model in samples.models:
-            for seed, full in zip(samples.seeds[model], samples.full[model], strict=True):
+            members = list(zip(samples.seeds[model], samples.full[model], strict=True))
+            # o candidato empilha as larguras de todas as seeds (réplicas, B-SEEDS; D4); os
+            # comparadores têm uma série por seed (uma só, no cohort)
+            groups = [members] if model == inputs.plan.candidate else [[m] for m in members]
+            for group in groups:
+                pairs = group[0][1].symmetric_pairs
                 boxes: list[tuple[float, float, float, float, float] | None] = []
-                labels: list[str] = []
                 counts: list[str] = []
-                for pair in full.symmetric_pairs:
-                    widths = CoverageMetrics.interval_widths(full, tolerance=tolerance, pair=pair)
-                    gold = _metric(
-                        inputs,
-                        model=model,
-                        seed=seed,
-                        horizon=horizon,
-                        sample=GATE_SAMPLE,
-                        metric="mpiw",
-                        level_low=pair[0],
-                        level_high=pair[1],
-                    )
-                    drawn = math.fsum(widths) / len(widths) if widths else None
-                    if drawn != gold:
-                        raise ReportSourceMismatchError(
-                            f"sharpness mean width differs from gold mpiw model_full at "
-                            f"model={model}, seed={seed}, horizon={horizon}, pair {pair}"
-                        )
-                    degenerate = full.n_points - len(widths)
-                    excluded[degenerate_key(model, seed, horizon, pair)] = degenerate
-                    boxes.append(_box(widths))
-                    labels.append(pair_text(pair))
+                for pair in pairs:
+                    stacked: list[float] = []
+                    degenerate = 0
+                    for seed, full in group:
+                        widths = _verified_widths(inputs, model, seed, horizon, full, pair)
+                        count = full.n_points - len(widths)
+                        excluded[degenerate_key(model, seed, horizon, pair)] = count
+                        degenerate += count
+                        stacked += widths
+                    boxes.append(_box(stacked))
                     counts.append(f"{pair_text(pair)}: {degenerate}")
+                seeds = [seed for seed, _ in group]
+                stacked_name = ", ".join(_seed_text(s) for s in seeds)
+                name = (
+                    f"{model} (larguras de {len(seeds)} seeds empilhadas: {stacked_name})"
+                    if len(group) > 1
+                    else f"{model} ({_seed_text(seeds[0])})"
+                )
                 series.append(
                     SeriesSpec(
-                        series_id=f"{model}|{seed}",
+                        series_id=f"{model}|stacked" if len(group) > 1 else f"{model}|{seeds[0]}",
                         kind=SeriesKind.BOXES,
-                        name=f"{model} ({_seed_text(seed)})",
+                        name=name,
                         model=model,
                         label=ElementLabel(
                             status=StatusLabel.DESCRIPTIVE,
                             note="degenerados excluídos pela máscara do MPIW — "
                             + "; ".join(counts),
                         ),
-                        x=tuple(labels),
+                        x=tuple(pair_text(pair) for pair in pairs),
                         y=tuple(None if b is None else b[2] for b in boxes),
                         low=tuple(None if b is None else b[1] for b in boxes),
                         high=tuple(None if b is None else b[3] for b in boxes),
