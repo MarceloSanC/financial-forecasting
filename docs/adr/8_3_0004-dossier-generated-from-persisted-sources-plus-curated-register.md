@@ -57,7 +57,12 @@ the revisions (ADR 6.5.0010, note of 2026-09-30).
    the claim numbers (R1/R2/R3 compared/different/max |Δ|, image, commit
    `060537fc`, `generation_digest`, `result_digest`). A file, not a section,
    because the TCC must be able to point to the citable dossier as a whole; the
-   8.2 artifact is not edited.
+   8.2 artifact is not edited. Visibility is decided by the **source**: the
+   register parser rejects a non-internal entry whose pointer targets
+   `docs/stages/8.2-*` (except declared citable anchors of the reproduction),
+   the equivalence report, the prior-evidence registry, ADRs 8.2.0003/8.2.0004
+   or `tests/equivalence/**`; a case-insensitive string scan of the citable file
+   (`_` and `-` interchangeable) is the second barrier.
 4. Curated items come from `docs/reports/dossier_register.toml`, parsed by the
    CLI (adapter in) into `DossierEntry` DTOs passed in the command; a malformed
    register is an error before the use case runs.

@@ -58,12 +58,19 @@ because its expectation took every `fact_oos_predictions|…` unit, including th
    `SilverContentMismatchError`, nothing written.
 4. The PDF sha256 may appear in the record only as informative.
 5. **Omissions:** an element of the catalog that the judged copy does not
-   persist (the candidate's Wilson band outside the gate, the paired native
-   series of the conformal figure, the aggregated Beta reference, bootstrap
-   intervals of I_f and s_f, the ACF confidence band, τ = 0.5 in the
-   calibration) is omitted, from a closed per-figure list fixed in concept 8.3
+   persist (the candidate's Wilson band outside the gate and on the seed mean,
+   the aggregated Beta reference, bootstrap intervals of I_f and s_f, the ACF
+   confidence band, τ = 0.5 in the calibration) is omitted, from a closed per-figure list fixed in concept 8.3
    D13 and tested; persisted per-seed values may be drawn as labelled
-   descriptive dispersion. Nothing is recomputed (doc §6.1 item 5).
+   descriptive dispersion. Nothing is recomputed (doc §6.1 item 5). The native
+   side of the native × conformal figure **is** persisted in the same mask
+   (Stage 7.2 comparison `descriptive_model_full_native_mask_seed_mean_counts_v1`,
+   concept 7.2 I14: conformal `n_evaluated` = native `n_observed` of the
+   `gold_calibration_table` row with `includes_degenerate = false`), so it is
+   drawn and that equality is checked; the aggregated I_f(h) is the persisted
+   aggregate row of `gold_h3_importance` (seed and permutation index null).
+   The sharpness widths are drawn in the MPIW mask (non-degenerate rows,
+   ADR 0.0.0011), so their mean equals the persisted MPIW.
 
 ## Alternatives considered
 

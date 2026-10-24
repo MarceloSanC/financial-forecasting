@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-24
 updated_at: 2026-10-24
 adr_id: 8.3.0003
-decision: matplotlib>=3.11,<3.12 becomes a direct dependency (lock keeps 3.11.0) confined to features/evaluation/adapters/out/plots by a new import-linter forbidden contract whose sources are every other module of the package (indirect imports allowed, so the composition root may wire the adapter), plus an AST test forbidding matplotlib.pyplot anywhere in src/; the renderer uses matplotlib.figure.Figure with the PDF backend inside rc_context (no pyplot, no global state) with pdf.fonttype 42 and savefig(format="pdf", metadata={"CreationDate": None}); only PDF is produced; sequential scales use cividis, series use a fixed model-to-colour colour-blind-safe cycle validated by the dataviz palette validator, with identity never by colour alone; labels are in Portuguese; outputs are versioned in docs/reports/figures/ and text/ is not touched.
+decision: matplotlib>=3.11,<3.12 becomes a direct dependency (lock keeps 3.11.0) confined to features/evaluation/adapters/out/plots by a new import-linter forbidden contract (source financial_forecasting, forbidden matplotlib, ignore_imports for the plots package only), plus an AST test forbidding matplotlib.pyplot anywhere in src/; the renderer uses matplotlib.figure.Figure with the PDF backend inside rc_context (no pyplot, no global state) with pdf.fonttype 42 and savefig(format="pdf", metadata={"CreationDate": None}); only PDF is produced; sequential scales use cividis, series use a fixed model-to-colour colour-blind-safe cycle validated by the dataviz palette validator, with identity never by colour alone; labels are in Portuguese; outputs are versioned in docs/reports/figures/ and text/ is not touched.
 context_stage: 8.3-plots-and-final-report
 bounded_context: evaluation
 ---
@@ -35,11 +35,11 @@ TCC template keeps images next to chapters, but writing the TCC is out of scope.
 
 1. `matplotlib>=3.11,<3.12` in `[project] dependencies` (minor pin, the lock
    pins the patch); import-linter `forbidden` contract
-   `evaluation-no-matplotlib-leak` whose `source_modules` list every module of
-   `financial_forecasting` except `features.evaluation.adapters.out.plots`
-   (including `adapters.out.reports`, `adapters.in`, other slices, `shared`,
-   `cli`, `composition_root`), with `allow_indirect_imports = true`, and a break
-   proof; an AST architecture test rejects `matplotlib.pyplot` in every `src/`
+   `evaluation-no-matplotlib-leak` with `source_modules = financial_forecasting`,
+   `forbidden_modules = matplotlib` and
+   `ignore_imports = financial_forecasting.features.evaluation.adapters.out.plots.** -> matplotlib`
+   (the `plots/__init__.py` does not import matplotlib; the project's
+   `unmatched_ignore_imports_alerting = error` stays), and a break proof; an AST architecture test rejects `matplotlib.pyplot` in every `src/`
    file, the plots adapter included.
 2. Renderer: `Figure` objects, PDF backend, `rc_context` with fixed fonts,
    sizes and `pdf.fonttype = 42`; `identity()` reports the matplotlib and
