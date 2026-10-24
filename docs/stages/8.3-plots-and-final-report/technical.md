@@ -1716,4 +1716,20 @@ mypy de `src/` verdes.
 mudança de `src/` pede revisão, `make check` e `GATE1` novos antes de recomeçar a Etapa R
 da R1 (linha `FAIL_SRC_CHANGED_SINCE_GATE1`).
 
+### 2026-10-24 — [measurement] Etapa R, novo `GATE1` depois do fix dos baselines pontuais — Claude (executor da Etapa R)
+**Contexto:** a linha `FAIL_SRC_CHANGED_SINCE_GATE1` pede, antes de recomeçar a Etapa R da R1,
+três coisas: revisão independente do fix, `make check` novo e `GATE1` novo.
+**Medição:**
+- Fix `040c4006`: revisão independente aprovada. Concept emendado em `fd3912f8`/`6effc3a9`/`272d5313`
+  (regra BP no D13). A sessão mestra fez um ensaio no dado real, e ele passou: 22 saídas, 2ª
+  geração idêntica, `find_forbidden` 0, `data/` intacto. O `omitted_models` foi
+  `[baseline_zero_return, baseline_historical_mean]`, só em `picp_mpiw_plot` e `sharpness_diagram`.
+  Esse ensaio foi descartado; nada dele foi commitado.
+- `make check` em `357e6d145c261dda85fc56c294ff6f241cf9878a`: `9269 passed, 30 skipped`,
+  cobertura 98,53 %, `EXIT=0` (log `make-check-83-1b.log` no scratchpad da sessão).
+- `GATE1 := 357e6d145c261dda85fc56c294ff6f241cf9878a` no `etapa-83.env`, e o `CODE_SRC` anterior
+  foi removido (a R1 grava o novo).
+**Razão:** destrava a Etapa R a partir da R1 com o mesmo `IMAGE_ID`
+(`sha256:b69a7620…8f45`). Este commit só toca o §7, fora do diff da R1.
+
 <!-- END: post-execution -->
