@@ -11,10 +11,15 @@ from __future__ import annotations
 import pytest
 from matplotlib import rc_context
 from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.collections import Collection
+from matplotlib.colors import to_rgba
+from matplotlib.container import BarContainer, ErrorbarContainer
 from matplotlib.figure import Figure
 from matplotlib.legend import Legend
+from matplotlib.lines import Line2D
 
 from financial_forecasting.features.evaluation.adapters.out.plots.matplotlib_figure_renderer import (  # noqa: E501
+    _BAND_FILLS,
     _LEGEND_WRAP,
     _RC,
     MatplotlibFigureRenderer,
@@ -112,11 +117,88 @@ def _spec(series: tuple[SeriesSpec, ...], panel_note: str | None = None) -> Figu
     )
 
 
-def test_distinct_series_get_distinct_looks_in_every_figure(specs: list[FigureSpec]) -> None:
+def _drawn(handle: object) -> tuple[object, ...]:
+    """O que o artista da série EFETIVAMENTE desenha (o que a legenda mostra).
+
+    Faixa → (cor de preenchimento com alpha, hachura); barra → (cor, hachura); linha/marca →
+    (cor, estilo de linha com o padrão de traço, marcador, preenchimento do marcador) —
+    marcador e preenchimento só contam quando há marcador desenhado.
+    """
+    if isinstance(handle, ErrorbarContainer):
+        handle = handle.lines[0]
+    if isinstance(handle, BarContainer):
+        patch = handle.patches[0]
+        return ("bar", to_rgba(patch.get_facecolor()), patch.get_hatch())
+    if isinstance(handle, Collection):
+        return ("fill", tuple(handle.get_facecolor()[0]), handle.get_hatch())
+    assert isinstance(handle, Line2D), type(handle)
+    marker = str(handle.get_marker())
+    drawn_marker = marker not in {"None", "none", "", " "}
+    linestyle = str(handle.get_linestyle())
+    dashes = getattr(handle, "_unscaled_dash_pattern", None) if linestyle != "None" else None
+    return (
+        "line",
+        to_rgba(handle.get_color()),
+        linestyle,
+        repr(dashes),
+        marker if drawn_marker else None,
+        str(handle.get_markerfacecolor()) if drawn_marker else None,
+    )
+
+
+def _drawn_by_label(spec: FigureSpec) -> dict[str, tuple[object, ...]]:
+    with rc_context(_RC):  # type: ignore[arg-type]
+        figure = MatplotlibFigureRenderer()._draw(spec)
+    drawn: dict[str, tuple[object, ...]] = {}
+    for ax in figure.get_axes():
+        for handle, text in zip(*ax.get_legend_handles_labels(), strict=True):
+            drawn.setdefault(text, _drawn(handle))
+    return drawn
+
+
+def test_distinct_series_are_drawn_distinctly_in_every_figure(specs: list[FigureSpec]) -> None:
+    """Duas entradas da legenda nunca têm a mesma marca desenhada (inclui faixas aninhadas)."""
     for spec in specs:
-        looks = figure_looks(spec)
-        keys = [look.key() for look in looks.values()]
-        assert len(keys) == len(set(keys)), spec.figure_id
+        drawn = _drawn_by_label(spec)
+        assert len(drawn) == len(legend_labels(spec)), spec.figure_id
+        looks = list(drawn.values())
+        assert len(looks) == len(set(looks)), (spec.figure_id, drawn)
+
+
+def test_nested_bands_of_one_model_are_distinguishable() -> None:
+    bands = tuple(
+        SeriesSpec(
+            series_id=f"band|{i}",
+            kind=SeriesKind.BAND,
+            name=f"faixa {i}",
+            model="tft_quantile",
+            label=_DESCRIPTIVE,
+            x=(0.1, 0.5),
+            y=(None, None),
+            low=(-0.1 * (3 - i), -0.1 * (3 - i)),
+            high=(0.1 * (3 - i), 0.1 * (3 - i)),
+        )
+        for i in range(len(_BAND_FILLS) + 1)
+    )
+    drawn = list(_drawn_by_label(_spec(bands)).values())
+    assert len(set(drawn[: len(_BAND_FILLS)])) == len(_BAND_FILLS)
+
+
+def test_fan_chart_realized_line_does_not_hide_the_median(specs: list[FigureSpec]) -> None:
+    """y_t (sem modelo) fino e abaixo da mediana do candidato, nos dois horizontes."""
+    fan = next(s for s in specs if s.figure_id == "oos_fan_chart")
+    with rc_context(_RC):  # type: ignore[arg-type]
+        figure = MatplotlibFigureRenderer()._draw(fan)
+    for ax in figure.get_axes():
+        lines = {str(line.get_label()): line for line in ax.get_lines()}
+        median = next(v for k, v in lines.items() if k.startswith("mediana"))
+        realized = next(v for k, v in lines.items() if k.startswith("realizado"))
+        assert realized.get_zorder() < median.get_zorder()
+        assert realized.get_linewidth() < median.get_linewidth()
+        assert realized.get_linestyle() == "-"
+        bands = [c for c in ax.collections if str(c.get_label()).startswith("faixa")]
+        assert bands
+        assert all(c.get_zorder() < realized.get_zorder() for c in bands)
 
 
 def test_same_model_series_keep_the_model_color_and_change_marker() -> None:
@@ -147,6 +229,52 @@ def test_footer_does_not_repeat_a_panel_note_equal_to_a_figure_note() -> None:
     lines = footer_lines(spec)
     assert lines.count("horizonte-invariante") == 1
     assert not any("horizonte-invariante: horizonte-invariante" in line for line in lines)
+
+
+def _two_panel_spec(notes: tuple[str | None, str | None], series_note: str | None) -> FigureSpec:
+    entry = FIGURE_CATALOG["quantile_score_plot"]
+    series = SeriesSpec(
+        series_id="a",
+        kind=SeriesKind.POINTS,
+        name="peso",
+        model=None,
+        label=ElementLabel(status=StatusLabel.DESCRIPTIVE, note=series_note),
+        x=(0.1, 0.5),
+        y=(0.2, 0.3),
+    )
+    panels = tuple(
+        PanelSpec(
+            panel_id=f"h{horizon}",
+            scope=PanelScope.HORIZON,
+            horizon=horizon,
+            title=f"h+{horizon}",
+            x_label="x",
+            y_label="y",
+            series=(series,),
+            label=ElementLabel(status=StatusLabel.DESCRIPTIVE, note=note),
+        )
+        for horizon, note in zip((1, 7), notes, strict=True)
+    )
+    return FigureSpec(
+        figure_id="quantile_score_plot",
+        title=entry.title,
+        panels=panels,
+        notes=(),
+        omissions=entry.omissions,
+    )
+
+
+def test_panel_note_shared_by_panels_names_every_panel() -> None:
+    lines = footer_lines(_two_panel_spec(("nota comum", "nota comum"), "nota da série"))
+    assert "h+1, h+7: nota comum" in lines
+    assert not any(line.startswith("h+1: nota comum") for line in lines)
+    assert "h+1, h+7 — peso: nota da série" in lines
+
+
+def test_distinct_panel_notes_keep_their_own_panel() -> None:
+    lines = footer_lines(_two_panel_spec(("nota um", "nota sete"), None))
+    assert "h+1: nota um" in lines
+    assert "h+7: nota sete" in lines
 
 
 def test_conformal_note_of_every_panel_appears_once(specs: list[FigureSpec]) -> None:

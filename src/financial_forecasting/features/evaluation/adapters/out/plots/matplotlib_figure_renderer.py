@@ -11,7 +11,10 @@ O adapter **só desenha o que a spec traz** — um eixo por painel, uma marca po
 Identidade nunca só por cor: mapa **fixo** modelo → (cor, marcador, estilo de linha), cores
 da ordem categórica da skill `dataviz` (`references/palette.md`, validadas pelo
 `validate_palette.js --mode light`, technical §7); modelo fora do mapa → `ValueError`
-(nenhuma cor gerada). Escalas sequenciais e o heatmap do DM em `cividis`. Rótulos em PT; o
+(nenhuma cor gerada). Séries distintas nunca coincidem no atributo efetivamente desenhado
+do seu tipo (`figure_looks`): faixas aninhadas por alpha/hachura, linhas por estilo, marcas
+por marcador; a linha sem modelo (o observado) é fina e fica abaixo das linhas de modelo.
+Escalas sequenciais e o heatmap do DM em `cividis`. Rótulos em PT; o
 estatuto de cada painel no título e de cada série na legenda; notas e omissões no rodapé.
 
 O processo precisa de `MPLCONFIGDIR` gravável (o container usa `/tmp`); o adapter não lê
@@ -54,6 +57,8 @@ MODEL_STYLES: Final[Mapping[str, Style]] = {
 """Modelo → (cor, marcador, estilo): as sete primeiras cores da ordem categórica fixa."""
 
 _NEUTRAL: Final = "#4d4d4d"
+_NEUTRALS: Final = (_NEUTRAL, "#8c8c8c")
+"""Tons das séries sem modelo, alternados por tipo de série (escuro, médio; ambos ≥ 3:1)."""
 _MARKERS: Final = ("o", "s", "^", "D", "v", "P", "X", "<", ">", "p", "h", "*", "d", "H", "8")
 """Marcadores na ordem de troca quando duas séries distintas cairiam no mesmo estilo."""
 _REFERENCE_LINESTYLES: Final[tuple[object, ...]] = (
@@ -64,6 +69,24 @@ _REFERENCE_LINESTYLES: Final[tuple[object, ...]] = (
     (0, (1, 3)),
     (0, (3, 1, 1, 1)),
 )
+_LINESTYLES: Final[tuple[object, ...]] = ("-", *_REFERENCE_LINESTYLES)
+"""Estilos de linha na ordem de troca quando duas linhas cairiam na mesma (cor, estilo)."""
+_BAND_FILLS: Final[tuple[tuple[float, str | None], ...]] = (
+    (0.12, None),
+    (0.24, None),
+    (0.36, None),
+    (0.12, "////"),
+    (0.12, "xxxx"),
+    (0.12, "...."),
+)
+"""(alpha, hachura) das faixas na ordem da spec: faixas aninhadas ficam distinguíveis."""
+_OBSERVED_WIDTH: Final = 0.4
+"""Linha sem modelo (o observado, ex. y_t): fina e abaixo das linhas de modelo."""
+_Z_BAND: Final = 1.0
+_Z_OBSERVED: Final = 2.0
+_Z_MODEL_LINE: Final = 3.0
+_DODGE: Final = 0.3
+"""Largura total do deslocamento lateral dos intervalos de um painel categórico."""
 _SEQUENTIAL: Final = "cividis"
 _WIDTH_IN: Final = 6.3
 _PANEL_HEIGHT_IN: Final = 2.6
@@ -106,64 +129,101 @@ def _label(series: SeriesSpec) -> str:
 
 
 class Look:
-    """O estilo resolvido de uma série: cor, marcador, linha e marcador vazado."""
+    """O estilo resolvido de uma série: cor, marcador, linha, vazado e preenchimento."""
 
-    def __init__(self, color: str, marker: str, linestyle: object, *, hollow: bool) -> None:
+    def __init__(  # noqa: PLR0913 — os atributos desenhados de uma série
+        self,
+        color: str,
+        marker: str,
+        linestyle: object,
+        *,
+        hollow: bool,
+        alpha: float = 0.2,
+        hatch: str | None = None,
+    ) -> None:
         self.color = color
         self.marker = marker
         self.linestyle = linestyle
         self.hollow = hollow
+        self.alpha = alpha
+        self.hatch = hatch
 
     @property
     def face(self) -> str:
         return "none" if self.hollow else self.color
 
-    def key(self) -> tuple[str, str, bool]:
-        return self.color, self.marker, self.hollow
+
+def _base_style(series: SeriesSpec, neutrals: dict[SeriesKind, int]) -> Style:
+    """(cor, marcador, linha) de partida: o mapa fixo do modelo, ou um tom neutro.
+
+    Séries sem modelo alternam os tons de `_NEUTRALS` na ordem em que aparecem dentro do
+    mesmo tipo (Δ_f da permutação e do LOCO do H3 deixam de ser o mesmo cinza).
+    """
+    if series.model is not None:
+        if series.model not in MODEL_STYLES:
+            raise ValueError(f"models without a fixed style: {[series.model]}")
+        return MODEL_STYLES[series.model]
+    index = neutrals.get(series.kind, 0)
+    neutrals[series.kind] = index + 1
+    linestyle = "-" if series.kind is SeriesKind.LINE else "--"
+    return _NEUTRALS[index % len(_NEUTRALS)], _MARKERS[0], linestyle
 
 
 def figure_looks(spec: FigureSpec) -> dict[str, Look]:
     """Rótulo da legenda → estilo, para a figura inteira (o mesmo rótulo, o mesmo estilo).
 
-    A cor de um modelo é a do mapa fixo (identidade do modelo); série sem modelo usa o
-    neutro. Duas séries **distintas** nunca ficam com o mesmo (cor, marcador, vazado): a
-    seguinte troca de marcador (na ordem de `_MARKERS`) e, esgotados, passa a vazado. As
-    referências (linhas sem marcador) também trocam o estilo de linha.
+    A cor de um modelo é a do mapa fixo (identidade do modelo); série sem modelo usa um tom
+    neutro. Duas séries **distintas** nunca ficam com o mesmo atributo **desenhado** do seu
+    tipo: faixa → (cor, alpha, hachura), trocando na ordem de `_BAND_FILLS` (faixas
+    aninhadas do mesmo modelo); linha → (cor, estilo), trocando o estilo; referência →
+    estilo de linha; marca com marcador → (cor, marcador, vazado), trocando de marcador
+    (ordem de `_MARKERS`) e, esgotados, passando a vazado — os tons neutros contam como uma
+    cor só, então duas séries sem modelo nunca se distinguem só pelo tom.
 
     Raises:
         ValueError: série de um modelo fora de `MODEL_STYLES`.
     """
     looks: dict[str, Look] = {}
-    used: set[tuple[str, str, bool]] = set()
+    used: set[tuple[object, ...]] = set()
     used_lines: list[object] = []
+    neutrals: dict[SeriesKind, int] = {}
     for panel in spec.panels:
         for series in panel.series:
             label = _label(series)
             if series.kind is SeriesKind.CELLS or label in looks:
                 continue
-            if series.model is not None:
-                if series.model not in MODEL_STYLES:
-                    raise ValueError(f"models without a fixed style: {[series.model]}")
-                color, marker, linestyle = MODEL_STYLES[series.model]
-            else:
-                color, marker, linestyle = _NEUTRAL, _MARKERS[0], "--"
-            line: object = linestyle
+            color, marker, linestyle = _base_style(series, neutrals)
+            if series.kind is SeriesKind.BAND:
+                alpha, hatch = next(
+                    (f for f in _BAND_FILLS if ("band", color, *f) not in used), _BAND_FILLS[-1]
+                )
+                used.add(("band", color, alpha, hatch))
+                looks[label] = Look(color, marker, "-", hollow=False, alpha=alpha, hatch=hatch)
+                continue
+            if series.kind is SeriesKind.LINE:
+                order = [linestyle, *(ls for ls in _LINESTYLES if ls != linestyle)]
+                line = next((ls for ls in order if ("line", color, ls) not in used), linestyle)
+                used.add(("line", color, line))
+                looks[label] = Look(color, marker, line, hollow=False)
+                continue
+            line = linestyle
             if series.kind is SeriesKind.REFERENCE:
                 line = next((ls for ls in _REFERENCE_LINESTYLES if ls not in used_lines), "--")
                 used_lines.append(line)
-            order = [marker, *(m for m in _MARKERS if m != marker)]
+            # os tons neutros contam como uma cor só: o marcador distingue sem depender do tom
+            hue = color if series.model is not None else _NEUTRAL
+            markers = [marker, *(m for m in _MARKERS if m != marker)]
             choice = next(
                 (
                     (m, hollow)
                     for hollow in (False, True)
-                    for m in order
-                    if (color, m, hollow) not in used
+                    for m in markers
+                    if ("mark", hue, m, hollow) not in used
                 ),
                 (marker, True),
             )
-            look = Look(color, choice[0], line, hollow=choice[1])
-            used.add(look.key())
-            looks[label] = look
+            used.add(("mark", hue, *choice))
+            looks[label] = Look(color, choice[0], line, hollow=choice[1])
     return looks
 
 
@@ -207,24 +267,41 @@ def footer_lines(spec: FigureSpec) -> list[str]:
     Nota de painel ou de série igual a uma nota já escrita não se repete (o texto
     "cobertura empírica (não garantida)" de todo painel do conformal sai uma vez; a nota do
     painel da VSN igual à da figura não vira "horizonte-invariante: horizonte-invariante").
+    A mesma nota em vários painéis sai uma vez, prefixada por todos eles ("h+1, h+7: …");
+    idem a nota da mesma série em vários painéis ("h+1, h+7 — série: …").
     """
     texts: dict[str, None] = dict.fromkeys(spec.notes)
     texts.update(dict.fromkeys(f"omissão declarada: {o}" for o in spec.omissions))
     seen = set(spec.notes)
+    panel_notes: dict[str, list[str]] = {}
     for panel in spec.panels:
         note = panel.label.note
         if note and note not in seen:
-            seen.add(note)
-            texts.setdefault(f"{panel.title}: {note}")
+            panel_notes.setdefault(note, []).append(panel.title)
+    for note, titles in panel_notes.items():
+        texts.setdefault(f"{', '.join(dict.fromkeys(titles))}: {note}")
+    seen.update(panel_notes)
+    series_notes: dict[tuple[str, str], list[str]] = {}
     for panel in spec.panels:
         for series in panel.series:
             note = series.label.note
             if note and note not in seen:
-                texts.setdefault(f"{panel.title} — {series.name}: {note}")
+                series_notes.setdefault((series.name, note), []).append(panel.title)
+    for (name, note), titles in series_notes.items():
+        texts.setdefault(f"{', '.join(dict.fromkeys(titles))} — {name}: {note}")
     lines: list[str] = []
     for text in texts:
         lines += textwrap.wrap(text, _WRAP) or [""]
     return lines
+
+
+def _dodged(xs: list[float], series: SeriesSpec, group: Sequence[SeriesSpec]) -> list[float]:
+    """Intervalos de várias séries na mesma categoria: lado a lado, como as barras."""
+    if len(group) < 2 or not all(isinstance(v, str) for v in series.x):  # noqa: PLR2004
+        return xs
+    step = _DODGE / (len(group) - 1)
+    offset = (group.index(series) - (len(group) - 1) / 2) * step
+    return [x + offset for x in xs]
 
 
 def _legend_height(labels: Sequence[str]) -> float:
@@ -330,7 +407,7 @@ class MatplotlibFigureRenderer:
         axes.set_ylabel(panel.y_label)
         groups = {
             kind: [s for s in panel.series if s.kind is kind]
-            for kind in (SeriesKind.BOXES, SeriesKind.BARS)
+            for kind in (SeriesKind.BOXES, SeriesKind.BARS, SeriesKind.INTERVAL)
         }
         for series in panel.series:
             self._series(axes, series, positions, looks, groups)
@@ -367,16 +444,38 @@ class MatplotlibFigureRenderer:
         high = None if series.high is None else [_number(v) for v in series.high]
         kind = series.kind
         if kind is SeriesKind.LINE:
-            axes.plot(xs, ys, color=color, linestyle=linestyle, label=label)
+            # sem modelo = o observado (y_t): fino e abaixo, nunca cobre a linha de um modelo
+            observed = series.model is None
+            axes.plot(
+                xs,
+                ys,
+                color=color,
+                linestyle=linestyle,
+                linewidth=_OBSERVED_WIDTH if observed else None,
+                zorder=_Z_OBSERVED if observed else _Z_MODEL_LINE,
+                label=label,
+            )
             if low is not None and high is not None:
-                axes.fill_between(xs, low, high, color=color, alpha=0.15, linewidth=0)
+                axes.fill_between(
+                    xs, low, high, color=color, alpha=0.15, linewidth=0, zorder=_Z_BAND
+                )
         elif kind is SeriesKind.POINTS:
             self._points(axes, xs, ys, low, high, (color, marker, face), label)
         elif kind is SeriesKind.BAND:
             axes.fill_between(
-                xs, low or ys, high or ys, color=color, alpha=0.2, linewidth=0, label=label
+                xs,
+                low or ys,
+                high or ys,
+                facecolor=color,
+                edgecolor=color if look.hatch else "none",
+                alpha=look.alpha,
+                hatch=look.hatch,
+                linewidth=0,
+                zorder=_Z_BAND,
+                label=label,
             )
         elif kind is SeriesKind.INTERVAL:
+            xs = _dodged(xs, series, groups[SeriesKind.INTERVAL])
             self._points(axes, xs, ys, low, high, (color, marker, face), label)
         elif kind is SeriesKind.BOXES:
             self._boxes(axes, series, xs, color, label, groups[SeriesKind.BOXES])
