@@ -1878,4 +1878,11 @@ agora exige os dois finitos (fail-closed). Testes com y_ant = ±inf/NaN na regra
 mutação mH (guarda removida): `1 failed, 73 passed, 1 skipped`; T1 `tests/equivalence
 tests/architecture --dist loadgroup`: `453 passed, 1 skipped`; ruff e mypy verdes.
 
+### 2026-10-24 — [measurement] E4 — emenda B3 aprovada, `make check` extra e `GATE1` novo — Claude (executor das Etapas)
+**Contexto:** a revisão independente aprovou a emenda B3 (4 achados fechados). `make check` extra
+sobre `49604d25` (coordenadora): `EXIT=0`, `8971 passed, 30 skipped`, coverage 98,68 %.
+**Razão:** `GATE1 := 49604d250a2eb0824a58b934a23c2561252434fd` no `etapa-82.env`. A E4 recomeça
+do passo 1 e a E5 regenera o `DECLARED` do novo relatório; a E4 anterior (`1a9eeb87`) e a E5
+(`d37fb097`, `a0afccd4`) ficam substituídas.
+
 <!-- END: post-execution -->
