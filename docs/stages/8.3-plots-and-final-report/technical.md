@@ -1975,4 +1975,32 @@ caminhos de `docs/reports/`, deixa `data/` intacto, e o citável passa na
 `CITABLE_FORBIDDEN_PATTERNS`. A geração não ergueu `ReportSourceMismatchError`, então vale a
 consistência do sharpness com o `mpiw`.
 
+### 2026-10-24 — [measurement] Etapa R (3ª tentativa), R3: segunda geração depois do commit (I8) — Claude (executor da Etapa R)
+**Contexto:** a R4 manda colar aqui as saídas literais da R3: as duas listagens,
+`SAME_SHA256SUM`, `REGEN_EQUALS_COMMIT` e `DATA_INTACT`. As saídas da geração 1 foram
+commitadas em `5130da7b`.
+**Medição:**
+- **Bloco R1 sobre `5130da7b`:** `WT_CLEAN`, `SRC_AS_GATE1`, `REGISTER_COMMITTED`, `COHORT_TAG_OK`,
+  `ABLATION_COHORT_TAG_OK`. Também `CODE_SRC_SAME` (`a92759b6…`), `IMAGE_ID_SAME`
+  (`sha256:b69a7620…8f45`) e `NO_FF83`.
+- **Geração 2** (`ff83-gen2`, mesma imagem, mesmos argumentos): `gen2.state` = `0 false`,
+  `GEN2_FIGURES_10`. As 12 linhas de contrato do `gen2.out` são iguais às do `gen1.out`
+  (`generation_digest`, os dez `data_digest`, os dossiês).
+- **Comparação:**
+  - `out-gen2.sha256sum` é idêntico, linha a linha, ao `out-gen1.sha256sum` colado na entrada
+    anterior (22 linhas). O sha256 das duas listagens é o mesmo:
+    `62813460e984f2dac2a3fc52f487e816c03b1ab3d016a57c19843b98f36026df`.
+  - `data/cohorts/aapl` tem 355 arquivos. O sha256 da listagem antes e depois da geração 2 é o
+    mesmo: `fc79ab29410af7d88e0b3e9ade31b9a2b87382e9f4a266d540470935a9ed4e6e`.
+```
+SAME_SHA256SUM
+REGEN_EQUALS_COMMIT
+DATA_INTACT
+```
+**Razão:** prova da segunda metade do A14 e do I8. A segunda geração, rodada depois do
+commit com o mesmo `code.src` e a mesma imagem, reproduz byte a byte os 22 artefatos
+commitados, e `data/` fica só leitura. A consistência do sharpness com o `mpiw` vale no dado
+real, porque nenhuma das duas gerações ergueu `ReportSourceMismatchError`. O 2º `make check`
+(de saída) fica com a sessão mestra.
+
 <!-- END: post-execution -->
