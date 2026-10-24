@@ -51,7 +51,9 @@ depends_on: [8.2-equivalence-audit]
   unidade** contra o `silver_content` do manifesto julgado (D4). Nunca
   `current/`, nunca a geração reproduzida, nunca re-treino.
 - **Rótulo de estatuto por elemento** (P8-ROT): confirmatório só nos
-  elementos da árvore pré-registrada e só nos horizontes em que H1 passa;
+  elementos da árvore pré-registrada, nos horizontes em que se aplicam — as
+  caudas do gate H1 em todo horizonte (passe ou reprove), a linha do DM (H2)
+  só onde H1 passa;
   descritivo e exploratório marcados; frases obrigatórias de H3, do
   conformal, da VSN, do PICP × MPIW, do sharpness, do reliability e do fan
   chart (doc §2.3, §6.2).
@@ -321,14 +323,18 @@ aponta.
   do domínio (DM, Holm, MCS, Wilson, gate H1, potência, ACF, CUSUM, Beta).
 - **I4 — Confirmatório só onde a árvore se aplica.** Calibração: as caudas
   0,1/0,9 do candidato na variante do gate, a banda 97,5 % e o poder vêm de
-  `verdict.horizons[h].h1` e `profile.horizons[h].power` do scorecard. DM:
+  `verdict.horizons[h].h1` e `profile.horizons[h].power` do scorecard e são
+  **confirmatórios em todo horizonte, passe ou reprove** — o gate H1 é o
+  próprio elemento confirmatório (doc §2.3; §6.2, linha do reliability, sem
+  condição). DM:
   p bruto, `adjusted_p_value` e `rejected` vêm de `gold_dm_results` na linha
   `variance_estimator = "rectangular"` (estimador primário, ADR 6.5.0006),
   `candidate = tft_quantile`, comparadores da família; `adjusted_p_value` e
   `rejected` são **conferidos** contra `profile.horizons[h].dm` (estimador
-  retangular) do scorecard — divergência → erro, nada escrito. O rótulo
-  confirmatório vale **só** onde `verdict.horizons[h].h1.passed`; onde H1
-  reprova, a linha do DM é "descritivo (perfil) — H2 não aplicável".
+  retangular) do scorecard — divergência → erro, nada escrito. Para a linha
+  do DM (H2), e só para ela, o rótulo confirmatório vale **só** onde
+  `verdict.horizons[h].h1.passed`; onde H1 reprova, a linha do DM é
+  "descritivo (perfil) — H2 não aplicável" (doc §6.2, linha do DM).
 - **I5 — Por horizonte.** Nenhuma série ou número mistura horizontes.
 - **I6 — Fan chart com a seed pré-declarada.** A seed é a primeira de
   `[seeds].tft_quantile` da revisão julgada (r3: `[1, …, 10]` → **seed 1**;
@@ -641,7 +647,8 @@ pelo humano e está ancorada (D9).
   `fact_permuted_predictions`/`fact_vsn_weights` com o mesmo `run_id` do
   candidato → passa.
 - [ ] **A5 — Rótulos.** Com scorecard falso em que H1 passa em h+1 e reprova
-  em h+7: elementos confirmatórios só em h+1, linha do DM de h+7
+  em h+7: as caudas do gate (com banda 97,5 % e poder) são confirmatórias nos
+  **dois** horizontes; a linha do DM é confirmatória só em h+1 e, em h+7,
   "descritivo (perfil) — H2 não aplicável"; as frases obrigatórias do I11
   presentes nas figuras certas — teste unitário.
 - [ ] **A6 — Nenhum teste novo.** Teste de importação: o módulo de montagem
@@ -769,6 +776,7 @@ no builder, da convenção de `differential` (D14).
 | A17 frágil (r2) | corrigido: visibilidade pela fonte (ponteiros proibidos no parser) + strings como 2ª barreira, sem caixa e com `_`/`-` iguais |
 | DT-5 menores (r2): VSN, banda do conformal | corrigido: `kind = family`; `band_level = 0,95` |
 | CA-6 forma (r2) | corrigido: `source_modules = financial_forecasting` + `ignore_imports` do `plots.**` |
+| Checkpoint C — caudas do gate só onde H1 passa (contradição com doc §2.3/§6.2) | corrigido (revision-from-execution): caudas do gate confirmatórias em todo horizonte; restrição a H1 aprovado só na linha do DM (P8-ROT, I4, A5) |
 | A12 "[finding] aberto" (r2) | corrigido: definição no A12 |
 | CA-2 evidência anterior no dossiê | corrigido: arquivo interno separado (D8, I12, A17); `reproduction_audit.md` §5 não apontado, limite no interno, sem editar a 8.2 |
 | CA-3 esperado do silver | corrigido: I2 por par (tabela, `run_id`), hash antes do filtro por split, A4; ADR 8.3.0002 item 3 emendado |
