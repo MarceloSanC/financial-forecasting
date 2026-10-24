@@ -415,6 +415,27 @@ def test_native_picp_mpiw_from_metrics_model_full(world: ReportWorld) -> None:
     )[0]["value"]
     assert coverage.y[coverage.text.index("PICP 0,25-0,75, seed 2")] == picp  # type: ignore[union-attr]
 
+    # CC2-3: a média nativa sai dos descritores model_full (a máscara do conformal), não
+    # dos common — no fake os dois diferem, então ler a amostra errada muda o ponto.
+    def descriptor(sample: str, metric: str, low: float) -> object:
+        return next(
+            d["mean"]
+            for d in world.horizon("profile", 1)["descriptors"]  # type: ignore[attr-defined]
+            if d["model"] == _CANDIDATE
+            and d["sample"] == sample
+            and d["metric"] == metric
+            and d["level_low"] == low
+        )
+
+    width_mean = _panel_series(spec, "h1_largura")["native|seed_mean"]
+    coverage_mean = _panel_series(spec, "h1_cobertura")["native|seed_mean"]
+    mpiw_mean = width_mean.y[width_mean.x.index("MPIW 0,1-0,9")]
+    picp_mean = coverage_mean.y[coverage_mean.x.index("PICP 0,25-0,75")]
+    assert mpiw_mean == descriptor("model_full", "mpiw", 0.1)
+    assert mpiw_mean != descriptor("common", "mpiw", 0.1)
+    assert picp_mean == descriptor("model_full", "picp", 0.25)
+    assert picp_mean != descriptor("common", "picp", 0.25)
+
 
 @pytest.mark.unit
 def test_n_evaluated_differs_from_n_observed_raises(world: ReportWorld) -> None:
