@@ -104,15 +104,20 @@ def value(*parts: object) -> float:
     return round(0.05 + 0.9 * int(digest[:8], 16) / 0xFFFFFFFF, 6)
 
 
-def report_plan() -> Preregistration:
-    """O r3 sintético com as seeds `[1, 2]` e dois pares simétricos."""
+def report_payload() -> dict[str, object]:
+    """O payload r3 sintético com as seeds `[1, 2]` e dois pares simétricos."""
     payload = r3_payload()
     payload["quantile_levels"] = list(LEVELS)
     payload["seeds"] = {**payload["seeds"], "tft_quantile": list(CANDIDATE_SEEDS)}  # type: ignore[dict-item]
     conformal = dict(payload["conformal"])  # type: ignore[call-overload]
     conformal["pairs"] = [[0.1, 0.9], [0.25, 0.75]]
     payload["conformal"] = conformal
-    return Preregistration.from_mapping(payload)
+    return payload
+
+
+def report_plan() -> Preregistration:
+    """O plano de `report_payload()`."""
+    return Preregistration.from_mapping(report_payload())
 
 
 def seeds_of(plan: Preregistration, model: str) -> tuple[Seed, ...]:
@@ -698,14 +703,23 @@ def make_scorecard(
     }
 
 
-def make_world(h1_passed: Mapping[int, bool] | None = None) -> ReportWorld:
-    """O mundo padrão: H1 passa em h+1 e reprova em h+7."""
-    plan = report_plan()
-    command = refresh_command_from(plan, REFERENCE)
+def make_world(
+    h1_passed: Mapping[int, bool] | None = None,
+    *,
+    plan: Preregistration | None = None,
+    reference: str = REFERENCE,
+) -> ReportWorld:
+    """O mundo padrão: H1 passa em h+1 e reprova em h+7.
+
+    `plan`/`reference` trocam o plano e a referência (o use case da Task 10 precisa da
+    referência calculada de uma cadeia r0-r3 real).
+    """
+    plan = report_plan() if plan is None else plan
+    command = refresh_command_from(plan, reference)
     base: Row = {
         "asset": command.partition.asset,
         "parent_sweep_id": command.partition.parent_sweep_id,
-        "preregistration_ref": REFERENCE,
+        "preregistration_ref": reference,
     }
     rows: dict[str, list[Row]] = {name: [] for name in GOLD_SCHEMAS}
     rows[GOLD_METRICS_BY_RUN.name] = _metrics_rows(plan, base)
@@ -719,7 +733,9 @@ def make_world(h1_passed: Mapping[int, bool] | None = None) -> ReportWorld:
     rows[GOLD_DIFFERENTIAL_ACF.name] = acf
     rows.update(_h3_rows(plan, base))
     passed = {1: True, 7: False} if h1_passed is None else dict(h1_passed)
-    return ReportWorld(plan=plan, rows=rows, scorecard=make_scorecard(plan, rows, passed))
+    scorecard = make_scorecard(plan, rows, passed)
+    scorecard["preregistration_ref"] = reference
+    return ReportWorld(plan=plan, rows=rows, scorecard=scorecard, reference=reference)
 
 
 # --------------------------------------------------------------------------------------

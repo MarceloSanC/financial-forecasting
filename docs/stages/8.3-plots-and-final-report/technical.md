@@ -1431,4 +1431,14 @@ que uma célula de tabela Markdown não transcreve byte a byte.
 **Razão:** reversível barato; dono único do `result_digest` (CB-5) e transcrição byte a
 byte do D9.
 
+### 2026-10-24 — [deviation] Task 10, `committed_records` e o mundo parametrizável — Claude (executor)
+**Contexto:** o use case precisa do `JudgedRecord` da referência para o dossiê (commit,
+tag, comentário), e o teste do use case precisa de uma cadeia r0-r3 com referências
+**calculadas** e do `dataset_fingerprint` da grade sintética.
+**O que mudou:** `judged_copy.committed_records(...)` (o filtro que `sealed_matching_record`
+já fazia, agora público e dono único das duas chamadas); `_report_inputs.py` (fora da
+lista da Task 10) ganhou `report_payload()` e os parâmetros `plan`/`reference` de
+`make_world`, sem mudar o mundo padrão das Tasks 06-09.
+**Razão:** abaixo do limiar de pergunta — mesma regra, sem cópia; helper de teste.
+
 <!-- END: post-execution -->

@@ -121,6 +121,7 @@ GUARDED_MODULES = (
     f"{_USE_CASES}/report_silver.py",
     f"{_USE_CASES}/report_dossier.py",
     f"{_USE_CASES}/dossier_markdown.py",
+    f"{_USE_CASES}/generate_report_artifacts.py",
 )
 _SERVICES = "financial_forecasting.features.evaluation.domain.services"
 ALLOWED_SERVICES = frozenset({"series_assembly", "coverage_metrics", "degeneracy_gate"})
