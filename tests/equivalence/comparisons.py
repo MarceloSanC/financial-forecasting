@@ -6,7 +6,7 @@ domínio existentes — `pinball_score.mean_pinball`, `coverage_series.is_inside
 
 - **A1** (D13): todo ponto de T∩ com |y_novo - y_ant| ≤ 2⁻⁵³·|y_ant| (y_ant = 0 ⇒ igualdade
   exata); contagem fora e max |Δ|. Emenda B3 (ADR 8.2.0004): se TODO y_ant do horizonte é
-  exatamente representável em float32, a tolerância é o meio ulp de float32 no ponto;
+  finito e exatamente representável em float32, o critério é `float32(y_novo) == y_ant`;
 
 - **A2** (D12 e): |m_A - m_ant| ≤ max(1e-9·max(|m_A|, |m_ant|, u_q), 2⁻⁵³·|m_ant|), com u_q
   por grandeza (pinball = a própria pinball; MPIW = média de |largura|; PICP = 1); amostra
@@ -59,12 +59,18 @@ class RawStatus(StrEnum):
 
 @dataclass(frozen=True)
 class A1Result:
-    """A1 de um horizonte: pontos em T∩, fora da tolerância e max |Δ|."""
+    """A1 de um horizonte: pontos em T∩, fora da regra aplicada e max |Δ|.
+
+    `n_out_double` e `max_rel_diff` são informação: o resultado sob a regra ORIGINAL de
+    `double` do D13 e o max |Δ|/|y_ant| (y_ant ≠ 0), qualquer que seja a regra aplicada.
+    """
 
     n_points: int
     n_out: int
     max_abs_diff: float | None
     status: RawStatus
+    n_out_double: int = 0
+    max_rel_diff: float | None = None
 
 
 def a1_within(y_new: float, y_prior: float, *, half_ulp: float = A1_HALF_ULP) -> bool:
@@ -73,21 +79,30 @@ def a1_within(y_new: float, y_prior: float, *, half_ulp: float = A1_HALF_ULP) ->
 
 
 def float32_exact(y: float) -> bool:
-    """y é exatamente representável em float32 (`float(np.float32(y)) == y`; NaN ⇒ falso)."""
-    return float(np.float32(y)) == y
+    """y é finito e exatamente representável em float32 (`float(np.float32(y)) == y`)."""
+    return math.isfinite(y) and float(np.float32(y)) == y
 
 
-def a1_float32_tolerance(y_prior: float) -> float:
-    """Meio ulp de float32 no ponto: `np.spacing(np.float32(|y_ant|)) / 2`, em float64 (B3)."""
-    return float(np.spacing(np.float32(abs(y_prior)))) / 2
+def a1_float32_match(y_new: float, y_prior: float) -> bool:
+    """Critério float32 do A1 (B3): y_ant é o arredondamento de y_novo ao float32 mais próximo.
+
+    `float(np.float32(y_novo)) == y_ant` — o meio ulp com a direção certa (na fronteira de
+    expoente o ulp para baixo é metade do de cima) e o empate para o par (ties-to-even).
+    Fail-closed: y_novo ou y_ant não finito ⇒ falso.
+    """
+    if not (math.isfinite(y_new) and math.isfinite(y_prior)):
+        return False
+    with np.errstate(over="ignore"):
+        return float(np.float32(y_new)) == y_prior
 
 
 @dataclass(frozen=True)
 class A1Rule:
     """Regra do A1 de um horizonte (B3, ADR 8.2.0004): a de float32 só com a pré-condição.
 
-    `float32` vale sse há y_ant e TODO y_ant do horizonte é exatamente representável em
-    float32 (`n_exact == n_prior`); senão vale a regra de `double` do D13.
+    `float32` vale sse há y_ant e TODO y_ant do horizonte (não só os de T∩) é finito e
+    exatamente representável em float32 (`n_exact == n_prior`); senão vale a regra de
+    `double` do D13.
     """
 
     float32: bool
@@ -110,18 +125,28 @@ def a1_check(
 ) -> A1Result:
     """A1 sobre os pares (y_novo, y_ant) de T∩ de um horizonte.
 
-    Com `rule.float32` (pré-condição B3 satisfeita), |Δ| ≤ meio ulp de float32 no ponto;
-    senão, |Δ| ≤ `half_ulp`·|y_ant| (meio ulp do tipo registrado de y_ant, D13).
+    Com `rule.float32` (pré-condição B3 satisfeita), `float32(y_novo) == y_ant` ponto a
+    ponto (`a1_float32_match`); senão, |Δ| ≤ `half_ulp`·|y_ant| (meio ulp do tipo registrado
+    de y_ant, D13). Nas duas, um valor não finito conta como fora (fail-closed).
     """
     if not pairs:
         return A1Result(0, 0, None, RawStatus.EMPTY_INTERSECTION)
+    n_out_double = sum(not a1_within(new, prior, half_ulp=half_ulp) for new, prior in pairs)
     if rule is not None and rule.float32:
-        n_out = sum(abs(new - prior) > a1_float32_tolerance(prior) for new, prior in pairs)
+        n_out = sum(not a1_float32_match(new, prior) for new, prior in pairs)
     else:
-        n_out = sum(not a1_within(new, prior, half_ulp=half_ulp) for new, prior in pairs)
+        n_out = n_out_double
     max_abs_diff = max(abs(new - prior) for new, prior in pairs)
+    relative = [abs(new - prior) / abs(prior) for new, prior in pairs if prior != 0]
     status = RawStatus.WITHIN_TOLERANCE if n_out == 0 else RawStatus.OUT_OF_TOLERANCE
-    return A1Result(len(pairs), n_out, max_abs_diff, status)
+    return A1Result(
+        len(pairs),
+        n_out,
+        max_abs_diff,
+        status,
+        n_out_double=n_out_double,
+        max_rel_diff=max(relative) if relative else None,
+    )
 
 
 # --- A2 -----------------------------------------------------------------------------------

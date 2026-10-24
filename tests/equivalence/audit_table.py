@@ -34,7 +34,7 @@ import re
 import sys
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
 
@@ -51,6 +51,7 @@ from tests.equivalence.alignment import (
 )
 from tests.equivalence.comparisons import (
     U_Q_PICP,
+    A1Rule,
     RawStatus,
     a1_check,
     a1_rule,
@@ -464,6 +465,13 @@ def new_grid(official: OfficialSide, model: str) -> Grid:
 # --- A9 -----------------------------------------------------------------------------------
 
 
+def a1_rules(prior: PriorSide) -> dict[int, A1Rule]:
+    """B3 (ADR 8.2.0004): a regra do A1 por horizonte, com a pré-condição sobre TODO y_ant do
+    horizonte (não só T∩) — dono único para a A9 e para o rótulo pós-A1."""
+    y_prior = prior_realized(prior.tables[cs.GOLD_OOS])
+    return {h: a1_rule(list(y_prior.get(h, {}).values())) for h in cs.HORIZONS}
+
+
 def a9_rows(
     prior: PriorSide, official: OfficialSide
 ) -> tuple[list[AuditRow], dict[int, tuple[str, ...]]]:
@@ -480,15 +488,15 @@ def a9_rows(
     )
     common = intersection({h: list(ys) for h, ys in y_prior.items()}, new_ts)
     half_ulp = storage_half_ulp(prior, cs.GOLD_OOS, "y_true")
+    rules = a1_rules(prior)
     rows: list[AuditRow] = []
     for horizon in cs.HORIZONS:
         shared = common.get(horizon, ())
         pairs = [(official.realized.realized_at(ts), y_prior[horizon][ts]) for ts in shared]
-        # B3 (ADR 8.2.0004): a pré-condição olha TODO y_ant do horizonte, não só T∩
-        rule = a1_rule(list(y_prior.get(horizon, {}).values()))
+        rule = rules[horizon]
         result = a1_check(pairs, half_ulp=half_ulp, rule=rule)
         tolerance = (
-            f"meio ulp float32 no ponto ({cs.A1_FLOAT32_DEVIATION})"
+            f"float32(y_novo) == y_ant ({cs.A1_FLOAT32_DEVIATION})"
             if rule.float32
             else f"{half_ulp!r}·|y_ant|"
         )
@@ -502,6 +510,7 @@ def a9_rows(
                     f"T∩={result.n_points} out={result.n_out} max_abs_diff={result.max_abs_diff!r}"
                     f" float32_exact={rule.n_exact}/{rule.n_prior}"
                     f" rule={'float32' if rule.float32 else 'double'}"
+                    f" out_double={result.n_out_double} max_rel={result.max_rel_diff!r}"
                 ),
                 tolerance=tolerance,
                 status=result.status,
@@ -874,7 +883,20 @@ def compute_rows(prior: PriorSide, official: OfficialSide) -> tuple[AuditRow, ..
     a9, common = a9_rows(prior, official)
     # A1 fora para a comparação de modelo do horizonte; T∩ vazio tem a sua própria linha
     a1_ok = {row.horizon: row.status is not RawStatus.OUT_OF_TOLERANCE for row in a9}
-    return (*a9, *a10_rows(prior, a1_ok), *a11_rows(prior, official, common, a1_ok))
+    model = (*a10_rows(prior, a1_ok), *a11_rows(prior, official, common, a1_ok))
+    float32 = frozenset(h for h, rule in a1_rules(prior).items() if rule.float32)
+    return (*a9, *label_post_a1(model, float32))
+
+
+def label_post_a1(rows: Iterable[AuditRow], float32_horizons: frozenset[int]) -> list[AuditRow]:
+    """O rótulo de desvio pós-A1 (`A1_FLOAT32_DEVIATION`) na tolerância de toda linha A10/A11
+    de um horizonte cujo A1 foi julgado pela regra float32 (B3, ADR 8.2.0004)."""
+    return [
+        replace(row, tolerance=f"{row.tolerance} [{cs.A1_FLOAT32_DEVIATION}]")
+        if row.horizon in float32_horizons
+        else row
+        for row in rows
+    ]
 
 
 def compute(oracle_root: Path, official_root: Path) -> tuple[AuditRow, ...]:

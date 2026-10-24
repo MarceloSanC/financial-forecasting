@@ -481,7 +481,10 @@ def test_compute_rows_on_a_rich_synthetic_world() -> None:
         "A11/h7/stopped": RawStatus.NOT_REALIZABLE,  # A1 fora: a comparação de modelo para
     }
     assert status == expected
-    assert values["A9/h1/realized"] == "T∩=4 out=0 max_abs_diff=0.0 float32_exact=0/4 rule=double"
+    assert (
+        values["A9/h1/realized"]
+        == "T∩=4 out=0 max_abs_diff=0.0 float32_exact=0/4 rule=double out_double=0 max_rel=0.0"
+    )
     assert values["A9/h7/realized"].startswith("T∩=4 out=4 ")
     assert values["A11/h1/candidate/nominal_side_80"] == "novo=above anterior=inside"
     assert values["A11/h1/baseline_zero_return/dm"] == "novo=(-1, True) anterior=(1, False)"
@@ -604,11 +607,21 @@ def _a9_world(*, extra_y: float | None) -> tuple[PriorSide, OfficialSide]:
             "config_signature": "cfg",
             cs.TIMESTAMP_COLUMN: _F32_TS[i],
             "y_true": y,
+            "run_id": "BTSF_w2_s1-h1",
+            **{
+                c[variant]: lv - 0.5 for lv, c in cs.PRIOR_QUANTILE_COLUMNS.items() for variant in c
+            },
         }
         for i, y in enumerate(prior_y)
     ]
     prior = PriorSide(
-        tables={cs.GOLD_OOS: oos},
+        tables={
+            cs.GOLD_OOS: oos,
+            cs.GOLD_METRICS_BY_RUN: [],
+            cs.GOLD_CALIBRATION: [],
+            cs.MARGINAL_COVERAGE: [],
+            cs.DM_FAMILY_6: [],
+        },
         column_types={cs.GOLD_OOS: {"y_true": "double"}},
         source_ids=frozenset(),
     )
@@ -620,12 +633,40 @@ def _a9_world(*, extra_y: float | None) -> tuple[PriorSide, OfficialSide]:
             timestamps=_F32_TS[:4], returns=tuple(y + 2.0**-30 for y in _F32_Y)
         ),
         predictions=tuple(
-            {"model": "tft_quantile", "seed": 1, "horizon": 1, "target_timestamp": ts}
+            {
+                "model": "tft_quantile",
+                "seed": 1,
+                "horizon": 1,
+                "target_timestamp": ts,
+                "level": lv,
+                "value": lv - 0.4,
+            }
             for ts in _F32_TS[:4]
+            for lv in cs.COMMON_LEVELS
         ),
         dm_rows=(),
     )
     return prior, official
+
+
+@pytest.mark.usefixtures("e1_fixed")
+def test_post_a1_label_marks_model_rows_of_float32_horizons(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """B3: toda linha A10/A11 de um horizonte julgado pela regra float32 leva o rótulo."""
+    monkeypatch.setattr(cs, "COMMON_BASELINES", ())
+    rows = compute_rows(*_a9_world(extra_y=None))
+    model_h1 = [r for r in rows if r.horizon == 1 and not r.id.startswith("A9/")]
+    assert {r.id for r in model_h1} >= {"A11/h1/candidate/picp_80", "A11/h1/candidate/mpiw_80"}
+    assert all(r.tolerance.endswith(f"[{cs.A1_FLOAT32_DEVIATION}]") for r in model_h1)
+    others = [r for r in rows if r.horizon != 1]  # h=7 sem y_ant (regra double) e a linha geral
+    assert others
+    assert all(cs.A1_FLOAT32_DEVIATION not in r.tolerance for r in others)
+
+    rows = compute_rows(*_a9_world(extra_y=0.1))  # regra double, A1 fora: sem rótulo
+    assert all(cs.A1_FLOAT32_DEVIATION not in r.tolerance for r in rows)
+    stopped = next(r for r in rows if r.id == "A11/h1/stopped")
+    assert stopped.reason == "A1"
 
 
 @pytest.mark.usefixtures("e1_fixed")
@@ -659,7 +700,7 @@ def test_horizon_without_new_predictions_is_an_empty_intersection() -> None:
     assert by_id["A9/h7/realized"].status is RawStatus.EMPTY_INTERSECTION
     assert (
         by_id["A9/h7/realized"].values
-        == "T∩=0 out=0 max_abs_diff=None float32_exact=0/4 rule=double"
+        == "T∩=0 out=0 max_abs_diff=None float32_exact=0/4 rule=double out_double=0 max_rel=None"
     )
     stopped = by_id["A11/h7/stopped"]
     assert (stopped.status, stopped.reason) == (RawStatus.EMPTY_INTERSECTION, "empty_intersection")

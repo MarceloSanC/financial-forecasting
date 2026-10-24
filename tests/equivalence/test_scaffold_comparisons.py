@@ -28,7 +28,7 @@ from tests.equivalence.comparisons import (
     U_Q_PICP,
     RawStatus,
     a1_check,
-    a1_float32_tolerance,
+    a1_float32_match,
     a1_rule,
     a2_compare,
     a2_tolerance,
@@ -159,27 +159,52 @@ def test_storage_precision_comes_from_the_registered_type() -> None:
 
 
 def test_a1_float32_rule_needs_the_precondition() -> None:
-    """B3 (ADR 8.2.0004): meio ulp de float32 no ponto, só se todo y_ant é float32-exato."""
-    y = 1.0  # float32-exato; ulp de float32 em 1.0 = 2⁻²³
-    half = y + 2.0**-24  # |Δ| = meio ulp de float32: no limite
-    one_ulp = y + 2.0**-23  # |Δ| = 1 ulp de float32: fora
+    """B3 (ADR 8.2.0004): `float32(y_novo) == y_ant`, só se todo y_ant é float32-exato."""
+    y = 1.0  # float32-exato; ulp de float32 acima de 1.0 = 2⁻²³, abaixo = 2⁻²⁴
     exact = a1_rule([1.0, -0.5, 0.25])
     assert (exact.float32, exact.n_exact, exact.n_prior) == (True, 3, 3)
 
-    assert a1_check([(half, y)], rule=exact).status is RawStatus.WITHIN_TOLERANCE
-    assert a1_check([(one_ulp, y)], rule=exact).status is RawStatus.OUT_OF_TOLERANCE
-    assert a1_float32_tolerance(y) == 2.0**-24
-    assert a1_float32_tolerance(-y) == 2.0**-24
-    assert a1_float32_tolerance(0.0) == 2.0**-150  # meio do menor subnormal, sem underflow
+    def status(new: float, prior: float = y) -> RawStatus:
+        return a1_check([(new, prior)], rule=exact).status
+
+    within, out = RawStatus.WITHIN_TOLERANCE, RawStatus.OUT_OF_TOLERANCE
+    assert status(y + 2.0**-24) is within  # meio ulp acima: empate, vai ao par (1.0)
+    assert status(y + 2.0**-23) is out  # 1 ulp acima
+    # fronteira de expoente: abaixo de 1.0 o ulp é 2⁻²⁴; 1 - 2⁻²⁴ é float32 e não arredonda a 1.0
+    assert status(y - 2.0**-24) is out
+    assert status(y - 2.0**-25) is within  # meio ulp abaixo: empate, vai ao par (1.0)
+    # empate para o par: 1 + 2⁻²³ tem mantissa ímpar, 1 + 2⁻²³ + 2⁻²⁴ vai a 1 + 2⁻²²
+    assert status(1.0 + 2.0**-23 + 2.0**-24, 1.0 + 2.0**-23) is out
+    assert a1_float32_match(-(y + 2.0**-24), -y) is True
     assert float32_exact(0.1) is False
-    assert float32_exact(math.nan) is False
 
     # pré-condição falsa (um y_ant do horizonte não é float32-exato): regra de double (D13)
     mixed = a1_rule([1.0, 0.1])
     assert (mixed.float32, mixed.n_exact, mixed.n_prior) == (False, 1, 2)
-    assert a1_check([(half, y)], rule=mixed).status is RawStatus.OUT_OF_TOLERANCE
-    assert a1_check([(half, y)]).status is RawStatus.OUT_OF_TOLERANCE  # sem regra: double
+    assert a1_check([(y + 2.0**-24, y)], rule=mixed).status is out
+    assert a1_check([(y + 2.0**-24, y)]).status is out  # sem regra: double
     assert a1_rule([]).float32 is False
+
+
+def test_a1_float32_rule_is_fail_closed_on_non_finite_values() -> None:
+    """NaN/inf: fora da pré-condição (y_ant) e fora do critério (y_novo)."""
+    for bad in (math.nan, math.inf, -math.inf):
+        assert float32_exact(bad) is False
+        assert a1_rule([1.0, bad]).float32 is False
+        assert a1_float32_match(bad, 1.0) is False
+        assert a1_float32_match(1.0, bad) is False
+        assert a1_float32_match(bad, bad) is False  # inf == inf não conta como reprodução
+        exact = a1_rule([1.0])
+        assert a1_check([(bad, 1.0)], rule=exact).status is RawStatus.OUT_OF_TOLERANCE
+        assert a1_check([(bad, 1.0)]).status is RawStatus.OUT_OF_TOLERANCE
+
+
+def test_a1_reports_the_original_double_rule_and_relative_max() -> None:
+    """A linha A9 traz também o resultado sob a regra de `double` e o max |Δ|/|y_ant|."""
+    result = a1_check([(1.0 + 2.0**-24, 1.0), (0.5, 0.5)], rule=a1_rule([1.0, 0.5]))
+    assert result.status is RawStatus.WITHIN_TOLERANCE
+    assert (result.n_out, result.n_out_double) == (0, 1)
+    assert result.max_rel_diff == 2.0**-24
 
 
 def test_a1_reports_count_out_and_max() -> None:
