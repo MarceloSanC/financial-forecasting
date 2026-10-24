@@ -1840,4 +1840,38 @@ Complemento (`[8.2/task-10-extra]`, só testes): `a9_rows` sintético com T∩ f
 y_ant fora de T∩ = 0.1 → `rule=double`, `float32_exact=4/5`; mutação mD (pré-condição só sobre
 T∩): `2 failed, 69 passed, 1 skipped`; corrigido `71 passed, 1 skipped`.
 
+### 2026-10-23 — [deviation] B3 refinada — critério float32 exato, fail-closed e rótulo propagado — Claude (executor das Etapas)
+**Contexto:** a revisão independente de `fb9e29d2` não aprovou: (1) `np.spacing(np.float32(|y|))/2`
+é o meio ulp ACIMA; com |y_ant| potência de 2 o ulp para baixo é metade (y_ant = 1.0, y_novo =
+1 − 2⁻²⁴ passava); (2) NaN/inf sem tratamento explícito; (4) o rótulo pós-A1 só na linha A9 e sem
+o resultado da regra original. Decisão da coordenadora (`[decision:C]`, refinamento dentro da B3,
+ADR 8.2.0004). Correção (`[8.2/task-10-fix]`, só andaime):
+- critério float32 **exato**: `a1_float32_match(y_novo, y_ant)` = `float(np.float32(y_novo)) ==
+  y_ant` (y_ant é o arredondamento ao float32 mais próximo de y_novo: meio ulp com a direção
+  certa e empate para o par); `a1_float32_tolerance` removida;
+- fail-closed: `float32_exact` exige `math.isfinite(y)`; `a1_float32_match` exige os dois
+  finitos; na regra de `double`, NaN/inf já reprovam (`<=` falso);
+- `A1Result` ganha `n_out_double` e `max_rel_diff` (informação: o A1 sob a regra original do D13
+  e max |Δ|/|y_ant|), impressos na linha A9 (`out_double=… max_rel=…`); tolerância da A9
+  `float32(y_novo) == y_ant (<rótulo>)`;
+- `a1_rules(prior)` (dono único da regra por horizonte) e `label_post_a1`: toda linha A10/A11 de
+  um horizonte sob a regra float32 leva `[desvio B3 (ADR 8.2.0004): …]` na tolerância.
+**Testes e mutações** (aplicadas, `pytest tests/equivalence/`, revertidas):
+```
+corrigido: 74 passed, 1 skipped
+mE critério com tolerância acima (spacing/2): 1 failed, 73 passed, 1 skipped
+mF isfinite removido da pré-condição: 1 failed, 73 passed, 1 skipped
+mF2 isfinite removido do critério: 1 failed, 73 passed, 1 skipped (depois do caso inf/inf)
+mG rótulo não propagado: 1 failed, 73 passed, 1 skipped
+```
+Casos: 1 + 2⁻²⁴ → 1.0 passa (empate ao par); 1 − 2⁻²⁴ reprova (fronteira); 1 − 2⁻²⁵ passa;
+1 + 2⁻²³ + 2⁻²⁴ contra 1 + 2⁻²³ reprova (empate ao par); NaN, ±inf fora da pré-condição e do
+critério; `compute_rows` sintético rotula as linhas de modelo de h=1 sob float32 e nenhuma sob
+`double`. **T1:** ruff e mypy verdes; `pytest tests/equivalence tests/architecture -n 4 --dist
+loadgroup`: `453 passed, 1 skipped` (antes do caso inf/inf, que só acrescenta uma asserção;
+`tests/equivalence` depois dele: `74 passed, 1 skipped`).
+**Texto a reconciliar (fora deste executor):** o ADR 8.2.0004 (Decision 2) e a emenda do D13 no
+concept dizem "todo y_ant de T∩"; o implementado é "todo y_ant **do horizonte**" e o critério
+exato acima — avisado à coordenadora para o autor dos docs.
+
 <!-- END: post-execution -->
