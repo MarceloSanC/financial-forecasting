@@ -433,12 +433,17 @@ pelo humano e está ancorada (D9).
   `silver_content` julgado só para os pares (tabela, `run_id`) lidos (I2).
   Sharpness: larguras u − l de `value_guardrail` dos pares simétricos,
   `split = "test"`, amostra **model_full** (toda a série do modelo/seed),
-  pontos degenerados incluídos (largura 0 é dado); candidato com as larguras
-  de todas as seeds empilhadas (réplicas, B-SEEDS), legenda declara o
-  empilhamento. Consistência exigida: a média das larguras de cada
-  (modelo, seed, par, horizonte) é igual ao `mpiw` de `gold_metrics_by_run`
-  na amostra `model_full` — teste no fake e conferência na execução real
+  **na máscara do MPIW**: só as linhas não-degeneradas, pela máscara do dono
+  único (`DegeneracyGate`, com a tolerância da revisão julgada; o MPIW do gold
+  é calculado só nelas — `coverage_metrics.py`, ADR 0.0.0011); o número de
+  pontos degenerados excluídos por (modelo, seed, horizonte) vai para a
+  legenda e o registro. Candidato com as larguras de todas as seeds
+  empilhadas (réplicas, B-SEEDS), legenda declara o empilhamento.
+  Consistência exigida: a média das larguras desenhadas de cada (modelo,
+  seed, par, horizonte) é igual ao `mpiw` de `gold_metrics_by_run` na
+  amostra `model_full` — teste no fake e conferência na execução real
   (divergência → erro: a figura não estaria desenhando o que o gold mediu).
+  A máscara é seleção de linhas, não estatística nova (I3).
 - `[decision:C] D4 — Escolha: silver conferido contra o silver_content julgado · Alternativas: só gold (fan chart e sharpness impossíveis); silver sem conferência · Degrau 1: doc §6.1 item 1 (silver "identificados pelo hash de conteúdo — §4.5"); Sandve 2013 Rule 7 · Reversível: sim`
 - **ADR:** [`8.3.0002`](../../adr/8_3_0002-figure-provenance-by-data-digest-and-verified-silver-units.md)
 
@@ -457,12 +462,11 @@ pelo humano e está ancorada (D9).
 - **O quê:** `matplotlib>=3.11,<3.12` em `dependencies` (pin por minor, o
   lock trava 3.11.0 — postura de todos os blocos do `pyproject.toml`);
   contrato import-linter `evaluation-no-matplotlib-leak` do tipo
-  `forbidden` cujas `source_modules` listam **todos** os módulos de
-  `financial_forecasting` exceto `features.evaluation.adapters.out.plots`
-  (os demais adapters do evaluation, inclusive `reports`, os outros slices,
-  `shared`, `cli`, `composition_root`, `main`), com
-  `allow_indirect_imports = true` (o composition root monta o adapter de
-  plots sem importar matplotlib); teste de arquitetura (AST) que proíbe
+  `forbidden` com `source_modules = financial_forecasting`,
+  `forbidden_modules = matplotlib` e
+  `ignore_imports = financial_forecasting.features.evaluation.adapters.out.plots.** -> matplotlib`
+  (o `__init__` de `plots` não importa matplotlib; o
+  `unmatched_ignore_imports_alerting = error` do projeto continua); teste de arquitetura (AST) que proíbe
   `matplotlib.pyplot` em todo o `src/`, inclusive no adapter de plots; o
   adapter usa `matplotlib.figure.Figure` com backend PDF e `rc_context`,
   sem estado global; `.importlinter` entra nos arquivos a modificar. Hoje matplotlib só chega transitivo via mlflow e
@@ -561,24 +565,23 @@ pelo humano e está ancorada (D9).
 |---|---|---|
 | Reliability por τ | **confirmatório:** scorecard `verdict.horizons[h].h1.lower_band`/`upper_band` (estimativa, limites, `band_level` 0,975) e `.passed`, `profile.horizons[h].power`; **descritivo, candidato:** scorecard `profile.horizons[h].calibration_95` (filtro do gate, `kind` de cauda, por nível) → ĉ = `mean_violations`/`mean_observed` (razão das contagens médias persistidas, B-SEEDS) + pontos por seed de `gold_calibration_table` (mesmo filtro, perfil 95 %) → `violation_rate`; **descritivo, baselines (seed nula) e GBM (seed 0):** `gold_calibration_table` (filtro do gate, perfil 95 %) → `wilson_estimate`, `wilson_lower`, `wilson_upper` | τ = 0,5 (sem linha de calibração); banda de Wilson do candidato nos níveis fora do gate e da média entre seeds (o gold só a tem por seed; a dispersão por seed é desenhada no lugar) |
 | Quantile score | `gold_metrics_by_run` `sample = common`, `metric = pinball`, `level_low = τ` → `value` por seed; média/mín/máx do candidato de `profile.horizons[h].descriptors` (mesmas chaves) | nenhuma |
-| Sharpness | silver `fact_oos_predictions` (`value_guardrail`, `split = test`, pares simétricos) conferido (D4); consistência com `gold_metrics_by_run` `sample = model_full`, `metric = mpiw` | nenhuma |
+| Sharpness | silver `fact_oos_predictions` (`value_guardrail`, `split = test`, pares simétricos, máscara não-degenerada do MPIW) conferido (D4); consistência com `gold_metrics_by_run` `sample = model_full`, `metric = mpiw` | nenhuma (degenerados fora pela máscara do MPIW, contados na legenda) |
 | PICP × MPIW | `gold_metrics_by_run` `sample = common`, `metric ∈ {picp, mpiw}`, por par → `value` por seed (dispersão entre seeds = pontos por seed); média/mín/máx do candidato de `profile.horizons[h].descriptors`; reta do nominal 1 − 2τ_l | nenhuma |
 | DM candidato × comparadores | `gold_dm_results` `variance_estimator = rectangular`, `candidate = tft_quantile`, comparador da família → `p_value` (bruto), `adjusted_p_value`, `rejected`; conferidos contra `profile.horizons[h].dm` (I4); rótulo por `verdict.horizons[h].h1.passed` | nenhuma (comparador × comparador não existe por construção) |
 | Série OOS / fan chart | silver `fact_oos_predictions` do candidato, seed 1, `split = test`, `value_guardrail` dos pares simétricos e da mediana; realizado pelo `TrainingGridReader`; cortes de fold do `dim_run` | nenhuma |
 | d_t + ACF | `gold_loss_differentials` (pares com o candidato e um comparador da família) → `differential`, `fold`; `gold_differential_acf` (mesmos pares) → `acf` por `lag` | faixa de confiança da ACF (±1,96/√n não persistida) |
-| Importância por família / H3 | `gold_h3_shares` (por `method` e `family`) → `share_h1`, `share_h7`, `delta`, `lower`, `upper`, `status`; `gold_h3_importance` (por `method`, `family`, `horizon`) → `importance` por seed × `permutation_index`, desenhada como **réplicas** (dispersão descritiva rotulada); `gold_h3_reading` → leitura C4/C5, `label`, `status` | intervalo bootstrap de I_f(h) e de s_f(h) (o gold só tem o de Δ_f); I_f(h) agregado pela `seed_aggregation` de H3 (não persistido; as réplicas o substituem) |
-| Pesos da VSN | `gold_h3_vsn` → `family`, `p10`, `p50`, `p90`, `label`, `status` | nenhuma |
-| Nativo × conformal | `gold_conformal_coverage` (duas variantes, por par/cauda, `seed` nula = média entre seeds e por seed) → `coverage`/`mean_of_seed_coverages`, `mpiw`, `wilson_lower`, `wilson_upper`, `label`; nominal | **série nativa** na mesma máscara/n do conformal (não persistida; a nativa de outras amostras não é pareada — inference §4.11 exige o mesmo n, pontos alinhados); **referência de dispersão Beta** agregada (o gold só tem `beta_mean`/`beta_sd` por fold × seed × cauda; agregar ou tirar quantis seria cálculo novo) |
+| Importância por família / H3 | `gold_h3_importance` (por `method`, `family`, `horizon`): linha agregada (`seed` nulo, `permutation_index` nulo) → `importance` = I_f(h), `status`, `reason`; perfis marginais como dispersão descritiva rotulada — por seed (`seed` = s, `permutation_index` nulo) nos dois métodos e, só na permutação, por permutação (`seed` nulo, `permutation_index` = k); a ablação (LOCO) não tem k; `gold_h3_shares` (por `method` e `family`) → `share_h1`, `share_h7`, `delta`, `lower`, `upper`, `status`; `gold_h3_reading` → leitura C4/C5, `label`, `status` | intervalo bootstrap de I_f(h) e de s_f(h) (o gold só tem o de Δ_f) |
+| Pesos da VSN | `gold_h3_vsn` `kind = family` (as 4 famílias; as linhas `kind = variable` ficam fora) → `name`, `p10`, `p50`, `p90`, `label`, `status` | nenhuma |
+| Nativo × conformal | **conformal:** `gold_conformal_coverage` (duas variantes, por par/cauda, `band_level = 0,95` — o perfil; a linha 0,975 fica fora; `seed` nula = média entre seeds, e por seed) → `coverage`/`mean_of_seed_coverages`, `n_evaluated`, `mpiw`, `wilson_lower`, `wilson_upper`, `label`; **nativo na mesma máscara** (comparação `descriptive_model_full_native_mask_seed_mean_counts_v1` da 7.2, concept 7.2 I14): ĉ por cauda de `gold_calibration_table` com candidato, a mesma seed e horizonte, `sample = model_full`, `kind` da cauda, `level_low` = τ, `includes_degenerate = false`, `dgt_offset` nulo, `band_level = 0,95` → `n_observed`, `n_violations`, `wilson_lower`, `wilson_upper`; média entre seeds pela razão `mean_violations`/`mean_observed` de `profile.horizons[h].calibration_95` (mesmas chaves); PICP e MPIW nativos de `gold_metrics_by_run` `sample = model_full` (mesma máscara não-degenerada do `CoverageMetrics`, que o conformal reusa — `conformal_coverage.py`) por seed, média de `profile.horizons[h].descriptors`; exigido `n_evaluated` (conformal) = `n_observed` (nativo) por (seed, horizonte, cauda), senão erro; nominal | **referência de dispersão Beta** agregada (o gold só tem `beta_mean`/`beta_sd` por fold × seed × cauda; agregar ou tirar quantis seria cálculo novo); banda de Wilson do nativo na média entre seeds (só por seed no gold; os pontos por seed ficam como dispersão) |
 
 - **Nenhuma omissão toca elemento confirmatório:** os elementos
   confirmatórios do catálogo (caudas do gate com banda 97,5 % e poder; linha
   do DM com p bruto e Holm) estão todos persistidos. As omissões são de
   elementos descritivos, e o doc §6.1 item 5 manda omitir em vez de
-  calcular ("não exige teste que o gold não tenha persistido"). A legenda do
-  nativo × conformal diz que a comparação com o nativo pareado não foi
-  persistida e aponta as figuras de calibração e PICP × MPIW (outra
-  amostra, não pareada).
-- `[decision:E] D13 — Escolha: omitir o não persistido, lista fechada por figura, ou desenhar valores persistidos por seed como dispersão rotulada · Alternativas: recalcular Wilson/Beta/cobertura/agregação de H3 na 8.3; desenhar o nativo de outra amostra como se fosse pareado · Base: doc §6.1 itens 1 e 5; inference §4.11 ("banda de Wilson com o mesmo n (pontos alinhados, nunca S·T)"); Checkpoint A r1 (DT-1/DT-2/DT-3/CA-4) · Reversível: sim`
+  calcular ("não exige teste que o gold não tenha persistido"). O nativo do
+  nativo × conformal é o da mesma máscara, persistido pela 7.2 (Checkpoint
+  A r2, DT-2).
+- `[decision:E] D13 — Escolha: omitir o não persistido, lista fechada por figura, ou desenhar valores persistidos por seed como dispersão rotulada · Alternativas: recalcular Wilson/Beta/cobertura na 8.3; desenhar o nativo de outra amostra como se fosse pareado · Base: doc §6.1 itens 1 e 5; inference §4.11 ("banda de Wilson com o mesmo n (pontos alinhados, nunca S·T)"); concept 7.2 I14 (n_evaluated = n_observed nativo); `h3_importance.py` (linha agregada = I_f(h)); Checkpoint A r1 e r2 · Reversível: sim`
 - `[decision:C] D13(sample) — common nas figuras que comparam modelos (quantile score, PICP × MPIW: pontos alinhados, evaluation §6.7); model_full e o filtro do gate na calibração e no sharpness (a amostra do gate e do MPIW por modelo) · Degrau 1 · Reversível: sim`
 
 ### D14 — Sinal de d_t
@@ -655,7 +658,11 @@ pelo humano e está ancorada (D9).
   `includes_degenerate`, `band_level`, `variance_estimator` (Bartlett ≠
   retangular), horizonte e seed, de modo que ler a linha errada do mapa do
   D13 reprova; sinal de d_t pelo D14 (candidato como `model_a` e como
-  `model_b`); sharpness: média das larguras = `mpiw` `model_full` do fake.
+  `model_b`); sharpness: média das larguras não-degeneradas = `mpiw`
+  `model_full` do fake (com degenerados no fake, que ficam fora); nativo ×
+  conformal: nativo das linhas `includes_degenerate = false` e
+  `n_evaluated` ≠ `n_observed` → erro; H3: I_f(h) = linha agregada
+  (`seed`, `permutation_index` nulos); VSN só `kind = family`.
 - [ ] **A8 — Fan chart.** Usa só a seed 1 (primeira de `[seeds].tft_quantile`
   da revisão julgada, igual à lista `seeds` do cohort), quantis
   `value_guardrail` dos pares simétricos, cortes de fold marcados e a
@@ -681,8 +688,14 @@ pelo humano e está ancorada (D9).
   linha da reprodução (claim (a); R1/R2/R3 com comparados, diferentes e max
   |Δ|; imagem; commit `060537fc`; `generation_digest`; `result_digest`;
   ponteiro às §1–§4 do `reproduction_audit.md`) e, do registro curado, no
-  mínimo: as erratas O1/O2 da 8.1, a nota do `code.src` (formatação) e os
-  `[deviation]` da reprodução da 8.2 (E2 item 7; `env-equal`).
+  mínimo: as erratas O1/O2 da 8.1, a nota do `code.src` (formatação), os
+  `[deviation]` da reprodução da 8.2 (E2 item 7; `env-equal`) e todo
+  `[finding]` aberto da cadeia citável. **`[finding]` aberto** = entrada
+  `[finding]` da §7 de um technical das Stages 5.5, 6.x, 7.x, 8.1 ou 8.2
+  parte (i) sem entrada posterior (mesma §7 ou auditoria) que o declare
+  corrigido ou resolvido; a varredura é feita na execução e cada um entra no
+  registro com `kind = finding` e `status = "open"` (os resolvidos não são
+  listados).
 - [ ] **A13 — Recusas do CLI e do gerador.** Árvore suja → `DirtyCodeError`
   sem escrita; registro curado malformado → erro antes do use case; falha
   de escrita no meio → staging removido, saída anterior intacta.
@@ -696,17 +709,26 @@ pelo humano e está ancorada (D9).
   da partição) igual antes e depois (só leitura).
 - [ ] **A15 — Dependência e gates.** `matplotlib>=3.11,<3.12` em
   `dependencies`; contrato import-linter que proíbe matplotlib em todos os
-  módulos fora de `features.evaluation.adapters.out.plots`, com prova de
-  quebra (import em `adapters/out/reports/` reprova); teste AST que reprova
+  módulos fora de `features.evaluation.adapters.out.plots` (forma do D6,
+  com `ignore_imports` casado), com prova de quebra (import em
+  `adapters/out/reports/` reprova); teste AST que reprova
   `matplotlib.pyplot` em qualquer arquivo de `src/`; `make check` verde.
 - [ ] **A16 — Omissões fechadas.** O conjunto de omissões de cada
   `FigureSpec` é exatamente o da coluna "Omissões declaradas" do D13 (teste
   com a lista literal), e nenhuma série desenha elemento dessa lista.
-- [ ] **A17 — Citável limpo, interno completo.** Teste: o dossiê citável não
-  contém `equivalence_audit`, `prior_evidence`, `tests/equivalence`,
-  `8.2.0003`, `8.2.0004`, `8_2_0003`, `8_2_0004`, "evidência anterior",
-  "projeto anterior" nem ponteiro à §5 do `reproduction_audit.md`, e não
-  recebe entrada `internal`; o interno contém o registro de hashes da
+- [ ] **A17 — Citável limpo, interno completo.** A visibilidade é decidida
+  pela **fonte**: o parser do registro recusa entrada não-`internal` cujo
+  `pointer` aponte para `docs/stages/8.2-*` (exceto as âncoras citáveis
+  declaradas: as entradas `[deviation]` E2 item 7 e `env-equal` e os
+  `[measurement]` E2/E3 do technical 8.2 §7), `docs/reports/equivalence_audit.md`,
+  `docs/reports/prior_evidence_registry.toml`, ADRs 8.2.0003/8.2.0004 ou
+  `tests/equivalence/**`; os `[deviation]` da 8.2 sobre o andaime
+  (`PRIOR_CANDIDATE_LABELS`, CC4 e afins) são `internal`. Segunda barreira,
+  teste sobre o texto do citável, sem diferenciar maiúsculas e tratando `_` e
+  `-` como iguais: nenhum de `equivalence_audit`, `prior_evidence`,
+  `tests/equivalence`, `8.2.0003`, `8.2.0004`, `8_2_0003`, `8_2_0004`,
+  `prior_candidate_labels`, "evidência anterior", "projeto anterior", nem
+  ponteiro à §5 do `reproduction_audit.md`. O interno contém o registro de hashes da
   evidência anterior, o `equivalence_audit.md`, B3/ADR 8.2.0004, o
   `[finding]` do PICP, as erratas F2–F5, o E4 do andaime e o limite da §5
   do `reproduction_audit.md`.
@@ -731,19 +753,23 @@ cada figura; o estilo (tamanho, fonte, demais `rcParams`) dentro do D7; a
 forma do Markdown dos dois dossiês dentro das camadas do D8; a confirmação,
 no builder, da convenção de `differential` (D14).
 
-### Checkpoint A, rodada 1 — disposição
+### Checkpoint A, rodadas 1 e 2 — disposição
 
 | Achado | Disposição |
 |---|---|
 | DT-1 banda do candidato por nível; τ = 0,5 | corrigido: D13 (mapa + omissão fechada; dispersão por seed; ĉ pela razão das contagens médias do perfil), A7, A16 |
-| DT-2 nativo na mesma máscara; Beta agregada | corrigido: omissões do D13 (`[decision:E]`, doc §6.1 item 5 + inference §4.11), A16 |
-| DT-3 IC de I_f/s_f; agregação de H3 | corrigido: omissões do D13; réplicas por seed × permutação; s_f = `share_h*` do gold (A7) |
+| DT-2 nativo na mesma máscara; Beta agregada | r1: omissão; **r2: corrigido** — o nativo na mesma máscara está persistido (7.2 I14); D13 o desenha, com `n_evaluated` = `n_observed` exigido (A7); Beta agregada segue omitida |
+| DT-3 IC de I_f/s_f; agregação de H3 | r2: corrigido — I_f(h) é a linha agregada do gold; perfis marginais por seed e (só permutação) por k; omitidos só os ICs de I_f e s_f |
 | DT-4 / CA-1 p bruto do DM | corrigido: I4, D13, A6 (p de `gold_dm_results` retangular; Holm/decisão conferidos contra o scorecard) |
 | DT-5 eixos de seleção | corrigido: D13 fixa (tabela, filtro, campo) por figura; A7 com fakes discriminantes |
-| DT-6 sharpness | corrigido: D4 (coluna, split, amostra, degenerados) e consistência com `mpiw` (A7, A14) |
+| DT-6 sharpness | r2: corrigido — larguras na máscara não-degenerada do MPIW, degenerados contados na legenda; consistência com `mpiw` (A7, A14) |
 | DT-7 sinal de d_t; faixa da ACF | corrigido: D14; faixa como omissão do D13 |
 | DT-8 determinismo só no processo | corrigido: A9 (subprocessos com `PYTHONHASHSEED`), `pdf.fonttype 42`, FreeType no `identity()` |
 | DT-9 commit no registro | corrigido: I8/I10, D5, A11, A14 (`code.src`/`code.uv_lock`, sem hash de commit; cohort file declarado) |
+| A17 frágil (r2) | corrigido: visibilidade pela fonte (ponteiros proibidos no parser) + strings como 2ª barreira, sem caixa e com `_`/`-` iguais |
+| DT-5 menores (r2): VSN, banda do conformal | corrigido: `kind = family`; `band_level = 0,95` |
+| CA-6 forma (r2) | corrigido: `source_modules = financial_forecasting` + `ignore_imports` do `plots.**` |
+| A12 "[finding] aberto" (r2) | corrigido: definição no A12 |
 | CA-2 evidência anterior no dossiê | corrigido: arquivo interno separado (D8, I12, A17); `reproduction_audit.md` §5 não apontado, limite no interno, sem editar a 8.2 |
 | CA-3 esperado do silver | corrigido: I2 por par (tabela, `run_id`), hash antes do filtro por split, A4; ADR 8.3.0002 item 3 emendado |
 | CA-4 omissões declaradas agora | corrigido: D13 + A16 |
