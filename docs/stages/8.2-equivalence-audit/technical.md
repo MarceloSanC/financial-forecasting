@@ -1763,4 +1763,31 @@ alvo anterior é float32; com o critério D13 não afrouxado, a comparação de 
 roda nesta auditoria. Não bloqueia a 8.2 nem o veredito da 8.1 (doc §5.6). Passo 4:
 `docs/reports/equivalence_audit.md`.
 
+### 2026-10-23 — [measurement] E5 — teste opt-in da equivalência — Claude (executor das Etapas)
+**Contexto:** passo 1: `DECLARED` = as 2 465 linhas da tabela do relatório (gerado da tabela por
+script do scratchpad; A9/h1 e A9/h7 `explained:alvo`, o resto `not_compared:<motivo>`). T1 da
+Task 11: `ruff format --check`/`ruff check` e `mypy` verdes; `pytest tests/equivalence/ -rs`:
+`69 passed, 1 skipped` — `SKIPPED [1] … opt-in: set EQUIVALENCE_ORACLE_ROOT and
+EQUIVALENCE_OFFICIAL_ROOT to existing directories; the prior evidence is checked against
+docs/reports/prior_evidence_registry.toml`. Commits `1a9eeb87` (relatório + §7) e `d37fb097`
+(teste). Passo 3, com o oráculo, árvore commitada:
+```
+exit 0
+1 passed, 1 warning in 22.87s
+TEST_NEVER_WRITES
+LIVE_INTACT
+```
+Prova negativa (linha 48 do `DECLARED`, A9/h1 `explained:alvo` → `not_explained`, não
+commitada):
+```
+exit 1
+E       AssertionError: --- declared
+E         -A9/h1/realized a1_realized out_of_tolerance not_explained
+E         +A9/h1/realized a1_realized out_of_tolerance explained:alvo
+1 failed, 1 warning in 30.31s
+NEGATIVE_PROOF_OK
+```
+(o `recomputed_matches` passou — a classificação de uma falha é humana —; a igualdade
+`DECLARED` = tabela parseada reprovou com o diff visível.)
+
 <!-- END: post-execution -->
