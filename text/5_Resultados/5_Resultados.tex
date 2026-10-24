@@ -1,28 +1,196 @@
 \chapter{Resultados e Discussão} \label{chap:resultados}
 
 % Objetivo: apresentar resultados, comparações e interpretações com base em
-% evidências rastreáveis. Status: aguarda a rodada confirmatória; as seções
-% abaixo são espaços reservados com o conteúdo que cada uma reportará.
+% evidências rastreáveis. Todos os números vêm da geração julgada da rodada
+% confirmatória (pré-registro aapl_confirmatory-r3-00fd83d9cd39), sem recálculo.
+% Pendentes: figuras (reliability, matriz de DM, PICP x MPIW, série OOS,
+% importância por família) e perfil pontual (RMSE/MAE/acurácia direcional).
 
 \section{Cenários experimentais}
-Os experimentos deste trabalho têm duas naturezas distintas. A \textbf{rodada exploratória} consiste nas buscas de hiperparâmetros do TFT e do GBM, avaliadas exclusivamente pela perda no bloco \texttt{early\_stop} da geometria do primeiro \textit{fold}, sem persistência de previsões fora da amostra; ela não constitui evidência e serve apenas para fixar as configurações. A \textbf{rodada confirmatória} é executada uma única vez, com hiperparâmetros congelados, sobre o cohort congelado (dez sementes \(\times\) seis \textit{folds} para o TFT), contra a hierarquia completa de \textit{baselines}, sob alinhamento estrito por \textit{target timestamp}; as tabelas que alimentam o veredito são geradas apenas depois da âncora do pré-registro. A contribuição de famílias usa, além disso, um cohort de ablação próprio, com pré-registro próprio. As seções seguintes são organizadas como espaços reservados que serão preenchidos com os artefatos da rodada confirmatória.
+Os experimentos deste trabalho têm duas naturezas distintas. A \textbf{rodada exploratória} consiste nas buscas de hiperparâmetros do TFT e do GBM, avaliadas exclusivamente pela perda no bloco \texttt{early\_stop} da geometria do primeiro \textit{fold}, sem persistência de previsões fora da amostra; ela não constitui evidência e serve apenas para fixar as configurações. A \textbf{rodada confirmatória} foi executada uma única vez, com hiperparâmetros congelados, sobre o cohort congelado (dez sementes \(\times\) seis \textit{folds} para o TFT), contra a hierarquia completa de \textit{baselines}, sob alinhamento estrito por \textit{target timestamp}; as tabelas que alimentam o veredito foram geradas depois da âncora do pré-registro. A contribuição de famílias usa, além disso, um cohort de ablação próprio, cujas regras de leitura também foram fixadas no pré-registro antes de qualquer métrica.
+
+O veredito foi emitido pela terceira revisão do pré-registro, que acumula as anteriores sem alterar o que julga H1 e H2 (Seção~\ref{sec:scorecard}). O \textit{scorecard} declarou a geração pronta para decisão acadêmica, sem nenhuma razão de bloqueio: tabelas completas, geradas depois da âncora, sem verificação de qualidade reprovada. Os seis blocos de teste cobrem as sessões-alvo de 27 de dezembro de 2019 a 31 de dezembro de 2025. A interseção exata entre todos os modelos tem \(n = 1.511\) pontos alinhados em \(h+1\) e \(n = 1.505\) em \(h+7\); todas as comparações abaixo usam essa amostra comum. A taxa de degeneração do TFT foi nula nos dois horizontes, e o rearranjo monotônico não alterou nenhuma previsão do candidato: sua grade emitida já era monotônica em todos os pontos. Entre os comparadores, o rearranjo alterou 0,20\% das previsões do GBM em \(h+1\) e nenhuma em \(h+7\). As figuras do perfil comparativo são apresentadas em versão posterior deste texto.
 
 \section{Calibração por horizonte (H1)}
-\textit{A ser preenchido após a rodada confirmatória.} Esta seção reportará, por horizonte (\(h+1\) e \(h+7\)), o resultado do \textit{gate} de H1 --- as duas bandas de Wilson do par \((0{,}10;\,0{,}90)\), a taxa média de degeneração e o poder exato contra os desvios pré-registrados no \(n\) medido --- e, como perfil, a cobertura marginal em cada nível da grade e o \textit{reliability diagram}, o PICP e o MPIW dos três pares simétricos, o \textit{interval score}, os testes de Christoffersen e Kupiec e as subséries de \(h+7\), além dos intervalos conformais (CQR) calibrados no bloco \texttt{calib}, com cobertura empírica. A proporção de previsões alteradas pelo rearranjo será reportada por execução.
+O \textit{gate} de H1 não rejeitou a calibração do TFT em nenhum dos dois horizontes (Tabela~\ref{tab:h1}). Em \(h+1\), a taxa de observações abaixo do quantil \(0{,}10\) foi \(0{,}0887\) e a de observações acima do quantil \(0{,}90\) foi \(0{,}0936\), contra a nominal de \(0{,}10\) em cada cauda; as duas bandas de Wilson de \(97{,}5\%\) contêm a nominal. Em \(h+7\), as taxas foram \(0{,}0882\) e \(0{,}0938\), também com as duas bandas contendo a nominal. Nos dois horizontes as caudas violam um pouco menos do que o nominal, o que corresponde a um intervalo de 80\% levemente conservador, com cobertura média de \(0{,}818\).
+
+\begin{table}[htb]
+\centering
+\caption{\textit{Gate} de calibração (H1) do TFT: taxas de violação por cauda do par \((0{,}10;\,0{,}90)\), médias entre as dez sementes, com bandas de Wilson de \(97{,}5\%\)}
+\label{tab:h1}
+\small
+\begin{tabular}{l c c c c}
+\toprule
+ & \multicolumn{2}{c}{\(h+1\) (\(n = 1.511\))} & \multicolumn{2}{c}{\(h+7\) (\(n = 1.505\))} \\
+Cauda & Taxa & Banda de Wilson & Taxa & Banda de Wilson \\
+\midrule
+Inferior (\(\tau = 0{,}10\)) & 0,0887 & [0,0737; 0,1065] & 0,0882 & [0,0731; 0,1060] \\
+Superior (\(\tau = 0{,}90\)) & 0,0936 & [0,0782; 0,1118] & 0,0938 & [0,0782; 0,1120] \\
+\midrule
+Degeneração média & \multicolumn{2}{c}{0\%} & \multicolumn{2}{c}{0\%} \\
+Resultado & \multicolumn{2}{c}{calibração não rejeitada} & \multicolumn{2}{c}{calibração não rejeitada} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A não rejeição é informativa porque o \textit{gate} tinha poder alto contra os desvios primários pré-registrados (Tabela~\ref{tab:h1-poder}). No \(n\) medido, a probabilidade de o \textit{gate} reprovar um modelo cuja cobertura do par se afastasse 5 pontos percentuais do nominal era de \(0{,}974\) a \(0{,}987\), e a de reprovar um deslocamento de locação de \(0{,}2\sigma\) era superior a \(0{,}999\). Contra os desvios secundários, menores, o poder cai para \(0{,}61\)--\(0{,}75\): um erro de calibração de 3 pontos percentuais teria passado despercebido em cerca de uma a cada três vezes. Em \(h+7\), o poder declarado supõe violações independentes e é, por isso, otimista (Seção~\ref{sec:scorecard}).
+
+\begin{table}[htb]
+\centering
+\caption{Probabilidade exata de o \textit{gate} de H1 reprovar o TFT sob os desvios mínimos pré-registrados, no \(n\) medido}
+\label{tab:h1-poder}
+\small
+\begin{tabular}{l l c c}
+\toprule
+Papel & Desvio & \(h+1\) & \(h+7\)\textsuperscript{a} \\
+\midrule
+Primário & cobertura do par \(+5\) p.p. (intervalo largo) & 0,974 & 0,976 \\
+Primário & cobertura do par \(-5\) p.p. (intervalo estreito) & 0,985 & 0,987 \\
+Primário & locação \(0{,}2\sigma\) & 0,9997 & 0,9998 \\
+Secundário & cobertura do par \(+3\) p.p. & 0,632 & 0,644 \\
+Secundário & cobertura do par \(-3\) p.p. & 0,606 & 0,629 \\
+Secundário & locação \(0{,}1\sigma\) & 0,733 & 0,746 \\
+\bottomrule
+\multicolumn{4}{l}{\footnotesize \textsuperscript{a} Supõe violações independentes; otimista para \(h > 1\).}
+\end{tabular}
+\end{table}
+
+As sensibilidades do perfil confirmam a leitura sem alterá-la. O teste de cobertura incondicional de três estados não rejeitou a calibração do par (\(p = 0{,}203\) em \(h+1\); \(p = 0{,}182\) em \(h+7\)). Em \(h+7\), as sete subséries de decisões espaçadas de sete sessões \cite{DIEBOLDGUNTHERTAY1998}, com \(n = 215\) cada, mantêm as duas caudas dentro das bandas corrigidas por Bonferroni (nível de \(99{,}64\%\)) em todas as catorze combinações de subsérie e cauda, com taxas entre \(0{,}075\) e \(0{,}119\). A cobertura marginal acompanha a nominal em toda a grade: em \(h+1\), as frequências observadas abaixo dos quantis \(0{,}02\), \(0{,}10\), \(0{,}25\), \(0{,}50\), \(0{,}75\), \(0{,}90\) e \(0{,}98\) foram \(0{,}023\), \(0{,}089\), \(0{,}227\), \(0{,}492\), \(0{,}766\), \(0{,}906\) e \(0{,}977\), e em \(h+7\) os valores diferem destes em no máximo meio ponto percentual.
+
+Duas qualificações acompanham esse resultado. A primeira é que o \textit{gate} julga a média entre sementes: a cobertura do par de 80\% de cada semente isolada variou de \(0{,}772\) a \(0{,}872\) em \(h+1\), e a banda de 95\% dessa cobertura contém o nominal em apenas quatro das dez sementes. A calibração não rejeitada é, portanto, uma propriedade do ensemble de sementes, e não de cada modelo treinado. A segunda é que as violações não são independentes no tempo: o teste de independência de Christoffersen rejeita para todas as sementes do TFT, com p-valor de Monte Carlo de no máximo \(0{,}003\) em \(h+1\), e rejeita também para todos os comparadores não degenerados. A calibração obtida é marginal, e não condicional: as violações se agrupam, o que é compatível com o agrupamento de volatilidade dos retornos diários \cite{CONT2001}, que nenhum dos modelos absorve por completo.
+
+Entre os comparadores, cuja calibração é reportada sem filtrar a família de H2, os dois naive têm grade degenerada em todos os pontos e, por isso, ficam fora das métricas de calibração. AR(1), EWMA-vol e quantis empíricos passam no mesmo critério de duas caudas nos dois horizontes; o GBM passa em \(h+1\) e falha na cauda superior em \(h+7\). No par de 80\%, o GBM produz os intervalos mais estreitos (MPIW de \(0{,}0396\) em \(h+1\)), à custa de cobertura de \(0{,}769\), abaixo do nominal; o EWMA-vol, os mais largos entre os fortes (\(0{,}0471\)), com cobertura de \(0{,}827\); o TFT fica entre eles, com MPIW médio de \(0{,}0464\) e cobertura de \(0{,}818\).
+
+\subsection{Referência conformal}
+A CQR assimétrica sem pesos, variante de registro, aplicada sobre o par entregue pelo TFT e calibrada no bloco \texttt{calib} de cada \textit{fold}, levou a cobertura do intervalo de 80\% para \(0{,}798\) em \(h+1\) e \(0{,}800\) em \(h+7\), com desvio-padrão entre sementes de \(0{,}016\) nos dois horizontes, e estreitou ligeiramente os intervalos (MPIW de \(0{,}0457\) e \(0{,}0456\), contra \(0{,}0464\) e \(0{,}0460\) da previsão nativa). A correção atuou sobretudo na cauda inferior, que na previsão nativa violava menos do que o nominal: a taxa passou de \(0{,}089\) para \(0{,}109\) em \(h+1\). A variante ponderada NexCP, sensibilidade, produziu coberturas de \(0{,}801\) e \(0{,}799\). Nos pares externos a correção foi menos precisa: o intervalo de 96\% conformalizado cobriu \(0{,}947\) nos dois horizontes, abaixo da cobertura nativa (\(0{,}953\) e \(0{,}956\)), e a taxa de violação da cauda \(0{,}02\) (\(0{,}028\) e \(0{,}029\)) ficou fora da sua banda de Wilson. Essas coberturas são empíricas: a garantia teórica da predição conformal pressupõe permutabilidade, que não vale em séries temporais \cite{BARBER2023}, e a comparação com a calibração nativa é descritiva.
 
 \section{\textit{Skill} relativo contra a hierarquia de \textit{baselines} (H2)}
-\textit{A ser preenchido após a rodada confirmatória.} Para os horizontes aprovados em H1, esta seção reportará a \textit{pinball loss} média e o CRPS do candidato e de cada \textit{baseline} (retorno nulo, média histórica, AR(1), EWMA-vol, quantis empíricos históricos e GBM quantílico), com a dispersão entre sementes e \textit{folds}.
+Como os dois horizontes passaram em H1, ambos entraram na comparação de \textit{skill}. A Tabela~\ref{tab:h2-perdas} reporta a \textit{pinball loss} média da grade de cada modelo na amostra comum. Como o CRPS aproximado pela grade é, por construção, o dobro dessa média com pesos iguais, ele ordena os modelos da mesma forma e não é repetido.
+
+\begin{table}[htb]
+\centering
+\caption{\textit{Pinball loss} média da grade na amostra comum (\(\times 10^{-3}\)); para o TFT, média das dez sementes, com mínimo e máximo entre sementes}
+\label{tab:h2-perdas}
+\small
+\begin{tabular}{l l c c}
+\toprule
+Nível & Modelo & \(h+1\) & \(h+7\) \\
+\midrule
+Naive & Retorno nulo & 6,915 & 6,924 \\
+ & Média histórica & 6,897 & 6,908 \\
+\midrule
+Estatístico & AR(1) & 4,086 & 4,079 \\
+ & EWMA-vol & \textbf{3,920} & \textbf{4,000} \\
+ & Quantis empíricos & 4,037 & 4,058 \\
+\midrule
+ML & GBM quantílico & 3,980 & 4,026 \\
+\midrule
+Candidato & TFT & 4,050 [3,987; 4,117] & 4,063 [4,004; 4,109] \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Três leituras decorrem da tabela. Primeiro, todos os modelos com distribuição preditiva não degenerada reduzem a perda dos naive em 41\% a 43\%, uma diferença que não depende de prever a média: os naive concentram toda a grade em um ponto, e qualquer descrição da escala da distribuição os supera. Segundo, entre os modelos fortes as diferenças são de outra ordem de grandeza, de no máximo cerca de 4\% da perda. Terceiro, o TFT não teve a menor perda média em nenhum horizonte: o EWMA-vol, um modelo de um parâmetro que descreve apenas a volatilidade condicional, teve a menor perda nos dois, seguido pelo GBM. A perda do TFT ficou \(3{,}3\%\) acima da do EWMA-vol em \(h+1\) e \(1{,}6\%\) acima em \(h+7\). A dispersão entre sementes do TFT é da mesma ordem dessas diferenças: em \(h+1\), a melhor semente (\(3{,}987\)) ainda ficou atrás do EWMA-vol e do GBM, e a pior (\(4{,}117\)), atrás do AR(1); em \(h+7\), a melhor semente (\(4{,}004\)) ficaria à frente do GBM, mas não do EWMA-vol.
 
 \section{Análise estatística pareada}
-\textit{A ser preenchido após a rodada confirmatória.} A análise pareada utilizará o teste de Diebold-Mariano \cite{DIEBOLDMARIANO1995} unilateral sobre a \textit{pinball loss}, com variância de janela retangular até a defasagem \(h-1\) e correção HLN \cite{HARVEY1997}, ajuste de Holm \cite{HOLM1979} sobre os seis comparadores e o \textit{Model Confidence Set} \cite{HANSEN2011MCS}, que integra a condição (ii) do \textit{scorecard}. O veredito de H1 e H2 por horizonte --- desfecho de H2 e vencedor primário --- será o produzido mecanicamente pelo \textit{scorecard} (Seção~\ref{sec:scorecard}), acompanhado das sensibilidades e dos recortes descritivos do perfil, que não o alteram.
+A Tabela~\ref{tab:h2-dm} reporta o teste de Diebold-Mariano unilateral \cite{DIEBOLDMARIANO1995}, com variância de janela retangular até a defasagem \(h-1\) e correção HLN \cite{HARVEY1997}, do TFT contra cada comparador, com p-valores ajustados por Holm \cite{HOLM1979} sobre os seis comparadores. O diferencial é \(\bar{d} = \bar{L}_{\text{TFT}} - \bar{L}_{\text{comparador}}\), de modo que valores negativos favorecem o candidato.
+
+\begin{table}[htb]
+\centering
+\caption{Diebold-Mariano unilateral do TFT contra cada comparador: diferencial médio de \textit{pinball} (\(\times 10^{-5}\)), estatística e p-valor ajustado por Holm}
+\label{tab:h2-dm}
+\small
+\begin{tabular}{l r r c r r c}
+\toprule
+ & \multicolumn{3}{c}{\(h+1\) (\(n = 1.511\))} & \multicolumn{3}{c}{\(h+7\) (\(n = 1.505\))} \\
+Comparador & \(\bar{d}\) & DM & \(p_{\text{Holm}}\) & \(\bar{d}\) & DM & \(p_{\text{Holm}}\) \\
+\midrule
+Retorno nulo & \(-286{,}4\) & \(-34{,}74\) & \(<10^{-15}\) & \(-286{,}1\) & \(-22{,}70\) & \(<10^{-15}\) \\
+Média histórica & \(-284{,}7\) & \(-34{,}62\) & \(<10^{-15}\) & \(-284{,}4\) & \(-22{,}50\) & \(<10^{-15}\) \\
+AR(1) & \(-3{,}5\) & \(-2{,}00\) & 0,091 & \(-1{,}6\) & \(-0{,}80\) & 0,852 \\
+EWMA-vol & \(+13{,}1\) & \(4{,}05\) & 1 & \(+6{,}3\) & \(1{,}36\) & 1 \\
+Quantis empíricos & \(+1{,}3\) & \(0{,}69\) & 1 & \(+0{,}5\) & \(0{,}21\) & 1 \\
+GBM quantílico & \(+7{,}0\) & \(4{,}08\) & 1 & \(+3{,}8\) & \(2{,}37\) & 1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Holm rejeita a igualdade contra os dois naive nos dois horizontes, o que satisfaz a condição (i) do \textit{scorecard}. Contra os fortes, nenhuma rejeição: o único diferencial negativo, contra o AR(1), não sobrevive ao ajuste em nenhum horizonte; contra EWMA-vol e GBM, o diferencial é positivo, ou seja, a perda do TFT é maior, e em \(h+1\) as estatísticas de \(4{,}05\) e \(4{,}08\) indicam que, em um teste na direção oposta, os comparadores é que teriam perda significativamente menor. O estimador de Bartlett, sensibilidade, não alterou nenhuma decisão.
+
+Sem rejeição contra todos os fortes, a condição (ii) depende do \textit{Model Confidence Set} \cite{HANSEN2011MCS}, com \(\alpha = 0{,}10\), \textit{bootstrap} estacionário e blocos de 65 (\(h+1\)) e 64 (\(h+7\)) sessões pela regra pré-registrada (Tabela~\ref{tab:h2-mcs}). Em \(h+1\), o conjunto retém EWMA-vol, GBM e quantis empíricos e elimina o TFT (\(p_{\text{MCS}} = 0{,}022\)); em \(h+7\), o TFT permanece no conjunto (\(p_{\text{MCS}} = 0{,}332\)), ao lado dos mesmos três comparadores.
+
+\begin{table}[htb]
+\centering
+\caption{\textit{Model Confidence Set} (\(\alpha = 0{,}10\)): p-valor do MCS de cada modelo na especificação primária e nas sensibilidades; em negrito, os modelos retidos na primária}
+\label{tab:h2-mcs}
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{l c c c c c c c c}
+\toprule
+ & \multicolumn{4}{c}{\(h+1\)} & \multicolumn{4}{c}{\(h+7\)} \\
+Modelo & Prim. & MB & \(l{=}h\) & \(l{=}\sqrt{T}\) & Prim. & MB & \(l{=}h\) & \(l{=}\sqrt{T}\) \\
+\midrule
+Retorno nulo & 0,000 & 0,000 & 0,000 & 0,000 & 0,000 & 0,000 & 0,000 & 0,000 \\
+Média histórica & 0,000 & 0,000 & 0,000 & 0,000 & 0,000 & 0,000 & 0,000 & 0,000 \\
+AR(1) & 0,004 & 0,005 & 0,000 & 0,011 & 0,053 & 0,056 & 0,004 & 0,015 \\
+EWMA-vol & \textbf{1,000} & 1,000 & 1,000 & 1,000 & \textbf{1,000} & 1,000 & 1,000 & 1,000 \\
+Quantis empíricos & \textbf{0,100} & 0,111 & 0,000 & 0,121 & \textbf{0,453} & 0,448 & 0,289 & 0,488 \\
+GBM quantílico & \textbf{0,316} & 0,293 & 0,059 & 0,274 & \textbf{0,611} & 0,613 & 0,574 & 0,637 \\
+TFT & 0,022 & 0,013 & 0,000 & 0,027 & \textbf{0,332} & 0,294 & 0,061 & 0,267 \\
+\bottomrule
+\end{tabular}
+
+\smallskip
+{\footnotesize Prim.: estacionário, bloco pela regra pré-registrada (65 e 64 sessões); MB: blocos móveis, mesmo comprimento; \(l{=}h\) e \(l{=}\sqrt{T}\): estacionário com bloco de \(h\) e de 39 sessões.\par}
+\end{table}
+
+O veredito mecânico do \textit{scorecard} é, por horizonte:
+\begin{itemize}
+    \item \textbf{\(h+1\)}: H1 não rejeitada; H2 com desfecho \textbf{supera só o naive}. O TFT supera os dois naive, mas não pertence ao MCS nem tem rejeição contra todos os fortes; não há vencedor primário.
+    \item \textbf{\(h+7\)}: H1 não rejeitada; H2 com desfecho \textbf{supera o naive e empata com os fortes}. O TFT supera os dois naive e pertence ao MCS; pela regra pré-registrada, é o vencedor primário do horizonte.
+\end{itemize}
+O estudo é considerado bem-sucedido pelo critério pré-registrado, pois H1 não foi rejeitada em ao menos um horizonte --- de fato, nos dois.
+
+O empate em \(h+7\) precisa ser lido com o seu alcance exato. ``Vencedor primário'' significa que o candidato é calibrado, supera os naive e não pode ser distinguido estatisticamente dos melhores modelos; não significa que tenha a menor perda, que pertence ao EWMA-vol, nem que supere algum comparador forte. Além disso, a pertença ao MCS em \(h+7\) é sensível ao comprimento do bloco: com blocos de \(h = 7\) sessões, mais curtos que os da especificação primária, o TFT seria eliminado (\(p_{\text{MCS}} = 0{,}061\)), enquanto blocos móveis e blocos de \(\sqrt{T}\) o mantêm. A especificação primária, fixada antes da rodada, é a que vale para o veredito; a sensibilidade mostra que o empate está perto da fronteira de decisão. Em \(h+1\), a eliminação do TFT é robusta: ele fica fora do conjunto em todas as quatro especificações.
+
+Os recortes descritivos do perfil, com p-valores brutos, sem papel no veredito, apontam na mesma direção. Por semente, o DM contra o AR(1) rejeita a igualdade em favor do TFT em cinco das dez sementes em \(h+1\) e em duas em \(h+7\); contra os quantis empíricos, em três sementes em \(h+1\) e nenhuma em \(h+7\); contra EWMA-vol e GBM, em nenhuma semente de nenhum horizonte. Nenhuma semente isolada do TFT, portanto, supera de forma significativa os dois comparadores com menor perda.
+
+A leitura conjunta é coerente com a hipótese de trabalho do Capítulo~\ref{chap:fundamentacao}: o valor de um modelo probabilístico de retornos diários está na escala da distribuição condicional, e não na sua locação. Todo o ganho sobre os naive vem de descrever a escala; entre os modelos que a descrevem, o EWMA-vol, que modela apenas a volatilidade, não foi superado por nenhum modelo com acesso a indicadores técnicos, sentimento e fundamentos. O TFT entrega uma distribuição calibrada, de qualidade estatisticamente indistinguível da melhor em \(h+7\), mas o conjunto de \textit{features} não se converteu em ganho de \textit{skill} sobre os comparadores fortes, como antecipado pela baixa previsibilidade da média dos retornos \cite{GU2020}.
 
 \section{Perfil descritivo pontual}
-\textit{A ser preenchido após a rodada confirmatória.} RMSE, MAE e acurácia direcional por horizonte, reportados como perfil descritivo, sem papel no veredito.
+\textit{A ser preenchido.} RMSE, MAE e acurácia direcional por horizonte, reportados como perfil descritivo, sem papel no veredito. Essas métricas não integram as tabelas da geração julgada e serão calculadas a partir das previsões persistidas, sem re-treino.
 
 \section{Contribuição de famílias (H3)}
-\textit{A ser preenchido após a rodada confirmatória.} A contribuição relativa das famílias (preço, técnico, sentimento, fundamento) será reportada pelas participações \(s_f(h)\) em \(h+1\) e \(h+7\) e pela variação \(\Delta_f\) com seu intervalo de \textit{bootstrap}, na importância por permutação e na ablação com re-treino, com a leitura da regra pré-registrada (concordância de sinal e intervalos excluindo zero na mesma família); os pesos da VSN serão reportados como descrição geral do uso de cada família.
+H3 não foi sustentada: nenhum dos dois métodos indicou heterogeneidade da contribuição das famílias entre \(h+1\) e \(h+7\), pois nenhum intervalo de \(\Delta_f\) excluiu zero (Tabela~\ref{tab:h3}). Os intervalos são de \(98{,}75\%\), com a correção de Bonferroni sobre as quatro famílias, obtidos por \textit{bootstrap} estacionário pareado com blocos de 61 sessões e 1.000 réplicas.
+
+\begin{table}[htb]
+\centering
+\caption{Participação de cada família na importância total, \(s_f(h)\), e variação entre horizontes, \(\Delta_f = s_f(h+7) - s_f(h+1)\), com intervalo de \textit{bootstrap} de \(98{,}75\%\)}
+\label{tab:h3}
+\small
+\begin{tabular}{l l c c c c}
+\toprule
+Método & Família & \(s_f(h+1)\) & \(s_f(h+7)\) & \(\Delta_f\) & Intervalo de \(\Delta_f\) \\
+\midrule
+Permutação & Técnico & 0,675 & 0,761 & \(+0{,}086\) & [\(-0{,}355\); \(0{,}758\)] \\
+ & Preço & 0,261 & 0,199 & \(-0{,}062\) & [\(-0{,}716\); \(0{,}419\)] \\
+ & Sentimento & 0,058 & 0,091 & \(+0{,}033\) & [\(-0{,}404\); \(0{,}282\)] \\
+ & Fundamento & 0,006 & \(-0{,}051\) & \(-0{,}057\) & [\(-0{,}336\); \(0{,}248\)] \\
+\midrule
+Ablação & Técnico & 0,340 & 0,398 & \(+0{,}058\) & ilimitado\textsuperscript{a} \\
+ & Preço & 0,296 & 0,301 & \(+0{,}006\) & ilimitado\textsuperscript{a} \\
+ & Sentimento & 0,283 & 0,290 & \(+0{,}007\) & ilimitado\textsuperscript{a} \\
+ & Fundamento & 0,081 & 0,010 & \(-0{,}071\) & ilimitado\textsuperscript{a} \\
+\bottomrule
+\multicolumn{6}{p{14cm}}{\footnotesize \textsuperscript{a} Em 1 réplica em \(h+1\) e 12 em \(h+7\), a soma das importâncias não foi positiva e a participação ficou indefinida; pela regra pré-registrada, essas réplicas contam como infinitas, e os dois limites do intervalo resultaram ilimitados.}
+\end{tabular}
+\end{table}
+
+A ausência de heterogeneidade decorre sobretudo da pequena magnitude das importâncias. Na permutação, a família técnica, a mais importante, eleva a \textit{pinball} média em \(2{,}0 \times 10^{-5}\) em \(h+1\), cerca de \(0{,}5\%\) da perda do modelo; a permutação dos fundamentos tem efeito praticamente nulo, e em \(h+7\) chega a ser negativo. Com contribuições tão pequenas, a normalização por um total próximo de zero torna as participações instáveis, o que explica a largura dos intervalos e as réplicas indefinidas da ablação. Na ablação, as importâncias são maiores (de \(1{,}5 \times 10^{-5}\) a \(6{,}3 \times 10^{-5}\) em \(h+1\)), mas sua soma ainda é pequena diante da variabilidade do re-treino entre sementes.
+
+Apesar da não sustentação de H3, a ordenação das famílias é consistente entre os métodos e os horizontes: a família técnica, que reúne as medidas de volatilidade, tem a maior participação nos dois métodos e nos dois horizontes, e a família de fundamentos, a menor. Os pesos da VSN, que descrevem o uso geral de cada família pelo modelo sem eixo de horizonte, seguem a mesma ordem: medianas sobre as decisões de \(0{,}385\) para a família técnica, \(0{,}253\) para preço, \(0{,}140\) para sentimento e \(0{,}127\) para fundamentos. Essa concordância é coerente com o resultado de H2: o modelo apoia-se sobretudo nas \textit{features} que descrevem a escala da distribuição. A leitura é preditiva e condicional ao modelo treinado, não causal.
 
 \section{Ameaças à validade}
-As principais ameaças à validade são: (i) sensibilidade dos resultados ao recorte de ativo, horizonte e janela temporal; (ii) possível subpotência estatística para detectar diferenças pequenas entre o candidato e os comparadores fortes e, em \(h+7\), poder do \textit{gate} de calibração otimista pela dependência entre violações vizinhas; (iii) interpretação indevida quando comparações são feitas fora da mesma interseção temporal; e (iv) não permutabilidade das séries temporais, que limita a garantia teórica da predição conformal --- razão pela qual sua cobertura é reportada como empírica \cite{BARBER2023}. Para mitigar esses riscos, a análise adota coorte congelada, alinhamento temporal estrito, correção de múltiplas comparações e leitura conjunta de métricas de calibração, \textit{skill} e testes pareados.
+As principais ameaças à validade são: (i) sensibilidade dos resultados ao recorte de ativo, horizonte e janela temporal; (ii) subpotência estatística para detectar diferenças pequenas entre o candidato e os comparadores fortes --- as diferenças observadas, de poucos por cento da perda, estão nessa faixa --- e, em \(h+7\), poder do \textit{gate} de calibração otimista pela dependência entre violações vizinhas; (iii) sensibilidade da pertença ao MCS em \(h+7\) ao comprimento do bloco do \textit{bootstrap}, reportada acima; (iv) interpretação indevida quando comparações são feitas fora da mesma interseção temporal; e (v) não permutabilidade das séries temporais, que limita a garantia teórica da predição conformal --- razão pela qual sua cobertura é reportada como empírica \cite{BARBER2023}. Para mitigar esses riscos, a análise adota coorte congelada, alinhamento temporal estrito, especificações fixadas antes da rodada, correção de múltiplas comparações e leitura conjunta de métricas de calibração, \textit{skill} e testes pareados.
 
 A generalização externa dos achados depende de replicação em outros ativos e períodos. As conclusões devem ser entendidas como evidência para o escopo experimental definido, e não como afirmação universal sobre o desempenho relativo de arquiteturas ou famílias de \textit{features}.
