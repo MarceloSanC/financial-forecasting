@@ -1624,4 +1624,44 @@ E       AssertionError: assert 'Declaração  ...egunda linha.' == '\n  Declara�
 **Razão:** o D9 (transcrição byte a byte) passa a ter teste que mata a normalização de
 espaço nas pontas; só o teste novo cai sob a mutação.
 
+### 2026-10-24 — [finding] Etapa R, R2 geração 1: `mpiw` ausente no gold para os baselines pontuais — Claude (executor da Etapa R)
+**Contexto:** R0 e R1 verdes (`IMAGE_ID_OK`, `GATE1_OK` com `GATE1 = d721c76c8f2b2065ec32ab58f166ff2c31021780`,
+`WT_CLEAN`, `SRC_AS_GATE1`, `REGISTER_COMMITTED`, `COHORT_TAG_OK`, `ABLATION_COHORT_TAG_OK`,
+`CODE_SRC = b786b7f0d7d9cff8c455a599c21cc89dfe51096a`); R2 item 1 verde (`JUDGED_COPY_OK`,
+`DIGEST_OK`, `RECORD_OK`, 355 arquivos em `live-before.sha256sum`, `NO_FF83`). Imagem
+`sha256:b69a7620e7bd8449369bde2f46e903c5f46c25e9efb3597f452af3272e0a8f45`. A geração 1
+(`ff83-gen1`) saiu com estado `2 false` (exit 2, sem OOM), e a saída inteira foi:
+```
+error: ReportSourceMismatchError: gold_metrics_by_run: expected one row for ['horizon', 'level_high', 'level_low', 'metric', 'model', 'sample', 'seed'] at model=baseline_historical_mean, seed=None, horizon=1, sample=model_full, metric=mpiw, found 0
+```
+Linha `FAIL_GEN1` com `ReportSourceMismatchError` da tabela "Se falhar": parada. DESCARTE →
+`DISCARDED` (nada fora do lugar; a geração não escreveu nada, I9); `DATA_INTACT` (listagem
+de `data/cohorts/aapl` igual à de antes). Nada commitado da geração.
+**Diagnóstico (só chaves e contagens, nenhum valor):** sonda DuckDB no container (mesmo
+`IMAGE_ID`, `/data` só leitura) sobre `judged/<REF>/generation/gold_metrics_by_run.parquet`:
+linhas `mpiw`/`picp` existem para `baseline_ar1`, `baseline_ewma_vol`,
+`baseline_historical_quantiles`, `gbm_quantile` (6 cada por amostra) e `tft_quantile` (60
+cada), nas amostras `common` e `model_full`, pares (0,02; 0,98), (0,1; 0,9), (0,25; 0,75).
+Para `baseline_historical_mean` e `baseline_zero_return` **não há nenhuma** linha `mpiw` nem
+`picp`, em nenhuma amostra. As métricas desses dois são `coverage_n_evaluated`, `crps_q`,
+`degeneracy_rate`, `guardrail_applied_rate`, `interval_score`, `interval_width`, `pinball` e
+`pinball_grid_mean`. Ou seja, são os baselines pontuais com intervalo degenerado, e o gold
+os grava sem métrica de cobertura. O lookup que falha é o `_verified_widths`
+(`report_figures.py`, figura `sharpness`, `sample = GATE_SAMPLE = model_full`), que exige
+uma linha `mpiw` para todo modelo do silver. O mundo sintético das Tasks 06–14 tem `mpiw`
+para todos os modelos, e é por isso que o gate não pegou o caso.
+**Direção sugerida:** é mudança de `src/` (linha `FAIL_SRC_CHANGED_SINCE_GATE1`), com revisão
+independente, novo `make check` e `GATE1` novo; depois, recomeçar a Etapa R da R1. Pontos a
+decidir no fix, que não são decididos aqui:
+(a) o que a sharpness desenha para modelo sem `mpiw` no gold. Por exemplo, pular o modelo,
+ou exigir que todas as larguras sejam degeneradas (lista vazia) e declarar isso na legenda e
+em `excluded_degenerate`;
+(b) conferir os outros lookups `mpiw`/`picp` por modelo (`picp_mpiw_figure`, o
+nativo × conformal e a fonte da linha 1854) para o mesmo caso;
+(c) um mundo sintético com um baseline pontual sem linhas `mpiw`/`picp`, num teste do use
+case e no e2e.
+Stage candidata: a própria 8.3 (fix antes do fechamento).
+**Razão:** parada dura do runbook. Nenhuma figura é ajustada para "passar" (I3), e o
+executor da Etapa R não altera `src/`.
+
 <!-- END: post-execution -->
