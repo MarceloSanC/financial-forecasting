@@ -236,9 +236,16 @@ def test_rewrite_replaces_previous_figures_entirely(tmp_path: Path) -> None:
 
 
 @pytest.mark.contract
+@pytest.mark.parametrize(
+    "failing_call",
+    [2, 5],
+    ids=["while-saving-the-previous", "after-a-partial-install"],
+)
 def test_failure_midway_restores_previous_and_removes_staging(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failing_call: int
 ) -> None:
+    # CC3-3: as trocas são 3 para guardar a saída anterior e 3 para instalar a nova; a 5ª
+    # falha depois de `figures/` já instalado (ramo da lista `installed`).
     sink = FilesystemReportSink(tmp_path)
     sink.write(figures=_figures(), dossier=_dossier())
     before = _listing(tmp_path)
@@ -247,7 +254,7 @@ def test_failure_midway_restores_previous_and_removes_staging(
 
     def flaky(src: object, dst: object) -> None:
         calls["n"] += 1
-        if calls["n"] == 2:  # noqa: PLR2004 — a segunda troca falha
+        if calls["n"] == failing_call:
             raise OSError("disk full")
         real_replace(src, dst)  # type: ignore[arg-type]
 
@@ -256,6 +263,30 @@ def test_failure_midway_restores_previous_and_removes_staging(
         sink.write(figures=_figures(b" new"), dossier=_dossier("novo"))
     monkeypatch.setattr(os, "replace", real_replace)
     assert _listing(tmp_path) == before
+
+
+@pytest.mark.contract
+def test_staging_write_failure_leaves_previous_output_intact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sink = FilesystemReportSink(tmp_path)
+    sink.write(figures=_figures(), dossier=_dossier())
+    before = _listing(tmp_path)
+    real_write = Path.write_bytes
+    calls = {"n": 0}
+
+    def flaky(self: Path, data: bytes) -> int:
+        calls["n"] += 1
+        if calls["n"] == 5:  # noqa: PLR2004 — no meio das figuras do staging
+            raise OSError("disk full")
+        return real_write(self, data)
+
+    monkeypatch.setattr(Path, "write_bytes", flaky)
+    with pytest.raises(OSError, match="disk full"):
+        sink.write(figures=_figures(b" new"), dossier=_dossier("novo"))
+    monkeypatch.setattr(Path, "write_bytes", real_write)
+    assert _listing(tmp_path) == before
+    assert not (tmp_path / ".report-artifacts-staging").exists()
 
 
 @pytest.mark.contract
