@@ -1355,4 +1355,39 @@ Vocabulário fechado (CONVENTIONS §3.4): `decision` (ou `decision:E` /
 `measurement`. Outra tag no cabeçalho de entrada é recusada por
 `scripts/check_technical_postexec.py`.
 
+### 2026-10-24 — [decision:C] Task 02, caixas do `SeriesSpec` com bigodes — Claude (executor)
+**Contexto:** o §1 fixa os campos do `SeriesSpec` (`x`, `y`, `low`/`high`, `text`), e a
+Task 08 manda as caixas do sharpness carregarem mínimo, quartis e máximo das larguras,
+que o renderer desenha por `Axes.bxp` sem recalcular. Cinco estatísticas não cabem em
+`y` + `low`/`high`.
+**Pergunta:** onde moram o mínimo e o máximo de uma caixa?
+**Opções:**
+- A — uma segunda série `interval` só com os extremos.
+- B — campos opcionais `whisker_low`/`whisker_high`, obrigatórios em `boxes` (com
+  `y` = mediana, `low`/`high` = quartis) e proibidos nos demais tipos. ✅ recomendada
+**Decisão:** B.
+**Razão:** reversível barato (nada persistido antes da Etapa R); mantém uma caixa como
+um elemento com um rótulo de estatuto, sem duas séries que o renderer teria de casar.
+
+### 2026-10-24 — [decision:C] Task 02, forma do catálogo, das seções citáveis e das âncoras — Claude (executor)
+**Contexto:** o §1 fecha as listas (`FIGURE_CATALOG`, `CITABLE_SECTIONS`,
+`CITABLE_82_ANCHORS`), mas não escreve os ids das seções, a ordem nem a forma das
+âncoras; a frase do conformal é exigida "em todo painel".
+**Pergunta:** como escrever essas listas fechadas?
+**Opções:**
+- A — seções na ordem da tabela do doc §7; âncoras por título livre; frase de painel
+  conferida só no teste da Task 06.
+- B — seções `(id, título)` na ordem das camadas do D8 (do veredito para os detalhes,
+  Sandve Rule 8); âncoras pelo slug do GitHub do cabeçalho da §7 da 8.2 (conferidas
+  contra o arquivo nesta Task); campo `panel_note` no catálogo, que a `FigureSpec` exige
+  no rótulo de todo painel; omissões do D13 literais sem a marcação Markdown (negrito e
+  crase); a legenda do fan chart como modelo `{seed}` que casa um inteiro. ✅ recomendada
+**Decisão:** B. Ids: `claim_pointers`, `declared_power`, `identity`,
+`preregistration_chain`, `pre_anchor_computation`, `blinding_statement`,
+`judged_generation`, `environment`, `code_commits`, `seeds`, `figures`, `reproduction`,
+`deviations` (13) e `internal`.
+**Razão:** reversível barato; o D8 é a âncora da ordem e o slug do GitHub é o que os
+links do Markdown resolvem no repositório; exigir a frase na construção fecha o I11 no
+tipo, como o §1 já faz com as omissões.
+
 <!-- END: post-execution -->
