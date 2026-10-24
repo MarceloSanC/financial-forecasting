@@ -119,6 +119,8 @@ _USE_CASES = "financial_forecasting/features/evaluation/application/use_cases"
 GUARDED_MODULES = (
     f"{_USE_CASES}/report_figures.py",
     f"{_USE_CASES}/report_silver.py",
+    f"{_USE_CASES}/report_dossier.py",
+    f"{_USE_CASES}/dossier_markdown.py",
 )
 _SERVICES = "financial_forecasting.features.evaluation.domain.services"
 ALLOWED_SERVICES = frozenset({"series_assembly", "coverage_metrics", "degeneracy_gate"})

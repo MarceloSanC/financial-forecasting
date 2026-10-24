@@ -951,9 +951,14 @@ class DossierSection:
 class TraceabilityDossier:
     """O dossiê: exatamente as `CITABLE_SECTIONS` (citáveis, na ordem) e a seção interna.
 
+    A 1ª barreira do A17 vale também para o ponteiro de cada bloco de seção citável (não só
+    para a `DossierEntry`): bloco montado de outra fonte não leva a evidência anterior ao
+    citável (Checkpoint C do bloco 1, CC1-1).
+
     Raises:
         ValueError: seção fora da lista fechada, fora de ordem, com título ou visibilidade
-            diferentes, ou seção interna ausente/repetida.
+            diferentes, seção interna ausente/repetida ou ponteiro proibido em seção
+            citável.
     """
 
     sections: tuple[DossierSection, ...]
@@ -972,6 +977,17 @@ class TraceabilityDossier:
             raise ValueError(
                 "dossier sections must be exactly CITABLE_SECTIONS followed by the internal "
                 f"one, got {[(sid, vis.value) for sid, _, vis in got]}"
+            )
+        forbidden = [
+            block.pointer
+            for section in self.sections_of(Visibility.CITABLE)
+            for block in section.blocks
+            if block.pointer is not None and is_forbidden_citable_pointer(block.pointer)
+        ]
+        if forbidden:
+            raise ValueError(
+                f"citable sections cannot point to {forbidden} (prior evidence goes to the "
+                "internal section — A17, 1st barrier)"
             )
 
     def sections_of(self, visibility: Visibility) -> tuple[DossierSection, ...]:

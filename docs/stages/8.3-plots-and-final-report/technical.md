@@ -1406,4 +1406,29 @@ tipo, como o §1 já faz com as omissões.
 **Razão:** reversível barato; uma grandeza por eixo y (ADR 8.3.0003 item 4) e nenhum
 número novo — só seleção, complemento e razão de contagens médias (I3).
 
+### 2026-10-24 — [deviation] Task 09, 1ª barreira do A17 também no ponteiro de bloco citável — Claude (executor)
+**Contexto:** o Checkpoint C do bloco 1 (CC1-1) pediu que a 1ª barreira valesse também para
+`DossierBlock.pointer` em seção citável, não só para a `DossierEntry`.
+**O que mudou:** `TraceabilityDossier.__post_init__` (`dtos/report_artifacts.py`, fora da
+lista de arquivos da Task 09) recusa bloco de seção citável cujo ponteiro case
+`is_forbidden_citable_pointer`; teste `test_citable_block_pointer_passes_the_first_barrier`.
+**Razão:** abaixo do limiar de pergunta — pedido explícito do revisor, mesma regra e mesmo
+dono da 1ª barreira, sem mudar contrato nem dado persistido.
+
+### 2026-10-24 — [decision:C] Task 09, `result_digest` explícito e forma do Markdown — Claude (executor)
+**Contexto:** o §1 dá `build_dossier(..., attempts, ...)`, mas o `result_digest` da última
+`input_read` tem dono na Task 10 (`judged_copy.last_input_read_digest`); calcular de novo
+no dossiê duplicaria a regra. O `blinding_statement` tem aspas, acento e quebra de linha,
+que uma célula de tabela Markdown não transcreve byte a byte.
+**Pergunta:** de onde vem o `result_digest` e como transcrever o texto literal?
+**Opções:**
+- A — o dossiê filtra as tentativas de novo; o texto vai à tabela com escapes.
+- B — `build_dossier` recebe `result_digest` (o use case passa o do dono) e usa as
+  tentativas só para a linha `started`; valor de várias linhas ou com `|` sai num bloco
+  cercado literal, fora da tabela; o comando de regeneração é um bloco
+  `REGENERATE_HEADING` de `code_commits` que o Markdown repete no topo. ✅ recomendada
+**Decisão:** B.
+**Razão:** reversível barato; dono único do `result_digest` (CB-5) e transcrição byte a
+byte do D9.
+
 <!-- END: post-execution -->
