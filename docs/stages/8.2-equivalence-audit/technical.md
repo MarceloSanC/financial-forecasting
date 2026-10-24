@@ -1836,5 +1836,8 @@ passam a trazer `float32_exact=0/4 rule=double` (o sintético não é float32-ex
 tests/architecture -n 4 --dist loadgroup`: `449 passed, 1 skipped`. Pendente: revisão
 independente, `make check` extra e `GATE1` novo; depois a E4 desde o passo 1 e a E5 (o `DECLARED`
 é regenerado do novo relatório).
+Complemento (`[8.2/task-10-extra]`, só testes): `a9_rows` sintético com T∩ float32-exato e um
+y_ant fora de T∩ = 0.1 → `rule=double`, `float32_exact=4/5`; mutação mD (pré-condição só sobre
+T∩): `2 failed, 69 passed, 1 skipped`; corrigido `71 passed, 1 skipped`.
 
 <!-- END: post-execution -->
