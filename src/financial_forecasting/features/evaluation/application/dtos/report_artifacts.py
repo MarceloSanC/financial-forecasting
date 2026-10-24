@@ -750,15 +750,22 @@ def is_forbidden_citable_pointer(pointer: str) -> bool:
 
 
 def _check_pointer(pointer: object, *, field: str) -> str:
-    """Caminho relativo ao repo, com âncora opcional `#…`."""
+    """Caminho relativo ao repo, **normalizado**, com âncora opcional `#…`.
+
+    Segmento `.`/`..` ou vazio (`./docs`, `docs//x`, `docs/./x`) é recusado: um ponteiro
+    não normalizado contornaria a comparação por prefixo da 1ª barreira do A17 (CC1-1).
+    A barra final (diretório) é a única forma de segmento vazio aceita.
+    """
     text = _non_empty_str(pointer, field=field)
     path = text.split("#", 1)[0]
+    segments = path.split("/")
     if (
         not path
         or _ABSOLUTE_PATH.match(text)
         or "\\" in text
         or any(char.isspace() for char in text)
-        or ".." in path.split("/")
+        or any(segment in {".", ".."} for segment in segments)
+        or "" in segments[:-1]
     ):
         raise ValueError(
             f"{field} must be a repo-relative path with optional #anchor, got {text!r}"
@@ -828,10 +835,12 @@ class DossierEntry:
 CITABLE_FORBIDDEN_PATTERNS: Final[tuple[re.Pattern[str], ...]] = tuple(
     re.compile(pattern, re.IGNORECASE)
     for pattern in (
-        # o relatório de equivalência; o diretório `8.2-equivalence-audit/` das âncoras
-        # citáveis é poupado (refinamento CB-2 do technical 8.3 §1)
+        # o relatório de equivalência; só o diretório `8.2-equivalence-audit/` (com a
+        # barra) das âncoras citáveis é poupado (refinamento CB-2 do technical 8.3 §1;
+        # CC1-1: sem a barra, o termo casa)
         r"equivalence[_-]audit\.md",
         r"(?<!8\.2[_-])equivalence[_-]audit",
+        r"equivalence[_-]audit(?!/)",
         r"prior[_-]evidence",
         r"tests/equivalence",
         r"8[._-]2[._-]000[34]",

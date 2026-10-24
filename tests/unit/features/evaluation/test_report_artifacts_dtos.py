@@ -485,6 +485,10 @@ def test_dossier_entry_kinds_closed_and_finding_requires_open() -> None:
         "docs/adr/8-2-0004-b3.md",
         "tests/equivalence/prior_evidence.py",
         "Tests/Equivalence/test_x.py",
+        # CC1-1: ponteiros não normalizados não contornam o prefixo (recusa na forma)
+        "./docs/stages/8.2-equivalence-audit/concept.md",
+        "docs//stages/8.2-equivalence-audit/concept.md",
+        "docs/./reports/equivalence_audit.md",
     ],
 )
 def test_non_internal_entry_with_forbidden_pointer_rejected(pointer: str) -> None:
@@ -492,7 +496,7 @@ def test_non_internal_entry_with_forbidden_pointer_rejected(pointer: str) -> Non
         if kind is DossierEntryKind.INTERNAL:
             continue
         status = "open" if kind is DossierEntryKind.FINDING else None
-        with pytest.raises(ValueError, match="A17"):
+        with pytest.raises(ValueError, match=r"A17|repo-relative"):
             DossierEntry(kind=kind, title="t", summary="s", pointer=pointer, status=status)
 
 
@@ -711,5 +715,30 @@ def test_find_forbidden_returns_matches_in_text() -> None:
     assert find_forbidden(text) == (
         "equivalence_audit.md",
         "equivalence_audit",
+        "equivalence_audit",
         "evidência anterior",
     )
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "pointer",
+    [
+        "./docs/x.md",
+        "docs//x.md",
+        "docs/./x.md",
+        "docs/stages/../reports/x.md",
+    ],
+)
+def test_pointer_must_be_normalized(pointer: str) -> None:
+    with pytest.raises(ValueError, match="repo-relative"):
+        DossierEntry(kind=DossierEntryKind.INTERNAL, title="t", summary="s", pointer=pointer)
+    assert DossierEntry(
+        kind=DossierEntryKind.INTERNAL, title="t", summary="s", pointer="tests/equivalence/"
+    ).pointer.endswith("/")
+
+
+@pytest.mark.unit
+def test_second_barrier_spares_the_82_directory_only_with_the_slash() -> None:
+    assert find_forbidden("docs/stages/8.2-equivalence-audit/technical.md") == ()
+    assert find_forbidden("a Stage 8.2-equivalence-audit inteira") == ("equivalence-audit",)
