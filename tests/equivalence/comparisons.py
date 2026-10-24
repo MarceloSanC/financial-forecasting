@@ -74,7 +74,12 @@ class A1Result:
 
 
 def a1_within(y_new: float, y_prior: float, *, half_ulp: float = A1_HALF_ULP) -> bool:
-    """|y_novo - y_ant| ≤ meio ulp·|y_ant| (2⁻⁵³ para `double`; y_ant = 0 ⇒ igualdade exata)."""
+    """|y_novo - y_ant| ≤ meio ulp·|y_ant| (2⁻⁵³ para `double`; y_ant = 0 ⇒ igualdade exata).
+
+    Fail-closed: y_novo ou y_ant não finito ⇒ falso (`inf <= 2⁻⁵³·inf` seria verdadeiro).
+    """
+    if not (math.isfinite(y_new) and math.isfinite(y_prior)):
+        return False
     return abs(y_new - y_prior) <= half_ulp * abs(y_prior)
 
 

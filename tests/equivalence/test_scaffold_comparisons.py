@@ -197,6 +197,9 @@ def test_a1_float32_rule_is_fail_closed_on_non_finite_values() -> None:
         exact = a1_rule([1.0])
         assert a1_check([(bad, 1.0)], rule=exact).status is RawStatus.OUT_OF_TOLERANCE
         assert a1_check([(bad, 1.0)]).status is RawStatus.OUT_OF_TOLERANCE
+        # regra de double (sem pré-condição B3): y_ant não finito também reprova
+        assert a1_check([(5.0, bad)]).status is RawStatus.OUT_OF_TOLERANCE
+        assert a1_check([(bad, bad)]).status is RawStatus.OUT_OF_TOLERANCE
 
 
 def test_a1_reports_the_original_double_rule_and_relative_max() -> None:
