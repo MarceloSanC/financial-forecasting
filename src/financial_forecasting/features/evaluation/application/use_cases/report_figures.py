@@ -34,6 +34,13 @@ from typing import Final
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
     GOLD_CALIBRATION_TABLE,
     GOLD_CONFORMAL_COVERAGE,
+    GOLD_DIFFERENTIAL_ACF,
+    GOLD_DM_RESULTS,
+    GOLD_H3_IMPORTANCE,
+    GOLD_H3_READING,
+    GOLD_H3_SHARES,
+    GOLD_H3_VSN,
+    GOLD_LOSS_DIFFERENTIALS,
     GOLD_METRICS_BY_RUN,
     GoldTableSchema,
 )
@@ -44,8 +51,12 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     GoldGeneration,
     GoldPartition,
     col,
+    col_bool_or_none,
+    col_float,
     col_float_or_none,
+    col_int,
     col_int_or_none,
+    col_str,
     col_str_or_none,
 )
 from financial_forecasting.features.evaluation.application.dtos.report_artifacts import (
@@ -65,6 +76,11 @@ from financial_forecasting.features.evaluation.application.dtos.report_artifacts
 )
 from financial_forecasting.features.evaluation.domain.value_objects._finite_number import (
     is_real_number,
+)
+from financial_forecasting.features.evaluation.domain.value_objects.family_loss_differentials import (  # noqa: E501
+    H3_HORIZONS,
+    H3_METHODS,
+    PERMUTATION,
 )
 from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
     Preregistration,
@@ -1217,6 +1233,425 @@ def native_vs_conformal_figure(inputs: ReportInputs) -> FigureAssembly:
     return FigureAssembly(
         spec=_spec("native_vs_conformal", panels, (EMPIRICAL_COVERAGE_NOTE,)), sources=sources
     )
+
+
+# --------------------------------------------------------------------------------------
+# DM: candidato x comparadores (I4; D2)
+# --------------------------------------------------------------------------------------
+
+_H2_NOT_APPLICABLE = ElementLabel(status=StatusLabel.DESCRIPTIVE_PROFILE_H2_NOT_APPLICABLE)
+
+
+def _holm_text(raw: float, adjusted: float, *, rejected: bool) -> str:
+    decision = "rejeita" if rejected else "não rejeita"
+    return f"p bruto = {raw:.3g}; Holm {decision} (p ajustado = {adjusted:.3g})"
+
+
+def dm_figure(inputs: ReportInputs) -> FigureAssembly:
+    """Por horizonte, uma célula por comparador da família: p bruto e decisão de Holm.
+
+    Linha `variance_estimator = primário (retangular)`; `adjusted_p_value`/`rejected`
+    conferidos contra `profile.horizons[h].dm` (estimador primário). Confirmatório só onde
+    `verdict.horizons[h].h1.passed`; senão "descritivo (perfil) — H2 não aplicável".
+
+    Raises:
+        ReportSourceMismatchError: linha ausente, entrada do scorecard ausente ou divergente.
+    """
+    schema = GOLD_DM_RESULTS
+    estimator = inputs.plan.dm.primary_estimator.value
+    candidate = inputs.plan.candidate
+    panels: list[PanelSpec] = []
+    for horizon in inputs.plan.horizons:
+        passed = _get(horizon_entry(inputs.scorecard, "verdict", horizon), "h1", "passed") is True
+        profile = horizon_entry(inputs.scorecard, "profile", horizon)
+        label = _CONFIRMATORY if passed else _H2_NOT_APPLICABLE
+        raws: list[float | None] = []
+        texts: list[str] = []
+        for comparator in inputs.plan.comparators:
+            row = _one(
+                inputs,
+                schema,
+                horizon=horizon,
+                variance_estimator=estimator,
+                candidate=candidate,
+                comparator=comparator,
+            )
+            raw = col_float(row, schema, "p_value")
+            adjusted = col_float(row, schema, "adjusted_p_value")
+            rejected = col_bool_or_none(row, schema, "rejected") is True
+            entry = _profile_entry(profile, "dm", comparator=comparator, estimator=estimator)
+            if (
+                _number(entry.get("adjusted_p_value"), where="dm.adjusted_p_value") != adjusted
+                or entry.get("rejected") is not rejected
+            ):
+                raise ReportSourceMismatchError(
+                    f"gold_dm_results differs from the scorecard profile dm at horizon "
+                    f"{horizon}, comparator {comparator}, estimator {estimator}"
+                )
+            raws.append(raw)
+            texts.append(_holm_text(raw, adjusted, rejected=rejected))
+        cells = SeriesSpec(
+            series_id="dm_cells",
+            kind=SeriesKind.CELLS,
+            name=f"DM unilateral (candidato com perda menor), estimador {estimator}",
+            model=candidate,
+            label=label,
+            x=inputs.plan.comparators,
+            y=tuple(raws),
+            text=tuple(texts),
+        )
+        panels.append(
+            _panel(
+                inputs,
+                horizon,
+                [cells],
+                x_label="comparador",
+                y_label="p bruto",
+                label=label,
+            )
+        )
+    sources = (
+        _gold(
+            schema.name,
+            ("p_value", "adjusted_p_value", "rejected"),
+            variance_estimator=estimator,
+            candidate=candidate,
+        ),
+        _document("profile.horizons[].dm", ("adjusted_p_value", "rejected"), estimator=estimator),
+        _document("verdict.horizons[].h1", ("passed",)),
+    )
+    return FigureAssembly(spec=_spec("dm_candidate_vs_comparators", panels), sources=sources)
+
+
+# --------------------------------------------------------------------------------------
+# Diferencial de perda d_t e ACF (D14)
+# --------------------------------------------------------------------------------------
+
+
+def _pair_rows(
+    inputs: ReportInputs, schema: GoldTableSchema, horizon: int, comparator: str
+) -> tuple[list[Row], bool]:
+    """As linhas do par (candidato, comparador) e se o candidato é `model_b` (sinal)."""
+    candidate = inputs.plan.candidate
+    forward = _rows(inputs, schema, horizon=horizon, model_a=candidate, model_b=comparator)
+    backward = _rows(inputs, schema, horizon=horizon, model_a=comparator, model_b=candidate)
+    if bool(forward) == bool(backward):
+        raise ReportSourceMismatchError(
+            f"{schema.name}: expected the pair (candidate, {comparator}) once at horizon "
+            f"{horizon}, found {len(forward)} forward and {len(backward)} backward rows"
+        )
+    return (forward, False) if forward else (backward, True)
+
+
+def _fold_cuts(timestamps: Sequence[str], folds: Sequence[str | None]) -> list[str]:
+    return [timestamps[i] for i in range(1, len(timestamps)) if folds[i] != folds[i - 1]]
+
+
+def loss_differential_figure(inputs: ReportInputs) -> FigureAssembly:
+    """d_t = L_candidato - L_comparador ao longo do tempo e a ACF persistida (D14).
+
+    O gold guarda d_t = L_a - L_b do par em ordem; com o candidato em `model_b` o sinal é
+    trocado (orientação do eixo, I3). A faixa de confiança da ACF não é persistida e fica
+    fora (omissão declarada).
+    """
+    loss, acf = GOLD_LOSS_DIFFERENTIALS, GOLD_DIFFERENTIAL_ACF
+    panels: list[PanelSpec] = []
+    for horizon in inputs.plan.horizons:
+        lines: list[SeriesSpec] = []
+        stems: list[SeriesSpec] = []
+        cuts: set[str] = set()
+        for comparator in inputs.plan.comparators:
+            rows, flipped = _pair_rows(inputs, loss, horizon, comparator)
+            ordered = sorted(rows, key=lambda r: col_str(r, loss, "target_timestamp"))
+            timestamps = [col_str(r, loss, "target_timestamp") for r in ordered]
+            sign = -1.0 if flipped else 1.0
+            lines.append(
+                SeriesSpec(
+                    series_id=f"d_t|{comparator}",
+                    kind=SeriesKind.LINE,
+                    name=f"d_t vs. {comparator}",
+                    model=comparator,
+                    label=_DESCRIPTIVE,
+                    x=tuple(timestamps),
+                    y=tuple(sign * col_float(r, loss, "differential") for r in ordered),
+                )
+            )
+            folds = [col_str_or_none(r, loss, "fold") for r in ordered]
+            cuts.update(_fold_cuts(timestamps, folds))
+            acf_rows, _ = _pair_rows(inputs, acf, horizon, comparator)
+            by_lag = sorted(acf_rows, key=lambda r: col_int(r, acf, "lag"))
+            stems.append(
+                SeriesSpec(
+                    series_id=f"acf|{comparator}",
+                    kind=SeriesKind.STEMS,
+                    name=f"ACF de d_t vs. {comparator}",
+                    model=comparator,
+                    label=_DESCRIPTIVE,
+                    x=tuple(float(col_int(r, acf, "lag")) for r in by_lag),
+                    y=tuple(col_float_or_none(r, acf, "acf") for r in by_lag),
+                )
+            )
+        if cuts:
+            ordered_cuts = tuple(sorted(cuts))
+            lines.append(
+                SeriesSpec(
+                    series_id="fold_cuts",
+                    kind=SeriesKind.VLINES,
+                    name="corte de fold",
+                    label=_DESCRIPTIVE,
+                    x=ordered_cuts,
+                    y=tuple(None for _ in ordered_cuts),
+                )
+            )
+        panels.append(
+            _panel(
+                inputs,
+                horizon,
+                lines,
+                x_label="target_timestamp",
+                y_label="d_t",
+                suffix="_d_t",
+                label=_DESCRIPTIVE,
+            )
+        )
+        panels.append(
+            _panel(
+                inputs,
+                horizon,
+                stems,
+                x_label="lag",
+                y_label="ACF",
+                suffix="_acf",
+                label=_DESCRIPTIVE,
+            )
+        )
+    sources = (
+        _gold(loss.name, ("differential", "fold"), pairs="candidate x family comparator"),
+        _gold(acf.name, ("acf",), pairs="candidate x family comparator"),
+    )
+    return FigureAssembly(spec=_spec("loss_differential_acf", panels), sources=sources)
+
+
+# --------------------------------------------------------------------------------------
+# Importância por família / H3
+# --------------------------------------------------------------------------------------
+
+H3_NOTE: Final = FIGURE_CATALOG["h3_family_importance"].required_notes[0]
+
+
+def _importance(row: Row) -> float | None:
+    return col_float_or_none(row, GOLD_H3_IMPORTANCE, "importance")
+
+
+def _status_text(row: Row, schema: GoldTableSchema) -> str:
+    status = col_str_or_none(row, schema, "status")
+    reason = col_str_or_none(row, schema, "reason")
+    return f"{status}; {reason}" if reason else str(status)
+
+
+def _h3_horizon_series(
+    inputs: ReportInputs, horizon: int, families: Sequence[str]
+) -> list[SeriesSpec]:
+    schema = GOLD_H3_IMPORTANCE
+    series: list[SeriesSpec] = []
+    for method in H3_METHODS:
+        aggregate = [
+            _one(
+                inputs,
+                schema,
+                method=method,
+                family=family,
+                horizon=horizon,
+                seed=None,
+                permutation_index=None,
+            )
+            for family in families
+        ]
+        series.append(
+            SeriesSpec(
+                series_id=f"{method}|aggregate",
+                kind=SeriesKind.BARS,
+                name=f"I_f(h), {method}",
+                label=_DESCRIPTIVE,
+                x=tuple(families),
+                y=tuple(_importance(r) for r in aggregate),
+                text=tuple(_status_text(r, schema) for r in aggregate),
+            )
+        )
+        per_seed: list[tuple[str, Row]] = []
+        per_permutation: list[tuple[str, Row]] = []
+        for family in families:
+            for row in _rows(inputs, schema, method=method, family=family, horizon=horizon):
+                seed = col_int_or_none(row, schema, "seed")
+                index = col_int_or_none(row, schema, "permutation_index")
+                if seed is not None and index is None:
+                    per_seed.append((f"seed {seed}", row))
+                elif seed is None and index is not None and method == PERMUTATION:
+                    per_permutation.append((f"permutação {index}", row))
+        for dimension, chosen in (("seed", per_seed), ("permutation", per_permutation)):
+            if not chosen:
+                continue
+            series.append(
+                SeriesSpec(
+                    series_id=f"{method}|per_{dimension}",
+                    kind=SeriesKind.POINTS,
+                    name=f"perfil por {'seed' if dimension == 'seed' else 'permutação'}, {method}",
+                    label=_DESCRIPTIVE,
+                    x=tuple(col_str(r, schema, "family") for _, r in chosen),
+                    y=tuple(_importance(r) for _, r in chosen),
+                    text=tuple(text for text, _ in chosen),
+                )
+            )
+    return series
+
+
+def _h3_comparison_series(inputs: ReportInputs, families: Sequence[str]) -> list[SeriesSpec]:
+    schema = GOLD_H3_SHARES
+    series: list[SeriesSpec] = []
+    for method in H3_METHODS:
+        rows = [_one(inputs, schema, method=method, family=family) for family in families]
+        series.append(
+            SeriesSpec(
+                series_id=f"{method}|delta",
+                kind=SeriesKind.INTERVAL,
+                name=f"Δ_f = s_f(h+7) - s_f(h+1), {method}",
+                label=_DESCRIPTIVE,
+                x=tuple(families),
+                y=tuple(col_float_or_none(r, schema, "delta") for r in rows),
+                low=tuple(col_float_or_none(r, schema, "lower") for r in rows),
+                high=tuple(col_float_or_none(r, schema, "upper") for r in rows),
+                text=tuple(str(col_str_or_none(r, schema, "status")) for r in rows),
+            )
+        )
+        for column, horizon in (("share_h1", 1), ("share_h7", 7)):
+            series.append(
+                SeriesSpec(
+                    series_id=f"{method}|{column}",
+                    kind=SeriesKind.POINTS,
+                    name=f"s_f(h+{horizon}), {method}",
+                    label=_DESCRIPTIVE,
+                    x=tuple(families),
+                    y=tuple(col_float_or_none(r, schema, column) for r in rows),
+                )
+            )
+    return series
+
+
+def _reading_note(inputs: ReportInputs) -> str:
+    schema = GOLD_H3_READING
+    rows = inputs.generation.table(schema).rows
+    if len(rows) != 1:
+        raise ReportSourceMismatchError(f"gold_h3_reading has {len(rows)} rows, expected one")
+    row = rows[0]
+    permutation = col_bool_or_none(row, schema, "heterogeneous_permutation")
+    ablation = col_bool_or_none(row, schema, "heterogeneous_ablation")
+    return (
+        f"leitura ({col_str(row, schema, 'reading_rule')}): "
+        f"{col_str_or_none(row, schema, 'label')} [{col_str_or_none(row, schema, 'status')}]; "
+        f"heterogênea na permutação = {permutation}, na ablação = {ablation}; "
+        f"sustentada = {col_bool_or_none(row, schema, 'sustained')}; "
+        f"famílias concordantes = {col_str_or_none(row, schema, 'agreeing_families')}"
+    )
+
+
+def h3_figure(inputs: ReportInputs) -> FigureAssembly:
+    """I_f(h) por família e método em h+1 e h+7 lado a lado; Δ_f e a leitura C4/C5.
+
+    Linguagem estritamente descritiva (C7). Os intervalos bootstrap de I_f(h) e s_f(h) não
+    são persistidos (omissão declarada); só o de Δ_f é desenhado.
+
+    Raises:
+        ReportSourceMismatchError: revisão sem `[h3]` ou linha ausente.
+    """
+    if inputs.plan.h3 is None:
+        raise ReportSourceMismatchError("the judged revision has no [h3] block")
+    families = inputs.plan.h3.families
+    panels = [
+        _panel(
+            inputs,
+            horizon,
+            _h3_horizon_series(inputs, horizon, families),
+            x_label="família",
+            y_label="I_f(h)",
+            label=_DESCRIPTIVE,
+        )
+        for horizon in H3_HORIZONS
+    ]
+    panels.append(
+        PanelSpec(
+            panel_id="h1_vs_h7",
+            scope=PanelScope.HORIZON_COMPARISON,
+            horizon=None,
+            title="h+1 vs. h+7",
+            x_label="família",
+            y_label="Δ_f / s_f(h)",
+            series=tuple(_h3_comparison_series(inputs, families)),
+            label=ElementLabel(status=StatusLabel.DESCRIPTIVE, note=_reading_note(inputs)),
+        )
+    )
+    sources = (
+        _gold(GOLD_H3_IMPORTANCE.name, ("importance", "status", "reason")),
+        _gold(GOLD_H3_SHARES.name, ("share_h1", "share_h7", "delta", "lower", "upper", "status")),
+        _gold(
+            GOLD_H3_READING.name,
+            (
+                "label",
+                "status",
+                "heterogeneous_permutation",
+                "heterogeneous_ablation",
+                "sustained",
+                "agreeing_families",
+            ),
+        ),
+    )
+    return FigureAssembly(spec=_spec("h3_family_importance", panels, (H3_NOTE,)), sources=sources)
+
+
+# --------------------------------------------------------------------------------------
+# Pesos da VSN (horizonte-invariante)
+# --------------------------------------------------------------------------------------
+
+VSN_NOTE: Final = FIGURE_CATALOG["vsn_weights"].required_notes[0]
+VSN_FAMILY_KIND: Final = "family"
+
+
+def vsn_figure(inputs: ReportInputs) -> FigureAssembly:
+    """Peso por família na seleção de variáveis: p10/p50/p90 das linhas `kind = family`."""
+    schema = GOLD_H3_VSN
+    rows = sorted(
+        _rows(inputs, schema, kind=VSN_FAMILY_KIND), key=lambda r: col_str(r, schema, "name")
+    )
+    if not rows:
+        raise ReportSourceMismatchError("gold_h3_vsn has no family rows")
+    label = ElementLabel(status=StatusLabel.DESCRIPTIVE, note=VSN_NOTE)
+    series = SeriesSpec(
+        series_id="vsn_family",
+        kind=SeriesKind.INTERVAL,
+        name="peso da VSN por família (p50; p10 a p90)",
+        label=label,
+        x=tuple(col_str(r, schema, "name") for r in rows),
+        y=tuple(col_float_or_none(r, schema, "p50") for r in rows),
+        low=tuple(col_float_or_none(r, schema, "p10") for r in rows),
+        high=tuple(col_float_or_none(r, schema, "p90") for r in rows),
+        text=tuple(
+            f"{col_str_or_none(r, schema, 'label')} [{col_str_or_none(r, schema, 'status')}]"
+            for r in rows
+        ),
+    )
+    panel = PanelSpec(
+        panel_id="invariant",
+        scope=PanelScope.HORIZON_INVARIANT,
+        horizon=None,
+        title="horizonte-invariante",
+        x_label="família",
+        y_label="peso",
+        series=(series,),
+        label=label,
+    )
+    sources = (
+        _gold(schema.name, ("name", "p10", "p50", "p90", "label", "status"), kind=VSN_FAMILY_KIND),
+    )
+    return FigureAssembly(spec=_spec("vsn_weights", [panel], (VSN_NOTE,)), sources=sources)
 
 
 FigureBuilder = Callable[[ReportInputs], FigureAssembly]

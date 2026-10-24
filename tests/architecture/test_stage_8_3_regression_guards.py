@@ -10,6 +10,13 @@ formas estáticas — `import matplotlib.pyplot`, `from matplotlib import pyplot
 `importlib.import_module("matplotlib.pyplot")` e `__import__("matplotlib.pyplot")`
 (CC1-2). Um auto-teste sobre fonte sintética prova que a guarda
 acusa cada forma (sem ele, uma guarda vazia passaria verde).
+
+A6 (concept 8.3 I3; technical 8.3 Task 07, CB-6): os módulos de montagem do dado plotado
+(`GUARDED_MODULES`) não importam serviço inferencial do domínio. A guarda é por **lista
+permitida** de `features.evaluation.domain.services`: só `series_assembly`,
+`coverage_metrics` e `degeneracy_gate`; qualquer outro módulo (DM, Holm, MCS, Wilson, gate
+H1, poder, ACF, CUSUM, Beta, conformal, scoring e serviço futuro) reprova. `from
+…domain.services import x` é resolvido pelo `alias.name`.
 """
 
 from __future__ import annotations
@@ -103,4 +110,64 @@ def test_pyplot_guard_scans_the_plots_adapter_too(tmp_path: Path) -> None:
     (plots / "renderer.py").write_text("from matplotlib import pyplot\n", encoding="utf-8")
     assert _offenders(tmp_path) == [
         "financial_forecasting/features/evaluation/adapters/out/plots/renderer.py:1"
+    ]
+
+
+# --- A6: nenhum serviço inferencial nos módulos de montagem ----------------------------
+
+_USE_CASES = "financial_forecasting/features/evaluation/application/use_cases"
+GUARDED_MODULES = (
+    f"{_USE_CASES}/report_figures.py",
+    f"{_USE_CASES}/report_silver.py",
+)
+_SERVICES = "financial_forecasting.features.evaluation.domain.services"
+ALLOWED_SERVICES = frozenset({"series_assembly", "coverage_metrics", "degeneracy_gate"})
+
+
+def _service_imports(tree: ast.AST) -> list[str]:
+    """Os módulos de `domain.services` importados, nas três formas de import."""
+    found: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found += [
+                alias.name.removeprefix(f"{_SERVICES}.").split(".")[0]
+                for alias in node.names
+                if alias.name.startswith(f"{_SERVICES}.")
+            ]
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            if node.module == _SERVICES:
+                found += [alias.name for alias in node.names]
+            elif node.module.startswith(f"{_SERVICES}."):
+                found.append(node.module.removeprefix(f"{_SERVICES}.").split(".")[0])
+    return found
+
+
+def _forbidden_services(source: str) -> list[str]:
+    return [name for name in _service_imports(ast.parse(source)) if name not in ALLOWED_SERVICES]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("module", GUARDED_MODULES)
+def test_report_figures_imports_no_inferential_service(module: str) -> None:
+    path = _SRC / module
+    assert path.is_file(), module
+    assert _forbidden_services(path.read_text(encoding="utf-8")) == []
+
+
+@pytest.mark.unit
+def test_inferential_service_guard_catches_every_import_form() -> None:
+    source = (
+        f"from {_SERVICES}.diebold_mariano import DieboldMariano\n"
+        f"import {_SERVICES}.wilson_band\n"
+        f"from {_SERVICES} import holm_correction, coverage_metrics\n"
+        f"from {_SERVICES}.conformal_coverage import EMPIRICAL_COVERAGE_LABEL\n"
+        f"from {_SERVICES}.series_assembly import SeriesAssembly\n"
+        f"from {_SERVICES}.a_future_service import thing\n"
+    )
+    assert _forbidden_services(source) == [
+        "diebold_mariano",
+        "wilson_band",
+        "holm_correction",
+        "conformal_coverage",
+        "a_future_service",
     ]

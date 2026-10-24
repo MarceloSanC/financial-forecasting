@@ -31,7 +31,13 @@ from financial_forecasting.features.evaluation.application.dtos.gold_schema impo
     CONFIRMATORY_TABLES,
     GOLD_CALIBRATION_TABLE,
     GOLD_CONFORMAL_COVERAGE,
+    GOLD_DIFFERENTIAL_ACF,
     GOLD_DM_RESULTS,
+    GOLD_H3_IMPORTANCE,
+    GOLD_H3_READING,
+    GOLD_H3_SHARES,
+    GOLD_H3_VSN,
+    GOLD_LOSS_DIFFERENTIALS,
     GOLD_METRICS_BY_RUN,
     GOLD_SCHEMAS,
     GoldTableSchema,
@@ -359,6 +365,150 @@ def _conformal_rows(plan: Preregistration, base: Row, calibration: list[Row]) ->
     return rows
 
 
+TARGETS = tuple(f"2024-01-{day:02d}T00:00:00+00:00" for day in range(2, 8))
+FOLDS = ("fold_0", "fold_0", "fold_0", "fold_1", "fold_1", "fold_1")
+LAGS = (1, 2, 3)
+CANDIDATE_IS_MODEL_A = frozenset({"baseline_zero_return", "baseline_ar1", "gbm_quantile"})
+"""Os pares em que o builder pôs o candidato em `model_a`; nos demais ele é `model_b`."""
+
+
+def pair_of(plan: Preregistration, comparator: str) -> tuple[str, str]:
+    """`(model_a, model_b)` do par como o gold o guarda."""
+    if comparator in CANDIDATE_IS_MODEL_A:
+        return plan.candidate, comparator
+    return comparator, plan.candidate
+
+
+def _differential_rows(plan: Preregistration, base: Row) -> tuple[list[Row], list[Row]]:
+    differentials: list[Row] = []
+    acf: list[Row] = []
+    for h in plan.horizons:
+        for comparator in plan.comparators:
+            model_a, model_b = pair_of(plan, comparator)
+            pair = {"horizon": h, "model_a": model_a, "model_b": model_b}
+            differentials += [
+                _row(
+                    GOLD_LOSS_DIFFERENTIALS,
+                    base,
+                    **pair,
+                    target_timestamp=target,
+                    fold=fold,
+                    differential=round(value("d_t", h, comparator, target) - 0.5, 6),
+                )
+                for target, fold in zip(TARGETS, FOLDS, strict=True)
+            ]
+            acf += [
+                _row(
+                    GOLD_DIFFERENTIAL_ACF,
+                    base,
+                    **pair,
+                    lag=lag,
+                    acf=round(value("acf", h, comparator, lag) - 0.5, 6),
+                    n_points=len(TARGETS),
+                    max_lag=len(LAGS),
+                )
+                for lag in LAGS
+            ]
+    return differentials, acf
+
+
+H3_SEEDS = (1, 2)
+PERMUTATIONS = (0, 1)
+VSN_VARIABLES = {"log_return": "price", "rsi_14": "technical"}
+
+
+def _h3_rows(plan: Preregistration, base: Row) -> dict[str, list[Row]]:
+    assert plan.h3 is not None
+    importance: list[Row] = []
+    for method in ("loco", "permutation"):
+        for family in plan.h3.families:
+            for h in (1, 7):
+                axes: list[tuple[int | None, int | None]] = [(None, None)]
+                axes += [(seed, None) for seed in H3_SEEDS]
+                if method == "permutation":
+                    axes += [(None, k) for k in PERMUTATIONS]
+                importance += [
+                    _row(
+                        GOLD_H3_IMPORTANCE,
+                        base,
+                        method=method,
+                        family=family,
+                        horizon=h,
+                        seed=seed,
+                        permutation_index=k,
+                        importance=value("importance", method, family, h, seed, k),
+                        n_points=100,
+                        status="ok",
+                        reason=None,
+                    )
+                    for seed, k in axes
+                ]
+    shares = [
+        _row(
+            GOLD_H3_SHARES,
+            base,
+            method=method,
+            family=family,
+            share_h1=value("share_h1", method, family),
+            share_h7=value("share_h7", method, family),
+            delta=round(value("delta", method, family) - 0.5, 6),
+            lower=round(value("delta", method, family) - 0.6, 6),
+            upper=round(value("delta", method, family) - 0.4, 6),
+            lower_infinite=False,
+            upper_infinite=False,
+            level=0.9875,
+            side="none",
+            excludes_zero=False,
+            status="ok",
+            reason=None,
+            method_status="ok",
+            method_reason=None,
+        )
+        for method in ("loco", "permutation")
+        for family in plan.h3.families
+    ]
+    reading = [
+        _row(
+            GOLD_H3_READING,
+            base,
+            reading_rule="interval_side_agreement_same_family_v1",
+            heterogeneous_permutation=True,
+            heterogeneous_ablation=False,
+            sustained=False,
+            agreeing_families="",
+            label="leitura descritiva",
+            status="ok",
+            reason=None,
+        )
+    ]
+    vsn = [
+        _row(
+            GOLD_H3_VSN,
+            base,
+            kind=kind,
+            name=name,
+            family=family,
+            p10=round(value("vsn", kind, name) / 3, 6),
+            p50=round(value("vsn", kind, name) / 2, 6),
+            p90=round(value("vsn", kind, name), 6),
+            n_decisions=100,
+            label="horizonte-invariante",
+            status="ok",
+            reason=None,
+        )
+        for kind, name, family in (
+            *(("family", family, family) for family in plan.h3.families),
+            *(("variable", variable, family) for variable, family in VSN_VARIABLES.items()),
+        )
+    ]
+    return {
+        GOLD_H3_IMPORTANCE.name: importance,
+        GOLD_H3_SHARES.name: shares,
+        GOLD_H3_READING.name: reading,
+        GOLD_H3_VSN.name: vsn,
+    }
+
+
 # --------------------------------------------------------------------------------------
 # Scorecard coerente
 # --------------------------------------------------------------------------------------
@@ -547,5 +697,9 @@ def make_world(h1_passed: Mapping[int, bool] | None = None) -> ReportWorld:
     rows[GOLD_CONFORMAL_COVERAGE.name] = _conformal_rows(
         plan, base, rows[GOLD_CALIBRATION_TABLE.name]
     )
+    differentials, acf = _differential_rows(plan, base)
+    rows[GOLD_LOSS_DIFFERENTIALS.name] = differentials
+    rows[GOLD_DIFFERENTIAL_ACF.name] = acf
+    rows.update(_h3_rows(plan, base))
     passed = {1: True, 7: False} if h1_passed is None else dict(h1_passed)
     return ReportWorld(plan=plan, rows=rows, scorecard=make_scorecard(plan, rows, passed))
