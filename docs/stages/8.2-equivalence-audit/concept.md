@@ -497,8 +497,8 @@ horizonte ou baseline; ela não entra em nenhuma decisão deste concept. Isto
   conferir no código, não nos números); baseline comum só por **definição**
   declarada dos dois lados (EQ-INTER item 1); `y_true` `double` ⇒ tolerância
   A1 = meio ulp de float64 na magnitude (2⁻⁵³·|y|) — **emendado por B3**
-  (D13): meio ulp de float32 no ponto, com a pré-condição de
-  representabilidade exata em float32.
+  (D13): `float32(y_novo) == y_ant`, com a pré-condição, por horizonte, de
+  representabilidade exata em float32 e valores finitos.
 
 ### D11 — Recorte do "antes de qualquer valor" (decisão da mestra no Checkpoint A, CA-2)
 ```
@@ -530,9 +530,15 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não d
 **Emenda pós-execução de D13 (desvio declarado):**
 ```
 [decision:P] B3 — tolerância de A1 pela precisão de armazenamento efetiva
-Escolha: opção 2 — A1 passa num ponto quando |y_novo − y_ant| ≤ meio ulp de float32 naquele ponto, com a PRÉ-CONDIÇÃO verificada de que todo y_ant de T∩ é exatamente representável em float32 (senão vale, para aquele horizonte, a regra de double acima, sem mudança); emenda commitada antes de qualquer número de modelo do anterior; E4/E5 refeitas sob ela; a comparação de modelo (A10/A11) que A1 libera é rotulada no relatório interno como desvio pós-hoc · Alternativas: 1 — manter A1 pela regra de double (A1 falha por artefato de armazenamento; A10/A11 ficam not_compared:A1); 3 — manter A1 reprovado e adiar a emenda para outra issue · Decisor: humano (issue #232, comentário de 2026-10-23)
+Escolha: opção 2 — tolerância de A1 = meio ulp de float32 no ponto (a precisão efetiva do anterior), com a PRÉ-CONDIÇÃO verificada, por horizonte, de que todo y_ant DO HORIZONTE é finito e exatamente representável em float32 e todo y_novo é finito (senão vale, para aquele horizonte, a regra de double acima, sem mudança); o resultado sob a regra original de double também é reportado; as linhas A10/A11 dos horizontes julgados pela regra float32 levam o rótulo de desvio pós-A1; emenda commitada antes de qualquer número de modelo do anterior; E4/E5 refeitas sob ela; a comparação de modelo (A10/A11) que A1 libera é rotulada no relatório interno como desvio pós-hoc · Alternativas: 1 — manter A1 pela regra de double (A1 falha por artefato de armazenamento; A10/A11 ficam not_compared:A1); 3 — manter A1 reprovado e adiar a emenda para outra issue · Decisor: humano (issue #232, comentário de 2026-10-23)
 Base: doc §5.4 ("dentro da precisão de armazenamento do anterior"; meio ulp do tipo gravado); diagnóstico pré-declarado de D13 item 4 na E4 real: y_ant = float32(y_novo) em 937/937 pontos nos dois horizontes, |Δ| relativo máx 0,978·2⁻²⁴; com a regra de double, 934/937 fora, explicados como "alvo"; nenhum número de modelo do anterior calculado
 Sensibilidade pré-registrada: nenhuma · Reversível: sim (ADR 8.2.0004)
+
+[decision:C] B3-EXATO — critério float32 exato (refinamento dentro da B3)
+Escolha: sob a pré-condição, A1 passa num ponto exatamente quando float32(y_novo) == y_ant (y_ant é o arredondamento ao float32 mais próximo de y_novo); max |Δ| e max |Δ|/|y| reportados só como informação · Alternativas: |Δ| ≤ np.spacing(float32(y))/2 (meio ulp "acima" — errado em potências de 2, onde o ulp abaixo é metade do acima)
+Degrau: 1 (equivale ao meio ulp de float32 com a direção certa e ties-to-even — IEEE 754 round-to-nearest-even; ADR 8.2.0004 item 2b)
+Base: ADR 8.2.0004; doc §5.4
+Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: sim
 ```
 
 ### D10 — Ordem das leituras
@@ -634,14 +640,16 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
 - [ ] **A8 — Claim declarado.** O relatório de reprodução afirma (a), cita (b)
   da 7.1 e declara que (c) não foi executada (D4).
 - [ ] **A9 — EQ-MUST A1 (D13, emendado por B3).** Por horizonte, T∩
-  reportado; a pré-condição de representabilidade exata em float32 de todo
-  y_ant conferida e reportada; todo ponto de T∩ conferido com |y_novo − y_ant|
-  ≤ meio ulp de float32 no ponto (pré-condição verdadeira) ou ≤ 2⁻⁵³·|y_ant|
-  (pré-condição falsa), com a contagem fora e o max |Δ| reportados, e o
+  reportado; a pré-condição (todo y_ant do horizonte finito e exatamente
+  representável em float32; todo y_novo finito) conferida e reportada; todo
+  ponto de T∩ conferido com `float32(y_novo) == y_ant` (pré-condição
+  verdadeira — B3-EXATO) ou |y_novo − y_ant| ≤ 2⁻⁵³·|y_ant| (pré-condição
+  falsa), com a contagem fora, max |Δ| e max |Δ|/|y| reportados, e o
   resultado sob a regra original de double também reportado — ou a
   divergência é registrada com a categoria "alvo", o diagnóstico
   pré-declarado percorrido, e a comparação de modelo daquele horizonte para;
-  A10/A11 liberados por B3 rotulados como desvio pós-hoc (ADR 8.2.0004).
+  as linhas A10/A11 dos horizontes julgados pela regra float32 levam o
+  rótulo de desvio pós-A1 (ADR 8.2.0004).
 - [ ] **A10 — EQ-MUST A2 (D12 c, e).** Para pinball por nível comum, PICP e
   MPIW do par 80 %: m_A (código novo sobre as predições anteriores, na
   variante e na amostra que o anterior usou — D7, D12) contra m_ant dentro de
