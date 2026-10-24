@@ -1800,4 +1800,50 @@ Stage candidata: a própria 8.3, antes do fechamento.
 **Razão:** parada dura da R2 item 4. A checagem de forma é o único gate dessas falhas: os
 testes de smoke conferem página e bytes, não recorte de texto.
 
+### 2026-10-24 — [deviation] fix do `FAIL_LAYOUT`: layout restrito, estilos distintos por série, rodapé sem repetição e nota vazia explícita — Claude (executor)
+**Contexto:** o `[finding]` acima (R2 item 4, 2ª tentativa). Decisões de forma `[decision:C]`
+dentro do ADR 8.3.0003 (renderer sem `pyplot`, determinístico, identidade nunca só pela cor);
+nenhuma muda o dado plotado, exceto a nota do H3 (conteúdo, item 4).
+**O que mudou:**
+1. **Página em três faixas** (`MatplotlibFigureRenderer._draw`): `Figure(layout="constrained")`
+   com três subfiguras empilhadas: painéis (o layout restrito reserva espaço para título,
+   ticks girados e rótulos de eixo: some o "comparador" cortado do DM e o `I_f(h)` cortado do
+   H3), legenda da figura (duas colunas, cada rótulo quebrado em `_LEGEND_WRAP = 62`
+   caracteres: a entrada das dez seeds empilhadas do sharpness quebra dentro da página) e
+   rodapé. As alturas das faixas de baixo saem da contagem de linhas.
+2. **Estilo por série** (`figure_looks`): rótulo da legenda → (cor, marcador, linha, vazado)
+   resolvido uma vez para a figura inteira; cor do modelo pelo mapa fixo, neutro sem
+   modelo; duas séries distintas nunca têm o mesmo (cor, marcador, vazado) — a seguinte troca
+   de marcador e, esgotados, passa a vazado; referências trocam o estilo de linha. Antes, o
+   marcador das séries sem modelo vinha do índice dentro do painel (colisão entre painéis do
+   H3) e as seeds do candidato no quantile score tinham marcador idêntico.
+3. **Rodapé** (`footer_lines`): notas da figura, omissões, notas de painel e **notas de série**
+   (antes não desenhadas: o poder declarado das caudas do gate no reliability e as contagens
+   de degenerados do sharpness), sem repetir texto já escrito — some
+   "horizonte-invariante: horizonte-invariante" da VSN e as quatro cópias de "cobertura
+   empírica (não garantida)" do conformal.
+4. **Nota do H3** (`report_figures._reading_note`, conteúdo do use case): o builder grava
+   `agreeing_families` como `"a,b"` ordenado e `""` quando nenhuma família concorda; vazio →
+   "famílias concordantes = nenhuma", lista → "price, technical". Muda o `data_digest` do
+   `h3_family_importance` (as outras nove specs ficam com o mesmo digest).
+5. **Ticks categóricos**: todos rotulados (posição sem rótulo era ambígua no nativo ×
+   conformal, que tinha 9 categorias e mostrava uma a cada duas), inclinados a 60° acima de
+   `_MAX_TICKS`; datas seguem uma a cada `step`.
+**Prévia real** (pedido da sessão mestra): as dez specs do dado real geradas pelo CLI no
+container (mesma imagem `sha256:b69a7620…8f45`, `/data` só leitura, saída no scratchpad; a
+foto do ambiente marcada limpa só nesse script de prévia, nada commitado), cada spec renderizada
+em PDF e em PNG (Agg, 200 dpi) e aberta para inspeção. As nove specs fora do H3 deram os
+mesmos `data_digest` da 2ª tentativa da Etapa R. Inspeção figura a figura: reliability,
+quantile score, sharpness, PICP × MPIW, DM, fan chart, d_t + ACF, H3, VSN e nativo × conformal
+sem texto cortado nem colisão; legendas dentro da página; séries distinguíveis; rodapés
+corretos (VSN com uma linha só; H3 termina em "famílias concordantes = nenhuma").
+**Testes novos** (`tests/integration/features/evaluation/test_matplotlib_figure_renderer_layout.py`):
+estilos distintos por série nas dez specs sintéticas; mesma cor e marcador trocado para
+séries do mesmo modelo; rótulos de legenda até `_LEGEND_WRAP`; nota de painel igual à da
+figura não se repete; nota do conformal uma vez; notas de série no rodapé; eixos, legendas e
+textos dentro da página (caixas medidas no canvas Agg). Unit: nota do H3 com "nenhuma" e com
+a lista.
+**Razão:** destrava a linha `FAIL_LAYOUT`; mudança de `src/` pede revisão, `make check` e
+`GATE1` novos antes de recomeçar a Etapa R da R1.
+
 <!-- END: post-execution -->
