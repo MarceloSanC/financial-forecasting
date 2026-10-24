@@ -571,8 +571,8 @@ pelo humano e está ancorada (D9).
 |---|---|---|
 | Reliability por τ | **confirmatório:** scorecard `verdict.horizons[h].h1.lower_band`/`upper_band` (estimativa, limites, `band_level` 0,975) e `.passed`, `profile.horizons[h].power`; **descritivo, candidato:** scorecard `profile.horizons[h].calibration_95` (filtro do gate, `kind` de cauda, por nível) → ĉ = `mean_violations`/`mean_observed` (razão das contagens médias persistidas, B-SEEDS) + pontos por seed de `gold_calibration_table` (mesmo filtro, perfil 95 %) → `violation_rate`; **descritivo, baselines (seed nula) e GBM (seed 0):** `gold_calibration_table` (filtro do gate, perfil 95 %) → `wilson_estimate`, `wilson_lower`, `wilson_upper` | τ = 0,5 (sem linha de calibração); banda de Wilson do candidato nos níveis fora do gate e da média entre seeds (o gold só a tem por seed; a dispersão por seed é desenhada no lugar) |
 | Quantile score | `gold_metrics_by_run` `sample = common`, `metric = pinball`, `level_low = τ` → `value` por seed; média/mín/máx do candidato de `profile.horizons[h].descriptors` (mesmas chaves) | nenhuma |
-| Sharpness | silver `fact_oos_predictions` (`value_guardrail`, `split = test`, pares simétricos, máscara não-degenerada do MPIW) conferido (D4); consistência com `gold_metrics_by_run` `sample = model_full`, `metric = mpiw` | nenhuma (degenerados fora pela máscara do MPIW, contados na legenda) |
-| PICP × MPIW | `gold_metrics_by_run` `sample = common`, `metric ∈ {picp, mpiw}`, por par → `value` por seed (dispersão entre seeds = pontos por seed); média/mín/máx do candidato de `profile.horizons[h].descriptors`; reta do nominal 1 − 2τ_l | nenhuma |
+| Sharpness | silver `fact_oos_predictions` (`value_guardrail`, `split = test`, pares simétricos, máscara não-degenerada do MPIW) conferido (D4); consistência com `gold_metrics_by_run` `sample = model_full`, `metric = mpiw` | degenerados fora pela máscara do MPIW, contados na legenda; **modelos sem intervalo** (regra BP abaixo) |
+| PICP × MPIW | `gold_metrics_by_run` `sample = common`, `metric ∈ {picp, mpiw}`, por par → `value` por seed (dispersão entre seeds = pontos por seed); média/mín/máx do candidato de `profile.horizons[h].descriptors`; reta do nominal 1 − 2τ_l | **modelos sem intervalo** (regra BP abaixo) |
 | DM candidato × comparadores | `gold_dm_results` `variance_estimator = rectangular`, `candidate = tft_quantile`, comparador da família → `p_value` (bruto), `adjusted_p_value`, `rejected`; conferidos contra `profile.horizons[h].dm` (I4); rótulo por `verdict.horizons[h].h1.passed` | nenhuma (comparador × comparador não existe por construção) |
 | Série OOS / fan chart | silver `fact_oos_predictions` do candidato, seed 1, `split = test`, `value_guardrail` dos pares simétricos e da mediana; realizado pelo `TrainingGridReader`; cortes de fold do `dim_run` | nenhuma |
 | d_t + ACF | `gold_loss_differentials` (pares com o candidato e um comparador da família) → `differential`, `fold`; `gold_differential_acf` (mesmos pares) → `acf` por `lag` | faixa de confiança da ACF (±1,96/√n não persistida) |
@@ -580,6 +580,20 @@ pelo humano e está ancorada (D9).
 | Pesos da VSN | `gold_h3_vsn` `kind = family` (as 4 famílias; as linhas `kind = variable` ficam fora) → `name`, `p10`, `p50`, `p90`, `label`, `status` | nenhuma |
 | Nativo × conformal | **conformal:** `gold_conformal_coverage` (duas variantes, por par/cauda, `band_level = 0,95` — o perfil; a linha 0,975 fica fora; `seed` nula = média entre seeds, e por seed) → `coverage`/`mean_of_seed_coverages`, `n_evaluated`, `mpiw`, `wilson_lower`, `wilson_upper`, `label`; **nativo na mesma máscara** (comparação `descriptive_model_full_native_mask_seed_mean_counts_v1` da 7.2, concept 7.2 I14): ĉ por cauda de `gold_calibration_table` com candidato, a mesma seed e horizonte, `sample = model_full`, `kind` da cauda, `level_low` = τ, `includes_degenerate = false`, `dgt_offset` nulo, `band_level = 0,95` → `n_observed`, `n_violations`, `wilson_lower`, `wilson_upper`; média entre seeds pela razão `mean_violations`/`mean_observed` de `profile.horizons[h].calibration_95` (mesmas chaves); PICP e MPIW nativos de `gold_metrics_by_run` `sample = model_full` (mesma máscara não-degenerada do `CoverageMetrics`, que o conformal reusa — `conformal_coverage.py`) por seed, média de `profile.horizons[h].descriptors`; exigido `n_evaluated` (conformal) = `n_observed` (nativo) por (seed, horizonte, cauda), senão erro; nominal | **referência de dispersão Beta** agregada (o gold só tem `beta_mean`/`beta_sd` por fold × seed × cauda; agregar ou tirar quantis seria cálculo novo); banda de Wilson do nativo na média entre seeds (só por seed no gold; os pontos por seed ficam como dispersão) |
 
+- **Regra BP — modelos sem intervalo** (Etapa R, revision-from-execution):
+  os baselines pontuais (`baseline_zero_return`, `baseline_historical_mean`)
+  são Dirac e não têm intervalo (evaluation §6.6); no gold julgado não há
+  nenhuma linha `mpiw` nem `picp` deles. Nas figuras de intervalo (sharpness,
+  PICP × MPIW e qualquer outra que use `mpiw`/`picp` por modelo), um modelo
+  sem **nenhuma** linha `mpiw`/`picp` em `gold_metrics_by_run` é omitido da
+  figura, e a omissão é declarada **por modelo** na legenda e no registro da
+  figura. Fail-closed: modelo com linhas parciais (só `mpiw` ou só `picp`, ou
+  faltando em algum horizonte, amostra, par ou seed que os demais modelos
+  têm) → erro, nada escrito. A lista de modelos omitidos não é fixada no
+  código: sai do gold, e o teste exige que coincida com os modelos sem
+  nenhuma dessas linhas. O nativo × conformal só usa o candidato e não é
+  afetado.
+  `[decision:C] BP — Degrau 1: evaluation §6.6 (baselines pontuais = Dirac, sem intervalo); nenhuma estatística nova (doc §6.1 item 5) · Decisor: coordenação (Etapa R, FAIL_GEN1) · Reversível: sim`
 - **Nenhuma omissão toca elemento confirmatório:** os elementos
   confirmatórios do catálogo (caudas do gate com banda 97,5 % e poder; linha
   do DM com p bruto e Holm) estão todos persistidos. As omissões são de
@@ -665,7 +679,8 @@ pelo humano e está ancorada (D9).
   `includes_degenerate`, `band_level`, `variance_estimator` (Bartlett ≠
   retangular), horizonte e seed, de modo que ler a linha errada do mapa do
   D13 reprova; sinal de d_t pelo D14 (candidato como `model_a` e como
-  `model_b`); sharpness: média das larguras não-degeneradas = `mpiw`
+  `model_b`); sharpness e PICP × MPIW sem os modelos da regra BP;
+  sharpness: média das larguras não-degeneradas = `mpiw`
   `model_full` do fake (com degenerados no fake, que ficam fora); nativo ×
   conformal: nativo das linhas `includes_degenerate = false` e
   `n_evaluated` ≠ `n_observed` → erro; H3: I_f(h) = linha agregada
@@ -722,7 +737,11 @@ pelo humano e está ancorada (D9).
   `matplotlib.pyplot` em qualquer arquivo de `src/`; `make check` verde.
 - [ ] **A16 — Omissões fechadas.** O conjunto de omissões de cada
   `FigureSpec` é exatamente o da coluna "Omissões declaradas" do D13 (teste
-  com a lista literal), e nenhuma série desenha elemento dessa lista.
+  com a lista literal), e nenhuma série desenha elemento dessa lista. Regra
+  BP: no fake com um modelo sem nenhuma linha `mpiw`/`picp`, ele é omitido
+  da sharpness e do PICP × MPIW e aparece na legenda e no registro como
+  omitido; com linhas parciais (ex.: `mpiw` sem `picp`, ou um horizonte
+  faltando), erro sem escrita.
 - [ ] **A17 — Citável limpo, interno completo.** A visibilidade é decidida
   pela **fonte**: o parser do registro recusa entrada não-`internal` cujo
   `pointer` aponte para `docs/stages/8.2-*` (exceto as âncoras citáveis
@@ -777,6 +796,7 @@ no builder, da convenção de `differential` (D14).
 | DT-5 menores (r2): VSN, banda do conformal | corrigido: `kind = family`; `band_level = 0,95` |
 | CA-6 forma (r2) | corrigido: `source_modules = financial_forecasting` + `ignore_imports` do `plots.**` |
 | Checkpoint C — caudas do gate só onde H1 passa (contradição com doc §2.3/§6.2) | corrigido (revision-from-execution): caudas do gate confirmatórias em todo horizonte; restrição a H1 aprovado só na linha do DM (P8-ROT, I4, A5) |
+| Etapa R FAIL_GEN1 — baselines pontuais sem `mpiw`/`picp` | corrigido (revision-from-execution): regra BP no D13 (omissão por modelo, fail-closed para linhas parciais), A7, A16 |
 | A12 "[finding] aberto" (r2) | corrigido: definição no A12 |
 | CA-2 evidência anterior no dossiê | corrigido: arquivo interno separado (D8, I12, A17); `reproduction_audit.md` §5 não apontado, limite no interno, sem editar a 8.2 |
 | CA-3 esperado do silver | corrigido: I2 por par (tabela, `run_id`), hash antes do filtro por split, A4; ADR 8.3.0002 item 3 emendado |
