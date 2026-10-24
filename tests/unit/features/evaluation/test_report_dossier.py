@@ -92,11 +92,11 @@ def _anchor(revision: int) -> PreregistrationAnchor:
     )
 
 
-def _chain() -> JudgedRevision:
+def _chain(blinding: str = BLINDING) -> JudgedRevision:
     payloads = [valid_payload(), r1_payload(), r2_payload(), r3_payload()]
     records = []
     for revision, payload in enumerate(payloads):
-        payload["blinding_statement"] = BLINDING
+        payload["blinding_statement"] = blinding
         if revision > 0:
             payload["amends"] = _CHAIN[revision - 1]
         records.append(PreregistrationRecord(payload=payload, anchor=_anchor(revision)))
@@ -308,6 +308,18 @@ def test_blinding_statement_byte_for_byte(dossier: TraceabilityDossier) -> None:
     rows = _all_rows(_section(dossier, "blinding_statement"))
     assert rows["blinding_statement"] == BLINDING
     assert BLINDING in render(dossier, Visibility.CITABLE)
+
+
+@pytest.mark.unit
+def test_blinding_statement_keeps_edge_and_inner_whitespace() -> None:
+    """D9: transcrição byte a byte — espaço e LF nas pontas e espaço duplo no meio ficam."""
+    statement = "\n  Declaração  com espaço duplo no meio.\nSegunda linha.  \n"
+    dossier = _build(plan_chain=_chain(statement))
+
+    rows = _all_rows(_section(dossier, "blinding_statement"))
+    assert rows["blinding_statement"] == statement
+    markdown = render(dossier, Visibility.CITABLE)
+    assert f"**blinding_statement:**\n\n```text\n{statement}\n```\n" in markdown
 
 
 @pytest.mark.unit
