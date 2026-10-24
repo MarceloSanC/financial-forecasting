@@ -768,9 +768,8 @@ allow_indirect_imports = False
 # application/domain do slice: nenhum outro adapter, o CLI ou o composition root
 # importam matplotlib. A exceção do pacote de plots entra na Stage 8.3 Task 11, junto com
 # o adapter: `ignore_imports = financial_forecasting.features.evaluation.adapters.out.plots.** -> matplotlib`
-# (o `plots/__init__.py` não importa matplotlib). Ela não existe ainda porque um ignore
-# sem import que case reprova pelo `unmatched_ignore_imports_alerting` (default
-# `error`). O teste AST `tests/architecture/test_stage_8_3_regression_guards.py` reprova
+# (o `plots/__init__.py` não importa matplotlib); com `unmatched_ignore_imports_alerting =
+# error`, a exceção morta (adapter removido) reprova. O teste AST `tests/architecture/test_stage_8_3_regression_guards.py` reprova
 # `matplotlib.pyplot` em todo o src/, inclusive no adapter de plots (estado global).
 [importlinter:contract:evaluation-no-matplotlib-leak]
 name = Só o adapter de plots do evaluation importa matplotlib
@@ -779,4 +778,7 @@ source_modules =
     financial_forecasting
 forbidden_modules =
     matplotlib
+ignore_imports =
+    financial_forecasting.features.evaluation.adapters.out.plots.** -> matplotlib
 allow_indirect_imports = False
+unmatched_ignore_imports_alerting = error

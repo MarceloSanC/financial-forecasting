@@ -1441,4 +1441,38 @@ lista da Task 10) ganhou `report_payload()` e os parâmetros `plan`/`reference` 
 `make_world`, sem mudar o mundo padrão das Tasks 06-09.
 **Razão:** abaixo do limiar de pergunta — mesma regra, sem cópia; helper de teste.
 
+### 2026-10-24 — [measurement] Task 11, paleta fixa de modelos no validador da skill `dataviz` — Claude (executor)
+**Contexto:** o §1 ("Renderer") manda validar o mapa modelo → cor pelo
+`validate_palette.js --mode light` e colar a saída aqui.
+**Medição:** host Windows, `node scripts/validate_palette.js
+"#2a78d6,#eb6834,#1baf7a,#eda100,#e87ba4,#008300,#6250d6" --mode light` (as sete primeiras
+cores da ordem categórica de `references/palette.md`, na ordem tft_quantile,
+baseline_zero_return, baseline_historical_mean, baseline_ar1, baseline_ewma_vol,
+baseline_historical_quantiles, gbm_quantile):
+```
+Palette (light, surface #fcfcfb, categorical): 7 slots
+  [PASS] Lightness band         all 7 inside L 0.43–0.77
+  [PASS] Chroma floor           all 7 >= 0.1
+  [PASS] CVD separation         worst adjacent #eda100↔#1baf7a ΔE 9.1 (protan) · tritan 5.8
+  [PASS] Normal-vision floor    worst adjacent #e87ba4↔#eda100 ΔE 19.6 (normal)
+  [WARN] Contrast vs surface    below 3:1 — relief required (visible labels or table view): [["#1baf7a",2.74],["#eda100",2.11],["#e87ba4",2.62]]
+  → ALL CHECKS PASS
+```
+**Razão:** o WARN de contraste é coberto pela codificação secundária do adapter (marcador e
+estilo de linha fixos por modelo, legenda com o nome em toda figura): identidade nunca só
+pela cor (ADR 8.3.0003 item 4).
+
+### 2026-10-24 — [decision:C] Task 11, grade de painéis e legenda da figura — Claude (executor)
+**Contexto:** o §1 diz "grade de painéis 1×n" em 6,3 in de largura; o d_t + ACF e o
+nativo x conformal têm quatro painéis (≈1,5 in cada), e a legenda por eixo cobria os
+pontos (conferido em pré-visualização PNG no scratchpad).
+**Pergunta:** como dispor painéis e legenda sem perder legibilidade?
+**Opções:**
+- A — 1×n literal, legenda dentro de cada eixo.
+- B — no máximo duas colunas (linhas extras quando n > 2) e uma legenda única da figura,
+  entre os painéis e o rodapé de notas. ✅ recomendada
+**Decisão:** B.
+**Razão:** reversível barato (só desenho, os bytes do PDF não são prova de origem — o
+`data_digest` é da spec); um eixo por painel continua valendo.
+
 <!-- END: post-execution -->
