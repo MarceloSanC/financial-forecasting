@@ -112,7 +112,12 @@ Todas `[decision:C]` de forma (degrau 1: convenção do próprio código ou prec
   - `application/use_cases/judged_copy.py` — extração da conferência "registro
     commitado ↔ cópia selada" e do `result_digest` da última `input_read`, hoje
     privados do `AuditReproduction` (dono único; o `AuditReproduction` passa a chamar,
-    sem mudar comportamento);
+    sem mudar comportamento). As funções **não** erguem erro de chamador (CB-5: o
+    `ReproductionAuditError` mora no módulo que importará `judged_copy` → import
+    circular): `sealed_matching_record(...) -> JudgedGeneration | None` devolve `None`
+    sem registro commitado (erguem `JudgedGenerationNotFoundError`/`…TamperedError`, que
+    são do port) e `last_input_read_digest(attempts, ref) -> str | None`; cada use case
+    ergue o seu (`ReproductionAuditError` / `ReportArtifactsError`);
   - `application/use_cases/generate_report_artifacts.py` — o use case;
   - `adapters/out/plots/matplotlib_figure_renderer.py` (`plots/__init__.py` não importa
     matplotlib); `adapters/out/reports/filesystem_report_sink.py`;
@@ -174,7 +179,9 @@ Todas `[decision:C]` de forma (degrau 1: convenção do próprio código ou prec
   (`SourceRef`: `kind` ∈ {`gold_table`, `document`, `silver_table`, `realized`},
   `name`, `filter: Mapping[str, str|int|float|bool|None]`, `fields: tuple[str, ...]`),
   `silver_units: Mapping[str, str]` (vazio fora do fan chart e do sharpness),
-  `omissions`, `code: {"code.src", "code.uv_lock"}`, `renderer: Mapping[str, str]`.
+  `excluded_degenerate: Mapping[str, int]` (chave `<modelo>|<seed>|h<h>|<τ_l>-<τ_u>` →
+  pontos degenerados fora pela máscara do MPIW; só no sharpness, vazio nas demais —
+  D4 "vai para a legenda e o registro", CB-8), `omissions`, `code: {"code.src", "code.uv_lock"}`, `renderer: Mapping[str, str]`.
   **Sem** commit HEAD, instante, host, caminho absoluto e sem sha256 do PDF (I7 deixa
   opcional; omitido para o registro só mudar com dado, código ou renderizador). A
   construção recusa chave com `commit`/`time`/`at` e valor com `/` absoluto.
@@ -189,6 +196,17 @@ Todas `[decision:C]` de forma (degrau 1: convenção do próprio código ou prec
   `docs/reports/equivalence_audit.md`, `docs/reports/prior_evidence_registry.toml`,
   `docs/adr/8_2_0003*`, `docs/adr/8_2_0004*` ou `tests/equivalence/` →
   `ValueError`. Comparação sem caixa, `_`/`-` iguais.
+- **Refinamento do A17 (2ª barreira; CB-2).** O A17 lista `equivalence_audit` entre os
+  termos proibidos no texto citável, com `_` ≡ `-`; lido ao pé da letra, o termo casa
+  o diretório `docs/stages/8.2-equivalence-audit/`, que as âncoras citáveis exigidas
+  pelo próprio A12/A17 (E2 item 7, `env-equal`, `[measurement]` E2/E3) têm de apontar —
+  os dois critérios se contradiriam. O termo efetivo é o **relatório**:
+  `equivalence[_-]audit\.md` (e `equivalence_audit` fora de um caminho
+  `8.2-equivalence-audit/`); os demais termos ficam como no A17. Uma única constante
+  `CITABLE_FORBIDDEN_PATTERNS` (regex, `re.IGNORECASE`) em `dtos/report_artifacts.py`
+  é usada pelo teste da Task 09, pelo e2e da Task 14 e reproduzida literalmente no
+  `grep` da R2. Não muda o objetivo do critério (nada da evidência anterior no
+  citável); registrado aqui porque o concept está `done`.
 - **`TraceabilityDossier`** (frozen): `sections: tuple[DossierSection, ...]`;
   `DossierSection`: `section_id`, `title`, `visibility` (`citable` | `internal`),
   `blocks: tuple[DossierBlock, ...]`; `DossierBlock`: `heading`, `rows:
@@ -204,6 +222,10 @@ Todas `[decision:C]` de forma (degrau 1: convenção do próprio código ou prec
   concept §4, que dizia "o comando leva a partição"; ver §6 "Verificação de gap").
   `ReportArtifactsResult`: `preregistration_ref`, `generation_digest`,
   `figures: tuple[tuple[str, str], ...]` (id, `data_digest`), `register_entries: int`.
+- **Validação da escrita** (dono único, CB-4): `check_artifacts(figures, dossier)` em
+  `dtos/report_artifacts.py` (ids únicos e todos os dez do catálogo, bytes começando por
+  `%PDF`, registro com o mesmo id) — chamada pelo fake e pelo sink real antes de
+  qualquer escrita; o contrato `[fake, real]` da Task 12 a exercita nas duas pernas.
 - **Erros** (em `dtos/report_artifacts.py`, `ApplicationError`):
   `ReportArtifactsError` (registro commitado da ref ausente, scorecard ausente na
   cópia, nenhuma `input_read` da ref); `SilverContentMismatchError` (concept §4; só
@@ -216,8 +238,12 @@ Todas `[decision:C]` de forma (degrau 1: convenção do próprio código ou prec
   `includes_degenerate = False`, `dgt_offset = None` — os dois últimos são literais
   dentro de `scorecard_evidence._tail`, sem constante nomeada; tocar o código que
   produziu a geração julgada para nomeá-los não se paga. O módulo de montagem declara
-  os dois e **amarra ao dono em tempo de execução**: para cada horizonte, a entrada de
-  `profile.horizons[h].calibration_95` do candidato com esse filtro, nas caudas do gate
+  os dois e **amarra ao dono em tempo de execução**. A seleção usa a **chave completa**
+  da linha de calibração do `_tail` (`model`, `sample`, `kind`, `level_low`,
+  `level_high = None`, `includes_degenerate`, `dgt_offset = None`, `dgt_step = None`,
+  `band_level`; CB-11) e recusa (`ReportSourceMismatchError`) se casar zero ou mais de
+  uma entrada/linha por seed. Para cada horizonte, a entrada de
+  `profile.horizons[h].calibration_95` do candidato com essa chave, nas caudas do gate
   (`h1_gate.lower_level`/`upper_level`), tem `mean_observed` igual a
   `verdict.horizons[h].h1.mean_observed`; diferente → `ReportSourceMismatchError`
   (filtro divergente do gate seria detectado no fake e no dado real).
@@ -386,6 +412,12 @@ loadgroup` atropela fixtures de `tests/architecture` (8.2 §7): nunca.
 | 1 | 15 (depois da auditoria de testes com mutação real e do Checkpoint C final) | Pré-geração real: o grupo de risco está todo nas Tasks 01, 11 e 13 — dependência e `uv.lock` (01), `.importlinter` (01 e 11: a linha `ignore_imports` só casa quando o adapter de plots existe), port novo consumido pelo composition root e `cli.py` (13); o T1 não roda `tests/architecture/` inteiro nem os scripts de gate (`port-coverage` só fica verde com os contratos das 11/12). Os artefatos commitados na Etapa R carregam o `code.src`: um vermelho descoberto depois da geração obrigaria a regenerar e recommitar, então o gate tem de estar verde **antes** da R2. Um ponto depois da 01 não se paga: o T1 da 01 roda `lint-imports` e os dois testes de arquitetura que ela toca, e as Tasks 02–10 não constroem sobre nada que o gate invalidaria além disso. |
 | 2 | saída (depois da R4) | Gate de saída (Passo 10): a Etapa R commita `docs/reports/figures/` e os dois dossiês (e §7); confirma que nada no `src/` mudou desde o ponto 1 e que a suíte segue verde com os artefatos no repo. |
 
+**Ponto 2 vermelho (GB-3).** Se o fix toca `src/`, `uv.lock`, `pyproject.toml` ou
+`.importlinter`: o `code.src` muda e invalida os artefatos commitados → `fix` +
+revisão independente + novo `make check` + `GATE1` novo + **refazer R1–R4**, com os
+artefatos regenerados num commit **novo** (nunca amend). Se o vermelho é só de docs
+(§7, registro, roadmap), consertar sem regenerar e rodar o `make check` de novo.
+
 Nas demais Tasks o gate é o T1. Vermelho no ponto 1 → `fix(<escopo>): …
 [8.3/task-NN-fix]`, **revisão independente do fix** (subagente) e novo `make check`
 (3º ponto, justificado: só o commit verde pode ser o `GATE1` da Etapa R).
@@ -409,7 +441,7 @@ src/financial_forecasting/
         ├── in/cli/{dossier_register.py, evaluation_commands.py}        # T13
         └── out/{plots/ (T11), reports/ (T12)}
 tests/
-├── fakes/features/evaluation/{in_memory_figure_renderer.py, in_memory_report_sink.py}   # T04
+├── fakes/features/evaluation/{in_memory_figure_renderer.py, in_memory_report_artifact_sink.py}   # T04
 ├── unit/features/evaluation/{test_report_artifacts_dtos.py (T02), test_gold_schema_report_columns.py (T03),
 │     test_report_silver.py (T05), _report_inputs.py (T06), test_report_figures_calibration.py (T06),
 │     test_report_figures_inference.py (T07), test_report_figures_silver.py (T08),
@@ -432,9 +464,13 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
 - **Arquivos a criar:** `tests/architecture/test_stage_8_3_regression_guards.py`
 - **Testes primeiro:** `test_import_contracts.py` — `"evaluation-no-matplotlib-leak"`
   na lista de contratos esperados; caso em `_REAL_VIOLATION_CASES`
-  `evaluation-no-matplotlib-leak:reports-adapter-imports-matplotlib` (arquivo
-  `features/evaluation/adapters/out/reports/_arch_taint_mpl.py` com `import
-  matplotlib`) — o mesmo caso satisfaz `test_every_forbidden_module_has_a_real_violation_case`;
+  `evaluation-no-matplotlib-leak:toml-adapter-imports-matplotlib` (arquivo
+  `features/evaluation/adapters/out/toml/_arch_taint_mpl.py` com `import
+  matplotlib` — **pacote existente** com `__init__.py`: o grimp pula módulo de
+  diretório sem `__init__`, e injetar um `__init__` em `reports/` faria o `finally` do
+  teste apagar o real depois da Task 12; o caso de `adapters/out/reports/` entra na
+  Task 12, quando o pacote existe — CB-1) — o mesmo caso satisfaz
+  `test_every_forbidden_module_has_a_real_violation_case`;
   `test_stage_8_3_regression_guards.py::test_no_pyplot_anywhere_in_src` (AST de todo
   `src/**/*.py`: `import matplotlib.pyplot`, `from matplotlib import pyplot` e `from
   matplotlib.pyplot import …` reprovam, inclusive em `adapters/out/plots/`) com um
@@ -443,8 +479,10 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
 - **O que fazer:** `"matplotlib>=3.11,<3.12"` em `[project] dependencies` com o bloco
   de comentário na postura dos demais (Stage 8.3 / ADR 8.3.0003; vive SÓ em
   `features/evaluation/adapters/out/plots/`; gate import-linter; pin por minor);
-  `uv lock` no container (sem `--upgrade`); conferir que o diff do `uv.lock` só toca o
-  `requires-dist` do projeto (`git diff uv.lock` sem versão de pacote alterada). No
+  `uv lock` no container (sem `--upgrade`); conferir que o diff do `uv.lock` fica no
+  bloco `[[package]]` do próprio projeto (`{ name = "matplotlib" }` em `dependencies` e
+  a linha do `requires-dist`) e que `git diff -U0 uv.lock | grep -E '^[-+](version|name) = '`
+  sai vazio (nenhum pacote novo, nenhuma versão alterada — GB-5). No
   `.importlinter`, o contrato `evaluation-no-matplotlib-leak` (`type = forbidden`,
   `source_modules = financial_forecasting`, `forbidden_modules = matplotlib`,
   `allow_indirect_imports = False`) com o comentário de cabeçalho (LAYOUT §3; D6) —
@@ -455,7 +493,7 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   `pyplot`).
 - **Verificação (T1):** `uv run --no-sync lint-imports` +
   `pytest tests/architecture/test_import_contracts.py tests/architecture/test_stage_8_3_regression_guards.py -q --no-cov`
-  + `git diff --stat uv.lock` (só o bloco do projeto).
+  + `git diff -U0 uv.lock | grep -E "^[-+](version|name) = "` vazio.
 - **Commit:** `build(evaluation): matplotlib direto e contrato que o confina ao adapter de plots [8.3/task-01]`
 
 ---
@@ -526,7 +564,7 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   - `src/financial_forecasting/features/evaluation/application/ports/out/figure_renderer.py`
   - `src/financial_forecasting/features/evaluation/application/ports/out/report_artifact_sink.py`
   - `tests/fakes/features/evaluation/in_memory_figure_renderer.py`
-  - `tests/fakes/features/evaluation/in_memory_report_sink.py`
+  - `tests/fakes/features/evaluation/in_memory_report_artifact_sink.py`
 - **Testes primeiro:** nenhum teste próprio — os fakes são exercitados pelos testes do
   use case (Task 10) e pelos contratos `[fake, real]` (Tasks 11–12). Port e fake na
   mesma Task (sem adapter real) não é a mistura que a PIPELINE §4.3 item 4 proíbe.
@@ -534,8 +572,8 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   chamada com tudo, tudo ou nada). `InMemoryFigureRenderer`: `render` →
   `b"%PDF-fake\n" + spec.canonical_bytes()`; `identity()` →
   `{"format": "pdf", "renderer": "in-memory"}`; conta chamadas.
-  `InMemoryReportSink`: guarda a tupla e o dossiê da **única** chamada (`writes`
-  conta), `fail_with: Exception | None` injetável (para o tudo ou nada do use case).
+  `InMemoryReportArtifactSink`: chama `check_artifacts` (dono único, Task 02) antes de
+  guardar; guarda a tupla e o dossiê da **única** chamada (`writes` conta), `fail_with: Exception | None` injetável (para o tudo ou nada do use case).
 - **Critério de aceite:** contratos do concept §4 presentes; `mypy` verde.
 - **Verificação (T1):** `uv run --no-sync mypy` + `python scripts/check_port_coverage.py --list | grep -E "FigureRenderer|ReportArtifactSink"` (fake listado; contrato ainda ausente, esperado até a 12).
 - **Commit:** `feat(evaluation): ports do renderizador de figuras e do destino dos artefatos [8.3/task-04]`
@@ -650,11 +688,17 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
     `test_no_if_or_sf_interval_drawn`.
   - VSN: `test_only_kind_family_rows`; `test_single_horizon_invariant_panel_with_note`.
   - `test_stage_8_3_regression_guards.py::test_report_figures_imports_no_inferential_service`
-    (AST de `report_figures.py`, `report_silver.py` e `report_dossier.py`: nenhum import
-    de `diebold_mariano`, `holm_correction`, `model_confidence_set`, `wilson_band`,
-    `h1_gate`, `h1_gate_power`, `differential_stationarity`, `conformal_coverage`,
-    `conformal_assembly` nem módulo com `beta` no nome; auto-teste sobre fonte
-    sintética).
+    (AST de `report_figures.py`, `report_silver.py`, `report_dossier.py`,
+    `dossier_markdown.py` e `generate_report_artifacts.py`; **lista PERMITIDA** de
+    `features.evaluation.domain.services` (CB-6): só `series_assembly` e
+    `coverage_metrics` (e `degeneracy_gate`, se a montagem o chamar diretamente);
+    qualquer outro módulo de `domain.services` reprova — cobre `diebold_mariano`,
+    `holm_correction`, `model_confidence_set`, `wilson_band`, `h1_gate`,
+    `h1_gate_power`, `differential_stationarity`, `kupiec_pof`, `christoffersen_test`,
+    `chi_square`, `student_t`, `dm_profiles`, `confirmatory_scorecard`, `pinball_score`,
+    `interval_score`, `crps_score`, `paired_pinball_losses`, `var_descriptive`,
+    `conformal_*` e serviço futuro; `from …domain.services import x` é resolvido pelo
+    `alias.name`; auto-teste sobre fonte sintética com as três formas de import).
 - **O que fazer:** `dm_figure`, `loss_differential_figure`, `h3_figure`, `vsn_figure`
   pelo D13 e pelas decisões do §1 (DM, D14).
 - **Critério de aceite:** A1 (DM e H3), A5 (DM), A6, A7 (quatro figuras), A16.
@@ -726,8 +770,10 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   `test_no_generation_instant_host_or_absolute_path` (render duas vezes → bytes iguais;
   nenhum `/` absoluto; nenhum commit HEAD — o snapshot entra só por `code.src`/`code.uv_lock`);
   `test_citable_text_free_of_prior_evidence_terms` (2ª barreira do A17, sobre o texto
-  renderizado: sem caixa, `_` ≡ `-`, a lista literal do A17, e nenhum
-  `reproduction_audit.md#5`/"§5"); `test_internal_lists_required_items` (registro de
+  renderizado, por `CITABLE_FORBIDDEN_PATTERNS`, e nenhum
+  `reproduction_audit.md#5`/"§5"); `test_citable_anchors_of_82_pass_the_second_barrier`
+  (registro sintético com as entradas de âncora citável `docs/stages/8.2-equivalence-audit/technical.md#…`
+  de E2 item 7 e `env-equal`: o citável as contém e passa — CB-2); `test_internal_lists_required_items` (registro de
   hashes, `equivalence_audit.md`, B3/ADR 8.2.0004, `[finding]` do PICP, F2–F5, E4,
   limite da §5 — vindos das entradas `internal` do registro sintético);
   `test_markdown_is_lf_and_ends_with_newline`.
@@ -753,13 +799,17 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
 - **Testes primeiro** (`InMemoryPreregistrationSource` com `add_judged`,
   `InMemoryJudgedGenerationStore`, `InMemoryGoldGenerationReader` com `current/`
   **diferente** da cópia, `FakeSilverTableReader`, `FakeTrainingGridReader`,
-  `InMemoryEvaluationEnvironment`, `InMemoryFigureRenderer`, `InMemoryReportSink`):
+  `InMemoryEvaluationEnvironment`, `InMemoryFigureRenderer`, `InMemoryReportArtifactSink`):
   `test_ten_figures_in_catalog_order_and_one_write` (A1); `test_specs_come_from_judged_copy_never_current`
   (A2; o use case nem recebe `GoldGenerationReader` — o teste prova pelo valor);
   `test_dirty_tree_raises_before_any_read_or_write` (A13, I10);
   `test_no_committed_record_raises`; `test_record_digest_other_than_find_raises_tampered`;
   `test_missing_copy_raises_not_found`; `test_tampered_copy_propagates` (A3);
-  `test_copy_without_scorecard_raises`; `test_silver_mismatch_writes_nothing` (A4);
+  `test_copy_without_scorecard_raises` — **toda** recusa afirma `sink.writes == 0` e
+  `renderer.calls == 0` (CB-9);
+  `test_confirmatory_label_only_on_gate_tails_and_dm_rows_where_h1_passes` (varre as dez
+  specs do resultado: `confirmatório` só nas séries das caudas do gate da reliability e
+  nas linhas do DM dos horizontes com `h1.passed`; em nenhum outro elemento — A5, CB-7); `test_silver_mismatch_writes_nothing` (A4);
   `test_dm_mismatch_writes_nothing`; `test_seed_mismatch_writes_nothing`;
   `test_nothing_rendered_when_any_build_step_fails` (renderer com 0 chamadas);
   `test_records_carry_data_digest_generation_digest_code_and_renderer` (A11; mudar um
@@ -769,13 +819,13 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   (o teste existente `test_audit_reproduction.py` roda inteiro no T1).
 - **O que fazer:** construtor do concept §4; `__call__` na ordem (1) snapshot (sujo →
   `DirtyCodeError`) → `resolve_judged_revision` → partição do plano →
-  `judged_copy.sealed_matching_record` (registro ausente → `ReportArtifactsError`) →
+  `judged_copy.sealed_matching_record` (`None` → `ReportArtifactsError`) →
   `read_judged_generation` → scorecard e `run_record` da cópia; (2) `result_digest`
   por `judged_copy.last_input_read_digest`; (3) `read_verified_silver` contra
   `generation.manifest.silver_content`; (4) dez specs + registros + dossiê; (5)
   `renderer.render` de cada spec e **uma** `sink.write`.
 - **Critério de aceite:** A1, A2, A3, A11, A13 (árvore suja), I9; base do A14.
-- **Verificação (T1):** `pytest tests/unit/features/evaluation/test_generate_report_artifacts.py tests/unit/features/evaluation/test_audit_reproduction.py -q --no-cov`
+- **Verificação (T1):** `pytest tests/unit/features/evaluation/test_generate_report_artifacts.py tests/unit/features/evaluation/test_audit_reproduction.py tests/integration/features/evaluation/test_audit_reproduction_cli.py tests/integration/features/evaluation/test_reproduction_process_independence.py -q --no-cov`
 - **Commit:** `feat(evaluation): use case que gera figuras e dossiê da cópia julgada [8.3/task-10]`
 
 ---
@@ -822,6 +872,10 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   - `src/financial_forecasting/features/evaluation/adapters/out/reports/__init__.py` *(pacote)*
   - `src/financial_forecasting/features/evaluation/adapters/out/reports/filesystem_report_sink.py`
   - `tests/contract/features/evaluation/test_report_artifact_sink_contract.py`
+- **Arquivos a modificar:** `tests/architecture/test_import_contracts.py` (caso
+  `evaluation-no-matplotlib-leak:reports-adapter-imports-matplotlib`, agora que o
+  pacote `reports/` existe — prova do A15 "import em `adapters/out/reports/` reprova";
+  CB-1)
 - **Testes primeiro:** contrato `[fake, real]` (fixture devolve o sink e um leitor do
   que foi escrito por perna): `test_writes_every_figure_record_and_both_dossiers`;
   `test_record_bytes_are_document_bytes`; `test_rejects_duplicate_or_unknown_id_before_writing`;
@@ -835,7 +889,7 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
 - **O que fazer:** o sink do §1; LF; `encoding="utf-8"`; nenhum caminho absoluto no
   conteúdo.
 - **Critério de aceite:** A11 (arquivos), A13 (staging), I8, I9.
-- **Verificação (T1):** `pytest tests/contract/features/evaluation/test_report_artifact_sink_contract.py -q --no-cov` + `python scripts/check_port_coverage.py` + `python scripts/check_fake_parity.py`
+- **Verificação (T1):** `uv run --no-sync lint-imports` + `pytest tests/contract/features/evaluation/test_report_artifact_sink_contract.py tests/architecture/test_import_contracts.py -q --no-cov` + `python scripts/check_port_coverage.py` + `python scripts/check_fake_parity.py`
 - **Commit:** `feat(evaluation): destino de arquivos dos artefatos com troca atômica [8.3/task-12]`
 
 ---
@@ -850,7 +904,12 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   - `src/financial_forecasting/cli.py` (subparser pelo `add(..., lock=False)`, despacho, docstring do módulo)
   - `src/financial_forecasting/composition_root.py` (`report_artifacts_wiring`, campo `generate_report_artifacts_for`)
   - `tests/unit/test_cli.py`
-- **Testes primeiro:** parser (`integration`, lê `tmp_path`):
+  - `tests/unit/shared/test_composition_root.py`
+- **Testes primeiro:** wiring: `test_report_artifacts_wiring_uses_real_collaborators`
+  (precedente `test_composition_root.py` l. 682: `ParquetGoldStore` da raiz como
+  `judged_store`, `TomlPreregistrationSource`, `ParquetAnalyticsRepository`,
+  `ReadTrainingGrid`, `GitEvaluationEnvironment`, `MatplotlibFigureRenderer`,
+  `FilesystemReportSink` no diretório pedido — CB-10). Parser (`integration`, lê `tmp_path`):
   `test_valid_register_parses_in_file_order`; `test_unknown_kind_raises`;
   `test_missing_field_raises`; `test_extra_field_raises`;
   `test_finding_without_open_status_raises`;
@@ -861,11 +920,14 @@ docs/reports/{dossier_register.toml (T15), figures/*.pdf|json, final_traceabilit
   `test_malformed_register_exits_2_before_use_case` (fake com 0 chamadas — A13);
   `test_report_artifacts_prints_contract_lines`; `test_cohort_seeds_passed_from_cohort_file`;
   `test_report_artifacts_exit_2_on_application_error`.
+- **Tamanho:** 7 arquivos (acima do típico ≤ 5): parser, CLI, composition root e os
+  três testes formam uma única fatia de entrada que só fica verde junta (o subcomando
+  sem o parser ou sem o wiring não roda); partir deixaria commit vermelho.
 - **O que fazer:** como no §1 ("Subcomando", "Composition root"); o parser recusa com
   `ValueError` (o `main` mapeia para exit 2) e nunca chega ao use case.
 - **Critério de aceite:** A13 (registro malformado), A17 (o parser recusa pela fonte),
   contrato do subcomando.
-- **Verificação (T1):** `pytest tests/unit/test_cli.py tests/integration/features/evaluation/test_dossier_register_parser.py -q --no-cov` + `python scripts/check_use_case_deps.py` + `python scripts/check_layout.py`
+- **Verificação (T1):** `pytest tests/unit/test_cli.py tests/unit/shared/test_composition_root.py tests/integration/features/evaluation/test_dossier_register_parser.py -q --no-cov` + `python scripts/check_use_case_deps.py` + `python scripts/check_layout.py`
 - **Commit:** `feat(evaluation): subcomando report-artifacts com o registro curado na fronteira [8.3/task-13]`
 
 ---
@@ -972,6 +1034,9 @@ LIVE=/c/Users/Marcelo/Documents/Code/financial-forecasting/data/cohorts/aapl
 P=/c/Users/Marcelo/Documents/Code/financial-forecasting/data/cohorts/aapl/gold/asset=AAPL/parent_sweep_id=aapl_confirmatory-r0-665f45d9169a
 IMAGE_ID=$(docker image inspect --format '{{.Id}}' financial_forecasting-app:dev)
 EOF
+grep -Eq '^IMAGE_ID=sha256:[0-9a-f]{64}$' "$SCRATCH/etapa-83.env" || { echo FAIL_IMAGE_ID; exit 1; }; echo IMAGE_ID_OK
+GATE1=$(grep '^GATE1=' "$SCRATCH/etapa-83.env" | cut -d= -f2)
+git -C /c/Users/Marcelo/Documents/Code/financial-forecasting-worktrees/feat-234-8-3-plots-and-final-report cat-file -e "$GATE1^{commit}" || { echo FAIL_GATE1; exit 1; }; echo GATE1_OK
 cat >> "$SCRATCH/etapa-83.env" <<'EOF'
 RES="--cpus 6 --memory 8g --memory-swap 8g"
 PRE="git config --global --add safe.directory '*'"
@@ -999,7 +1064,7 @@ printf 'CODE_SRC=%s\n' "$(git -C "$WTH" rev-parse HEAD:src)" >> "$SCRATCH/etapa-
    test "$(grep '^generation_digest' "$WTH/config/preregistration/aapl_confirmatory-r3.judged.toml" | cut -d'"' -f2)" = "$DIGEST" || { echo FAIL_RECORD; exit 1; }; echo RECORD_OK
    (cd "$LIVE" && find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum) > "$SCRATCH/live-before.sha256sum"
    wc -l < "$SCRATCH/live-before.sha256sum"
-   test -z "$(docker ps --filter name=ff83 -q)" || { echo FAIL_CONTAINER_ALIVE; exit 1; }; echo NO_FF83
+   test -z "$(docker ps -aq --filter name=^ff83-)" || { echo FAIL_CONTAINER_EXISTS; exit 1; }; echo NO_FF83
    ```
 2. *Geração 1* (destacada; `docker wait` em segundo plano):
    ```bash
@@ -1017,15 +1082,18 @@ printf 'CODE_SRC=%s\n' "$(git -C "$WTH" rev-parse HEAD:src)" >> "$SCRATCH/etapa-
    test "$(wc -l < "$SCRATCH/out-gen1.sha256sum")" = 22 || { echo FAIL_OUTPUT_COUNT; exit 1; }; echo OUTPUT_22
    (cd "$LIVE" && find . -type f -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum) > "$SCRATCH/live-after1.sha256sum"
    diff -q "$SCRATCH/live-before.sha256sum" "$SCRATCH/live-after1.sha256sum" || { echo FAIL_DATA_CHANGED; exit 1; }; echo DATA_INTACT
-   test -z "$(git -C "$WTH" status --porcelain -- src config uv.lock pyproject.toml)" || { echo FAIL_GEN_TOUCHED_CODE; exit 1; }; echo ONLY_REPORTS_WRITTEN
+   git -C "$WTH" status --porcelain --untracked-files=all | sed 's/^...//' | LC_ALL=C sort > "$SCRATCH/written.txt"
+   test "$(wc -l < "$SCRATCH/written.txt")" = 22 || { echo FAIL_UNEXPECTED_PATHS; exit 1; }
+   grep -vxE 'docs/reports/figures/[a-z0-9_]+\.(pdf|json)|docs/reports/final_traceability_dossier(_internal)?\.md' "$SCRATCH/written.txt" && { echo FAIL_UNEXPECTED_PATHS; exit 1; }; echo ONLY_REPORTS_WRITTEN
    for f in "$WTH"/docs/reports/figures/*.json; do grep -q "\"code.src\": \"$CODE_SRC\"" "$f" || { echo "FAIL_CODE_SRC $f"; exit 1; }; done; echo RECORDS_CODE_SRC
-   grep -qiE 'equivalence[_-]audit|prior[_-]evidence|tests/equivalence|8[._]2[._]000[34]|prior[_-]candidate[_-]labels|evid[eê]ncia anterior|projeto anterior' "$WTH/docs/reports/final_traceability_dossier.md" && { echo FAIL_CITABLE_LEAK; exit 1; }; echo CITABLE_CLEAN
+   grep -qiE 'equivalence[_-]audit\.md|prior[_-]evidence|tests/equivalence|8[._]2[._]000[34]|prior[_-]candidate[_-]labels|evid[eê]ncia anterior|projeto anterior' "$WTH/docs/reports/final_traceability_dossier.md" && { echo FAIL_CITABLE_LEAK; exit 1; }; echo CITABLE_CLEAN   # = CITABLE_FORBIDDEN_PATTERNS (refinamento do A17, §1)
    ```
 4. *Leitura humana mínima (sem decidir nada):* abrir cada PDF e conferir só forma
    (sem colisão de rótulos, uma página, rótulo de estatuto visível, frases do I11) —
    checagem de layout da skill `dataviz` passo 7; colisão → ajuste de estilo no
    renderer é mudança de `src/` → linha `FAIL_LAYOUT` da tabela.
-5. *Commit das saídas* (`docs/reports/figures/`, os dois dossiês, §7 com a
+5. *Commit das saídas* — `git add` **só** dos 22 caminhos de `written.txt` e do
+   `technical.md` (`docs/reports/figures/`, os dois dossiês, §7 com a
    `[measurement]` da R2: `gen1.out`, `out-gen1.sha256sum`, `DATA_INTACT`, estado do
    container, `IMAGE_ID`, `CODE_SRC`):
    `docs(evaluation): figuras canônicas e dossiê final gerados da cópia julgada [8.3/--]`.
@@ -1047,18 +1115,36 @@ sharpness com o `mpiw` vale porque a geração não ergueu `ReportSourceMismatch
 commit `docs(evaluation): determinismo e só leitura da geração real registrados [8.3/--]`,
 depois o 2º `make check` (saída).
 
+**Descartar saída não commitada (DESCARTE)** — toda linha pós-geração abaixo que manda
+"descartar" usa este bloco (GB-1), depois de gravar logs e estado:
+```bash
+set -eu; SCRATCH=<…>; . "$SCRATCH/etapa-83.env" || exit 1
+git -C "$WTH" checkout -- docs/reports
+git -C "$WTH" clean -fdx -- docs/reports/figures docs/reports/final_traceability_dossier.md docs/reports/final_traceability_dossier_internal.md docs/reports/.report-artifacts-staging docs/reports/.report-artifacts-previous
+test -z "$(git -C "$WTH" status --porcelain)" || { echo FAIL_DISCARD; exit 1; }; echo DISCARDED
+```
+
 **Se falhar.**
 
 | Linha | Sintoma | Ação |
 |---|---|---|
+| `FAIL_IMAGE_ID`/`FAIL_GATE1` | R0 sem id de imagem ou `GATE1` inexistente | corrigir o env file; nada rodou |
+| `FAIL_WT_DIRTY`/`FAIL_REGISTER_NOT_COMMITTED` | árvore suja (inclusive saída parcial anterior) ou registro fora do commit | DESCARTE para saída parcial; registro → commit dele (linha do registro abaixo) |
+| `FAIL_CONTAINER_EXISTS` | `ff83-*` de tentativa anterior (parado ou vivo) | `docker logs`/`docker inspect` gravados no scratch, `docker rm -f`, repetir o passo |
+| exit 2 `DirtyCodeError` | probe viu árvore suja | DESCARTE / commit pendente; repetir sem gate |
+| exit 2 `MissingImageIdError` | `IMAGE_ID` não chegou ao container | corrigir `ENVS`; repetir sem gate |
+| exit 2 `ReportArtifactsError` | sem `.judged.toml`, scorecard ou `input_read` | parar; `[finding]` (a cópia julgada não é a esperada) |
+| exit 2 `ValueError` do parser | registro curado malformado ou ponteiro proibido | corrigir `dossier_register.toml`, T1 de `tests/architecture/test_stage_8_3_repo_files.py`, commit `docs(evaluation)`, R1 (o `GATE1` continua: o registro está fora do diff da R1) |
+| `FAIL_GEN1_FIGURES`/`FAIL_OUTPUT_COUNT`/`FAIL_UNEXPECTED_PATHS`/`FAIL_CODE_SRC` | saída incompleta, caminho inesperado ou registro com outro `code.src` | parar; DESCARTE; defeito de `src/` → linha `FAIL_SRC_CHANGED_SINCE_GATE1` |
+| `FAIL_GEN2_*` (mesmas checagens na geração 2) | falha só na 2ª geração | parar; não commitar nada da 2ª; DESCARTE das mudanças (o commit da 1ª fica) e diagnóstico como `FAIL_NOT_DETERMINISTIC` |
 | `FAIL_SRC_CHANGED_SINCE_GATE1` | `src/`/lock/`.importlinter` mudou depois do ponto 1 | revisão independente do fix + novo `make check` + `GATE1` novo; recomeçar da R1 |
 | `FAIL_JUDGED_COPY`/`FAIL_DIGEST`/`FAIL_RECORD` | cópia julgada adulterada ou registro divergente | parar; `[finding]`; restauração só pelo backup conferido (`sha256sum -c`, ADR 8.1.0003 item 7) com decisão do coordenador |
 | `FAIL_GEN1` com `SilverContentMismatchError` | unidade lida ≠ julgada | parar; diagnóstico só por chaves e hashes (nenhum valor): unidades lidas × esperadas por par (lição E4 da 8.2) — defeito do leitor é `fix` + gate; silver alterado é `[finding]` |
 | `FAIL_GEN1` com `ReportSourceMismatchError` | DM gold ≠ scorecard, `n_evaluated` ≠ `n_observed`, larguras ≠ `mpiw`, filtro do gate ≠ H1, seeds | parar; `[finding]` com a chave; nenhuma figura é ajustada para "passar" (I3); correção de código passa pela linha 1 |
 | `FAIL_GEN1` por escrita em `/data` (FS só leitura) | o wiring cria arquivo sob o `data_root` | `[deviation]`: montar `/data` rw; `DATA_INTACT` continua obrigatório (a listagem prova o só leitura) |
 | `FAIL_GEN1` OOM | memória | registrar; `docker stats`; ler por `feature_set_name` já é o desenho; não aumentar `--memory` sem `[deviation]` |
-| `FAIL_LAYOUT` | colisão de rótulo, página a mais | ajuste no renderer = `src/` → linha 1; descartar a saída da geração 1 (`git checkout -- docs/reports` / `git clean -fd docs/reports/figures`) |
-| `FAIL_CITABLE_LEAK` | termo proibido no citável | parar; defeito do registro (`docs`, sem gate) ou do Markdown (`src/`, linha 1); regenerar |
+| `FAIL_LAYOUT` | colisão de rótulo, página a mais | DESCARTE; ajuste no renderer = `src/` → linha `FAIL_SRC_CHANGED_SINCE_GATE1` |
+| `FAIL_CITABLE_LEAK` | termo proibido no citável | DESCARTE; defeito do registro → linha do parser acima (T1 do teste do arquivo + commit, sem `make check`); defeito do Markdown (`src/`) → linha `FAIL_SRC_CHANGED_SINCE_GATE1`; regenerar |
 | `FAIL_NOT_DETERMINISTIC`/`FAIL_REGEN_DIFFERS_FROM_COMMIT` | bytes diferentes entre gerações | parar; diagnóstico: PDF (fonte/subset, ordem de objetos) × registro × dossiê pelo `diff` das listagens; `[finding]`; nunca commitar a 2ª geração por cima |
 | `FAIL_DATA_CHANGED` | `data/` mudou | parar; `[finding]`; nada é commitado |
 
@@ -1151,7 +1237,7 @@ python scripts/check_technical_postexec.py docs/stages/8.3-plots-and-final-repor
 | A2 | Fonte única (nunca `current/`) | 10, 14 | `test_specs_come_from_judged_copy_never_current` (construtor sem `GoldGenerationReader`); e2e sobre o mundo julgado |
 | A3 | Cópia conferida, sem escrita | 10, 14 | `test_record_digest_other_than_find_raises_tampered`, `test_missing_copy_raises_not_found`, `test_tampered_copy_propagates`; `test_tampered_judged_copy_exit_2_nothing_written`, `test_judged_toml_with_other_digest_exit_2_nothing_written` |
 | A4 | Silver por unidade | 05, 10 | `test_report_silver.py` (calib alterada, falta, sobra, realizado, ablação e permutadas/VSN só no julgado passam); `test_silver_mismatch_writes_nothing` |
-| A5 | Rótulos e frases | 02, 06, 07 | `test_confirmatory_only_where_h1_passes`; `test_row_label_h2_not_applicable_where_h1_fails`; `test_spec_rejects_missing_required_note[*]`; `test_every_panel_has_empirical_coverage_label` |
+| A5 | Rótulos e frases | 02, 06, 07, 10 | `test_confirmatory_label_only_on_gate_tails_and_dm_rows_where_h1_passes` (as dez specs); `test_confirmatory_only_where_h1_passes`; `test_row_label_h2_not_applicable_where_h1_fails`; `test_spec_rejects_missing_required_note[*]`; `test_every_panel_has_empirical_coverage_label` |
 | A6 | Nenhum teste novo | 06, 07 | `test_report_figures_imports_no_inferential_service` (AST); `test_confirmatory_tails_equal_verdict_h1_bands_and_profile_power`; `test_raw_p_from_rectangular_row_not_bartlett`; `test_adjusted_and_rejected_divergent_from_scorecard_raises` |
 | A7 | Dado plotado (fakes discriminantes) | 06–08 | testes das três suítes `test_report_figures_*` (inclusive D14 nos dois lados, `mean_of_drawn_widths_equals_gold_mpiw_model_full_exactly`, `n_evaluated_differs_from_n_observed_raises`, agregado de H3, VSN `family`) |
 | A8 | Fan chart | 08 | `test_uses_first_seed_of_revision_only`, `test_cohort_seeds_differ_from_revision_raises`, `test_first_seed_without_predictions_raises_no_fallback`, `test_legend_names_the_seed` |
@@ -1161,9 +1247,9 @@ python scripts/check_technical_postexec.py docs/stages/8.3-plots-and-final-repor
 | A12 | Dossiê citável completo | 02, 09, 15 | `test_dossier_sections_closed`; `test_report_dossier.py` (seções, cegamento byte a byte, poder, ponteiros, reprodução); `test_register_has_inherited_citable_items`; `[measurement]` da varredura de `[finding]` abertos |
 | A13 | Recusas do CLI e do gerador | 10, 12, 13, 14 | `test_dirty_tree_raises_before_any_read_or_write`; `test_malformed_register_exits_2_before_use_case`; `test_failure_midway_restores_previous_and_removes_staging` |
 | A14 | Execução real | 14, R | e2e sintético (bytes iguais, `data/` intacto); R2/R3: `OUTPUT_22`, `SAME_SHA256SUM`, `REGEN_EQUALS_COMMIT`, `DATA_INTACT` e o sharpness sem `ReportSourceMismatchError` |
-| A15 | Dependência e gates | 01, 11, pontos 1–2 | `lint-imports`; caso `evaluation-no-matplotlib-leak:reports-adapter-imports-matplotlib`; `test_no_pyplot_anywhere_in_src`; `make check` |
+| A15 | Dependência e gates | 01, 11, 12, pontos 1–2 | `lint-imports`; casos `evaluation-no-matplotlib-leak:toml-adapter-imports-matplotlib` (01) e `:reports-adapter-imports-matplotlib` (12); `test_no_pyplot_anywhere_in_src`; `make check` |
 | A16 | Omissões fechadas | 02, 06, 07 | `test_catalog_omissions_equal_concept_d13_literal`; `test_spec_rejects_omission_outside_catalog`; `test_omissions_equal_catalog_and_no_series_draws_omitted_element`; `test_acf_band_absent`; `test_no_if_or_sf_interval_drawn` |
-| A17 | Citável limpo, interno completo | 02, 09, 13, 14, 15, R | `test_non_internal_entry_with_forbidden_pointer_rejected[*]`; `test_non_internal_forbidden_pointer_raises`; `test_citable_text_free_of_prior_evidence_terms`; `test_internal_lists_required_items`; `test_register_has_inherited_internal_items`; `CITABLE_CLEAN` |
+| A17 | Citável limpo, interno completo | 02, 09, 13, 14, 15, R | `test_non_internal_entry_with_forbidden_pointer_rejected[*]`; `test_citable_anchors_of_82_pass_the_second_barrier` (refinamento §1); `test_non_internal_forbidden_pointer_raises`; `test_citable_text_free_of_prior_evidence_terms`; `test_internal_lists_required_items`; `test_register_has_inherited_internal_items`; `CITABLE_CLEAN` |
 
 ### Verificação de gap no concept (uma passada, Fase 3B)
 
@@ -1174,7 +1260,11 @@ python scripts/check_technical_postexec.py docs/stages/8.3-plots-and-final-repor
   `cohort_seeds` (o I6 exige comparar a lista do arquivo de cohort, e o use case não
   tem port para ler o cohort — a leitura fica no CLI, fronteira); (c) o subcomando
   ganha `--data-root`, `--cohort`, `--preregistration`, `--revision` além dos três do
-  concept (o probe do I10 usa o cohort; o silver vive na raiz). O Markdown do dossiê é
+  concept (o probe do I10 usa o cohort; o silver vive na raiz); (d) A17 (2ª barreira):
+  o termo `equivalence_audit` vale para o relatório `equivalence_audit.md`, não para o
+  diretório `8.2-equivalence-audit/` das âncoras citáveis que o próprio A12/A17 exige
+  (Checkpoint B CB-2); (e) D4: a contagem de degenerados vai para o registro no campo
+  `excluded_degenerate` (CB-8). O Markdown do dossiê é
   renderizado por função pura da application que o sink chama — compatível com "o sink
   renderiza". Registrados aqui como `[decision:C]` de forma; não regridem o concept.
 - **Decisão que pedia ADR?** Nenhuma: uso dos donos existentes (`SeriesAssembly`,
