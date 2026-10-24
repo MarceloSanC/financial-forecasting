@@ -3,7 +3,7 @@ title: Concept — Stage 8.3 — Plots canônicos da geração julgada e dossiê
 description: Gera, a partir da cópia julgada da 8.1 (judged/<ref>/, lida pelo read_judged_generation da 8.2) e do silver conferido contra o silver_content dela, as dez figuras do catálogo §6.2 do doc de domínio de reprodução (PDF vetorial determinístico, rótulo de estatuto por elemento, nenhum teste novo), um registro de origem por figura (hash do dado plotado + generation_digest + tabela/chave + code.src), omissões declaradas em lista fechada para o que o gold não persiste, e o dossiê final de rastreabilidade com os itens do §7 em dois arquivos (citável e interno, este com tudo que toca a evidência anterior), pelo use case GenerateReportArtifacts e o subcomando report-artifacts
 when-use: Consultar ao iniciar a Fase 3B (technical) desta Stage; antes de desenhar qualquer gráfico do gold julgado ou escrever o dossiê; ao questionar por que são dez figuras e não cinco, por que o DM é candidato × comparadores, por que a prova de origem é o hash do dado e não o da imagem, ou por que o fan chart usa a seed 1
 keywords: [concept, plots, report, dossier, traceability, evaluation, judged-generation, p8-rot, p8-fan, p8-persist, dossie, matplotlib, deterministic-pdf, figure-record, data-digest, silver-content, sandve]
-status: done
+status: draft
 created_at: 2026-10-24
 updated_at: 2026-10-24
 stage_id: 8.3-plots-and-final-report
