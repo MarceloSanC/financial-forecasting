@@ -1,0 +1,77 @@
+{
+  "code": {
+    "code.src": "a92759b6c813518d72588be2704340b5110636ea",
+    "code.uv_lock": "0ff8a4dfe837fbb76c5d619b240f918e519c0dd7"
+  },
+  "data_digest": "88a6ede5a7e53ad7f129fc5e64f9fb6ad671d6474cd73ac71b9f447489a8c62d",
+  "excluded_degenerate": {},
+  "figure_id": "oos_fan_chart",
+  "generation_digest": "96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539",
+  "omissions": [],
+  "omitted_models": [],
+  "partition": {
+    "asset": "AAPL",
+    "parent_sweep_id": "aapl_confirmatory-r0-665f45d9169a"
+  },
+  "preregistration_ref": "aapl_confirmatory-r3-00fd83d9cd39",
+  "renderer": {
+    "format": "pdf",
+    "freetype": "2.14.3",
+    "matplotlib": "3.11.0"
+  },
+  "revision": 3,
+  "silver_units": {
+    "dim_run|aapl_confirmatory-r0-665f45d9169a": "1330dad38f7a6722c4e5d8bec02d2c57be4415ee8c9b0d1dd51d3a0132a222e5",
+    "fact_oos_predictions|23cdefe3e4500fb192663a56aacfedd3f5f2aaaf8d89ee7b5a5890daa6ab253a|2021": "4752acde436d27993e04c56200e204322ecb970ca0eb1bc63dc6568b759fed0b",
+    "fact_oos_predictions|23cdefe3e4500fb192663a56aacfedd3f5f2aaaf8d89ee7b5a5890daa6ab253a|2022": "054905b6d17fe4ccf5266aefcf774e62de494b640aefb72adba0aa6dcd0704dd",
+    "fact_oos_predictions|23cdefe3e4500fb192663a56aacfedd3f5f2aaaf8d89ee7b5a5890daa6ab253a|2023": "ea7ec6bdc1478e46cf04417e7b736bd700152c88b21cf5a0efcf4437cd9682c9",
+    "fact_oos_predictions|32b3d050ea6905e1270bd2e48cca495c39e0d1614a11dc63660f6479bfa1636d|2019": "71895bde866e495ccc62855ad4139456c475abcc90658eeded843b57ec6db3c1",
+    "fact_oos_predictions|32b3d050ea6905e1270bd2e48cca495c39e0d1614a11dc63660f6479bfa1636d|2020": "3dab2cb4a0b22228cb627caa004a49e16ec6abb84f206584f6b41ce622fa0582",
+    "fact_oos_predictions|32b3d050ea6905e1270bd2e48cca495c39e0d1614a11dc63660f6479bfa1636d|2021": "1607a92947c4ba862c9d5c26174377227071507550ce00848154edff5410e6c2",
+    "fact_oos_predictions|3741d9072e9c98a4fb203e47a2fbdd8be77ab06136838c7bbd25f89924cbe3b5|2020": "1d9e0b66643587edb31fb43d1539d28bbabe8041d27cb0ca6db7fd1b2f57d406",
+    "fact_oos_predictions|3741d9072e9c98a4fb203e47a2fbdd8be77ab06136838c7bbd25f89924cbe3b5|2021": "d5e7ab991a837eac6417b0e157da44ec76bd90c75410f53c956af359c61fdea3",
+    "fact_oos_predictions|3741d9072e9c98a4fb203e47a2fbdd8be77ab06136838c7bbd25f89924cbe3b5|2022": "fc5b8707707565d5cf4c375cf75ab75037fdea725e8c2215cd027eafc986bae4",
+    "fact_oos_predictions|9c92445b8ba773398af9c13a347e0c0a025c21b593c98c2eb8f587f0abf351f3|2023": "b8ccb960ae69eb2c3a4c3fefdc5515b6420c47f210aec0a2125c93e258537913",
+    "fact_oos_predictions|9c92445b8ba773398af9c13a347e0c0a025c21b593c98c2eb8f587f0abf351f3|2024": "fe085bb324c875c9b095bb4a13d4ac88c92d5db97f033e0bf45a2e0f4dd04876",
+    "fact_oos_predictions|9c92445b8ba773398af9c13a347e0c0a025c21b593c98c2eb8f587f0abf351f3|2025": "c1bd3ae28fa92e8e5bd32ccaa91544e90ff31c3c080ea799f62220d51d04ad9f",
+    "fact_oos_predictions|d58a4cfe09ddd867f0ee0c089693d55383f4744768f8d82d9256802573764887|2018": "eb5beba0a0e94442a4fb92953fd740180390cc735ce7616c0357b12b3c067ed6",
+    "fact_oos_predictions|d58a4cfe09ddd867f0ee0c089693d55383f4744768f8d82d9256802573764887|2019": "33508828ff3c336a1630753b6ab9f3cbf7fb19963634d95a8eb50f9c3628f9d8",
+    "fact_oos_predictions|d58a4cfe09ddd867f0ee0c089693d55383f4744768f8d82d9256802573764887|2020": "dd5adb8fc56a3bf80345ff71bc2c1976681b9d3ce3e503a4bd7f4445e00515ff",
+    "fact_oos_predictions|f95b2857537903f4eeffd7852b9d221e5ea4404577a53c0248764e54cd9f2fac|2022": "5a4a99b0412b8e5ea43b3deee927e126a4cdd0c57afbf64478670c6105f4623e",
+    "fact_oos_predictions|f95b2857537903f4eeffd7852b9d221e5ea4404577a53c0248764e54cd9f2fac|2023": "da6da4eba69fd9e621f20cbec8bfcf2a6909c0e56ad4ef66f7090623ae11ccb7",
+    "fact_oos_predictions|f95b2857537903f4eeffd7852b9d221e5ea4404577a53c0248764e54cd9f2fac|2024": "434aedda1c4d7dd3b1b39f6b6cb75db1b238398a1e443c25a0f93d63b618c923",
+    "realized|AAPL": "d75a43feb12739ca60a44b17aaf8807de50bc8439ab796d516b00699ba6ff3f3"
+  },
+  "sources": [
+    {
+      "fields": [
+        "quantile_level",
+        "value_guardrail",
+        "target_timestamp_utc"
+      ],
+      "filter": {
+        "model": "tft_quantile",
+        "seed": 1,
+        "split": "test"
+      },
+      "kind": "silver_table",
+      "name": "fact_oos_predictions"
+    },
+    {
+      "fields": [
+        "target_return"
+      ],
+      "filter": {},
+      "kind": "realized",
+      "name": "realized"
+    },
+    {
+      "fields": [
+        "fold"
+      ],
+      "filter": {},
+      "kind": "silver_table",
+      "name": "dim_run"
+    }
+  ]
+}

@@ -1910,4 +1910,69 @@ CLI passou 12 vezes seguidas com o fix.
 **Razão:** o A9 (renderer determinístico) não pode depender do acaso do solver; mudança de
 `src/` pede `make check` e `GATE1` novos antes de recomeçar a Etapa R da R1.
 
+### 2026-10-24 — [measurement] Etapa R (3ª tentativa), R1 e R2: geração 1 sobre a cópia julgada — Claude (executor da Etapa R)
+**Contexto:** a R2 item 5 manda colar aqui o `gen1.out`, o `out-gen1.sha256sum`, o `DATA_INTACT`,
+o estado do container, o `IMAGE_ID` e o `CODE_SRC`. Antes da R1, o HEAD era `8baeb16d` e a
+árvore estava limpa; não havia saída parcial da tentativa anterior.
+**Medição:**
+- **Ambiente:** `GATE1 = 8baeb16dcf43726d0d02e45796d30203ab646589` (`make check` verde: 9287 passed,
+  cobertura 99 %, `EXIT=0`). `IMAGE_ID = sha256:b69a7620e7bd8449369bde2f46e903c5f46c25e9efb3597f452af3272e0a8f45`
+  (o mesmo das tentativas anteriores).
+- **R1:** `WT_CLEAN`, `SRC_AS_GATE1`, `REGISTER_COMMITTED`, `COHORT_TAG_OK`, `ABLATION_COHORT_TAG_OK`,
+  `CODE_SRC = a92759b6c813518d72588be2704340b5110636ea`.
+- **R2 item 1:** `JUDGED_COPY_OK`, `DIGEST_OK`, `RECORD_OK`, 355 arquivos em `live-before.sha256sum`,
+  `NO_FF83`.
+- **R2 item 2** (`ff83-gen1`): `gen1.state` = `0 false`, `GEN1_FIGURES_10`. O `gen1.out` tem 1 112
+  linhas; 1 100 são log do `fontTools.subset`, e o arquivo completo fica no scratchpad. Estas
+  são as linhas de contrato:
+```
+report aapl_confirmatory-r3-00fd83d9cd39: generation_digest 96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539 figures 10 register_entries 35
+figure reliability_diagram data_digest 92320bf22151cd08c7484466bccff854f7034333089de0e84d5f692c400f3a51
+figure quantile_score_plot data_digest 1dee7acefecc1df244b5e7c55c1b32a5ef0e5f97eb5796cf7a49af866beff11e
+figure sharpness_diagram data_digest 9c3f327a5f93a0c9d2e6a29567da0655b552ed81250b261f01cd4cd25920ff06
+figure picp_mpiw_plot data_digest bcfd53ece66a8e9d28a148a5c260a8239bc72e1657d792c5ed1fe309409bedcd
+figure dm_candidate_vs_comparators data_digest 9d6d0dc210f0a770efc3bc3ac7a50915530862f4066cc293096c5cfed9c949a5
+figure oos_fan_chart data_digest 88a6ede5a7e53ad7f129fc5e64f9fb6ad671d6474cd73ac71b9f447489a8c62d
+figure loss_differential_acf data_digest 01443b683465d9360b5d32ac087b18d082ee9e530d73a5703ebbd7e751cf1b0a
+figure h3_family_importance data_digest 29642f60010e8382042830d2970e4424d5d59460c76473ceecf71acbadcf016d
+figure vsn_weights data_digest 1574ad8ac24713c74c40f010ee85144d7c31eada8959c287b1d5a07f03f65bee
+figure native_vs_conformal data_digest c75ad2eabf561bcd55d6d90627836ec6ff5eda84a6487d3f9c153290edeeeb8a
+dossier citable final_traceability_dossier.md internal final_traceability_dossier_internal.md
+```
+- **R2 item 3:** `OUTPUT_22`, `DATA_INTACT`, `ONLY_REPORTS_WRITTEN`, `RECORDS_CODE_SRC`, `exit 0` /
+  `HITS 0` / `CITABLE_CLEAN`. Os dez PDFs têm uma página cada e nenhum tem `/CreationDate`.
+  `out-gen1.sha256sum`:
+```
+1ea72261106123fdb854e7e8f5e556cd6d06e8a6a694e3451bc62da0a75c3afe *figures/dm_candidate_vs_comparators.pdf
+c9d13c58d70b798be25ea209da569f7dd167ca831969f26a733b9e605c8ba26a *figures/h3_family_importance.pdf
+d8d03d097eb80127d6a8beaea928b3f124a68c1ab2a7020d6016cbdef419bfbb *figures/loss_differential_acf.pdf
+ec61a2e09b9497dbeedbae8bfab544daed8de5c909e21d0897e01adc3079913e *figures/native_vs_conformal.pdf
+1510e9fce0bf865b89eb59a5a5c9de064a55ce5231964e2bb49d2084138d80e7 *figures/oos_fan_chart.pdf
+9c151e2b69387bff2209437536de6deb080ae7d78ddd2f2df91f181055a1fe0f *figures/picp_mpiw_plot.pdf
+654c21db38e97035fa932c7a35d896c41bc8d4b398adb667f936225775befb6a *figures/quantile_score_plot.pdf
+94f0b94a57fb9c30650db4902b23e0821e3251db2d63921938f4fa27627cbed0 *figures/reliability_diagram.pdf
+f6b0386456c46b718c85ec9b078df4d55284c2435d1d2a9f1394795880aa5970 *figures/sharpness_diagram.pdf
+21d156bcc25cccb4181ad586c2c37d16f045d2927b549f7b521cddc5a5a33dcc *figures/vsn_weights.pdf
+edd5b51cbd2b460076900ccedb4f720b7188ce09f752cd72442ff4de8a342f4e *figures/dm_candidate_vs_comparators.json
+36f65b88300c04cba15f4fc8620e62758c83789355ecc94a5c527adbac2985b8 *figures/h3_family_importance.json
+2cc78601548e0e506de86f3177963c588f11396b369dd7ccb604db2317af2181 *figures/loss_differential_acf.json
+c3d2626025689bec03c3c4effef1ca538bd762fc97f5e239770b53bbdf1545aa *figures/native_vs_conformal.json
+1c97ff87d07ca25d1dbde094070f951be29292dafb45a5044adfe81cb73ea001 *figures/oos_fan_chart.json
+e655203582d33642e537b3c3d0e894227cc8fe51c42792ea30dda07865c6f44a *figures/picp_mpiw_plot.json
+a582b95aa42d66615234669b31bf47bec90d82188019fb051a9eec2f174d1ceb *figures/quantile_score_plot.json
+0a6cb459dac5ad132fddea822c974409f06c7739e3f1158bc00bf1a21f306640 *figures/reliability_diagram.json
+21f896d37715e90afe010e3b30523c02323ec8077e444b2a80e47da9490bb5e7 *figures/sharpness_diagram.json
+6927bc90655a19b48d6568b1f5005f98e3b3c4342e549e97002672dfea55b2e9 *figures/vsn_weights.json
+c2ea4498af4095383b6b99d3d0ad3d2484479636977509e5879d5bafbf5e9baa *final_traceability_dossier.md
+f345cbf229afeb334e7d0ea51b08713b99b023a2b6362b738424e64ac8f2f871 *final_traceability_dossier_internal.md
+```
+- **R2 item 4 (forma):** os dez PDFs foram abertos e conferidos só na forma. Nenhum rótulo está
+  cortado ou colidindo, todo rótulo de estatuto está visível, e as frases do I11 estão nas
+  notas. Os três defeitos da 2ª tentativa (sharpness, DM, H3) não aparecem mais; a nota do H3
+  termina em "famílias concordantes = nenhuma".
+**Razão:** prova da R2 (A14, primeira parte): a geração lê a cópia julgada, escreve só os 22
+caminhos de `docs/reports/`, deixa `data/` intacto, e o citável passa na
+`CITABLE_FORBIDDEN_PATTERNS`. A geração não ergueu `ReportSourceMismatchError`, então vale a
+consistência do sharpness com o `mpiw`.
+
 <!-- END: post-execution -->
