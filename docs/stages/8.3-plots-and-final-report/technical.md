@@ -1882,4 +1882,32 @@ deduplicadas com "h+1, h+7 — …"). Worktree removida.
 **Razão:** os achados da revisão; mudança de `src/` pede `make check` e `GATE1` novos antes
 de recomeçar a Etapa R da R1.
 
+### 2026-10-24 — [deviation] PDF não byte-idêntico entre duas gerações no mesmo processo — Claude (executor)
+**Contexto:** o `make check` em `79912075` reprovou
+`test_report_artifacts_cli.py::test_second_generation_is_byte_identical`: na segunda geração
+o `figures/native_vs_conformal.pdf` saiu com outro sha256 (as outras 21 saídas iguais). Em
+`357e6d14` e `d721c76c` o teste tinha passado: a falha é intermitente.
+**Causa raiz (medida):** as `FigureSpec` da geração do teste, renderizadas 30 vezes no mesmo
+processo, deram dois sha256 só no `native_vs_conformal` (8 × 22; nas outras nove, um só); a
+spec sintética de `_report_inputs` diverge ~1 em 10. Os PDFs descomprimidos diferem em três
+números do clip da faixa do rodapé (`0 -0 m` × `0 0 m`). O layout restrito (kiwisolver)
+devolve posições com ruído de último bit que muda de chamada para chamada no mesmo processo
+(o fundo do rodapé `-2.36e-16` × `0.0`; os eixos na 16.ª casa), e o `pdfRepr` do matplotlib
+escreve `-0` para o negativo minúsculo. Não depende de `PYTHONHASHSEED` (dois processos com
+seeds distintas reproduzem o mesmo par de hashes); o fix de layout só tornou visível um
+não-determinismo do motor de layout que já existia.
+**O que mudou:** `freeze_layout` (`matplotlib_figure_renderer`) roda o layout uma vez, leva
+caixas das subfiguras, posições dos eixos e título da faixa dos painéis para a grade de
+`1e-6` da figura (~0,0005 pt, sem zero negativo) e desliga o motor antes do `savefig`; tudo
+a jusante é aritmética determinística sobre posições fixas. Sem `pyplot`, `fonttype 42` e
+`CreationDate None` mantidos; `data_digest` intacto (o dado da spec não muda), sha256 dos PDF
+mudam uma vez. Testes: contrato do renderer real com ruído `±1e-15` injetado no resultado do
+layout (determinístico) e 31 renderizações do `native_vs_conformal` sintético no mesmo
+processo; os dois **falham** sem o fix (mutação conferida). Junto, os dois testes pedidos
+pela revisão: tons de `_NEUTRALS` distintos nos Δ_f do H3 e `_dodged` deslocando intervalos
+da mesma categoria (mutação: tons iguais e deslocamento nulo derrubam cada um). O teste da
+CLI passou 12 vezes seguidas com o fix.
+**Razão:** o A9 (renderer determinístico) não pode depender do acaso do solver; mudança de
+`src/` pede `make check` e `GATE1` novos antes de recomeçar a Etapa R da R1.
+
 <!-- END: post-execution -->
