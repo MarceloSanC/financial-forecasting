@@ -53,6 +53,7 @@ from tests.equivalence.comparisons import (
     U_Q_PICP,
     RawStatus,
     a1_check,
+    a1_rule,
     a2_compare,
     dm_sense,
     pair_measures,
@@ -483,7 +484,14 @@ def a9_rows(
     for horizon in cs.HORIZONS:
         shared = common.get(horizon, ())
         pairs = [(official.realized.realized_at(ts), y_prior[horizon][ts]) for ts in shared]
-        result = a1_check(pairs, half_ulp=half_ulp)
+        # B3 (ADR 8.2.0004): a pré-condição olha TODO y_ant do horizonte, não só T∩
+        rule = a1_rule(list(y_prior.get(horizon, {}).values()))
+        result = a1_check(pairs, half_ulp=half_ulp, rule=rule)
+        tolerance = (
+            f"meio ulp float32 no ponto ({cs.A1_FLOAT32_DEVIATION})"
+            if rule.float32
+            else f"{half_ulp!r}·|y_ant|"
+        )
         rows.append(
             AuditRow(
                 id=f"A9/h{horizon}/realized",
@@ -492,8 +500,10 @@ def a9_rows(
                 quantity="realizado y_t",
                 values=(
                     f"T∩={result.n_points} out={result.n_out} max_abs_diff={result.max_abs_diff!r}"
+                    f" float32_exact={rule.n_exact}/{rule.n_prior}"
+                    f" rule={'float32' if rule.float32 else 'double'}"
                 ),
-                tolerance=f"{half_ulp!r}·|y_ant|",
+                tolerance=tolerance,
                 status=result.status,
                 reason="empty_intersection",
             )

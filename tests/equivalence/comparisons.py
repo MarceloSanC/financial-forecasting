@@ -5,7 +5,9 @@ domínio existentes — `pinball_score.mean_pinball`, `coverage_series.is_inside
 `wilson_band.wilson_interval`; nenhuma métrica nova (concept §12 item vi).
 
 - **A1** (D13): todo ponto de T∩ com |y_novo - y_ant| ≤ 2⁻⁵³·|y_ant| (y_ant = 0 ⇒ igualdade
-  exata); contagem fora e max |Δ|;
+  exata); contagem fora e max |Δ|. Emenda B3 (ADR 8.2.0004): se TODO y_ant do horizonte é
+  exatamente representável em float32, a tolerância é o meio ulp de float32 no ponto;
+
 - **A2** (D12 e): |m_A - m_ant| ≤ max(1e-9·max(|m_A|, |m_ant|, u_q), 2⁻⁵³·|m_ant|), com u_q
   por grandeza (pinball = a própria pinball; MPIW = média de |largura|; PICP = 1); amostra
   não reconstruível (`n_samples`/`n_obs` ≠ pontos lidos) → `not_realizable`;
@@ -20,6 +22,8 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+
+import numpy as np
 
 from financial_forecasting.features.evaluation.domain.services.pinball_score import (
     mean_pinball,
@@ -68,11 +72,53 @@ def a1_within(y_new: float, y_prior: float, *, half_ulp: float = A1_HALF_ULP) ->
     return abs(y_new - y_prior) <= half_ulp * abs(y_prior)
 
 
-def a1_check(pairs: Sequence[tuple[float, float]], *, half_ulp: float = A1_HALF_ULP) -> A1Result:
-    """A1 sobre os pares (y_novo, y_ant) de T∩ de um horizonte (meio ulp do tipo de y_ant)."""
+def float32_exact(y: float) -> bool:
+    """y é exatamente representável em float32 (`float(np.float32(y)) == y`; NaN ⇒ falso)."""
+    return float(np.float32(y)) == y
+
+
+def a1_float32_tolerance(y_prior: float) -> float:
+    """Meio ulp de float32 no ponto: `np.spacing(np.float32(|y_ant|)) / 2`, em float64 (B3)."""
+    return float(np.spacing(np.float32(abs(y_prior)))) / 2
+
+
+@dataclass(frozen=True)
+class A1Rule:
+    """Regra do A1 de um horizonte (B3, ADR 8.2.0004): a de float32 só com a pré-condição.
+
+    `float32` vale sse há y_ant e TODO y_ant do horizonte é exatamente representável em
+    float32 (`n_exact == n_prior`); senão vale a regra de `double` do D13.
+    """
+
+    float32: bool
+    n_exact: int
+    n_prior: int
+
+
+def a1_rule(prior_values: Sequence[float]) -> A1Rule:
+    """A pré-condição da regra float32 sobre os y_ant do horizonte (contagem representável)."""
+    n_exact = sum(float32_exact(value) for value in prior_values)
+    n_prior = len(prior_values)
+    return A1Rule(float32=n_prior > 0 and n_exact == n_prior, n_exact=n_exact, n_prior=n_prior)
+
+
+def a1_check(
+    pairs: Sequence[tuple[float, float]],
+    *,
+    half_ulp: float = A1_HALF_ULP,
+    rule: A1Rule | None = None,
+) -> A1Result:
+    """A1 sobre os pares (y_novo, y_ant) de T∩ de um horizonte.
+
+    Com `rule.float32` (pré-condição B3 satisfeita), |Δ| ≤ meio ulp de float32 no ponto;
+    senão, |Δ| ≤ `half_ulp`·|y_ant| (meio ulp do tipo registrado de y_ant, D13).
+    """
     if not pairs:
         return A1Result(0, 0, None, RawStatus.EMPTY_INTERSECTION)
-    n_out = sum(not a1_within(new, prior, half_ulp=half_ulp) for new, prior in pairs)
+    if rule is not None and rule.float32:
+        n_out = sum(abs(new - prior) > a1_float32_tolerance(prior) for new, prior in pairs)
+    else:
+        n_out = sum(not a1_within(new, prior, half_ulp=half_ulp) for new, prior in pairs)
     max_abs_diff = max(abs(new - prior) for new, prior in pairs)
     status = RawStatus.WITHIN_TOLERANCE if n_out == 0 else RawStatus.OUT_OF_TOLERANCE
     return A1Result(len(pairs), n_out, max_abs_diff, status)

@@ -28,10 +28,13 @@ from tests.equivalence.comparisons import (
     U_Q_PICP,
     RawStatus,
     a1_check,
+    a1_float32_tolerance,
+    a1_rule,
     a2_compare,
     a2_tolerance,
     dm_rejected,
     dm_sense,
+    float32_exact,
     normalized_mean_diff,
     pair_measures,
     pinball_at,
@@ -153,6 +156,30 @@ def test_storage_precision_comes_from_the_registered_type() -> None:
     assert a2_tolerance(m_a=0.0, m_ant=1e10, u_q=0.0, storage_half_ulp=2.0**-24) == (
         2.0**-24 * 1e10
     )
+
+
+def test_a1_float32_rule_needs_the_precondition() -> None:
+    """B3 (ADR 8.2.0004): meio ulp de float32 no ponto, só se todo y_ant é float32-exato."""
+    y = 1.0  # float32-exato; ulp de float32 em 1.0 = 2⁻²³
+    half = y + 2.0**-24  # |Δ| = meio ulp de float32: no limite
+    one_ulp = y + 2.0**-23  # |Δ| = 1 ulp de float32: fora
+    exact = a1_rule([1.0, -0.5, 0.25])
+    assert (exact.float32, exact.n_exact, exact.n_prior) == (True, 3, 3)
+
+    assert a1_check([(half, y)], rule=exact).status is RawStatus.WITHIN_TOLERANCE
+    assert a1_check([(one_ulp, y)], rule=exact).status is RawStatus.OUT_OF_TOLERANCE
+    assert a1_float32_tolerance(y) == 2.0**-24
+    assert a1_float32_tolerance(-y) == 2.0**-24
+    assert a1_float32_tolerance(0.0) == 2.0**-150  # meio do menor subnormal, sem underflow
+    assert float32_exact(0.1) is False
+    assert float32_exact(math.nan) is False
+
+    # pré-condição falsa (um y_ant do horizonte não é float32-exato): regra de double (D13)
+    mixed = a1_rule([1.0, 0.1])
+    assert (mixed.float32, mixed.n_exact, mixed.n_prior) == (False, 1, 2)
+    assert a1_check([(half, y)], rule=mixed).status is RawStatus.OUT_OF_TOLERANCE
+    assert a1_check([(half, y)]).status is RawStatus.OUT_OF_TOLERANCE  # sem regra: double
+    assert a1_rule([]).float32 is False
 
 
 def test_a1_reports_count_out_and_max() -> None:

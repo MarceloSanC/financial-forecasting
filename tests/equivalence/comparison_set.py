@@ -202,6 +202,10 @@ PRIOR_DEDUP_RULE: Final = "operationally_latest_fold"
 """D7: num `target_timestamp` com duas janelas, o ponto da janela de teste mais recente."""
 A1_HALF_ULP: Final = 2.0**-53
 """D13: meio ulp do `double` gravado pelo anterior, na magnitude de y_ant."""
+A1_FLOAT32_DEVIATION: Final = "desvio B3 (ADR 8.2.0004): A1 por meio ulp de float32"
+"""Rótulo de desvio pós-A1 (declarado antes de qualquer número de modelo): marca o A1 de um
+horizonte julgado pela regra float32 (pré-condição: todo y_ant exatamente representável em
+float32) e, com ele, toda comparação de modelo daquele horizonte."""
 STORAGE_HALF_ULP_DOUBLE: Final = 2.0**-53
 """D12 e: precisão de armazenamento de m_ant (`double`)."""
 HALF_ULP_BY_TYPE: Final[dict[str, float]] = {"double": 2.0**-53, "float": 2.0**-24}

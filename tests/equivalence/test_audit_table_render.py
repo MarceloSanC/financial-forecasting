@@ -480,7 +480,7 @@ def test_compute_rows_on_a_rich_synthetic_world() -> None:
         "A11/h7/stopped": RawStatus.NOT_REALIZABLE,  # A1 fora: a comparação de modelo para
     }
     assert status == expected
-    assert values["A9/h1/realized"] == "T∩=4 out=0 max_abs_diff=0.0"
+    assert values["A9/h1/realized"] == "T∩=4 out=0 max_abs_diff=0.0 float32_exact=0/4 rule=double"
     assert values["A9/h7/realized"].startswith("T∩=4 out=4 ")
     assert values["A11/h1/candidate/nominal_side_80"] == "novo=above anterior=inside"
     assert values["A11/h1/baseline_zero_return/dm"] == "novo=(-1, True) anterior=(1, False)"
@@ -598,7 +598,10 @@ def test_horizon_without_new_predictions_is_an_empty_intersection() -> None:
 
     by_id = {row.id: row for row in rows}
     assert by_id["A9/h7/realized"].status is RawStatus.EMPTY_INTERSECTION
-    assert by_id["A9/h7/realized"].values == "T∩=0 out=0 max_abs_diff=None"
+    assert (
+        by_id["A9/h7/realized"].values
+        == "T∩=0 out=0 max_abs_diff=None float32_exact=0/4 rule=double"
+    )
     stopped = by_id["A11/h7/stopped"]
     assert (stopped.status, stopped.reason) == (RawStatus.EMPTY_INTERSECTION, "empty_intersection")
     stem = Path(cs.GOLD_METRICS_BY_RUN).stem
