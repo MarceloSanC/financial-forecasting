@@ -22,6 +22,7 @@ from collections.abc import Mapping, Sequence
 from typing import Final
 
 from financial_forecasting.features.evaluation.application.dtos.confirmatory_run import (
+    RUN_RECORD_ENVIRONMENT,
     RUN_RECORD_SEEDS,
 )
 from financial_forecasting.features.evaluation.application.dtos.gold_schema import (
@@ -49,8 +50,12 @@ from financial_forecasting.features.evaluation.application.dtos.report_artifacts
     Visibility,
 )
 from financial_forecasting.features.evaluation.application.ports.out.evaluation_environment import (
+    CODE_DIRTY_KEY,
     ENV_PREFIX,
+    FALSE,
     IMAGE_ID_KEY,
+    PREREGISTRATION_DIRTY_KEY,
+    TRUE,
 )
 from financial_forecasting.features.evaluation.application.ports.out.preregistration_source import (
     JudgedRecord,
@@ -69,6 +74,11 @@ ORDERING_CAVEAT: Final = (
 )
 CODE_SRC: Final = "code.src"
 CODE_UV_LOCK: Final = "code.uv_lock"
+CLEAN_TREE_LABELS: Final = (
+    (CODE_DIRTY_KEY, "árvore limpa no commit do código"),
+    (PREREGISTRATION_DIRTY_KEY, "árvore limpa do pré-registro"),
+)
+"""Os indicadores de árvore limpa da corrida julgada (doc §7 item 3; Sandve 2013 Rule 4)."""
 COHORT_TAG_PREFIX: Final = "cohort/"
 """A tag git do freeze de um cohort (`cohort/<cohort_id>`; ADRs 5.5.0001 e 7.3.0006)."""
 _ADR_COHORT_TAG: Final = "docs/adr/5_5_0001-frozen-hashed-cohort-spec.md"
@@ -420,9 +430,37 @@ def _environment_blocks(
     ]
 
 
+def _clean_tree_rows(run_record: Mapping[str, object]) -> list[Row]:
+    """`sim`/`não` de cada sujeira do `environment` do `run_record.json` (fail-closed).
+
+    O valor persistido é o da foto do `EvaluationEnvironment` (`"true"`/`"false"`); ausente
+    ou fora disso a cópia não é a que a 8.1 selou — `ReportSourceMismatchError`. Sujo sai
+    `não`, com o valor ao lado, nunca omitido.
+    """
+    environment = run_record.get(RUN_RECORD_ENVIRONMENT)
+    if not isinstance(environment, Mapping):
+        raise ReportSourceMismatchError(
+            f"run_record.json lacks the {RUN_RECORD_ENVIRONMENT} mapping"
+        )
+    rows: list[Row] = []
+    for key, label in CLEAN_TREE_LABELS:
+        value = environment.get(key)
+        if value not in (TRUE, FALSE):
+            raise ReportSourceMismatchError(
+                f"run_record.json {RUN_RECORD_ENVIRONMENT}.{key} is {value!r}, "
+                f"expected {TRUE!r} or {FALSE!r}"
+            )
+        rows.append((label, f"{'sim' if value == FALSE else 'não'} ({key} = {value})"))
+    return rows
+
+
 def _code_blocks(
-    started: JudgedAttempt, snapshot: Mapping[str, str], command: str
+    started: JudgedAttempt,
+    snapshot: Mapping[str, str],
+    command: str,
+    run_record: Mapping[str, object],
 ) -> list[DossierBlock]:
+    clean_tree = _clean_tree_rows(run_record)
     code = started.code or {}
     try:
         generator = [(CODE_SRC, snapshot[CODE_SRC]), (CODE_UV_LOCK, snapshot[CODE_UV_LOCK])]
@@ -437,6 +475,7 @@ def _code_blocks(
                     "início (persistido)",
                     _text(started.started_at and started.started_at.isoformat()),
                 ),
+                *clean_tree,
                 *((key, code[key]) for key in sorted(code)),
             ],
         ),
@@ -554,8 +593,9 @@ def build_dossier(  # noqa: PLR0913 — as fontes persistidas do dossiê (D8), u
 
     Raises:
         ReportSourceMismatchError: scorecard fora da forma, sem tentativa `started` da
-            referência, sem `blinding_statement`, run sem `split_fingerprint` ou foto do
-            gerador sem `code.src`.
+            referência, sem `blinding_statement`, run sem `split_fingerprint`, foto do
+            gerador sem `code.src` ou `run_record.json` sem `code_dirty`/
+            `preregistration_dirty` em `"true"`/`"false"`.
         ValueError: ponteiro proibido numa seção citável (A17).
     """
     ref = judged_record.preregistration_ref
@@ -575,7 +615,7 @@ def build_dossier(  # noqa: PLR0913 — as fontes persistidas do dossiê (D8), u
         "blinding_statement": _blinding_blocks(plan_chain),
         "judged_generation": _judged_blocks(plan_chain, judged_record, scorecard, manifest),
         "environment": _environment_blocks(started, register),
-        "code_commits": _code_blocks(started, snapshot, command),
+        "code_commits": _code_blocks(started, snapshot, command, run_record),
         "seeds": _seed_blocks(plan_chain, run_record),
         "figures": _figure_blocks(records),
         "reproduction": _reproduction_blocks(judged_record, result_digest, started, register),

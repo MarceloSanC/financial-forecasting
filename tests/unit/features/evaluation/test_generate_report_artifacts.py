@@ -321,7 +321,10 @@ def _make(  # noqa: PLR0913 — um eixo por variação do mundo
     digest = "00" * 32
     if seal:
         documents: dict[str, Mapping[str, object]] = {
-            RUN_RECORD_DOCUMENT: {"seeds": {"gold": "manifest"}}
+            RUN_RECORD_DOCUMENT: {
+                "environment": {"code_dirty": "false", "preregistration_dirty": "false"},
+                "seeds": {"gold": "manifest"},
+            }
         }
         if scorecard:
             documents[SCORECARD_DOCUMENT] = _scorecard(world)

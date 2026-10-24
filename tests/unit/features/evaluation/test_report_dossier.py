@@ -81,6 +81,9 @@ STARTED_AT = datetime(2026, 10, 20, 9, 30, tzinfo=UTC)
 _CHAIN = tuple(f"test_plan-r{r}-0123456789ab" for r in range(4))
 _DIGESTS = tuple(f"{r}a" * 32 for r in range(4))
 _82 = "docs/stages/8.2-equivalence-audit/technical.md"
+_CLEAN_ENVIRONMENT = {"commit": "06" * 20, "code_dirty": "false", "preregistration_dirty": "false"}
+_CODE_CLEAN = "árvore limpa no commit do código"
+_PREREG_CLEAN = "árvore limpa do pré-registro"
 
 
 def _anchor(revision: int) -> PreregistrationAnchor:
@@ -251,7 +254,10 @@ def _build(**overrides: object) -> TraceabilityDossier:
         "attempts": _attempts(),
         "result_digest": RESULT_DIGEST,
         "revision_digests": _DIGESTS,
-        "run_record": {"seeds": {"gold": "manifest", "training": "cohort spec"}},
+        "run_record": {
+            "environment": dict(_CLEAN_ENVIRONMENT),
+            "seeds": {"gold": "manifest", "training": "cohort spec"},
+        },
         "scorecard": _scorecard(),
         "manifest": world.generation().manifest,
         "runs": (
@@ -556,6 +562,57 @@ def test_run_record_without_seeds_reference_raises() -> None:
     )
 
     with pytest.raises(ReportSourceMismatchError, match="seeds"):
-        _build(run_record={})
+        _build(run_record={"environment": dict(_CLEAN_ENVIRONMENT)})
     with pytest.raises(ReportSourceMismatchError, match="sha256"):
         _build(revision_digests=_DIGESTS[:3])
+
+
+@pytest.mark.unit
+def test_clean_tree_indicators_from_run_record_environment(dossier: TraceabilityDossier) -> None:
+    code = _all_rows(_section(dossier, "code_commits"))
+    assert code[_CODE_CLEAN] == "sim (code_dirty = false)"
+    assert code[_PREREG_CLEAN] == "sim (preregistration_dirty = false)"
+    markdown = render(dossier, Visibility.CITABLE)
+    assert f"| {_CODE_CLEAN} | sim (code_dirty = false) |" in markdown
+    assert f"| {_PREREG_CLEAN} | sim (preregistration_dirty = false) |" in markdown
+
+
+@pytest.mark.unit
+def test_dirty_tree_shown_as_not_clean() -> None:
+    environment = {**_CLEAN_ENVIRONMENT, "code_dirty": "true", "preregistration_dirty": "true"}
+    dossier = _build(run_record={"environment": environment, "seeds": {"gold": "manifest"}})
+    code = _all_rows(_section(dossier, "code_commits"))
+    assert code[_CODE_CLEAN] == "não (code_dirty = true)"
+    assert code[_PREREG_CLEAN] == "não (preregistration_dirty = true)"
+    assert f"| {_CODE_CLEAN} | não (code_dirty = true) |" in render(dossier, Visibility.CITABLE)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "run_record",
+    [
+        {"seeds": {"gold": "manifest"}},
+        {"environment": "false", "seeds": {"gold": "manifest"}},
+        {"environment": {"preregistration_dirty": "false"}, "seeds": {"gold": "manifest"}},
+        {"environment": {"code_dirty": "false"}, "seeds": {"gold": "manifest"}},
+        {
+            "environment": {**_CLEAN_ENVIRONMENT, "code_dirty": False},
+            "seeds": {"gold": "manifest"},
+        },
+        {
+            "environment": {**_CLEAN_ENVIRONMENT, "preregistration_dirty": "unknown"},
+            "seeds": {"gold": "manifest"},
+        },
+    ],
+    ids=[
+        "no-environment",
+        "environment-not-mapping",
+        "no-code-dirty",
+        "no-preregistration-dirty",
+        "code-dirty-json-bool",
+        "preregistration-dirty-unknown",
+    ],
+)
+def test_clean_tree_indicator_absent_or_malformed_raises(run_record: dict[str, object]) -> None:
+    with pytest.raises(ReportSourceMismatchError, match=r"run_record\.json.*environment"):
+        _build(run_record=run_record)
