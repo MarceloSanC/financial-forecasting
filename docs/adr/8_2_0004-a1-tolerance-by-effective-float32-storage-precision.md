@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-23
 updated_at: 2026-10-23
 adr_id: 8.2.0004
-decision: Under the verified precondition that every y_prior of the horizon is finite and exactly representable in float32 (and y_new finite), A1 passes at a point exactly when float32(y_new) == y_prior — the round-to-nearest-even float32 of y_new, i.e. half an ulp of float32 with the right direction and ties-to-even; otherwise the double rule of concept D13 applies unchanged for that horizon; the result under the original double rule is also reported; human decision B3 (option 2) on issue #232, taken after the A1 diagnosis and before any model number of the prior evidence was computed; the model comparison (A10/A11) that A1 now unblocks is labelled in the internal report as a post-hoc deviation.
+decision: Under the verified precondition that every y_prior of the horizon is finite and exactly representable in float32, A1 passes at a point exactly when float32(y_new) == y_prior — the round-to-nearest-even float32 of y_new, i.e. half an ulp of float32 with the right direction and ties-to-even; otherwise the double rule of concept D13 applies unchanged for that horizon; a point with a non-finite y_new or y_prior is out under both rules (fail-closed); the result under the original double rule is also reported; human decision B3 (option 2) on issue #232, taken after the A1 diagnosis and before any model number of the prior evidence was computed; the model comparison (A10/A11) that A1 now unblocks is labelled in the internal report as a post-hoc deviation.
 context_stage: 8.2-equivalence-audit
 bounded_context: evaluation
 ---
@@ -44,9 +44,11 @@ Human decision B3, option 2 ("emendar A1 já"), registered on issue #232
    which is what doc §5.4 asks for ("dentro da precisão de armazenamento do
    anterior"): half an ulp of float32 at the point.
 2. **Precondition (checked, per horizon).** Every y_prior **of the horizon** is
-   finite and exactly representable in float32 (`float(np.float32(y)) == y`),
-   and every y_new is finite. If any point fails it, the double rule of D13
+   finite and exactly representable in float32 (`float(np.float32(y)) == y`).
+   If any y_prior of the horizon fails it, the double rule of D13
    applies unchanged for that horizon.
+   A point with a non-finite y_new or y_prior is **out** under both rules
+   (fail-closed); y_new does not enter the precondition.
 2b. **Exact criterion (refinement within B3, [decision:C]).** Under the
    precondition, A1 passes at a point exactly when `float32(y_new) == y_prior`
    (y_prior is the nearest float32 to y_new). This is item 1 with the right
