@@ -1790,4 +1790,22 @@ NEGATIVE_PROOF_OK
 (o `recomputed_matches` passou — a classificação de uma falha é humana —; a igualdade
 `DECLARED` = tabela parseada reprovou com o diff visível.)
 
+### 2026-10-23 — [deviation] pós-E5 — testes da barreira `dim_run|<cohort>` (achado médio da revisão) — Claude (executor das Etapas)
+**Contexto:** a revisão independente do `0e59b9f9` notou que, com o esperado restrito aos
+`run_ids`, a igualdade de `dim_run|<cohort>` virou a única barreira contra "um run some do
+silver vivo e as suas unidades somem do esperado junto", e a mutação `if (False and key ==
+dim_run)` em `readers.py` l.284 sobrevivia. Só testes (`[8.2/task-11-extra]`); `readers.py` não
+muda, então o código executado na E4 é o do `GATE1`.
+- `test_check_silver_units_compares_dim_run_and_fact_units`: caso `dim_run|sweep-01` com outro
+  digest no laço `changed`;
+- `test_official_predictions_are_checked_against_the_judged_silver`: silver sintético sem o run
+  `r2` no `dim_run` → `OfficialSilverMismatchError` com `match="dim_run"`.
+**Mutação (aplicada, `pytest tests/equivalence/test_audit_table_render.py`, revertida):**
+```
+m3 if (False and key == dim_run): 2 failed, 23 passed, 1 warning in 7.71s
+corrigido: 25 passed, 1 warning in 0.59s
+```
+`ruff format --check`/`ruff check` e `mypy` verdes; `pytest tests/equivalence/ -rs`: `69 passed,
+1 skipped`.
+
 <!-- END: post-execution -->
