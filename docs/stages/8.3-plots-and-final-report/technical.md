@@ -2003,4 +2003,11 @@ commitados, e `data/` fica só leitura. A consistência do sharpness com o `mpiw
 real, porque nenhuma das duas gerações ergueu `ReportSourceMismatchError`. O 2º `make check`
 (de saída) fica com a sessão mestra.
 
+### 2026-10-24 — [deviation] revisão do fix de determinismo: texto do §7 e da docstring — Claude (sessão mestra)
+**Contexto:** a revisão independente de `79912075..8baeb16d` aprovou o `freeze_layout` (sem achado crítico ou médio). Mediu, nas dez `FigureSpec` sintéticas, distância mínima de `6,5e-9` entre uma posição congelada e a meia-célula da grade, contra ruído do solver de `~2e-16` (margem de ~7 ordens de grandeza; chance estimada de cruzar a fronteira ~1e-7 por relatório).
+**Correções de texto (só leitura do §7; o código não muda):**
+- "grade de `1e-6` da figura" na entrada do PDF não byte-idêntico: a grade vale no referencial do **pai** de cada caixa (figura para as subfiguras, subfigura para os eixos), não na figura inteira. Inócuo para o determinismo.
+- A docstring de `freeze_layout` em `matplotlib_figure_renderer.py` afirma que a ordem das variáveis do solver segue endereços de memória; é hipótese **provável**, não medida. Fica como imprecisão residual declarada: corrigir a docstring mudaria `src/` depois da Etapa R e o `code.src` registrado nas figuras deixaria de ser o do commit.
+**Razão:** registrar a precisão do texto sem invalidar a prova de origem das saídas commitadas.
+
 <!-- END: post-execution -->
