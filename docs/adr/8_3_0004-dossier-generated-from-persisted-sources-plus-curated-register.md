@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-24
 updated_at: 2026-10-24
 adr_id: 8.3.0004
-decision: docs/reports/final_traceability_dossier.md is generated, never hand-edited, by the same use case that renders the figures, with sections for every row of domain doc §7 organised in layers (verdict and claims with pointers, input identity, preregistration chain and blinding, judged generation, environment/commits/seeds, figures, reproduction, deviations and findings, internal); hashes and ids come from persisted sources; curated items come from docs/reports/dossier_register.toml (entries with kind in deviation, finding, pre_anchor, environment, reproduction, internal; title; summary; pointer), parsed by the CLI into DossierEntry DTOs; the blinding statement is transcribed verbatim from the judged revision.
+decision: docs/reports/final_traceability_dossier.md (citable) and docs/reports/final_traceability_dossier_internal.md (internal: everything touching the prior evidence) are generated, never hand-edited, by the same use case that renders the figures, with sections for every row of domain doc §7 organised in layers (verdict and claims with pointers, input identity, preregistration chain and blinding, judged generation, environment/commits/seeds, figures, reproduction with R1/R2/R3 counts and max |Δ|, deviations and findings) in the citable file and the internal layer in a separate file; hashes and ids come from persisted sources; curated items come from docs/reports/dossier_register.toml (entries with kind in deviation, finding, pre_anchor, environment, reproduction, internal; title; summary; pointer), parsed by the CLI into DossierEntry DTOs, kind internal going only to the internal file; the blinding statement is transcribed verbatim from the judged revision.
 context_stage: 8.3-plots-and-final-report
 bounded_context: evaluation
 ---
@@ -47,12 +47,21 @@ the revisions (ADR 6.5.0010, note of 2026-09-30).
    identity; preregistration chain with `blind_status`, the verbatim
    `blinding_statement` and the ADR 6.5.0003 item 4 caveat; judged generation;
    environment, commits, seeds; figures (record per figure); reproduction;
-   deviations and findings; internal (prior-evidence registry and equivalence
-   report, outside the TCC).
-3. Curated items come from `docs/reports/dossier_register.toml`, parsed by the
+   deviations and findings of the citable chain.
+3. **Separate internal file** (domain doc §7 last row, "Interno, fora do texto
+   do TCC"; P-EDIT, doc §9 item 2): the prior-evidence hash registry, the
+   equivalence report, B3/ADR 8.2.0004, the 8.2 PICP finding, errata F2–F5, the
+   E4 scaffold finding and the limit that `reproduction_audit.md` §5 lists the
+   blob of `tests/equivalence/prior_evidence.py`. The citable file cites none of
+   these (tested) and points only to §1–§4 of `reproduction_audit.md`, repeating
+   the claim numbers (R1/R2/R3 compared/different/max |Δ|, image, commit
+   `060537fc`, `generation_digest`, `result_digest`). A file, not a section,
+   because the TCC must be able to point to the citable dossier as a whole; the
+   8.2 artifact is not edited.
+4. Curated items come from `docs/reports/dossier_register.toml`, parsed by the
    CLI (adapter in) into `DossierEntry` DTOs passed in the command; a malformed
    register is an error before the use case runs.
-4. The dossier carries no timestamp of the generation run (byte determinism,
+5. The dossier carries no timestamp of the generation run (byte determinism,
    ADR 8.3.0003); recorded server timestamps of anchors are data.
 
 ## Alternatives considered

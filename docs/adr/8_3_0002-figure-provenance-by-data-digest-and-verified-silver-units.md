@@ -7,7 +7,7 @@ status: accepted
 created_at: 2026-10-24
 updated_at: 2026-10-24
 adr_id: 8.3.0002
-decision: Each figure gets a JSON record next to its PDF with data_digest (sha256 of the canonical serialization of the renderer-agnostic FigureSpec), generation_digest of the judged copy (checked against the committed .judged.toml), preregistration_ref, partition, source references (table or document, key filter, fields), silver units used with their digests, generator commit and renderer identity; the PDF hash is informative only; the fan chart and the sharpness diagram read dim_run and fact_oos_predictions of the cohort and the realized grid, recompute each unit digest with the SilverContentAccumulator and require equality with the judged silver_content for exactly the units of the runs read (ablation units excluded from the expectation), refusing to write anything otherwise.
+decision: Each figure gets a JSON record next to its PDF with data_digest (sha256 of the canonical serialization of the renderer-agnostic FigureSpec), generation_digest of the judged copy (checked against the committed .judged.toml), preregistration_ref, partition, source references (table or document, key filter, fields), silver units used with their digests, the closed list of omitted elements, the generator code identity (code.src, code.uv_lock — no HEAD commit hash) and renderer identity; the PDF hash is informative only; an element the judged copy does not persist is omitted from a closed per-figure list, never recomputed; the fan chart and the sharpness diagram read dim_run and fact_oos_predictions of the cohort and the realized grid, recompute each unit digest with the SilverContentAccumulator and require equality with the judged silver_content for exactly the (table, run_id) pairs read, hashed over all rows before any split filter (ablation runs and the permuted/VSN tables sharing a candidate run_id excluded from the expectation), refusing to write anything otherwise.
 context_stage: 8.3-plots-and-final-report
 bounded_context: evaluation
 ---
@@ -41,17 +41,29 @@ because its expectation took every `fact_oos_predictions|…` unit, including th
    `data_digest` = sha256 of `FigureSpec.canonical_bytes()` (single owner),
    `generation_digest`, `preregistration_ref`, partition, `sources`
    (table/document, key filter, fields), `silver_units` (key → digest, only for
-   silver-based figures), omitted elements, generator `commit`, renderer
-   `identity()`. No timestamps, hosts or absolute paths.
+   silver-based figures), omitted elements, generator `code.src` and
+   `code.uv_lock`, renderer `identity()`. No timestamps, hosts, absolute paths
+   or HEAD commit hash (committing the outputs must not change them).
 2. **Judged copy check:** the `find` digest must equal the committed
    `.judged.toml`; tables come only from `read_judged_generation` (never
    `current/`).
 3. **Silver check:** read with the refresh's post-filter (asset, cohort run ids);
-   recompute unit digests with `SilverContentAccumulator`; expected = judged
-   units whose run id was read plus `dim_run|<cohort>` and `realized|<asset>`;
-   for every run read, the set of `<table>|<run_id>|*` keys must be equal.
-   Any difference → `SilverContentMismatchError`, nothing written.
+   recompute unit digests with `SilverContentAccumulator` over **all** rows of
+   each unit, before any `split` filter (the refresh hashes test and calib);
+   expected = for every **(table, run_id) pair read**, all judged keys
+   `<table>|<run_id>|*` and only those, plus `dim_run|<cohort>` and
+   `realized|<asset>`. Judged units of pairs not read — ablation runs, and
+   `fact_permuted_predictions`/`fact_vsn_weights` units that share a candidate
+   `run_id` (Checkpoint A, CA-3) — are not expected. Any difference →
+   `SilverContentMismatchError`, nothing written.
 4. The PDF sha256 may appear in the record only as informative.
+5. **Omissions:** an element of the catalog that the judged copy does not
+   persist (the candidate's Wilson band outside the gate, the paired native
+   series of the conformal figure, the aggregated Beta reference, bootstrap
+   intervals of I_f and s_f, the ACF confidence band, τ = 0.5 in the
+   calibration) is omitted, from a closed per-figure list fixed in concept 8.3
+   D13 and tested; persisted per-seed values may be drawn as labelled
+   descriptive dispersion. Nothing is recomputed (doc §6.1 item 5).
 
 ## Alternatives considered
 
