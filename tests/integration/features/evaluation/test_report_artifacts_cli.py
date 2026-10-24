@@ -19,6 +19,7 @@ import json
 import re
 import shutil
 import subprocess
+import tomllib
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -27,10 +28,23 @@ import pytest
 
 from financial_forecasting import cli
 from financial_forecasting.composition_root import wire_dependencies
+from financial_forecasting.features.analytics_store.adapters.out.parquet.parquet_analytics_repository import (  # noqa: E501
+    ParquetAnalyticsRepository,
+)
 from financial_forecasting.features.evaluation.application.dtos.report_artifacts import (
     FIGURE_IDS,
     find_forbidden,
 )
+from financial_forecasting.features.evaluation.domain.value_objects.preregistration import (
+    Preregistration,
+)
+from financial_forecasting.shared.adapters.out.hashing.canonical_json_hasher import (
+    CanonicalJsonHasher,
+)
+from financial_forecasting.shared.domain.value_objects.preregistration_hash import (
+    PreregistrationHash,
+)
+from financial_forecasting.shared.infrastructure.clock.system_clock import SystemClock
 from financial_forecasting.shared.infrastructure.config.settings import Settings
 from tests.fakes.features.modeling.in_memory_runtime_environment_probe import (
     InMemoryRuntimeEnvironmentProbe,
@@ -342,3 +356,58 @@ def test_citable_dossier_free_of_prior_evidence_terms(world: _Copy) -> None:
     assert find_forbidden(citable) == ()
     assert _BLINDING in citable
     assert "prior_evidence_registry.toml" in internal
+
+
+def _markdown_blocks(markdown: str) -> dict[str, dict[str, str]]:
+    """`### <bloco>` → as linhas `| campo | valor |` da tabela do bloco."""
+    blocks: dict[str, dict[str, str]] = {}
+    current: dict[str, str] | None = None
+    for line in markdown.splitlines():
+        if line.startswith("### "):
+            current = blocks.setdefault(line[4:], {})
+        elif current is not None and line.startswith("| ") and line.count(" | ") == 1:
+            field, value = line[2:].removesuffix(" |").split(" | ")
+            if (field, value) != ("campo", "valor"):
+                current[field] = value
+    return blocks
+
+
+def test_revision_sha256_is_the_hash_of_each_committed_toml(world: _Copy) -> None:
+    """CC4-1: o sha256 de r0 a r3 no citável = `PreregistrationHash` de cada TOML commitado,
+    e o seu prefixo de 12 é o sufixo da referência (a da r3, a da ref julgada)."""
+    assert world.run()[0] == 0
+    blocks = _markdown_blocks(
+        (world.output / "final_traceability_dossier.md").read_text(encoding="utf-8")
+    )
+    folder = world.repo / "config" / "preregistration"
+    for revision in range(4):
+        payload = tomllib.loads(
+            (folder / f"{world.base.name}-r{revision}.toml").read_text(encoding="utf-8")
+        )
+        plan = Preregistration.from_mapping(payload)
+        computed = PreregistrationHash.compute(
+            hasher=CanonicalJsonHasher(), payload=plan.as_payload()
+        )
+        rows = blocks[f"r{revision}"]
+        assert rows["sha256 da revisão"] == computed.value, revision
+        assert rows["preregistration_ref"] == plan.reference(computed)
+        assert rows["preregistration_ref"].endswith(f"-{computed.value[:12]}")
+    assert blocks["r3"]["preregistration_ref"] == world.base.reference
+
+
+def test_split_fingerprint_of_the_silver_reaches_the_citable_run_rows(world: _Copy) -> None:
+    """CC4-1: o `split_fingerprint` gravado no `dim_run` aparece na linha do run."""
+    assert world.run()[0] == 0
+    runs = _markdown_blocks(
+        (world.output / "final_traceability_dossier.md").read_text(encoding="utf-8")
+    )["Runs do cohort (dim_run)"]
+    silver = ParquetAnalyticsRepository(data_root=world.data, clock=SystemClock()).read(
+        layer="silver", table="dim_run"
+    )
+    cohort = [row for row in silver if str(row["run_id"]) in runs]
+    assert cohort
+    assert len(cohort) == len(runs)
+    for row in cohort:
+        assert runs[str(row["run_id"])].endswith(
+            f"; split_fingerprint {row['split_fingerprint']}"
+        ), row["run_id"]
