@@ -533,6 +533,7 @@ def test_check_silver_units_compares_dim_run_and_fact_units() -> None:
         {**read.units, "fact_oos_predictions|run-a|2024": "9" * 64},
         {**read.units, "fact_oos_predictions|run-b|2024": "9" * 64},
         {**read.units, "fact_oos_predictions|abl-1|2024": "8" * 64},  # leu a ablação: a mais
+        {**read.units, "dim_run|sweep-01": "9" * 64},  # dim_run do cohort com outro digest
         {"dim_run|sweep-01": "a" * 64},
     ):
         other = SilverContent(digest="0" * 64, tables={"dim_run": "1" * 64}, units=changed)
@@ -730,6 +731,19 @@ def test_official_predictions_are_checked_against_the_judged_silver() -> None:
     judged = SilverContent(digest=consumed.digest, tables=consumed.tables, units=tampered)
     with pytest.raises(OfficialSilverMismatchError, match="fact_oos_predictions"):
         readers._model_predictions(silver, partition, frozenset({"tft_quantile"}), judged)  # type: ignore[arg-type]
+    # um run do cohort some do dim_run vivo: as suas unidades saem do esperado junto, e só a
+    # igualdade de `dim_run|<cohort>` o denuncia
+    base = _silver()
+    shrunk = _FakeSilver(
+        {
+            "dim_run": [
+                r for r in base.read(layer="silver", table="dim_run") if r["run_id"] != "r2"
+            ],
+            "fact_oos_predictions": base.read(layer="silver", table="fact_oos_predictions"),
+        }
+    )
+    with pytest.raises(OfficialSilverMismatchError, match="dim_run"):
+        readers._model_predictions(shrunk, partition, frozenset({"tft_quantile"}), judged_ablation)  # type: ignore[arg-type]
 
 
 def test_compute_rows_requires_the_e1(monkeypatch: pytest.MonkeyPatch) -> None:
