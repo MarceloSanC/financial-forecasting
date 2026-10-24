@@ -1808,4 +1808,33 @@ corrigido: 25 passed, 1 warning in 0.59s
 `ruff format --check`/`ruff check` e `mypy` verdes; `pytest tests/equivalence/ -rs`: `69 passed,
 1 skipped`.
 
+### 2026-10-23 — [deviation] B3 — emenda do A1: meio ulp de float32 com pré-condição (ADR 8.2.0004) — Claude (executor das Etapas)
+**Contexto:** decisão humana B3 = opção 2 (registrada na #232; ADR 8.2.0004 e emenda do concept
+escritos em paralelo por outra sessão): com o alvo anterior em precisão float32 (`[finding]` da
+E4), o A1 passa a usar a precisão efetiva do anterior — **só** quando ela é verificável no dado.
+Correção no andaime (`[8.2/task-10-fix]`), antes de qualquer número de modelo:
+- `comparisons.py`: `float32_exact(y)` (`float(np.float32(y)) == y`), `a1_float32_tolerance(y_ant)`
+  = `float(np.spacing(np.float32(|y_ant|))) / 2`, `A1Rule`/`a1_rule(prior_values)` (pré-condição:
+  há y_ant e **todo** y_ant do horizonte é float32-exato) e `a1_check(..., rule=)`: com a
+  pré-condição, |Δ| ≤ meio ulp de float32 no ponto; sem ela, a regra de `double` do D13, intacta;
+- `comparison_set.py`: `A1_FLOAT32_DEVIATION = "desvio B3 (ADR 8.2.0004): A1 por meio ulp de
+  float32"` — rótulo de desvio pós-A1, declarado antes de calcular números de modelo;
+- `audit_table.a9_rows`: a pré-condição sobre todos os y_ant do horizonte (não só T∩); a linha A9
+  registra `float32_exact=<n>/<total> rule=<float32|double>` e, na tolerância, `meio ulp float32 no
+  ponto (<rótulo>)` ou a de `double`.
+**Testes e mutações** (aplicadas, `pytest tests/equivalence/`, revertidas):
+```
+corrigido: 70 passed, 1 skipped
+mA float32 sem pré-condição (if rule is not None): 1 failed, 69 passed, 1 skipped
+mB tolerância de 1 ulp (sem / 2): 1 failed, 69 passed, 1 skipped
+mC pré-condição sempre verdadeira (float32 = n_prior > 0): 3 failed, 67 passed, 1 skipped
+```
+Pré-condição verdadeira: |Δ| = meio ulp de float32 em 1.0 passa e 1 ulp falha; pré-condição falsa
+(`[1.0, 0.1]`) cai na regra de `double`. Os dois testes de render que fixavam o texto da linha A9
+passam a trazer `float32_exact=0/4 rule=double` (o sintético não é float32-exato).
+**T1:** `ruff format --check`/`ruff check` dos 5 arquivos e `mypy` verdes; `pytest tests/equivalence
+tests/architecture -n 4 --dist loadgroup`: `449 passed, 1 skipped`. Pendente: revisão
+independente, `make check` extra e `GATE1` novo; depois a E4 desde o passo 1 e a E5 (o `DECLARED`
+é regenerado do novo relatório).
+
 <!-- END: post-execution -->
