@@ -30,6 +30,7 @@ from financial_forecasting.features.evaluation.application.dtos.report_artifacts
     DossierEntry,
     DossierEntryKind,
     FigureRecord,
+    ReportSourceMismatchError,
     SourceKind,
     SourceRef,
     TraceabilityDossier,
@@ -105,6 +106,7 @@ def _chain() -> JudgedRevision:
         plans=plans,
         chain=_CHAIN,
         anchor=records[-1].anchor,  # type: ignore[arg-type]
+        digests=_DIGESTS,
     )
 
 
@@ -525,6 +527,13 @@ def test_identity_and_chain_fields_of_doc_section_7_rows_1_and_2(
         assert chain[f"r{revision}"]["preregistration_ref"] == _CHAIN[revision]
     seeds = _all_rows(_section(dossier, "seeds"))
     assert seeds["referência (gold)"] == "manifest"
+
+
+@pytest.mark.unit
+def test_run_without_split_fingerprint_raises() -> None:
+    """CC4-2: sem default — run do cohort sem `split_fingerprint` recusa."""
+    with pytest.raises(ReportSourceMismatchError, match="split_fingerprint"):
+        _build(split_fingerprints={})
 
 
 @pytest.mark.unit

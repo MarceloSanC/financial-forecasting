@@ -255,7 +255,7 @@ def _identity_blocks(
     plan_chain: JudgedRevision,
     manifest: GoldManifest,
     runs: Sequence[CohortRun],
-    split_fingerprints: Mapping[str, str | None],
+    split_fingerprints: Mapping[str, str],
 ) -> list[DossierBlock]:
     plan = plan_chain.plan
     rows: list[Row] = [
@@ -272,12 +272,15 @@ def _identity_blocks(
                 f"{plan.h3.ablation_cohort_id} (hash {plan.h3.ablation_cohort_hash})",
             ),
         ]
+    missing = sorted(run.run_id for run in runs if run.run_id not in split_fingerprints)
+    if missing:
+        raise ReportSourceMismatchError(f"runs without split_fingerprint: {missing}")
     run_rows: list[Row] = [
         (
             run.run_id,
             f"{run.model}; seed {_text(run.seed)}; fold {_text(run.fold)}; "
             f"feature_set {run.feature_set_name}; config_signature {run.config_signature}; "
-            f"split_fingerprint {_text(split_fingerprints.get(run.run_id))}",
+            f"split_fingerprint {split_fingerprints[run.run_id]}",
         )
         for run in sorted(runs, key=lambda r: r.run_id)
     ]
@@ -533,7 +536,7 @@ def build_dossier(  # noqa: PLR0913 — as fontes persistidas do dossiê (D8), u
     scorecard: Mapping[str, object],
     manifest: GoldManifest,
     runs: Sequence[CohortRun],
-    split_fingerprints: Mapping[str, str | None],
+    split_fingerprints: Mapping[str, str],
     records: Sequence[FigureRecord],
     register: Sequence[DossierEntry],
     snapshot: Mapping[str, str],
@@ -547,7 +550,8 @@ def build_dossier(  # noqa: PLR0913 — as fontes persistidas do dossiê (D8), u
 
     Raises:
         ReportSourceMismatchError: scorecard fora da forma, sem tentativa `started` da
-            referência, sem `blinding_statement` ou foto do gerador sem `code.src`.
+            referência, sem `blinding_statement`, run sem `split_fingerprint` ou foto do
+            gerador sem `code.src`.
         ValueError: ponteiro proibido numa seção citável (A17).
     """
     ref = judged_record.preregistration_ref

@@ -96,9 +96,6 @@ from financial_forecasting.features.evaluation.application.use_cases.report_silv
     read_verified_silver,
 )
 from financial_forecasting.shared.application.ports.out.hasher import Hasher
-from financial_forecasting.shared.domain.value_objects.preregistration_hash import (
-    PreregistrationHash,
-)
 
 
 def _builders(
@@ -238,10 +235,7 @@ class GenerateReportArtifacts:
             judged_record=judged_record,
             attempts=attempts,
             result_digest=result_digest,
-            revision_digests=tuple(
-                PreregistrationHash.compute(hasher=self._hasher, payload=p.as_payload()).value
-                for p in resolved.plans
-            ),
+            revision_digests=resolved.digests,
             run_record=run_record,
             scorecard=scorecard,
             manifest=generation.manifest,

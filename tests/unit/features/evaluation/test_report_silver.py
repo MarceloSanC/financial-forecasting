@@ -86,6 +86,7 @@ def _run(run_id: str, model: str, seed: int | None, fold: str, feature_set: str)
         "fold": fold,
         "seed": seed,
         "model_version": model,
+        "split_fingerprint": f"sf-{run_id}",
     }
 
 
@@ -336,6 +337,25 @@ def test_cohort_without_dim_run_raises() -> None:
     judged = _judged(world, _dataset())
     world["dim_run"] = []
     with pytest.raises(ReportSourceMismatchError, match="dim_run"):
+        _read(world, judged=judged)
+
+
+@pytest.mark.unit
+def test_split_fingerprints_of_the_cohort_runs_are_returned() -> None:
+    world = _world()
+    verified = _read(world, judged=_judged(world, _dataset()))
+    assert dict(verified.split_fingerprints) == {
+        run_id: f"sf-{run_id}" for run_id in ("run-tft-1", "run-tft-2", "run-zero")
+    }
+
+
+@pytest.mark.unit
+def test_dim_run_row_without_split_fingerprint_raises() -> None:
+    """CC4-2: `nullable=False` no schema; ausente → recusa (nada de "—" no dossiê)."""
+    world = _world()
+    judged = _judged(world, _dataset())
+    world["dim_run"][1]["split_fingerprint"] = None
+    with pytest.raises(ReportSourceMismatchError, match="split_fingerprint"):
         _read(world, judged=judged)
 
 

@@ -159,6 +159,7 @@ def _silver_rows(
             "fold": run.fold,
             "seed": run.seed,
             "model_version": run.model,
+            "split_fingerprint": silver.split_fingerprints[run.run_id],
         }
         for run in silver.runs
     ]

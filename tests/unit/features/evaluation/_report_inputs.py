@@ -807,5 +807,9 @@ def make_silver(world: ReportWorld) -> VerifiedSilver:
     units[f"dim_run|{command.partition.parent_sweep_id}"] = "d1" * 32
     units[f"realized|{command.partition.asset}"] = "7e" * 32
     return VerifiedSilver(
-        runs=cohort.runs, records=cohort.records, realized=cohort.realized, units=units
+        runs=cohort.runs,
+        records=cohort.records,
+        realized=cohort.realized,
+        units=units,
+        split_fingerprints={run.run_id: "5f" * 32 for run in cohort.runs},
     )

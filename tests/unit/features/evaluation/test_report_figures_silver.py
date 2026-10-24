@@ -212,6 +212,7 @@ def test_first_seed_without_predictions_raises_no_fallback(
         records=tuple(r for r in silver.records if not (r.model == _CANDIDATE and r.seed == 1)),
         realized=silver.realized,
         units=silver.units,
+        split_fingerprints=silver.split_fingerprints,
     )
     with pytest.raises(ReportSourceMismatchError, match="seed 1"):
         fan_chart_figure(world.inputs(), without, CANDIDATE_SEEDS)

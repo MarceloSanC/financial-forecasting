@@ -27,7 +27,7 @@ equivalência — um filtro diferente produz digest diferente e recusa.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final
 
@@ -89,8 +89,9 @@ class VerifiedSilver:
     records: tuple[ForecastRecord, ...]
     realized: RealizedReturns
     units: Mapping[str, str]
-    split_fingerprints: Mapping[str, str | None] = field(default_factory=dict)
-    """`run_id` → `split_fingerprint` do `dim_run` (identidade da entrada no dossiê, doc §7)."""
+    split_fingerprints: Mapping[str, str]
+    """`run_id` → `split_fingerprint` do `dim_run` (identidade da entrada no dossiê, doc §7;
+    `nullable=False` no schema — sem default, CC4-2)."""
 
     def __post_init__(self) -> None:
         if not isinstance(self.runs, tuple) or not isinstance(self.records, tuple):
@@ -117,7 +118,8 @@ def read_verified_silver(  # noqa: PLR0913 — os colaboradores e as referência
     """Lê `dim_run`, os fatos e o realizado do cohort e confere unidade a unidade (I2).
 
     Raises:
-        ReportSourceMismatchError: o cohort não tem linha no `dim_run`.
+        ReportSourceMismatchError: o cohort não tem linha no `dim_run`, ou uma linha sem
+            `split_fingerprint`.
         GridFingerprintMismatchError: a grade lida não é a do plano.
         SilverContentMismatchError: alguma unidade difere, falta ou sobra.
     """
@@ -169,7 +171,7 @@ def _check_units(
 
 def _read_runs(
     reader: SilverTableReader, partition: GoldPartition, accumulator: SilverContentAccumulator
-) -> tuple[tuple[CohortRun, ...], dict[str, str | None]]:
+) -> tuple[tuple[CohortRun, ...], dict[str, str]]:
     rows = [
         row
         for row in reader.read(
@@ -182,6 +184,9 @@ def _read_runs(
     ]
     if not rows:
         raise ReportSourceMismatchError(f"cohort {partition.parent_sweep_id!r} has no dim_run rows")
+    missing = sorted(str(row["run_id"]) for row in rows if row.get("split_fingerprint") is None)
+    if missing:
+        raise ReportSourceMismatchError(f"dim_run rows without split_fingerprint: {missing}")
     accumulator.add_dim_run(
         columns=reader.columns(layer=SILVER_LAYER, table=DIM_RUN_TABLE),
         parent_sweep_id=partition.parent_sweep_id,
@@ -198,12 +203,7 @@ def _read_runs(
         )
         for row in rows
     )
-    fingerprints = {
-        str(row["run_id"]): None
-        if row.get("split_fingerprint") is None
-        else str(row["split_fingerprint"])
-        for row in rows
-    }
+    fingerprints = {str(row["run_id"]): str(row["split_fingerprint"]) for row in rows}
     return tuple(sorted(runs, key=lambda run: run.run_id)), fingerprints
 
 
