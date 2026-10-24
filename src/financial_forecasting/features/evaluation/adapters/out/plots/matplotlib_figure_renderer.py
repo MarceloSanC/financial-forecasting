@@ -31,7 +31,7 @@ from matplotlib import ft2font, rc_context
 from matplotlib.artist import Artist
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_pdf import FigureCanvasPdf
-from matplotlib.figure import Figure
+from matplotlib.figure import Figure, SubFigure
 
 from financial_forecasting.features.evaluation.application.dtos.report_artifacts import (
     FigureSpec,
@@ -54,16 +54,30 @@ MODEL_STYLES: Final[Mapping[str, Style]] = {
 """Modelo → (cor, marcador, estilo): as sete primeiras cores da ordem categórica fixa."""
 
 _NEUTRAL: Final = "#4d4d4d"
-_NEUTRAL_MARKERS: Final = ("o", "s", "^", "D", "v", "P", "X")
+_MARKERS: Final = ("o", "s", "^", "D", "v", "P", "X", "<", ">", "p", "h", "*", "d", "H", "8")
+"""Marcadores na ordem de troca quando duas séries distintas cairiam no mesmo estilo."""
+_REFERENCE_LINESTYLES: Final[tuple[object, ...]] = (
+    "--",
+    ":",
+    "-.",
+    (0, (5, 1)),
+    (0, (1, 3)),
+    (0, (3, 1, 1, 1)),
+)
 _SEQUENTIAL: Final = "cividis"
 _WIDTH_IN: Final = 6.3
 _PANEL_HEIGHT_IN: Final = 2.6
-_FOOTER_LINE_IN: Final = 0.11
+_TITLE_IN: Final = 0.45
+_FOOTER_LINE_IN: Final = 0.085
 _MAX_COLUMNS: Final = 2
 _MAX_TICKS: Final = 6
-_WRAP: Final = 120
-_LEGEND_LINE_IN: Final = 0.1
+_WRAP: Final = 160
+_LEGEND_WRAP: Final = 62
+"""Caracteres por linha de um rótulo de legenda (cabe numa das duas colunas da página)."""
+_LEGEND_LINE_IN: Final = 0.085
+_LEGEND_ENTRY_IN: Final = 0.035
 _LEGEND_COLUMNS: Final = 2
+_PAD_IN: Final = 0.12
 _ISO_MIN: Final = 19
 _DARK_CELL: Final = 0.5
 _RC: Final[Mapping[str, object]] = {
@@ -87,7 +101,70 @@ _RC: Final[Mapping[str, object]] = {
 
 
 def _label(series: SeriesSpec) -> str:
-    return f"{series.name} [{series.label.status.value}]"
+    """O rótulo da série na legenda (nome e estatuto), quebrado para caber na coluna."""
+    return "\n".join(textwrap.wrap(f"{series.name} [{series.label.status.value}]", _LEGEND_WRAP))
+
+
+class Look:
+    """O estilo resolvido de uma série: cor, marcador, linha e marcador vazado."""
+
+    def __init__(self, color: str, marker: str, linestyle: object, *, hollow: bool) -> None:
+        self.color = color
+        self.marker = marker
+        self.linestyle = linestyle
+        self.hollow = hollow
+
+    @property
+    def face(self) -> str:
+        return "none" if self.hollow else self.color
+
+    def key(self) -> tuple[str, str, bool]:
+        return self.color, self.marker, self.hollow
+
+
+def figure_looks(spec: FigureSpec) -> dict[str, Look]:
+    """Rótulo da legenda → estilo, para a figura inteira (o mesmo rótulo, o mesmo estilo).
+
+    A cor de um modelo é a do mapa fixo (identidade do modelo); série sem modelo usa o
+    neutro. Duas séries **distintas** nunca ficam com o mesmo (cor, marcador, vazado): a
+    seguinte troca de marcador (na ordem de `_MARKERS`) e, esgotados, passa a vazado. As
+    referências (linhas sem marcador) também trocam o estilo de linha.
+
+    Raises:
+        ValueError: série de um modelo fora de `MODEL_STYLES`.
+    """
+    looks: dict[str, Look] = {}
+    used: set[tuple[str, str, bool]] = set()
+    used_lines: list[object] = []
+    for panel in spec.panels:
+        for series in panel.series:
+            label = _label(series)
+            if series.kind is SeriesKind.CELLS or label in looks:
+                continue
+            if series.model is not None:
+                if series.model not in MODEL_STYLES:
+                    raise ValueError(f"models without a fixed style: {[series.model]}")
+                color, marker, linestyle = MODEL_STYLES[series.model]
+            else:
+                color, marker, linestyle = _NEUTRAL, _MARKERS[0], "--"
+            line: object = linestyle
+            if series.kind is SeriesKind.REFERENCE:
+                line = next((ls for ls in _REFERENCE_LINESTYLES if ls not in used_lines), "--")
+                used_lines.append(line)
+            order = [marker, *(m for m in _MARKERS if m != marker)]
+            choice = next(
+                (
+                    (m, hollow)
+                    for hollow in (False, True)
+                    for m in order
+                    if (color, m, hollow) not in used
+                ),
+                (marker, True),
+            )
+            look = Look(color, choice[0], line, hollow=choice[1])
+            used.add(look.key())
+            looks[label] = look
+    return looks
 
 
 def _tick(label: str) -> str:
@@ -112,6 +189,68 @@ class _Positions:
 
     def of(self, values: Sequence[float | str]) -> list[float]:
         return [float(self.categories[v]) if isinstance(v, str) else float(v) for v in values]
+
+
+def legend_labels(spec: FigureSpec) -> list[str]:
+    """Os rótulos da legenda da figura (um por série distinta, células fora)."""
+    entries: dict[str, None] = {}
+    for panel in spec.panels:
+        for series in panel.series:
+            if series.kind is not SeriesKind.CELLS:
+                entries.setdefault(_label(series))
+    return list(entries)
+
+
+def footer_lines(spec: FigureSpec) -> list[str]:
+    """O rodapé: notas da figura, omissões, notas de painel e de série, sem repetir.
+
+    Nota de painel ou de série igual a uma nota já escrita não se repete (o texto
+    "cobertura empírica (não garantida)" de todo painel do conformal sai uma vez; a nota do
+    painel da VSN igual à da figura não vira "horizonte-invariante: horizonte-invariante").
+    """
+    texts: dict[str, None] = dict.fromkeys(spec.notes)
+    texts.update(dict.fromkeys(f"omissão declarada: {o}" for o in spec.omissions))
+    seen = set(spec.notes)
+    for panel in spec.panels:
+        note = panel.label.note
+        if note and note not in seen:
+            seen.add(note)
+            texts.setdefault(f"{panel.title}: {note}")
+    for panel in spec.panels:
+        for series in panel.series:
+            note = series.label.note
+            if note and note not in seen:
+                texts.setdefault(f"{panel.title} — {series.name}: {note}")
+    lines: list[str] = []
+    for text in texts:
+        lines += textwrap.wrap(text, _WRAP) or [""]
+    return lines
+
+
+def _legend_height(labels: Sequence[str]) -> float:
+    """Altura da legenda: o matplotlib preenche as colunas de cima para baixo."""
+    per_column = math.ceil(len(labels) / _LEGEND_COLUMNS)
+    columns = [labels[i : i + per_column] for i in range(0, len(labels), per_column)]
+    rows = [max(c[i].count("\n") + 1 for c in columns if i < len(c)) for i in range(per_column)]
+    return _LEGEND_LINE_IN * sum(rows) + _LEGEND_ENTRY_IN * per_column
+
+
+def _legend(band: SubFigure, axes: Sequence[Sequence[Axes]]) -> None:
+    handles: dict[str, Artist] = {}
+    for row in axes:
+        for ax in row:
+            for handle, text in zip(*ax.get_legend_handles_labels(), strict=True):
+                handles.setdefault(text, handle)
+    if handles:
+        band.legend(
+            list(handles.values()),
+            list(handles),
+            loc="upper center",
+            bbox_to_anchor=(0.5, 1.0),
+            ncol=_LEGEND_COLUMNS,
+            frameon=False,
+            borderaxespad=0.0,
+        )
 
 
 class MatplotlibFigureRenderer:
@@ -149,67 +288,42 @@ class MatplotlibFigureRenderer:
     # -- desenho ----------------------------------------------------------------------
 
     def _draw(self, spec: FigureSpec) -> Figure:
+        """A página: painéis (layout restrito), legenda e rodapé em faixas próprias.
+
+        Três subfiguras empilhadas: os painéis, com o layout restrito do matplotlib (rótulo
+        de eixo e tick nunca cortados nem sobrepostos); a legenda da figura em duas colunas,
+        cada rótulo quebrado para caber na coluna; e o rodapé (notas, omissões, notas de
+        painel e de série, sem repetir). As alturas das faixas de baixo saem da contagem de
+        linhas.
+        """
+        looks = figure_looks(spec)
         n = len(spec.panels)
         columns = min(n, _MAX_COLUMNS)
         rows = math.ceil(n / columns)
-        footer = self._footer(spec)
-        footer_in = _FOOTER_LINE_IN * (len(footer) + 1)
-        entries = self._legend_entries(spec)
-        legend_in = _LEGEND_LINE_IN * math.ceil(len(entries) / _LEGEND_COLUMNS) + 0.3
-        height = rows * _PANEL_HEIGHT_IN + footer_in + legend_in + 0.4
-        figure = Figure(figsize=(_WIDTH_IN, height))
+        footer = footer_lines(spec)
+        labels = legend_labels(spec)
+        panels_in = rows * _PANEL_HEIGHT_IN + _TITLE_IN
+        legend_in = _legend_height(labels) + _PAD_IN if labels else 0.05
+        footer_in = _FOOTER_LINE_IN * len(footer) + _PAD_IN if footer else 0.05
+        figure = Figure(
+            figsize=(_WIDTH_IN, panels_in + legend_in + footer_in), layout="constrained"
+        )
         FigureCanvasPdf(figure)
-        axes = figure.subplots(rows, columns, squeeze=False)
+        bands = figure.subfigures(3, 1, height_ratios=[panels_in, legend_in, footer_in])
+        top, legend_band, footer_band = (bands[i] for i in range(3))  # type: ignore[index]
+        axes = top.subplots(rows, columns, squeeze=False)
         for index, panel in enumerate(spec.panels):
-            self._panel(axes[index // columns][index % columns], panel)
+            self._panel(axes[index // columns][index % columns], panel, looks)
         for index in range(n, rows * columns):
             axes[index // columns][index % columns].set_visible(False)
-        figure.suptitle(spec.title, fontsize=8)
-        figure.subplots_adjust(
-            left=0.08,
-            right=0.98,
-            top=1 - 0.55 / height,
-            bottom=(footer_in + legend_in + 0.35) / height,
-            hspace=0.6,
-            wspace=0.25,
+        top.suptitle(spec.title, fontsize=8)
+        _legend(legend_band, axes)
+        footer_band.text(
+            0.01, 0.98, "\n".join(footer), fontsize=4.5, va="top", ha="left", linespacing=1.25
         )
-        handles: dict[str, Artist] = {}
-        for row in axes:
-            for ax in row:
-                for handle, text in zip(*ax.get_legend_handles_labels(), strict=True):
-                    handles.setdefault(text, handle)
-        if handles:
-            figure.legend(
-                list(handles.values()),
-                list(handles),
-                loc="lower center",
-                bbox_to_anchor=(0.5, footer_in / height),
-                ncol=_LEGEND_COLUMNS,
-                frameon=False,
-            )
-        figure.text(0.01, 0.01, "\n".join(footer), fontsize=4.5, va="bottom", ha="left")
         return figure
 
-    @staticmethod
-    def _legend_entries(spec: FigureSpec) -> list[str]:
-        """Os rótulos da legenda da figura (um por série distinta, células fora)."""
-        entries: dict[str, None] = {}
-        for panel in spec.panels:
-            for series in panel.series:
-                if series.kind is not SeriesKind.CELLS:
-                    entries.setdefault(_label(series))
-        return list(entries)
-
-    @staticmethod
-    def _footer(spec: FigureSpec) -> list[str]:
-        lines: list[str] = []
-        texts = [*spec.notes, *(f"omissão declarada: {o}" for o in spec.omissions)]
-        texts += [f"{panel.title}: {panel.label.note}" for panel in spec.panels if panel.label.note]
-        for text in texts:
-            lines += textwrap.wrap(text, _WRAP) or [""]
-        return lines
-
-    def _panel(self, axes: Axes, panel: PanelSpec) -> None:
+    def _panel(self, axes: Axes, panel: PanelSpec, looks: Mapping[str, Look]) -> None:
         positions = _Positions(panel)
         axes.set_title(f"{panel.title} — {panel.label.status.value}")
         axes.set_xlabel(panel.x_label)
@@ -218,31 +332,35 @@ class MatplotlibFigureRenderer:
             kind: [s for s in panel.series if s.kind is kind]
             for kind in (SeriesKind.BOXES, SeriesKind.BARS)
         }
-        for index, series in enumerate(panel.series):
-            self._series(axes, series, positions, index, groups)
+        for series in panel.series:
+            self._series(axes, series, positions, looks, groups)
         if positions.categories:
             labels = list(positions.categories)
-            step = max(1, math.ceil(len(labels) / _MAX_TICKS))
+            # datas: um rótulo a cada `step`; categoria: todas rotuladas (posição sem rótulo
+            # seria ambígua), mais inclinadas quando passam de `_MAX_TICKS`
+            dates = all(_tick(label) != label for label in labels)
+            step = max(1, math.ceil(len(labels) / _MAX_TICKS)) if dates else 1
             ticks = list(range(0, len(labels), step))
+            rotation = 60 if not dates and len(labels) > _MAX_TICKS else 30
             axes.set_xticks([float(t) for t in ticks])
-            axes.set_xticklabels([_tick(labels[t]) for t in ticks], rotation=30, ha="right")
-
-    @staticmethod
-    def _style(series: SeriesSpec, index: int) -> Style:
-        if series.model is not None:
-            return MODEL_STYLES[series.model]
-        return _NEUTRAL, _NEUTRAL_MARKERS[index % len(_NEUTRAL_MARKERS)], "--"
+            axes.set_xticklabels(
+                [_tick(labels[t]) for t in ticks],
+                rotation=rotation,
+                ha="right",
+                rotation_mode="anchor",
+            )
 
     def _series(
         self,
         axes: Axes,
         series: SeriesSpec,
         positions: _Positions,
-        index: int,
+        looks: Mapping[str, Look],
         groups: Mapping[SeriesKind, list[SeriesSpec]],
     ) -> None:
-        color, marker, linestyle = self._style(series, index)
         label = _label(series)
+        look = looks.get(label, Look(_NEUTRAL, _MARKERS[0], "--", hollow=False))
+        color, marker, linestyle, face = look.color, look.marker, look.linestyle, look.face
         xs = positions.of(series.x)
         ys = [_number(v) for v in series.y]
         low = None if series.low is None else [_number(v) for v in series.low]
@@ -253,20 +371,28 @@ class MatplotlibFigureRenderer:
             if low is not None and high is not None:
                 axes.fill_between(xs, low, high, color=color, alpha=0.15, linewidth=0)
         elif kind is SeriesKind.POINTS:
-            self._points(axes, xs, ys, low, high, color, marker, label)
+            self._points(axes, xs, ys, low, high, (color, marker, face), label)
         elif kind is SeriesKind.BAND:
             axes.fill_between(
                 xs, low or ys, high or ys, color=color, alpha=0.2, linewidth=0, label=label
             )
         elif kind is SeriesKind.INTERVAL:
-            self._points(axes, xs, ys, low, high, color, marker, label)
+            self._points(axes, xs, ys, low, high, (color, marker, face), label)
         elif kind is SeriesKind.BOXES:
             self._boxes(axes, series, xs, color, label, groups[SeriesKind.BOXES])
         elif kind is SeriesKind.CELLS:
             self._cells(axes, series, ys)
         elif kind is SeriesKind.STEMS:
             axes.vlines(xs, 0.0, ys, color=color, linewidth=0.8)
-            axes.plot(xs, ys, linestyle="none", marker=marker, color=color, label=label)
+            axes.plot(
+                xs,
+                ys,
+                linestyle="none",
+                marker=marker,
+                color=color,
+                markerfacecolor=face,
+                label=label,
+            )
             axes.axhline(0.0, color="#888888", linewidth=0.5)
         elif kind is SeriesKind.BARS:
             group = groups[SeriesKind.BARS]
@@ -285,7 +411,7 @@ class MatplotlibFigureRenderer:
                 axes.axvline(x, color="#999999", linestyle=":", linewidth=0.6)
             axes.plot([], [], color="#999999", linestyle=":", label=label)
         else:
-            self._reference(axes, series, xs, ys, label)
+            self._reference(axes, series, xs, ys, label, linestyle)
 
     @staticmethod
     def _points(  # noqa: PLR0913 — a marca e a sua banda
@@ -294,10 +420,10 @@ class MatplotlibFigureRenderer:
         ys: list[float],
         low: list[float] | None,
         high: list[float] | None,
-        color: str,
-        marker: str,
+        look: tuple[str, str, str],
         label: str,
     ) -> None:
+        color, marker, face = look
         if low is not None and high is not None:
             centers = [
                 y if not math.isnan(y) else (lo + hi) / 2
@@ -313,13 +439,22 @@ class MatplotlibFigureRenderer:
                 yerr=errors,
                 color=color,
                 marker=marker,
+                markerfacecolor=face,
                 linestyle="none",
                 elinewidth=0.6,
                 capsize=1.5,
                 label=label,
             )
         else:
-            axes.plot(xs, ys, color=color, marker=marker, linestyle="none", label=label)
+            axes.plot(
+                xs,
+                ys,
+                color=color,
+                marker=marker,
+                markerfacecolor=face,
+                linestyle="none",
+                label=label,
+            )
 
     @staticmethod
     def _boxes(  # noqa: PLR0913 — a série de caixas e o seu grupo
@@ -380,14 +515,32 @@ class MatplotlibFigureRenderer:
         axes.grid(visible=False)
 
     @staticmethod
-    def _reference(
-        axes: Axes, series: SeriesSpec, xs: list[float], ys: list[float], label: str
+    def _reference(  # noqa: PLR0913 — a referência e o seu estilo de linha
+        axes: Axes,
+        series: SeriesSpec,
+        xs: list[float],
+        ys: list[float],
+        label: str,
+        linestyle: object,
     ) -> None:
         if len(xs) == 1:
-            axes.axhline(ys[0], color=_NEUTRAL, linestyle="--", linewidth=0.6, label=label)
+            axes.axhline(
+                ys[0],
+                color=_NEUTRAL,
+                linestyle=linestyle,
+                linewidth=0.6,
+                label=label,
+            )
         elif all(isinstance(v, str) for v in series.x):
             axes.plot(
                 xs, ys, color=_NEUTRAL, marker="_", markersize=8, linestyle="none", label=label
             )
         else:
-            axes.plot(xs, ys, color=_NEUTRAL, linestyle="--", linewidth=0.6, label=label)
+            axes.plot(
+                xs,
+                ys,
+                color=_NEUTRAL,
+                linestyle=linestyle,
+                linewidth=0.6,
+                label=label,
+            )
