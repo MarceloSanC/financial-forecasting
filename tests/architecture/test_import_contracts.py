@@ -131,6 +131,9 @@ _EXPECTED_CONTRACTS = (
     # Stage 8.2 (CB-1 do Checkpoint B; A14): nenhum módulo de src/ importa tests/ — o
     # andaime da equivalência (`tests/equivalence/`) incluído (ADR 8.2.0003 item 2).
     "src-no-tests",
+    # Stage 8.3 (A15; ADR 8.3.0003 item 1): matplotlib só no adapter
+    # features/evaluation/adapters/out/plots/ — perímetro de todo o pacote.
+    "evaluation-no-matplotlib-leak",
 )
 
 
@@ -1090,6 +1093,19 @@ _REAL_VIOLATION_CASES = (
             )
         },
         id="src-no-tests:evaluation-imports-equivalence-scaffold",
+    ),
+    # Stage 8.3 (A15) — `evaluation-no-matplotlib-leak`: um adapter de saída que não é o
+    # de plots importando matplotlib reprova. O pacote `adapters/out/toml/` já existe com
+    # `__init__.py` (o grimp pula módulo de diretório sem `__init__`); o caso de
+    # `adapters/out/reports/` entra na Task 12, quando o pacote existe (CB-1).
+    pytest.param(
+        "evaluation-no-matplotlib-leak",
+        {
+            "features/evaluation/adapters/out/toml/_arch_taint_mpl.py": (
+                "import matplotlib  # violação temporária\n"
+            )
+        },
+        id="evaluation-no-matplotlib-leak:toml-adapter-imports-matplotlib",
     ),
 )
 

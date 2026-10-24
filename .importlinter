@@ -757,3 +757,26 @@ source_modules =
 forbidden_modules =
     tests
 allow_indirect_imports = False
+
+# -----------------------------------------------------------------------------
+# Contrato 17 — evaluation-no-matplotlib-leak (type = forbidden) — Stage 8.3 (A15; D6)
+# LAYOUT §3 (bibliotecas de terceiros só no adapter que as encapsula) e ADR 8.3.0003
+# item 1: `matplotlib` desenha as figuras canônicas SÓ em
+# features/evaluation/adapters/out/plots/, atrás do port-out `FigureRenderer`; a
+# montagem do dado plotado (`FigureSpec`) é pura e não conhece a biblioteca. Por isso o
+# perímetro é o pacote inteiro (`source_modules = financial_forecasting`), não só a
+# application/domain do slice: nenhum outro adapter, o CLI ou o composition root
+# importam matplotlib. A exceção do pacote de plots entra na Stage 8.3 Task 11, junto com
+# o adapter: `ignore_imports = financial_forecasting.features.evaluation.adapters.out.plots.** -> matplotlib`
+# (o `plots/__init__.py` não importa matplotlib). Ela não existe ainda porque um ignore
+# sem import que case reprova pelo `unmatched_ignore_imports_alerting` (default
+# `error`). O teste AST `tests/architecture/test_stage_8_3_regression_guards.py` reprova
+# `matplotlib.pyplot` em todo o src/, inclusive no adapter de plots (estado global).
+[importlinter:contract:evaluation-no-matplotlib-leak]
+name = Só o adapter de plots do evaluation importa matplotlib
+type = forbidden
+source_modules =
+    financial_forecasting
+forbidden_modules =
+    matplotlib
+allow_indirect_imports = False
