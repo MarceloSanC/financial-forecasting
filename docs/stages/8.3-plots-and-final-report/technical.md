@@ -1475,4 +1475,17 @@ pontos (conferido em pré-visualização PNG no scratchpad).
 **Razão:** reversível barato (só desenho, os bytes do PDF não são prova de origem — o
 `data_digest` é da spec); um eixo por painel continua valendo.
 
+### 2026-10-24 — [deviation] Checkpoint C do bloco 2, CC2-1: caudas do gate H1 sempre confirmatórias — Claude (executor)
+**Contexto:** a Task 06 (teste `test_confirmatory_only_where_h1_passes`) e o concept A5/I4
+rotulavam as caudas do gate "descritivo (perfil)" onde H1 reprova. O doc de domínio
+(reproduction §2.3 e §6.2), fonte superior, diz que o gate H1 (cada cauda, banda 97,5 %) é
+confirmatório sem condição; "só onde H1 passa" vale para H2 (Holm/MCS), isto é, para a
+linha do DM.
+**O que mudou:** `report_figures._confirmatory_tails` rotula as duas caudas
+`confirmatório` em todo horizonte, com o desfecho ("H1 passa/reprova em h+h") na nota;
+o DM segue condicionado a `h1.passed`. Testes: `test_gate_tails_confirmatory_in_every_horizon`
+e a lista de elementos confirmatórios do use case. O concept é emendado por outro agente.
+**Razão:** correção de rótulo para a fonte superior, pedida pelo revisor; sem mudar dado
+lido nem contrato de port.
+
 <!-- END: post-execution -->

@@ -458,7 +458,7 @@ def test_records_carry_data_digest_generation_digest_code_and_renderer(harness: 
     assert dict(changed.figures)["quantile_score_plot"] != digests["quantile_score_plot"]  # type: ignore[attr-defined]
 
 
-def test_confirmatory_label_only_on_gate_tails_and_dm_rows_where_h1_passes(
+def test_confirmatory_label_on_gate_tails_and_dm_rows_where_h1_passes(
     harness: _World,
 ) -> None:
     harness.run()
@@ -475,6 +475,8 @@ def test_confirmatory_label_only_on_gate_tails_and_dm_rows_where_h1_passes(
     assert confirmatory == [
         ("reliability_diagram", "h1", "gate_lower_tail"),
         ("reliability_diagram", "h1", "gate_upper_tail"),
+        ("reliability_diagram", "h7", "gate_lower_tail"),
+        ("reliability_diagram", "h7", "gate_upper_tail"),
         ("dm_candidate_vs_comparators", "h1", "panel"),
         ("dm_candidate_vs_comparators", "h1", "dm_cells"),
     ]

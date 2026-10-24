@@ -13,8 +13,10 @@ Regras comuns:
   não importa serviço inferencial do domínio (guarda AST em
   `tests/architecture/test_stage_8_3_regression_guards.py`);
 - **por horizonte** (I5): um painel por horizonte, nada mistura horizontes;
-- **rótulo de estatuto por elemento** (P8-ROT): `confirmatório` só nas caudas do gate do
-  candidato nos horizontes em que H1 passa (I4);
+- **rótulo de estatuto por elemento** (P8-ROT): as caudas do gate H1 do candidato são
+  `confirmatório` em todo horizonte (doc §2.3 e §6.2 — o gate é o teste confirmatório,
+  passe ou reprove; a nota diz o desfecho); a condição "só onde H1 passa" vale só para a
+  linha do DM (H2; I4, Checkpoint C do bloco 2, CC2-1);
 - **o filtro do gate** é o do dono (`scorecard_evidence._tail`): `sample = GATE_SAMPLE`,
   `includes_degenerate = False`, `dgt_offset = dgt_step = None`. Os dois literais não têm
   constante nomeada no dono; são declarados aqui e **amarrados em tempo de execução**: a
@@ -437,14 +439,17 @@ def _confirmatory_tails(
             _number_or_none(_get(band, "upper"), where=where),
         )
         band_level = _number(_get(band, "band_level"), where=where)
-        status = StatusLabel.CONFIRMATORY if passed else StatusLabel.DESCRIPTIVE_PROFILE
         series.append(
             SeriesSpec(
                 series_id=f"gate_{kind}",
                 kind=SeriesKind.INTERVAL,
                 name=f"candidato, cauda do gate τ = {level_text(level)}",
                 model=inputs.plan.candidate,
-                label=ElementLabel(status=status, note=_power_note(profile, band_level)),  # type: ignore[arg-type]
+                label=ElementLabel(
+                    status=StatusLabel.CONFIRMATORY,
+                    note=f"H1 {'passa' if passed else 'reprova'} em h+{horizon}; "
+                    + _power_note(profile, band_level),  # type: ignore[arg-type]
+                ),
                 x=(level,),
                 y=(_orient(kind, estimate),),
                 low=(low,),

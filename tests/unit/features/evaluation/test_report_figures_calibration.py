@@ -91,18 +91,27 @@ def test_confirmatory_tails_equal_verdict_h1_bands_and_profile_power(world: Repo
 
 
 @pytest.mark.unit
-def test_confirmatory_only_where_h1_passes(world: ReportWorld) -> None:
+def test_gate_tails_confirmatory_in_every_horizon(world: ReportWorld) -> None:
+    # CC2-1 (doc §2.3/§6.2): o gate H1 é confirmatório passe ou reprove; H1 passa em h+1
+    # e reprova em h+7 no mundo padrão, e a nota diz o desfecho.
     spec = reliability_figure(world.inputs()).spec
     for kind in ("gate_lower_tail", "gate_upper_tail"):
         assert _panel_series(spec, "h1")[kind].label.status is StatusLabel.CONFIRMATORY
-        assert _panel_series(spec, "h7")[kind].label.status is StatusLabel.DESCRIPTIVE_PROFILE
+        assert _panel_series(spec, "h7")[kind].label.status is StatusLabel.CONFIRMATORY
+        assert (_panel_series(spec, "h1")[kind].label.note or "").startswith("H1 passa em h+1")
+        assert (_panel_series(spec, "h7")[kind].label.note or "").startswith("H1 reprova em h+7")
     confirmatory = [
         (p.panel_id, s.series_id)
         for p in spec.panels
         for s in p.series
         if s.label.status is StatusLabel.CONFIRMATORY
     ]
-    assert confirmatory == [("h1", "gate_lower_tail"), ("h1", "gate_upper_tail")]
+    assert confirmatory == [
+        ("h1", "gate_lower_tail"),
+        ("h1", "gate_upper_tail"),
+        ("h7", "gate_lower_tail"),
+        ("h7", "gate_upper_tail"),
+    ]
 
 
 @pytest.mark.unit
