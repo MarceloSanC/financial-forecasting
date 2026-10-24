@@ -2072,4 +2072,29 @@ a5c0ca7142a908201add9754edfc938c3a36e1406dc4fa5cc9fbed2b43e85cd8 *figures/sharpn
 **Razão:** prova da R2 sobre o código corrigido. O fix muda só o texto do dossiê e o `code.src`;
 nenhum dado plotado mudou (mesmos `data_digest` e os mesmos PDFs).
 
+### 2026-10-24 — [measurement] Etapa R (4ª tentativa), R3: segunda geração depois do commit `1b57092a` (I8) — Claude (executor da Etapa R)
+**Contexto:** a R4 manda colar aqui as saídas da R3 para as saídas regeradas e commitadas em
+`1b57092a`.
+**Medição:**
+- **Bloco R1 sobre `1b57092a`:** `SRC_AS_GATE1`, `REGISTER_COMMITTED`, `COHORT_TAG_OK`,
+  `ABLATION_COHORT_TAG_OK`, `CODE_SRC_SAME` (`9763b316…`), `NO_FF83`; árvore limpa depois do
+  commit.
+- **Geração 2:** `ff83-gen2`, mesma imagem `sha256:b69a7620…8f45`, estado `0 false`,
+  `GEN2_FIGURES_10`.
+- **Comparação:**
+  - `out-gen2.sha256sum` é idêntico ao `out-gen1.sha256sum` desta tentativa (22 linhas: os dez
+    PDFs da entrada da 3ª tentativa e os 12 sha256 novos da entrada anterior). O sha256 da
+    listagem é `1c21c405f2d8cdbe6d1b9ce1353d1a4a43766e6814d1a8a2a353f24ce43ef4a6`.
+  - `data/cohorts/aapl` tem 355 arquivos, e o sha256 da listagem é o mesmo antes e depois:
+    `fc79ab29410af7d88e0b3e9ade31b9a2b87382e9f4a266d540470935a9ed4e6e`.
+```
+SAME_SHA256SUM
+REGEN_EQUALS_COMMIT
+DATA_INTACT
+```
+**Razão:** A14 e I8 sobre o código corrigido. A segunda geração depois do commit reproduz byte
+a byte os 22 artefatos commitados, e `data/` fica só leitura. As gerações não ergueram
+`ReportSourceMismatchError`, então vale a consistência do sharpness com o `mpiw`. O 2º
+`make check` de saída fica com a sessão mestra.
+
 <!-- END: post-execution -->
