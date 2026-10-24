@@ -479,6 +479,12 @@ horizonte ou baseline; ela não entra em nenhuma decisão deste concept. Isto
   realizado de h=7 é formado a partir da série diária) — §10 e D13. O
   andaime obtém y_novo pelo `ReadTrainingGrid` do código novo sobre o
   backup restaurado (o gold não guarda o realizado por ponto).
+  **Emenda pós-execução (B3, ADR [8.2.0004](../../adr/8_2_0004-a1-tolerance-by-effective-float32-storage-precision.md)):** o tipo físico `double` do
+  `y_true` anterior **não** é a sua precisão efetiva — na E4 real, o
+  diagnóstico de D13 mostrou y_ant = float32(y_novo) em 937/937 pontos nos
+  dois horizontes (|Δ| relativo máx 0,978·2⁻²⁴). A suposição "os dois lados
+  `double` ⇒ o caminho float32 não se aplica" desta medição estava errada para
+  o lado anterior.
 - **D-M5 — Interseção (só datas, amostra de 2023):** h=1, 249 das 250 datas
   do anterior presentes no novo; h=7, 243 de 250. A interseção exata (T∩ por
   horizonte) e o motivo do h=7 menor são da Fase 4.
@@ -490,7 +496,9 @@ horizonte ou baseline; ela não entra em nenhuma decisão deste concept. Isto
   categoria "bruto × rearranjado" se o lado novo pontuar outra variante (a
   conferir no código, não nos números); baseline comum só por **definição**
   declarada dos dois lados (EQ-INTER item 1); `y_true` `double` ⇒ tolerância
-  A1 = meio ulp de float64 na magnitude (2⁻⁵³·|y|).
+  A1 = meio ulp de float64 na magnitude (2⁻⁵³·|y|) — **emendado por B3**
+  (D13): meio ulp de float32 no ponto, com a pré-condição de
+  representabilidade exata em float32.
 
 ### D11 — Recorte do "antes de qualquer valor" (decisão da mestra no Checkpoint A, CA-2)
 ```
@@ -517,6 +525,14 @@ Escolha: todo ponto de T∩ (por horizonte) é conferido: |y_novo − y_ant| ≤
 Degrau: 1 (doc §5.4 A1 "meio ulp do tipo gravado na magnitude do valor"; sem ampliar a regra)
 Base: doc §5.4, §5.6 (categoria "alvo"); medições D-M5, D-M6
 Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não depois do passo 3 do D10
+```
+
+**Emenda pós-execução de D13 (desvio declarado):**
+```
+[decision:P] B3 — tolerância de A1 pela precisão de armazenamento efetiva
+Escolha: opção 2 — A1 passa num ponto quando |y_novo − y_ant| ≤ meio ulp de float32 naquele ponto, com a PRÉ-CONDIÇÃO verificada de que todo y_ant de T∩ é exatamente representável em float32 (senão vale, para aquele horizonte, a regra de double acima, sem mudança); emenda commitada antes de qualquer número de modelo do anterior; E4/E5 refeitas sob ela; a comparação de modelo (A10/A11) que A1 libera é rotulada no relatório interno como desvio pós-hoc · Alternativas: 1 — manter A1 pela regra de double (A1 falha por artefato de armazenamento; A10/A11 ficam not_compared:A1); 3 — manter A1 reprovado e adiar a emenda para outra issue · Decisor: humano (issue #232, comentário de 2026-10-23)
+Base: doc §5.4 ("dentro da precisão de armazenamento do anterior"; meio ulp do tipo gravado); diagnóstico pré-declarado de D13 item 4 na E4 real: y_ant = float32(y_novo) em 937/937 pontos nos dois horizontes, |Δ| relativo máx 0,978·2⁻²⁴; com a regra de double, 934/937 fora, explicados como "alvo"; nenhum número de modelo do anterior calculado
+Sensibilidade pré-registrada: nenhuma · Reversível: sim (ADR 8.2.0004)
 ```
 
 ### D10 — Ordem das leituras
@@ -555,7 +571,8 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
 | Valor do anterior lido antes do registro (forking paths) | B | A | D10; I6; o andaime só lê arquivo do registro |
 | Definição dos baselines anteriores não recuperável | M | M | ficam fora do "modelo comum" e entram só em A2 (EQ-INTER item 1); registrado |
 | Interseção h=7 menor que h=1 por definição diferente de `target_timestamp` | M | M | diagnosticar pelo calendário na Fase 4; se for definição do alvo, A1 o mostra |
-| A1 falhar por definição do realizado de h=7 (D-M6: os dois lados `double`, o risco é de definição, não de precisão) | M | M | critério e diagnóstico pré-declarados em D13; a comparação de modelo daquele horizonte para e a divergência é registrada com a categoria "alvo"; a regra não é afrouxada (seria desvio) |
+| A1 falhar por armazenamento: o anterior gravou o alvo arredondado para float32 dentro de coluna `double` (**materializado** na E4: 937/937 pontos) | A | M | emenda B3 / ADR 8.2.0004: tolerância pela precisão efetiva com pré-condição verificada; resultado da regra original também reportado; comparação de modelo rotulada desvio pós-hoc |
+| A1 falhar por definição do realizado de h=7 | M | M | critério e diagnóstico pré-declarados em D13; a comparação de modelo daquele horizonte para e a divergência é registrada com a categoria "alvo"; a regra não é afrouxada (seria desvio) |
 | `env.platform` inclui o kernel do WSL (`6.18.54.1-microsoft-standard-WSL2`); uma atualização do WSL quebra a igualdade da foto | M | M | diagnóstico de **ambiente**, não de código: `[finding]`, sem rodar como R-BIT; registrar a versão do kernel antes da Fase 4 e não atualizar o WSL até a reprodução |
 | Driver da reprodução divergir do código de `060537fc` | B | A | só wiring, por APIs idênticas nos dois commits; smoke test no HEAD; roda com a árvore de `060537fc` em `/app` |
 | Tempo (~14 min de refresh; `h3` 625 s) e memória da reprodução | M | B | mesmos limites da 8.1; nada concorrente no Docker durante a corrida |
@@ -616,11 +633,15 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
   `060537fc`.
 - [ ] **A8 — Claim declarado.** O relatório de reprodução afirma (a), cita (b)
   da 7.1 e declara que (c) não foi executada (D4).
-- [ ] **A9 — EQ-MUST A1 (D13).** Por horizonte, T∩ reportado; todo ponto de
-  T∩ conferido com |y_novo − y_ant| ≤ 2⁻⁵³·|y_ant|, com a contagem fora e o
-  max |Δ| reportados — ou a divergência é registrada com a categoria "alvo",
-  o diagnóstico pré-declarado percorrido, e a comparação de modelo daquele
-  horizonte para.
+- [ ] **A9 — EQ-MUST A1 (D13, emendado por B3).** Por horizonte, T∩
+  reportado; a pré-condição de representabilidade exata em float32 de todo
+  y_ant conferida e reportada; todo ponto de T∩ conferido com |y_novo − y_ant|
+  ≤ meio ulp de float32 no ponto (pré-condição verdadeira) ou ≤ 2⁻⁵³·|y_ant|
+  (pré-condição falsa), com a contagem fora e o max |Δ| reportados, e o
+  resultado sob a regra original de double também reportado — ou a
+  divergência é registrada com a categoria "alvo", o diagnóstico
+  pré-declarado percorrido, e a comparação de modelo daquele horizonte para;
+  A10/A11 liberados por B3 rotulados como desvio pós-hoc (ADR 8.2.0004).
 - [ ] **A10 — EQ-MUST A2 (D12 c, e).** Para pinball por nível comum, PICP e
   MPIW do par 80 %: m_A (código novo sobre as predições anteriores, na
   variante e na amostra que o anterior usou — D7, D12) contra m_ant dentro de
@@ -664,8 +685,9 @@ Verificado: — · Sensibilidade pré-registrada: nenhuma · Reversível: não (
 - [x] Toda integração externa tem contrato definido (interface, formato, auth)?
   — só Docker, com a imagem e os limites da 8.1; nenhuma rede.
 - [x] Decisões com alternativa real descartada têm ADR escrito? — 8.2.0001
-  (D1, D2, driver), 8.2.0002 (D3), 8.2.0003 (D5, D6); D4, D7, D8, D10–D13
-  aplicam o doc de domínio sem alternativa real fora dele.
+  (D1, D2, driver), 8.2.0002 (D3), 8.2.0003 (D5, D6), 8.2.0004 (emenda B3
+  de D13); D4, D7, D8, D10–D13 aplicam o doc de domínio sem alternativa real
+  fora dele.
 - [x] Dependências de Stages anteriores estão satisfeitas (`done`)? — 8.1 `done`
   (PR #231 mergeado).
 - [x] Stage cabe em ~3–12 Tasks (ver [`CONVENTIONS.md`](../../CONVENTIONS.md) §6)?
