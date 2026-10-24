@@ -17,6 +17,7 @@ import pytest
 
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldPartition,
+    GridFingerprintMismatchError,
 )
 from financial_forecasting.features.evaluation.application.dtos.report_artifacts import (
     ReportSourceMismatchError,
@@ -24,9 +25,6 @@ from financial_forecasting.features.evaluation.application.dtos.report_artifacts
 )
 from financial_forecasting.features.evaluation.application.dtos.silver_content import (
     SilverContent,
-)
-from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
-    GridFingerprintMismatchError,
 )
 from financial_forecasting.features.evaluation.application.use_cases.report_silver import (
     VerifiedSilver,

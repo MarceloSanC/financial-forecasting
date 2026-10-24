@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Final
 
 from financial_forecasting.features.evaluation.application.dtos.refresh_gold import (
     GoldPartition,
+    GridFingerprintMismatchError,
 )
 from financial_forecasting.features.evaluation.application.dtos.report_artifacts import (
     ReportSourceMismatchError,
@@ -49,9 +50,6 @@ from financial_forecasting.features.evaluation.application.ports.out.silver_tabl
 )
 from financial_forecasting.features.evaluation.application.ports.out.training_grid_reader import (
     TrainingGridReader,
-)
-from financial_forecasting.features.evaluation.application.use_cases.refresh_gold import (
-    GridFingerprintMismatchError,
 )
 from financial_forecasting.features.evaluation.application.use_cases.silver_content_accumulator import (  # noqa: E501
     DIM_RUN_TABLE,

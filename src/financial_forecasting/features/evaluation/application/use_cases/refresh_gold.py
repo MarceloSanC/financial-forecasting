@@ -70,6 +70,7 @@ from financial_forecasting.features.evaluation.application.dtos.refresh_gold imp
     GoldManifest,
     GoldPartition,
     GoldTable,
+    GridFingerprintMismatchError,
     H3Reports,
     McsBlockRun,
     RefreshGoldCommand,
@@ -228,7 +229,6 @@ from financial_forecasting.features.inference.application.use_cases.calibrate_co
     ConformalPointInput,
     ConformalUnitInput,
 )
-from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.application.ports.out.clock import Clock
 from financial_forecasting.shared.application.ports.out.hasher import Hasher
 from financial_forecasting.shared.domain.value_objects.dataset_content_fingerprint import (
@@ -263,14 +263,6 @@ def _timed[T](step: str, n_in: int, action: Callable[[], T], count: Callable[[T]
         count(result),
     )
     return result
-
-
-class GridFingerprintMismatchError(ApplicationError):
-    """A grade lida não é a do cohort: o fingerprint diverge do congelado (C10).
-
-    Espelha o `DatasetMismatchError` da corrida confirmatória (ADR 6.4.0009 item 5): o
-    dado não é aquele sobre o qual o cohort treinou, então não há série a julgar.
-    """
 
 
 class _ConsumedSilver:
