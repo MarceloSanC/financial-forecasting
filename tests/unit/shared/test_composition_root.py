@@ -59,10 +59,18 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_
     ParquetGoldStore,
 )
 from financial_forecasting.features.evaluation.adapters.out.plots.matplotlib_figure_renderer import (  # noqa: E501
+    DOSSIER_STYLE,
     MatplotlibFigureRenderer,
+)
+from financial_forecasting.features.evaluation.adapters.out.plots.presentation_style import (
+    PRESENTATION_OMISSIONS,
+    PRESENTATION_STYLE,
 )
 from financial_forecasting.features.evaluation.adapters.out.reports.filesystem_report_sink import (
     FilesystemReportSink,
+)
+from financial_forecasting.features.evaluation.adapters.out.reports.presentation_figure_sink import (  # noqa: E501
+    PresentationFigureSink,
 )
 from financial_forecasting.features.evaluation.adapters.out.runtime.git_evaluation_environment import (  # noqa: E501
     GitEvaluationEnvironment,
@@ -1210,5 +1218,32 @@ def test_report_artifacts_wiring_uses_real_collaborators(tmp_path: Path) -> None
     assert environment._probe_dirty_key == "code_dirty"
     assert environment._image_id == "sha256:" + "d" * 64
     assert isinstance(use_case._renderer, MatplotlibFigureRenderer)
+    assert use_case._renderer._style is DOSSIER_STYLE
     assert isinstance(use_case._sink, FilesystemReportSink)
     assert use_case._sink._output == output
+
+
+@pytest.mark.unit
+def test_presentation_figures_wiring_same_collaborators_presentation_renderer_and_sink(
+    tmp_path: Path,
+) -> None:
+    """Issue #250: o mesmo gerador da 8.3 (gold, silver, grade, hasher do refresh), com o
+    renderer no estilo de apresentação e o sink das figuras do texto com as omissões."""
+    settings = _inference_settings(tmp_path).model_copy(update={"image_id": "sha256:" + "d" * 64})
+    deps = wire_dependencies(settings=settings)
+    output = tmp_path / "text" / "figuras"
+
+    use_case = deps.generate_presentation_figures_for(tmp_path / "c.toml", "cpu", output)
+
+    assert isinstance(use_case, GenerateReportArtifacts)
+    assert use_case._judged_store is deps.refresh_gold._gold_store
+    assert use_case._silver_reader is deps.analytics_repository
+    assert use_case._grid_reader is deps.refresh_gold._grid_reader
+    assert use_case._hasher is deps.hasher
+    assert isinstance(use_case._environment, GitEvaluationEnvironment)
+    assert use_case._environment._image_id == "sha256:" + "d" * 64
+    assert isinstance(use_case._renderer, MatplotlibFigureRenderer)
+    assert use_case._renderer._style is PRESENTATION_STYLE
+    assert isinstance(use_case._sink, PresentationFigureSink)
+    assert use_case._sink._output == output
+    assert use_case._sink._omissions == dict(PRESENTATION_OMISSIONS)
