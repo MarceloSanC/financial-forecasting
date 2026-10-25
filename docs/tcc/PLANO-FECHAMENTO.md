@@ -110,13 +110,14 @@ passou por auditoria de citações, e C falha em três critérios.
 | # | Entrega | Issue | Nível | Depende de | Como verificar (antes de escrever) |
 |---|---|---|---|---|---|
 | E1 | Resultados confirmatórios no texto | #233 | N1 | — | C1 (script), C2 parcial, PDF compila |
-| E2 | Figuras da 8.3, reprodução da 8.2, perfil pontual (D1) e Winkler/Kupiec (D5) no texto | nova | N1 | E1 | figuras citadas e legíveis, cada uma com parágrafo de leitura; afirmação de reprodução igual ao relatório da 8.2; C1 estendido aos números novos |
-| E3 | Estudo piloto como motivação do desenho | nova | N2 (D2) | E1 | C6; política editorial atualizada |
-| E4a | Análise exploratória da média das sementes (D3), na especificação da §7 | nova | N1 | — | números conferidos por teste opt-in; nada fora da especificação |
-| E4 | Discussão: por que o EWMA-vol venceu e o que mudaria o resultado | nova | N2 | E1, E4a, pesquisa §5 | C5, C3 |
-| E5 | Limitações completas (as-of anual/trimestral, regimes de coleta das notícias) | nova | N0 | E1 | os 3 itens da #163 e a cobertura das notícias declarados |
-| E6 | Alinhamento à rubrica: introdução, resumo, ABNT, apêndice de implementação, consistência | nova | N1 | E2–E5, síntese §5 | C4, C2 completo |
-| E7 | Apresentação da defesa (Beamer, em `text/`) | nova | N1 | E6 | C8 |
+| E2a | Estilo de apresentação das figuras (nomes em PT, sem anotações do dossiê), gerado do gold | #250 | N1 | — | dossiê da 8.3 inalterado; figuras de `text/figuras/` sem identificador interno |
+| E2 | Figuras da 8.3, reprodução da 8.2, perfil pontual (D1) e Winkler/Kupiec (D5) no texto | #244 | N1 | E1 | figuras citadas e legíveis, cada uma com parágrafo de leitura; afirmação de reprodução igual ao relatório da 8.2; C1 estendido aos números novos |
+| E3 | Estudo piloto como motivação do desenho | #245 | N2 (D2) | E1 | C6; política editorial atualizada |
+| E4a | Análises pós-veredito: perfil pontual (D1) e média das sementes (D3, na especificação da §7) | #243 | N1 | — | números conferidos por teste opt-in; nada fora da especificação |
+| E4 | Discussão: por que o EWMA-vol venceu e o que mudaria o resultado | #246 | N2 | E1, E4a, pesquisa §5 | C5, C3 |
+| E5 | Limitações completas (as-of anual/trimestral, regimes de coleta das notícias) | #247 | N0 | E1 | os 3 itens da #163 e a cobertura das notícias declarados |
+| E6 | Alinhamento à rubrica: introdução, resumo, ABNT, apêndice de implementação, consistência | #248 | N1 | E2–E5, síntese §5 | C4, C2 completo |
+| E7 | Apresentação da defesa (Beamer, em `text/`) | #249 | N1 | E6 | C8 |
 | E8 | Stage 8.4 — job de cohort de produção | #202 | N2 (Stage) | — | C7 |
 | E9 | Auditoria final em sessão separada | #237 | — | E1–E8 | C1–C8 com evidência; achados viram issue ligada ou recusa com motivo |
 
@@ -219,3 +220,13 @@ A síntese é gravada em `docs/tcc/RUBRICA-E-REFERENCIAS.md` e alimenta E4, E6 e
     os números conferidos por teste. A E4 consome o resultado.
   - A E6 ganha trabalhos correlatos, a tabela de objetivos, contribuições reduzidas e os
     elementos formais.
+- **2026-10-25 — furo no C2.** A compilação sem `undefined` não pega comando LaTeX corrompido
+  que ainda compila: um `\textit` colapsado em TAB + "extit" pelo heredoc do Bash passou e só a
+  auditoria da E1 achou. O script de build passou a procurar TAB, CR, FF ou BS seguidos de
+  `ext`, `egin` e similares, e os fragmentos `extit`/`extbf` sem barra. Edições no texto passam a
+  usar só Write/Edit ou scripts gravados por Write, nunca heredoc.
+- **2026-10-25 — figuras.** As figuras da 8.3 foram desenhadas para o dossiê: identificadores
+  internos e estatuto na legenda, regras internas no rodapé. Entra a E2a (#250), um estilo de
+  apresentação gerado do mesmo gold, com o dossiê inalterado byte a byte.
+- **2026-10-25 — E1 auditada.** Aprovada pela `issue-audit` em contexto limpo (20 testes de C1 e
+  cerca de 40 números de prosa conferidos à mão); um finding dentro do escopo foi corrigido no PR.
