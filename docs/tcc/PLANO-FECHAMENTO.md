@@ -228,5 +228,12 @@ A síntese é gravada em `docs/tcc/RUBRICA-E-REFERENCIAS.md` e alimenta E4, E6 e
 - **2026-10-25 — figuras.** As figuras da 8.3 foram desenhadas para o dossiê: identificadores
   internos e estatuto na legenda, regras internas no rodapé. Entra a E2a (#250), um estilo de
   apresentação gerado do mesmo gold, com o dossiê inalterado byte a byte.
+- **2026-10-25 — gate local dos PRs só de texto (decisão da sessão mestra, a ratificar).**
+  - O `make check` local leva cerca de 49 minutos e não exercita `text/`; a CI roda o mesmo
+    `make check` e é condição de merge.
+  - PR que só toca `text/` roda localmente a compilação e a varredura de comandos colapsados, e
+    declara o desvio no corpo.
+  - PR com código (#243, #250, Stage 8.4) segue com o `make check` local.
+  - E1 (#240) mergeada em `a0d2dde4`.
 - **2026-10-25 — E1 auditada.** Aprovada pela `issue-audit` em contexto limpo (20 testes de C1 e
   cerca de 40 números de prosa conferidos à mão); um finding dentro do escopo foi corrigido no PR.
