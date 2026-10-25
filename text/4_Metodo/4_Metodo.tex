@@ -8,6 +8,36 @@ Esta pesquisa adota abordagem quantitativa, aplicada e de natureza experimental-
 
 O fluxo geral é sequencial: ingestão dos dados brutos, engenharia de \textit{features}, construção do conjunto de dados, treinamento do candidato e dos \textit{baselines} sob o mesmo protocolo temporal, persistência das previsões fora da amostra e, por fim, cálculo das métricas, testes estatísticos e regra de decisão pré-registrada. Os experimentos dividem-se em duas rodadas de natureza distinta: uma \textbf{rodada exploratória} de busca de hiperparâmetros, que usa apenas dados de treino e de validação e não constitui evidência, e uma \textbf{rodada confirmatória}, executada uma única vez com a configuração congelada --- separação que evita o viés otimista de selecionar hiperparâmetros com os mesmos dados usados na avaliação \cite{RASCHKA2018}.
 
+\subsection{Estudo piloto e decisões de desenho} \label{sec:piloto}
+O desenho descrito neste capítulo foi precedido por um estudo piloto: uma primeira implementação do mesmo problema (TFT quantílico sobre retornos diários de AAPL, com \textit{features} de preço, técnicas, de sentimento e de fundamentos), conduzida sem pré-registro e sem separação formal entre rodadas exploratória e confirmatória. O piloto é tratado aqui na acepção metodológica do termo. Na pesquisa clínica, de onde o conceito vem, o objetivo principal de um piloto é avaliar a viabilidade de um estudo maior e de seus procedimentos, e as estimativas de efeito que ele produz, imprecisas e possivelmente enviesadas, devem ser usadas com cautela \cite{THABANE2010}; o paralelo com a previsão financeira é uma analogia, e não a aplicação de uma norma do campo. Além disso, apenas as análises especificadas antes de se ver os dados merecem o rótulo de confirmatórias, e só para elas os testes estatísticos usuais são válidos; as demais são exploratórias \cite{WAGENMAKERS2012}.
+
+\textbf{O piloto não constitui evidência para nenhuma das hipóteses deste trabalho.} Seus números aparecem nesta seção apenas para descrever os problemas de procedimento que ele revelou e não entram em nenhuma comparação, métrica ou teste dos Capítulos~\ref{chap:resultados} e~\ref{chap:conclusoes}. O que o piloto ofereceu foi um diagnóstico de viabilidade: os pontos em que o procedimento de avaliação poderia produzir um número errado sem que nada o denunciasse. A Tabela~\ref{tab:piloto} associa cada um desses pontos à decisão correspondente do desenho final.
+
+\begin{table}[htb]
+\centering
+\caption{Lições do estudo piloto e decisões do desenho final}
+\label{tab:piloto}
+\small
+\begin{tabular}{p{5.4cm} p{6.4cm} p{2.6cm}}
+\toprule
+Lição do piloto & Decisão do desenho final & Onde aparece \\
+\midrule
+O TFT e os \textit{baselines} ancoravam a previsão em datas diferentes (o fim do decodificador e a data de decisão); em \(h = 1\), nenhuma de 685 linhas com o mesmo \textit{target timestamp} tinha o mesmo valor realizado nas duas séries. O alvo era, além disso, deslocado por \(h\) dias corridos, e não por \(h\) sessões & Data de decisão como índice único de todos os modelos; \textit{target timestamp} contado em posições da grade de sessões de pregão; comparação apenas sobre interseção temporal exata & Seções~\ref{sec:alvo} e~\ref{sec:scorecard} \\
+\addlinespace
+Nas execuções avulsas do histórico do piloto (as que não pertenciam a uma busca de hiperparâmetros), 91,25\% apresentavam grade degenerada, com \(p10 = p90\) & \textit{Gate} de degeneração com tolerância declarada, taxa sempre reportada e limiar de 1\% pré-registrado no \textit{gate} de H1; comparações restritas a uma coorte declarada & Seções~\ref{sec:metricas}, \ref{sec:governanca} e~\ref{sec:scorecard} \\
+\addlinespace
+A avaliação probabilística usava apenas três níveis, \(p10\), \(p50\) e \(p90\) & Grade comum de sete níveis para todos os modelos & Seção~\ref{sec:grade} \\
+\addlinespace
+A estatística de comparação era implementada à mão, e o procedimento de eliminação do MCS continha um erro conhecido; um teste que congelasse a saída completa como referência tomaria esse erro por verdade & Cada métrica e cada teste validados, unidade a unidade, contra implementações de referência e casos analíticos de resultado conhecido & Seção~\ref{sec:metricas} \\
+\addlinespace
+A junção \textit{as-of} dos fundamentos foi verificada sem vazamento; a data substituta (fim do período fiscal mais 45 dias) foi usada em 17 de 81 casos & Regra mantida e verificada por teste, com interrupção da execução se a data efetiva for posterior à sessão & Seção~\ref{sec:features} \\
+\bottomrule
+\end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir dos registros de decisão do projeto.}
+\end{table}
+
+Duas observações delimitam o alcance da tabela. Primeiro, a taxa de degeneração e a contagem de linhas desalinhadas são diagnósticos de procedimento, e não estimativas do desempenho do TFT: execuções com a grade colapsada ou com o alvo deslocado não chegam a medir calibração ou \textit{skill}. Segundo, as decisões da tabela dizem respeito à forma de medir, e não ao resultado esperado da medida; a configuração do candidato foi fixada pela rodada exploratória descrita na Seção~\ref{sec:tft}, e não pelo piloto.
+
 \section{Dados}
 Os dados combinam quatro fontes, todas com granularidade diária e \textit{timestamps} padronizados em UTC: (i) cotações OHLCV diárias de AAPL, obtidas via \texttt{yfinance}; (ii) notícias sobre o ativo, com data e hora de publicação; (iii) demonstrativos contábeis trimestrais e anuais (resultado, balanço e fluxo de caixa) e datas de divulgação de resultados, obtidos da API Alpha Vantage; e (iv) o calendário de pregão da bolsa de Nova York (XNYS), que define as sessões válidas, os feriados e o horário de fechamento. O calendário é a referência temporal de todo o trabalho: horizontes, purga e embargo são contados em sessões de pregão, e não em dias corridos.
 
@@ -15,7 +45,7 @@ O sentimento das notícias é estimado pelo modelo FinBERT \cite{ARACI2019}, com
 
 Os dados brutos são preservados de forma imutável; todas as \textit{features}, previsões e métricas são derivadas deles de forma determinística. O ativo e a janela temporal são parâmetros da execução, registrados na assinatura de configuração de cada \textit{run}.
 
-\section{Engenharia de \textit{features}}
+\section{Engenharia de \textit{features}} \label{sec:features}
 As \textit{features} são organizadas em quatro famílias fixas, exigidas pela hipótese H3: preço, técnico, sentimento e fundamento. O registro contém 55 \textit{features} (Tabela~\ref{tab:familias}), cada uma declarada com sua família, colunas de origem, fórmula, período de aquecimento (\textit{warmup}), tipagem para o TFT e uma \textit{tag} obrigatória de causalidade; uma \textit{feature} sem contrato de causalidade é rejeitada pelo registro. O conjunto de \textit{features} utilizado é identificado por um \textit{hash} do conteúdo do registro, que integra a identidade de cada execução.
 
 \begin{table}[htb]
@@ -48,7 +78,7 @@ Cada \textit{feature} declara seu período de aquecimento, e um \textit{gate} de
 
 O candidato confirmatório é \textit{all-features}: todas as \textit{features} habilitadas no registro, sem seleção por desempenho fora da amostra. Essa escolha elimina a busca em vez de corrigi-la: o \textit{data snooping} \cite{WHITE2000,ROMANOWOLF2005} é evitado por construção, e não ajustado \textit{a posteriori} como propõem esses autores, de modo que as correções de múltiplas comparações passam a operar sobre uma família pequena e congelada de hipóteses. A contribuição relativa das famílias é objeto descritivo de H3, e não critério de seleção.
 
-\section{Alvo e alinhamento temporal}
+\section{Alvo e alinhamento temporal} \label{sec:alvo}
 O alvo é o retorno logarítmico de um dia, \(r_t = \log(P_t / P_{t-1})\), em que \(P_t\) é o preço de fechamento da sessão \(t\). A linha do conjunto de dados indexada em \(t\) é a sessão de decisão: carrega as \textit{features} conhecidas até \(t\). Para o horizonte \(h\), o valor previsto na decisão \(t\) é o retorno de \textbf{um} dia realizado na sessão \(t+h\), e o \textit{target timestamp} é a sessão localizada \(h\) posições à frente na grade de sessões de pregão --- nunca \(h\) dias corridos, o que faria, por exemplo, uma decisão de sexta-feira apontar para um sábado. Como o alvo em \(h\) é um retorno diário, e não o retorno acumulado de \(h\) dias, nenhuma regra de escala \(\sqrt{h}\) se aplica aos comparadores.
 
 \section{Protocolo experimental}
@@ -80,7 +110,7 @@ A variância entre execuções é tratada como parte do resultado \cite{BOUTHILL
 
 O candidato, os comparadores, as sementes, os \textit{folds}, os hiperparâmetros congelados, o dispositivo de execução (CPU) e a impressão digital do conteúdo do conjunto de dados compõem a especificação do cohort confirmatório. Essa especificação é congelada e \textit{hasheada} antes do treino, ancorada em um registro com data atestada pelo servidor do repositório, e identificada por um id de coorte comum a todas as suas execuções. A ordem do estudo é, portanto, em três tempos: (i) cohort congelado e treinado; (ii) pré-registro das regras de avaliação congelado e ancorado; (iii) só então, geração das tabelas que alimentam o veredito (Seção~\ref{sec:scorecard}).
 
-\section{Configuração do modelo TFT}
+\section{Configuração do modelo TFT} \label{sec:tft}
 O TFT opera exclusivamente em modo quantílico: a função de perda é a \textit{pinball loss} agregada sobre os níveis da grade e os passos do decodificador e normalizada pelo número de amostras e de passos \cite[Eq.~24]{LIMETAL2021TFT}; a implementação utilizada também a normaliza pelo número de níveis, o que não altera o minimizador. Em cada \textit{fold}, um único modelo é ajustado com decodificador de \(h_{\max}\) passos, e os horizontes de interesse são lidos dos passos correspondentes. A janela de contexto do codificador termina na própria sessão de decisão e pode alcançar sessões de partições anteriores; o que nunca atravessa a fronteira das partições é o ajuste e a seleção. Coerentemente, o normalizador do alvo é um padronizador global ajustado apenas no bloco de treino e herdado pelas demais partições.
 
 A parada antecipada monitora a perda no bloco \texttt{early\_stop}, e a previsão usa os pesos da época de menor perda de validação, e não os da última época \cite{PRECHELT1998}. A rodada exploratória busca, com Optuna \cite{AKIBA2019} e o amostrador TPE (\textit{Tree-structured Parzen Estimator}) \cite{BERGSTRA2011}, a dimensão oculta, o \textit{dropout}, a taxa de aprendizado e o tamanho de lote, com a janela de contexto (60 sessões) e o número de cabeças de atenção (4) fixos, em 60 tentativas, avaliando cada tentativa apenas pela perda no bloco \texttt{early\_stop}. A busca usa uma geometria de um único \textit{fold}, cujos blocos \texttt{train} e \texttt{early\_stop} são exatamente os do primeiro \textit{fold} confirmatório; ela só ajusta modelos, nunca lê o bloco de teste e não persiste nenhuma previsão fora da amostra. O GBM passa por busca análoga, com o mesmo número de tentativas e, como objetivo, a média entre horizontes da \textit{pinball} no bloco \texttt{early\_stop}. As configurações escolhidas são então fixadas antes da avaliação no bloco de teste \cite{RASCHKA2018} e congeladas na especificação do cohort.
@@ -116,7 +146,7 @@ Em cada método, os horizontes são comparados pela participação normalizada \
 
 A análise é preditiva e condicional ao modelo treinado, não causal: os métodos indicam o que o modelo usou e o que cada família acrescenta ao aprendizado, não o que move o retorno. A conclusão de H3 é descritiva, produzida pela regra pré-registrada acima e separada do veredito de H1 e H2, que ela nunca altera. Interpretações por instância são apenas ilustrativas.
 
-\section{Rastreabilidade e governança de coorte}
+\section{Rastreabilidade e governança de coorte} \label{sec:governanca}
 Cada execução é identificada pelo \textit{hash} determinístico descrito no Capítulo~\ref{chap:fundamentacao}, e registra a assinatura de configuração, a impressão digital das partições, a semente, o \textit{fold}, a versão do modelo e o id da coorte. A coorte é definida pelo ativo, pelo conjunto de \textit{features}, pelo horizonte máximo --- que fixa a largura da purga --- e pelo id de coorte; comparações e agregações são sempre feitas dentro de uma coorte, e comparações fora dela não são reportadas. Uma falha interrompe a execução com erro tipado; nenhuma execução falha é descartada em silêncio ou tratada como concluída.
 
 Como todas as tabelas analíticas são derivadas das previsões persistidas, qualquer reanálise --- inclusive com outra variante quantílica ou outro parâmetro de teste --- é reconstruída sem re-treinar os modelos. Os detalhes de implementação estão no Apêndice D.
