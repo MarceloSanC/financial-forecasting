@@ -53,6 +53,9 @@ SERVING_POINTER = "serving.env"
 DATA_ROOT_KEY = "DATA_ROOT"
 SERVING_COHORT_FILE_KEY = "SERVING_COHORT_FILE"
 _ROUND_NAME = re.compile(r"(\d{4}-\d{2}-\d{2})(?:\.([1-9]\d*))?")
+# `mkstemp` cria o temporário com 0600; o ponteiro e o spec da rodada são lidos por
+# outro usuário (o `docker --env-file` no host, o `USER app` da imagem de runtime).
+_PUBLISHED_MODE = 0o644
 
 
 class ProductionRoundError(ApplicationError):
@@ -175,11 +178,16 @@ def _pointed_round(pointer: Path) -> str:
 
 
 def _replace_atomically(path: Path, text: str) -> None:
-    """Temporário de nome único no mesmo diretório + `os.replace` (ADR 8.4.0002 item 2)."""
+    """Temporário de nome único no mesmo diretório + `os.replace` (ADR 8.4.0002 item 2).
+
+    O temporário sai do `mkstemp` com modo 0600; antes da troca ele ganha 0644, o modo
+    que uma escrita comum teria, para o arquivo publicado ser legível por quem o lê.
+    """
     fd, temp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
+        Path(temp).chmod(_PUBLISHED_MODE)
         os.replace(temp, path)
     finally:
         Path(temp).unlink(missing_ok=True)

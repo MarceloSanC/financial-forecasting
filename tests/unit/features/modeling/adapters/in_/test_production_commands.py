@@ -41,6 +41,7 @@ production: Any = importlib.import_module(
     "financial_forecasting.features.modeling.adapters.in.cli.production_commands"
 )
 cohort_file: Any = base.cohort_file
+_PUBLISHED_MODE = 0o644  # o que uma escrita comum daria (umask 022)
 
 
 def _model() -> CohortSpec:
@@ -278,3 +279,70 @@ def test_module_does_not_import_evaluation() -> None:
         for alias in node.names
     ]
     assert not [name for name in imported if "features.evaluation" in name]
+
+
+# -- auditoria de testes (Stage 8.4): ordem, ponteiro malformado, modo, ida e volta ----
+
+
+def test_pointer_orders_suffixes_numerically(tmp_path: Path) -> None:
+    world = _World(tmp_path)
+    assert _publish(world, "2026-01-09.10")
+    newer = _pointer(world).read_bytes()
+
+    assert not _publish(world, "2026-01-09.2")
+    assert _pointer(world).read_bytes() == newer
+    assert "not published" in world.out.getvalue()
+
+
+def test_plain_date_does_not_replace_its_suffixed_round(tmp_path: Path) -> None:
+    world = _World(tmp_path)
+    assert _publish(world, "2026-01-09.1")
+    newer = _pointer(world).read_bytes()
+
+    assert not _publish(world, "2026-01-09")
+    assert _pointer(world).read_bytes() == newer
+
+
+def test_pointer_without_data_root_is_refused(tmp_path: Path) -> None:
+    world = _World(tmp_path)
+    world.production_root.mkdir(parents=True, exist_ok=True)
+    _pointer(world).write_text("SERVING_COHORT_FILE=/x\n", encoding="utf-8")
+
+    with pytest.raises(production.ProductionRoundError, match="no DATA_ROOT"):
+        _publish(world, "2026-01-02")
+    assert _pointer(world).read_text(encoding="utf-8") == "SERVING_COHORT_FILE=/x\n"
+
+
+def test_pointer_paths_are_resolved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    world = _World(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    relative = Path("production") / "rounds" / "2026-01-02"
+
+    assert production.publish_serving_pointer(
+        world.production_root, "2026-01-02", relative, relative / "cohort.toml", out=world.out
+    )
+
+    values = [line.split("=", 1)[1] for line in _pointer(world).read_text().splitlines()]
+    assert all(Path(value).is_absolute() for value in values)
+    assert values[0] == (tmp_path / relative).resolve().as_posix()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="modo de arquivo POSIX")
+def test_published_files_are_world_readable(tmp_path: Path) -> None:
+    world = _World(tmp_path)
+    world.prepare()
+    assert _publish(world, "2026-01-02")
+
+    assert _pointer(world).stat().st_mode & 0o777 == _PUBLISHED_MODE
+    assert world.round_spec.stat().st_mode & 0o777 == _PUBLISHED_MODE
+
+
+def test_round_spec_that_does_not_round_trip_is_refused(tmp_path: Path) -> None:
+    world = _World(tmp_path)
+    world.deps = replace(
+        world.deps, dump_spec=lambda spec: cohort_file.dump(replace(spec, revision=9))
+    )
+
+    with pytest.raises(production.ProductionRoundError, match="round trip"):
+        world.prepare()
+    assert not world.round_spec.exists()
