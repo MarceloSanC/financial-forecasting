@@ -148,11 +148,27 @@ the variables above:
 
 ```bash
 #!/bin/sh
-set -eu
-cd /c/Users/<user>/Documents/Code/financial-forecasting
-OUT=$($JOB sh -c "git config --global --add safe.directory '*'; $CLI production-round $ROUND_ARGS --round $(date +%F)")
+# no `set -e`: exit 1 (verify diverged) and 2 (error) must reach the log, not abort it
+cd /c/Users/<user>/Documents/Code/financial-forecasting || exit 2
+export MSYS_NO_PATHCONV=1
+rc=0
+OUT=$(docker run --rm --cpus 6 --memory 8g \
+  -v "$PWD:/app" -v ff-prod-venv-sentiment:/app/.venv -v ff-prod-hf-cache:/root/.cache/huggingface \
+  -w /app financial_forecasting-app:dev sh -c "git config --global --add safe.directory '*'; \
+  uv run --no-sync python -m financial_forecasting.cli production-round \
+  --production-root data/production/aapl --raw-root data/raw-production \
+  --cohort config/cohorts/aapl_production.toml --round $(date +%F)" 2>&1) || rc=$?
 echo "$OUT"
-echo "$OUT" | grep -q '^published ' && { docker rm -f ff-inference-api; docker run -d … ; }
+echo "production-round exit $rc"
+if [ "$rc" -eq 0 ] && echo "$OUT" | grep -q '^published '; then
+  docker rm -f ff-inference-api 2>/dev/null
+  docker run -d --name ff-inference-api -p 8000:8000 \
+    --env-file data/production/aapl/serving.env \
+    -v "$PWD:/app" -v financial-forecasting_app-venv:/app/.venv -w /app \
+    financial_forecasting-app:dev \
+    uv run --no-sync uvicorn financial_forecasting.main:app --host 0.0.0.0 --port 8000
+fi
+exit "$rc"
 ```
 
 - **cron (Linux/WSL host):** `0 3 * * 6 /path/to/production-round.sh >> /var/log/ff-production.log 2>&1`
@@ -183,7 +199,13 @@ scheduled runs never overlap: the second exits 2 with `CohortRunLockedError`.
   (`DATA_ROOT` and `SERVING_COHORT_FILE`), then Step 2. The next scheduled round
   (newer by date) publishes again.
 - **Cleanup:** delete `data/production/aapl/rounds/<old round>/` for rounds that
-  are not the one in `serving.env`. There is no automatic retention.
+  are not the one in `serving.env`. Every TFT training also copies its checkpoint
+  into the MLflow artifact store `./mlruns/` of the working directory (the checkout;
+  git-ignored), ~80 MB per round with three seeds (measured in technical 8.4 §7):
+  the round's runs are listed in its own `rounds/<round>/mlruns.db`, so after
+  deleting old rounds also delete `./mlruns/` entries no remaining round uses, or the
+  whole `./mlruns/` if only the served round matters. There is no automatic
+  retention.
 
 ## Verification
 
