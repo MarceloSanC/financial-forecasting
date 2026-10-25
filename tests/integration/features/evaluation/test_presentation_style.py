@@ -1,0 +1,186 @@
+"""Estilo de apresentação das figuras para o texto do TCC (issue #250).
+
+Sobre as dez specs sintéticas da 8.3: nenhum identificador interno nem marcador de
+estatuto em texto desenhado, sem título da figura nem rodapé, fonte de pelo menos 7 pt,
+altura até meia página A4, rótulos de legenda distintos como no dossiê, bytes iguais em
+renderizações repetidas e a identidade do renderizador com o estilo. O dossiê continua com
+o estilo padrão e a identidade da 8.3. Integração (não unit): o módulo importa matplotlib
+pelo adapter de plots (gate de pureza dos unit do `evaluation`).
+"""
+
+from __future__ import annotations
+
+import re
+
+import pytest
+from matplotlib.text import Text
+
+from financial_forecasting.features.evaluation.adapters.out.plots.matplotlib_figure_renderer import (  # noqa: E501
+    DOSSIER_STYLE,
+    MODEL_STYLES,
+    MatplotlibFigureRenderer,
+    footer_lines,
+    legend_labels,
+)
+from financial_forecasting.features.evaluation.adapters.out.plots.presentation_style import (
+    AXIS_LABELS,
+    FAMILY_NAMES,
+    METHOD_NAMES,
+    MODEL_NAMES,
+    PRESENTATION_OMISSIONS,
+    PRESENTATION_STYLE,
+    presentation_text,
+)
+from financial_forecasting.features.evaluation.application.dtos.report_artifacts import (
+    FIGURE_CATALOG,
+    FIGURE_IDS,
+    FigureSpec,
+    StatusLabel,
+)
+from tests.integration.features.evaluation.test_matplotlib_figure_renderer_layout import (
+    _assemblies,
+)
+
+pytestmark = pytest.mark.integration
+
+_SNAKE_CASE = re.compile(r"[A-Za-z]{2,}_[A-Za-z0-9]{2,}")
+"""Identificador interno (`baseline_ar1`, `target_timestamp`); `d_t` e `τ_l` não casam."""
+_HALF_A4_IN = 297 / 2 / 25.4
+_MIN_FONT_PT = 7.0
+
+
+@pytest.fixture(scope="module")
+def specs() -> list[FigureSpec]:
+    return [assembly.spec for assembly in _assemblies()]
+
+
+def _drawn_texts(spec: FigureSpec) -> list[Text]:
+    figure = MatplotlibFigureRenderer(PRESENTATION_STYLE)._draw(spec)
+    return [t for t in figure.findobj(Text) if t.get_visible() and t.get_text().strip()]
+
+
+@pytest.mark.parametrize(
+    ("internal", "shown"),
+    [
+        *MODEL_NAMES.items(),
+        *FAMILY_NAMES.items(),
+        *METHOD_NAMES.items(),
+    ],
+)
+def test_identifier_shown_by_display_name(internal: str, shown: str) -> None:
+    assert presentation_text(internal) == shown
+    assert presentation_text(f"d_t vs. {internal}") == f"d_t vs. {shown}"
+
+
+def test_display_names_of_the_issue() -> None:
+    assert [MODEL_NAMES[m] for m in MODEL_STYLES] == [
+        "TFT",
+        "Retorno nulo",
+        "Média histórica",
+        "AR(1)",
+        "EWMA-vol",
+        "Quantis empíricos",
+        "GBM quantílico",
+    ]
+    assert list(FAMILY_NAMES.values()) == ["Preço", "Técnico", "Sentimento", "Fundamento"]
+
+
+def test_identifier_replaced_only_as_whole_word() -> None:
+    assert presentation_text("pricey technicality") == "pricey technicality"
+    assert presentation_text("baseline_ar1x") == "baseline_ar1x"
+
+
+def test_axis_labels_exact_text_only() -> None:
+    assert presentation_text("τ") == "nível τ"
+    assert presentation_text("target_timestamp") == "data-alvo"
+    assert presentation_text("retorno") == "retorno"
+    assert presentation_text("ĉ(τ)") == AXIS_LABELS["ĉ(τ)"] == "cobertura observada ĉ(τ)"
+    # o mesmo texto dentro de outro não é eixo
+    assert presentation_text("MPIW 0,1-0,9") == "MPIW 0,1-0,9"
+
+
+def test_seed_wording_in_portuguese() -> None:
+    assert presentation_text("baseline_ar1 (sem seed), Wilson 0,95") == "AR(1), Wilson 0,95"
+    assert presentation_text("tft_quantile (seed 3)") == "TFT (semente 3)"
+    assert presentation_text("candidato, média entre seeds") == "TFT, média entre sementes"
+    assert (
+        presentation_text("tft_quantile (larguras de 10 seeds empilhadas: seed 1, seed 2)")
+        == "TFT (larguras das 10 sementes empilhadas)"
+    )
+
+
+def test_omissions_are_catalog_figures_with_reason() -> None:
+    assert set(PRESENTATION_OMISSIONS) <= set(FIGURE_IDS)
+    assert set(PRESENTATION_OMISSIONS) == {"dm_candidate_vs_comparators"}
+    assert all(reason.strip() for reason in PRESENTATION_OMISSIONS.values())
+
+
+def test_no_internal_identifier_or_status_marker_drawn(specs: list[FigureSpec]) -> None:
+    statuses = [status.value for status in StatusLabel]
+    for spec in specs:
+        if spec.figure_id in PRESENTATION_OMISSIONS:
+            continue
+        for text in (t.get_text() for t in _drawn_texts(spec)):
+            assert not _SNAKE_CASE.search(text), (spec.figure_id, text)
+            assert not any(f"[{status}]" in text for status in statuses), (spec.figure_id, text)
+            assert not text.endswith(tuple(f"— {status}" for status in statuses)), text
+
+
+def test_no_figure_title_nor_footer_drawn(specs: list[FigureSpec]) -> None:
+    for spec in specs:
+        drawn = {t.get_text() for t in _drawn_texts(spec)}
+        assert FIGURE_CATALOG[spec.figure_id].title not in drawn, spec.figure_id
+        footer = footer_lines(spec)
+        # uma linha só pode coincidir com o título de um painel (VSN: horizonte-invariante)
+        assert len(footer) == 1 or "\n".join(footer) not in drawn, spec.figure_id
+        assert not [t for t in drawn if "omissão declarada" in t], spec.figure_id
+
+
+def test_drawn_text_at_least_seven_points(specs: list[FigureSpec]) -> None:
+    for spec in specs:
+        if spec.figure_id in PRESENTATION_OMISSIONS:
+            continue
+        for text in _drawn_texts(spec):
+            assert float(text.get_fontsize()) >= _MIN_FONT_PT, (spec.figure_id, text.get_text())
+
+
+def test_figure_fits_half_an_a4_page(specs: list[FigureSpec]) -> None:
+    for spec in specs:
+        if spec.figure_id in PRESENTATION_OMISSIONS:
+            continue
+        figure = MatplotlibFigureRenderer(PRESENTATION_STYLE)._draw(spec)
+        width, height = figure.get_size_inches()
+        assert width == pytest.approx(6.3)
+        assert height <= _HALF_A4_IN, (spec.figure_id, height)
+
+
+def test_legend_entries_stay_distinct(specs: list[FigureSpec]) -> None:
+    for spec in specs:
+        shown = legend_labels(spec, PRESENTATION_STYLE)
+        assert len(set(shown)) == len(legend_labels(spec, DOSSIER_STYLE)), spec.figure_id
+
+
+def test_presentation_bytes_repeat_and_differ_from_dossier(specs: list[FigureSpec]) -> None:
+    renderer = MatplotlibFigureRenderer(PRESENTATION_STYLE)
+    spec = specs[FIGURE_IDS.index("native_vs_conformal")]
+    first = renderer.render(spec)
+    assert first.startswith(b"%PDF")
+    assert renderer.render(spec) == first
+    assert MatplotlibFigureRenderer().render(spec) != first
+
+
+def test_identity_names_the_style_only_in_presentation() -> None:
+    dossier = MatplotlibFigureRenderer().identity()
+    assert "style" not in dossier
+    assert MatplotlibFigureRenderer(DOSSIER_STYLE).identity() == dossier
+    assert MatplotlibFigureRenderer(PRESENTATION_STYLE).identity() == {
+        **dossier,
+        "style": "presentation",
+    }
+
+
+def test_default_renderer_is_the_dossier_style(specs: list[FigureSpec]) -> None:
+    spec = specs[0]
+    assert MatplotlibFigureRenderer().render(spec) == MatplotlibFigureRenderer(
+        DOSSIER_STYLE
+    ).render(spec)

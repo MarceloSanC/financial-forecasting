@@ -18,6 +18,11 @@ por marcador; a linha sem modelo (o observado) é fina e fica abaixo das linhas 
 Escalas sequenciais e o heatmap do DM em `cividis`. Rótulos em PT; o
 estatuto de cada painel no título e de cada série na legenda; notas e omissões no rodapé.
 
+Estilo (issue #250): o renderizador recebe um `RenderStyle`. O padrão, `DOSSIER_STYLE`, é o
+do dossiê (o desenho acima, byte a byte o da Stage 8.3); o de apresentação
+(`presentation_style.PRESENTATION_STYLE`) troca só o texto exibido (nomes em português, sem
+estatuto, sem título nem rodapé) e as medidas de fonte — o dado desenhado é o mesmo.
+
 O processo precisa de `MPLCONFIGDIR` gravável (o container usa `/tmp`); o adapter não lê
 variável de ambiente.
 """
@@ -27,7 +32,8 @@ from __future__ import annotations
 import io
 import math
 import textwrap
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Final
 
 import matplotlib
@@ -128,9 +134,50 @@ _RC: Final[Mapping[str, object]] = {
 }
 
 
-def _label(series: SeriesSpec) -> str:
-    """O rótulo da série na legenda (nome e estatuto), quebrado para caber na coluna."""
-    return "\n".join(textwrap.wrap(f"{series.name} [{series.label.status.value}]", _LEGEND_WRAP))
+def _verbatim(text: str) -> str:
+    return text
+
+
+@dataclass(frozen=True, kw_only=True)
+class RenderStyle:
+    """O que muda entre o dossiê e a apresentação: texto exibido e medidas — nunca o dado.
+
+    `annotations` liga o estatuto (título do painel e legenda), o título da figura e o
+    rodapé; `text` traduz todo texto exibido vindo da spec (título de painel, eixos,
+    categorias, nomes de série, células); `name` entra na identidade do renderizador
+    (`None` no dossiê: o registro da 8.3 não muda).
+    """
+
+    name: str | None
+    rc: Mapping[str, object]
+    annotations: bool
+    text: Callable[[str], str]
+    panel_height_in: float
+    title_in: float
+    legend_wrap: int
+    legend_line_in: float
+    legend_entry_in: float
+
+
+DOSSIER_STYLE: Final = RenderStyle(
+    name=None,
+    rc=_RC,
+    annotations=True,
+    text=_verbatim,
+    panel_height_in=_PANEL_HEIGHT_IN,
+    title_in=_TITLE_IN,
+    legend_wrap=_LEGEND_WRAP,
+    legend_line_in=_LEGEND_LINE_IN,
+    legend_entry_in=_LEGEND_ENTRY_IN,
+)
+"""O estilo do dossiê (Stage 8.3): estatuto, título e rodapé, texto como na spec."""
+
+
+def _label(series: SeriesSpec, style: RenderStyle = DOSSIER_STYLE) -> str:
+    """O rótulo da série na legenda (nome e, no dossiê, estatuto), quebrado para a coluna."""
+    name = style.text(series.name)
+    text = f"{name} [{series.label.status.value}]" if style.annotations else name
+    return "\n".join(textwrap.wrap(text, style.legend_wrap))
 
 
 class Look:
@@ -174,7 +221,7 @@ def _base_style(series: SeriesSpec, neutrals: dict[SeriesKind, int]) -> Style:
     return _NEUTRALS[index % len(_NEUTRALS)], _MARKERS[0], linestyle
 
 
-def figure_looks(spec: FigureSpec) -> dict[str, Look]:
+def figure_looks(spec: FigureSpec, style: RenderStyle = DOSSIER_STYLE) -> dict[str, Look]:
     """Rótulo da legenda → estilo, para a figura inteira (o mesmo rótulo, o mesmo estilo).
 
     A cor de um modelo é a do mapa fixo (identidade do modelo); série sem modelo usa um tom
@@ -194,7 +241,7 @@ def figure_looks(spec: FigureSpec) -> dict[str, Look]:
     neutrals: dict[SeriesKind, int] = {}
     for panel in spec.panels:
         for series in panel.series:
-            label = _label(series)
+            label = _label(series, style)
             if series.kind is SeriesKind.CELLS or label in looks:
                 continue
             color, marker, linestyle = _base_style(series, neutrals)
@@ -256,13 +303,13 @@ class _Positions:
         return [float(self.categories[v]) if isinstance(v, str) else float(v) for v in values]
 
 
-def legend_labels(spec: FigureSpec) -> list[str]:
+def legend_labels(spec: FigureSpec, style: RenderStyle = DOSSIER_STYLE) -> list[str]:
     """Os rótulos da legenda da figura (um por série distinta, células fora)."""
     entries: dict[str, None] = {}
     for panel in spec.panels:
         for series in panel.series:
             if series.kind is not SeriesKind.CELLS:
-                entries.setdefault(_label(series))
+                entries.setdefault(_label(series, style))
     return list(entries)
 
 
@@ -309,12 +356,12 @@ def _dodged(xs: list[float], series: SeriesSpec, group: Sequence[SeriesSpec]) ->
     return [x + offset for x in xs]
 
 
-def _legend_height(labels: Sequence[str]) -> float:
+def _legend_height(labels: Sequence[str], style: RenderStyle = DOSSIER_STYLE) -> float:
     """Altura da legenda: o matplotlib preenche as colunas de cima para baixo."""
     per_column = math.ceil(len(labels) / _LEGEND_COLUMNS)
     columns = [labels[i : i + per_column] for i in range(0, len(labels), per_column)]
     rows = [max(c[i].count("\n") + 1 for c in columns if i < len(c)) for i in range(per_column)]
-    return _LEGEND_LINE_IN * sum(rows) + _LEGEND_ENTRY_IN * per_column
+    return style.legend_line_in * sum(rows) + style.legend_entry_in * per_column
 
 
 def _legend(band: SubFigure, axes: Sequence[Sequence[Axes]]) -> None:
@@ -373,14 +420,20 @@ def freeze_layout(figure: Figure) -> None:
 
 
 class MatplotlibFigureRenderer:
-    """Satisfaz `FigureRenderer`: uma página PDF por `FigureSpec`."""
+    """Satisfaz `FigureRenderer`: uma página PDF por `FigureSpec`, no estilo dado."""
+
+    def __init__(self, style: RenderStyle = DOSSIER_STYLE) -> None:
+        self._style = style
 
     def identity(self) -> Mapping[str, str]:
-        return {
+        identity = {
             "format": "pdf",
             "matplotlib": matplotlib.__version__,
             "freetype": ft2font.__freetype_version__,
         }
+        if self._style.name is not None:
+            identity["style"] = self._style.name
+        return identity
 
     def render(self, figure: FigureSpec) -> bytes:
         """Os bytes do PDF da figura (ver o docstring do módulo).
@@ -398,7 +451,7 @@ class MatplotlibFigureRenderer:
         )
         if unknown:
             raise ValueError(f"models without a fixed style: {unknown}")
-        with rc_context(_RC):  # type: ignore[arg-type]
+        with rc_context(self._style.rc):  # type: ignore[arg-type]
             canvas_figure = self._draw(figure)
             freeze_layout(canvas_figure)
             buffer = io.BytesIO()
@@ -416,14 +469,15 @@ class MatplotlibFigureRenderer:
         painel e de série, sem repetir). As alturas das faixas de baixo saem da contagem de
         linhas.
         """
-        looks = figure_looks(spec)
+        style = self._style
+        looks = figure_looks(spec, style)
         n = len(spec.panels)
         columns = min(n, _MAX_COLUMNS)
         rows = math.ceil(n / columns)
-        footer = footer_lines(spec)
-        labels = legend_labels(spec)
-        panels_in = rows * _PANEL_HEIGHT_IN + _TITLE_IN
-        legend_in = _legend_height(labels) + _PAD_IN if labels else 0.05
+        footer = footer_lines(spec) if style.annotations else []
+        labels = legend_labels(spec, style)
+        panels_in = rows * style.panel_height_in + style.title_in
+        legend_in = _legend_height(labels, style) + _PAD_IN if labels else 0.05
         footer_in = _FOOTER_LINE_IN * len(footer) + _PAD_IN if footer else 0.05
         figure = Figure(
             figsize=(_WIDTH_IN, panels_in + legend_in + footer_in), layout="constrained"
@@ -436,7 +490,8 @@ class MatplotlibFigureRenderer:
             self._panel(axes[index // columns][index % columns], panel, looks)
         for index in range(n, rows * columns):
             axes[index // columns][index % columns].set_visible(False)
-        top.suptitle(spec.title, fontsize=8)
+        if style.annotations:
+            top.suptitle(spec.title, fontsize=8)
         _legend(legend_band, axes)
         footer_band.text(
             0.01, 0.98, "\n".join(footer), fontsize=4.5, va="top", ha="left", linespacing=1.25
@@ -444,10 +499,14 @@ class MatplotlibFigureRenderer:
         return figure
 
     def _panel(self, axes: Axes, panel: PanelSpec, looks: Mapping[str, Look]) -> None:
+        text = self._style.text
         positions = _Positions(panel)
-        axes.set_title(f"{panel.title} — {panel.label.status.value}")
-        axes.set_xlabel(panel.x_label)
-        axes.set_ylabel(panel.y_label)
+        title = text(panel.title)
+        if self._style.annotations:
+            title = f"{title} — {panel.label.status.value}"
+        axes.set_title(title)
+        axes.set_xlabel(text(panel.x_label))
+        axes.set_ylabel(text(panel.y_label))
         groups = {
             kind: [s for s in panel.series if s.kind is kind]
             for kind in (SeriesKind.BOXES, SeriesKind.BARS, SeriesKind.INTERVAL)
@@ -464,7 +523,7 @@ class MatplotlibFigureRenderer:
             rotation = 60 if not dates and len(labels) > _MAX_TICKS else 30
             axes.set_xticks([float(t) for t in ticks])
             axes.set_xticklabels(
-                [_tick(labels[t]) for t in ticks],
+                [text(_tick(labels[t])) for t in ticks],
                 rotation=rotation,
                 ha="right",
                 rotation_mode="anchor",
@@ -478,7 +537,7 @@ class MatplotlibFigureRenderer:
         looks: Mapping[str, Look],
         groups: Mapping[SeriesKind, list[SeriesSpec]],
     ) -> None:
-        label = _label(series)
+        label = _label(series, self._style)
         look = looks.get(label, Look(_NEUTRAL, _MARKERS[0], "--", hollow=False))
         color, marker, linestyle, face = look.color, look.marker, look.linestyle, look.face
         xs = positions.of(series.x)
@@ -523,7 +582,7 @@ class MatplotlibFigureRenderer:
         elif kind is SeriesKind.BOXES:
             self._boxes(axes, series, xs, color, label, groups[SeriesKind.BOXES])
         elif kind is SeriesKind.CELLS:
-            self._cells(axes, series, ys)
+            self._cells(axes, series, ys, self._style.text)
         elif kind is SeriesKind.STEMS:
             axes.vlines(xs, 0.0, ys, color=color, linewidth=0.8)
             axes.plot(
@@ -641,13 +700,15 @@ class MatplotlibFigureRenderer:
         axes.plot([], [], color=color, marker="s", linestyle="none", label=label)
 
     @staticmethod
-    def _cells(axes: Axes, series: SeriesSpec, ys: list[float]) -> None:
+    def _cells(
+        axes: Axes, series: SeriesSpec, ys: list[float], display: Callable[[str], str]
+    ) -> None:
         axes.imshow([ys], cmap=_SEQUENTIAL, vmin=0.0, vmax=1.0, aspect="auto")
         for i, text in enumerate(series.text or ()):
             axes.text(
                 i,
                 0,
-                "\n".join(textwrap.wrap(text, 12)),
+                "\n".join(textwrap.wrap(display(text), 12)),
                 ha="center",
                 va="center",
                 fontsize=3.5,
