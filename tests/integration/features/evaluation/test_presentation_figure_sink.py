@@ -3,19 +3,22 @@
 Grava, direto no diretório, `<id>.pdf` e `<id>.json` (bytes de `document_bytes`) das
 figuras usadas e `omitted_figures.json` com o motivo das omitidas; não grava o dossiê;
 valida antes de escrever; tira o que sobrou de figura omitida; não toca outros arquivos;
-bytes iguais em duas escritas.
+bytes iguais em duas escritas; falha no meio (staging ou troca) deixa a saída anterior
+intacta (I9).
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
 
 from financial_forecasting.features.evaluation.adapters.out.reports.presentation_figure_sink import (  # noqa: E501
     OMITTED_FILE,
+    STAGING_DIR,
     PresentationFigureSink,
 )
 from financial_forecasting.features.evaluation.application.dtos.judged_generation import (
@@ -111,3 +114,52 @@ def test_rejects_unknown_omission_or_empty_reason(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         PresentationFigureSink(tmp_path, omissions)
+
+
+@pytest.mark.parametrize("failing_call", [5, 25])
+def test_swap_failure_restores_previous_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failing_call: int
+) -> None:
+    # 19 trocas guardam a saída anterior (9 figuras x 2 + omissões) e 19 instalam a nova:
+    # a 5ª falha guardando, a 25ª falha instalando (ramo da lista `installed`)
+    (tmp_path / "diagrama.pdf").write_bytes(b"%PDF other")
+    sink = PresentationFigureSink(tmp_path, _OMITTED)
+    sink.write(figures=_figures(), dossier=_dossier())
+    before = _listing(tmp_path)
+    real_replace = os.replace
+    calls = {"n": 0}
+
+    def flaky(src: object, dst: object) -> None:
+        calls["n"] += 1
+        if calls["n"] == failing_call:
+            raise OSError("disk full")
+        real_replace(src, dst)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(os, "replace", flaky)
+    with pytest.raises(OSError, match="disk full"):
+        sink.write(figures=_figures(b" new"), dossier=_dossier())
+    monkeypatch.setattr(os, "replace", real_replace)
+    assert _listing(tmp_path) == before
+
+
+def test_staging_write_failure_leaves_previous_output_intact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sink = PresentationFigureSink(tmp_path, _OMITTED)
+    sink.write(figures=_figures(), dossier=_dossier())
+    before = _listing(tmp_path)
+    real_write = Path.write_bytes
+    calls = {"n": 0}
+
+    def flaky(self: Path, data: bytes) -> int:
+        calls["n"] += 1
+        if calls["n"] == 5:  # noqa: PLR2004 — no meio das figuras do staging
+            raise OSError("disk full")
+        return real_write(self, data)
+
+    monkeypatch.setattr(Path, "write_bytes", flaky)
+    with pytest.raises(OSError, match="disk full"):
+        sink.write(figures=_figures(b" new"), dossier=_dossier())
+    monkeypatch.setattr(Path, "write_bytes", real_write)
+    assert _listing(tmp_path) == before
+    assert not (tmp_path / STAGING_DIR).exists()
