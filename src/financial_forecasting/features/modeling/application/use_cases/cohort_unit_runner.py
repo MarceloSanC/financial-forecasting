@@ -200,6 +200,7 @@ def check_cohort_declarations(  # noqa: PLR0913 — as declarações conferidas,
     observed_feature_set_hash: str,
     pipeline_version: str,
     supported_device: str,
+    inherited_hyperparameters: bool = False,
 ) -> TrainingGrid:
     """I4 + geometria: o dado e o código de agora são os que o spec declara.
 
@@ -207,6 +208,11 @@ def check_cohort_declarations(  # noqa: PLR0913 — as declarações conferidas,
     (impressão digital do dado), `CohortDeclarationMismatchError` (proveniência
     dos sweeps, `feature_set_hash`, device, `pipeline_version`) e o erro de
     geometria do domínio.
+
+    `inherited_hyperparameters=True` (Stage 8.4, ADR 8.4.0001 item 6) dispensa SÓ a
+    igualdade entre o dado dos sweeps e o declarado: a rodada de produção usa, por
+    desenho, os hiperparâmetros do confirmatório sobre dado novo. A proveniência
+    continua obrigatória e todas as outras conferências valem.
     """
     grid = load_training_grid(store=store, asset_id=spec.asset_id, columns=modeling_columns)
     observed = grid_fingerprint(grid, hasher=hasher, asset_id=spec.asset_id)
@@ -216,7 +222,9 @@ def check_cohort_declarations(  # noqa: PLR0913 — as declarações conferidas,
             f"{str(spec.dataset_fingerprint)[:12]} — the materialized data changed"
         )
     provenance = spec.provenance
-    if provenance is None or provenance.dataset_fingerprint != spec.dataset_fingerprint:
+    if provenance is None:
+        raise CohortDeclarationMismatchError("the cohort declares no sweep provenance")
+    if not inherited_hyperparameters and provenance.dataset_fingerprint != spec.dataset_fingerprint:
         raise CohortDeclarationMismatchError(
             "sweeps ran on a different dataset than the one declared for the run"
         )
