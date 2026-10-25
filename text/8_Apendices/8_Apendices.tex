@@ -138,7 +138,7 @@ Sobre o conjunto de dados, executam-se: as buscas exploratórias de hiperparâme
 
 \section*{C.4 Reprodução da geração julgada}
 
-A geração julgada, isto é, as tabelas e o \textit{scorecard} a partir dos quais o veredito foi emitido, foi preservada numa cópia imutável, com o \textit{hash} do conteúdo registrado antes de qualquer outra atualização. A cadeia que a produz foi executada de novo a partir dos dados persistidos, num destino separado, sem re-treino e no mesmo ambiente da corrida (mesma imagem e mesmo código). O resultado foi idêntico bit a bit: as 19 tabelas e o \textit{scorecard}, inclusive as colunas das etapas com sorteio (\textit{bootstrap} e Monte Carlo), num total de 1.173.254 valores comparados sem nenhuma diferença, e com o mesmo \textit{digest} do resultado. As previsões de teste também se reproduzem bit a bit a partir dos modelos salvos, no ambiente do cohort. A reprodução em outro ambiente, em que a aritmética de ponto flutuante pode diferir e se aplicaria a tolerância descrita em C.1, não foi realizada.
+A geração julgada, isto é, as tabelas e o \textit{scorecard} a partir dos quais o veredito foi emitido, foi preservada numa cópia imutável, com o \textit{hash} do conteúdo registrado antes de qualquer outra atualização. A cadeia que a produz foi executada de novo a partir dos dados persistidos, num destino separado, sem re-treino e no mesmo ambiente da corrida (mesma imagem e mesmo código). O resultado foi idêntico bit a bit: as 19 tabelas, inclusive as colunas das etapas com sorteio (\textit{bootstrap} e Monte Carlo), num total de 1.173.254 valores comparados, e as 66.117 folhas do \textit{scorecard}, sem nenhuma diferença, e com o mesmo \textit{digest} do resultado. As previsões de teste também se reproduzem bit a bit a partir dos modelos salvos, no ambiente do cohort. A reprodução em outro ambiente, em que a aritmética de ponto flutuante pode diferir e se aplicaria a tolerância descrita em C.1, não foi realizada.
 
 \chapter*{APÊNDICE D - Notas de implementação}
 \addcontentsline{toc}{chapter}{APÊNDICE D - Notas de implementação}
@@ -165,29 +165,37 @@ As decisões de desenho são registradas em documentos de decisão arquitetural 
 \addcontentsline{toc}{chapter}{APÊNDICE E - Figuras complementares}
 
 As figuras deste apêndice completam o perfil descritivo do Capítulo~\ref{chap:resultados} e não têm papel no veredito. Todas são reconstruídas a partir das tabelas da geração julgada, sem re-treino.
+
+A Figura~\ref{fig:conformal} compara os intervalos nativos do TFT com os corrigidos pela predição conformal. Na escala da figura, as coberturas nativas e corrigidas quase se sobrepõem em todos os níveis e pares, o que corresponde às diferenças de até dois pontos percentuais relatadas no Capítulo~\ref{chap:resultados}. A diferença visível está na largura do par de 96\%: a NexCP produz intervalos mais largos que os nativos e os da CQR.
 \begin{figure}[htbp]
 \centering
-\caption{Cobertura empírica (não garantida) dos intervalos do TFT, nativos e corrigidos pela CQR (variante de registro) e pela NexCP (sensibilidade), por par e horizonte}
+\caption{Cobertura empírica (não garantida) e largura média dos intervalos do TFT, nativos e corrigidos pela CQR (variante de registro) e pela NexCP (sensibilidade), por nível, par e horizonte; a banda de Wilson do nativo existe só por semente, e a referência de dispersão Beta não é desenhada}
 \label{fig:conformal}
 \includegraphics[width=\textwidth]{figuras/native_vs_conformal.pdf}
 \fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{figure}
 
+A Figura~\ref{fig:sharpness} mostra a distribuição das larguras ao longo da série. A largura do AR(1) quase não varia, porque sua variância de previsão é fixa em cada \textit{fold}; a do EWMA-vol é a que mais varia, acompanhando a volatilidade condicional, com as maiores larguras de todos os modelos. O TFT tem a largura mediana mais alta nos pares de 80\% e 96\%, e o GBM e os quantis empíricos ficam entre os extremos.
+
 \begin{figure}[htbp]
 \centering
-\caption{Nitidez: largura dos intervalos de 50\%, 80\% e 96\% por modelo e horizonte}
+\caption{Nitidez: largura dos intervalos de 50\%, 80\% e 96\% por modelo e horizonte; os naive ficam de fora porque seus intervalos são degenerados em toda a série}
 \label{fig:sharpness}
 \includegraphics[width=\textwidth]{figuras/sharpness_diagram.pdf}
 \fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{figure}
 
+A Figura~\ref{fig:acf} mostra o diferencial de perda \(d_t\) do TFT contra cada comparador e sua autocorrelação. Contra os naive, o diferencial é negativo em quase toda a série, com magnitude maior nos períodos voláteis; contra os comparadores fortes, oscila em torno de zero, com o maior pico positivo contra o EWMA-vol no início de 2020. As autocorrelações são positivas na maioria das defasagens e chegam a pouco mais de 0,2. A variância do teste de Diebold-Mariano, fixada no pré-registro, considera a autocorrelação só até a defasagem \(h-1\), e a sensibilidade com o estimador de Bartlett não alterou nenhuma decisão; o MCS usa \textit{bootstrap} em blocos, que preserva a dependência entre sessões vizinhas.
+
 \begin{figure}[htbp]
 \centering
-\caption{Diferencial de perda entre o TFT e cada comparador forte, \(d_t\), e sua autocorrelação, que fundamenta o uso de variância robusta no teste de Diebold-Mariano e de \textit{bootstrap} em blocos no MCS}
+\caption{Diferencial de perda entre o TFT e cada comparador, \(d_t\), e sua autocorrelação amostral, por horizonte; a faixa de confiança da autocorrelação não é desenhada}
 \label{fig:acf}
 \includegraphics[width=\textwidth]{figuras/loss_differential_acf.pdf}
 \fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{figure}
+
+A Figura~\ref{fig:vsn} mostra os pesos da VSN por família. A família técnica tem o maior peso mediano, e sua faixa entre os percentis 10 e 90 não se sobrepõe à das demais; preço vem em seguida, e sentimento e fundamentos têm pesos menores, com faixas que se sobrepõem. Os pesos descrevem o uso das famílias pelo modelo, e não sua contribuição para a perda, que é medida pela permutação e pela ablação no Capítulo~\ref{chap:resultados}.
 
 \begin{figure}[htbp]
 \centering
