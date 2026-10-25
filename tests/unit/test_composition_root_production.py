@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from financial_forecasting.composition_root import wire_dependencies
+from financial_forecasting.composition_root import ApplicationDependencies, wire_dependencies
 from financial_forecasting.features.modeling.application.ports.out.cohort_progress_ledger import (
     CohortRunLockedError,
 )
@@ -23,7 +23,7 @@ from tests.fakes.features.modeling.in_memory_runtime_environment_probe import (
 
 
 @pytest.fixture
-def wired(tmp_path: Path) -> tuple[object, list[tuple[Path, str]]]:
+def wired(tmp_path: Path) -> tuple[ApplicationDependencies, list[tuple[Path, str]]]:
     probes: list[tuple[Path, str]] = []
 
     def probe_for(path: Path, device: str) -> InMemoryRuntimeEnvironmentProbe:
@@ -44,13 +44,13 @@ def wired(tmp_path: Path) -> tuple[object, list[tuple[Path, str]]]:
 
 
 def test_only_the_production_factory_inherits_hyperparameters(
-    wired: tuple[object, list[tuple[Path, str]]], tmp_path: Path
+    wired: tuple[ApplicationDependencies, list[tuple[Path, str]]], tmp_path: Path
 ) -> None:
     deps, probes = wired
     template = tmp_path / "aapl_production.toml"
 
-    confirmatory = deps.confirmatory_cohort_for(tmp_path / "c.toml", "cpu")  # type: ignore[attr-defined]
-    production = deps.production_cohort_for(template, "cpu")  # type: ignore[attr-defined]
+    confirmatory = deps.confirmatory_cohort_for(tmp_path / "c.toml", "cpu")
+    production = deps.production_cohort_for(template, "cpu")
 
     assert confirmatory._inherited_hyperparameters is False
     assert production._inherited_hyperparameters is True
@@ -58,12 +58,12 @@ def test_only_the_production_factory_inherits_hyperparameters(
 
 
 def test_writer_lock_for_locks_the_given_root(
-    wired: tuple[object, list[tuple[Path, str]]], tmp_path: Path
+    wired: tuple[ApplicationDependencies, list[tuple[Path, str]]], tmp_path: Path
 ) -> None:
     deps, _ = wired
     root = tmp_path / "production"
-    first = deps.writer_lock_for(root)  # type: ignore[attr-defined]
-    second = deps.writer_lock_for(root)  # type: ignore[attr-defined]
+    first = deps.writer_lock_for(root)
+    second = deps.writer_lock_for(root)
 
     first.acquire_writer()
     try:
