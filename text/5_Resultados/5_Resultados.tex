@@ -214,7 +214,31 @@ Os recortes descritivos do perfil, com p-valores brutos, sem papel no veredito, 
 A leitura conjunta é coerente com a hipótese de trabalho do Capítulo~\ref{chap:fundamentacao}: o valor de um modelo probabilístico de retornos diários está na escala da distribuição condicional, e não na sua locação. Todo o ganho sobre os naive vem de descrever a escala; entre os modelos que a descrevem, o EWMA-vol, que modela apenas a volatilidade, não foi superado por nenhum modelo com acesso a indicadores técnicos, sentimento e fundamentos. O TFT entrega uma distribuição calibrada, de qualidade estatisticamente indistinguível da melhor em \(h+7\), mas o conjunto de \textit{features} não se converteu em ganho de \textit{skill} sobre os comparadores fortes, como antecipado pela baixa previsibilidade da média dos retornos \cite{GU2020}.
 
 \section{Perfil descritivo pontual}
-\textit{A ser preenchido.} RMSE, MAE e acurácia direcional por horizonte, reportados como perfil descritivo, sem papel no veredito. Essas métricas não integram as tabelas da geração julgada e serão calculadas a partir das previsões persistidas, sem re-treino.
+O perfil pontual da mediana (\(\tau = 0{,}5\)) foi calculado depois do veredito, a partir das previsões persistidas e na amostra comum, sem re-treino e sem papel no veredito (Tabela~\ref{tab:pontual}); o código e a proveniência estão no relatório de análises pós-veredito do repositório. O erro da mediana é praticamente o mesmo em todos os modelos: RMSE de cerca de \(2{,}0 \times 10^{-2}\) e MAE de cerca de \(1{,}38 \times 10^{-2}\) nos dois horizontes, com diferenças menores que a dispersão entre as sementes do TFT. Retorno nulo e EWMA-vol têm mediana identicamente nula e ficam fora da acurácia direcional.
+
+A acurácia direcional, isto é, a fração de dias em que o sinal da mediana coincide com o do retorno realizado, fica entre 0,51 e 0,54, e vários intervalos de Wilson de 95\% excluem 0,5. A referência adequada, porém, não é 0,5, e sim a fração de dias de alta na amostra, 0,531 nos dois horizontes: a média histórica, cuja mediana é sempre positiva, acerta exatamente essa fração, e nenhum modelo se afasta dela de forma relevante. O TFT fica em 0,529 em \(h+1\) e 0,523 em \(h+7\), abaixo dessa taxa-base. Não há, portanto, evidência de habilidade direcional, o que confirma, na métrica mais usada pela literatura aplicada, a premissa do Capítulo~\ref{chap:intro} de que a média dos retornos diários é quase imprevisível.
+
+\begin{table}[htb]
+\centering
+\caption{Perfil pontual da mediana na amostra comum, calculado depois do veredito: RMSE e MAE (\(\times 10^{-2}\)) e acurácia direcional; para o TFT, média das dez sementes}
+\label{tab:pontual}
+\small
+\begin{tabular}{l c c c c c c}
+\toprule
+ & \multicolumn{3}{c}{\(h+1\)} & \multicolumn{3}{c}{\(h+7\)} \\
+Modelo & RMSE & MAE & Acurácia & RMSE & MAE & Acurácia \\
+\midrule
+Retorno nulo & 1,999 & 1,383 & --- & 2,001 & 1,385 & --- \\
+Média histórica & 1,997 & 1,379 & 0,531 & 2,000 & 1,382 & 0,531 \\
+AR(1) & 2,004 & 1,385 & 0,514 & 2,000 & 1,382 & 0,531 \\
+EWMA-vol & 1,999 & 1,383 & --- & 2,001 & 1,385 & --- \\
+Quantis empíricos & 2,000 & 1,384 & 0,523 & 2,003 & 1,386 & 0,530 \\
+GBM quantílico & 1,995 & 1,379 & 0,516 & 1,999 & 1,382 & 0,537 \\
+TFT & 2,004 & 1,386 & 0,529 & 2,009 & 1,391 & 0,523 \\
+\bottomrule
+\multicolumn{7}{p{13cm}}{\footnotesize --- : mediana identicamente nula, sem direção prevista. Fração de dias de alta na amostra: 0,531 nos dois horizontes.}
+\end{tabular}
+\end{table}
 
 \section{Contribuição de famílias (H3)}
 H3 não foi sustentada: nenhum dos dois métodos indicou heterogeneidade da contribuição das famílias entre \(h+1\) e \(h+7\), pois nenhum intervalo de \(\Delta_f\) excluiu zero (Tabela~\ref{tab:h3}). Os intervalos são de \(98{,}75\%\), com a correção de Bonferroni sobre as quatro famílias, obtidos por \textit{bootstrap} estacionário pareado com blocos de 61 sessões e 1.000 réplicas.
