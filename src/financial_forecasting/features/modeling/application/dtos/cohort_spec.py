@@ -32,7 +32,7 @@ congelamento — é o que identifica os sweeps (`exploratory_scope_id`).
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
@@ -47,6 +47,7 @@ from financial_forecasting.features.modeling.application.ports.out.tft_trainer i
     TftTrainingParams,
 )
 from financial_forecasting.features.modeling.domain.value_objects.scope_spec import ScopeSpec
+from financial_forecasting.shared.domain.services.sha256_hex import validate_sha256_hex
 from financial_forecasting.shared.domain.value_objects.asset_id import AssetId
 
 if TYPE_CHECKING:
@@ -201,6 +202,37 @@ class CohortSpec:
             and self.provenance is not None
             and self.dataset_fingerprint is not None
         )
+
+    def production_round(self, dataset_fingerprint: str) -> CohortSpec:
+        """Spec congelado de uma rodada de produção (Stage 8.4; ADR 8.4.0001 item 3).
+
+        `self` é o modelo de produção versionado: todos os campos de congelamento
+        decididos, MENOS a impressão digital do dado, que cada rodada observa no
+        grid que materializou. O resultado é um `CohortSpec` congelado comum, cujo
+        `cohort_id` muda quando o dado muda. Modelo já com impressão digital,
+        modelo incompleto ou impressão digital malformada → `ValueError`.
+        """
+        if self.dataset_fingerprint is not None:
+            raise ValueError(
+                f"production model {self.name!r} already declares a dataset_fingerprint — "
+                "a production model leaves it to each round"
+            )
+        missing = [
+            name
+            for name, value in (
+                ("tft_params", self.tft_params),
+                ("gbm_params", self.gbm_params),
+                ("provenance", self.provenance),
+                ("sweep.n_trials", self.sweep.n_trials),
+            )
+            if value is None
+        ]
+        if not self.seeds:
+            missing.append("seeds")
+        if missing:
+            raise ValueError(f"production model {self.name!r} is missing {missing}")
+        validate_sha256_hex(dataset_fingerprint, field="dataset_fingerprint")
+        return replace(self, dataset_fingerprint=dataset_fingerprint)
 
     def hash_payload(self) -> dict[str, object]:
         """Payload canônico do spec inteiro (sem a seed por unidade do TFT).
