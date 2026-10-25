@@ -31,7 +31,9 @@ Stage 8.3: `report-artifacts --data-root <dir> --cohort <toml> --preregistration
 canônicas e dossiê da cópia julgada; só leitura sobre `data/` (sem lock). O cohort é lido
 aqui (seeds e device); `--output` padrão `<repo_root>/docs/reports` e `--register` padrão
 `<repo_root>/docs/reports/dossier_register.toml`; o registro é parseado pelo comando do
-`evaluation` (fronteira) antes do use case.
+`evaluation` (fronteira) antes do use case. Com `--style presentation` (issue #250), as
+figuras no estilo do texto do TCC, sem o dossiê, com `--output` padrão
+`<repo_root>/text/figuras`.
 Stage 8.4: `production-round --production-root <dir> --round <AAAA-MM-DD[.N]> --raw-root
 <dir> --cohort config/cohorts/aapl_production.toml [--break-stale-lock]` — uma rodada do job
 de produção (ADRs 8.4.0001 e 8.4.0002), fora do helper `add()` e despachada ANTES do wiring
@@ -121,6 +123,9 @@ _INFERENCE_SUBCOMMANDS = frozenset({"infer", "attribute"})
 _AUDIT_REPRODUCTION = "audit-reproduction"
 _REPORT_ARTIFACTS = "report-artifacts"
 _REPORTS_DIR = Path("docs") / "reports"
+_PRESENTATION_DIR = Path("text") / "figuras"
+_DOSSIER_STYLE = "dossier"
+_PRESENTATION_STYLE = "presentation"
 _REGISTER_FILE = "dossier_register.toml"
 # Stage 8.4 — a rodada de produção (ADR 8.4.0002)
 _PRODUCTION_ROUND = "production-round"
@@ -261,7 +266,16 @@ def _parser() -> argparse.ArgumentParser:
         help="referência esperada da revisão (<nome>-r<rev>-<hash12>)",
     )
     report.add_argument(
-        "--output", type=Path, default=None, help="diretório de saída (padrão docs/reports)"
+        "--output",
+        type=Path,
+        default=None,
+        help="diretório de saída (padrão docs/reports; text/figuras no estilo presentation)",
+    )
+    report.add_argument(
+        "--style",
+        choices=(_DOSSIER_STYLE, _PRESENTATION_STYLE),
+        default=_DOSSIER_STYLE,
+        help="dossier: figuras e dossiê; presentation: só as figuras do texto do TCC",
     )
     report.add_argument(
         "--register",
@@ -419,17 +433,25 @@ def _dispatch_report_artifacts(
     importa o `modeling`); saída e registro com padrão sob o `repo_root`."""
     spec = cohort_file.load(args.cohort)
     reports = Path(settings.repo_root) / _REPORTS_DIR
-    output: Path = args.output if args.output is not None else reports
+    presentation = args.style == _PRESENTATION_STYLE
+    default_output = Path(settings.repo_root) / _PRESENTATION_DIR if presentation else reports
+    output: Path = args.output if args.output is not None else default_output
     register: Path = args.register if args.register is not None else reports / _REGISTER_FILE
+    factory = (
+        deps.generate_presentation_figures_for
+        if presentation
+        else deps.generate_report_artifacts_for
+    )
     evaluation = importlib.import_module(_EVALUATION_COMMANDS)
     exit_code: int = evaluation.report_artifacts(
-        deps.generate_report_artifacts_for(args.cohort, spec.device, output),
+        factory(args.cohort, spec.device, output),
         register_path=register,
         name=args.preregistration,
         revision=args.revision,
         preregistration_ref=args.preregistration_ref,
         cohort_seeds=tuple(spec.seeds),
         out=out,
+        dossier=not presentation,
     )
     return exit_code
 

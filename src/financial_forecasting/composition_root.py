@@ -95,6 +95,11 @@ corrida: o MESMO `ParquetGoldStore` (como `JudgedGenerationStore`), o MESMO
 `GitEvaluationEnvironment` igual ao da corrida, o `MatplotlibFigureRenderer` e o
 `FilesystemReportSink(output_dir)`.
 
+Issue #250: `generate_presentation_figures_for(cohort_path, device, output_dir)` monta o
+MESMO use case com o `MatplotlibFigureRenderer(PRESENTATION_STYLE)` e o
+`PresentationFigureSink(output_dir, PRESENTATION_OMISSIONS)` — as figuras do texto do TCC,
+do mesmo dado; o dossiê não é escrito.
+
 Stage 8.4 (ADR 8.4.0001 item 6, ADR 8.4.0002 item 5): a fábrica
 `production_cohort_for(template_path, device)` monta o MESMO `RunConfirmatoryCohort` do
 `confirmatory_cohort_for`, com `inherited_hyperparameters=True` (a rodada de produção usa
@@ -196,8 +201,15 @@ from financial_forecasting.features.evaluation.adapters.out.duckdb.parquet_gold_
 from financial_forecasting.features.evaluation.adapters.out.plots.matplotlib_figure_renderer import (  # noqa: E501
     MatplotlibFigureRenderer,
 )
+from financial_forecasting.features.evaluation.adapters.out.plots.presentation_style import (
+    PRESENTATION_OMISSIONS,
+    PRESENTATION_STYLE,
+)
 from financial_forecasting.features.evaluation.adapters.out.reports.filesystem_report_sink import (
     FilesystemReportSink,
+)
+from financial_forecasting.features.evaluation.adapters.out.reports.presentation_figure_sink import (  # noqa: E501
+    PresentationFigureSink,
 )
 from financial_forecasting.features.evaluation.adapters.out.runtime.git_evaluation_environment import (  # noqa: E501
     GitEvaluationEnvironment,
@@ -854,11 +866,14 @@ def report_artifacts_wiring(  # noqa: PLR0913 — os colaboradores do gerador (c
     gold_store: ParquetGoldStore,
     silver_reader: ParquetAnalyticsRepository,
     grid_reader: ReadTrainingGrid,
+    presentation: bool = False,
 ) -> Callable[[Path, str, Path], GenerateReportArtifacts]:
     """A fábrica do `GenerateReportArtifacts` (Stage 8.3, Task 13; ver o docstring do módulo).
 
-    Só leitura sobre `data/`; a única escrita é a do `FilesystemReportSink` no diretório
-    pedido (padrão `<repo_root>/docs/reports`, decidido no `cli.py`).
+    Só leitura sobre `data/`; a única escrita é a do sink no diretório pedido: o
+    `FilesystemReportSink` do dossiê (padrão `<repo_root>/docs/reports`) ou, com
+    `presentation` (issue #250), o `PresentationFigureSink` com o renderizador no
+    `PRESENTATION_STYLE` (padrão `<repo_root>/text/figuras`) — padrões decididos no `cli.py`.
     """
     source = TomlPreregistrationSource(root=repo_root / "config" / "preregistration")
 
@@ -878,8 +893,16 @@ def report_artifacts_wiring(  # noqa: PLR0913 — os colaboradores do gerador (c
                 cohort_path=cohort_path,
                 device=device,
             ),
-            renderer=MatplotlibFigureRenderer(),
-            sink=FilesystemReportSink(output_dir),
+            renderer=(
+                MatplotlibFigureRenderer(PRESENTATION_STYLE)
+                if presentation
+                else MatplotlibFigureRenderer()
+            ),
+            sink=(
+                PresentationFigureSink(output_dir, PRESENTATION_OMISSIONS)
+                if presentation
+                else FilesystemReportSink(output_dir)
+            ),
         )
 
     return generate_report_artifacts_for
@@ -1140,6 +1163,9 @@ class ApplicationDependencies:
     # BC evaluation (Stage 8.3, Task 13): figuras e dossiê da cópia julgada, por arquivo e
     # device do cohort (o probe do ambiente) e diretório de saída.
     generate_report_artifacts_for: Callable[[Path, str, Path], GenerateReportArtifacts]
+    # BC evaluation (issue #250): o mesmo gerador, com as figuras no estilo de apresentação
+    # do texto do TCC e sem o dossiê.
+    generate_presentation_figures_for: Callable[[Path, str, Path], GenerateReportArtifacts]
 
 
 def wire_dependencies(  # noqa: PLR0915 — o grafo inteiro, um bloco por BC
@@ -1584,6 +1610,16 @@ def wire_dependencies(  # noqa: PLR0915 — o grafo inteiro, um bloco por BC
             gold_store=gold_store,
             silver_reader=analytics_repository,
             grid_reader=grid_reader,
+        ),
+        generate_presentation_figures_for=report_artifacts_wiring(
+            repo_root=repo_root,
+            runtime_probe_for=runtime_probe_for,
+            image_id=cfg.image_id,
+            hasher=hasher,
+            gold_store=gold_store,
+            silver_reader=analytics_repository,
+            grid_reader=grid_reader,
+            presentation=True,
         ),
     )
 

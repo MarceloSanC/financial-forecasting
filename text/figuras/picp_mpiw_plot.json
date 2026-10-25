@@ -1,0 +1,56 @@
+{
+  "code": {
+    "code.src": "29286e68ea70211e964cb40cfb355f7c2b5d65dd",
+    "code.uv_lock": "0ff8a4dfe837fbb76c5d619b240f918e519c0dd7"
+  },
+  "data_digest": "bcfd53ece66a8e9d28a148a5c260a8239bc72e1657d792c5ed1fe309409bedcd",
+  "excluded_degenerate": {},
+  "figure_id": "picp_mpiw_plot",
+  "generation_digest": "96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539",
+  "omissions": [],
+  "omitted_models": [
+    "baseline_zero_return",
+    "baseline_historical_mean"
+  ],
+  "partition": {
+    "asset": "AAPL",
+    "parent_sweep_id": "aapl_confirmatory-r0-665f45d9169a"
+  },
+  "preregistration_ref": "aapl_confirmatory-r3-00fd83d9cd39",
+  "renderer": {
+    "format": "pdf",
+    "freetype": "2.14.3",
+    "matplotlib": "3.11.0",
+    "style": "presentation"
+  },
+  "revision": 3,
+  "silver_units": {},
+  "sources": [
+    {
+      "fields": [
+        "value"
+      ],
+      "filter": {
+        "metric": "picp|mpiw",
+        "sample": "common"
+      },
+      "kind": "gold_table",
+      "name": "gold_metrics_by_run"
+    },
+    {
+      "fields": [
+        "mean",
+        "minimum",
+        "maximum"
+      ],
+      "filter": {
+        "metric": "picp|mpiw",
+        "model": "tft_quantile",
+        "path": "profile.horizons[].descriptors",
+        "sample": "common"
+      },
+      "kind": "document",
+      "name": "gold_model_comparison_confirmatory_scorecard.json"
+    }
+  ]
+}

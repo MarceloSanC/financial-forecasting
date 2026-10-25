@@ -1268,6 +1268,59 @@ def test_report_artifacts_defaults_output_and_register_under_repo_root(
 
 
 @pytest.mark.unit
+def test_report_artifacts_presentation_style_defaults_to_text_figuras(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #250: `--style presentation` usa a fábrica das figuras do texto, com saída
+    padrão `<repo_root>/text/figuras`, o MESMO registro padrão e sem a linha do dossiê."""
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        evaluation,
+        "report_artifacts",
+        lambda use_case, **kwargs: calls.append({"use_case": use_case, **kwargs}) or 0,
+    )
+    cohort = _cohort(tmp_path, frozen=True)
+    assert cli.main(_report_argv(tmp_path, cohort), wiring=_wiring(tmp_path)) == 0
+    assert calls[0]["dossier"] is True
+    assert type(calls[0]["use_case"]._sink).__name__ == "FilesystemReportSink"
+
+    calls.clear()
+    code = cli.main(
+        _report_argv(tmp_path, cohort, "--style", "presentation"), wiring=_wiring(tmp_path)
+    )
+    assert code == 0
+    (call,) = calls
+    assert call["dossier"] is False
+    assert call["register_path"] == tmp_path / "docs" / "reports" / "dossier_register.toml"
+    sink = call["use_case"]._sink
+    assert type(sink).__name__ == "PresentationFigureSink"
+    assert sink._output == tmp_path / "text" / "figuras"
+    assert call["use_case"]._renderer.identity()["style"] == "presentation"
+
+    calls.clear()
+    output = tmp_path / "out"
+    cli.main(
+        _report_argv(tmp_path, cohort, "--style", "presentation", "--output", str(output)),
+        wiring=_wiring(tmp_path),
+    )
+    assert calls[0]["use_case"]._sink._output == output
+
+
+@pytest.mark.unit
+def test_report_artifacts_rejects_unknown_style(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main(
+            _report_argv(tmp_path, tmp_path / "c.toml", "--style", "poster"),
+            wiring=_wiring(tmp_path),
+        )
+    assert exc.value.code == _EXIT_ERROR
+    assert "--style" in capsys.readouterr().err
+
+
+@pytest.mark.unit
 def test_cohort_seeds_passed_from_cohort_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1332,6 +1385,27 @@ def test_report_artifacts_prints_contract_lines(tmp_path: Path) -> None:
     (command,) = fake.commands
     assert command.cohort_seeds == (1, 2)
     assert command.register[0].title == "Errata"
+
+
+@pytest.mark.unit
+def test_report_artifacts_without_dossier_prints_presentation_line(tmp_path: Path) -> None:
+    """Issue #250: no estilo de apresentação o sink não grava o dossiê."""
+    evaluation: Any = cli.importlib.import_module(_EVALUATION_COMMANDS)
+    out = io.StringIO()
+    code = evaluation.report_artifacts(
+        _FakeGenerate(),
+        register_path=_register_file(tmp_path, _VALID_REGISTER),
+        name="synthetic_plan",
+        revision=3,
+        preregistration_ref=_REPORT_REF,
+        cohort_seeds=(1, 2),
+        out=out,
+        dossier=False,
+    )
+    assert code == 0
+    lines = out.getvalue().splitlines()
+    assert lines[-1] == "presentation figures (no dossier written)"
+    assert not any(line.startswith("dossier ") for line in lines)
 
 
 @pytest.mark.unit
