@@ -91,3 +91,10 @@ def test_model_without_n_trials_is_refused() -> None:
 def test_malformed_fingerprint_is_refused(bad: object) -> None:
     with pytest.raises(ValueError, match="dataset_fingerprint"):
         _model().production_round(bad)  # type: ignore[arg-type]
+
+
+def test_require_production_model_accepts_the_model_and_refuses_a_frozen_spec() -> None:
+    _model().require_production_model()
+
+    with pytest.raises(ValueError, match="already declares a dataset_fingerprint"):
+        _spec(dataset_fingerprint=_FP_A).require_production_model()

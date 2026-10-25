@@ -55,10 +55,14 @@ class _World:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(rel.encode())
         self.template = tmp_path / "aapl_production.toml"
-        self.template.write_text(cohort_file.dump(_frozen()), encoding="utf-8")
+        self.template.write_text(
+            cohort_file.dump(dataclasses.replace(_frozen(), dataset_fingerprint=None)),
+            encoding="utf-8",
+        )
         self.steps: list[str] = []
         self.settings: list[Settings] = []
         self.verify_code = 0
+        self.run_commands: list[RunConfirmatoryCohortCommand] = []
         self.overrides = {
             "_env_file": None,
             "repo_root": self.repo,
@@ -99,6 +103,7 @@ class _World:
     def _cohort_for(self, template: Path, device: str) -> Any:  # noqa: ANN401
         def use_case(command: RunConfirmatoryCohortCommand) -> RunConfirmatoryCohortResult:
             self.steps.append("run")
+            self.run_commands.append(command)
             assert template == self.template
             return RunConfirmatoryCohortResult(cohort_id="prod-c", cohort_hash="h", outcomes=())
 
@@ -266,3 +271,123 @@ def test_failure_releases_the_production_lock(
     assert code == _EXIT_ERROR
     assert "boom" in err
     assert not (world.production_root / ".writer.lock").exists()
+
+
+# -- auditoria de testes (Stage 8.4): fronteiras, marca, lock e ponteiro ----------------
+
+
+@pytest.mark.parametrize("relative", ["data/cohorts-x", "data/cohortsprod"])
+def test_sibling_of_the_cohorts_dir_is_accepted(world: _World, relative: str) -> None:
+    code, _, err = world.cli(root=world.repo / relative)
+
+    assert code == 0, err
+
+
+def test_dotdot_path_into_the_cohorts_is_refused(world: _World) -> None:
+    root = world.repo / "data" / "x" / ".." / "cohorts" / "p"
+
+    code, _, err = world.cli(root=root)
+
+    assert code == _EXIT_ERROR
+    assert "overlaps" in err
+    assert not (world.repo / "data" / "cohorts").exists()
+
+
+def test_overlap_ignores_the_case_of_the_repository_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = _World(tmp_path, monkeypatch)
+    upper = tmp_path / "Repo"
+    world.repo.rename(upper)
+    world.overrides["repo_root"] = upper
+
+    code, _, err = world.cli(root=tmp_path / "repo" / "data" / "cohorts" / "p")
+
+    assert code == _EXIT_ERROR
+    assert "overlaps" in err
+
+
+def test_failed_materialization_leaves_no_mark_and_is_redone(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(deps: Any, **kwargs: Any) -> int:  # noqa: ANN401
+        world.steps.append("materialize")
+        raise RuntimeError("finbert crashed")
+
+    working = cli._materialize
+    monkeypatch.setattr(cli, "_materialize", broken)
+    code, _, err = world.cli()
+    assert code == _EXIT_ERROR
+    assert "finbert crashed" in err
+    assert not (world.round_root / ".materialized").exists()
+    assert not (world.production_root / ".writer.lock").exists()
+
+    monkeypatch.setattr(cli, "_materialize", working)
+    world.steps.clear()
+    assert world.cli()[0] == 0
+    assert world.steps[0] == "materialize"
+
+
+def test_unmarked_round_redoes_the_raw_copies(world: _World) -> None:
+    extra = world.round_root / "raw" / "extra.parquet"
+    extra.parent.mkdir(parents=True)
+    extra.write_text("left by a crash", encoding="utf-8")
+
+    assert world.cli()[0] == 0
+
+    assert not extra.exists()
+
+
+def test_break_stale_lock_reaches_both_locks(world: _World) -> None:
+    world.production_root.mkdir(parents=True)
+    (world.production_root / ".writer.lock").write_text(
+        json.dumps({"pid": 424242, "host": "dead", "started_at": "t", "token": "o"}),
+        encoding="utf-8",
+    )
+
+    code, _, err = world.cli("--break-stale-lock")
+
+    assert code == 0, err
+    (command,) = world.run_commands
+    assert command.break_stale_lock is True
+    assert not (world.production_root / ".writer.lock").exists()
+
+
+def test_diverging_verify_keeps_the_previous_pointer(world: _World) -> None:
+    world.production_root.mkdir(parents=True)
+    pointer = world.production_root / "serving.env"
+    previous = f"DATA_ROOT={world.production_root / 'rounds' / '2025-12-01'}\n".encode()
+    pointer.write_bytes(previous)
+    world.verify_code = _EXIT_MISMATCH
+
+    code, out, _ = world.cli()
+
+    assert code == _EXIT_MISMATCH
+    assert "published" not in out
+    assert pointer.read_bytes() == previous
+
+
+def test_pointer_write_failure_exits_2_and_releases_the_lock(
+    world: _World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(*args: Any, **kwargs: Any) -> bool:  # noqa: ANN401
+        raise OSError("disk full")
+
+    monkeypatch.setattr(production, "publish_serving_pointer", broken)
+
+    code, _, err = world.cli()
+
+    assert code == _EXIT_ERROR
+    assert "OSError" in err
+    assert not (world.production_root / ".writer.lock").exists()
+
+
+def test_frozen_production_model_is_refused_before_any_write(world: _World) -> None:
+    world.template.write_text(cohort_file.dump(_frozen()), encoding="utf-8")
+
+    code, _, err = world.cli()
+
+    assert code == _EXIT_ERROR
+    assert "already declares a dataset_fingerprint" in err
+    assert world.steps == []
+    assert not world.production_root.exists()

@@ -491,6 +491,7 @@ def _dispatch_production_round(
     production = importlib.import_module(_PRODUCTION_COMMANDS)
     production.parse_round_name(args.round)
     model = cohort_file.load(args.cohort)
+    model.require_production_model()  # antes de escrever: a materialização leva minutos
     overrides = dict(injected.settings_overrides)
     repo_root = Path(Settings(**overrides).repo_root).resolve()
     production_root: Path = args.production_root.resolve()

@@ -212,6 +212,16 @@ class CohortSpec:
         `cohort_id` muda quando o dado muda. Modelo já com impressão digital,
         modelo incompleto ou impressão digital malformada → `ValueError`.
         """
+        self.require_production_model()
+        validate_sha256_hex(dataset_fingerprint, field="dataset_fingerprint")
+        return replace(self, dataset_fingerprint=dataset_fingerprint)
+
+    def require_production_model(self) -> None:
+        """Recusa (`ValueError`) o que não serve de modelo de produção.
+
+        Exposto à parte para o `production-round` validar o modelo ANTES de escrever
+        qualquer coisa (a materialização leva minutos), não só ao derivar a rodada.
+        """
         if self.dataset_fingerprint is not None:
             raise ValueError(
                 f"production model {self.name!r} already declares a dataset_fingerprint — "
@@ -231,8 +241,6 @@ class CohortSpec:
             missing.append("seeds")
         if missing:
             raise ValueError(f"production model {self.name!r} is missing {missing}")
-        validate_sha256_hex(dataset_fingerprint, field="dataset_fingerprint")
-        return replace(self, dataset_fingerprint=dataset_fingerprint)
 
     def hash_payload(self) -> dict[str, object]:
         """Payload canônico do spec inteiro (sem a seed por unidade do TFT).
