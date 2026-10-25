@@ -32,6 +32,15 @@ canônicas e dossiê da cópia julgada; só leitura sobre `data/` (sem lock). O 
 aqui (seeds e device); `--output` padrão `<repo_root>/docs/reports` e `--register` padrão
 `<repo_root>/docs/reports/dossier_register.toml`; o registro é parseado pelo comando do
 `evaluation` (fronteira) antes do use case.
+Stage 8.4: `production-round --production-root <dir> --round <AAAA-MM-DD[.N]> --raw-root
+<dir> --cohort config/cohorts/aapl_production.toml [--break-stale-lock]` — uma rodada do job
+de produção (ADRs 8.4.0001 e 8.4.0002), fora do helper `add()` e despachada ANTES do wiring
+geral: valida nome, brutos e raiz (nunca dentro de `<repo_root>/data/cohorts/`) sem
+escrever nada; monta o processo com `data_root`, `artifacts_root` e `mlflow_tracking_uri`
+DENTRO da rodada; sob o lock de escritor único da raiz de produção, copia os brutos e
+materializa (marca `.materialized`), deriva o spec da rodada do modelo versionado, corre
+pelo `production_cohort_for`, roda o `verify` e só com ele OK troca o `serving.env`
+(monotônico). Exit 0 com a rodada verificada, 1 com o `verify` divergente, 2 em erro.
 `--data-root` é obrigatório nos demais, sem default: o dado de um cohort vive
 isolado em `data/cohorts/<nome>/` (concept D10) e um default silencioso poderia
 misturá-lo com o `data/` de desenvolvimento.
@@ -49,9 +58,11 @@ de sentimento, a fábrica do probe e overrides de `Settings` (`repo_root`,
 from __future__ import annotations
 
 import argparse
+import filecmp
 import importlib
 import importlib.util
 import logging
+import shutil
 import sys
 import traceback
 from dataclasses import dataclass, field
@@ -74,6 +85,9 @@ from financial_forecasting.features.market_data.application.use_cases.ingest_fun
 )
 from financial_forecasting.features.market_data.application.use_cases.ingest_news import (
     IngestNewsRequest,
+)
+from financial_forecasting.features.modeling.application.use_cases.run_confirmatory_cohort import (
+    RunConfirmatoryCohortCommand,
 )
 from financial_forecasting.shared.application.exceptions import ApplicationError
 from financial_forecasting.shared.domain.exceptions.base import DomainError
@@ -108,6 +122,21 @@ _AUDIT_REPRODUCTION = "audit-reproduction"
 _REPORT_ARTIFACTS = "report-artifacts"
 _REPORTS_DIR = Path("docs") / "reports"
 _REGISTER_FILE = "dossier_register.toml"
+# Stage 8.4 — a rodada de produção (ADR 8.4.0002)
+_PRODUCTION_ROUND = "production-round"
+_PRODUCTION_COMMANDS = f"{_CLI_PACKAGE}.production_commands"
+_COHORTS_DIR = Path("data") / "cohorts"  # onde vivem o confirmatório e o de ablação
+_ROUNDS_DIR = "rounds"
+_ROUND_SPEC = "cohort.toml"
+_MATERIALIZED_MARK = ".materialized"
+# os três brutos que a ingestão local da 5.5 lê sob o `data_root` (composition root)
+_RAW_INPUTS = (
+    "raw/market/candles/{a}/candles_{a}_1d.parquet",
+    "raw/news/{a}/news_{a}.parquet",
+    "processed/fundamentals/{a}/fundamentals_{a}.parquet",
+)
+# o que uma materialização sem marca deixa na rodada e que é refeito do zero
+_ROUND_REDONE = ("raw", "processed", "bronze")
 
 
 class MissingSentimentExtraError(ApplicationError):
@@ -240,6 +269,28 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="registro curado (padrão docs/reports/dossier_register.toml)",
     )
+    # Stage 8.4: a rodada de produção — fora do helper `add()` (raiz de produção, não
+    # `--data-root`: o `data_root` do processo é a raiz da rodada, derivada daqui)
+    production = commands.add_parser(
+        _PRODUCTION_ROUND, help="corre uma rodada do cohort de produção e publica o ponteiro"
+    )
+    production.add_argument(
+        "--production-root", type=Path, required=True, help="raiz de produção (rodadas e ponteiro)"
+    )
+    production.add_argument(
+        "--round", required=True, metavar="AAAA-MM-DD[.N]", help="nome (data) da rodada"
+    )
+    production.add_argument(
+        "--raw-root", type=Path, required=True, help="diretório com os três brutos de entrada"
+    )
+    production.add_argument(
+        "--cohort", type=Path, required=True, help="modelo de produção versionado (TOML)"
+    )
+    production.add_argument(
+        "--break-stale-lock",
+        action="store_true",
+        help="remove locks órfãos (processo morto) da raiz de produção e da rodada",
+    )
     # Stage 8.2: só leitura, sem `--data-root`/`--cohort`/lock — fora do helper `add()`
     audit = commands.add_parser(
         _AUDIT_REPRODUCTION, help="compara a geração reproduzida com a cópia julgada"
@@ -294,6 +345,8 @@ def main(  # noqa: PLR0911 — um return por família de subcomando
     try:
         if args.command == _AUDIT_REPRODUCTION:
             return _dispatch_audit_reproduction(args, injected, stdout)
+        if args.command == _PRODUCTION_ROUND:
+            return _dispatch_production_round(args, injected, cohort_file, stdout)
         settings = Settings(data_root=args.data_root, **injected.settings_overrides)
         deps = wire_dependencies(
             settings,
@@ -381,11 +434,12 @@ def _dispatch_report_artifacts(
     return exit_code
 
 
-def _dispatch_cohort_command(
-    args: argparse.Namespace, deps: ApplicationDependencies, cohort_file: ModuleType, out: TextIO
-) -> int:
+def _cohort_command_deps(
+    deps: ApplicationDependencies, cohort_file: ModuleType
+) -> tuple[ModuleType, Any]:
+    """O módulo `cohort_commands` e as dependências dele, montadas do composition root."""
     commands = importlib.import_module(f"{_CLI_PACKAGE}.cohort_commands")
-    command_deps = commands.CohortCommandDeps(
+    return commands, commands.CohortCommandDeps(
         store=deps.store,
         hasher=deps.hasher,
         ledger=deps.cohort_ledger,
@@ -398,6 +452,12 @@ def _dispatch_cohort_command(
         parse_spec=cohort_file.parse,
         dump_spec=cohort_file.dump,
     )
+
+
+def _dispatch_cohort_command(
+    args: argparse.Namespace, deps: ApplicationDependencies, cohort_file: ModuleType, out: TextIO
+) -> int:
+    commands, command_deps = _cohort_command_deps(deps, cohort_file)
     if args.command == "sweep":
         exit_code: int = commands.sweep(
             command_deps,
@@ -417,6 +477,150 @@ def _dispatch_cohort_command(
     else:
         exit_code = commands.verify(command_deps, args.cohort, out=out)
     return exit_code
+
+
+def _dispatch_production_round(
+    args: argparse.Namespace, injected: CliWiring, cohort_file: ModuleType, out: TextIO
+) -> int:
+    """`production-round` (8.4): valida sem escrever, depois corre a rodada sob o lock da raiz.
+
+    Ordem (ADR 8.4.0002): nome, modelo, raiz e brutos validados → processo da rodada
+    montado → lock da raiz de produção → materialização (pulada se marcada) → spec da
+    rodada → corrida → `verify` → ponteiro. Exit 1 do `verify` volta sem publicar.
+    """
+    production = importlib.import_module(_PRODUCTION_COMMANDS)
+    production.parse_round_name(args.round)
+    model = cohort_file.load(args.cohort)
+    overrides = dict(injected.settings_overrides)
+    repo_root = Path(Settings(**overrides).repo_root).resolve()
+    production_root: Path = args.production_root.resolve()
+    _refuse_cohort_overlap(production, production_root, repo_root / _COHORTS_DIR)
+    inputs = _raw_inputs(production, args.raw_root, model.asset_id)
+    round_root = production_root / _ROUNDS_DIR / args.round
+    overrides.update(
+        data_root=round_root,
+        artifacts_root=round_root / "artifacts",
+        mlflow_tracking_uri=f"sqlite:///{(round_root / 'mlruns.db').as_posix()}",
+    )
+    deps = wire_dependencies(
+        Settings(**overrides),
+        sentiment_model=injected.sentiment_model,
+        runtime_probe_factory=injected.runtime_probe_factory,
+    )
+    lock = deps.writer_lock_for(production_root)
+    lock.acquire_writer(break_stale=args.break_stale_lock)
+    try:
+        _materialize_round(
+            deps,
+            round_root=round_root,
+            inputs=inputs,
+            asset_id=model.asset_id,
+            dataset_start=model.dataset_start,
+            sentiment_injected=injected.sentiment_model is not None,
+            break_stale_lock=args.break_stale_lock,
+            out=out,
+        )
+        round_spec_path = round_root / _ROUND_SPEC
+        spec = production.prepare_round_spec(
+            production.ProductionCommandDeps(
+                store=deps.store,
+                hasher=deps.hasher,
+                modeling_columns=deps.modeling_columns,
+                load_spec=cohort_file.load,
+                parse_spec=cohort_file.parse,
+                dump_spec=cohort_file.dump,
+            ),
+            args.cohort,
+            round_spec_path,
+            out=out,
+        )
+        result = deps.production_cohort_for(args.cohort, spec.device)(
+            RunConfirmatoryCohortCommand(spec=spec, break_stale_lock=args.break_stale_lock)
+        )
+        out.write(f"cohort {result.cohort_id}\n")
+        for outcome in result.outcomes:
+            out.write(f"  {outcome.unit_key}: {outcome.status} ({len(outcome.run_ids)} runs)\n")
+        commands, command_deps = _cohort_command_deps(deps, cohort_file)
+        verified: int = commands.verify(command_deps, round_spec_path, out=out)
+        if verified != 0:
+            return verified
+        if production.publish_serving_pointer(
+            production_root, args.round, round_root, round_spec_path, out=out
+        ):
+            pointer = production_root / production.SERVING_POINTER
+            out.write(f"published {result.cohort_id} → {pointer}\n")
+        return 0
+    finally:
+        lock.release_writer()
+
+
+def _refuse_cohort_overlap(production: ModuleType, production_root: Path, cohorts: Path) -> None:
+    """Raiz de produção igual, dentro ou contendo a dos cohorts → erro (I1).
+
+    Compara os caminhos resolvidos sem diferenciar maiúsculas: no bind mount do host
+    Windows, `Data/Cohorts` e `data/cohorts` são o mesmo diretório.
+    """
+    root = production_root.as_posix().casefold().rstrip("/")
+    guarded = cohorts.resolve().as_posix().casefold().rstrip("/")
+    if root == guarded or root.startswith(f"{guarded}/") or guarded.startswith(f"{root}/"):
+        raise production.ProductionRoundError(
+            f"production root {production_root} overlaps {cohorts}, where the confirmatory "
+            "and ablation cohorts live — choose a root outside it (e.g. data/production/<asset>)"
+        )
+
+
+def _raw_inputs(production: ModuleType, raw_root: Path, asset_id: str) -> list[tuple[Path, str]]:
+    """Os três brutos `(origem, caminho relativo)`; ausente → erro nomeando o arquivo."""
+    inputs = [(raw_root / rel.format(a=asset_id), rel.format(a=asset_id)) for rel in _RAW_INPUTS]
+    for source, _ in inputs:
+        if not source.is_file():
+            raise production.ProductionRoundError(f"raw input not found: {source}")
+    return inputs
+
+
+def _materialize_round(  # noqa: PLR0913 — opções coesas da etapa
+    deps: ApplicationDependencies,
+    *,
+    round_root: Path,
+    inputs: list[tuple[Path, str]],
+    asset_id: str,
+    dataset_start: date | None,
+    sentiment_injected: bool,
+    break_stale_lock: bool,
+    out: TextIO,
+) -> None:
+    """Copia os brutos e materializa, ou pula se a rodada já está marcada (I6, I7).
+
+    A ingestão acrescenta ao bronze e recusa chave repetida: sem a marca, o que uma
+    tentativa anterior deixou (brutos copiados, bronze, dataset) é apagado e refeito.
+    """
+    mark = round_root / _MATERIALIZED_MARK
+    if mark.exists():
+        changed = [
+            rel for source, rel in inputs if not filecmp.cmp(source, round_root / rel, False)
+        ]
+        if changed:
+            out.write(
+                f"warning: --raw-root differs from the round's copy for {changed}; "
+                "the round keeps its copy (start a new round to use the new inputs)\n"
+            )
+        out.write(f"materialized round {round_root.name}: already marked — skipped\n")
+        return
+    for name in _ROUND_REDONE:
+        shutil.rmtree(round_root / name, ignore_errors=True)
+    for source, rel in inputs:
+        target = round_root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+    _materialize(
+        deps,
+        asset_id=asset_id,
+        sentiment_injected=sentiment_injected,
+        break_stale_lock=break_stale_lock,
+        dataset_start=dataset_start,
+        out=out,
+    )
+    mark.write_text(f"{datetime.now(UTC).isoformat()}\n", encoding="utf-8")
 
 
 def _dispatch_inference_command(
