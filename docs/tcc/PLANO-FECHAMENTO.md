@@ -83,7 +83,7 @@ cobriria.
 | C5 | A pergunta "por que o EWMA-vol venceu?" tem resposta no texto | seção de discussão com o mecanismo, os números da corrida e ≥ 2 fontes primárias |
 | C6 | O estudo piloto aparece como motivação, não como evidência | cada achado do piloto citado tem fonte verificável no repositório; o texto diz que o piloto não é evidência confirmatória |
 | C7 | A Stage 8.4 atende aos critérios da #202 | `stage-audit` `complete`, `make check` verde e os 3 critérios de aceitação da #202 com evidência |
-| C8 | A defesa cabe no tempo e não contradiz o texto | apresentação compila; cada número dos slides aparece igual no texto; tempo estimado ≤ 25 min |
+| C8 | A defesa cabe no tempo e não contradiz o texto | apresentação compila; cada número dos slides aparece igual no texto; tempo estimado ≤ 20 min (Art. 16 do regulamento de TCC do Campus Joinville; ajustado em 2026-10-25, ver §9) |
 
 ### Não-objetivos
 
@@ -110,9 +110,10 @@ passou por auditoria de citações, e C falha em três critérios.
 | # | Entrega | Issue | Nível | Depende de | Como verificar (antes de escrever) |
 |---|---|---|---|---|---|
 | E1 | Resultados confirmatórios no texto | #233 | N1 | — | C1 (script), C2 parcial, PDF compila |
-| E2 | Figuras da 8.3, reprodução da 8.2 e perfil pontual (D1) no texto | nova | N1 | E1 | figuras citadas e legíveis; afirmação de reprodução igual ao relatório da 8.2; C1 nos números novos |
+| E2 | Figuras da 8.3, reprodução da 8.2, perfil pontual (D1) e Winkler/Kupiec (D5) no texto | nova | N1 | E1 | figuras citadas e legíveis, cada uma com parágrafo de leitura; afirmação de reprodução igual ao relatório da 8.2; C1 estendido aos números novos |
 | E3 | Estudo piloto como motivação do desenho | nova | N2 (D2) | E1 | C6; política editorial atualizada |
-| E4 | Discussão: por que o EWMA-vol venceu e o que mudaria o resultado | nova | N2 (D3) | E1, pesquisa §5 | C5, C3 |
+| E4a | Análise exploratória da média das sementes (D3), na especificação da §7 | nova | N1 | — | números conferidos por teste opt-in; nada fora da especificação |
+| E4 | Discussão: por que o EWMA-vol venceu e o que mudaria o resultado | nova | N2 | E1, E4a, pesquisa §5 | C5, C3 |
 | E5 | Limitações completas (as-of anual/trimestral, regimes de coleta das notícias) | nova | N0 | E1 | os 3 itens da #163 e a cobertura das notícias declarados |
 | E6 | Alinhamento à rubrica: introdução, resumo, ABNT, apêndice de implementação, consistência | nova | N1 | E2–E5, síntese §5 | C4, C2 completo |
 | E7 | Apresentação da defesa (Beamer, em `text/`) | nova | N1 | E6 | C8 |
@@ -155,10 +156,32 @@ A síntese é gravada em `docs/tcc/RUBRICA-E-REFERENCIAS.md` e alimenta E4, E6 e
 
 | # | Decisão | Tipo | Escolha | Motivo | Status |
 |---|---|---|---|---|---|
-| D1 | Perfil pontual (RMSE, MAE, acurácia direcional) | P | a decidir na E2, depois da síntese da §5 | o Método promete o perfil; o pré-registro não o exige | aberta |
+| D1 | Perfil pontual (RMSE, MAE, acurácia direcional) | P | **calcular, de forma enxuta**, sobre as previsões persistidas: uma tabela e um parágrafo, rotulados "calculado depois do veredito, descritivo"; acurácia direcional com IC binomial contra 0,5 e reportada só para modelos de mediana não nula (TFT, AR(1), GBM, média histórica) | o Método promete o perfil; cortar exigiria reescrever o Cap. 2 e o Cap. 4; a banca de engenharia vai perguntar; custo baixo, sem re-treino (síntese §2) | a ratificar |
 | D2 | Enquadrar o projeto antigo como estudo piloto | P | sim, como motivação metodológica e sem números como evidência | pedido do dono em 2026-10-24 | ratificada pelo dono |
-| D3 | Análise exploratória pós-confirmatória (ex.: ensemble das seeds) sobre previsões já persistidas | P | a decidir na E4 | responde "o TFT foi mal usado?" com dado, sem re-treino; risco de parecer pesca pós-hoc | aberta |
+| D3 | Análise exploratória pós-confirmatória da média das sementes | P | **fazer uma única análise**, especificada abaixo **antes** de calcular | é a pergunta mais provável da arguição; pela convexidade da *pinball* (Jensen), a perda do quantil médio é sempre ≤ a média das perdas, então o sinal é garantido e só a magnitude informa, o que reduz o risco de pesca | a ratificar |
 | D4 | Formato da apresentação | C | Beamer em `text/`, compilado pela mesma imagem | coerência com o texto em LaTeX; convenção comum em defesas de exatas | a ratificar |
+| D5 | Winkler e VaR/Kupiec prometidos no Método | E | entregar a partir das tabelas gold existentes (`gold_metrics_by_run` tem `interval_score`; `gold_calibration_table` tem Kupiec POF); cortar a promessa só para o que não existir | coerência entre o prometido e o entregue (rubrica, critério 6) | aceita |
+
+### Especificação da D3 (fixada em 2026-10-25, antes de qualquer cálculo)
+
+- **Objeto.** Em cada ponto de decisão da amostra comum de H2 (n = 1.511 em h+1; 1.505 em h+7),
+  em cada nível τ da grade, o quantil do *ensemble* é a média aritmética de `value_guardrail`
+  das dez sementes do TFT no mesmo `target_timestamp` e no mesmo horizonte. Não há rearranjo
+  adicional: a média de grades monotônicas é monotônica.
+- **Medidas.**
+  - *Pinball* média da grade do *ensemble* e sua razão contra a média das perdas por semente
+    (4,050 e 4,063 × 10⁻³) e contra o EWMA-vol e o GBM.
+  - Taxas de violação das duas caudas do par de 80% e PICP.
+  - DM unilateral (variância retangular até a defasagem h − 1, correção HLN), a mesma
+    especificação do confirmatório, do *ensemble* contra o EWMA-vol e contra o GBM, com
+    **p-valores brutos** (sem Holm: a análise é exploratória).
+- **Rótulo no texto.** "Análise exploratória pós-confirmatória (WAGENMAKERS et al., 2012): não
+  altera o veredito." Junto, o custo: dez treinos contra um modelo de um parâmetro.
+- **Leitura fixada antes.**
+  - Se o *ensemble* tiver perda menor que a do EWMA-vol, isso vira **hipótese** para trabalho
+    futuro.
+  - Se não tiver, reforça que o limite está na informação das *features*.
+  - Nenhum outro *ensemble* (mediana, pesos, subconjuntos de sementes) será calculado.
 
 ## 8. Ameaças à validade deste plano
 
@@ -176,3 +199,23 @@ A síntese é gravada em `docs/tcc/RUBRICA-E-REFERENCIAS.md` e alimenta E4, E6 e
 
 - **2026-10-25.** A worktree da #202 já tinha o commit que cria a Stage 8.4 no roadmap, sem
   push, refeito sobre o `develop` atual. A E8 começa pelo PR desse commit.
+- **2026-10-25 — checkout principal.** Havia um *cherry-pick* de `acb7cca6` parado no checkout
+  principal do `develop`, anterior a esta sessão; o mesmo conteúdo já estava em `b545c6f5`. Foi
+  abortado e o `develop` local avançou para o `origin/develop`. O Docker Desktop também estava
+  parado e foi iniciado.
+- **2026-10-25 — pesquisa de referência.** Não existe corpus público de "TCC nota 10" em IA. Os
+  premiados verificados (CTIC/SBC) têm menos rigor estatístico que este trabalho e se destacam
+  por clareza. A síntese está em [RUBRICA-E-REFERENCIAS](./RUBRICA-E-REFERENCIAS.md).
+- **2026-10-25 — instrumento real.** O curso é Engenharia Mecatrônica (UFSC Joinville). Pelo
+  regulamento do campus, a apresentação tem até 20 minutos, por isso o C8 passou de 25 para 20.
+  A cópia vai à banca 15 dias antes. As bancas de 2026/2 vão de 09 a 27/nov, o que deixa pouca
+  folga. A data da defesa é do dono.
+- **2026-10-25 — achado na E1.** A frase "a calibração é propriedade do *ensemble* de sementes"
+  estava imprecisa, porque o *gate* julga a média das taxas por semente. Foi corrigida no próprio
+  PR da E1 (#240).
+- **2026-10-25 — entregas ajustadas pela síntese.**
+  - A E2 passa a cobrir também a D1, a D5 e a reprodução.
+  - A análise D3 vira uma entrega própria, a E4a: código em `tests/tcc/`, opt-in como o C1, com
+    os números conferidos por teste. A E4 consome o resultado.
+  - A E6 ganha trabalhos correlatos, a tabela de objetivos, contribuições reduzidas e os
+    elementos formais.
