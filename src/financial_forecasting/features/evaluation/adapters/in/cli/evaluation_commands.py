@@ -209,6 +209,7 @@ def report_artifacts(  # noqa: PLR0913 — opções coesas do subcomando
     preregistration_ref: str,
     cohort_seeds: tuple[int, ...],
     out: TextIO,
+    dossier: bool = True,
 ) -> int:
     """Parseia o registro curado (fronteira), gera figuras e dossiê e imprime; devolve 0.
 
@@ -217,6 +218,9 @@ def report_artifacts(  # noqa: PLR0913 — opções coesas do subcomando
         report <ref>: generation_digest <64 hex> figures 10 register_entries <n>
         figure <id> data_digest <64 hex>                  (10 linhas, ordem do catálogo)
         dossier citable final_traceability_dossier.md internal (o arquivo _internal.md)
+
+    Sem `dossier` (estilo de apresentação, issue #250: o sink não grava o dossiê), a última
+    linha é `presentation figures (no dossier written)`.
 
     Registro malformado ergue `ValueError` antes do use case (o `main` traduz em exit 2).
     """
@@ -235,7 +239,9 @@ def report_artifacts(  # noqa: PLR0913 — opções coesas do subcomando
         f"report {result.preregistration_ref}: generation_digest {result.generation_digest} "
         f"figures {len(result.figures)} register_entries {result.register_entries}",
         *(f"figure {figure_id} data_digest {digest}" for figure_id, digest in result.figures),
-        f"dossier citable {CITABLE_FILE} internal {INTERNAL_FILE}",
+        f"dossier citable {CITABLE_FILE} internal {INTERNAL_FILE}"
+        if dossier
+        else "presentation figures (no dossier written)",
     ]
     out.write("".join(f"{line}\n" for line in lines))
     return 0

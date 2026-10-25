@@ -233,7 +233,9 @@ class _Copy:
     def data(self) -> Path:
         return self.repo / "data"
 
-    def run(self, *, reference: str | None = None) -> tuple[int, str, str]:
+    def run(
+        self, *, reference: str | None = None, extra: tuple[str, ...] = ()
+    ) -> tuple[int, str, str]:
         out, err = io.StringIO(), io.StringIO()
         code = cli.main(
             [
@@ -252,6 +254,7 @@ class _Copy:
                 str(self.output),
                 "--register",
                 str(self.register),
+                *extra,
             ],
             wiring=cli.CliWiring(
                 runtime_probe_factory=lambda path, device: _PROBE,
@@ -312,6 +315,43 @@ def test_second_generation_is_byte_identical(world: _Copy) -> None:
     first = _hashes(world.output)
     assert world.run()[0] == 0
     assert _hashes(world.output) == first
+
+
+def test_presentation_style_same_data_digest_without_dossier(world: _Copy) -> None:
+    """Issue #250: as figuras do texto saem do mesmo dado (mesmo `data_digest`, geração e
+    referência do dossiê), sem a omitida e sem dossiê, com o estilo no registro; a segunda
+    geração repete os bytes e `data/` fica intacto."""
+    assert world.run()[0] == 0
+    before = _hashes(world.data)
+    presentation = world.output.parent / "figuras"
+    extra = ("--style", "presentation", "--output", str(presentation))
+    code, out, err = world.run(extra=extra)
+    assert code == 0, err
+    assert out.splitlines()[-1] == "presentation figures (no dossier written)"
+    used = [fid for fid in FIGURE_IDS if fid != "dm_candidate_vs_comparators"]
+    assert set(_hashes(presentation)) == {
+        f"{fid}.{ext}" for fid in used for ext in ("pdf", "json")
+    } | {"omitted_figures.json"}
+    for figure_id in used:
+        dossier = json.loads(
+            (world.output / "figures" / f"{figure_id}.json").read_text(encoding="utf-8")
+        )
+        shown = json.loads((presentation / f"{figure_id}.json").read_text(encoding="utf-8"))
+        assert shown["renderer"] == {**dossier["renderer"], "style": "presentation"}
+        assert {k: v for k, v in shown.items() if k != "renderer"} == {
+            k: v for k, v in dossier.items() if k != "renderer"
+        }
+        assert (presentation / f"{figure_id}.pdf").read_bytes() != (
+            world.output / "figures" / f"{figure_id}.pdf"
+        ).read_bytes()
+    omitted = json.loads((presentation / "omitted_figures.json").read_text(encoding="utf-8"))
+    assert omitted["generation_digest"] == world.base.digest
+    assert omitted["preregistration_ref"] == world.base.reference
+    assert set(omitted["omitted"]) == {"dm_candidate_vs_comparators"}
+    first = _hashes(presentation)
+    assert world.run(extra=extra)[0] == 0
+    assert _hashes(presentation) == first
+    assert _hashes(world.data) == before
 
 
 def test_data_root_unchanged(world: _Copy) -> None:
