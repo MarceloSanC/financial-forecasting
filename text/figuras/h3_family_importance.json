@@ -1,0 +1,65 @@
+{
+  "code": {
+    "code.src": "a6821223aa6bb1d69a0f0804dc48f978c9f470b7",
+    "code.uv_lock": "0ff8a4dfe837fbb76c5d619b240f918e519c0dd7"
+  },
+  "data_digest": "29642f60010e8382042830d2970e4424d5d59460c76473ceecf71acbadcf016d",
+  "excluded_degenerate": {},
+  "figure_id": "h3_family_importance",
+  "generation_digest": "96c0541301885ed1c6688a517176f63a54e872a3e18ee82fbb5c23121747e539",
+  "omissions": [
+    "intervalo bootstrap de I_f(h) e de s_f(h) (o gold s\u00f3 tem o de \u0394_f)"
+  ],
+  "omitted_models": [],
+  "partition": {
+    "asset": "AAPL",
+    "parent_sweep_id": "aapl_confirmatory-r0-665f45d9169a"
+  },
+  "preregistration_ref": "aapl_confirmatory-r3-00fd83d9cd39",
+  "renderer": {
+    "format": "pdf",
+    "freetype": "2.14.3",
+    "matplotlib": "3.11.0",
+    "style": "presentation"
+  },
+  "revision": 3,
+  "silver_units": {},
+  "sources": [
+    {
+      "fields": [
+        "importance",
+        "status",
+        "reason"
+      ],
+      "filter": {},
+      "kind": "gold_table",
+      "name": "gold_h3_importance"
+    },
+    {
+      "fields": [
+        "share_h1",
+        "share_h7",
+        "delta",
+        "lower",
+        "upper",
+        "status"
+      ],
+      "filter": {},
+      "kind": "gold_table",
+      "name": "gold_h3_shares"
+    },
+    {
+      "fields": [
+        "label",
+        "status",
+        "heterogeneous_permutation",
+        "heterogeneous_ablation",
+        "sustained",
+        "agreeing_families"
+      ],
+      "filter": {},
+      "kind": "gold_table",
+      "name": "gold_h3_reading"
+    }
+  ]
+}
