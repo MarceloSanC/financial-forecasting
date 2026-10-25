@@ -3,8 +3,9 @@
 As mesmas `FigureSpec` do dossiê, desenhadas para uma banca: nomes de modelos, famílias e
 métodos em português, eixos por extenso, sem estatuto na legenda nem no título do painel,
 sem título da figura (a legenda do LaTeX faz esse papel) e sem rodapé; fontes de 7 a 8,5 pt
-na largura do texto (6,3 pol.), legíveis com a figura em meia página A4. Só o texto
-exibido e as medidas mudam — o dado desenhado, as cores e os marcadores são os do dossiê.
+na largura do texto (6,3 pol.), legíveis com a figura em meia página A4; vírgula decimal
+nos eixos numéricos. Só o texto exibido e as medidas mudam — o dado desenhado, as cores e
+os marcadores são os do dossiê.
 
 `PRESENTATION_OMISSIONS` lista as figuras do catálogo que o texto não usa, com o motivo; o
 sink de apresentação grava o motivo ao lado das figuras.
@@ -13,7 +14,7 @@ sink de apresentação grava o motivo ao lado das figuras.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from types import MappingProxyType
 from typing import Final
 
@@ -61,19 +62,28 @@ AXIS_LABELS: Final[Mapping[str, str]] = MappingProxyType(
         "P̄_τ (pinball)": "perda pinball média",
         "MPIW": "largura média (MPIW)",
         "PICP": "cobertura observada (PICP)",
-        "par (τ_l-τ_u)": "par de níveis (τ_l-τ_u)",
+        "par (τ_l-τ_u)": r"par de níveis ($\tau_l$-$\tau_u$)",
         "largura u - l": "largura do intervalo",
         "target_timestamp": "data-alvo",
-        "d_t": "diferencial de perda d_t",
+        "d_t": r"diferencial de perda $d_t$",
         "lag": "defasagem",
         "ACF": "autocorrelação",
-        "I_f(h)": "importância I_f(h)",
+        "I_f(h)": r"importância $I_f(h)$",
+        "Δ_f / s_f(h)": r"$\Delta_f\,/\,s_f(h)$",
         "peso": "peso na VSN",
         "cauda / par": "nível ou par",
         "ĉ(τ) / PICP": "cobertura observada",
     }
 )
 """Texto exibido inteiro (eixos) → texto por extenso; casa só o texto inteiro."""
+
+_NOTATION: Final[tuple[tuple[re.Pattern[str], Callable[[re.Match[str]], str]], ...]] = (
+    (re.compile(r"(?<!\w)d_t(?!\w)"), lambda _: "$d_t$"),
+    (re.compile(r"I_f\(h\)"), lambda _: "$I_f(h)$"),
+    (re.compile(r"s_f\(h(\+\d+)?\)"), lambda m: f"$s_f(h{m.group(1) or ''})$"),
+    (re.compile(r"Δ_f"), lambda _: r"$\Delta_f$"),
+)
+"""Notação com índice (`d_t`, `I_f(h)`, `s_f(h+7)`, `Δ_f`) em mathtext, sem `_` literal."""
 
 _PHRASES: Final[tuple[tuple[str, str], ...]] = (
     (r" \(sem seed\)", ""),
@@ -84,6 +94,7 @@ _PHRASES: Final[tuple[tuple[str, str], ...]] = (
     (r"realizado y_t", "retorno realizado"),
     (r"perfil por permutação", "dispersão entre repetições"),
     (r"perfil por seed", "dispersão entre sementes"),
+    (r"\(p50; p10 a p90\)", "(mediana; p10 a p90)"),
     (r"\bcandidato\b", "TFT"),
     (r"— d t$", "— diferencial de perda"),
     (r"— acf$", "— autocorrelação"),
@@ -106,13 +117,16 @@ _COMPILED: Final = tuple((re.compile(pattern), repl) for pattern, repl in _PHRAS
 def presentation_text(text: str) -> str:
     """O texto exibido no estilo de apresentação.
 
-    Texto inteiro de eixo → `AXIS_LABELS`; senão, os trechos de `_PHRASES` na ordem e cada
-    identificador (modelo, família, método) pelo nome de exibição, só como palavra inteira.
+    Texto inteiro de eixo → `AXIS_LABELS`; senão, os trechos de `_PHRASES` na ordem, a
+    notação com índice em mathtext (`_NOTATION`) e cada identificador (modelo, família,
+    método) pelo nome de exibição, só como palavra inteira.
     """
     if text in AXIS_LABELS:
         return AXIS_LABELS[text]
     for pattern, repl in _COMPILED:
         text = pattern.sub(repl, text)
+    for notation, write in _NOTATION:
+        text = notation.sub(write, text)
     return _IDENTIFIER.sub(lambda match: _IDENTIFIERS[match.group(1)], text)
 
 
@@ -144,9 +158,10 @@ PRESENTATION_STYLE: Final = RenderStyle(
     text=presentation_text,
     panel_height_in=2.15,
     title_in=0.1,
-    legend_wrap=44,
-    legend_line_in=0.12,
-    legend_entry_in=0.055,
+    legend_wrap=50,
+    legend_line_in=0.1,
+    legend_entry_in=0.045,
+    decimal_comma=True,
 )
 """O estilo de apresentação (ver o docstring do módulo)."""
 

@@ -43,6 +43,7 @@ from matplotlib.axes import Axes
 from matplotlib.backends.backend_pdf import FigureCanvasPdf
 from matplotlib.figure import Figure, SubFigure
 from matplotlib.text import Text
+from matplotlib.ticker import ScalarFormatter
 from matplotlib.transforms import Bbox
 
 from financial_forecasting.features.evaluation.application.dtos.report_artifacts import (
@@ -157,6 +158,14 @@ class RenderStyle:
     legend_wrap: int
     legend_line_in: float
     legend_entry_in: float
+    decimal_comma: bool
+
+
+class _DecimalCommaFormatter(ScalarFormatter):
+    """O rótulo numérico do `ScalarFormatter` com vírgula decimal (texto em português)."""
+
+    def __call__(self, x: float, pos: int | None = None) -> str:
+        return super().__call__(x, pos).replace(".", ",")
 
 
 DOSSIER_STYLE: Final = RenderStyle(
@@ -169,6 +178,7 @@ DOSSIER_STYLE: Final = RenderStyle(
     legend_wrap=_LEGEND_WRAP,
     legend_line_in=_LEGEND_LINE_IN,
     legend_entry_in=_LEGEND_ENTRY_IN,
+    decimal_comma=False,
 )
 """O estilo do dossiê (Stage 8.3): estatuto, título e rodapé, texto como na spec."""
 
@@ -507,6 +517,10 @@ class MatplotlibFigureRenderer:
         axes.set_title(title)
         axes.set_xlabel(text(panel.x_label))
         axes.set_ylabel(text(panel.y_label))
+        if self._style.decimal_comma:
+            # eixo de categorias troca o formatador por rótulos fixos mais abaixo
+            axes.xaxis.set_major_formatter(_DecimalCommaFormatter())
+            axes.yaxis.set_major_formatter(_DecimalCommaFormatter())
         groups = {
             kind: [s for s in panel.series if s.kind is kind]
             for kind in (SeriesKind.BOXES, SeriesKind.BARS, SeriesKind.INTERVAL)

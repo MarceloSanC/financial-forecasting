@@ -69,7 +69,7 @@ def _drawn_texts(spec: FigureSpec) -> list[Text]:
 )
 def test_identifier_shown_by_display_name(internal: str, shown: str) -> None:
     assert presentation_text(internal) == shown
-    assert presentation_text(f"d_t vs. {internal}") == f"d_t vs. {shown}"
+    assert presentation_text(f"comparador {internal}") == f"comparador {shown}"
 
 
 def test_display_names_of_the_issue() -> None:
@@ -107,6 +107,27 @@ def test_seed_wording_in_portuguese() -> None:
         presentation_text("tft_quantile (larguras de 10 seeds empilhadas: seed 1, seed 2)")
         == "TFT (larguras das 10 sementes empilhadas)"
     )
+
+
+def test_indexed_notation_in_mathtext() -> None:
+    assert presentation_text("d_t vs. baseline_ar1") == "$d_t$ vs. AR(1)"
+    assert presentation_text("ACF de d_t vs. gbm_quantile") == "ACF de $d_t$ vs. GBM quantílico"
+    assert presentation_text("Δ_f = s_f(h+7) - s_f(h+1), loco") == (
+        r"$\Delta_f$ = $s_f(h+7)$ - $s_f(h+1)$, ablação"
+    )
+    assert presentation_text("I_f(h), permutation") == "$I_f(h)$, permutação"
+    assert presentation_text("d_t") == "diferencial de perda $d_t$"
+
+
+def test_numeric_ticks_with_decimal_comma(specs: list[FigureSpec]) -> None:
+    spec = specs[FIGURE_IDS.index("vsn_weights")]
+    for style, separator in ((PRESENTATION_STYLE, ","), (DOSSIER_STYLE, ".")):
+        figure = MatplotlibFigureRenderer(style)._draw(spec)
+        figure.draw_without_rendering()
+        labels = [t.get_text() for ax in figure.get_axes() for t in ax.get_yticklabels()]
+        assert any(separator in label for label in labels), labels
+        other = "." if separator == "," else ","
+        assert not any(other in label for label in labels), labels
 
 
 def test_omissions_are_catalog_figures_with_reason() -> None:
