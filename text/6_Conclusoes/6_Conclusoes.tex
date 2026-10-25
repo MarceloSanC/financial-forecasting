@@ -66,7 +66,7 @@ Em nono lugar, a cobertura das notícias não é homogênea no tempo. A base tem
 Por fim, o limiar de degeneração e os desvios mínimos relevantes usados no cálculo do poder não têm valor canônico na literatura; sua validade decorre da declaração antecipada no pré-registro, conforme discutido na Seção~\ref{sec:scorecard}.
 
 \section{Trabalhos futuros}
-Como evoluções coerentes com as limitações observadas, propõem-se cinco direções.
+Como evoluções coerentes com as limitações observadas, propõem-se seis direções.
 
 A primeira é ampliar a avaliação para horizontes mais longos, como \(h+30\), e para outros ativos, mantendo o desenho \textit{single-asset} e definindo no pré-registro os critérios de inclusão de ativos, com declaração explícita de disponibilidade, qualidade e comparabilidade.
 
@@ -77,3 +77,5 @@ A terceira é explorar variantes de emissão de quantis e de calibração não a
 A quarta é o desenho de estudo específico para inferência causal das famílias de indicadores; o escopo atual sustenta apenas contribuição preditiva condicional ao modelo.
 
 A quinta é a aplicação do estimador em alocação de carteira ou estratégia de \textit{trading}, e a extensão a outras classes de ativos e frequências (por exemplo, derivativos de criptoativos e dados de microestrutura), condicionadas a validação própria --- custos de transação, restrições de execução --- fora do recorte deste trabalho.
+
+A sexta é testar as duas hipóteses levantadas na discussão (Seção~\ref{sec:discussao}): treinar o TFT no regime para o qual foi concebido, como modelo global sobre muitos ativos, e incluir na hierarquia de \textit{baselines} um modelo de volatilidade assimétrico, que acomode o efeito alavancagem \cite{HANSEN2005}, como comparador mais exigente que o EWMA-vol.
