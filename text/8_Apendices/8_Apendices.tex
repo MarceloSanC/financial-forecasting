@@ -136,6 +136,10 @@ As fontes são \texttt{yfinance} (cotações diárias), notícias com data e hor
 
 Sobre o conjunto de dados, executam-se: as buscas exploratórias de hiperparâmetros do TFT e do GBM; o congelamento e a ancoragem da especificação do cohort; e o treino do cohort confirmatório --- os cinco \textit{baselines} estatísticos, o GBM quantílico e o TFT sob o mesmo protocolo \textit{walk-forward}. Em seguida, congela-se e ancora-se o pré-registro; geram-se as previsões do bloco \texttt{calib} a partir dos modelos salvos, com a verificação de reprodução das previsões de teste; e só então calculam-se métricas, testes, predição conformal e contribuição de famílias, e o \textit{scorecard} produz o veredito. As execuções são registradas em MLflow com \textit{backend} local.
 
+\section*{C.4 Reprodução da geração julgada}
+
+A geração julgada, isto é, as tabelas e o \textit{scorecard} a partir dos quais o veredito foi emitido, foi preservada numa cópia imutável, com o \textit{hash} do conteúdo registrado antes de qualquer outra atualização. A cadeia que a produz foi executada de novo a partir dos dados persistidos, num destino separado, sem re-treino e no mesmo ambiente da corrida (mesma imagem e mesmo código). O resultado foi idêntico bit a bit: as 19 tabelas e o \textit{scorecard}, inclusive as colunas das etapas com sorteio (\textit{bootstrap} e Monte Carlo), num total de 1.173.254 valores comparados sem nenhuma diferença, e com o mesmo \textit{digest} do resultado. As previsões de teste também se reproduzem bit a bit a partir dos modelos salvos, no ambiente do cohort. A reprodução em outro ambiente, em que a aritmética de ponto flutuante pode diferir e se aplicaria a tolerância descrita em C.1, não foi realizada.
+
 \chapter*{APÊNDICE D - Notas de implementação}
 \addcontentsline{toc}{chapter}{APÊNDICE D - Notas de implementação}
 
@@ -156,3 +160,39 @@ Os dados seguem a organização em camadas \textit{bronze} (dados brutos imutáv
 \section*{D.4 Registro de decisões}
 
 As decisões de desenho são registradas em documentos de decisão arquitetural (ADR) versionados no repositório, por exemplo: enquadramento em calibração probabilística (ADR 0.0.0002), controle de \textit{leakage} (0.0.0018), convenções de emissão de quantis dos \textit{baselines} (0.0.0052), definição do alvo (3.5.0001), formato longo das previsões (4.1.0002), indexação do \textit{target timestamp} por sessão (4.3.0001), rearranjo sobre a grade densa (4.3.0002), \textit{walk-forward} expansivo e partição de calibração (5.1.0001--5.1.0003), GBM direto por nível e horizonte (5.3.0001), configuração do TFT (5.4.0001--5.4.0006), especificação congelada do cohort (5.5.0001), regra de leitura da H3 (0.0.0007), CQR como referência de cobertura (0.0.0008), invariantes do pré-registro e \textit{gate} de H1 (0.0.0011), pré-registro canônico e emendas (6.5.0001--6.5.0002), forma lógica do veredito (6.5.0007) e contrato de reprodução das previsões (7.1.0003).
+
+\chapter*{APÊNDICE E - Figuras complementares}
+\addcontentsline{toc}{chapter}{APÊNDICE E - Figuras complementares}
+
+As figuras deste apêndice completam o perfil descritivo do Capítulo~\ref{chap:resultados} e não têm papel no veredito. Todas são reconstruídas a partir das tabelas da geração julgada, sem re-treino.
+\begin{figure}[htbp]
+\centering
+\caption{Cobertura empírica (não garantida) dos intervalos do TFT, nativos e corrigidos pela CQR (variante de registro) e pela NexCP (sensibilidade), por par e horizonte}
+\label{fig:conformal}
+\includegraphics[width=\textwidth]{figuras/native_vs_conformal.pdf}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\caption{Nitidez: largura dos intervalos de 50\%, 80\% e 96\% por modelo e horizonte}
+\label{fig:sharpness}
+\includegraphics[width=\textwidth]{figuras/sharpness_diagram.pdf}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\caption{Diferencial de perda entre o TFT e cada comparador forte, \(d_t\), e sua autocorrelação, que fundamenta o uso de variância robusta no teste de Diebold-Mariano e de \textit{bootstrap} em blocos no MCS}
+\label{fig:acf}
+\includegraphics[width=\textwidth]{figuras/loss_differential_acf.pdf}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\caption{Pesos da \textit{Variable Selection Network} por família de \textit{features}, sobre as decisões de teste (descrição do uso pelo modelo, sem eixo de horizonte)}
+\label{fig:vsn}
+\includegraphics[width=\textwidth]{figuras/vsn_weights.pdf}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
+\end{figure}
