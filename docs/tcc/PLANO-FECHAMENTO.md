@@ -157,10 +157,10 @@ A síntese é gravada em `docs/tcc/RUBRICA-E-REFERENCIAS.md` e alimenta E4, E6 e
 
 | # | Decisão | Tipo | Escolha | Motivo | Status |
 |---|---|---|---|---|---|
-| D1 | Perfil pontual (RMSE, MAE, acurácia direcional) | P | **calcular, de forma enxuta**, sobre as previsões persistidas: uma tabela e um parágrafo, rotulados "calculado depois do veredito, descritivo"; acurácia direcional com IC binomial contra 0,5 e reportada só para modelos de mediana não nula (TFT, AR(1), GBM, média histórica) | o Método promete o perfil; cortar exigiria reescrever o Cap. 2 e o Cap. 4; a banca de engenharia vai perguntar; custo baixo, sem re-treino (síntese §2) | a ratificar |
+| D1 | Perfil pontual (RMSE, MAE, acurácia direcional) | P | **calcular, de forma enxuta**, sobre as previsões persistidas: uma tabela e um parágrafo, rotulados "calculado depois do veredito, descritivo"; acurácia direcional com IC binomial contra 0,5 e reportada só para modelos de mediana não nula (TFT, AR(1), GBM, média histórica) | o Método promete o perfil; cortar exigiria reescrever o Cap. 2 e o Cap. 4; a banca de engenharia vai perguntar; custo baixo, sem re-treino (síntese §2) | ratificada pelo dono em 2026-10-25 |
 | D2 | Enquadrar o projeto antigo como estudo piloto | P | sim, como motivação metodológica e sem números como evidência | pedido do dono em 2026-10-24 | ratificada pelo dono |
-| D3 | Análise exploratória pós-confirmatória da média das sementes | P | **fazer uma única análise**, especificada abaixo **antes** de calcular | é a pergunta mais provável da arguição; pela convexidade da *pinball* (Jensen), a perda do quantil médio é sempre ≤ a média das perdas, então o sinal é garantido e só a magnitude informa, o que reduz o risco de pesca | a ratificar |
-| D4 | Formato da apresentação | C | Beamer em `text/`, compilado pela mesma imagem | coerência com o texto em LaTeX; convenção comum em defesas de exatas | a ratificar |
+| D3 | Análise exploratória pós-confirmatória da média das sementes | P | **fazer uma única análise**, especificada abaixo **antes** de calcular | é a pergunta mais provável da arguição; pela convexidade da *pinball* (Jensen), a perda do quantil médio é sempre ≤ a média das perdas, então o sinal é garantido e só a magnitude informa, o que reduz o risco de pesca | ratificada pelo dono em 2026-10-25 |
+| D4 | Formato da apresentação | C | Beamer em `text/`, compilado pela mesma imagem | coerência com o texto em LaTeX; convenção comum em defesas de exatas | fechada como convenção (C) |
 | D5 | Winkler e VaR/Kupiec prometidos no Método | E | entregar a partir das tabelas gold existentes (`gold_metrics_by_run` tem `interval_score`; `gold_calibration_table` tem Kupiec POF); cortar a promessa só para o que não existir | coerência entre o prometido e o entregue (rubrica, critério 6) | aceita |
 
 ### Especificação da D3 (fixada em 2026-10-25, antes de qualquer cálculo)
@@ -228,7 +228,7 @@ A síntese é gravada em `docs/tcc/RUBRICA-E-REFERENCIAS.md` e alimenta E4, E6 e
 - **2026-10-25 — figuras.** As figuras da 8.3 foram desenhadas para o dossiê: identificadores
   internos e estatuto na legenda, regras internas no rodapé. Entra a E2a (#250), um estilo de
   apresentação gerado do mesmo gold, com o dossiê inalterado byte a byte.
-- **2026-10-25 — gate local dos PRs só de texto (decisão da sessão mestra, a ratificar).**
+- **2026-10-25 — gate local dos PRs só de texto (decisão da sessão mestra, ratificada pelo dono em 2026-10-25).**
   - O `make check` local leva cerca de 49 minutos e não exercita `text/`; a CI roda o mesmo
     `make check` e é condição de merge.
   - PR que só toca `text/` roda localmente a compilação e a varredura de comandos colapsados, e
