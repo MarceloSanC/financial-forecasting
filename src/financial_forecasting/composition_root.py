@@ -1312,7 +1312,11 @@ def wire_dependencies(  # noqa: PLR0915 — o grafo inteiro, um bloco por BC
     observed_feature_set_hash = feature_set_hash()
     columns = modeling_columns()
 
-    def confirmatory_cohort_for(cohort_path: Path, device: str) -> RunConfirmatoryCohort:
+    def cohort_runner(
+        cohort_path: Path, device: str, *, inherited_hyperparameters: bool
+    ) -> RunConfirmatoryCohort:
+        # Um construtor só para o confirmatório e a produção (Stage 8.4, D5: "o MESMO
+        # runner"): um colaborador novo entra nos dois de uma vez.
         return RunConfirmatoryCohort(
             store=store,
             hasher=hasher,
@@ -1328,27 +1332,15 @@ def wire_dependencies(  # noqa: PLR0915 — o grafo inteiro, um bloco por BC
             pipeline_version=PIPELINE_VERSION,
             schema_version=_SILVER_SCHEMA_VERSION,
             supported_device=_TRAINERS_DEVICE,
+            inherited_hyperparameters=inherited_hyperparameters,
         )
+
+    def confirmatory_cohort_for(cohort_path: Path, device: str) -> RunConfirmatoryCohort:
+        return cohort_runner(cohort_path, device, inherited_hyperparameters=False)
 
     def production_cohort_for(template_path: Path, device: str) -> RunConfirmatoryCohort:
         # Stage 8.4: o único ponto que dispensa "dado dos sweeps = dado do cohort".
-        return RunConfirmatoryCohort(
-            store=store,
-            hasher=hasher,
-            clock=SystemClock(),
-            ledger=cohort_ledger,
-            run_index=cohort_run_index,
-            probe=runtime_probe_for(template_path, device),
-            run_baselines=run_baselines,
-            train_gbm=train_gbm_quantile,
-            train_tft=train_tft,
-            modeling_columns=columns,
-            observed_feature_set_hash=observed_feature_set_hash,
-            pipeline_version=PIPELINE_VERSION,
-            schema_version=_SILVER_SCHEMA_VERSION,
-            supported_device=_TRAINERS_DEVICE,
-            inherited_hyperparameters=True,
-        )
+        return cohort_runner(template_path, device, inherited_hyperparameters=True)
 
     def writer_lock_for(root: Path) -> CohortProgressLedger:
         return JsonCohortProgressLedger(artifacts_root=root / "artifacts", data_root=root)
