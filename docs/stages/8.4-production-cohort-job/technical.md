@@ -432,4 +432,161 @@ Task 02 ─► Task 04 ─┼─► Task 05 ─► Task 06 ─► Task 07 ─►
 ## 7. Execução (post-hoc, editável após done)
 <!-- BEGIN: post-execution -->
 
+### 2026-10-25 — [measurement] Concept D2, custo do retreino num fold — Claude (executor)
+**Contexto:** o D2 manda medir o custo do retreino antes de decidir entre retreinar e
+predizer com os checkpoints congelados, e o D7 escolhe as seeds com esse número.
+**Medição:** script avulso no scratchpad (`probe_cost.py`) chamando `deps.train_tft` com
+`tft_train_command` sobre o `aapl_confirmatory.toml` com `geometry.n_folds = 1`, seed 1,
+sobre uma CÓPIA do `processed/dataset_tft` do confirmatório num `data_root` descartável
+(nenhuma métrica calculada, nada gravado no `data_root` confirmatório). Container
+`financial_forecasting-app:dev`, `--cpus 6 --memory 8g`, com outro gate (`ff-gate-233`)
+rodando ao mesmo tempo:
+```
+ELAPSED_S 1641.9 runs [('aa6486a46a33e3f29d1b06de2b99cd7ae032613286c38432f5d30b29948e57aa', 3472)]
+```
+3472 linhas = 7 níveis × (251 decisões em h+1 + 245 em h+7).
+**Razão:** ~27 min por seed num fold contra 1,5–2,9 h por seed nos 6 folds da 5.5; com
+três seeds, a rodada fica em ~1 h 45 min (FinBERT ~15 min). Sustenta D2 e D7.
+
+### 2026-10-25 — [deviation] Checkpoint C uma vez, depois das oito Tasks — Claude (executor)
+**Contexto:** o PROMPT da sessão única pede o Checkpoint C a cada 2–3 Tasks.
+**Razão:** as oito Tasks foram implementadas e testadas antes do primeiro bloco ser
+revisado (a sessão adiantou o código enquanto esperava a CI do PR #239). O Checkpoint C
+rodou uma vez sobre o diff inteiro `8573e368..HEAD`, com a mesma lente; os achados viraram
+os commits `-fix` (abaixo). Nenhum achado dependia da ordem dos blocos.
+
+### 2026-10-25 — [measurement] Checkpoint C, achados e disposição — Claude (executor)
+**Contexto:** revisor de contexto zerado sobre `8573e368..HEAD` (skills hex-arch-python,
+composition-root, orchestrator-design, pytest-with-fakes).
+**Medição:** 1 major e 3 minor.
+1. major — `mkstemp` cria o temporário com 0600, e o `os.replace` publica o `serving.env` e
+   o `cohort.toml` com esse modo: o `docker --env-file` no host Linux e o `USER app` da
+   imagem de runtime não os leriam. **Corrigido** em `8865d28b` (chmod 0644 antes da troca,
+   teste do modo em POSIX).
+2. minor — `production_cohort_for` repetia os 14 argumentos do `confirmatory_cohort_for`.
+   **Corrigido** em `480ea62e` (construtor `cohort_runner` único).
+3. minor — o leiaute dos três brutos (`_RAW_INPUTS` do `cli.py`) repete o nome de arquivo
+   dos fetchers Parquet. **Refutado** com artefato: o e2e
+   `tests/e2e/test_production_round_cli.py` grava os brutos pelo `write_raw` (o leiaute que
+   os fetchers leem), passa-os pelo `_raw_inputs`/cópia e materializa com os fetchers reais;
+   uma divergência quebra o e2e (`materialize` não acha o arquivo). A duplicação de
+   `prepare_round_spec` com o `freeze` (grid → impressão digital → `fits` → ida e volta) é
+   a mesma leitura pelas MESMAS funções (`load_training_grid`, `grid_fingerprint`), não uma
+   segunda fórmula.
+4. minor — o `infer` da 7.1 chama `check_cohort_declarations` com o padrão `False` e recusaria
+   uma rodada; um gold de produção futuro precisaria disso. **Escalado** como `[finding]`
+   (abaixo) e issue #253.
+
+### 2026-10-25 — [finding] Gold de produção exigiria a herança no `infer` — Claude (executor)
+**Contexto:** achado 4 do Checkpoint C. O spec da rodada herda a proveniência dos sweeps do
+r0; `resolve_tft_checkpoints`, `predict_tft_from_checkpoints` e
+`predict_tft_attribution_from_checkpoints` chamam `check_cohort_declarations` sem
+`inherited_hyperparameters`, então o `infer` sobre uma rodada sai com
+`CohortDeclarationMismatchError`. A API não é afetada (o `serve_inference_for` não confere
+declarações).
+**Direção sugerida:** se o dono reverter o D3 e quiser o conformal em produção, passar a
+herança ao `infer` pela mesma restrição de fábrica.
+**Stage candidata:** issue #253 (gold de conformal no cohort de produção), ligada à #202.
+
+### 2026-10-25 — [measurement] Auditoria de testes (subagente independente) — Claude (executor)
+**Contexto:** gate "Auditoria de Testes" do PROMPT da sessão única, com mutação real nas três
+funções mais críticas (`publish_serving_pointer`, `_refuse_cohort_overlap`, o ramo
+`inherited_hyperparameters` de `check_cohort_declarations`), worktree montada `:ro` e
+copiada para `/tmp/m`, `PYTHONPATH=/tmp/m/src:/tmp/m` (import conferido em
+`/tmp/m/src/financial_forecasting/__init__.py`).
+**Medição (rodada 1):** caminho feliz coberto em CA1–CA5, CA7, CA8; ramo da herança 8/8
+mutantes mortos; sobreviventes reais: P5 (sufixo comparado como texto), P6 (só a data),
+P10 (caminho relativo), P14 (ponteiro sem `DATA_ROOT`), O6 (caixa do repositório), O7
+(irmão de `data/cohorts`), O9 (`..` no caminho), M1 (marca antes de materializar), M2/M5
+(`--break-stale-lock` não repassado), M3 (`raw/` não refeito); e casos do §6 sem teste pelo
+CLI (verify divergente com ponteiro anterior, falha do ponteiro, modelo congelado, ida e
+volta do spec). Os testes que faltavam entraram em `8865d28b` e `8cfda3b3`; o modelo passou a
+ser validado antes de escrever (`require_production_model`).
+**Medição (rodada 2, mesmo script `mut.sh`):**
+```
+IMPORT FROM /tmp/m/src/financial_forecasting/__init__.py
+BASELINE: 118 passed, 6 warnings in 3.53s
+[P3] SOBREVIVENTE :: 32 passed
+[P4] SOBREVIVENTE :: 32 passed
+[P12] MUTATION NOT APPLIED
+[I8] MUTATION NOT APPLIED
+```
+Todos os outros mutantes morreram. P3 e P4 são equivalentes (`parse_round_name` é injetivo:
+a guarda `current != round_name` e o `>=` não mudam o resultado). P12 e I8 não se aplicam ao
+código novo (a escrita ganhou o `chmod`; a fábrica passou a delegar a `cohort_runner`); os
+equivalentes atuais são mortos por `test_failed_replace_keeps_the_previous_pointer_and_no_temporary`
+e `test_only_the_production_factory_inherits_hyperparameters`.
+**Razão:** os seis itens do questionário ficam "sim".
+
+### 2026-10-25 — [deviation] Conferência do CA5 no gate depois do `cohort_runner` — Claude (executor)
+**Contexto:** o §3 confere "só `production_cohort_for` passa `True`" com
+`grep -rnE "^\s+inherited_hyperparameters=True," src/`. Depois de `480ea62e` a fábrica de
+produção passa `inherited_hyperparameters=True` como argumento de `cohort_runner(...)`, numa
+linha sem a vírgula final.
+**Razão:** a conferência mecânica do CA5 passa a ser o teste
+`tests/unit/test_composition_root_production.py` (flag `False` no confirmatório e `True` na
+produção) mais `grep -rn "inherited_hyperparameters=True" src/ --include=*.py`, cujas
+ocorrências são só a fábrica de produção e docstrings.
+
+### 2026-10-25 — [measurement] Gate 1, `make check` na saída do código — Claude (executor)
+**Contexto:** o plano de gates (§1) tem um único `make check`, depois da Task 08 e dos
+`-fix`, sobre o HEAD `8cfda3b3` rebaseado em `4c4e631b`.
+**Medição:** `docker run --name ff-gate-202 --cpus 6 --memory 8g` com a worktree em `/app`,
+`make check PYTEST_PAR='-n 4 --dist loadgroup'` (21:06–22:12 UTC):
+```
+uv run lint-imports … Contracts: 19 kept, 0 broken.
+[fake_parity] PASSOU — nenhuma violação nova.
+[port_coverage] PASSOU — nenhuma violação nova (1 no baseline).
+src/financial_forecasting/cli.py                                         266      3    99%
+src/financial_forecasting/composition_root.py                            366      7    98%
+src/financial_forecasting/features/modeling/adapters/in/cli/production_commands.py   81  0  100%
+src/financial_forecasting/features/modeling/application/dtos/cohort_spec.py         127  0  100%
+src/financial_forecasting/features/modeling/application/use_cases/cohort_unit_runner.py   133  0  100%
+src/financial_forecasting/features/modeling/application/use_cases/run_confirmatory_cohort.py   91  1  99%
+TOTAL                                                                  21180    308    99%
+Required test coverage of 90.0% reached. Total coverage: 98.55%
+========= 9396 passed, 38 skipped, 892 warnings in 3813.15s (1:03:33) ==========
+MAKE_EXIT=0
+```
+**Razão:** gate de saída verde; cada arquivo tocado ≥ 98 %.
+
+### 2026-10-25 — [measurement] Etapa R0–R2, rodada real 2025-06-30 e a API servindo-a — Claude (executor)
+**Contexto:** CA6. Brutos lidos (cópia) de `<checkout principal>/data/cohorts/aapl`; a raiz
+`raw-cut` corta candles em `timestamp < 2025-07-01`, notícias em `published_at` e
+fundamentos em `reported_date` (3896 candles, 3584 notícias, 61 fundamentos); `raw-full` é a
+cópia integral (4024, 6921, 81; sha256 `e102c738…`, `918cde47…`, `babfffbf…`). `sha256sum`
+dos 355 arquivos de `data/cohorts/aapl` gravado antes. Venv `ff84-venv-sentiment` (cópia
+do venv de dev + `uv sync --locked --extra dev --extra sentiment`, transformers 4.57.6,
+torch 2.13.0+cpu). Rodada pelo `docker run` do runbook com `--cpus 6 --memory 8g`, a worktree
+limpa em `/app`, só o `.git` principal `:ro` em `/main.git` e os brutos `:ro` em `/raw`; o
+`data/` do checkout principal não é montado.
+**Medição (R1):** `production-round --production-root data/production/aapl --round 2025-06-30
+--raw-root /raw/raw-cut --cohort config/cohorts/aapl_production.toml`, 22:13:55 → 23:31:35 UTC
+(77 min 40 s):
+```
+materialized AAPL: 3896 candles, 3584 news, 61 fundamentals
+dataset rows 3822 (2010-04-21..2025-06-30), feature_set_hash 7df0e1b4…09e0
+round spec written: /app/data/production/aapl/rounds/2025-06-30/cohort.toml (dataset fe7f5185f308)
+unit baselines: ran (5 runs, 17360 rows written, 208.3s)
+unit gbm: ran (1 runs, 3472 rows written, 52.3s)
+unit tft:seed=1: ran (1 runs, 3472 rows written, 1391.8s)
+unit tft:seed=2: ran (1 runs, 3472 rows written, 1159.6s)
+unit tft:seed=3: ran (1 runs, 3472 rows written, 1368.3s)
+cohort aapl_production-r0-df7d1ccd49bf: 9 models x 1 folds; rows expected 31248, observed 31248
+OK
+published aapl_production-r0-df7d1ccd49bf → /app/data/production/aapl/serving.env
+EXIT=0
+```
+Teste servido (TFT, h+1): 251 decisões, 2024-06-27..2025-06-27. Fim do treino (grid da
+rodada, `test_start − 547`): 2022-04-22.
+**Medição (R2):** API pelo comando de recriação do runbook (`docker rm -f` + `docker run -d
+--env-file data/production/aapl/serving.env … uvicorn`), `--cpus 2 --memory 2g`:
+```
+2025-09-15 HTTP 404 0.514289s  {"detail": "não há dados para o pedido solicitado: decisão 2025-09-15 sem linha de teste para (seed 1, h+1), (seed 2, h+1), (seed 3, h+1)", "type": "not_found"}
+2025-06-27 HTTP 200 0.584167s  cohort_id aapl_production-r0-df7d1ccd49bf, target 2025-06-30, seeds [1, 2, 3], conformal unavailable "gold não publicado para o cohort aapl_production-r0-df7d1ccd49bf", explainability unavailable
+recreate_ms=22566
+```
+**Razão:** a rodada sai servível pela API sem mudança de código (CA1, CA2 do concept; critérios
+1 e 3 da #202), e a API recriada leva ~23 s para voltar a responder.
+
 <!-- END: post-execution -->
