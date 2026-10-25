@@ -94,6 +94,14 @@ corrida: o MESMO `ParquetGoldStore` (como `JudgedGenerationStore`), o MESMO
 `ReadTrainingGrid` do refresh (como `TrainingGridReader`), o MESMO hasher, o
 `GitEvaluationEnvironment` igual ao da corrida, o `MatplotlibFigureRenderer` e o
 `FilesystemReportSink(output_dir)`.
+
+Stage 8.4 (ADR 8.4.0001 item 6, ADR 8.4.0002 item 5): a fábrica
+`production_cohort_for(template_path, device)` monta o MESMO `RunConfirmatoryCohort` do
+`confirmatory_cohort_for`, com `inherited_hyperparameters=True` (a rodada de produção usa
+os hiperparâmetros do confirmatório sobre dado novo) e o probe sobre o modelo de produção
+VERSIONADO — o spec da rodada vive fora do git. É o único ponto que passa `True`. E
+`writer_lock_for(root)` devolve o `JsonCohortProgressLedger` de uma raiz qualquer, usado
+pelo `production-round` só como lock de escritor único da raiz de produção.
 """
 
 import importlib
@@ -1098,6 +1106,10 @@ class ApplicationDependencies:
     cohort_run_index: CohortRunIndex
     runtime_probe_for: RuntimeProbeFactory
     confirmatory_cohort_for: Callable[[Path, str], RunConfirmatoryCohort]
+    # BC modeling (Stage 8.4): o runner da rodada de produção (probe sobre o modelo
+    # versionado, hiperparâmetros herdados) e o lock de escritor único de uma raiz.
+    production_cohort_for: Callable[[Path, str], RunConfirmatoryCohort]
+    writer_lock_for: Callable[[Path], CohortProgressLedger]
     # As colunas de modelagem que o cohort usa em I4 — o `freeze` do CLI usa as
     # MESMAS, deste campo (uma fonte só para as duas impressões digitais).
     modeling_columns: tuple[str, ...]
@@ -1318,6 +1330,29 @@ def wire_dependencies(  # noqa: PLR0915 — o grafo inteiro, um bloco por BC
             supported_device=_TRAINERS_DEVICE,
         )
 
+    def production_cohort_for(template_path: Path, device: str) -> RunConfirmatoryCohort:
+        # Stage 8.4: o único ponto que dispensa "dado dos sweeps = dado do cohort".
+        return RunConfirmatoryCohort(
+            store=store,
+            hasher=hasher,
+            clock=SystemClock(),
+            ledger=cohort_ledger,
+            run_index=cohort_run_index,
+            probe=runtime_probe_for(template_path, device),
+            run_baselines=run_baselines,
+            train_gbm=train_gbm_quantile,
+            train_tft=train_tft,
+            modeling_columns=columns,
+            observed_feature_set_hash=observed_feature_set_hash,
+            pipeline_version=PIPELINE_VERSION,
+            schema_version=_SILVER_SCHEMA_VERSION,
+            supported_device=_TRAINERS_DEVICE,
+            inherited_hyperparameters=True,
+        )
+
+    def writer_lock_for(root: Path) -> CohortProgressLedger:
+        return JsonCohortProgressLedger(artifacts_root=root / "artifacts", data_root=root)
+
     # BC modeling (Stage 7.3, Task 10): cohort de ablação e piloto. O device é LIDO do
     # spec: o proxy do treinador é o do device (fora do mapa ⇒ `ValueError`, sem torch);
     # a base confirmatória é conferida com o device dos treinadores de hoje (`cpu`).
@@ -1530,6 +1565,8 @@ def wire_dependencies(  # noqa: PLR0915 — o grafo inteiro, um bloco por BC
         cohort_run_index=cohort_run_index,
         runtime_probe_for=runtime_probe_for,
         confirmatory_cohort_for=confirmatory_cohort_for,
+        production_cohort_for=production_cohort_for,
+        writer_lock_for=writer_lock_for,
         modeling_columns=columns,
         refresh_gold=refresh_gold,
         build_confirmatory_scorecard=build_confirmatory_scorecard,
