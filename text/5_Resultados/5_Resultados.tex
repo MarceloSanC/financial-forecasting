@@ -5,14 +5,14 @@
 % confirmatória (pré-registro aapl_confirmatory-r3-00fd83d9cd39), sem recálculo.
 
 \section{Cenários experimentais}
-Os experimentos deste trabalho têm duas naturezas distintas. A \textbf{rodada exploratória} consiste nas buscas de hiperparâmetros do TFT e do GBM, avaliadas exclusivamente pela perda no bloco \texttt{early\_stop} da geometria do primeiro \textit{fold}, sem persistência de previsões fora da amostra; ela não constitui evidência e serve apenas para fixar as configurações. A \textbf{rodada confirmatória} foi executada uma única vez, com hiperparâmetros congelados, sobre o cohort congelado (dez sementes \(\times\) seis \textit{folds} para o TFT), contra a hierarquia completa de \textit{baselines}, sob alinhamento estrito por \textit{target timestamp}; as tabelas que alimentam o veredito foram geradas depois da âncora do pré-registro. A contribuição de famílias usa, além disso, um cohort de ablação próprio, cujas regras de leitura também foram fixadas no pré-registro antes de qualquer métrica.
+Os experimentos deste trabalho têm duas naturezas distintas. A \textbf{rodada exploratória} consiste nas buscas de hiperparâmetros do TFT e do GBM, avaliadas exclusivamente pela perda no bloco de parada antecipada da geometria do primeiro \textit{fold}, sem persistência de previsões fora da amostra; ela não constitui evidência e serve apenas para fixar as configurações. A \textbf{rodada confirmatória} foi executada uma única vez, com hiperparâmetros congelados, sobre a coorte congelada (dez sementes \(\times\) seis \textit{folds} para o TFT), contra a hierarquia completa de \textit{baselines}, sob alinhamento estrito por \textit{target timestamp}; as tabelas que alimentam o veredito foram geradas depois da âncora do pré-registro. A contribuição de famílias usa, além disso, uma coorte de ablação própria, cujas regras de leitura também foram fixadas no pré-registro antes de qualquer métrica.
 
-O veredito foi emitido pela terceira revisão do pré-registro, que acumula as anteriores sem alterar o que julga H1 e H2 (Seção~\ref{sec:scorecard}). A regra de decisão declarou a geração pronta para decisão acadêmica, sem nenhuma razão de bloqueio: tabelas completas, geradas depois da âncora, sem verificação de qualidade reprovada. Os seis blocos de teste cobrem as sessões-alvo de 27 de dezembro de 2019 a 31 de dezembro de 2025. A interseção exata entre todos os modelos tem \(n = 1.511\) pontos alinhados em \(h+1\) e \(n = 1.505\) em \(h+7\); todas as comparações abaixo usam essa amostra comum. A taxa de degeneração do TFT foi nula nos dois horizontes, e o rearranjo monotônico não alterou nenhuma previsão do candidato: sua grade emitida já era monotônica em todos os pontos. Entre os comparadores, o rearranjo alterou 0,20\% das previsões do GBM em \(h+1\) e nenhuma em \(h+7\). A geração julgada foi reproduzida bit a bit a partir dos dados persistidos, sem re-treino, no ambiente registrado da corrida: os 1.173.254 valores das 19 tabelas e os 66.117 campos do registro do veredito foram comparados, sem nenhuma diferença (Apêndice~C). A reprodução em outro ambiente de execução não foi realizada.
+O veredito foi emitido pela terceira revisão do pré-registro, que acumula as anteriores sem alterar o que julga H1 e H2 (Seção~\ref{sec:scorecard}). A regra de decisão declarou a geração pronta para decisão acadêmica, sem nenhuma razão de bloqueio: tabelas completas, geradas depois da âncora, sem verificação de qualidade reprovada. Os seis blocos de teste cobrem as sessões-alvo de 27 de dezembro de 2019 a 31 de dezembro de 2025. A interseção exata entre todos os modelos tem \(n = 1.511\) pontos alinhados em \(h+1\) e \(n = 1.505\) em \(h+7\); todas as comparações abaixo usam essa amostra comum. A taxa de degeneração do TFT foi nula nos dois horizontes, e o rearranjo monotônico não alterou nenhuma previsão do candidato: sua grade emitida já era monotônica em todos os pontos. Entre os comparadores, o rearranjo alterou 0,20\% das previsões do GBM em \(h+1\) e nenhuma em \(h+7\). A geração julgada foi reproduzida bit a bit a partir dos dados persistidos, sem retreino, no ambiente registrado da rodada: os 1.173.254 valores das 19 tabelas e os 66.117 campos do registro do veredito foram comparados, sem nenhuma diferença (Apêndice~C). A reprodução em outro ambiente de execução não foi realizada.
 
 A Figura~\ref{fig:fanchart} ilustra o objeto avaliado. Para cada sessão, o TFT emite sete quantis, e as faixas entre pares simétricos formam intervalos de 50\%, 80\% e 96\%. A mediana fica próxima de zero em todo o período, reflexo da baixa previsibilidade da média dos retornos. A largura das faixas varia pouco ao longo do tempo, enquanto os retornos realizados têm episódios de magnitude muito maior, como no início de 2020: é a imagem visual do agrupamento de violações discutido na Seção~\ref{sec:h1}. As métricas deste capítulo usam a média entre as dez sementes; a semente 1 da figura é apenas ilustrativa.
 \begin{figure}[htbp]
 \centering
-\caption{Previsões fora da amostra do TFT (semente 1, ilustrativa): faixas entre os pares de quantis, mediana e retorno realizado, por horizonte; as linhas verticais marcam o início de cada bloco de teste}
+\caption[Previsões fora da amostra do TFT (semente 1)]{Previsões fora da amostra do TFT (semente 1, ilustrativa): faixas entre os pares de quantis, mediana e retorno realizado, por horizonte; as linhas verticais marcam o início de cada bloco de teste}
 \label{fig:fanchart}
 \includegraphics[width=\textwidth]{figuras/oos_fan_chart.pdf}
 \fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
@@ -24,7 +24,7 @@ O \textit{gate} de H1 não rejeitou a calibração do TFT em nenhum dos dois hor
 
 \begin{table}[htb]
 \centering
-\caption{\textit{Gate} de calibração (H1) do TFT: taxas de violação por cauda do par \((0{,}10;\,0{,}90)\), médias entre as dez sementes, com bandas de Wilson de \(97{,}5\%\)}
+\caption[\textit{Gate} de calibração (H1) do TFT]{\textit{Gate} de calibração (H1) do TFT: taxas de violação por cauda do par \((0{,}10;\,0{,}90)\), médias entre as dez sementes, com bandas de Wilson de \(97{,}5\%\)}
 \label{tab:h1}
 \small
 \begin{tabular}{l c c c c}
@@ -39,13 +39,14 @@ Degeneração média & \multicolumn{2}{c}{0\%} & \multicolumn{2}{c}{0\%} \\
 Resultado & \multicolumn{2}{c}{calibração não rejeitada} & \multicolumn{2}{c}{calibração não rejeitada} \\
 \bottomrule
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
 A não rejeição é informativa porque o \textit{gate} tinha poder alto contra os desvios primários pré-registrados (Tabela~\ref{tab:h1-poder}). No \(n\) medido, a probabilidade de o \textit{gate} reprovar um modelo cuja cobertura do par se afastasse 5 pontos percentuais do nominal era de \(0{,}974\) a \(0{,}987\), e a de reprovar um deslocamento de locação de \(0{,}2\sigma\) era superior a \(0{,}999\). Contra os desvios secundários, menores, o poder cai para \(0{,}61\)--\(0{,}75\): um erro de calibração de 3 pontos percentuais teria passado despercebido em cerca de uma a cada três vezes. Em \(h+7\), o poder declarado supõe violações independentes e é, por isso, otimista (Seção~\ref{sec:scorecard}).
 
 \begin{table}[htb]
 \centering
-\caption{Probabilidade exata de o \textit{gate} de H1 reprovar o TFT sob os desvios mínimos pré-registrados, no \(n\) medido}
+\caption[Poder do \textit{gate} de H1 sob os desvios pré-registrados]{Probabilidade exata de o \textit{gate} de H1 reprovar o TFT sob os desvios mínimos pré-registrados, no \(n\) medido}
 \label{tab:h1-poder}
 \small
 \begin{tabular}{l l c c}
@@ -61,12 +62,13 @@ Secundário & locação \(0{,}1\sigma\) & 0,733 & 0,746 \\
 \bottomrule
 \multicolumn{4}{l}{\footnotesize \textsuperscript{a} Supõe violações independentes; otimista para \(h > 1\).}
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
 As sensibilidades do perfil confirmam a leitura sem alterá-la. O teste de cobertura incondicional de três estados não rejeitou a calibração do par (\(p = 0{,}203\) em \(h+1\); \(p = 0{,}182\) em \(h+7\)). Em \(h+7\), as sete subséries de decisões espaçadas de sete sessões \cite{DIEBOLDGUNTHERTAY1998}, com \(n = 215\) cada, mantêm as duas caudas dentro das bandas corrigidas por Bonferroni (nível de \(99{,}64\%\)) em todas as catorze combinações de subsérie e cauda, com taxas entre \(0{,}075\) e \(0{,}119\). A cobertura marginal acompanha a nominal em toda a grade: em \(h+1\), as frequências observadas abaixo dos quantis \(0{,}02\), \(0{,}10\), \(0{,}25\), \(0{,}50\), \(0{,}75\), \(0{,}90\) e \(0{,}98\) foram \(0{,}023\), \(0{,}089\), \(0{,}227\), \(0{,}492\), \(0{,}766\), \(0{,}906\) e \(0{,}977\), e em \(h+7\) os valores diferem destes em no máximo meio ponto percentual. A Figura~\ref{fig:reliability} resume essa leitura: os pontos de todos os modelos não degenerados ficam próximos da diagonal em toda a grade, com desvios de poucos pontos percentuais.
 \begin{figure}[htbp]
 \centering
-\caption{Diagrama de confiabilidade: frequência observada abaixo de cada quantil previsto contra o nível nominal \(\tau\), por horizonte, para o TFT (por semente e na média) e para os comparadores; o nível \(\tau = 0{,}5\) não é desenhado; a banda de Wilson do TFT aparece só nas caudas do \textit{gate}, e nos demais níveis e na média entre sementes a dispersão por semente ocupa o seu lugar; os naive, degenerados, não têm pontos}
+\caption[Diagrama de confiabilidade]{Diagrama de confiabilidade: frequência observada abaixo de cada quantil previsto contra o nível nominal \(\tau\), por horizonte, para o TFT (por semente e na média) e para os comparadores; o nível \(\tau = 0{,}5\) não é desenhado; a banda de Wilson do TFT aparece só nas caudas do \textit{gate}, e nos demais níveis e na média entre sementes a dispersão por semente ocupa o seu lugar; os naive, degenerados, não têm pontos}
 \label{fig:reliability}
 \includegraphics[width=\textwidth]{figuras/reliability_diagram.pdf}
 \fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
@@ -78,18 +80,18 @@ Duas qualificações acompanham esse resultado. A primeira é que o \textit{gate
 Entre os comparadores, cuja calibração é reportada sem filtrar a família de H2, os dois naive têm grade degenerada em todos os pontos e, por isso, ficam fora das métricas de calibração. AR(1), EWMA-vol e quantis empíricos passam no mesmo critério de duas caudas nos dois horizontes; o GBM passa em \(h+1\) e falha na cauda superior em \(h+7\). No par de 80\%, o GBM produz os intervalos mais estreitos (MPIW de \(0{,}0396\) em \(h+1\)), à custa de cobertura de \(0{,}769\), abaixo do nominal; o EWMA-vol, os mais largos entre os fortes (\(0{,}0471\)), com cobertura de \(0{,}827\); o TFT fica entre eles, com MPIW médio de \(0{,}0464\) e cobertura de \(0{,}818\). A Figura~\ref{fig:picpmpiw} mostra essa troca entre cobertura e largura nos três pares. O gráfico não ordena modelos: um intervalo mais estreito só é melhor com a mesma cobertura. A distribuição das larguras ao longo da série está na Figura~\ref{fig:sharpness}, no Apêndice~E.
 \begin{figure}[htbp]
 \centering
-\caption{Cobertura observada (PICP) contra largura média (MPIW) dos intervalos de 50\%, 80\% e 96\%, por horizonte; os naive ficam de fora porque seus intervalos são degenerados em toda a série}
+\caption[Cobertura (PICP) contra largura (MPIW) dos intervalos]{Cobertura observada (PICP) contra largura média (MPIW) dos intervalos de 50\%, 80\% e 96\%, por horizonte; os naive ficam de fora porque seus intervalos são degenerados em toda a série}
 \label{fig:picpmpiw}
 \includegraphics[width=\textwidth]{figuras/picp_mpiw_plot.pdf}
 \fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{figure}
 
 \subsection{VaR descritivo}
-O VaR é lido de forma descritiva, sem pretensão de gestão de risco, pelos quantis inferiores \(0{,}02\) e \(0{,}10\) (VaR de 98\% e de 90\%), na amostra comum, com o teste de Kupiec \cite{KUPIEC1995} para a taxa de violações (Tabela~\ref{tab:var}). No VaR de 98\%, três comparadores violam com frequência acima da nominal de 2\%: o AR(1) e o EWMA-vol, que descrevem a cauda pela forma gaussiana, e os quantis empíricos, que a descrevem por uma janela fixa de um ano; o teste de Kupiec rejeita a taxa nominal para os três nos dois horizontes. Caudas mais pesadas que a gaussiana são um fato estilizado dos retornos diários \cite{CONT2001}. O GBM e o TFT, na média das sementes, ficam próximos da nominal; por semente, porém, a taxa do TFT varia de 1,2\% a 3,0\% em \(h+1\), e o teste rejeita em quatro das dez sementes, a mesma variação entre sementes vista na calibração. No VaR de 90\%, as taxas médias de todos os modelos ficam entre 8\% e 12\%. A menor \textit{pinball} média do EWMA-vol não se estende, portanto, à cauda extrema, o que motiva a variante com caudas t-Student listada entre os trabalhos futuros.
+O VaR é lido de forma descritiva, sem pretensão de gestão de risco, pelos quantis inferiores \(0{,}02\) e \(0{,}10\) (VaR de 98\% e de 90\%), na amostra comum, com o teste de \citeonline{KUPIEC1995} para a taxa de violações (Tabela~\ref{tab:var}). No VaR de 98\%, três comparadores violam com frequência acima da nominal de 2\%: o AR(1) e o EWMA-vol, que descrevem a cauda pela forma gaussiana, e os quantis empíricos, que a descrevem por uma janela fixa de um ano; o teste de Kupiec rejeita a taxa nominal para os três nos dois horizontes. Caudas mais pesadas que a gaussiana são um fato estilizado dos retornos diários \cite{CONT2001}. O GBM e o TFT, na média das sementes, ficam próximos da nominal; por semente, porém, a taxa do TFT varia de 1,2\% a 3,0\% em \(h+1\), e o teste rejeita em quatro das dez sementes, a mesma variação entre sementes vista na calibração. No VaR de 90\%, as taxas médias de todos os modelos ficam entre 8\% e 12\%. A menor \textit{pinball} média do EWMA-vol não se estende, portanto, à cauda extrema, o que motiva a variante com caudas t de Student listada entre os trabalhos futuros.
 
 \begin{table}[htb]
 \centering
-\caption{VaR descritivo de 98\% (quantil \(0{,}02\)): taxa de violações na amostra comum e p-valor do teste de Kupiec; para o TFT, média das sementes, com mínimo e máximo entre sementes, e número de sementes em que o teste rejeita a 5\%}
+\caption[VaR descritivo de 98\%]{VaR descritivo de 98\% (quantil \(0{,}02\)): taxa de violações na amostra comum e p-valor do teste de Kupiec; para o TFT, média das sementes, com mínimo e máximo entre sementes, e número de sementes em que o teste rejeita a 5\%}
 \label{tab:var}
 \small
 \begin{tabular}{l c c c c}
@@ -104,6 +106,7 @@ GBM quantílico & 0,0245 & 0,229 & 0,0246 & 0,220 \\
 TFT & 0,0233 [0,0119; 0,0298] & 4 de 10 & 0,0227 [0,0140; 0,0332] & 1 de 10 \\
 \bottomrule
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
 
@@ -115,7 +118,7 @@ Como os dois horizontes passaram em H1, ambos entraram na comparação de \texti
 
 \begin{table}[htb]
 \centering
-\caption{\textit{Pinball loss} média da grade na amostra comum (\(\times 10^{-3}\)); para o TFT, média das dez sementes, com mínimo e máximo entre sementes}
+\caption[\textit{Pinball loss} média da grade na amostra comum]{\textit{Pinball loss} média da grade na amostra comum (\(\times 10^{-3}\)); para o TFT, média das dez sementes, com mínimo e máximo entre sementes}
 \label{tab:h2-perdas}
 \small
 \begin{tabular}{l l c c}
@@ -134,6 +137,7 @@ ML & GBM quantílico & 3,980 & 4,026 \\
 Candidato & TFT & 4,050 [3,987; 4,117] & 4,063 [4,004; 4,109] \\
 \bottomrule
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
 Três leituras decorrem da tabela. Primeiro, todos os modelos com distribuição preditiva não degenerada reduzem a perda dos naive em 41\% a 43\%, uma diferença que não depende de prever a média: os naive concentram toda a grade em um ponto, e qualquer descrição da escala da distribuição os supera. Segundo, entre os modelos fortes as diferenças são de outra ordem de grandeza, de no máximo cerca de 4\% da perda. Terceiro, o TFT não teve a menor perda média em nenhum horizonte: o EWMA-vol, um modelo de um parâmetro que descreve apenas a volatilidade condicional, teve a menor perda nos dois, seguido pelo GBM. A perda do TFT ficou \(3{,}3\%\) acima da do EWMA-vol em \(h+1\) e \(1{,}6\%\) acima em \(h+7\). A dispersão entre sementes do TFT é da mesma ordem dessas diferenças: em \(h+1\), a melhor semente (\(3{,}987\)) ainda ficou atrás do EWMA-vol e do GBM, e a pior (\(4{,}117\)), atrás do AR(1); em \(h+7\), a melhor semente (\(4{,}004\)) ficaria à frente do GBM, mas não do EWMA-vol.
@@ -141,7 +145,7 @@ Três leituras decorrem da tabela. Primeiro, todos os modelos com distribuição
 O \textit{interval score} de Winkler do par de 80\%, que soma a largura do intervalo e a penalidade por observações fora dele \cite{GNEITING2007}, ordena os modelos da mesma forma em \(h+1\): \(0{,}0680\) para o EWMA-vol, \(0{,}0700\) para o GBM, \(0{,}0719\) para os quantis empíricos, \(0{,}0720\) para o TFT, na média das sementes, e \(0{,}0728\) para o AR(1). Em \(h+7\), a ordem é a mesma, exceto que o TFT (\(0{,}0722\)) fica à frente dos quantis empíricos (\(0{,}0723\)). A Figura~\ref{fig:quantilescore} decompõe a \textit{pinball} por nível: as curvas dos modelos fortes quase se sobrepõem em toda a grade, e os naive só se aproximam deles na mediana, onde a escala da distribuição não pesa. A diferença entre os modelos fortes não se concentra em um nível específico.
 \begin{figure}[htbp]
 \centering
-\caption{\textit{Pinball loss} média por nível \(\tau\), por horizonte, para cada semente do TFT, a média entre sementes e os comparadores}
+\caption[\textit{Pinball loss} média por nível \(\tau\)]{\textit{Pinball loss} média por nível \(\tau\), por horizonte, para cada semente do TFT, a média entre sementes e os comparadores}
 \label{fig:quantilescore}
 \includegraphics[width=\textwidth]{figuras/quantile_score_plot.pdf}
 \fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
@@ -149,11 +153,11 @@ O \textit{interval score} de Winkler do par de 80\%, que soma a largura do inter
 
 
 \section{Análise estatística pareada}
-A Tabela~\ref{tab:h2-dm} reporta o teste de Diebold-Mariano unilateral \cite{DIEBOLDMARIANO1995}, com variância de janela retangular até a defasagem \(h-1\) e correção HLN \cite{HARVEY1997}, do TFT contra cada comparador, com p-valores ajustados por Holm \cite{HOLM1979} sobre os seis comparadores. O diferencial é \(\bar{d} = \bar{L}_{\text{TFT}} - \bar{L}_{\text{comparador}}\), de modo que valores negativos favorecem o candidato. A Figura~\ref{fig:acf}, no Apêndice~E, mostra esse diferencial ao longo da série e sua autocorrelação amostral.
+A Tabela~\ref{tab:h2-dm} reporta o teste unilateral de \citeonline{DIEBOLDMARIANO1995}, com variância de janela retangular até a defasagem \(h-1\) e correção HLN \cite{HARVEY1997}, do TFT contra cada comparador, com p-valores ajustados por \citeonline{HOLM1979} sobre os seis comparadores. O diferencial é \(\bar{d} = \bar{L}_{\text{TFT}} - \bar{L}_{\text{comparador}}\), de modo que valores negativos favorecem o candidato. A Figura~\ref{fig:acf}, no Apêndice~E, mostra esse diferencial ao longo da série e sua autocorrelação amostral.
 
 \begin{table}[htb]
 \centering
-\caption{Diebold-Mariano unilateral do TFT contra cada comparador: diferencial médio de \textit{pinball} (\(\times 10^{-5}\)), estatística e p-valor ajustado por Holm}
+\caption[Diebold-Mariano unilateral do TFT contra cada comparador]{Diebold-Mariano unilateral do TFT contra cada comparador: diferencial médio de \textit{pinball} (\(\times 10^{-5}\)), estatística e p-valor ajustado por Holm}
 \label{tab:h2-dm}
 \small
 \begin{tabular}{l r r c r r c}
@@ -169,6 +173,7 @@ Quantis empíricos & \(+1{,}3\) & \(0{,}69\) & 1 & \(+0{,}5\) & \(0{,}21\) & 1 \
 GBM quantílico & \(+7{,}0\) & \(4{,}08\) & 1 & \(+3{,}8\) & \(2{,}37\) & 1 \\
 \bottomrule
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
 Holm rejeita a igualdade contra os dois naive nos dois horizontes, o que satisfaz a condição (i) da regra de decisão. Contra os fortes, nenhuma rejeição: o único diferencial negativo, contra o AR(1), não sobrevive ao ajuste em nenhum horizonte; contra EWMA-vol e GBM, o diferencial é positivo, ou seja, a perda do TFT é maior, e em \(h+1\) as estatísticas de \(4{,}05\) e \(4{,}08\) indicam que, em um teste na direção oposta, os comparadores é que teriam perda significativamente menor. O estimador de Bartlett, sensibilidade, não alterou nenhuma decisão.
@@ -177,9 +182,9 @@ Sem rejeição contra todos os fortes, a condição (ii) depende do \textit{Mode
 
 \begin{table}[htb]
 \centering
-\caption{\textit{Model Confidence Set} (\(\alpha = 0{,}10\)): p-valor do MCS de cada modelo na especificação primária e nas sensibilidades; em negrito, os modelos retidos na primária}
+\caption[\textit{Model Confidence Set} (\(\alpha = 0{,}10\))]{\textit{Model Confidence Set} (\(\alpha = 0{,}10\)): p-valor do MCS de cada modelo na especificação primária e nas sensibilidades; em negrito, os modelos retidos na primária}
 \label{tab:h2-mcs}
-\footnotesize
+\small
 \setlength{\tabcolsep}{3.5pt}
 \begin{tabular}{l c c c c c c c c}
 \toprule
@@ -195,6 +200,7 @@ GBM quantílico & \textbf{0,316} & 0,293 & 0,059 & 0,274 & \textbf{0,611} & 0,61
 TFT & 0,022 & 0,013 & 0,000 & 0,027 & \textbf{0,332} & 0,294 & 0,061 & 0,267 \\
 \bottomrule
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 
 \smallskip
 {\footnotesize Prim.: estacionário, bloco pela regra pré-registrada (65 e 64 sessões); MB: blocos móveis, mesmo comprimento; \(l{=}h\) e \(l{=}\sqrt{T}\): estacionário com bloco de \(h\) e de 39 sessões.\par}
@@ -205,6 +211,7 @@ O veredito mecânico da regra de decisão é, por horizonte:
     \item \textbf{\(h+1\)}: H1 não rejeitada; H2 com desfecho \textbf{supera só o naive}. O TFT supera os dois naive, mas não pertence ao MCS nem tem rejeição contra todos os fortes; não há vencedor primário.
     \item \textbf{\(h+7\)}: H1 não rejeitada; H2 com desfecho \textbf{supera o naive e empata com os fortes}. O TFT supera os dois naive e pertence ao MCS; pela regra pré-registrada, é o vencedor primário do horizonte.
 \end{itemize}
+
 O estudo é considerado bem-sucedido pelo critério pré-registrado, pois H1 não foi rejeitada em ao menos um horizonte --- de fato, nos dois.
 
 O empate em \(h+7\) precisa ser lido com o seu alcance exato. ``Vencedor primário'' significa que o candidato é calibrado, supera os naive e não pode ser distinguido estatisticamente dos melhores modelos; não significa que tenha a menor perda, que pertence ao EWMA-vol, nem que supere algum comparador forte. Além disso, a pertença ao MCS em \(h+7\) é sensível ao comprimento do bloco: com blocos de \(h = 7\) sessões, mais curtos que os da especificação primária, o TFT seria eliminado (\(p_{\text{MCS}} = 0{,}061\)), enquanto blocos móveis e blocos de \(\sqrt{T}\) o mantêm. A especificação primária, fixada antes da rodada, é a que vale para o veredito; a sensibilidade mostra que o empate está perto da fronteira de decisão. Em \(h+1\), a eliminação do TFT é robusta: ele fica fora do conjunto em todas as quatro especificações.
@@ -214,13 +221,13 @@ Os recortes descritivos do perfil, com p-valores brutos, sem papel no veredito, 
 A leitura conjunta é coerente com a hipótese de trabalho do Capítulo~\ref{chap:fundamentacao}: o valor de um modelo probabilístico de retornos diários está na escala da distribuição condicional, e não na sua locação. Todo o ganho sobre os naive vem de descrever a escala; entre os modelos que a descrevem, o EWMA-vol, que modela apenas a volatilidade, não foi superado por nenhum modelo com acesso a indicadores técnicos, sentimento e fundamentos. O TFT entrega uma distribuição calibrada, de qualidade estatisticamente indistinguível da melhor em \(h+7\), mas o conjunto de \textit{features} não se converteu em ganho de \textit{skill} sobre os comparadores fortes, como antecipado pela baixa previsibilidade da média dos retornos \cite{GU2020}.
 
 \section{Perfil descritivo pontual}
-O perfil pontual da mediana (\(\tau = 0{,}5\)) foi calculado depois do veredito, a partir das previsões persistidas e na amostra comum, sem re-treino e sem papel no veredito (Tabela~\ref{tab:pontual}); o código e a proveniência estão no relatório de análises pós-veredito do repositório. O erro da mediana é praticamente o mesmo em todos os modelos: RMSE de cerca de \(2{,}0 \times 10^{-2}\) e MAE de cerca de \(1{,}38 \times 10^{-2}\) nos dois horizontes, com diferenças menores que a dispersão entre as sementes do TFT. Retorno nulo e EWMA-vol têm mediana identicamente nula e ficam fora da acurácia direcional.
+O perfil pontual da mediana (\(\tau = 0{,}5\)) foi calculado depois do veredito, a partir das previsões persistidas e na amostra comum, sem retreino e sem papel no veredito (Tabela~\ref{tab:pontual}); o código e a proveniência estão no repositório do trabalho (Apêndice~C). O erro da mediana é praticamente o mesmo em todos os modelos: RMSE de cerca de \(2{,}0 \times 10^{-2}\) e MAE de cerca de \(1{,}38 \times 10^{-2}\) nos dois horizontes, com diferenças menores que a dispersão entre as sementes do TFT. Retorno nulo e EWMA-vol têm mediana identicamente nula e ficam fora da acurácia direcional.
 
 A acurácia direcional, isto é, a fração de dias em que o sinal da mediana coincide com o do retorno realizado, fica entre 0,51 e 0,54, e vários intervalos de Wilson de 95\% excluem 0,5. A referência adequada, porém, não é 0,5, e sim a fração de dias de alta na amostra, 0,531 nos dois horizontes: a média histórica, cuja mediana é sempre positiva, acerta exatamente essa fração, e nenhum modelo se afasta dela de forma relevante. O TFT fica em 0,529 em \(h+1\) e 0,523 em \(h+7\), abaixo dessa taxa-base. Não há, portanto, evidência de habilidade direcional, o que confirma, na métrica mais usada pela literatura aplicada, a premissa do Capítulo~\ref{chap:intro} de que a média dos retornos diários é quase imprevisível.
 
 \begin{table}[htb]
 \centering
-\caption{Perfil pontual da mediana na amostra comum, calculado depois do veredito: RMSE e MAE (\(\times 10^{-2}\)) e acurácia direcional; para o TFT, média das dez sementes}
+\caption[Perfil pontual da mediana na amostra comum]{Perfil pontual da mediana na amostra comum, calculado depois do veredito: RMSE e MAE (\(\times 10^{-2}\)) e acurácia direcional; para o TFT, média das dez sementes}
 \label{tab:pontual}
 \small
 \begin{tabular}{l c c c c c c}
@@ -238,6 +245,7 @@ TFT & 2,004 & 1,386 & 0,529 & 2,009 & 1,391 & 0,523 \\
 \bottomrule
 \multicolumn{7}{p{13cm}}{\footnotesize --- : mediana identicamente nula, sem direção prevista. Fração de dias de alta na amostra: 0,531 nos dois horizontes.}
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
 \section{Contribuição de famílias (H3)} \label{sec:h3}
@@ -245,7 +253,7 @@ H3 não foi sustentada: nenhum dos dois métodos indicou heterogeneidade da cont
 
 \begin{table}[htb]
 \centering
-\caption{Participação de cada família na importância total, \(s_f(h)\), e variação entre horizontes, \(\Delta_f = s_f(h+7) - s_f(h+1)\), com intervalo de \textit{bootstrap} de \(98{,}75\%\)}
+\caption[Participação de cada família e variação entre horizontes (H3)]{Participação de cada família na importância total, \(s_f(h)\), e variação entre horizontes, \(\Delta_f = s_f(h+7) - s_f(h+1)\), com intervalo de \textit{bootstrap} de \(98{,}75\%\)}
 \label{tab:h3}
 \small
 \begin{tabular}{l l c c c c}
@@ -264,14 +272,15 @@ Ablação & Técnico & 0,340 & 0,398 & \(+0{,}058\) & ilimitado\textsuperscript{
 \bottomrule
 \multicolumn{6}{p{14cm}}{\footnotesize \textsuperscript{a} Em 1 réplica em \(h+1\) e 12 em \(h+7\), a soma das importâncias não foi positiva e a participação ficou indefinida; pela regra pré-registrada, essas réplicas contam como infinitas, e os dois limites do intervalo resultaram ilimitados.}
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
-A ausência de heterogeneidade decorre sobretudo da pequena magnitude das importâncias. Na permutação, a família técnica, a mais importante, eleva a \textit{pinball} média em \(2{,}0 \times 10^{-5}\) em \(h+1\), cerca de \(0{,}5\%\) da perda do modelo; a permutação dos fundamentos tem efeito praticamente nulo, e em \(h+7\) chega a ser negativo. Com contribuições tão pequenas, a normalização por um total próximo de zero torna as participações instáveis, o que explica a largura dos intervalos e as réplicas indefinidas da ablação. Na ablação, as importâncias são maiores (de \(1{,}5 \times 10^{-5}\) a \(6{,}3 \times 10^{-5}\) em \(h+1\)), mas sua soma ainda é pequena diante da variabilidade do re-treino entre sementes.
+A ausência de heterogeneidade decorre sobretudo da pequena magnitude das importâncias. Na permutação, a família técnica, a mais importante, eleva a \textit{pinball} média em \(2{,}0 \times 10^{-5}\) em \(h+1\), cerca de \(0{,}5\%\) da perda do modelo; a permutação dos fundamentos tem efeito praticamente nulo, e em \(h+7\) chega a ser negativo. Com contribuições tão pequenas, a normalização por um total próximo de zero torna as participações instáveis, o que explica a largura dos intervalos e as réplicas indefinidas da ablação. Na ablação, as importâncias são maiores (de \(1{,}5 \times 10^{-5}\) a \(6{,}3 \times 10^{-5}\) em \(h+1\)), mas sua soma ainda é pequena diante da variabilidade do retreino entre sementes.
 
 Apesar da não sustentação de H3, a ordenação das famílias é consistente entre os métodos e os horizontes: a família técnica, que reúne as medidas de volatilidade, tem a maior participação nos dois métodos e nos dois horizontes, e a família de fundamentos, a menor. Os pesos da VSN, que descrevem o uso geral de cada família pelo modelo sem eixo de horizonte, seguem a mesma ordem: medianas sobre as decisões de \(0{,}385\) para a família técnica, \(0{,}253\) para preço, \(0{,}140\) para sentimento e \(0{,}127\) para fundamentos (Figura~\ref{fig:vsn}, no Apêndice~E). Essa concordância é coerente com o resultado de H2: o modelo apoia-se sobretudo nas \textit{features} que descrevem a escala da distribuição. A leitura é preditiva e condicional ao modelo treinado, não causal. A Figura~\ref{fig:h3} mostra as importâncias por família, semente e método, e as variações entre horizontes com seus intervalos: a dispersão entre sementes é da ordem das próprias importâncias, e os intervalos de \(\Delta_f\) da permutação contêm o zero; os da ablação, ilimitados (Tabela~\ref{tab:h3}), não são desenhados.
 \begin{figure}[htbp]
 \centering
-\caption{Importância por família de \textit{features} em \(h+1\) e \(h+7\), por permutação e por ablação, com o perfil por semente, e variação da participação entre horizontes, \(\Delta_f\), com o intervalo de \textit{bootstrap} da permutação; as importâncias e as participações não têm intervalo, e os da ablação são ilimitados}
+\caption[Importância por família de \textit{features} e variação entre horizontes]{Importância por família de \textit{features} em \(h+1\) e \(h+7\), por permutação e por ablação, com o perfil por semente, e variação da participação entre horizontes, \(\Delta_f\), com o intervalo de \textit{bootstrap} da permutação; as importâncias e as participações aparecem sem intervalo, e os intervalos de \(\Delta_f\) da ablação, ilimitados, não são desenhados}
 \label{fig:h3}
 \includegraphics[width=\textwidth]{figuras/h3_family_importance.pdf}
 \fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
@@ -281,7 +290,7 @@ Apesar da não sustentação de H3, a ordenação das famílias é consistente e
 \section{Discussão} \label{sec:discussao}
 
 \subsection{Por que o EWMA-vol teve a menor perda}
-Os resultados de H2 têm uma estrutura nítida. A redução de 41\% a 43\% da \textit{pinball} em relação aos naive vem de descrever a escala da distribuição, e não de prever a média: os naive concentram toda a grade em um ponto, e qualquer descrição da dispersão os supera. Entre os modelos que descrevem a escala, as diferenças são de no máximo cerca de 4\% da perda. O EWMA-vol emite quantis gaussianos de média zero, com variância dada por uma recursão de um único parâmetro, fixado antes do estudo no valor que o documento técnico da RiskMetrics adota para dados diários (\(\lambda = 0{,}94\)) \cite{RISKMETRICS1996}; no treino, ele não estima nada além do estado dessa recursão. Que um modelo assim tenha a menor perda nos dois horizontes indica que, para os retornos diários de AAPL no período de teste, quase toda a informação que os modelos avaliados conseguiram aproveitar na \textit{pinball} está na magnitude recente dos retornos, que é exatamente o que a recursão acompanha.
+Os resultados de H2 têm uma estrutura nítida. A redução de 41\% a 43\% da \textit{pinball} em relação aos naive vem de descrever a escala da distribuição, e não de prever a média: os naive concentram toda a grade em um ponto, e qualquer descrição da dispersão os supera. Entre os modelos que descrevem a escala, as diferenças são de no máximo cerca de 4\% da perda. O EWMA-vol emite quantis gaussianos de média zero, com variância dada por uma recursão de um único parâmetro, fixado antes do estudo no valor que o documento técnico da RiskMetrics adota para dados diários, \(\lambda = 0{,}94\) \cite{RISKMETRICS1996}; no treino, ele não estima nada além do estado dessa recursão. Que um modelo assim tenha a menor perda nos dois horizontes indica que, para os retornos diários de AAPL no período de teste, quase toda a informação que os modelos avaliados conseguiram aproveitar na \textit{pinball} está na magnitude recente dos retornos, que é exatamente o que a recursão acompanha.
 
 Três evidências do próprio estudo sustentam essa leitura. A primeira é que o resultado não é particular do TFT: o GBM quantílico, que recebe as mesmas 55 \textit{features}, também ficou atrás do EWMA-vol (\(3{,}980\) contra \(3{,}920 \times 10^{-3}\) em \(h+1\)). A segunda vem de H3: a família técnica, que reúne as medidas de volatilidade, tem a maior participação nos dois métodos de atribuição e nos dois horizontes, enquanto a permutação da família mais importante altera a perda em apenas cerca de 0,5\% e a dos fundamentos não a altera; as famílias além da escala acrescentam pouco ao que os retornos passados já informam. A terceira é a variância entre sementes: em \(h+1\), a perda média do TFT por semente vai de \(3{,}987\) a \(4{,}117 \times 10^{-3}\), uma amplitude de cerca de 3\%, da mesma ordem da distância até o EWMA-vol. Como a variância entre execuções afeta de forma marcante as comparações entre algoritmos de aprendizado de máquina \cite{BOUTHILLIER2021}, parte do erro adicional do TFT é compatível com a variância de estimação de um modelo de muitos parâmetros treinado em uma única série; a análise exploratória apresentada mais adiante nesta seção mostra, porém, que reduzir essa variância não basta para superar o EWMA-vol.
 
@@ -291,7 +300,7 @@ O resultado é coerente com uma tradição empírica em que modelos simples e be
 A literatura também ajuda a delimitar o achado. Em \citeonline{ELSAYED2021}, o \textit{gradient boosting} sobre janelas superou a maioria das redes profundas avaliadas, mas o TFT foi o único modelo profundo a superá-lo consistentemente. A diferença está no regime de uso: o TFT foi avaliado em bases com várias entidades, de algumas dezenas (os índices de ações) a cerca de 130 mil séries (os pares produto--loja de varejo), e, na sua aplicação financeira, o alvo é a log-volatilidade realizada diária de 31 índices de ações, com os retornos diários entrando apenas como covariável \cite{LIMETAL2021TFT}. Volatilidade é persistente, com autocorrelação de decaimento lento nos retornos absolutos; os retornos diários, por sua vez, quase não têm autocorrelação \cite{CONT2001}. Além disso, para grupos de séries semelhantes, métodos globais, que ajustam um único modelo a todas as séries, superam os locais \cite{MONTEROMANSO2021}. Este trabalho usa o TFT no regime oposto ao de sua concepção: um único ativo, com o retorno como alvo.
 
 \subsection{O TFT foi usado de forma pouco eficiente?}
-A pergunta é legítima e tem resposta parcial. Três escolhas do desenho jogam contra o candidato e foram feitas por razões de escopo, não de desempenho: o modelo é treinado em um único ativo, o que dispensa a vantagem dos modelos globais; a busca de hiperparâmetros teve 60 tentativas avaliadas apenas no bloco \texttt{early\_stop} do primeiro \textit{fold}; e o candidato recebe todas as famílias de \textit{features}, sem seleção, o que inclui famílias de contribuição quase nula. Nenhuma delas, porém, explica o fato de o GBM, com as mesmas \textit{features}, também ter ficado atrás do EWMA-vol.
+A pergunta é legítima e tem resposta parcial. Três escolhas do desenho jogam contra o candidato e foram feitas por razões de escopo, não de desempenho: o modelo é treinado em um único ativo, o que dispensa a vantagem dos modelos globais; a busca de hiperparâmetros teve 60 tentativas avaliadas apenas no bloco de parada antecipada do primeiro \textit{fold}; e o candidato recebe todas as famílias de \textit{features}, sem seleção, o que inclui famílias de contribuição quase nula. Nenhuma delas, porém, explica o fato de o GBM, com as mesmas \textit{features}, também ter ficado atrás do EWMA-vol.
 
 Uma forma direta de reduzir a variância de estimação é combinar as sementes. Para medir esse efeito, uma única análise exploratória, posterior ao veredito e especificada por escrito antes de qualquer cálculo \cite{WAGENMAKERS2012}, combinou as dez sementes pela média dos quantis em cada ponto. Pela convexidade da \textit{pinball}, a perda desse \textit{ensemble} é necessariamente menor ou igual à média das perdas por semente, de modo que só a magnitude da melhora é informativa. O \textit{ensemble} reduziu a perda em 1,6\% em \(h+1\) e 1,4\% em \(h+7\) (\(3{,}988\) e \(4{,}008 \times 10^{-3}\)), mas continuou acima do EWMA-vol nos dois horizontes, em 1,7\% e 0,2\%, sem rejeição no teste de Diebold-Mariano unilateral (p-valores brutos de 0,98 e 0,57), e empatado com o GBM. A média das sementes também aumentou a sobrecobertura do intervalo de 80\% (cobertura de 0,832 e 0,830). O resultado não altera o veredito e reforça a leitura anterior: a distância até o EWMA-vol não se deve só à variância entre sementes, e o restante é coerente com a pouca informação que as \textit{features} acrescentam à escala, sem excluir o efeito do regime de uso do modelo, hipótese (vi) abaixo. Além disso, o \textit{ensemble} custa dez treinos, contra um modelo de um parâmetro.
 

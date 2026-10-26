@@ -23,7 +23,7 @@ A Tabela~\ref{tab:objetivos} retoma, um a um, os objetivos específicos da Seç�
 \caption{Objetivos específicos, onde foram atendidos e resultado}
 \label{tab:objetivos}
 \footnotesize
-\begin{tabular}{p{5.6cm} p{2.3cm} p{6.4cm}}
+\begin{tabular}{>{\raggedright\arraybackslash}p{5.6cm} >{\raggedright\arraybackslash}p{2.3cm} >{\raggedright\arraybackslash}p{6.4cm}}
 \toprule
 Objetivo específico & Onde & Resultado \\
 \midrule
@@ -31,11 +31,11 @@ Construir um conjunto de dados diário com quatro famílias de \textit{features}
 \addlinespace
 Treinar o Temporal Fusion Transformer em modo quantílico sobre uma grade densa de níveis, com rearranjo monotônico dos quantis e rastreabilidade de configurações, sementes e partições. & Seções~\ref{sec:tft} e~\ref{sec:governanca}; Capítulo~\ref{chap:resultados} & TFT treinado com dez sementes em cada um dos seis \textit{folds}, sobre a grade de sete níveis; degeneração nula, e a grade emitida já era monotônica, de modo que o rearranjo não alterou nenhuma previsão; cada execução identificada por \textit{hash} determinístico. \\
 \addlinespace
-Definir e aplicar um protocolo experimental com validação \textit{walk-forward} com purga e embargo, conjunto de calibração dedicado, múltiplas sementes e \textit{folds}, alinhamento estrito por \textit{target timestamp} e pré-registro imutável hasheado. & Seções~\ref{sec:governanca} e~\ref{sec:scorecard}; Apêndice C & Seis blocos de teste, de dezembro de 2019 a dezembro de 2025, com amostra comum de 1.511 pontos em \(h+1\) e 1.505 em \(h+7\); pré-registro ancorado antes das tabelas, com três revisões sem acesso a resultados; geração julgada reproduzida bit a bit. \\
+Definir e aplicar um protocolo experimental com validação \textit{walk-forward} com purga e embargo, conjunto de calibração dedicado, múltiplas sementes e \textit{folds}, alinhamento estrito por \textit{target timestamp} e pré-registro imutável identificado por \textit{hash}. & Seções~\ref{sec:governanca} e~\ref{sec:scorecard}; Apêndice C & Seis blocos de teste, de dezembro de 2019 a dezembro de 2025, com amostra comum de 1.511 pontos em \(h+1\) e 1.505 em \(h+7\); pré-registro ancorado antes das tabelas, com três revisões sem acesso a resultados; geração julgada reproduzida bit a bit. \\
 \addlinespace
 Avaliar a calibração probabilística (cobertura marginal por quantil, PICP, MPIW, \textit{reliability diagram}, cobertura condicional) e o \textit{skill} em \textit{pinball loss} (primária) e CRPS (complementar), comparando o candidato à hierarquia de \textit{baselines} via Diebold-Mariano (HAC/HLN, unilateral) com ajuste de Holm e \textit{Model Confidence Set}, e confrontando a calibração nativa com intervalos conformais (CQR). & Seções~\ref{sec:h1} e~\ref{sec:h2} & H1 não rejeitada nos dois horizontes, com poder de 0,974 a 0,987 contra desvios de 5 pontos percentuais, mas com violações agrupadas no tempo; H2: supera só o naive em \(h+1\) e empata com os fortes em \(h+7\), onde o TFT é o vencedor primário, com empate sensível ao bloco do \textit{bootstrap}; menor perda do EWMA-vol nos dois horizontes; a CQR levou a cobertura do intervalo de 80\% a 0,798 e 0,800. \\
 \addlinespace
-Caracterizar a contribuição relativa de famílias de indicadores entre horizontes via importância por permutação e ablação com re-treino, reportando a concordância e a divergência entre os dois métodos, com os pesos da \textit{Variable Selection Network} como descrição complementar. & Seção~\ref{sec:h3} & H3 não sustentada: nenhum intervalo da variação entre horizontes excluiu zero; ordenação concordante entre os dois métodos e os dois horizontes, com a família técnica à frente e os fundamentos por último, e os pesos da VSN na mesma ordem. \\
+Caracterizar a contribuição relativa de famílias de indicadores entre horizontes via importância por permutação e ablação com retreino, reportando a concordância e a divergência entre os dois métodos, com os pesos da \textit{Variable Selection Network} como descrição complementar. & Seção~\ref{sec:h3} & H3 não sustentada: nenhum intervalo da variação entre horizontes excluiu zero; ordenação concordante entre os dois métodos e os dois horizontes, com a família técnica à frente e os fundamentos por último, e os pesos da VSN na mesma ordem. \\
 \bottomrule
 \end{tabular}
 \fonte{Elaborado pelo autor (2026).}
@@ -53,7 +53,7 @@ A segunda é a hierarquia de \textit{baselines} com um comparador forte de apren
 
 A terceira é a avaliação probabilística com testes pareados corrigidos. Calibração e nitidez são medidas sobre a distribuição preditiva inteira, com a \textit{pinball loss} como regra de pontuação primária; as comparações usam o teste de Diebold-Mariano com correção HLN e ajuste de Holm e o \textit{Model Confidence Set}, com sensibilidades ao bloco do \textit{bootstrap} reportadas, e a contribuição das famílias é lida por dois métodos com estimandos distintos, sem leitura causal.
 
-A quarta é a reprodução bit a bit. Cada métrica e cada teste foram validados contra implementações de referência (Apêndice D.2), e a geração julgada foi reproduzida sem diferença a partir das previsões persistidas, sem re-treino (Apêndice C.4), de modo que qualquer número do Capítulo~\ref{chap:resultados} pode ser reconstruído e conferido.
+A quarta é a reprodução bit a bit. Cada métrica e cada teste foram validados contra implementações de referência (Apêndice D.2), e a geração julgada foi reproduzida sem diferença a partir das previsões persistidas, sem retreino (Apêndice C.4), de modo que qualquer número do Capítulo~\ref{chap:resultados} pode ser reconstruído e conferido.
 
 \subsection{Contribuições empíricas}
 A primeira contribuição empírica é a evidência de que um TFT quantílico pode entregar intervalos marginalmente calibrados para retornos diários em dois horizontes, com o poder do teste declarado, e de que essa calibração não se estende à independência das violações nem a cada semente isolada: a cobertura do intervalo de 80\% de uma semente variou de 0,772 a 0,872 em \(h+1\). Um único treinamento do mesmo procedimento pode, portanto, produzir intervalos mal calibrados. A referência conformal levou essa cobertura praticamente ao nominal (0,798 e 0,800), mas foi menos precisa no intervalo de 96\%, o que ilustra o caráter empírico da sua cobertura em séries temporais.
@@ -71,9 +71,9 @@ Em primeiro lugar, os modelos são \textit{single-asset}: cada execução é tre
 
 Em segundo lugar, as análises de contribuição relativa de famílias indicam contribuição preditiva condicional ao modelo treinado, e não causalidade. Interpretações locais são apenas ilustrativas; conclusões derivam de evidência global por horizonte e da estabilidade entre sementes e \textit{folds}.
 
-Em terceiro lugar, a previsibilidade da média de retornos de ações é muito baixa já em frequência mensal, com \(R^2\) fora da amostra inferior a \(0{,}5\%\) para ações individuais \cite{GU2020}; em retornos diários, infere-se que o componente previsível seja ainda menor, o que torna plausível a ausência de superioridade do candidato frente a comparadores fortes. A não-dominância em H2 é, nesse contexto, resultado científico válido sobre os limites do estimador, e não falha do método.
+Em terceiro lugar, a previsibilidade da média de retornos de ações é muito baixa já em frequência mensal, com \(R^2\) fora da amostra inferior a \(0{,}5\%\) para ações individuais \cite{GU2020}; em retornos diários, infere-se que o componente previsível seja ainda menor, o que torna plausível a ausência de superioridade do candidato frente a comparadores fortes. A não dominância em H2 é, nesse contexto, resultado científico válido sobre os limites do estimador, e não falha do método.
 
-Em quarto lugar, as conclusões confirmatórias limitam-se a \(h+1\) e \(h+7\); o horizonte \(h+30\), com amostra efetiva menor e dependência entre violações que pode se estender até a defasagem 29, ficou fora do cohort confirmatório. Mesmo em \(h+7\), a possível dependência entre violações de decisões vizinhas, até a defasagem 6, torna a banda binomial do \textit{gate} e o poder declarado otimistas, o que é mitigado, mas não eliminado, pela análise das subséries de decisões espaçadas de \(h\) sessões \cite{DIEBOLDGUNTHERTAY1998}.
+Em quarto lugar, as conclusões confirmatórias limitam-se a \(h+1\) e \(h+7\); o horizonte \(h+30\), com amostra efetiva menor e dependência entre violações que pode se estender até a defasagem 29, ficou fora da coorte confirmatória. Mesmo em \(h+7\), a possível dependência entre violações de decisões vizinhas, até a defasagem 6, torna a banda binomial do \textit{gate} e o poder declarado otimistas, o que é mitigado, mas não eliminado, pela análise das subséries de decisões espaçadas de \(h\) sessões \cite{DIEBOLDGUNTHERTAY1998}.
 
 Em quinto lugar, o \textit{gate} de H1 abre a comparação de H2 apenas quando não rejeita a calibração. A probabilidade conjunta de declarar \textit{skill} e passar no \textit{gate} é limitada pelo nível do teste, mas o tamanho do teste de H2 condicional a ter passado em H1 não é controlado pelo procedimento, e este trabalho não deriva garantia para ele; essa leitura sequencial é declarada como limitação.
 
@@ -94,7 +94,7 @@ A primeira é ampliar a avaliação para horizontes mais longos, como \(h+30\), 
 
 A segunda é tratar a classificação ou detecção de regimes de mercado como estudo separado, com rotulagem e metodologia próprias; o presente trabalho registra regimes de alta volatilidade apenas como ameaça à validade, não como objeto de modelagem.
 
-A terceira é explorar variantes de emissão de quantis e de calibração não adotadas aqui, como caudas t-Student para o EWMA, quantis não cruzantes por construção \cite{BONDELL2010,CANNON2018} e variantes conformais adaptativas para séries temporais.
+A terceira é explorar variantes de emissão de quantis e de calibração não adotadas aqui, como caudas t de Student para o EWMA, quantis não cruzantes por construção \cite{BONDELL2010,CANNON2018} e variantes conformais adaptativas para séries temporais.
 
 A quarta é o desenho de estudo específico para inferência causal das famílias de indicadores; o escopo atual sustenta apenas contribuição preditiva condicional ao modelo.
 

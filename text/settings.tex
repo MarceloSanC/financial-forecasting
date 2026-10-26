@@ -39,6 +39,14 @@
 \frenchspacing 
 \renewcommand{\familydefault}{\sfdefault}
 \usepackage[alf, abnt-etal-list=3, abnt-emphasize=bf,abnt-last-names=bibtex, abnt-etal-cite=3]{abntex2cite}	% Citações padrão ABNT
+% NBR 10520:2023: sobrenome em caixa mista também na citação entre parênteses. A opção de pacote
+% abnt-cite-style=AuthorYEAR não funciona (a chave colide, sem distinção de caixa, com
+% abnt-cite-style=AUTHORYEAR em abntex2-options.bib); a opção vem da entrada abnt-cite-style-2023
+% do .bib do trabalho, escrita no .aux como o abntex2cite faz com as próprias opções (sem \nocite,
+% que acusaria citação indefinida).
+\makeatletter
+\AtBeginDocument{\if@filesw\immediate\write\@auxout{\string\citation{abnt-cite-style-2023}}\fi}
+\makeatother
 \bibliographystyle{abntex2-alf}
 \renewcommand{\bibname}{Referências}
 
