@@ -51,7 +51,7 @@
 \begin{frame}{A pergunta}
   \begin{itemize}
     \item Prever o retorno de uma ação de um dia para o outro é quase impossível:
-      mesmo com dados mensais, o \(R^2\) fora da amostra fica abaixo de 1\%
+      mesmo com dados mensais, o \(R^2\) fora da amostra costuma ficar abaixo de 1\%
       (cerca de 0,4\% para ações individuais).
     \item Já o \alert{tamanho} típico do retorno (a volatilidade) é persistente:
       dias agitados tendem a vir em sequência.
@@ -171,7 +171,7 @@
     \toprule
     \textbf{O piloto revelou} & \textbf{Decisão do desenho final} \\
     \midrule
-    Previsões e valores realizados desalinhados no tempo: em \(h=1\), nenhuma
+    Previsões e valores realizados desalinhados no tempo: em \hum, nenhuma
     de 685 linhas tinha o mesmo valor realizado nas duas séries
     & Data de decisão única, contada em pregões; comparação só sobre datas comuns \\
     \addlinespace
@@ -387,8 +387,9 @@
 % seguinte: 41% a 43%; cerca de 4%; 3,3% e 1,6%.
 \begin{frame}{H2 --- Perda média (\textit{pinball}, \(\times 10^{-3}\); menor é melhor)}
   \begin{columns}[T]
-    \begin{column}{0.5\textwidth}
+    \begin{column}{0.56\textwidth}
       \small
+      \setlength{\tabcolsep}{4pt}
       \begin{tabular}{l l c c}
         \toprule
         & Modelo & \hum & \hsete \\
@@ -400,7 +401,7 @@
                      & EWMA-vol & \alert{\textbf{3,920}} & \alert{\textbf{4,000}} \\
                      & Quantis empíricos & 4,037 & 4,058 \\
         \midrule
-        ML & GBM & 3,980 & 4,026 \\
+        Apr. de máquina & GBM quantílico & 3,980 & 4,026 \\
         \midrule
         Candidato & TFT & 4,050 & 4,063 \\
         \bottomrule
@@ -408,7 +409,7 @@
 
       {\small TFT: média das dez sementes.}
     \end{column}
-    \begin{column}{0.46\textwidth}
+    \begin{column}{0.4\textwidth}
       \begin{itemize}
         \item Quem descreve a escala da distribuição reduz a perda dos ingênuos em
           41\% a 43\%.
@@ -608,7 +609,8 @@
   \vspace{6pt}
   \raggedright
   Diferencial médio de \textit{pinball} \(\bar d = \bar L_{\text{TFT}} - \bar L_{\text{comparador}}\)
-  (\(\times 10^{-5}\)); negativo favorece o TFT. Teste unilateral com correção HLN e Holm
+  (\(\times 10^{-5}\)); negativo favorece o TFT. Teste unilateral com a correção de pequenas amostras de
+  Harvey, Leybourne e Newbold (HLN) e com Holm
   sobre os seis comparadores.
 \end{frame}
 
@@ -636,7 +638,7 @@
   \raggedright\small
   p-valor do MCS (\(\alpha = 0{,}10\)); em negrito, os retidos na especificação primária.
   Prim.: \textit{bootstrap} estacionário com bloco pela regra pré-registrada (65 e 64
-  sessões); MB: blocos móveis; \(l{=}h\) e \(l{=}\sqrt{T}\): blocos de \(h\) e de 39 sessões.
+  pregões); MB: blocos móveis; \(l{=}h\) e \(l{=}\sqrt{T}\): blocos de \(h\) e de 39 pregões.
   Em \hum, o TFT fica fora em todas as quatro especificações.
 \end{frame}
 
