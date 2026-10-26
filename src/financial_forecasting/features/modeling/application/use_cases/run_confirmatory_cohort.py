@@ -222,6 +222,7 @@ class RunConfirmatoryCohort:
         pipeline_version: str,
         schema_version: int,
         supported_device: str,
+        inherited_hyperparameters: bool = False,
     ) -> None:
         self._store = store
         self._hasher = hasher
@@ -237,6 +238,9 @@ class RunConfirmatoryCohort:
         self._pipeline_version = pipeline_version
         self._schema_version = schema_version
         self._supported_device = supported_device
+        # Stage 8.4 (ADR 8.4.0001 item 6): só a fábrica da rodada de produção passa
+        # `True` — hiperparâmetros dos sweeps do confirmatório sobre dado novo.
+        self._inherited_hyperparameters = inherited_hyperparameters
 
     def __call__(self, command: RunConfirmatoryCohortCommand) -> RunConfirmatoryCohortResult:
         spec = command.spec
@@ -278,6 +282,7 @@ class RunConfirmatoryCohort:
             observed_feature_set_hash=self._observed_feature_set_hash,
             pipeline_version=self._pipeline_version,
             supported_device=self._supported_device,
+            inherited_hyperparameters=self._inherited_hyperparameters,
         )
 
     # -- unidades -----------------------------------------------------------------

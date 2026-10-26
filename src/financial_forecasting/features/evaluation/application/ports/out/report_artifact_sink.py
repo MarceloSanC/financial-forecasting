@@ -9,6 +9,12 @@ Real: `FilesystemReportSink` (`features/evaluation/adapters/out/reports/`): grav
 `figures/<id>.pdf`, `figures/<id>.json` e os dois Markdown do dossiê num staging trocado
 no fim; falha no meio restaura a saída anterior. Fake: `InMemoryReportArtifactSink`
 (`tests/fakes/features/evaluation/`).
+
+Destino só de figuras (issue #250): um sink pode gravar só as figuras e os registros —
+validando a entrada inteira, dossiê inclusive, e com o mesmo tudo ou nada — e deixar o
+dossiê com o destino canônico. Real: `PresentationFigureSink` (mesmo pacote; as figuras do
+texto do TCC em `text/figuras/`, e as que o texto não usa declaradas, com o motivo, em
+`omitted_figures.json`).
 """
 
 from __future__ import annotations
@@ -35,6 +41,7 @@ class ReportArtifactSink(Protocol):
 
         `figures` são `(id, bytes do PDF, registro)`, um por figura do catálogo. Entrada
         inválida (`check_artifacts`) ergue `ValueError` antes de qualquer escrita; falha
-        no meio deixa a saída anterior intacta.
+        no meio deixa a saída anterior intacta. Um destino só de figuras (ver o docstring
+        do módulo) não grava o dossiê e pode deixar de fora figuras declaradas omitidas.
         """
         ...

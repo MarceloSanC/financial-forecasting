@@ -15,6 +15,8 @@ Com o aumento de disponibilidade de dados e capacidade computacional, o aprendiz
 \section{Problema de pesquisa}
 É comum encontrar estudos de previsão financeira avaliados apenas por erro pontual, com o modelo proposto comparado a poucos comparadores simples e com configurações escolhidas após a observação do desempenho fora da amostra. Esse cenário dificulta distinguir ganho real de modelagem de efeito do desenho experimental: a seleção pós-observação infla falsos positivos \cite{WHITE2000,ROMANOWOLF2005}, e o erro pontual é praticamente insensível à qualidade da incerteza estimada.
 
+Um exemplo concreto ajuda a fixar a diferença. Uma previsão pontual diz apenas que o retorno da Apple amanhã será, digamos, de \(0{,}1\%\); uma previsão probabilística diz também que há 80\% de chance de ele ficar entre \(-2{,}3\%\) e \(+2{,}3\%\). A primeira quase nunca acerta exatamente e informa pouco sobre o risco; a segunda pode ser testada. Se, em mil dias, o retorno cair dentro do intervalo declarado em cerca de 800 deles, a previsão está calibrada; se cair em apenas 650, o modelo subestima o risco, e quem confiasse nele estaria mais exposto do que imagina. Avaliar a previsão como distribuição é, portanto, verificar se a incerteza que o modelo declara corresponde à que de fato se observa.
+
 Sob a ótica de previsão probabilística, previsões devem ser distribuições, e sua avaliação deve considerar calibração e nitidez, o que regras de pontuação próprias fazem simultaneamente, inclusive para quantis e intervalos \cite{GNEITING2007}. Previsões quantílicas oferecem um arcabouço consolidado para descrever a distribuição condicional da variável-alvo além da média \cite{KOENKERBASSETT1978,KOENKER2005}, e comparações entre modelos devem ser feitas sobre previsões pareadas do mesmo alvo na mesma data, por meio de um teste formal de igualdade de acurácia preditiva \cite{DIEBOLDMARIANO1995}. Assim, este trabalho investiga se um TFT quantílico, avaliado sob protocolo pré-registrado e reprodutível, produz previsões calibradas de retornos diários e se supera --- ou empata com --- uma hierarquia de \textit{baselines} explícitos, sem qualquer seleção de configuração por desempenho fora da amostra.
 
 \section{Justificativa}
@@ -22,11 +24,13 @@ Este estudo se justifica por três frentes complementares. Na frente científica
 
 Além disso, ao registrar explicitamente configurações, partições temporais e identificadores de execução, e ao congelar hipóteses e regras de decisão antes da rodada confirmatória, o trabalho se alinha a recomendações contemporâneas de rigor experimental em aprendizado de máquina \cite{PINEAU2021REPRODUCIBILITY} e à prática de pré-registro de hipóteses e análises \cite{NOSEK2018}.
 
+Esse desenho é também resposta a um estudo piloto que o precedeu, uma primeira implementação do mesmo problema, com execuções apenas exploratórias e não cobertas por pré-registro. O piloto mostrou que falhas de procedimento podem produzir números aparentemente plausíveis: previsões e valores realizados desalinhados no tempo, grades de quantis colapsadas em um único ponto e testes estatísticos implementados sem conferência. Cada uma dessas falhas motivou uma decisão do desenho final (Seção~\ref{sec:piloto}); os resultados do piloto, porém, não são usados como evidência em nenhuma parte deste trabalho.
+
 \section{Objetivos}
 \subsection{Objetivo geral}
 Caracterizar a calibração probabilística de um Temporal Fusion Transformer aplicado à previsão multi-horizonte de retornos diários, compará-lo a uma hierarquia pré-declarada de \textit{baselines} e descrever a contribuição relativa de famílias de indicadores, sob protocolo estatístico explícito, reprodutível e pré-registrado, no recorte de ativo piloto AAPL e modelos \textit{single-asset}.
 
-\subsection{Objetivos específicos}
+\subsection{Objetivos específicos} \label{sec:objetivos-especificos}
 \begin{itemize}
     \item Construir um conjunto de dados diário com quatro famílias de \textit{features} (preço, indicadores técnicos, sentimento de notícias e fundamentos), com causalidade temporal verificada por \textit{feature} e mitigação de \textit{leakage}.
     \item Treinar o Temporal Fusion Transformer em modo quantílico sobre uma grade densa de níveis, com rearranjo monotônico dos quantis e rastreabilidade de configurações, sementes e partições.

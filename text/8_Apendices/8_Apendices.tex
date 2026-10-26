@@ -87,7 +87,7 @@ Este apêndice reúne, em formato sintético, os termos técnicos recorrentes ao
 
 \phantomsection\label{gl:preregistro}\textbf{Pré-registro}: documento congelado, \textit{hasheado} e ancorado antes da geração das tabelas que o veredito julga, que fixa as regras que julgam as hipóteses, comparadores, métricas, \textit{gate} de calibração, parâmetros dos testes e regra de decisão; alterações são novas revisões, nunca reescritas.
 
-\phantomsection\label{gl:scorecard}\textbf{\textit{Scorecard}}: aplicação mecânica da regra de decisão pré-registrada, que separa o veredito do perfil comparativo.
+\phantomsection\label{gl:scorecard}\textbf{\textit{Scorecard}}: nome dado, nos apêndices, ao artefato que aplica mecanicamente a regra de decisão pré-registrada (Seção~\ref{sec:scorecard}), separando o veredito do perfil comparativo; no corpo do texto, usa-se o termo ``regra de decisão''.
 
 \section*{B.3 Termos do modelo}
 
@@ -136,6 +136,10 @@ As fontes são \texttt{yfinance} (cotações diárias), notícias com data e hor
 
 Sobre o conjunto de dados, executam-se: as buscas exploratórias de hiperparâmetros do TFT e do GBM; o congelamento e a ancoragem da especificação do cohort; e o treino do cohort confirmatório --- os cinco \textit{baselines} estatísticos, o GBM quantílico e o TFT sob o mesmo protocolo \textit{walk-forward}. Em seguida, congela-se e ancora-se o pré-registro; geram-se as previsões do bloco \texttt{calib} a partir dos modelos salvos, com a verificação de reprodução das previsões de teste; e só então calculam-se métricas, testes, predição conformal e contribuição de famílias, e o \textit{scorecard} produz o veredito. As execuções são registradas em MLflow com \textit{backend} local.
 
+\section*{C.4 Reprodução da geração julgada}
+
+A geração julgada, isto é, as tabelas e o \textit{scorecard} a partir dos quais o veredito foi emitido, foi preservada numa cópia imutável, com o \textit{hash} do conteúdo registrado antes de qualquer outra atualização. A cadeia que a produz foi executada de novo a partir dos dados persistidos, num destino separado, sem re-treino e no mesmo ambiente da corrida (mesma imagem e mesmo código). O resultado foi idêntico bit a bit: as 19 tabelas, inclusive as colunas das etapas com sorteio (\textit{bootstrap} e Monte Carlo), num total de 1.173.254 valores comparados, e as 66.117 folhas do \textit{scorecard}, sem nenhuma diferença, e com o mesmo \textit{digest} do resultado. As previsões de teste também se reproduzem bit a bit a partir dos modelos salvos, no ambiente do cohort. A reprodução em outro ambiente, em que a aritmética de ponto flutuante pode diferir e se aplicaria a tolerância descrita em C.1, não foi realizada.
+
 \chapter*{APÊNDICE D - Notas de implementação}
 \addcontentsline{toc}{chapter}{APÊNDICE D - Notas de implementação}
 
@@ -143,7 +147,7 @@ Este apêndice descreve, de forma sucinta, as escolhas de engenharia de software
 
 \section*{D.1 Arquitetura}
 
-O código segue arquitetura hexagonal (\textit{ports and adapters}) organizada em \textit{vertical slices} por contexto: dados de mercado, engenharia de \textit{features}, armazenamento analítico, modelagem, avaliação e inferência. O domínio é implementado apenas com a biblioteca padrão do Python; bibliotecas numéricas e de aprendizado de máquina (\texttt{pandas}, \texttt{pyarrow}, \texttt{torch}, \texttt{pytorch-forecasting}, \texttt{lightgbm}, \texttt{statsforecast}, \texttt{optuna}) ficam restritas a adaptadores. A direção das dependências é verificada automaticamente pelo \texttt{import-linter}, com checagem de tipos estrita (\texttt{mypy --strict}) e cobertura mínima de testes de 90\% como condição para integrar qualquer mudança.
+O código é organizado por etapa do estudo (dados, \textit{features}, modelagem e avaliação), em arquitetura hexagonal: as regras de cálculo das métricas, dos testes e da decisão ficam separadas das bibliotecas numéricas e de aprendizado de máquina, que só são acessadas por interfaces. Essa separação permite conferir cada estatística isoladamente (D.2), e nenhuma mudança é integrada sem que os testes automatizados passem.
 
 \section*{D.2 Validação das estatísticas}
 
@@ -156,3 +160,47 @@ Os dados seguem a organização em camadas \textit{bronze} (dados brutos imutáv
 \section*{D.4 Registro de decisões}
 
 As decisões de desenho são registradas em documentos de decisão arquitetural (ADR) versionados no repositório, por exemplo: enquadramento em calibração probabilística (ADR 0.0.0002), controle de \textit{leakage} (0.0.0018), convenções de emissão de quantis dos \textit{baselines} (0.0.0052), definição do alvo (3.5.0001), formato longo das previsões (4.1.0002), indexação do \textit{target timestamp} por sessão (4.3.0001), rearranjo sobre a grade densa (4.3.0002), \textit{walk-forward} expansivo e partição de calibração (5.1.0001--5.1.0003), GBM direto por nível e horizonte (5.3.0001), configuração do TFT (5.4.0001--5.4.0006), especificação congelada do cohort (5.5.0001), regra de leitura da H3 (0.0.0007), CQR como referência de cobertura (0.0.0008), invariantes do pré-registro e \textit{gate} de H1 (0.0.0011), pré-registro canônico e emendas (6.5.0001--6.5.0002), forma lógica do veredito (6.5.0007) e contrato de reprodução das previsões (7.1.0003).
+
+\chapter*{APÊNDICE E - Figuras complementares}
+\addcontentsline{toc}{chapter}{APÊNDICE E - Figuras complementares}
+
+As figuras deste apêndice completam o perfil descritivo do Capítulo~\ref{chap:resultados} e não têm papel no veredito. Todas são reconstruídas a partir das tabelas da geração julgada, sem re-treino.
+
+A Figura~\ref{fig:conformal} compara os intervalos nativos do TFT com os corrigidos pela predição conformal. Na escala da figura, as coberturas nativas e corrigidas quase se sobrepõem em todos os níveis e pares, o que corresponde às diferenças de até dois pontos percentuais relatadas no Capítulo~\ref{chap:resultados}. A diferença visível está na largura do par de 96\%: a NexCP produz intervalos mais largos que os nativos e os da CQR.
+\begin{figure}[htbp]
+\centering
+\caption{Cobertura empírica (não garantida) e largura média dos intervalos do TFT, nativos e corrigidos pela CQR (variante de registro) e pela NexCP (sensibilidade), por nível, par e horizonte; a banda de Wilson do nativo existe só por semente, e a referência de dispersão Beta não é desenhada}
+\label{fig:conformal}
+\includegraphics[width=\textwidth]{figuras/native_vs_conformal.pdf}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
+\end{figure}
+
+A Figura~\ref{fig:sharpness} mostra a distribuição das larguras ao longo da série. A largura do AR(1) quase não varia, porque sua variância de previsão é fixa em cada \textit{fold}; a do EWMA-vol é a que mais varia, acompanhando a volatilidade condicional, com as maiores larguras de todos os modelos. O TFT tem a largura mediana mais alta nos pares de 80\% e 96\%, e o GBM e os quantis empíricos ficam entre os extremos.
+
+\begin{figure}[htbp]
+\centering
+\caption{Nitidez: largura dos intervalos de 50\%, 80\% e 96\% por modelo e horizonte; os naive ficam de fora porque seus intervalos são degenerados em toda a série}
+\label{fig:sharpness}
+\includegraphics[width=\textwidth]{figuras/sharpness_diagram.pdf}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
+\end{figure}
+
+A Figura~\ref{fig:acf} mostra o diferencial de perda \(d_t\) do TFT contra cada comparador e sua autocorrelação. Contra os naive, o diferencial é negativo em quase toda a série, com magnitude maior nos períodos voláteis; contra os comparadores fortes, oscila em torno de zero, com o maior pico positivo contra o EWMA-vol no início de 2020. As autocorrelações são positivas na maioria das defasagens e chegam a pouco mais de 0,2. A variância do teste de Diebold-Mariano, fixada no pré-registro, considera a autocorrelação só até a defasagem \(h-1\), e a sensibilidade com o estimador de Bartlett não alterou nenhuma decisão; o MCS usa \textit{bootstrap} em blocos, que preserva a dependência entre sessões vizinhas.
+
+\begin{figure}[htbp]
+\centering
+\caption{Diferencial de perda entre o TFT e cada comparador, \(d_t\), e sua autocorrelação amostral, por horizonte; a faixa de confiança da autocorrelação não é desenhada}
+\label{fig:acf}
+\includegraphics[width=\textwidth]{figuras/loss_differential_acf.pdf}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
+\end{figure}
+
+A Figura~\ref{fig:vsn} mostra os pesos da VSN por família. A família técnica tem o maior peso mediano, e sua faixa entre os percentis 10 e 90 não se sobrepõe à das demais; preço vem em seguida, e sentimento e fundamentos têm pesos menores, com faixas que se sobrepõem. Os pesos descrevem o uso das famílias pelo modelo, e não sua contribuição para a perda, que é medida pela permutação e pela ablação no Capítulo~\ref{chap:resultados}.
+
+\begin{figure}[htbp]
+\centering
+\caption{Pesos da \textit{Variable Selection Network} por família de \textit{features}, sobre as decisões de teste (descrição do uso pelo modelo, sem eixo de horizonte)}
+\label{fig:vsn}
+\includegraphics[width=\textwidth]{figuras/vsn_weights.pdf}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
+\end{figure}

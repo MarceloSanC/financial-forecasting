@@ -37,7 +37,13 @@ jobs:
     # ablação) e da 7.4 (e2e da API), o job foi cancelado a 99 % do pytest nos
     # runs 39665942703 (develop) e 39743444111 (PR #205); localmente o
     # `make check` leva 22-26 min com `-n 4`, e o runner tem menos CPU.
-    timeout-minutes: 60
+    # 90 min (era 60, #259): depois das Stages 8.x e das issues do TCC o job
+    # passou a terminar perto do teto e caiu dos dois lados (32 min em
+    # 40242652911; cancelado a 99 % em 40234134619, 40237761307, 40245186014).
+    # Não é travamento: no 40245186014 os últimos ~9 min são os parâmetros de
+    # test_silver_content_refresh em série no gw0 (~1 min 45 s cada, loadgroup);
+    # localmente o `make check` levou 1 h 03 min com `-n 4`.
+    timeout-minutes: 90
     # `issues: read` habilita o `gh issue view` do check_stage_issue.py
     # (docs-check) — sem ele o script cai no caminho best-effort e o gate
     # issue-first passa sem verificar nada.
