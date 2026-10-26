@@ -30,7 +30,7 @@ A avaliação probabilística usava apenas três níveis, \(p10\), \(p50\) e \(p
 \addlinespace
 A estatística de comparação era implementada à mão, e o procedimento de eliminação do MCS continha um erro conhecido; um teste que congelasse a saída completa como referência tomaria esse erro por verdade & Cada métrica e cada teste validados, unidade a unidade, contra implementações de referência e casos analíticos de resultado conhecido & Seção~\ref{sec:metricas} \\
 \addlinespace
-A junção \textit{as-of} dos fundamentos foi verificada sem vazamento; a data substituta (fim do período fiscal mais 45 dias) foi usada em 17 de 81 casos & Regra mantida e verificada por teste, com interrupção da execução se a data efetiva for posterior à sessão & Seção~\ref{sec:features} \\
+A junção \textit{as-of} dos fundamentos não usava informação posterior à data de divulgação; a data substituta (fim do período fiscal mais 45 dias) foi usada em 17 de 81 casos & Regra mantida e verificada por teste, com interrupção da execução se a data efetiva for posterior à sessão; a antecipação de algumas horas no próprio dia da divulgação é declarada nas Limitações & Seções~\ref{sec:features} e~\ref{sec:limitacoes} \\
 \bottomrule
 \end{tabular}
 \fonte{Elaborado pelo autor (2026), a partir dos registros de decisão do projeto.}
