@@ -225,7 +225,7 @@
           e o calendário de pregão.
         \item 55 indicadores em quatro famílias: preço (17), técnico (17),
           sentimento (11) e fundamento (10).
-        \item Cada indicador usa só informação disponível até o dia da decisão,
+        \item Nenhum indicador usa dados de datas posteriores à decisão,
           verificado por teste.
       \end{itemize}
     \end{column}
@@ -336,7 +336,8 @@
 % ---------------------------------------------------------------------------
 % 10. H1 --- tempo: 1,3 min
 % Fontes: Cap. 5, Calibração por horizonte (H1): taxas 0,0887 / 0,0936 / 0,0882 /
-% 0,0938; cobertura 0,818; poder de 0,974 a 0,987; sementes de 0,772 a 0,872;
+% 0,0938; cobertura 0,818; poder de 0,974 a 0,987; sementes de 0,772 a 0,872 em h+1
+% (Cap. 6, Limitações, na branch da #248);
 % Christoffersen p de no máximo 0,003 em h+1. Figura do diagrama de confiabilidade.
 \begin{frame}{H1 --- Calibração: não rejeitada nos dois horizontes}
   \begin{columns}[T]
@@ -366,7 +367,7 @@
         \item Poder contra desvios de 5 pontos: de 0,974 a 0,987.
         \item[\alert{!}] As violações se agrupam no tempo: a calibração é marginal, não
           condicional.
-        \item[\alert{!}] Cada semente isolada variou de 0,772 a 0,872.
+        \item[\alert{!}] Em \hum, a cobertura de uma semente isolada foi de 0,772 a 0,872.
       \end{itemize}
     \end{column}
   \end{columns}
@@ -504,8 +505,8 @@
   \end{enumerate}
   \begin{block}{Análise exploratória, posterior ao veredito e especificada antes do cálculo}
     A média dos quantis das dez sementes reduz a perda em 1,6\% (\hum) e 1,4\% (\hsete),
-    para 3,988 e 4,008. Ainda fica 1,7\% e 0,2\% acima do EWMA-vol, sem diferença
-    significativa (p-valores brutos de 0,98 e 0,57), e custa dez treinos.
+    para 3,988 e 4,008. Ainda fica 1,7\% e 0,2\% acima do EWMA-vol, sem rejeição no
+    Diebold-Mariano unilateral (p-valores brutos de 0,98 e 0,57), e custa dez treinos.
   \end{block}
   Hipótese não testada: o TFT foi concebido para muitas séries, com a volatilidade
   como alvo; aqui, um único ativo, com o retorno como alvo.
@@ -556,14 +557,13 @@
   \begin{itemize}
     \item \textbf{H1}: calibração não rejeitada nos dois horizontes, com poder acima
       de 0,97; ela é marginal (violações agrupadas no tempo) e vale na média das sementes.
-    \item \textbf{H2}: o TFT supera os ingênuos e não supera os fortes; empata em \hsete;
-      a menor perda é a do EWMA-vol.
+    \item \textbf{H2}: supera os ingênuos, não os fortes; empata em \hsete; menor perda: EWMA-vol.
     \item \textbf{H3}: não sustentada; a família técnica vem à frente.
   \end{itemize}
   \begin{block}{Mensagem}
-    O valor do modelo está em descrever a \alert{escala} da distribuição, não em prever
-    a média. Um bom modelo de volatilidade é a barra mínima para qualquer modelo de
-    retornos diários.
+    O valor está em descrever a \alert{escala} da distribuição, não em prever a média.
+    Sugere-se um modelo de volatilidade simples como barra mínima na previsão
+    probabilística de retornos diários.
   \end{block}
   \textbf{Trabalhos futuros}
   \begin{itemize}
