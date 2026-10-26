@@ -34,6 +34,7 @@ import math
 import textwrap
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Final
 
 import matplotlib
@@ -42,7 +43,9 @@ from matplotlib.artist import Artist
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_pdf import FigureCanvasPdf
 from matplotlib.figure import Figure, SubFigure
+from matplotlib.font_manager import FontProperties
 from matplotlib.text import Text
+from matplotlib.textpath import TextToPath
 from matplotlib.ticker import ScalarFormatter
 from matplotlib.transforms import Bbox
 
@@ -113,6 +116,11 @@ _LEGEND_LINE_IN: Final = 0.085
 _LEGEND_ENTRY_IN: Final = 0.035
 _LEGEND_COLUMNS: Final = 2
 _PAD_IN: Final = 0.12
+_Y_AXIS_IN: Final = 0.8
+"""Largura reservada ao eixo y de um painel (ticks e rótulo) na conta do rótulo horizontal."""
+_TICK_GAP_PT: Final = 4.0
+"""Folga mínima entre dois rótulos horizontais vizinhos do eixo x."""
+_POINTS_PER_IN: Final = 72.0
 _ISO_MIN: Final = 19
 _DARK_CELL: Final = 0.5
 _RC: Final[Mapping[str, object]] = {
@@ -146,7 +154,9 @@ class RenderStyle:
     `annotations` liga o estatuto (título do painel e legenda), o título da figura e o
     rodapé; `text` traduz todo texto exibido vindo da spec (título de painel, eixos,
     categorias, nomes de série, células); `name` entra na identidade do renderizador
-    (`None` no dossiê: o registro da 8.3 não muda).
+    (`None` no dossiê: o registro da 8.3 não muda). `legend_drawn_only` tira da legenda a
+    série que não desenha nada (`drawn`); `horizontal_ticks` deixa horizontais os rótulos
+    do eixo x que cabem lado a lado (`_ticks_fit`) — os dois desligados no dossiê.
     """
 
     name: str | None
@@ -159,6 +169,8 @@ class RenderStyle:
     legend_line_in: float
     legend_entry_in: float
     decimal_comma: bool
+    legend_drawn_only: bool
+    horizontal_ticks: bool
 
 
 class _DecimalCommaFormatter(ScalarFormatter):
@@ -179,6 +191,8 @@ DOSSIER_STYLE: Final = RenderStyle(
     legend_line_in=_LEGEND_LINE_IN,
     legend_entry_in=_LEGEND_ENTRY_IN,
     decimal_comma=False,
+    legend_drawn_only=False,
+    horizontal_ticks=False,
 )
 """O estilo do dossiê (Stage 8.3): estatuto, título e rodapé, texto como na spec."""
 
@@ -313,14 +327,54 @@ class _Positions:
         return [float(self.categories[v]) if isinstance(v, str) else float(v) for v in values]
 
 
+def drawn(series: SeriesSpec) -> bool:
+    """A série desenha alguma marca: um valor finito em y, low ou high (linhas verticais: um x).
+
+    Uma série com todos os valores ausentes (ex.: o Wilson de um comparador sem linha de
+    calibração) não desenha nada, mas ainda deixaria a entrada na legenda.
+    """
+    if series.kind is SeriesKind.VLINES:
+        return bool(series.x)
+    values = (*series.y, *(series.low or ()), *(series.high or ()))
+    return any(v is not None and math.isfinite(float(v)) for v in values)
+
+
+def _in_legend(series: SeriesSpec, style: RenderStyle) -> bool:
+    return series.kind is not SeriesKind.CELLS and (not style.legend_drawn_only or drawn(series))
+
+
 def legend_labels(spec: FigureSpec, style: RenderStyle = DOSSIER_STYLE) -> list[str]:
-    """Os rótulos da legenda da figura (um por série distinta, células fora)."""
+    """Os rótulos da legenda da figura (um por série distinta, células fora).
+
+    Com `legend_drawn_only`, a série que não desenha nada (`drawn`) fica fora.
+    """
     entries: dict[str, None] = {}
     for panel in spec.panels:
         for series in panel.series:
-            if series.kind is not SeriesKind.CELLS:
+            if _in_legend(series, style):
                 entries.setdefault(_label(series, style))
     return list(entries)
+
+
+def ticks_fit(labels: Sequence[str], columns: int) -> bool:
+    """Os rótulos cabem horizontais, lado a lado, na largura estimada de um painel.
+
+    Largura do painel: a da página dividida pelas colunas, menos o eixo y (`_Y_AXIS_IN`);
+    cada rótulo ocupa uma fatia igual dela (ticks igualmente espaçados) e dois vizinhos,
+    centrados nas suas fatias, não chegam a menos de `_TICK_GAP_PT` um do outro. A largura
+    de cada rótulo é medida no contorno da fonte (`TextToPath`, no tamanho dos ticks do
+    `rc` em vigor) — sem desenhar, a mesma em qualquer chamada.
+    """
+    if len(labels) < 2:  # noqa: PLR2004 — um rótulo só não tem vizinho
+        return True
+    prop = FontProperties(size=matplotlib.rcParams["xtick.labelsize"])
+    measure = TextToPath()
+    widths = [
+        measure.get_text_width_height_descent(label, prop, ismath="$" in label)[0]
+        for label in labels
+    ]
+    slot = (_WIDTH_IN / columns - _Y_AXIS_IN) * _POINTS_PER_IN / len(labels)
+    return all((a + b) / 2 + _TICK_GAP_PT <= slot for a, b in pairwise(widths))
 
 
 def footer_lines(spec: FigureSpec) -> list[str]:
@@ -497,7 +551,7 @@ class MatplotlibFigureRenderer:
         top, legend_band, footer_band = (bands[i] for i in range(3))  # type: ignore[index]
         axes = top.subplots(rows, columns, squeeze=False)
         for index, panel in enumerate(spec.panels):
-            self._panel(axes[index // columns][index % columns], panel, looks)
+            self._panel(axes[index // columns][index % columns], panel, looks, columns)
         for index in range(n, rows * columns):
             axes[index // columns][index % columns].set_visible(False)
         if style.annotations:
@@ -508,7 +562,7 @@ class MatplotlibFigureRenderer:
         )
         return figure
 
-    def _panel(self, axes: Axes, panel: PanelSpec, looks: Mapping[str, Look]) -> None:
+    def _panel(self, axes: Axes, panel: PanelSpec, looks: Mapping[str, Look], columns: int) -> None:
         text = self._style.text
         positions = _Positions(panel)
         title = text(panel.title)
@@ -530,18 +584,25 @@ class MatplotlibFigureRenderer:
         if positions.categories:
             labels = list(positions.categories)
             # datas: um rótulo a cada `step`; categoria: todas rotuladas (posição sem rótulo
-            # seria ambígua), mais inclinadas quando passam de `_MAX_TICKS`
+            # seria ambígua), mais inclinadas quando passam de `_MAX_TICKS`; horizontais
+            # quando o estilo pede e elas cabem lado a lado
             dates = all(_tick(label) != label for label in labels)
             step = max(1, math.ceil(len(labels) / _MAX_TICKS)) if dates else 1
             ticks = list(range(0, len(labels), step))
-            rotation = 60 if not dates and len(labels) > _MAX_TICKS else 30
+            shown = [text(_tick(labels[t])) for t in ticks]
             axes.set_xticks([float(t) for t in ticks])
-            axes.set_xticklabels(
-                [text(_tick(labels[t])) for t in ticks],
-                rotation=rotation,
-                ha="right",
-                rotation_mode="anchor",
-            )
+            if self._style.horizontal_ticks and ticks_fit(shown, columns):
+                axes.set_xticklabels(shown)
+                return
+            rotation = 60 if not dates and len(labels) > _MAX_TICKS else 30
+            axes.set_xticklabels(shown, rotation=rotation, ha="right", rotation_mode="anchor")
+
+    def _label_and_look(self, series: SeriesSpec, looks: Mapping[str, Look]) -> tuple[str, Look]:
+        """O rótulo do artista (`"_nolegend_"` fora da legenda) e o estilo da série."""
+        label = _label(series, self._style)
+        look = looks.get(label, Look(_NEUTRAL, _MARKERS[0], "--", hollow=False))
+        # o matplotlib deixa fora da legenda o rótulo com "_" inicial
+        return (label if _in_legend(series, self._style) else "_nolegend_"), look
 
     def _series(
         self,
@@ -551,8 +612,7 @@ class MatplotlibFigureRenderer:
         looks: Mapping[str, Look],
         groups: Mapping[SeriesKind, list[SeriesSpec]],
     ) -> None:
-        label = _label(series, self._style)
-        look = looks.get(label, Look(_NEUTRAL, _MARKERS[0], "--", hollow=False))
+        label, look = self._label_and_look(series, looks)
         color, marker, linestyle, face = look.color, look.marker, look.linestyle, look.face
         xs = positions.of(series.x)
         ys = [_number(v) for v in series.y]
