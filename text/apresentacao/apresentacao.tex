@@ -4,7 +4,7 @@
 % em comentário, a seção do texto de onde vem cada número e o tempo estimado.
 % Tempo-alvo: até 20 min (Art. 16 do regulamento de TCC do Campus Joinville).
 % Estimativa: abertura 0,3 min + 16 slides de conteúdo (de 0,9 a 1,3 min cada,
-% somando 18,3 min) = 18,6 min; encerramento e reservas ficam fora do tempo.
+% somando 18,0 min) = 18,3 min; encerramento e reservas ficam fora do tempo.
 % Os números foram escritos no formato do texto (vírgula decimal, ponto de milhar)
 % e conferidos por script contra o texto das branches do fechamento do TCC.
 \documentclass[aspectratio=169,10pt]{beamer}
@@ -421,7 +421,7 @@
 \end{frame}
 
 % ---------------------------------------------------------------------------
-% 12. H2: veredito --- tempo: 1,3 min
+% 12. H2: veredito --- tempo: 1,2 min
 % Fontes: Cap. 5, Análise estatística pareada: Holm rejeita contra os naive e contra
 % nenhum forte; MCS p = 0,022 (h+1) e 0,332 (h+7); sensibilidade l = h com
 % p = 0,061; veredito por horizonte; critério de sucesso.
@@ -451,7 +451,6 @@
     empate está perto da fronteira: com blocos de \(h\) pregões no \textit{bootstrap},
     o TFT seria eliminado (\(p = 0{,}061\)).
   \end{alertblock}
-  Estudo bem-sucedido pelo critério fixado antes: H1 não rejeitada (nos dois horizontes).
 \end{frame}
 
 % ---------------------------------------------------------------------------
@@ -493,12 +492,10 @@
 \end{frame}
 
 % ---------------------------------------------------------------------------
-% 14. Por que o EWMA-vol venceu --- tempo: 1,3 min
+% 14. Por que o EWMA-vol venceu --- tempo: 1,1 min
 % Fontes: Cap. 5, Discussão, Por que o EWMA-vol teve a menor perda (GBM 3,980 contra
-% 3,920; cerca de 0,5%; sementes de 3,987 a 4,117, cerca de 3%) e O TFT foi usado de
-% forma pouco eficiente? (média das dez sementes: 1,6% e 1,4%; 3,988 e 4,008;
-% 1,7% e 0,2% acima do EWMA-vol; p-valores brutos 0,98 e 0,57; dez treinos);
-% Relação com a literatura (regime de uso do TFT).
+% 3,920; cerca de 0,5%; sementes de 3,987 a 4,117, cerca de 3%); Relação com a
+% literatura (regime de uso do TFT). A média das sementes está na Reserva 10.
 \begin{frame}{Por que o EWMA-vol teve a menor perda}
   \small
   Leitura: quase toda a informação aproveitável está no \alert{tamanho recente dos
@@ -511,11 +508,10 @@
     \item \textbf{Sementes}: a perda do TFT vai de 3,987 a 4,117 entre sementes
       (cerca de 3\%), a mesma ordem da distância até o EWMA-vol.
   \end{enumerate}
-  \begin{block}{Análise exploratória, posterior ao veredito e especificada antes do cálculo}
-    A média dos quantis das dez sementes reduz a perda em 1,6\% (\hum) e 1,4\% (\hsete),
-    para 3,988 e 4,008. Ainda fica 1,7\% e 0,2\% acima do EWMA-vol, sem rejeição no
-    Diebold-Mariano unilateral (p-valores brutos de 0,98 e 0,57), e custa dez treinos.
-  \end{block}
+  \vspace{4pt}
+  Combinar as sementes não muda o quadro (análise exploratória, na reserva).
+
+  \vspace{4pt}
   Hipótese não testada: o TFT foi concebido para muitas séries, com a volatilidade
   como alvo; aqui, um único ativo, com o retorno como alvo.
 \end{frame}
@@ -797,7 +793,18 @@
   \end{block}
 \end{frame}
 
-% Reserva 10 --- Fonte: Cap. 4, Scorecard (três revisões; cegamento declarado).
+% Reserva 10 --- Fonte: Cap. 5, Discussão, O TFT foi usado de forma pouco eficiente?
+% (média das dez sementes: 1,6% e 1,4%; 3,988 e 4,008; 1,7% e 0,2% acima do EWMA-vol;
+% p-valores brutos 0,98 e 0,57; dez treinos). Saiu do slide 14 para aliviá-lo.
+\begin{frame}{Reserva --- Média dos quantis das sementes}
+  \begin{block}{Análise exploratória, posterior ao veredito e especificada antes do cálculo}
+    A média dos quantis das dez sementes reduz a perda em 1,6\% (\hum) e 1,4\% (\hsete),
+    para 3,988 e 4,008. Ainda fica 1,7\% e 0,2\% acima do EWMA-vol, sem rejeição no
+    Diebold-Mariano unilateral (p-valores brutos de 0,98 e 0,57), e custa dez treinos.
+  \end{block}
+\end{frame}
+
+% Reserva 11 --- Fonte: Cap. 4, Scorecard (três revisões; cegamento declarado).
 \begin{frame}{Reserva --- Pré-registro: o que mudou e quando}
   \begin{itemize}
     \item As regras ficam num arquivo congelado, com \textit{hash} registrado antes de
