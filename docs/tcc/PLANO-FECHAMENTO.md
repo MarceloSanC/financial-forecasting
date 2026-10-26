@@ -237,3 +237,30 @@ A síntese é gravada em `docs/tcc/RUBRICA-E-REFERENCIAS.md` e alimenta E4, E6 e
   - E1 (#240) mergeada em `a0d2dde4`.
 - **2026-10-25 — E1 auditada.** Aprovada pela `issue-audit` em contexto limpo (20 testes de C1 e
   cerca de 40 números de prosa conferidos à mão); um finding dentro do escopo foi corrigido no PR.
+- **2026-10-26 — entregas mergeadas.**
+  - E3 (#252), E5 (#251), E4a (#255), E2a (#254), E4 (#256) e E2 (#257).
+  - Cada uma passou por `issue-audit` em contexto limpo. Todas as auditorias acharam algo dentro
+    do escopo e corrigiram no próprio PR, de 1 a 6 itens cada. Os achados mais relevantes:
+    - E5: o texto dizia que agregadores predominavam; a maior fonte tem 9,2% de 674 fontes.
+    - E3: o piloto tinha, sim, separação exploratória/confirmatória prevista.
+    - E4: Elsayed et al. registram o TFT como o único modelo profundo que supera o GBRT, um
+      contraste com este estudo; a conclusão do *ensemble* passou de causa para "coerente com".
+    - E2: os 1.173.254 valores são só das tabelas; o TFT no VaR varia por semente.
+- **2026-10-26 — resultado da D3 (análise exploratória, especificação `cdf434bf`).** A média das
+  sementes reduz a perda em 1,6% e 1,4%, mas fica acima do EWMA-vol (1,7% e 0,2%; DM sem
+  rejeição). Pela leitura fixada antes, isso é coerente com um limite informacional das
+  *features*.
+- **2026-10-26 — CI (#259, fora do plano, assumida pela mestra).**
+  - O `lint-and-test` passou a terminar perto do teto de 60 min e a ser cancelado a 99%, também
+    no `develop`, o que bloqueava qualquer merge.
+  - A causa medida é uma cauda lenta, não um travamento. O teto subiu para 90 min (#260).
+  - O primeiro PR depois disso levou 1 h 01 min e teria sido cancelado no teto antigo.
+- **2026-10-26 — runs simultâneos de CI.** A regra de branch atualizada serializa os merges: cada
+  merge exige rebase e uma CI nova nos demais. Para cortar runs desperdiçados, os runs de HEADs
+  superados são cancelados à mão. A opção `concurrency` no `ci.yml` foi oferecida ao dono e
+  aguarda resposta.
+- **2026-10-26 — Stage 8.4 (E8) mergeada** (#258, `4ce33a4d`; #202 fechada). Duas rodadas reais
+  provaram os três critérios da #202. As decisões P da Stage (D1, D2, D3, D4, D7, D9 e a
+  indisponibilidade de 19–23 s da API na troca) foram apresentadas ao dono para ratificação.
+- **2026-10-26 — E6: contribuições.** O "3 ou 4" do escopo foi lido como limite por frente (C,
+  fechado pela mestra): ficam 4 metodológicas e 4 empíricas.
