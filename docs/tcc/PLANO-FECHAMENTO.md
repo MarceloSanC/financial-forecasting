@@ -279,7 +279,7 @@ A síntese é gravada em `docs/tcc/RUBRICA-E-REFERENCIAS.md` e alimenta E4, E6 e
   - O C2, como fixado no §3, media só quatro marcadores. A auditoria em contexto limpo achou o
     que a medida mecânica não pegava, o mesmo achado do teste do protocolo (critérios de processo
     passam e o resultado ainda tem gap).
-  - Tratamento: #263. O PR #264 fez a parte que não depende do autor: título, elementos opcionais
+  - Tratamento: #263. O PR #264 (aberto, aguardando a CI e o merge) fez a parte que não depende do autor: título, elementos opcionais
     de exemplo fora do PDF e a varredura do C2 estendida num teste do CI, com as pendências do
     autor como `xfail` ligado à #263. O restante está no §10.
 
@@ -293,7 +293,7 @@ as mantêm visíveis: o teste falha quando um campo é preenchido sem tirá-lo d
 | 1 | Nomes da banca (membros A e B e instituições) | `text/Main.tex`, `\membrobancaA`/`B` | Se a cópia for à banca antes de definida, ocultar a folha de aprovação (`folhadeaprovacaoTag`) |
 | 2 | Data de aprovação | `text/Main.tex`, `\diaAprovacao`/`\mesAprovacao` | Preenchida depois da defesa |
 | 3 | Tratamento do orientador e do coorientador | `text/Main.tex`, "Orientador(a): Dr(a)." | Também no slide de abertura (`text/apresentacao/`) |
-| 4 | Dedicatória, agradecimentos e epígrafe | `text/1_Resumo/1_1`–`1_3`, hoje fora do PDF | Opcionais pela NBR 14724; agradecimentos obrigatórios se houve bolsa ou financiamento |
+| 4 | Dedicatória, agradecimentos e epígrafe | `text/1_Resumo/1_1`–`1_3`, hoje fora do PDF | Opcionais pela NBR 14724; agradecimentos obrigatórios se houve bolsa ou financiamento. Ratificar também a decisão do PR #264 de comentá-los no `Main.tex` em vez de apagar os arquivos |
 | 5 | Calendário | regulamento de Joinville | Bancas de 2026/2 entre 09 e 27/nov; cópia à banca 15 dias antes (Art. 13) |
 | 6 | Template exigido pelo curso | coordenação | Confirmar se o template atual (UFSC/abnTeX2) é aceito ou se é exigido o de Joinville |
 | 7 | Ratificar as decisões P da Stage 8.4 | #202, technical §7 | D1, D2, D3, D4, D7, D9 e a indisponibilidade de 19 a 23 s da API na troca |
