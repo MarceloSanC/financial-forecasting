@@ -589,4 +589,76 @@ recreate_ms=22566
 **Razão:** a rodada sai servível pela API sem mudança de código (CA1, CA2 do concept; critérios
 1 e 3 da #202), e a API recriada leva ~23 s para voltar a responder.
 
+
+### 2026-10-26 — [measurement] Etapa R3–R4, rodada real 2025-12-31, troca do cohort servido e isolamento — Claude (executor)
+**Contexto:** CA6, segunda metade. A rodada roda depois do merge de `origin/develop`
+(`339ecef7`) e dos `-fix` da auditoria, com a mesma montagem da R1: só o `.git` principal
+`:ro`, brutos `raw-full` `:ro` e o `data/` do checkout principal sem montar.
+**Medição (R3, rodada):** `production-round … --round 2025-12-31 --raw-root /raw/raw-full`,
+00:31:58 → 01:51:14 UTC (79 min 16 s):
+```
+materialized AAPL: 4024 candles, 6921 news, 81 fundamentals
+dataset rows 3950 (2010-04-21..2025-12-31), feature_set_hash 7df0e1b4…09e0
+round spec written: /app/data/production/aapl/rounds/2025-12-31/cohort.toml (dataset 00e4406dcd96)
+unit baselines: ran (5 runs, 17360 rows written, 147.0s)
+unit gbm: ran (1 runs, 3472 rows written, 38.6s)
+unit tft:seed=1: ran (1 runs, 3472 rows written, 1316.1s)
+unit tft:seed=2: ran (1 runs, 3472 rows written, 1509.3s)
+unit tft:seed=3: ran (1 runs, 3472 rows written, 1073.9s)
+cohort aapl_production-r0-ad1bd972fad7: 9 models x 1 folds; rows expected 31248, observed 31248
+OK
+published aapl_production-r0-ad1bd972fad7 → /app/data/production/aapl/serving.env
+EXIT=0
+```
+O dado da rodada é o do confirmatório (impressão digital `00e4406d…`, o mesmo fim em
+2025-12-31): ela simula a chegada de dado novo em relação à rodada 1, como o CA6 declara.
+Teste servido (TFT, h+1): 251 decisões, 2024-12-30..2025-12-30. Fim do treino (`test_start −
+547`): 2022-10-25. O `serving.env` passou a `DATA_ROOT=/app/data/production/aapl/rounds/2025-12-31`.
+**Medição (R3, troca da API):** recriação pelo comando do runbook com o ponteiro novo:
+```
+recreate_ms=19103
+2025-09-15 HTTP 200 0.704211s  cohort_id aapl_production-r0-ad1bd972fad7, target 2025-09-16, seeds [1, 2, 3], conformal unavailable "gold não publicado para o cohort aapl_production-r0-ad1bd972fad7", explainability unavailable
+2025-12-30 HTTP 200 0.551813s
+```
+A mesma decisão de 2025-09-15 que respondia 404 com a API na rodada 1 (R2) responde 200 na
+rodada 2, sem mudança de código.
+**Medição (R4, isolamento):** `sha256sum` dos arquivos de
+`<checkout principal>/data/cohorts/aapl` antes de R0 e depois de R3, `diff` dos dois:
+```
+IDENTICAL 355 files
+```
+**Razão:** fecha o CA6 e os três critérios da #202 com execução real: rodada servível sem
+tocar o `data_root` confirmatório, janela tratada pela raiz imutável e o risco da recriação
+medido (19–23 s) e aceito (entrada abaixo), API servindo o cohort novo sem mudança de código.
+
+### 2026-10-26 — [deviation] Etapa R, fim do treino derivado da geometria — Claude (executor)
+**Contexto:** a Etapa R (R1, R3) mandava ler a data do fim do treino "do `dim_run`".
+**Razão:** o `dim_run` não guarda janela de treino (colunas: `run_id`, `asset`,
+`parent_sweep_id`, `feature_set_name`, `config_signature`, `split_fingerprint`, `fold`,
+`seed`, `model_version`, `schema_version`, `created_at_utc`). A data sai do grid materializado
+da rodada pela mesma geometria do splitter: última sessão de treino = `test_start − 547`
+(gaps de 14 + early stopping 252 + calibração 252), conferida contra a primeira decisão de
+teste gravada no silver.
+
+### 2026-10-26 — [measurement] Cópia de artefatos do MLflow fora da raiz da rodada — Claude (executor)
+**Contexto:** achado F3 da auditoria da Stage; o concept I1 declara que a cópia de artefato do
+MLflow vai para `./mlruns/` do diretório de trabalho.
+**Medição:** `du -sh mlruns` na worktree: `103M` depois da rodada 2025-06-30 e `185M` depois
+da rodada 2025-12-31, ou seja, ~80–100 MB por rodada (checkpoints das três seeds do TFT). O
+probe de custo não conta: rodou com a worktree montada `:ro`.
+**Razão:** o runbook passa a mandar limpar o `./mlruns/` junto com as rodadas antigas
+(`c34e0fb2`).
+
+### 2026-10-26 — [decision] Aceitação do risco da recriação da API (CA6) — Claude (executor)
+**Contexto:** o CA6 pede o risco do intervalo de recriação aceito por escrito no §7; o ADR
+8.4.0002 item 3 já o declara.
+**Pergunta:** o intervalo em que a API não responde durante a troca de cohort é aceitável no v0?
+**Opções:**
+- A — dois processos atrás de um proxy (troca sem intervalo)
+- B — recriar o container no horário agendado e aceitar o intervalo ✅ recomendada
+**Decisão:** B.
+**Razão:** medido em 22,6 s (R2) e 19,1 s (R3), uma vez por semana, num projeto com um
+operador e sem meta de disponibilidade; o caminho A exige infraestrutura nova para um ganho
+que ninguém pediu. Fica a ratificar pelo dono junto com o D4.
+
 <!-- END: post-execution -->
