@@ -36,6 +36,10 @@ _RESULTS_TEX: Final = Path(__file__).parents[2] / "text" / "5_Resultados" / "5_R
 _HORIZONS: Final = (1, 7)
 _TFT: Final = "tft_quantile"
 _N_SEEDS: Final = 10
+_ALPHA: Final = 0.05
+_VAR_LEVEL: Final = 0.98
+_VAR_BAND: Final = 0.95
+_WINKLER_LOW: Final = 0.10
 _MODELS: Final[Mapping[str, str]] = {
     "Retorno nulo": "baseline_zero_return",
     "Média histórica": "baseline_historical_mean",
@@ -87,6 +91,7 @@ def judged() -> dict[str, Any]:
                 "h3_shares",
                 "h3_vsn",
                 "conformal_coverage",
+                "calibration_table",
             )
         },
     }
@@ -313,3 +318,85 @@ def test_common_sample_size(tex: str, judged: dict[str, Any]) -> None:
     for horizon, shown in ((1, "1.511"), (7, "1.505")):
         assert _h1(judged, horizon)["common_points"] == parse_number(shown)[0]
         assert f"n = {shown}" in normalize(tex), f"n de h+{horizon} ausente do texto"
+
+
+def _var_rows(judged: Mapping[str, Any], model: str, horizon: int) -> Rows:
+    """Backtest do VaR de 98% (cauda inferior 0,02) na amostra comum, sem degenerados."""
+    return [
+        row
+        for row in judged["calibration_table"]
+        if row["model"] == model
+        and row["horizon"] == horizon
+        and row["sample"] == "common"
+        and row["kind"] == "lower_tail"
+        and row["var_level"] == _VAR_LEVEL
+        and row["band_level"] == _VAR_BAND
+        and row["dgt_offset"] is None
+        and not row["includes_degenerate"]
+    ]
+
+
+def _check_p(cell: str, value: float, where: str) -> None:
+    if cell.startswith("<"):
+        shown, _ = parse_number(cell.removeprefix("<"))
+        assert value < shown, f"{where}: texto {cell!r}, gravado {value!r}"
+    else:
+        _check(cell, value, where)
+
+
+def test_var_table(tex: str, judged: dict[str, Any]) -> None:
+    for row in table_rows(tex, "tab:var"):
+        if row[0] not in _MODELS:
+            continue
+        model = _MODELS[row[0]]
+        for i, horizon in enumerate(_HORIZONS):
+            rows = _var_rows(judged, model, horizon)
+            rates = [r["n_violations"] / r["n_observed"] for r in rows]
+            where = f"VaR {model} h+{horizon}"
+            if model == _TFT:
+                assert len(rows) == _N_SEEDS, f"{where}: {len(rows)} seeds"
+                head, interval = row[1 + 2 * i].split(" ", 1)
+                _check(head, mean(rates), f"{where} média")
+                (low, low_d), (high, high_d) = parse_interval(interval)
+                assert consistent(low, low_d, min(rates)), f"{where} mínimo"
+                assert consistent(high, high_d, max(rates)), f"{where} máximo"
+                rejecting = sum(r["kupiec_pof_p_value"] < _ALPHA for r in rows)
+                assert row[2 + 2 * i] == f"{rejecting} de {_N_SEEDS}", f"{where} rejeições"
+            else:
+                assert len(rows) == 1, f"{where}: {len(rows)} rows"
+                _check(row[1 + 2 * i], rates[0], f"{where} taxa")
+                _check_p(row[2 + 2 * i], rows[0]["kupiec_pof_p_value"], f"{where} Kupiec")
+
+
+def test_winkler_prose(tex: str, judged: dict[str, Any]) -> None:
+    def score(model: str, horizon: int) -> float:
+        return mean(
+            float(value)
+            for value in (
+                row["value"]
+                for row in judged["metrics_by_run"]
+                if row["model"] == model
+                and row["horizon"] == horizon
+                and row["sample"] == "common"
+                and row["metric"] == "interval_score"
+                and row["level_low"] == _WINKLER_LOW
+            )
+        )
+
+    text = normalize(tex.replace("\n", " ")).replace("\\%", "%")
+    start = text.find("O interval score de Winkler")
+    assert start >= 0, "parágrafo do Winkler ausente"
+    claims = (
+        ("ordena os modelos da mesma forma em h+1: ", "baseline_ewma_vol", 1),
+        ("para o EWMA-vol, ", "gbm_quantile", 1),
+        ("para o GBM, ", "baseline_historical_quantiles", 1),
+        ("para os quantis empíricos, ", _TFT, 1),
+        ("na média das sementes, e ", "baseline_ar1", 1),
+        ("exceto que o TFT (", _TFT, 7),
+        ("fica à frente dos quantis empíricos (", "baseline_historical_quantiles", 7),
+    )
+    for prefix, model, horizon in claims:
+        at = text.find(prefix, start)
+        assert at >= 0, f"trecho não encontrado: {prefix!r}"
+        token = text[at + len(prefix) :].split(" ", 1)[0].rstrip(").,;%")
+        _check(token, score(model, horizon), f"Winkler {model} h+{horizon}")
