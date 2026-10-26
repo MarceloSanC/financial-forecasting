@@ -147,7 +147,7 @@ Este apêndice descreve, de forma sucinta, as escolhas de engenharia de software
 
 \section*{D.1 Arquitetura}
 
-O código segue arquitetura hexagonal (\textit{ports and adapters}) organizada em \textit{vertical slices} por contexto: dados de mercado, engenharia de \textit{features}, armazenamento analítico, modelagem, avaliação e inferência. O domínio é implementado apenas com a biblioteca padrão do Python; bibliotecas numéricas e de aprendizado de máquina (\texttt{pandas}, \texttt{pyarrow}, \texttt{torch}, \texttt{pytorch-forecasting}, \texttt{lightgbm}, \texttt{statsforecast}, \texttt{optuna}) ficam restritas a adaptadores. A direção das dependências é verificada automaticamente pelo \texttt{import-linter}, com checagem de tipos estrita (\texttt{mypy --strict}) e cobertura mínima de testes de 90\% como condição para integrar qualquer mudança.
+O código é organizado por etapa do estudo (dados, \textit{features}, modelagem e avaliação), em arquitetura hexagonal: as regras de cálculo das métricas, dos testes e da decisão ficam separadas das bibliotecas numéricas e de aprendizado de máquina, que só são acessadas por interfaces. Essa separação permite conferir cada estatística isoladamente (D.2), e nenhuma mudança é integrada sem que os testes automatizados passem.
 
 \section*{D.2 Validação das estatísticas}
 
