@@ -3,9 +3,9 @@ title: Plano de fechamento do TCC e da Stage 8.4
 description: Metodologia, critérios de sucesso fixados antes da execução, triagem e ordem das entregas que fecham o texto do TCC e a Stage 8.4, mais o registro vivo de surpresas e decisões
 when-use: Consultar ao retomar o fechamento do TCC, ao abrir uma entrega do texto ou da 8.4, e na auditoria final que confere os critérios C1–C8
 keywords: [tcc, plano, fechamento, entregas, criterios, rubrica, auditoria, stage-8.4]
-status: in_progress
+status: done
 created_at: 2026-10-25
-updated_at: 2026-10-25
+updated_at: 2026-10-26
 references:
   - roadmap.md
   - RUNBOOK-STAGE-LIFECYCLE.md
@@ -23,8 +23,8 @@ surpresas e as decisões tomadas no caminho (§9).
 
 | Resultado | O que passa a ser possível | Status | Entregas |
 |---|---|---|---|
-| **R1 — TCC fechado** | A banca recebe um texto completo, com cada número rastreável à geração julgada e cada afirmação teórica apoiada em fonte primária, e uma apresentação de defesa coerente com ele | agora | E1–E7, E9 |
-| **R2 — cohort de produção servível** | A API da 7.4 serve datas posteriores ao teste do estudo sem tocar no cohort confirmatório | agora | E8 (Stage 8.4, #202) |
+| **R1 — TCC fechado** | A banca recebe um texto completo, com cada número rastreável à geração julgada e cada afirmação teórica apoiada em fonte primária, e uma apresentação de defesa coerente com ele | entregue, com pendências do autor (§10) | E1–E7, E9 |
+| **R2 — cohort de produção servível** | A API da 7.4 serve datas posteriores ao teste do estudo sem tocar no cohort confirmatório | entregue (#258) | E8 (Stage 8.4, #202) |
 
 ## 2. Metodologia
 
@@ -255,6 +255,9 @@ A síntese é gravada em `docs/tcc/RUBRICA-E-REFERENCIAS.md` e alimenta E4, E6 e
     no `develop`, o que bloqueava qualquer merge.
   - A causa medida é uma cauda lenta, não um travamento. O teto subiu para 90 min (#260).
   - O primeiro PR depois disso levou 1 h 01 min e teria sido cancelado no teto antigo.
+  - O critério da #259 foi cumprido: quatro runs seguidos verdes no `develop` (`8a173772`,
+    `8ecb8418`, `4ce33a4d`, `fc0aa828`). A evidência está comentada na issue. O fechamento manual é
+    do dono, porque o `publish_guard` o reserva ao humano (§10).
 - **2026-10-26 — runs simultâneos de CI.** A regra de branch atualizada serializa os merges: cada
   merge exige rebase e uma CI nova nos demais. Para cortar runs desperdiçados, os runs de HEADs
   superados são cancelados à mão. A opção `concurrency` no `ci.yml` foi oferecida ao dono e
@@ -264,3 +267,37 @@ A síntese é gravada em `docs/tcc/RUBRICA-E-REFERENCIAS.md` e alimenta E4, E6 e
   indisponibilidade de 19–23 s da API na troca) foram apresentadas ao dono para ratificação.
 - **2026-10-26 — E6: contribuições.** O "3 ou 4" do escopo foi lido como limite por frente (C,
   fechado pela mestra): ficam 4 metodológicas e 4 empíricas.
+- **2026-10-26 — E6 e E7 mergeadas** (#262 em `fc0aa828`; #261 em `e4d71e75`). Os 217 números dos
+  slides foram conferidos de novo contra o texto final do `develop`: nenhum ausente.
+- **2026-10-26 — E9, auditoria final** (`AUDITORIA-FINAL.md`; sessão separada `claude --bg`,
+  aberta e encerrada pelo registro de sessões do protocolo do whaka-template, T8/T9).
+  - Veredito: **atende com ressalvas**.
+    - C1, C5, C6 e C7: atendem.
+    - C3, C4 e C8: atendem com ressalva.
+    - C2: não atende. As páginas 2 a 6 do PDF ainda tinham texto do template (dedicatória,
+      agradecimentos, epígrafe, banca, data, "Dr(a).") e o título terminava em ponto.
+  - O C2, como fixado no §3, media só quatro marcadores. A auditoria em contexto limpo achou o
+    que a medida mecânica não pegava, o mesmo achado do teste do protocolo (critérios de processo
+    passam e o resultado ainda tem gap).
+  - Tratamento: #263. O PR #264 fez a parte que não depende do autor: título, elementos opcionais
+    de exemplo fora do PDF e a varredura do C2 estendida num teste do CI, com as pendências do
+    autor como `xfail` ligado à #263. O restante está no §10.
+
+## 10. Pendências do autor (o que só o dono pode fazer)
+
+Nenhuma delas tem resposta no repositório. A #263 e o teste `tests/tcc/test_template_markers.py`
+as mantêm visíveis: o teste falha quando um campo é preenchido sem tirá-lo da lista de pendências.
+
+| # | Pendência | Onde | Observação |
+|---|---|---|---|
+| 1 | Nomes da banca (membros A e B e instituições) | `text/Main.tex`, `\membrobancaA`/`B` | Se a cópia for à banca antes de definida, ocultar a folha de aprovação (`folhadeaprovacaoTag`) |
+| 2 | Data de aprovação | `text/Main.tex`, `\diaAprovacao`/`\mesAprovacao` | Preenchida depois da defesa |
+| 3 | Tratamento do orientador e do coorientador | `text/Main.tex`, "Orientador(a): Dr(a)." | Também no slide de abertura (`text/apresentacao/`) |
+| 4 | Dedicatória, agradecimentos e epígrafe | `text/1_Resumo/1_1`–`1_3`, hoje fora do PDF | Opcionais pela NBR 14724; agradecimentos obrigatórios se houve bolsa ou financiamento |
+| 5 | Calendário | regulamento de Joinville | Bancas de 2026/2 entre 09 e 27/nov; cópia à banca 15 dias antes (Art. 13) |
+| 6 | Template exigido pelo curso | coordenação | Confirmar se o template atual (UFSC/abnTeX2) é aceito ou se é exigido o de Joinville |
+| 7 | Ratificar as decisões P da Stage 8.4 | #202, technical §7 | D1, D2, D3, D4, D7, D9 e a indisponibilidade de 19 a 23 s da API na troca |
+| 8 | `concurrency` no `ci.yml` | sugestão desta sessão | Cancela sozinho os runs superados; nada foi feito sem a resposta |
+| 9 | Volume Docker `ff84-venv-sentiment` | Stage 8.4 | Reaproveitar no runbook de produção ou remover |
+| 10 | Fechar a #259 | GitHub | Critério cumprido e evidência comentada; o hook reserva o fechamento manual ao humano |
+
