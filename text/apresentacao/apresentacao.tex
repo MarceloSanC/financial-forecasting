@@ -12,13 +12,19 @@
 \usepackage[T1]{fontenc}
 \usepackage[brazilian]{babel}
 \usepackage[sfdefault,lining]{FiraSans}
+\usepackage{array}
 \usepackage{booktabs}
 \usepackage{graphicx}
+\usepackage{appendixnumberbeamer}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning}
 
 \usetheme[progressbar=frametitle,numbering=fraction,block=fill]{metropolis}
 \setbeamertemplate{frame footer}{Marcelo Santos do Carmo --- Defesa de TCC}
+% Destaque mais escuro que o laranja padrão do tema, para contraste no projetor.
+\setbeamercolor{alerted text}{fg=mLightBrown!70!black}
+% Curso e orientadores no mesmo corpo, legível na projeção.
+\setbeamerfont{institute}{size=\small}
 
 \graphicspath{{../figuras/}}
 
@@ -29,7 +35,7 @@
 \subtitle{Calibração e comparação pré-registrada contra modelos de referência}
 \author{Marcelo Santos do Carmo}
 \institute{Engenharia Mecatrônica --- UFSC, Centro Tecnológico de Joinville\\[2pt]
-  \small Orientador: Dr. Pedro Paulo de Andrade Júnior \quad Coorientador: Dr. Benjamin Grando Moreira}
+  Orientador: Dr. Pedro Paulo de Andrade Júnior \quad Coorientador: Dr. Benjamin Grando Moreira}
 \date{Defesa de Trabalho de Conclusão de Curso --- 2026}
 
 \begin{document}
@@ -160,7 +166,8 @@
 % O piloto não é evidência (mesma seção).
 \begin{frame}{Estudo piloto: o que motivou o desenho}
   \small
-  \begin{tabular}{p{0.46\textwidth} p{0.46\textwidth}}
+  \begin{tabular}{>{\raggedright\arraybackslash}p{0.46\textwidth}
+                  >{\raggedright\arraybackslash}p{0.46\textwidth}}
     \toprule
     \textbf{O piloto revelou} & \textbf{Decisão do desenho final} \\
     \midrule
@@ -278,7 +285,8 @@
 % 60 tentativas (Cap. 4, Configuração do modelo TFT).
 \begin{frame}{Comparadores: uma escada de dificuldade}
   \small
-  \begin{tabular}{p{0.17\textwidth} p{0.75\textwidth}}
+  \begin{tabular}{>{\raggedright\arraybackslash}p{0.17\textwidth}
+                  >{\raggedright\arraybackslash}p{0.75\textwidth}}
     \toprule
     \textbf{Ingênuos} & Retorno nulo e média histórica: um único valor para todos
       os quantis (sem incerteza). \\
