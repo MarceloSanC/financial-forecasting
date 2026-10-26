@@ -5,8 +5,8 @@ when-use: Consultar antes de iniciar nova Stage; atualizar ao fechar qualquer St
 keywords: [roadmap, tft, calibracao, conformal, medalhao, hexagonal, steps, stages]
 status: in_progress
 created_at: 2026-06-22
-updated_at: 2026-10-25
-last_reviewed_at: 2026-10-25
+updated_at: 2026-10-26
+last_reviewed_at: 2026-10-26
 ---
 
 # Roadmap — Previsão Probabilística de Retornos Financeiros (TFT)
@@ -70,7 +70,7 @@ graph LR
 | 5 | Modelagem, baselines e treino | TFT re-treinado + GBM quantílico + baselines naive/estatísticos sobre walk-forward purgado/embargoado; cohort confirmatório AAPL | done | 5.1–5.5 |
 | 6 | Núcleo estatístico confirmatório | Pipeline gold confirmatória: pinball/CRPS/DM/MCS/Holm/PICP-Christoffersen + gates + scorecard pré-registrado, no domínio e validada por oráculo | done | 6.1–6.6 |
 | 7 | Inferência, conformal, explicabilidade e API | Motor de inferência + conformal CQR (benchmark) + explicabilidade (VSN/permutação/ablação) servidos por API fina | done | 7.1–7.4 |
-| 8 | Reprodução, equivalência e relatório | Protocolo completo em AAPL; equivalência vs evidência anterior auditada; plots e dossiê de rastreabilidade; job agendado que mantém um cohort de produção servível pela API | in_progress | 8.1–8.4 |
+| 8 | Reprodução, equivalência e relatório | Protocolo completo em AAPL; equivalência vs evidência anterior auditada; plots e dossiê de rastreabilidade; job agendado que mantém um cohort de produção servível pela API | done | 8.1–8.4 |
 
 **Legenda de status (Step):** `not_started`, `in_progress`, `blocked`, `done`, `deprecated`.
 
@@ -113,7 +113,7 @@ graph LR
 | `8.1-confirmatory-run` | evaluation | multi (orquestração) | vertical | done | 6.5, 6.6, 7.1, 7.2, 7.3 |
 | `8.2-equivalence-audit` | evaluation | multi (application + adapters + tests) | vertical | done | 8.1 |
 | `8.3-plots-and-final-report` | evaluation | multi (application + adapters/out + adapters/in/cli + docs) | vertical | done | 8.2 |
-| `8.4-production-cohort-job` | inference | multi (orquestração market_data → feature_engineering → modeling → evaluation + configuração do processo da API) | vertical | draft | 7.4, 8.1, 8.3 |
+| `8.4-production-cohort-job` | inference | multi (orquestração market_data → feature_engineering → modeling no `cli.py` + configuração do processo da API) | vertical | done | 7.4, 8.1, 8.3 |
 
 **Legenda de status (Stage):** `draft`, `in_progress`, `review`, `done`, `archived`.
 
@@ -1317,14 +1317,14 @@ A janela entre as duas trocas de pasta do `ParquetGoldStore` (ADR 6.4.0005) tamb
 ```yaml
 stage_id: 8.4-production-cohort-job
 bounded_context: inference
-camada_alvo: multi (orquestração market_data → feature_engineering → modeling → evaluation, em adapters/in/cli ou scheduler externo; configuração do processo da API)
-arquivos_a_criar: []  # o concept da 8.4 fixa, depois de decidir as quatro incertezas (issue #202)
-arquivos_a_modificar: []
-contratos_introduzidos: [job de cohort de produção (forma decidida no concept, com ADR), procedimento de troca do cohort servido pela API]
-contratos_consumidos: [ServeInference e a configuração SERVING_COHORT_FILE + DATA_ROOT (7.4), RunInference / subcomando `infer` (7.1), executor de cohort e CohortSpec (5.5), RefreshGold e ParquetGoldStore (6.4, ADR 6.4.0005), publicação real do gold exercitada pela 8.1]
+camada_alvo: multi (orquestração market_data → feature_engineering → modeling no subcomando `production-round` do cli.py; configuração do processo da API por `serving.env`; sem evaluation — a rodada não publica gold, concept 8.4 D3)
+arquivos_a_criar: [config/cohorts/aapl_production.toml, src/financial_forecasting/features/modeling/adapters/in/cli/production_commands.py, docs/runbooks/production-cohort-job.md, tests/unit/features/modeling/application/test_cohort_spec_production_round.py, tests/unit/features/modeling/application/test_inherited_hyperparameters.py, tests/unit/features/modeling/adapters/in_/test_production_commands.py, tests/unit/test_cli_production_round.py, tests/unit/test_composition_root_production.py, tests/integration/features/modeling/test_production_cohort_config.py, tests/e2e/test_production_round_cli.py]
+arquivos_a_modificar: [src/financial_forecasting/cli.py, src/financial_forecasting/composition_root.py, src/financial_forecasting/features/modeling/application/dtos/cohort_spec.py, src/financial_forecasting/features/modeling/application/use_cases/cohort_unit_runner.py, src/financial_forecasting/features/modeling/application/use_cases/run_confirmatory_cohort.py]
+contratos_introduzidos: [subcomando production-round (rodada datada, idempotente, sob o lock da raiz de produção), CohortSpec.production_round / require_production_model, inherited_hyperparameters no runner (só a fábrica production_cohort_for passa True), writer_lock_for, ponteiro <production-root>/serving.env atômico e monotônico (ADRs 8.4.0001 e 8.4.0002)]
+contratos_consumidos: [ServeInference e a configuração SERVING_COHORT_FILE + DATA_ROOT (7.4), RunConfirmatoryCohort, CohortSpec, cohort_file, verify, lock do ledger e materialize (5.5), validate_sha256_hex]
 definition_of_done: "Uma rodada do job deixa um cohort servível pela API sem tocar no data_root do cohort confirmatório; a janela de publicação do ADR 6.4.0005 está tratada, ou o risco está medido e aceito por escrito; a API serve o cohort novo sem mudança de código."
 non_goals: [mudar o contrato da API (POST /inference/run, schema 1), predição online por pedido (rejeitada no ADR 7.4.0001, alternativas A e B), escrever no data_root do cohort confirmatório]
-complexidade_estimada: M  # a confirmar no concept; o retreino por rodada pode empurrar para L
+complexidade_estimada: M  # rodada real medida em ~78 min (FinBERT + baselines + GBM + 3 seeds do TFT num fold, 6 CPUs)
 gate_mode: strict
 skills_hint: [orchestrator-design, composition-root, hex-arch-python, dmls-ch06-deployment-and-inference-decisions]
 ```
@@ -1375,6 +1375,7 @@ skills_hint: [orchestrator-design, composition-root, hex-arch-python, dmls-ch06-
 | 2026-10-24 | Stage `8.3-plots-and-final-report` `done`; Step 8 segue `in_progress` até a auditoria. As dez figuras do catálogo do doc de domínio §6.2 geradas da cópia julgada da 8.1 (`generation_digest` `96c05413…`) com rótulo de estatuto por elemento e registro de origem por figura (`data_digest`, `generation_digest`, `code.src`), mais o dossiê final citável e o interno (`docs/reports/`); geração real commitada e segunda geração com sha256 idênticos, `data/` intacto. Desvios de execução no §7 do technical: baselines pontuais omitidos e declarados nas figuras de intervalo (regra BP), layout das figuras refeito com conferência visual, e layout congelado numa grade de 1e-6 para o PDF ser byte-idêntico (ruído de último bit do solver de layout). |
 | 2026-10-24 | Auditoria da Stage `8.3-plots-and-final-report` `complete`; Step 8 `done` (última Stage do step). O finding F1 da auditoria (o dossiê citável não mostrava a árvore limpa) foi corrigido em `a14c39fa`: o dossiê passa a mostrar `code_dirty`/`preregistration_dirty` do `run_record.json`. Etapa R refeita (`1b57092a`, `d394c6c9`) com `code.src` `9763b316…`: a segunda geração e a terceira, feita pelo auditor, saem com sha256 idênticos, e `data/` fica intacto | Fechamento da Stage 8.3 (issue #234; PR #236; ADRs 8.3.0001–8.3.0004; technical 8.3 §7) |
 | 2026-10-25 | Stage `8.4-production-cohort-job` criada (`draft`, BC `inference`, depende de 7.4, 8.1 e 8.3, todas `done`); Step 8 passa a 8.1–8.4, ganha o job agendado no resultado de negócio e volta de `done` para `in_progress` | A issue #202 (job agendado que mantém um cohort de produção servível pela API) carrega conceito: quatro incertezas a decidir com ADR, além da janela de publicação do ADR 6.4.0005. O litmus de forma (PIPELINE §4.5) manda Stage; decisão do humano: Step 8, depois da 8.3 |
+| 2026-10-26 | Stage `8.4-production-cohort-job` `done` e auditada; Step 8 `done`. O subcomando `production-round` mantém um cohort de produção sob `data/production/<ativo>/rounds/<data>/`: cada rodada é um cohort congelado derivado de `config/cohorts/aapl_production.toml` (hiperparâmetros do r0, um fold, seeds 1–3), retreinado sobre os brutos atuais, sem gold, e publicado por um `serving.env` atômico e monotônico que a API lê ao ser recriada. Duas rodadas reais (2025-06-30 e 2025-12-31) servidas pela API, com o `data/cohorts/aapl` intacto. Decisões P a ratificar pelo dono: D1–D4, D7, D9. Issues abertas: #241, #242, #253 | Fechamento da Stage 8.4 (issue #202; PR #258; ADRs 8.4.0001 e 8.4.0002; technical 8.4 §7) |
 
 ## Próxima revisão de roadmap
 
