@@ -140,11 +140,17 @@ Entre os trabalhos de graduação brasileiros, dois ilustram desenhos distintos 
 Trabalho & Alvo & Validação & \textit{Baselines} & Teste e correção múltipla & Saída probabilística & Pré-registro \\
 \midrule
 \citeonline{GU2020} & retorno mensal em excesso (ações individuais) & reajuste anual, treino expansivo; 30 anos de teste & OLS, OLS-3 e outros lineares (13 modelos) & DM pareado; Bonferroni & não (pontual) & não informado \\
+\addlinespace
 \citeonline{LIMETAL2021TFT} & volatilidade realizada (31 índices) & \textit{holdout}: treino, validação, teste & DeepAR, ConvTrans, Seq2Seq, MQRNN & não informado & quantis 0,1, 0,5 e 0,9 & não informado \\
+\addlinespace
 \citeonline{ORMANIEC2022} & VaR de 25 carteiras & \textit{holdout} 80/10/10; teste em janela móvel & empírico, gaussiano, GARCH-n, GARCH-t & não informado (métricas comparadas descritivamente) & quantil (VaR 1\% e 5\%) & não informado \\
+\addlinespace
 \citeonline{HERRIG2023} & VaR 99\% de 3 índices & \textit{holdout} por período de avaliação & simulação histórica, média constante, GARCH(1,1) & Kupiec e Christoffersen; correção não informada & quantil (VaR) & não informado \\
+\addlinespace
 \citeonline{AMJAD2026}\textsuperscript{a} & VaR e CVaR de 12 índices & período de teste reservado & simulação histórica, GARCH(1,1)-\(t\) com FHS & Kupiec, Christoffersen; DM com Holm-Bonferroni & quantil (VaR, CVaR) & não informado \\
+\addlinespace
 \citeonline{MORAIS2023} & preço de fechamento (5 ações) & \textit{holdout} 80/20 & passeio aleatório & DM; correção não informada & não (pontual) & não informado \\
+\addlinespace
 \citeonline{EUZEBIO2025} & preço de fechamento (3 ações) & \textit{walk-forward}, treino expansivo & MLP; acaso (50\%); carteira 1/N no \textit{backtest} & não informado & não (pontual) & não informado \\
 \midrule
 Este trabalho & log-retorno diário (AAPL), \(h+1\) e \(h+7\) & \textit{walk-forward}, treino expansivo, purga e embargo & retorno nulo, média histórica, AR(1), EWMA-vol, quantis empíricos, GBM & DM-HLN unilateral com Holm; MCS & 7 quantis; calibração e conformal & sim, com \textit{hash} \\

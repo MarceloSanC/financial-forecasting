@@ -1,7 +1,7 @@
 \appendix
 
-\chapter*{APÊNDICE A - Protocolo experimental consolidado}
-\addcontentsline{toc}{chapter}{APÊNDICE A - Protocolo experimental consolidado}
+\chapter*{APÊNDICE A --- Protocolo experimental consolidado}
+\addcontentsline{toc}{chapter}{APÊNDICE A --- Protocolo experimental consolidado}
 
 Este apêndice consolida os elementos do protocolo experimental que sustentam os Capítulos~\ref{chap:metodo} e~\ref{chap:resultados}, como referência integrada para auditoria do trabalho.
 
@@ -36,10 +36,11 @@ O estudo congela dois artefatos distintos, cada um identificado por \textit{hash
     \item \textbf{Especificação da coorte}, congelada antes do treino: ativo, conjunto de \textit{features} e seu \textit{hash}, horizontes \(\{1, 7\}\), grade de sete níveis, geometria (seis \textit{folds} de 252 sessões, embargo de 7), dispositivo, sementes do TFT (1 a 10), planos das buscas exploratórias, hiperparâmetros congelados do TFT e do GBM, especificação dos \textit{baselines} e impressão do conteúdo do conjunto de dados.
     \item \textbf{Pré-registro}, congelado depois do treino e antes da geração das tabelas que o veredito julga: referência à coorte julgada; as regras que julgam as hipóteses; candidato e comparadores por nível da hierarquia; métrica primária; forma do \textit{gate} de H1 (par, nível das bandas, limiar de degeneração) e cenários de poder; árvore de decisão de H2 e regra do vencedor; parâmetros do DM, do Holm e do MCS, com as sensibilidades; agregação das sementes; declaração de cegamento; e, em revisão posterior, as regras dos perfis descritivos. As regras da predição conformal e da contribuição de famílias são pré-registradas da mesma forma antes de qualquer métrica de predição conformal ou de contribuição de famílias.
 \end{itemize}
+
 Uma alteração não reescreve um arquivo congelado: torna-se uma nova revisão, que referencia a anterior, traz justificativa e declara se foi feita com ou sem acesso a resultados; o \textit{scorecard} marca como não pronta uma geração de tabelas anterior à âncora da revisão julgada ou que dependa de emenda feita com acesso a resultados.
 
-\chapter*{APÊNDICE B - Glossário técnico de termos recorrentes}
-\addcontentsline{toc}{chapter}{APÊNDICE B - Glossário técnico de termos recorrentes}
+\chapter*{APÊNDICE B --- Glossário técnico de termos recorrentes}
+\addcontentsline{toc}{chapter}{APÊNDICE B --- Glossário técnico de termos recorrentes}
 
 Este apêndice reúne, em formato sintético, os termos técnicos recorrentes ao longo do trabalho.
 
@@ -117,8 +118,8 @@ Este apêndice reúne, em formato sintético, os termos técnicos recorrentes ao
 
 \phantomsection\label{gl:christoffersen}\textbf{Christoffersen e Kupiec}: testes de razão de verossimilhança para a cobertura de intervalos e VaR; Kupiec avalia a proporção de violações e Christoffersen acrescenta a independência entre elas.
 
-\chapter*{APÊNDICE C - Reprodução}
-\addcontentsline{toc}{chapter}{APÊNDICE C - Reprodução}
+\chapter*{APÊNDICE C --- Reprodução}
+\addcontentsline{toc}{chapter}{APÊNDICE C --- Reprodução}
 
 Este apêndice indica como reproduzir o \textit{pipeline}. O repositório do trabalho contém o código, a configuração e a documentação de decisões.
 
@@ -140,8 +141,8 @@ Sobre o conjunto de dados, executam-se: as buscas exploratórias de hiperparâme
 
 A geração julgada, isto é, as tabelas e o \textit{scorecard} a partir dos quais o veredito foi emitido, foi preservada numa cópia imutável, com o \textit{hash} do conteúdo registrado antes de qualquer outra atualização. A cadeia que a produz foi executada de novo a partir dos dados persistidos, num destino separado, sem retreino e no mesmo ambiente da rodada (mesma imagem e mesmo código). O resultado foi idêntico bit a bit: as 19 tabelas, inclusive as colunas das etapas com sorteio (\textit{bootstrap} e Monte Carlo), num total de 1.173.254 valores comparados, e os 66.117 valores do \textit{scorecard}, sem nenhuma diferença, e com o mesmo \textit{digest} do resultado. As previsões de teste também se reproduzem bit a bit a partir dos modelos salvos, no ambiente da coorte. A reprodução em outro ambiente, em que a aritmética de ponto flutuante pode diferir e se aplicaria a tolerância descrita em C.1, não foi realizada.
 
-\chapter*{APÊNDICE D - Notas de implementação}
-\addcontentsline{toc}{chapter}{APÊNDICE D - Notas de implementação}
+\chapter*{APÊNDICE D --- Notas de implementação}
+\addcontentsline{toc}{chapter}{APÊNDICE D --- Notas de implementação}
 
 Este apêndice descreve, de forma sucinta, as escolhas de engenharia de software que sustentam o trabalho. Elas não fazem parte do objeto científico, mas asseguram que os números reportados sejam verificáveis.
 
@@ -161,8 +162,9 @@ Os dados seguem a organização em camadas \textit{bronze} (dados brutos imutáv
 
 As decisões de desenho são registradas em documentos de decisão arquitetural (ADR) versionados no repositório, por exemplo: enquadramento em calibração probabilística (ADR 0.0.0002), controle de \textit{leakage} (ADR 0.0.0018), convenções de emissão de quantis dos \textit{baselines} (ADR 0.0.0052), definição do alvo (ADR 3.5.0001), formato longo das previsões (ADR 4.1.0002), indexação do \textit{target timestamp} por sessão (ADR 4.3.0001), rearranjo sobre a grade densa (ADR 4.3.0002), \textit{walk-forward} expansivo e partição de calibração (ADR 5.1.0001--5.1.0003), GBM direto por nível e horizonte (ADR 5.3.0001), configuração do TFT (ADR 5.4.0001--5.4.0006), especificação congelada da coorte (ADR 5.5.0001), regra de leitura da H3 (ADR 0.0.0007), CQR como referência de cobertura (ADR 0.0.0008), invariantes do pré-registro e \textit{gate} de H1 (ADR 0.0.0011), pré-registro canônico e emendas (ADR 6.5.0001--6.5.0002), forma lógica do veredito (ADR 6.5.0007) e contrato de reprodução das previsões (ADR 7.1.0003).
 
-\chapter*{APÊNDICE E - Figuras complementares}
-\addcontentsline{toc}{chapter}{APÊNDICE E - Figuras complementares}
+\chapter*{APÊNDICE E --- Figuras complementares}
+\addcontentsline{toc}{chapter}{APÊNDICE E --- Figuras complementares}
+\makeatletter\setlength{\@fptop}{0pt}\makeatother % páginas só de figuras alinhadas ao topo
 
 As figuras deste apêndice completam o perfil descritivo do Capítulo~\ref{chap:resultados} e não têm papel no veredito. Todas são reconstruídas a partir das tabelas da geração julgada, sem retreino.
 
@@ -187,7 +189,7 @@ A Figura~\ref{fig:sharpness} mostra a distribuição das larguras ao longo da s�
 
 A Figura~\ref{fig:acf} mostra o diferencial de perda \(d_t\) do TFT contra cada comparador e sua autocorrelação. Contra os naive, o diferencial é negativo em quase toda a série, com magnitude maior nos períodos voláteis; contra os comparadores fortes, oscila em torno de zero, com o maior pico positivo contra o EWMA-vol no início de 2020. As autocorrelações são positivas na maioria das defasagens e chegam a pouco mais de 0,2. A variância do teste de Diebold-Mariano, fixada no pré-registro, considera a autocorrelação só até a defasagem \(h-1\), e a sensibilidade com o estimador de Bartlett não alterou nenhuma decisão; o MCS usa \textit{bootstrap} em blocos, que preserva a dependência entre sessões vizinhas.
 
-\begin{figure}[htbp]
+\begin{figure}[!t]
 \centering
 \caption[Diferencial de perda entre o TFT e cada comparador e sua autocorrelação]{Diferencial de perda entre o TFT e cada comparador, \(d_t\), e sua autocorrelação amostral, por horizonte; a faixa de confiança da autocorrelação não é desenhada}
 \label{fig:acf}
@@ -197,7 +199,7 @@ A Figura~\ref{fig:acf} mostra o diferencial de perda \(d_t\) do TFT contra cada 
 
 A Figura~\ref{fig:vsn} mostra os pesos da VSN por família. A família técnica tem o maior peso mediano, e sua faixa entre os percentis 10 e 90 não se sobrepõe à das demais; preço vem em seguida, e sentimento e fundamentos têm pesos menores, com faixas que se sobrepõem. Os pesos descrevem o uso das famílias pelo modelo, e não sua contribuição para a perda, que é medida pela permutação e pela ablação no Capítulo~\ref{chap:resultados}.
 
-\begin{figure}[htbp]
+\begin{figure}[!t]
 \centering
 \caption[Pesos da \textit{Variable Selection Network} por família de \textit{features}]{Pesos da \textit{Variable Selection Network} por família de \textit{features}, sobre as decisões de teste (descrição do uso pelo modelo, sem eixo de horizonte)}
 \label{fig:vsn}

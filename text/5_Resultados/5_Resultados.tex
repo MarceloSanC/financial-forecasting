@@ -211,6 +211,7 @@ O veredito mecânico da regra de decisão é, por horizonte:
     \item \textbf{\(h+1\)}: H1 não rejeitada; H2 com desfecho \textbf{supera só o naive}. O TFT supera os dois naive, mas não pertence ao MCS nem tem rejeição contra todos os fortes; não há vencedor primário.
     \item \textbf{\(h+7\)}: H1 não rejeitada; H2 com desfecho \textbf{supera o naive e empata com os fortes}. O TFT supera os dois naive e pertence ao MCS; pela regra pré-registrada, é o vencedor primário do horizonte.
 \end{itemize}
+
 O estudo é considerado bem-sucedido pelo critério pré-registrado, pois H1 não foi rejeitada em ao menos um horizonte --- de fato, nos dois.
 
 O empate em \(h+7\) precisa ser lido com o seu alcance exato. ``Vencedor primário'' significa que o candidato é calibrado, supera os naive e não pode ser distinguido estatisticamente dos melhores modelos; não significa que tenha a menor perda, que pertence ao EWMA-vol, nem que supere algum comparador forte. Além disso, a pertença ao MCS em \(h+7\) é sensível ao comprimento do bloco: com blocos de \(h = 7\) sessões, mais curtos que os da especificação primária, o TFT seria eliminado (\(p_{\text{MCS}} = 0{,}061\)), enquanto blocos móveis e blocos de \(\sqrt{T}\) o mantêm. A especificação primária, fixada antes da rodada, é a que vale para o veredito; a sensibilidade mostra que o empate está perto da fronteira de decisão. Em \(h+1\), a eliminação do TFT é robusta: ele fica fora do conjunto em todas as quatro especificações.
