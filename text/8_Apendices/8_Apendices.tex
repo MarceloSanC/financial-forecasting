@@ -15,7 +15,7 @@ Cada execução é identificada de forma determinística por um \texttt{run\_id}
 
 As previsões fora da amostra são persistidas em formato longo, com uma linha por (execução, partição, horizonte, sessão de decisão, \textit{target timestamp}, nível de quantil). Cada linha carrega o valor bruto do modelo, o valor após o rearranjo monotônico e um indicador de que o rearranjo alterou a ordem dos níveis. A grade de níveis é dado, e não estrutura: alterar a grade acrescenta linhas, sem mudar o esquema. Candidato e comparadores usam o mesmo formato e a mesma coorte.
 
-Os dados brutos e os fatos de execução são imutáveis; toda tabela de métricas, testes e decisão é derivada deles e pode ser reconstruída sem re-treinar os modelos --- inclusive para reanálises com outra variante quantílica ou outro parâmetro de teste.
+Os dados brutos e os fatos de execução são imutáveis; toda tabela de métricas, testes e decisão é derivada deles e pode ser reconstruída sem retreinar os modelos --- inclusive para reanálises com outra variante quantílica ou outro parâmetro de teste.
 
 \section*{A.3 Rearranjo monotônico e \textit{gate} de degeneração}
 
@@ -31,7 +31,7 @@ A comparação fora da amostra exige interseção exata por (ativo, partição, 
 
 \section*{A.6 Pré-registro}
 
-O estudo congela dois artefatos distintos, cada um \textit{hasheado} e ancorado por uma \textit{tag} no repositório e por um comentário com data atestada pelo servidor:
+O estudo congela dois artefatos distintos, cada um identificado por \textit{hash} e ancorado por uma \textit{tag} no repositório e por um comentário com data atestada pelo servidor:
 \begin{itemize}
     \item \textbf{Especificação da coorte}, congelada antes do treino: ativo, conjunto de \textit{features} e seu \textit{hash}, horizontes \(\{1, 7\}\), grade de sete níveis, geometria (seis \textit{folds} de 252 sessões, embargo de 7), dispositivo, sementes do TFT (1 a 10), planos das buscas exploratórias, hiperparâmetros congelados do TFT e do GBM, especificação dos \textit{baselines} e impressão do conteúdo do conjunto de dados.
     \item \textbf{Pré-registro}, congelado depois do treino e antes da geração das tabelas que o veredito julga: referência à coorte julgada; as regras que julgam as hipóteses; candidato e comparadores por nível da hierarquia; métrica primária; forma do \textit{gate} de H1 (par, nível das bandas, limiar de degeneração) e cenários de poder; árvore de decisão de H2 e regra do vencedor; parâmetros do DM, do Holm e do MCS, com as sensibilidades; agregação das sementes; declaração de cegamento; e, em revisão posterior, as regras dos perfis descritivos. As regras da predição conformal e da contribuição de famílias são pré-registradas da mesma forma antes de qualquer métrica de predição conformal ou de contribuição de famílias.
@@ -85,19 +85,19 @@ Este apêndice reúne, em formato sintético, os termos técnicos recorrentes ao
 
 \phantomsection\label{gl:dedup}\textbf{Deduplicação \textit{operationally-latest}}: quando \textit{folds} distintos preveem o mesmo ponto alinhado, mantém-se apenas a previsão mais recente, garantindo uma observação por ponto.
 
-\phantomsection\label{gl:preregistro}\textbf{Pré-registro}: documento congelado, \textit{hasheado} e ancorado antes da geração das tabelas que o veredito julga, que fixa as regras que julgam as hipóteses, comparadores, métricas, \textit{gate} de calibração, parâmetros dos testes e regra de decisão; alterações são novas revisões, nunca reescritas.
+\phantomsection\label{gl:preregistro}\textbf{Pré-registro}: documento congelado, identificado por \textit{hash} e ancorado antes da geração das tabelas que o veredito julga, que fixa as regras que julgam as hipóteses, comparadores, métricas, \textit{gate} de calibração, parâmetros dos testes e regra de decisão; alterações são novas revisões, nunca reescritas.
 
 \phantomsection\label{gl:scorecard}\textbf{\textit{Scorecard}}: nome dado, nos apêndices, ao artefato que aplica mecanicamente a regra de decisão pré-registrada (Seção~\ref{sec:scorecard}), separando o veredito do perfil comparativo; no corpo do texto, usa-se o termo ``regra de decisão''.
 
 \section*{B.3 Termos do modelo}
 
-\phantomsection\label{gl:tft}\textbf{TFT (\textit{Temporal Fusion Transformer})}: modelo de previsão multi-horizonte que combina seleção de variáveis, camadas recorrentes, atenção \textit{multi-head} e saída quantílica \cite{LIMETAL2021TFT}.
+\phantomsection\label{gl:tft}\textbf{TFT (Temporal Fusion Transformer)}: modelo de previsão multi-horizonte que combina seleção de variáveis, camadas recorrentes, atenção \textit{multi-head} e saída quantílica \cite{LIMETAL2021TFT}.
 
 \phantomsection\label{gl:vsn}\textbf{VSN (\textit{Variable Selection Network})}: subcomponente do TFT que atribui pesos por passo de tempo às variáveis de entrada; para as variáveis observadas, os pesos são do codificador e não variam com o horizonte.
 
 \phantomsection\label{gl:permutacao}\textbf{Importância por permutação de grupo}: aumento da perda de um modelo fixo quando todas as variáveis de um grupo são permutadas conjuntamente entre as amostras de teste.
 
-\phantomsection\label{gl:loco}\textbf{Ablação LOCO (\textit{Leave-One-Covariate-Out})}: diferença de perda entre o modelo re-treinado sem um grupo de variáveis e o modelo completo.
+\phantomsection\label{gl:loco}\textbf{Ablação LOCO (\textit{Leave-One-Covariate-Out})}: diferença de perda entre o modelo retreinado sem um grupo de variáveis e o modelo completo.
 
 \phantomsection\label{gl:feature-families}\textbf{Famílias de \textit{features}}: preço (OHLCV e derivadas de preço e volume), técnico (indicadores e medidas de volatilidade), sentimento (agregados de notícias por sessão) e fundamento (demonstrativos e razões contábeis).
 
@@ -138,7 +138,7 @@ Sobre o conjunto de dados, executam-se: as buscas exploratórias de hiperparâme
 
 \section*{C.4 Reprodução da geração julgada}
 
-A geração julgada, isto é, as tabelas e o \textit{scorecard} a partir dos quais o veredito foi emitido, foi preservada numa cópia imutável, com o \textit{hash} do conteúdo registrado antes de qualquer outra atualização. A cadeia que a produz foi executada de novo a partir dos dados persistidos, num destino separado, sem re-treino e no mesmo ambiente da corrida (mesma imagem e mesmo código). O resultado foi idêntico bit a bit: as 19 tabelas, inclusive as colunas das etapas com sorteio (\textit{bootstrap} e Monte Carlo), num total de 1.173.254 valores comparados, e as 66.117 folhas do \textit{scorecard}, sem nenhuma diferença, e com o mesmo \textit{digest} do resultado. As previsões de teste também se reproduzem bit a bit a partir dos modelos salvos, no ambiente da coorte. A reprodução em outro ambiente, em que a aritmética de ponto flutuante pode diferir e se aplicaria a tolerância descrita em C.1, não foi realizada.
+A geração julgada, isto é, as tabelas e o \textit{scorecard} a partir dos quais o veredito foi emitido, foi preservada numa cópia imutável, com o \textit{hash} do conteúdo registrado antes de qualquer outra atualização. A cadeia que a produz foi executada de novo a partir dos dados persistidos, num destino separado, sem retreino e no mesmo ambiente da rodada (mesma imagem e mesmo código). O resultado foi idêntico bit a bit: as 19 tabelas, inclusive as colunas das etapas com sorteio (\textit{bootstrap} e Monte Carlo), num total de 1.173.254 valores comparados, e os 66.117 valores do \textit{scorecard}, sem nenhuma diferença, e com o mesmo \textit{digest} do resultado. As previsões de teste também se reproduzem bit a bit a partir dos modelos salvos, no ambiente da coorte. A reprodução em outro ambiente, em que a aritmética de ponto flutuante pode diferir e se aplicaria a tolerância descrita em C.1, não foi realizada.
 
 \chapter*{APÊNDICE D - Notas de implementação}
 \addcontentsline{toc}{chapter}{APÊNDICE D - Notas de implementação}
@@ -164,7 +164,7 @@ As decisões de desenho são registradas em documentos de decisão arquitetural 
 \chapter*{APÊNDICE E - Figuras complementares}
 \addcontentsline{toc}{chapter}{APÊNDICE E - Figuras complementares}
 
-As figuras deste apêndice completam o perfil descritivo do Capítulo~\ref{chap:resultados} e não têm papel no veredito. Todas são reconstruídas a partir das tabelas da geração julgada, sem re-treino.
+As figuras deste apêndice completam o perfil descritivo do Capítulo~\ref{chap:resultados} e não têm papel no veredito. Todas são reconstruídas a partir das tabelas da geração julgada, sem retreino.
 
 A Figura~\ref{fig:conformal} compara os intervalos nativos do TFT com os corrigidos pela predição conformal. Na escala da figura, as coberturas nativas e corrigidas quase se sobrepõem em todos os níveis e pares, o que corresponde às diferenças de até dois pontos percentuais relatadas no Capítulo~\ref{chap:resultados}. A diferença visível está na largura do par de 96\%: a NexCP produz intervalos mais largos que os nativos e os da CQR.
 \begin{figure}[htbp]
