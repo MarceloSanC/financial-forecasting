@@ -279,7 +279,7 @@ A síntese é gravada em `docs/tcc/RUBRICA-E-REFERENCIAS.md` e alimenta E4, E6 e
   - O C2, como fixado no §3, media só quatro marcadores. A auditoria em contexto limpo achou o
     que a medida mecânica não pegava, o mesmo achado do teste do protocolo (critérios de processo
     passam e o resultado ainda tem gap).
-  - Tratamento: #263. O PR #264 (aberto, aguardando a CI e o merge) fez a parte que não depende do autor: título, elementos opcionais
+  - Tratamento: #263. O PR #264 (mergeado em `ae767db4`) fez a parte que não depende do autor: título, elementos opcionais
     de exemplo fora do PDF e a varredura do C2 estendida num teste do CI, com as pendências do
     autor como `xfail` ligado à #263. O restante está no §10.
 
