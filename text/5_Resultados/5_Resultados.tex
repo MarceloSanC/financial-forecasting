@@ -39,6 +39,7 @@ Degeneração média & \multicolumn{2}{c}{0\%} & \multicolumn{2}{c}{0\%} \\
 Resultado & \multicolumn{2}{c}{calibração não rejeitada} & \multicolumn{2}{c}{calibração não rejeitada} \\
 \bottomrule
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
 A não rejeição é informativa porque o \textit{gate} tinha poder alto contra os desvios primários pré-registrados (Tabela~\ref{tab:h1-poder}). No \(n\) medido, a probabilidade de o \textit{gate} reprovar um modelo cuja cobertura do par se afastasse 5 pontos percentuais do nominal era de \(0{,}974\) a \(0{,}987\), e a de reprovar um deslocamento de locação de \(0{,}2\sigma\) era superior a \(0{,}999\). Contra os desvios secundários, menores, o poder cai para \(0{,}61\)--\(0{,}75\): um erro de calibração de 3 pontos percentuais teria passado despercebido em cerca de uma a cada três vezes. Em \(h+7\), o poder declarado supõe violações independentes e é, por isso, otimista (Seção~\ref{sec:scorecard}).
@@ -61,6 +62,7 @@ Secundário & locação \(0{,}1\sigma\) & 0,733 & 0,746 \\
 \bottomrule
 \multicolumn{4}{l}{\footnotesize \textsuperscript{a} Supõe violações independentes; otimista para \(h > 1\).}
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
 As sensibilidades do perfil confirmam a leitura sem alterá-la. O teste de cobertura incondicional de três estados não rejeitou a calibração do par (\(p = 0{,}203\) em \(h+1\); \(p = 0{,}182\) em \(h+7\)). Em \(h+7\), as sete subséries de decisões espaçadas de sete sessões \cite{DIEBOLDGUNTHERTAY1998}, com \(n = 215\) cada, mantêm as duas caudas dentro das bandas corrigidas por Bonferroni (nível de \(99{,}64\%\)) em todas as catorze combinações de subsérie e cauda, com taxas entre \(0{,}075\) e \(0{,}119\). A cobertura marginal acompanha a nominal em toda a grade: em \(h+1\), as frequências observadas abaixo dos quantis \(0{,}02\), \(0{,}10\), \(0{,}25\), \(0{,}50\), \(0{,}75\), \(0{,}90\) e \(0{,}98\) foram \(0{,}023\), \(0{,}089\), \(0{,}227\), \(0{,}492\), \(0{,}766\), \(0{,}906\) e \(0{,}977\), e em \(h+7\) os valores diferem destes em no máximo meio ponto percentual. A Figura~\ref{fig:reliability} resume essa leitura: os pontos de todos os modelos não degenerados ficam próximos da diagonal em toda a grade, com desvios de poucos pontos percentuais.
@@ -104,6 +106,7 @@ GBM quantílico & 0,0245 & 0,229 & 0,0246 & 0,220 \\
 TFT & 0,0233 [0,0119; 0,0298] & 4 de 10 & 0,0227 [0,0140; 0,0332] & 1 de 10 \\
 \bottomrule
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
 
@@ -134,6 +137,7 @@ ML & GBM quantílico & 3,980 & 4,026 \\
 Candidato & TFT & 4,050 [3,987; 4,117] & 4,063 [4,004; 4,109] \\
 \bottomrule
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
 Três leituras decorrem da tabela. Primeiro, todos os modelos com distribuição preditiva não degenerada reduzem a perda dos naive em 41\% a 43\%, uma diferença que não depende de prever a média: os naive concentram toda a grade em um ponto, e qualquer descrição da escala da distribuição os supera. Segundo, entre os modelos fortes as diferenças são de outra ordem de grandeza, de no máximo cerca de 4\% da perda. Terceiro, o TFT não teve a menor perda média em nenhum horizonte: o EWMA-vol, um modelo de um parâmetro que descreve apenas a volatilidade condicional, teve a menor perda nos dois, seguido pelo GBM. A perda do TFT ficou \(3{,}3\%\) acima da do EWMA-vol em \(h+1\) e \(1{,}6\%\) acima em \(h+7\). A dispersão entre sementes do TFT é da mesma ordem dessas diferenças: em \(h+1\), a melhor semente (\(3{,}987\)) ainda ficou atrás do EWMA-vol e do GBM, e a pior (\(4{,}117\)), atrás do AR(1); em \(h+7\), a melhor semente (\(4{,}004\)) ficaria à frente do GBM, mas não do EWMA-vol.
@@ -169,6 +173,7 @@ Quantis empíricos & \(+1{,}3\) & \(0{,}69\) & 1 & \(+0{,}5\) & \(0{,}21\) & 1 \
 GBM quantílico & \(+7{,}0\) & \(4{,}08\) & 1 & \(+3{,}8\) & \(2{,}37\) & 1 \\
 \bottomrule
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
 Holm rejeita a igualdade contra os dois naive nos dois horizontes, o que satisfaz a condição (i) da regra de decisão. Contra os fortes, nenhuma rejeição: o único diferencial negativo, contra o AR(1), não sobrevive ao ajuste em nenhum horizonte; contra EWMA-vol e GBM, o diferencial é positivo, ou seja, a perda do TFT é maior, e em \(h+1\) as estatísticas de \(4{,}05\) e \(4{,}08\) indicam que, em um teste na direção oposta, os comparadores é que teriam perda significativamente menor. O estimador de Bartlett, sensibilidade, não alterou nenhuma decisão.
@@ -195,6 +200,7 @@ GBM quantílico & \textbf{0,316} & 0,293 & 0,059 & 0,274 & \textbf{0,611} & 0,61
 TFT & 0,022 & 0,013 & 0,000 & 0,027 & \textbf{0,332} & 0,294 & 0,061 & 0,267 \\
 \bottomrule
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 
 \smallskip
 {\footnotesize Prim.: estacionário, bloco pela regra pré-registrada (65 e 64 sessões); MB: blocos móveis, mesmo comprimento; \(l{=}h\) e \(l{=}\sqrt{T}\): estacionário com bloco de \(h\) e de 39 sessões.\par}
@@ -238,6 +244,7 @@ TFT & 2,004 & 1,386 & 0,529 & 2,009 & 1,391 & 0,523 \\
 \bottomrule
 \multicolumn{7}{p{13cm}}{\footnotesize --- : mediana identicamente nula, sem direção prevista. Fração de dias de alta na amostra: 0,531 nos dois horizontes.}
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
 \section{Contribuição de famílias (H3)} \label{sec:h3}
@@ -264,6 +271,7 @@ Ablação & Técnico & 0,340 & 0,398 & \(+0{,}058\) & ilimitado\textsuperscript{
 \bottomrule
 \multicolumn{6}{p{14cm}}{\footnotesize \textsuperscript{a} Em 1 réplica em \(h+1\) e 12 em \(h+7\), a soma das importâncias não foi positiva e a participação ficou indefinida; pela regra pré-registrada, essas réplicas contam como infinitas, e os dois limites do intervalo resultaram ilimitados.}
 \end{tabular}
+\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{table}
 
 A ausência de heterogeneidade decorre sobretudo da pequena magnitude das importâncias. Na permutação, a família técnica, a mais importante, eleva a \textit{pinball} média em \(2{,}0 \times 10^{-5}\) em \(h+1\), cerca de \(0{,}5\%\) da perda do modelo; a permutação dos fundamentos tem efeito praticamente nulo, e em \(h+7\) chega a ser negativo. Com contribuições tão pequenas, a normalização por um total próximo de zero torna as participações instáveis, o que explica a largura dos intervalos e as réplicas indefinidas da ablação. Na ablação, as importâncias são maiores (de \(1{,}5 \times 10^{-5}\) a \(6{,}3 \times 10^{-5}\) em \(h+1\)), mas sua soma ainda é pequena diante da variabilidade do re-treino entre sementes.
