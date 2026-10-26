@@ -110,7 +110,7 @@ TFT & 0,0233 [0,0119; 0,0298] & 4 de 10 & 0,0227 [0,0140; 0,0332] & 1 de 10 \\
 \subsection{Referência conformal}
 A CQR assimétrica sem pesos, variante de registro, aplicada sobre o par entregue pelo TFT e calibrada no bloco \texttt{calib} de cada \textit{fold}, levou a cobertura do intervalo de 80\% para \(0{,}798\) em \(h+1\) e \(0{,}800\) em \(h+7\), com desvio-padrão entre sementes de \(0{,}016\) nos dois horizontes, e estreitou ligeiramente os intervalos (MPIW de \(0{,}0457\) e \(0{,}0456\), contra \(0{,}0464\) e \(0{,}0460\) da previsão nativa). A correção atuou sobretudo na cauda inferior, que na previsão nativa violava menos do que o nominal: a taxa passou de \(0{,}089\) para \(0{,}109\) em \(h+1\). A variante ponderada NexCP, sensibilidade, produziu coberturas de \(0{,}801\) e \(0{,}799\). Nos pares externos a correção foi menos precisa: o intervalo de 96\% conformalizado cobriu \(0{,}947\) nos dois horizontes, abaixo da cobertura nativa (\(0{,}953\) e \(0{,}956\)), e a taxa de violação da cauda \(0{,}02\) (\(0{,}028\) e \(0{,}029\)) ficou fora da sua banda de Wilson. Essas coberturas são empíricas: a garantia teórica da predição conformal pressupõe permutabilidade, que não vale em séries temporais \cite{BARBER2023}, e a comparação com a calibração nativa é descritiva. A Figura~\ref{fig:conformal}, no Apêndice~E, compara as coberturas e as larguras nativas e corrigidas.
 
-\section{\textit{Skill} relativo contra a hierarquia de \textit{baselines} (H2)}
+\section{\textit{Skill} relativo contra a hierarquia de \textit{baselines} (H2)} \label{sec:h2}
 Como os dois horizontes passaram em H1, ambos entraram na comparação de \textit{skill}. A Tabela~\ref{tab:h2-perdas} reporta a \textit{pinball loss} média da grade de cada modelo na amostra comum. Como o CRPS aproximado pela grade é, por construção, o dobro dessa média com pesos iguais, ele ordena os modelos da mesma forma e não é repetido.
 
 \begin{table}[htb]
@@ -240,7 +240,7 @@ TFT & 2,004 & 1,386 & 0,529 & 2,009 & 1,391 & 0,523 \\
 \end{tabular}
 \end{table}
 
-\section{Contribuição de famílias (H3)}
+\section{Contribuição de famílias (H3)} \label{sec:h3}
 H3 não foi sustentada: nenhum dos dois métodos indicou heterogeneidade da contribuição das famílias entre \(h+1\) e \(h+7\), pois nenhum intervalo de \(\Delta_f\) excluiu zero (Tabela~\ref{tab:h3}). Os intervalos são de \(98{,}75\%\), com a correção de Bonferroni sobre as quatro famílias, obtidos por \textit{bootstrap} estacionário pareado com blocos de 61 sessões e 1.000 réplicas.
 
 \begin{table}[htb]
