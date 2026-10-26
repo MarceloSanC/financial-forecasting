@@ -351,12 +351,12 @@
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
       \centering
-      \includegraphics[height=0.62\textheight,trim=0 80bp 226bp 0,clip]{reliability_diagram.pdf}
+      \includegraphics[height=0.55\textheight,trim=0 80bp 226bp 0,clip]{reliability_diagram.pdf}
 
       \raggedright
-      {\scriptsize Frequência observada abaixo de cada quantil contra o nível nominal,
-      em \hum, para todos os modelos não degenerados; a diagonal é a calibração perfeita.
-      Em \hsete, o quadro é praticamente o mesmo.}
+      {\small Frequência observada abaixo de cada quantil, em \hum; diagonal: calibração
+      perfeita. TFT em azul; comparadores, em outras cores, quase sobrepostos.
+      Em \hsete, o quadro é o mesmo.}
     \end{column}
     \begin{column}{0.48\textwidth}
       \small
@@ -406,7 +406,7 @@
         \bottomrule
       \end{tabular}
 
-      {\scriptsize TFT: média das dez sementes.}
+      {\small TFT: média das dez sementes.}
     \end{column}
     \begin{column}{0.46\textwidth}
       \begin{itemize}
@@ -475,7 +475,7 @@
         \bottomrule
       \end{tabular}
 
-      {\scriptsize Participação de cada família na importância total.}
+      {\small Participação de cada família na importância total.}
     \end{column}
     \begin{column}{0.42\textwidth}
       \small
@@ -670,13 +670,25 @@
 % Reserva 4 --- Fonte: Cap. 5, Calibração por horizonte (H1), parágrafo dos
 % comparadores e Figura PICP x MPIW (GBM 0,0396 e 0,769; EWMA-vol 0,0471 e 0,827;
 % TFT 0,0464 e 0,818, em h+1).
-\begin{frame}{Reserva --- Cobertura contra largura dos intervalos}
-  \centering
-  \includegraphics[width=0.8\textwidth]{picp_mpiw_plot.pdf}
-
-  \raggedright\small
-  Intervalo de 80\% em \hum: GBM mais estreito (largura 0,0396) com cobertura de 0,769;
-  EWMA-vol 0,0471 e 0,827; TFT 0,0464 e 0,818.
+\begin{frame}{Reserva --- Cobertura contra largura dos intervalos (\hum)}
+  \begin{columns}[T]
+    \begin{column}{0.58\textwidth}
+      \centering
+      \includegraphics[height=0.72\textheight,trim=0 80bp 226bp 0,clip]{picp_mpiw_plot.pdf}
+    \end{column}
+    \begin{column}{0.4\textwidth}
+      \small
+      \begin{itemize}
+        \item Cada ponto: um modelo, um intervalo (50\%, 80\% ou 96\%).
+          TFT em azul, GBM em roxo, EWMA-vol em rosa, AR(1) em laranja,
+          quantis empíricos em verde.
+        \item Linhas horizontais: as coberturas nominais.
+        \item Intervalo de 80\%: GBM mais estreito (largura 0,0396) com cobertura
+          de 0,769; EWMA-vol 0,0471 e 0,827; TFT 0,0464 e 0,818.
+        \item O painel de \hsete{} é praticamente igual.
+      \end{itemize}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 % Reserva 5 --- Fonte: Cap. 5, Skill relativo (H2), Figura da pinball por nível e
@@ -688,7 +700,10 @@
       \centering
       \includegraphics[height=0.62\textheight,trim=0 105bp 226bp 0,clip]{quantile_score_plot.pdf}
 
-      {\scriptsize \hum; o painel de \hsete{} é praticamente igual.}
+      \raggedright
+      {\small \hum. TFT em azul; ingênuos tracejados (retorno nulo em laranja, média
+      histórica em verde); os demais quase se sobrepõem ao TFT. O painel de \hsete{}
+      é praticamente igual.}
     \end{column}
     \begin{column}{0.38\textwidth}
       \small
