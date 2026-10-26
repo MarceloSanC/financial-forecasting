@@ -1,0 +1,12 @@
+# Auxiliares de compilação do Beamer; o PDF segue a política do text/Main.pdf (não versionado).
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+*.vrb
+*.pdf
