@@ -4,7 +4,7 @@
 % em comentário, a seção do texto de onde vem cada número e o tempo estimado.
 % Tempo-alvo: até 20 min (Art. 16 do regulamento de TCC do Campus Joinville).
 % Estimativa: abertura 0,3 min + 16 slides de conteúdo (de 0,9 a 1,3 min cada,
-% somando 18,3 min) = 18,6 min; encerramento e reservas ficam fora do tempo.
+% somando 18,0 min) = 18,3 min; encerramento e reservas ficam fora do tempo.
 % Os números foram escritos no formato do texto (vírgula decimal, ponto de milhar)
 % e conferidos por script contra o texto das branches do fechamento do TCC.
 \documentclass[aspectratio=169,10pt]{beamer}
@@ -12,13 +12,19 @@
 \usepackage[T1]{fontenc}
 \usepackage[brazilian]{babel}
 \usepackage[sfdefault,lining]{FiraSans}
+\usepackage{array}
 \usepackage{booktabs}
 \usepackage{graphicx}
+\usepackage{appendixnumberbeamer}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning}
 
 \usetheme[progressbar=frametitle,numbering=fraction,block=fill]{metropolis}
 \setbeamertemplate{frame footer}{Marcelo Santos do Carmo --- Defesa de TCC}
+% Destaque mais escuro que o laranja padrão do tema, para contraste no projetor.
+\setbeamercolor{alerted text}{fg=mLightBrown!70!black}
+% Curso e orientadores no mesmo corpo, legível na projeção.
+\setbeamerfont{institute}{size=\small}
 
 \graphicspath{{../figuras/}}
 
@@ -29,7 +35,7 @@
 \subtitle{Calibração e comparação pré-registrada contra modelos de referência}
 \author{Marcelo Santos do Carmo}
 \institute{Engenharia Mecatrônica --- UFSC, Centro Tecnológico de Joinville\\[2pt]
-  \small Orientador: Dr. Pedro Paulo de Andrade Júnior \quad Coorientador: Dr. Benjamin Grando Moreira}
+  Orientador: Dr. Pedro Paulo de Andrade Júnior \quad Coorientador: Dr. Benjamin Grando Moreira}
 \date{Defesa de Trabalho de Conclusão de Curso --- 2026}
 
 \begin{document}
@@ -45,7 +51,7 @@
 \begin{frame}{A pergunta}
   \begin{itemize}
     \item Prever o retorno de uma ação de um dia para o outro é quase impossível:
-      mesmo com dados mensais, o \(R^2\) fora da amostra fica abaixo de 1\%
+      mesmo com dados mensais, o \(R^2\) fora da amostra costuma ficar abaixo de 1\%
       (cerca de 0,4\% para ações individuais).
     \item Já o \alert{tamanho} típico do retorno (a volatilidade) é persistente:
       dias agitados tendem a vir em sequência.
@@ -160,11 +166,12 @@
 % O piloto não é evidência (mesma seção).
 \begin{frame}{Estudo piloto: o que motivou o desenho}
   \small
-  \begin{tabular}{p{0.46\textwidth} p{0.46\textwidth}}
+  \begin{tabular}{>{\raggedright\arraybackslash}p{0.46\textwidth}
+                  >{\raggedright\arraybackslash}p{0.46\textwidth}}
     \toprule
     \textbf{O piloto revelou} & \textbf{Decisão do desenho final} \\
     \midrule
-    Previsões e valores realizados desalinhados no tempo: em \(h=1\), nenhuma
+    Previsões e valores realizados desalinhados no tempo: em \hum, nenhuma
     de 685 linhas tinha o mesmo valor realizado nas duas séries
     & Data de decisão única, contada em pregões; comparação só sobre datas comuns \\
     \addlinespace
@@ -179,7 +186,7 @@
     \bottomrule
   \end{tabular}
 
-  \vspace{6pt}
+  \vspace{2pt}
   \alert{O piloto foi exploratório e não é evidência}: seus números descrevem falhas de
   procedimento, não desempenho.
 \end{frame}
@@ -250,7 +257,7 @@
           \node[left] at (0,-\r-0.4) {\lab};
         }
         \node at (2,-2.1) {\(\vdots\)};
-        \draw[->] (0,-3.9) -- (13,-3.9) node[right] {tempo};
+        \draw[->] (0,-3.9) -- (12.6,-3.9) node[below left] {tempo};
         \node[anchor=north west,align=left] at (-1.5,-4.3) {
           \tikz\draw[fill=mDarkTeal!25] (0,0) rectangle (0.3,0.2); ajuste \quad
           \tikz\draw[fill=mDarkTeal!10] (0,0) rectangle (0.3,0.2); parada antecipada \quad
@@ -278,7 +285,8 @@
 % 60 tentativas (Cap. 4, Configuração do modelo TFT).
 \begin{frame}{Comparadores: uma escada de dificuldade}
   \small
-  \begin{tabular}{p{0.17\textwidth} p{0.75\textwidth}}
+  \begin{tabular}{>{\raggedright\arraybackslash}p{0.17\textwidth}
+                  >{\raggedright\arraybackslash}p{0.75\textwidth}}
     \toprule
     \textbf{Ingênuos} & Retorno nulo e média histórica: um único valor para todos
       os quantis (sem incerteza). \\
@@ -343,12 +351,12 @@
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
       \centering
-      \includegraphics[height=0.62\textheight,trim=0 80bp 226bp 0,clip]{reliability_diagram.pdf}
+      \includegraphics[height=0.55\textheight,trim=0 70bp 226bp 0,clip]{reliability_diagram.pdf}
 
       \raggedright
-      {\scriptsize Frequência observada abaixo de cada quantil contra o nível nominal,
-      em \hum, para todos os modelos não degenerados; a diagonal é a calibração perfeita.
-      Em \hsete, o quadro é praticamente o mesmo.}
+      {\small Frequência observada abaixo de cada quantil, em \hum; diagonal: calibração
+      perfeita. TFT em azul; comparadores, em outras cores, quase sobrepostos.
+      Em \hsete, o quadro é o mesmo.}
     \end{column}
     \begin{column}{0.48\textwidth}
       \small
@@ -379,8 +387,9 @@
 % seguinte: 41% a 43%; cerca de 4%; 3,3% e 1,6%.
 \begin{frame}{H2 --- Perda média (\textit{pinball}, \(\times 10^{-3}\); menor é melhor)}
   \begin{columns}[T]
-    \begin{column}{0.5\textwidth}
+    \begin{column}{0.56\textwidth}
       \small
+      \setlength{\tabcolsep}{4pt}
       \begin{tabular}{l l c c}
         \toprule
         & Modelo & \hum & \hsete \\
@@ -392,15 +401,15 @@
                      & EWMA-vol & \alert{\textbf{3,920}} & \alert{\textbf{4,000}} \\
                      & Quantis empíricos & 4,037 & 4,058 \\
         \midrule
-        ML & GBM & 3,980 & 4,026 \\
+        Apr. de máquina & GBM quantílico & 3,980 & 4,026 \\
         \midrule
         Candidato & TFT & 4,050 & 4,063 \\
         \bottomrule
       \end{tabular}
 
-      {\scriptsize TFT: média das dez sementes.}
+      {\small TFT: média das dez sementes.}
     \end{column}
-    \begin{column}{0.46\textwidth}
+    \begin{column}{0.4\textwidth}
       \begin{itemize}
         \item Quem descreve a escala da distribuição reduz a perda dos ingênuos em
           41\% a 43\%.
@@ -413,7 +422,7 @@
 \end{frame}
 
 % ---------------------------------------------------------------------------
-% 12. H2: veredito --- tempo: 1,3 min
+% 12. H2: veredito --- tempo: 1,2 min
 % Fontes: Cap. 5, Análise estatística pareada: Holm rejeita contra os naive e contra
 % nenhum forte; MCS p = 0,022 (h+1) e 0,332 (h+7); sensibilidade l = h com
 % p = 0,061; veredito por horizonte; critério de sucesso.
@@ -443,7 +452,6 @@
     empate está perto da fronteira: com blocos de \(h\) pregões no \textit{bootstrap},
     o TFT seria eliminado (\(p = 0{,}061\)).
   \end{alertblock}
-  Estudo bem-sucedido pelo critério fixado antes: H1 não rejeitada (nos dois horizontes).
 \end{frame}
 
 % ---------------------------------------------------------------------------
@@ -467,7 +475,7 @@
         \bottomrule
       \end{tabular}
 
-      {\scriptsize Participação de cada família na importância total.}
+      {\small Participação de cada família na importância total.}
     \end{column}
     \begin{column}{0.42\textwidth}
       \small
@@ -485,12 +493,10 @@
 \end{frame}
 
 % ---------------------------------------------------------------------------
-% 14. Por que o EWMA-vol venceu --- tempo: 1,3 min
+% 14. Por que o EWMA-vol venceu --- tempo: 1,1 min
 % Fontes: Cap. 5, Discussão, Por que o EWMA-vol teve a menor perda (GBM 3,980 contra
-% 3,920; cerca de 0,5%; sementes de 3,987 a 4,117, cerca de 3%) e O TFT foi usado de
-% forma pouco eficiente? (média das dez sementes: 1,6% e 1,4%; 3,988 e 4,008;
-% 1,7% e 0,2% acima do EWMA-vol; p-valores brutos 0,98 e 0,57; dez treinos);
-% Relação com a literatura (regime de uso do TFT).
+% 3,920; cerca de 0,5%; sementes de 3,987 a 4,117, cerca de 3%); Relação com a
+% literatura (regime de uso do TFT). A média das sementes está na Reserva 10.
 \begin{frame}{Por que o EWMA-vol teve a menor perda}
   \small
   Leitura: quase toda a informação aproveitável está no \alert{tamanho recente dos
@@ -503,11 +509,10 @@
     \item \textbf{Sementes}: a perda do TFT vai de 3,987 a 4,117 entre sementes
       (cerca de 3\%), a mesma ordem da distância até o EWMA-vol.
   \end{enumerate}
-  \begin{block}{Análise exploratória, posterior ao veredito e especificada antes do cálculo}
-    A média dos quantis das dez sementes reduz a perda em 1,6\% (\hum) e 1,4\% (\hsete),
-    para 3,988 e 4,008. Ainda fica 1,7\% e 0,2\% acima do EWMA-vol, sem rejeição no
-    Diebold-Mariano unilateral (p-valores brutos de 0,98 e 0,57), e custa dez treinos.
-  \end{block}
+  \vspace{4pt}
+  Combinar as sementes não muda o quadro (análise exploratória, na reserva).
+
+  \vspace{4pt}
   Hipótese não testada: o TFT foi concebido para muitas séries, com a volatilidade
   como alvo; aqui, um único ativo, com o retorno como alvo.
 \end{frame}
@@ -604,7 +609,8 @@
   \vspace{6pt}
   \raggedright
   Diferencial médio de \textit{pinball} \(\bar d = \bar L_{\text{TFT}} - \bar L_{\text{comparador}}\)
-  (\(\times 10^{-5}\)); negativo favorece o TFT. Teste unilateral com correção HLN e Holm
+  (\(\times 10^{-5}\)); negativo favorece o TFT. Teste unilateral com a correção de pequenas amostras de
+  Harvey, Leybourne e Newbold (HLN) e com Holm
   sobre os seis comparadores.
 \end{frame}
 
@@ -632,7 +638,7 @@
   \raggedright\small
   p-valor do MCS (\(\alpha = 0{,}10\)); em negrito, os retidos na especificação primária.
   Prim.: \textit{bootstrap} estacionário com bloco pela regra pré-registrada (65 e 64
-  sessões); MB: blocos móveis; \(l{=}h\) e \(l{=}\sqrt{T}\): blocos de \(h\) e de 39 sessões.
+  pregões); MB: blocos móveis; \(l{=}h\) e \(l{=}\sqrt{T}\): blocos de \(h\) e de 39 pregões.
   Em \hum, o TFT fica fora em todas as quatro especificações.
 \end{frame}
 
@@ -662,13 +668,25 @@
 % Reserva 4 --- Fonte: Cap. 5, Calibração por horizonte (H1), parágrafo dos
 % comparadores e Figura PICP x MPIW (GBM 0,0396 e 0,769; EWMA-vol 0,0471 e 0,827;
 % TFT 0,0464 e 0,818, em h+1).
-\begin{frame}{Reserva --- Cobertura contra largura dos intervalos}
-  \centering
-  \includegraphics[width=0.8\textwidth]{picp_mpiw_plot.pdf}
-
-  \raggedright\small
-  Intervalo de 80\% em \hum: GBM mais estreito (largura 0,0396) com cobertura de 0,769;
-  EWMA-vol 0,0471 e 0,827; TFT 0,0464 e 0,818.
+\begin{frame}{Reserva --- Cobertura contra largura dos intervalos (\hum)}
+  \begin{columns}[T]
+    \begin{column}{0.58\textwidth}
+      \centering
+      \includegraphics[height=0.68\textheight,trim=0 80bp 226bp 0,clip]{picp_mpiw_plot.pdf}
+    \end{column}
+    \begin{column}{0.4\textwidth}
+      \small
+      \begin{itemize}
+        \item Cada ponto: um modelo, um intervalo (50\%, 80\% ou 96\%).
+          TFT em azul, GBM em roxo, EWMA-vol em rosa, AR(1) em laranja,
+          quantis empíricos em verde.
+        \item Linhas horizontais: as coberturas nominais.
+        \item Intervalo de 80\%: GBM mais estreito (largura 0,0396) com cobertura
+          de 0,769; EWMA-vol 0,0471 e 0,827; TFT 0,0464 e 0,818.
+        \item O painel de \hsete{} é praticamente igual.
+      \end{itemize}
+    \end{column}
+  \end{columns}
 \end{frame}
 
 % Reserva 5 --- Fonte: Cap. 5, Skill relativo (H2), Figura da pinball por nível e
@@ -678,9 +696,12 @@
   \begin{columns}[T]
     \begin{column}{0.6\textwidth}
       \centering
-      \includegraphics[height=0.62\textheight,trim=0 105bp 226bp 0,clip]{quantile_score_plot.pdf}
+      \includegraphics[height=0.62\textheight,trim=0 114bp 226bp 0,clip]{quantile_score_plot.pdf}
 
-      {\scriptsize \hum; o painel de \hsete{} é praticamente igual.}
+      \raggedright
+      {\small \hum. TFT em azul; ingênuos tracejados (retorno nulo em laranja, média
+      histórica em verde); os demais quase se sobrepõem ao TFT. O painel de \hsete{}
+      é praticamente igual.}
     \end{column}
     \begin{column}{0.38\textwidth}
       \small
@@ -774,7 +795,18 @@
   \end{block}
 \end{frame}
 
-% Reserva 10 --- Fonte: Cap. 4, Scorecard (três revisões; cegamento declarado).
+% Reserva 10 --- Fonte: Cap. 5, Discussão, O TFT foi usado de forma pouco eficiente?
+% (média das dez sementes: 1,6% e 1,4%; 3,988 e 4,008; 1,7% e 0,2% acima do EWMA-vol;
+% p-valores brutos 0,98 e 0,57; dez treinos). Saiu do slide 14 para aliviá-lo.
+\begin{frame}{Reserva --- Média dos quantis das sementes}
+  \begin{block}{Análise exploratória, posterior ao veredito e especificada antes do cálculo}
+    A média dos quantis das dez sementes reduz a perda em 1,6\% (\hum) e 1,4\% (\hsete),
+    para 3,988 e 4,008. Ainda fica 1,7\% e 0,2\% acima do EWMA-vol, sem rejeição no
+    Diebold-Mariano unilateral (p-valores brutos de 0,98 e 0,57), e custa dez treinos.
+  \end{block}
+\end{frame}
+
+% Reserva 11 --- Fonte: Cap. 4, Scorecard (três revisões; cegamento declarado).
 \begin{frame}{Reserva --- Pré-registro: o que mudou e quando}
   \begin{itemize}
     \item As regras ficam num arquivo congelado, com \textit{hash} registrado antes de
