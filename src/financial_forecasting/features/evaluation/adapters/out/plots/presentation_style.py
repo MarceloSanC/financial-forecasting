@@ -2,10 +2,11 @@
 
 As mesmas `FigureSpec` do dossiê, desenhadas para uma banca: nomes de modelos, famílias e
 métodos em português, eixos por extenso, sem estatuto na legenda nem no título do painel,
-sem título da figura (a legenda do LaTeX faz esse papel) e sem rodapé; fontes de 7 a 8,5 pt
+sem título da figura (a legenda do LaTeX faz esse papel) e sem rodapé; fontes de 8 a 9,5 pt
 na largura do texto (6,3 pol.), legíveis com a figura em meia página A4; vírgula decimal
-nos eixos numéricos. Só o texto exibido e as medidas mudam — o dado desenhado, as cores e
-os marcadores são os do dossiê.
+nos eixos numéricos e nos rótulos; legenda só com as séries que desenham alguma marca;
+rótulos do eixo x horizontais quando cabem (issue #268). Só o texto exibido e as medidas
+mudam — o dado desenhado, as cores e os marcadores são os do dossiê.
 
 `PRESENTATION_OMISSIONS` lista as figuras do catálogo que o texto não usa, com o motivo; o
 sink de apresentação grava o motivo ao lado das figuras.
@@ -62,7 +63,7 @@ AXIS_LABELS: Final[Mapping[str, str]] = MappingProxyType(
         "P̄_τ (pinball)": "perda pinball média",
         "MPIW": "largura média (MPIW)",
         "PICP": "cobertura observada (PICP)",
-        "par (τ_l-τ_u)": r"par de níveis ($\tau_l$-$\tau_u$)",
+        "par (τ_l-τ_u)": r"par de níveis ($\tau_l$" + "\N{EN DASH}" + r"$\tau_u$)",
         "largura u - l": "largura do intervalo",
         "target_timestamp": "data-alvo",
         "d_t": r"diferencial de perda $d_t$",
@@ -86,7 +87,10 @@ _NOTATION: Final[tuple[tuple[re.Pattern[str], Callable[[re.Match[str]], str]], .
 """Notação com índice (`d_t`, `I_f(h)`, `s_f(h+7)`, `Δ_f`) em mathtext, sem `_` literal."""
 
 _PHRASES: Final[tuple[tuple[str, str], ...]] = (
+    (r"(?<=\d)\.(?=\d)", ","),
+    (r"(\d,\d+)-(?=\d)", "\\1\N{EN DASH}"),
     (r" \(sem seed\)", ""),
+    (r"(?<=gbm_quantile) \(seed \d+\)", ""),
     (r" \(c\S*/n\S*\)", ""),
     (r"\(larguras de (\d+) seeds empilhadas: [^)]*\)", r"(larguras das \1 sementes empilhadas)"),
     (r"nativo \(mesma máscara\)", "nativo"),
@@ -101,7 +105,13 @@ _PHRASES: Final[tuple[tuple[str, str], ...]] = (
     (r"\bseeds\b", "sementes"),
     (r"\bseed\b", "semente"),
 )
-"""Trechos reescritos, na ordem (antes dos identificadores)."""
+"""Trechos reescritos, na ordem (antes dos identificadores).
+
+Os dois primeiros valem para todo número exibido (issue #268): vírgula decimal ("0,02",
+nunca "0.02") e meia-risca (U+2013) entre os níveis de um par, que o hífen deixaria
+parecido com um sinal de menos; datas ISO não têm vírgula e mantêm o hífen. O GBM quantílico
+tem uma única semente: o "(seed 0)" dele sai do nome.
+"""
 
 _IDENTIFIERS: Final[Mapping[str, str]] = MappingProxyType(
     {**MODEL_NAMES, **FAMILY_NAMES, **METHOD_NAMES}
@@ -134,12 +144,12 @@ _PRESENTATION_RC: Final[Mapping[str, object]] = MappingProxyType(
     {
         "pdf.fonttype": 42,
         "font.family": "DejaVu Sans",
-        "font.size": 8,
-        "axes.titlesize": 8.5,
-        "axes.labelsize": 8,
-        "xtick.labelsize": 7,
-        "ytick.labelsize": 7,
-        "legend.fontsize": 7,
+        "font.size": 9,
+        "axes.titlesize": 9.5,
+        "axes.labelsize": 9,
+        "xtick.labelsize": 8,
+        "ytick.labelsize": 8,
+        "legend.fontsize": 8,
         "axes.grid": True,
         "grid.color": "#dddddd",
         "grid.linewidth": 0.4,
@@ -156,12 +166,14 @@ PRESENTATION_STYLE: Final = RenderStyle(
     rc=_PRESENTATION_RC,
     annotations=False,
     text=presentation_text,
-    panel_height_in=2.15,
+    panel_height_in=2.2,
     title_in=0.1,
     legend_wrap=50,
-    legend_line_in=0.1,
+    legend_line_in=0.115,
     legend_entry_in=0.045,
     decimal_comma=True,
+    legend_drawn_only=True,
+    horizontal_ticks=True,
 )
 """O estilo de apresentação (ver o docstring do módulo)."""
 

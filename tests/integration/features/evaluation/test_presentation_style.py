@@ -1,26 +1,35 @@
 """Estilo de apresentação das figuras para o texto do TCC (issue #250).
 
 Sobre as dez specs sintéticas da 8.3: nenhum identificador interno nem marcador de
-estatuto em texto desenhado, sem título da figura nem rodapé, fonte de pelo menos 7 pt,
+estatuto em texto desenhado, sem título da figura nem rodapé, fonte de pelo menos 8 pt,
 altura até meia página A4, rótulos de legenda distintos como no dossiê, bytes iguais em
 renderizações repetidas e a identidade do renderizador com o estilo. O dossiê continua com
-o estilo padrão e a identidade da 8.3. Integração (não unit): o módulo importa matplotlib
-pelo adapter de plots (gate de pureza dos unit do `evaluation`).
+o estilo padrão e a identidade da 8.3. Issue #268: vírgula decimal e meia-risca nos pares,
+GBM sem semente, legenda sem série que não desenha nada e rótulos do eixo x horizontais
+quando cabem. Integração (não unit): o módulo importa matplotlib pelo adapter de plots
+(gate de pureza dos unit do `evaluation`).
 """
 
 from __future__ import annotations
 
+import dataclasses
 import re
 
 import pytest
+from matplotlib import rc_context
+from matplotlib.legend import Legend
 from matplotlib.text import Text
 
 from financial_forecasting.features.evaluation.adapters.out.plots.matplotlib_figure_renderer import (  # noqa: E501
+    _RC,
     DOSSIER_STYLE,
     MODEL_STYLES,
     MatplotlibFigureRenderer,
+    RenderStyle,
+    drawn,
     footer_lines,
     legend_labels,
+    ticks_fit,
 )
 from financial_forecasting.features.evaluation.adapters.out.plots.presentation_style import (
     AXIS_LABELS,
@@ -35,18 +44,25 @@ from financial_forecasting.features.evaluation.application.dtos.report_artifacts
     FIGURE_CATALOG,
     FIGURE_IDS,
     FigureSpec,
+    SeriesKind,
+    SeriesSpec,
     StatusLabel,
 )
 from tests.integration.features.evaluation.test_matplotlib_figure_renderer_layout import (
+    _DESCRIPTIVE,
     _assemblies,
+    _interval,
+    _spec,
 )
 
 pytestmark = pytest.mark.integration
 
 _SNAKE_CASE = re.compile(r"[A-Za-z]{2,}_[A-Za-z0-9]{2,}")
 """Identificador interno (`baseline_ar1`, `target_timestamp`); `d_t` e `τ_l` não casam."""
+_DASH = "\N{EN DASH}"
+_DECIMAL_POINT = re.compile(r"\d\.\d")
 _HALF_A4_IN = 297 / 2 / 25.4
-_MIN_FONT_PT = 7.0
+_MIN_FONT_PT = 8.0
 
 
 @pytest.fixture(scope="module")
@@ -96,7 +112,30 @@ def test_axis_labels_exact_text_only() -> None:
     assert presentation_text("retorno") == "retorno"
     assert presentation_text("ĉ(τ)") == AXIS_LABELS["ĉ(τ)"] == "cobertura observada ĉ(τ)"
     # o mesmo texto dentro de outro não é eixo
-    assert presentation_text("MPIW 0,1-0,9") == "MPIW 0,1-0,9"
+    assert presentation_text("MPIW 0,1-0,9") == f"MPIW 0,1{_DASH}0,9"
+
+
+@pytest.mark.parametrize(
+    ("text", "shown"),
+    [
+        ("cauda 0.02", "cauda 0,02"),
+        ("PICP 0.02-0.98", f"PICP 0,02{_DASH}0,98"),
+        ("faixa 0,1-0,9", f"faixa 0,1{_DASH}0,9"),
+        ("cobertura nominal, par 0,25-0,75", f"cobertura nominal, par 0,25{_DASH}0,75"),
+        ("2019-12-27", "2019-12-27"),
+        ("Δ_f = s_f(h+7) - s_f(h+1), loco", r"$\Delta_f$ = $s_f(h+7)$ - $s_f(h+1)$, ablação"),
+    ],
+)
+def test_numbers_with_decimal_comma_and_pairs_with_en_dash(text: str, shown: str) -> None:
+    assert presentation_text(text) == shown
+
+
+def test_gbm_shown_without_its_single_seed() -> None:
+    assert presentation_text("gbm_quantile (seed 0)") == "GBM quantílico"
+    assert presentation_text("gbm_quantile (seed 0), Wilson 0,95") == (
+        "GBM quantílico, Wilson 0,95"
+    )
+    assert presentation_text("tft_quantile (seed 1)") == "TFT (semente 1)"
 
 
 def test_seed_wording_in_portuguese() -> None:
@@ -143,6 +182,7 @@ def test_no_internal_identifier_or_status_marker_drawn(specs: list[FigureSpec]) 
             continue
         for text in (t.get_text() for t in _drawn_texts(spec)):
             assert not _SNAKE_CASE.search(text), (spec.figure_id, text)
+            assert not _DECIMAL_POINT.search(text), (spec.figure_id, text)
             assert not any(f"[{status}]" in text for status in statuses), (spec.figure_id, text)
             assert not text.endswith(tuple(f"— {status}" for status in statuses)), text
 
@@ -176,9 +216,74 @@ def test_figure_fits_half_an_a4_page(specs: list[FigureSpec]) -> None:
 
 
 def test_legend_entries_stay_distinct(specs: list[FigureSpec]) -> None:
+    dossier_drawn = dataclasses.replace(DOSSIER_STYLE, legend_drawn_only=True)
     for spec in specs:
         shown = legend_labels(spec, PRESENTATION_STYLE)
-        assert len(set(shown)) == len(legend_labels(spec, DOSSIER_STYLE)), spec.figure_id
+        assert len(set(shown)) == len(legend_labels(spec, dossier_drawn)), spec.figure_id
+
+
+def _empty(series_id: str, model: str) -> SeriesSpec:
+    return SeriesSpec(
+        series_id=series_id,
+        kind=SeriesKind.INTERVAL,
+        name=series_id,
+        model=model,
+        label=_DESCRIPTIVE,
+        x=("a", "b"),
+        y=(None, None),
+        low=(None, None),
+        high=(None, None),
+    )
+
+
+def _rendered_legend(spec: FigureSpec, style: RenderStyle) -> list[str]:
+    with rc_context(_RC):  # type: ignore[arg-type]
+        figure = MatplotlibFigureRenderer(style)._draw(spec)
+    return [t.get_text() for legend in figure.findobj(Legend) for t in legend.get_texts()]
+
+
+def test_series_without_any_mark_left_out_of_the_presentation_legend() -> None:
+    spec = _spec(
+        (_interval("drawn", "tft_quantile"), _empty("baseline_zero_return", "baseline_zero_return"))
+    )
+    assert drawn(spec.panels[0].series[0])
+    assert not drawn(spec.panels[0].series[1])
+    assert _rendered_legend(spec, PRESENTATION_STYLE) == ["drawn"]
+    assert legend_labels(spec, PRESENTATION_STYLE) == ["drawn"]
+    # o dossiê da 8.3 não muda: a série vazia segue na legenda
+    assert len(_rendered_legend(spec, DOSSIER_STYLE)) == 2  # noqa: PLR2004
+    assert len(legend_labels(spec, DOSSIER_STYLE)) == 2  # noqa: PLR2004
+
+
+def test_vertical_lines_count_as_drawn_by_their_x() -> None:
+    cuts = SeriesSpec(
+        series_id="cuts",
+        kind=SeriesKind.VLINES,
+        name="corte de fold",
+        label=_DESCRIPTIVE,
+        x=(1.0, 2.0),
+        y=(None, None),
+    )
+    assert drawn(cuts)
+
+
+def _rotations(spec: FigureSpec, style: RenderStyle) -> set[float]:
+    with rc_context(style.rc):  # type: ignore[arg-type]
+        figure = MatplotlibFigureRenderer(style)._draw(spec)
+    return {t.get_rotation() for ax in figure.get_axes() for t in ax.get_xticklabels()}
+
+
+def test_category_ticks_horizontal_when_they_fit(specs: list[FigureSpec]) -> None:
+    vsn = specs[FIGURE_IDS.index("vsn_weights")]
+    assert _rotations(vsn, PRESENTATION_STYLE) == {0.0}
+    assert _rotations(vsn, DOSSIER_STYLE) == {30.0}
+
+
+def test_ticks_fit_measures_the_labels() -> None:
+    with rc_context(PRESENTATION_STYLE.rc):  # type: ignore[arg-type]
+        assert ticks_fit(["Preço", "Técnico", "Sentimento", "Fundamento"], columns=1)
+        assert not ticks_fit(["Sentimento", "Fundamento"] * 4, columns=2)
+        assert ticks_fit(["um rótulo comprido que não tem vizinho"], columns=2)
 
 
 def test_presentation_bytes_repeat_and_differ_from_dossier(specs: list[FigureSpec]) -> None:
