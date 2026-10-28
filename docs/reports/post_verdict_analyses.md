@@ -11,7 +11,7 @@ de qualquer cálculo, e é seguida sem desvio: um único *ensemble* (média arit
 lá e nenhuma outra combinação de sementes.
 
 A D4 (issue #272) entrou depois, a pedido do orientador, para dar número à leitura das
-Figuras 8 e 9 do TCC (a largura do EWMA-vol acompanha a volatilidade; a do TFT, menos).
+figuras de nitidez e de diferencial de perda do TCC, na Seção 4.7.1 (a largura do EWMA-vol acompanha a volatilidade; a do TFT, menos).
 **Não teve especificação prévia:** uma sonda exploratória sobre as mesmas previsões veio
 antes deste código, e a medida foi escolhida sabendo o que ela mostrava. É descritiva,
 não tem teste nem p-valor e não altera o veredito. A volatilidade de referência é a
@@ -150,7 +150,7 @@ longo da série (o quantil de 95 % da largura é 3,2 vezes o de 5 %). O TFT, com
 médias das dez sementes, tem correlação 0,50 (h+1) e 0,44 (h+7) e varia bem menos (1,7 e 1,6
 vezes), com a maior largura mediana dos modelos (4,40 × 10⁻² contra 4,26–4,27 × 10⁻² do
 EWMA-vol). O GBM e os quantis empíricos ficam entre os dois; o AR(1), de variância fixa por
-*fold*, tem correlação negativa (−0,23). A leitura é coerente com a Figura 9: o TFT perde mais
+*fold*, tem correlação negativa (−0,23). A leitura é coerente com a figura do diferencial de perda: o TFT perde mais
 para o EWMA-vol quando a volatilidade sobe de repente (início de 2020), justamente quando a
 largura dele reage pouco. É uma descrição do comportamento dos intervalos, e não a causa
 demonstrada da diferença de perda.
