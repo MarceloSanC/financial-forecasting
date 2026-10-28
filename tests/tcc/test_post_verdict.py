@@ -1,4 +1,4 @@
-"""Testes unitários das regras puras das análises pós-veredito (D1 e D3; issue #243)."""
+"""Testes unitários das regras puras das análises pós-veredito (D1 e D3, #243; D4, #272)."""
 
 from __future__ import annotations
 
@@ -15,10 +15,14 @@ from financial_forecasting.features.evaluation.domain.value_objects.coverage_ser
 from tests.tcc.post_verdict import (
     median_is_identically_zero,
     medians,
+    pair_widths,
     point_profile,
+    quantile_type7,
     seed_ensemble,
     seed_mean,
+    spearman,
     tail_rates,
+    values_at_decision,
 )
 from tests.tcc.post_verdict_report import (
     BEGIN_MARKER,
@@ -143,3 +147,44 @@ def test_block_of_returns_the_marked_block() -> None:
     assert block_of(text) == f"{BEGIN_MARKER}\nx\n{END_MARKER}\n"
     with pytest.raises(ValueError, match="markers"):
         block_of("sem marcadores")
+
+
+def test_pair_widths_read_the_scored_vector() -> None:
+    series = _series([(-1.0, 0.0, 1.0), (-0.5, 0.0, 2.0)], (0.1, 0.2))
+    assert pair_widths(series, pair=(0.1, 0.9)) == (2.0, 2.5)
+    with pytest.raises(ValueError, match="not in the grid"):
+        pair_widths(series, pair=(0.25, 0.75))
+
+
+def test_values_at_decision_step_back_h_sessions_on_the_grid() -> None:
+    grid = ("2019-12-30T00:00:00+00:00", "2019-12-31T00:00:00+00:00", *STAMPS)
+    column = (10.0, 20.0, 30.0, 40.0, 50.0)
+    series = _series([(-1.0, 0.0, 1.0)] * 2, (0.1, 0.2))  # alvos STAMPS[0:2], h = 1
+    assert values_at_decision(series, timestamps=grid, column=column) == (20.0, 30.0)
+    with pytest.raises(ValueError, match="before the session grid"):
+        values_at_decision(series, timestamps=STAMPS, column=column)
+    with pytest.raises(ValueError, match="not in the session grid"):
+        values_at_decision(series, timestamps=grid[:2], column=column)
+
+
+def test_spearman_matches_the_textbook_cases() -> None:
+    assert spearman([1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 40.0, 80.0]) == pytest.approx(1.0)
+    assert spearman([1.0, 2.0, 3.0], [3.0, 2.0, 1.0]) == pytest.approx(-1.0)
+    # empates com postos médios: x = (1, 2, 2, 3) -> postos (1, 2.5, 2.5, 4)
+    assert spearman([1.0, 2.0, 2.0, 3.0], [1.0, 3.0, 2.0, 4.0]) == pytest.approx(
+        4.5 / math.sqrt(4.5 * 5.0)
+    )
+    with pytest.raises(ValueError, match="constant"):
+        spearman([1.0, 1.0], [1.0, 2.0])
+    with pytest.raises(ValueError, match="same length"):
+        spearman([1.0], [1.0])
+
+
+def test_quantile_type7_interpolates_like_r_and_numpy() -> None:
+    values = [4.0, 1.0, 3.0, 2.0]
+    assert quantile_type7(values, 0.0) == min(values)
+    assert quantile_type7(values, 1.0) == max(values)
+    assert quantile_type7(values, 0.5) == pytest.approx(2.5)
+    assert quantile_type7(values, 0.05) == pytest.approx(1.15)  # numpy.quantile(..., 0.05)
+    with pytest.raises(ValueError, match="probability"):
+        quantile_type7(values, 1.5)

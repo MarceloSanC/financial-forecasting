@@ -1,4 +1,4 @@
-"""Análises pós-veredito (D1 e D3) sobre a geração julgada: leitura, sanidade, cálculo e tabela.
+"""Análises pós-veredito (D1, D3 e D4) sobre a geração julgada: leitura, sanidade, cálculo e tabela.
 
 Plano de fechamento (#237) §7; issue #243. **Calculado depois do veredito; não altera o
 veredito.** D3 segue a especificação fixada no commit `cdf434bf`, antes de qualquer cálculo.
@@ -95,10 +95,14 @@ from tests.tcc.post_verdict import (
     PointProfile,
     TailRates,
     median_is_identically_zero,
+    pair_widths,
     point_profile,
+    quantile_type7,
     seed_ensemble,
     seed_mean,
+    spearman,
     tail_rates,
+    values_at_decision,
 )
 
 BEGIN_MARKER: Final = "<!-- BEGIN: post-verdict-numbers -->"
@@ -108,6 +112,9 @@ ENSEMBLE: Final = "tft_seed_ensemble"
 D3_COMPARATORS: Final = ("baseline_ewma_vol", "gbm_quantile")
 PAIR_80: Final = (0.1, 0.9)
 WILSON_LEVEL: Final = 0.95
+VOLATILITY_COLUMN: Final = "volatility_20d"
+"""D4: a volatilidade de 20 sessões do registro, na sessão de decisão (causal)."""
+DISPERSION_PROBABILITIES: Final = (0.05, 0.95)
 RELATIVE_TOLERANCE: Final = 1e-9
 """Tolerância relativa da sanidade (o mesmo código sobre os mesmos dados; folga de fsum)."""
 _SILVER: Final = "silver"
@@ -145,6 +152,9 @@ class JudgedInputs:
     samples: Mapping[int, HorizonSamples]
     metrics_by_run: Sequence[Row]
     dm_results: Sequence[Row]
+    grid_timestamps: tuple[str, ...]
+    volatility: tuple[float, ...]
+    """D4: `VOLATILITY_COLUMN` da grade de treino, alinhada a `grid_timestamps`."""
 
 
 def _record(row: Row, run: CohortRun) -> ForecastRecord:
@@ -273,6 +283,8 @@ def read_judged_inputs(root: Path) -> JudgedInputs:
         samples={sample.horizon: sample for sample in assembled.horizons},
         metrics_by_run=generation.tables["gold_metrics_by_run"].rows,
         dm_results=generation.tables["gold_dm_results"].rows,
+        grid_timestamps=grid.timestamps_iso(),
+        volatility=grid.column(VOLATILITY_COLUMN),
     )
 
 
@@ -501,6 +513,50 @@ def d3_rows(inputs: JudgedInputs) -> tuple[D3Row, ...]:
     return tuple(rows)
 
 
+@dataclass(frozen=True)
+class D4Row:
+    """Resposta da largura do par de 80 % à volatilidade, num modelo e horizonte (issue #272).
+
+    No TFT, a largura de cada ponto é a média das larguras das sementes (a largura do
+    *ensemble* da D3, pois a média é linear).
+    """
+
+    model: str
+    horizon: int
+    n_points: int
+    spearman: float
+    median_width: float
+    dispersion: float
+    """Razão entre os quantis de 95 % e de 5 % da largura ao longo da série."""
+
+
+def d4_rows(inputs: JudgedInputs) -> tuple[D4Row, ...]:
+    """D4 por modelo e horizonte na amostra comum, sem os modelos de largura identicamente nula."""
+    rows: list[D4Row] = []
+    for horizon, sample in sorted(inputs.samples.items()):
+        for model in (m for m in MODEL_LABELS if m in sample.models):
+            seeds = sample.common[model]
+            per_seed = [pair_widths(series, pair=PAIR_80) for series in seeds]
+            widths = [seed_mean(list(point)) for point in zip(*per_seed, strict=True)]
+            if all(w == 0.0 for w in widths):
+                continue
+            volatility = values_at_decision(
+                seeds[0], timestamps=inputs.grid_timestamps, column=inputs.volatility
+            )
+            low, high = (quantile_type7(widths, p) for p in DISPERSION_PROBABILITIES)
+            rows.append(
+                D4Row(
+                    model=model,
+                    horizon=horizon,
+                    n_points=len(widths),
+                    spearman=spearman(widths, volatility),
+                    median_width=quantile_type7(widths, 0.5),
+                    dispersion=high / low,
+                )
+            )
+    return tuple(rows)
+
+
 # --- tabela ----------------------------------------------------------------------------------
 
 
@@ -519,7 +575,14 @@ def _range(values: tuple[float, float, float], n_seeds: int, scale: float) -> st
     return f"{_f(mean, 3, scale)} [{_f(low, 3, scale)}; {_f(high, 3, scale)}]"
 
 
-def render(inputs: JudgedInputs, d1: Sequence[D1Row], d3: Sequence[D3Row], *, n_checks: int) -> str:
+def render(
+    inputs: JudgedInputs,
+    d1: Sequence[D1Row],
+    d3: Sequence[D3Row],
+    d4: Sequence[D4Row],
+    *,
+    n_checks: int,
+) -> str:
     """O bloco de números do relatório (determinístico; o teste opt-in o compara)."""
     lines = [
         BEGIN_MARKER,
@@ -617,6 +680,23 @@ def render(inputs: JudgedInputs, d1: Sequence[D1Row], d3: Sequence[D3Row], *, n_
                 f"{_f(result.mean_differential, 3, 1e5)} | {_f(result.statistic, 3)} | "
                 f"{_f(result.p_value, 4)} | {'sim' if result.fallback_applied else 'não'} |"
             )
+    lines += [
+        "",
+        "### D4 — resposta da largura do par de 80 % à volatilidade (issue #272)",
+        "",
+        "Largura q₀,₉ - q₀,₁ por ponto (TFT: média das larguras das 10 sementes). Spearman: "
+        f"correlação de postos entre a largura e `{VOLATILITY_COLUMN}` na sessão de decisão. "
+        "Dispersão: quantil de 95 % ÷ quantil de 5 % da largura (tipo 7). Mediana em 10⁻².",
+        "",
+        "| modelo | h | n | Spearman | mediana | dispersão |",
+        "|---|---|---|---|---|---|",
+    ]
+    for d4_row in d4:
+        lines.append(
+            f"| {MODEL_LABELS[d4_row.model]} | {d4_row.horizon} | {d4_row.n_points} | "
+            f"{_f(d4_row.spearman, 3)} | {_f(d4_row.median_width, 3, 1e2)} | "
+            f"{_f(d4_row.dispersion, 2)} |"
+        )
     lines += ["", END_MARKER]
     return "\n".join(lines) + "\n"
 
@@ -626,7 +706,7 @@ def compute(root: Path) -> str:
     inputs = read_judged_inputs(root)
     checks = sanity_checks(inputs)
     check_sanity(checks)
-    return render(inputs, d1_rows(inputs), d3_rows(inputs), n_checks=len(checks))
+    return render(inputs, d1_rows(inputs), d3_rows(inputs), d4_rows(inputs), n_checks=len(checks))
 
 
 def block_of(text: str) -> str:

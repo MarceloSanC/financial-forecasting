@@ -1,4 +1,4 @@
-"""Regras puras das análises pós-veredito do TCC: perfil pontual (D1) e média das sementes (D3).
+"""Regras puras das análises pós-veredito do TCC: D1, D3 e resposta da largura (D4).
 
 Plano de fechamento (#237, `docs/tcc/PLANO-FECHAMENTO.md` §7); issue #243. Calculado depois
 do veredito; não altera o veredito. As métricas saem dos serviços de domínio do gold
@@ -16,6 +16,11 @@ predicados de cobertura de `coverage_series`); aqui só moram as regras que eles
   monotônica; grade não monotônica ergue, nunca é corrigida); `tail_rates`: violação da
   cauda inferior (y ≤ q_τl), da superior (y > q_τu) e PICP do par (intervalo fechado),
   pelos predicados únicos do gold.
+- **D4** (issue #272) — `pair_widths`: a largura q_τu - q_τl do vetor pontuado em cada
+  ponto; `values_at_decision`: o valor de uma coluna da grade de treino na sessão de
+  decisão de cada ponto (h posições antes do alvo na grade de sessões); `spearman`: a
+  correlação de postos (postos médios nos empates); `quantile_type7`: o quantil amostral
+  do tipo 7 de Hyndman e Fan (interpolação linear, o padrão do R e do NumPy).
 """
 
 from __future__ import annotations
@@ -178,3 +183,86 @@ def tail_rates(series: CoverageSeries, *, pair: tuple[float, float]) -> TailRate
         inside += is_inside_closed(y, values[k_low], values[k_high])
     n_points = series.n_points
     return TailRates(lower=lower / n_points, upper=upper / n_points, picp=inside / n_points)
+
+
+def pair_widths(series: CoverageSeries, *, pair: tuple[float, float]) -> tuple[float, ...]:
+    """D4: a largura q_τu - q_τl do vetor pontuado (pós-guardrail) em cada ponto.
+
+    Raises:
+        ValueError: nível do par fora da grade da série.
+    """
+    for level in pair:
+        if level not in series.levels:
+            raise ValueError(f"level {level} is not in the grid {series.levels}")
+    k_low, k_high = series.levels.index(pair[0]), series.levels.index(pair[1])
+    return tuple(
+        series.scored_values(i)[k_high] - series.scored_values(i)[k_low]
+        for i in range(series.n_points)
+    )
+
+
+def values_at_decision(
+    series: CoverageSeries, *, timestamps: Sequence[str], column: Sequence[float]
+) -> tuple[float, ...]:
+    """D4: `column` na sessão de decisão de cada ponto, h posições antes do alvo na grade.
+
+    Raises:
+        ValueError: alvo fora da grade, ou decisão antes do início da grade.
+    """
+    position = {stamp: i for i, stamp in enumerate(timestamps)}
+    values: list[float] = []
+    for target in series.target_timestamps:
+        if target not in position:
+            raise ValueError(f"target {target} is not in the session grid")
+        decision = position[target] - series.horizon
+        if decision < 0:
+            raise ValueError(f"target {target}: decision falls before the session grid")
+        values.append(column[decision])
+    return tuple(values)
+
+
+def _average_ranks(values: Sequence[float]) -> list[float]:
+    order = sorted(range(len(values)), key=lambda i: values[i])
+    ranks = [0.0] * len(values)
+    start = 0
+    while start < len(order):
+        end = start
+        while end + 1 < len(order) and values[order[end + 1]] == values[order[start]]:
+            end += 1
+        for k in range(start, end + 1):
+            ranks[order[k]] = (start + end) / 2 + 1
+        start = end + 1
+    return ranks
+
+
+def spearman(x: Sequence[float], y: Sequence[float]) -> float:
+    """D4: a correlação de Spearman (Pearson sobre os postos médios).
+
+    Raises:
+        ValueError: tamanhos diferentes, menos de dois pontos, ou série constante.
+    """
+    if len(x) != len(y) or len(x) < 2:  # noqa: PLR2004
+        raise ValueError("spearman needs two series of the same length >= 2")
+    rx, ry = _average_ranks(x), _average_ranks(y)
+    mx, my = math.fsum(rx) / len(rx), math.fsum(ry) / len(ry)
+    sxy = math.fsum((a - mx) * (b - my) for a, b in zip(rx, ry, strict=True))
+    sxx = math.fsum((a - mx) ** 2 for a in rx)
+    syy = math.fsum((b - my) ** 2 for b in ry)
+    if sxx == 0.0 or syy == 0.0:
+        raise ValueError("spearman is undefined for a constant series")
+    return sxy / math.sqrt(sxx * syy)
+
+
+def quantile_type7(values: Sequence[float], probability: float) -> float:
+    """D4: o quantil amostral do tipo 7 (interpolação linear entre estatísticas de ordem).
+
+    Raises:
+        ValueError: amostra vazia ou probabilidade fora de [0, 1].
+    """
+    if not values or not 0.0 <= probability <= 1.0:
+        raise ValueError("quantile_type7 needs values and a probability in [0, 1]")
+    ordered = sorted(values)
+    h = (len(ordered) - 1) * probability
+    low = math.floor(h)
+    high = min(low + 1, len(ordered) - 1)
+    return ordered[low] + (h - low) * (ordered[high] - ordered[low])
