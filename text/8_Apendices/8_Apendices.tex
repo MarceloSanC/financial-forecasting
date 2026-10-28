@@ -121,7 +121,7 @@ Este apêndice reúne, em formato sintético, os termos técnicos recorrentes ao
 \chapter*{APÊNDICE C --- Reprodução}
 \addcontentsline{toc}{chapter}{APÊNDICE C --- Reprodução}
 
-Este apêndice indica como reproduzir o \textit{pipeline}. O repositório do trabalho contém o código, a configuração e a documentação de decisões.
+Este apêndice indica como reproduzir o \textit{pipeline}. O repositório público do trabalho, \url{https://github.com/MarceloSanC/financial-forecasting}, contém o código, a configuração, o pré-registro com as suas revisões e âncoras (pasta \texttt{config/preregistration}) e a documentação de decisões. Os dados brutos não fazem parte do repositório, pelos termos de uso das fontes (Seção~\ref{sec:dados}); C.2 indica como obtê-los.
 
 \section*{C.1 Ambiente}
 
@@ -131,7 +131,7 @@ A reprodução das previsões a partir dos modelos salvos tem dois modos. No mes
 
 \section*{C.2 Dados e \textit{features}}
 
-As fontes são \texttt{yfinance} (cotações diárias), notícias com data e hora de publicação, Alpha Vantage (demonstrativos e datas de divulgação) e o modelo FinBERT com revisão de pesos fixada. A sequência é: ingestão de cotações, notícias e fundamentos; pontuação e agregação de sentimento por sessão; e construção do conjunto de dados com as 55 \textit{features}, o alvo e o \textit{gate} de qualidade.
+As fontes são o Yahoo Finance, pela biblioteca \texttt{yfinance} (cotações diárias, com o ajuste automático desligado), a API Alpha Vantage (notícias, pelo \textit{endpoint} \texttt{NEWS\_SENTIMENT}, e demonstrativos e datas de divulgação), que exige uma chave gratuita, e o modelo FinBERT com revisão de pesos fixada. Os adaptadores de coleta estão no repositório; a impressão digital do conjunto de dados registrada na especificação da coorte confirma se uma nova coleta reproduz a base usada. A sequência é: ingestão de cotações, notícias e fundamentos; pontuação e agregação de sentimento por sessão; e construção do conjunto de dados com as 55 \textit{features}, o alvo e o \textit{gate} de qualidade.
 
 \section*{C.3 Treinamento e avaliação}
 
@@ -174,26 +174,6 @@ A Figura~\ref{fig:conformal} compara os intervalos nativos do TFT com os corrigi
 \caption[Cobertura e largura dos intervalos do TFT, nativos e conformais]{Cobertura empírica (não garantida) e largura média dos intervalos do TFT, nativos e corrigidos pela CQR (variante de registro) e pela NexCP (sensibilidade), por nível, par e horizonte; a banda de Wilson do nativo existe só por semente, e a referência de dispersão Beta não é desenhada}
 \label{fig:conformal}
 \includegraphics[width=\textwidth]{figuras/native_vs_conformal.pdf}
-\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
-\end{figure}
-
-A Figura~\ref{fig:sharpness} mostra a distribuição das larguras ao longo da série. A largura do AR(1) quase não varia, porque sua variância de previsão é fixa em cada \textit{fold}; a do EWMA-vol é a que mais varia, acompanhando a volatilidade condicional, com as maiores larguras de todos os modelos. O TFT tem a largura mediana mais alta nos pares de 80\% e 96\%, e o GBM e os quantis empíricos ficam entre os extremos.
-
-\begin{figure}[htbp]
-\centering
-\caption[Nitidez: largura dos intervalos por modelo e horizonte]{Nitidez: largura dos intervalos de 50\%, 80\% e 96\% por modelo e horizonte; os naive ficam de fora porque seus intervalos são degenerados em toda a série}
-\label{fig:sharpness}
-\includegraphics[width=\textwidth]{figuras/sharpness_diagram.pdf}
-\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
-\end{figure}
-
-A Figura~\ref{fig:acf} mostra o diferencial de perda \(d_t\) do TFT contra cada comparador e sua autocorrelação. Contra os naive, o diferencial é negativo em quase toda a série, com magnitude maior nos períodos voláteis; contra os comparadores fortes, oscila em torno de zero, com o maior pico positivo contra o EWMA-vol no início de 2020. As autocorrelações são positivas na maioria das defasagens e chegam a pouco mais de 0,2. A variância do teste de Diebold-Mariano, fixada no pré-registro, considera a autocorrelação só até a defasagem \(h-1\), e a sensibilidade com o estimador de Bartlett não alterou nenhuma decisão; o MCS usa \textit{bootstrap} em blocos, que preserva a dependência entre sessões vizinhas.
-
-\begin{figure}[!t]
-\centering
-\caption[Diferencial de perda entre o TFT e cada comparador e sua autocorrelação]{Diferencial de perda entre o TFT e cada comparador, \(d_t\), e sua autocorrelação amostral, por horizonte; a faixa de confiança da autocorrelação não é desenhada}
-\label{fig:acf}
-\includegraphics[width=\textwidth]{figuras/loss_differential_acf.pdf}
 \fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
 \end{figure}
 
