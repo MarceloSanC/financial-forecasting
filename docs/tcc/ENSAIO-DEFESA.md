@@ -1,3 +1,13 @@
+---
+title: Ensaio da defesa do TCC — respostas curtas
+description: Respostas de cerca de 40 segundos às quatro perguntas que o orientador anteviu na revisão, com os números e as seções do texto de onde vêm, mais as perguntas administrativas que só o autor responde
+when-use: Consultar ao ensaiar a defesa, ao revisar os slides de reserva e ao responder ao orientador sobre a arguição
+keywords: [tcc, defesa, ensaio, arguicao, ewma, garch, calibracao, horizonte]
+status: done
+created_at: 2026-10-28
+updated_at: 2026-10-28
+---
+
 # Ensaio da defesa — respostas curtas
 
 Perguntas que o orientador anteviu na revisão de 2026-10-28 (#272). Cada resposta cabe em
