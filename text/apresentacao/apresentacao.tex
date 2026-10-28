@@ -4,7 +4,10 @@
 % em comentário, a seção do texto de onde vem cada número e o tempo estimado.
 % Tempo-alvo: até 20 min (Art. 16 do regulamento de TCC do Campus Joinville).
 % Estimativa: abertura 0,3 min + 16 slides de conteúdo (de 0,9 a 1,3 min cada,
-% somando 18,0 min) = 18,3 min; encerramento e reservas ficam fora do tempo.
+% somando 18,2 min) = 18,5 min; encerramento e reservas ficam fora do tempo.
+% Revisão do orientador (#272): o piloto foi para a reserva e entrou o slide do TFT.
+% As figuras recortadas vêm de ../figuras/slides/ (PNG gerado por recortes.sh), e não
+% de trim + clip, que deixava a parte cortada escondida dentro do PDF.
 % Os números foram escritos no formato do texto (vírgula decimal, ponto de milhar)
 % e conferidos por script contra o texto das branches do fechamento do TCC.
 \documentclass[aspectratio=169,10pt]{beamer}
@@ -32,7 +35,7 @@
 \newcommand{\hsete}{\(h{+}7\)}
 
 \title{Previsão probabilística de retornos diários com\\ \textit{Temporal Fusion Transformer}}
-\subtitle{Calibração e comparação pré-registrada contra modelos de referência}
+\subtitle{Calibração e comparação pré-registrada no caso da AAPL}
 \author{Marcelo Santos do Carmo}
 \institute{Engenharia Mecatrônica --- UFSC, Centro Tecnológico de Joinville\\[2pt]
   Orientador: Dr. Pedro Paulo de Andrade Júnior \quad Coorientador: Dr. Benjamin Grando Moreira}
@@ -75,7 +78,7 @@
 % semente ilustrativa (Cap. 5, Cenários experimentais, parágrafo da Figura do fan chart).
 \begin{frame}{O que é uma previsão quantílica}
   \centering
-  \includegraphics[width=\textwidth,trim=0 50bp 0 0,clip]{oos_fan_chart.pdf}
+  \includegraphics[width=0.9\textwidth]{slides/oos_fan_chart.png}
 
   \vspace{-2pt}
   \begin{columns}[T]
@@ -160,38 +163,6 @@
 \end{frame}
 
 % ---------------------------------------------------------------------------
-% 5. Estudo piloto --- tempo: 1,0 min
-% Fontes: Cap. 4, Estudo piloto e decisões de desenho (Tabela de lições do piloto):
-% 685 linhas, 91,25%, três níveis, limiar de 1%, sete níveis, MCS com erro.
-% O piloto não é evidência (mesma seção).
-\begin{frame}{Estudo piloto: o que motivou o desenho}
-  \small
-  \begin{tabular}{>{\raggedright\arraybackslash}p{0.46\textwidth}
-                  >{\raggedright\arraybackslash}p{0.46\textwidth}}
-    \toprule
-    \textbf{O piloto revelou} & \textbf{Decisão do desenho final} \\
-    \midrule
-    Previsões e valores realizados desalinhados no tempo: em \hum, nenhuma
-    de 685 linhas tinha o mesmo valor realizado nas duas séries
-    & Data de decisão única, contada em pregões; comparação só sobre datas comuns \\
-    \addlinespace
-    91,25\% das execuções avulsas com a grade colapsada em um ponto (\(p10 = p90\))
-    & Teste de degeneração, com limiar de 1\% fixado antes \\
-    \addlinespace
-    Só três níveis de quantil
-    & Grade comum de sete níveis para todos os modelos \\
-    \addlinespace
-    Teste estatístico feito à mão, com um erro no procedimento do MCS
-    & Cada métrica e teste conferidos contra implementações de referência \\
-    \bottomrule
-  \end{tabular}
-
-  \vspace{2pt}
-  \alert{O piloto foi exploratório e não é evidência}: seus números descrevem falhas de
-  procedimento, não desempenho.
-\end{frame}
-
-% ---------------------------------------------------------------------------
 % 6. Objetivo e hipóteses --- tempo: 1,1 min
 % Fontes: Cap. 2, Objetivo geral e Hipóteses; intervalo de 80% (Cap. 4, Scorecard);
 % critério de sucesso (Cap. 4, Scorecard, item Vencedor primário).
@@ -228,8 +199,9 @@
       \small
       \textbf{Dados diários de AAPL}
       \begin{itemize}
-        \item Cotações, notícias (sentimento por FinBERT), demonstrativos contábeis
-          e o calendário de pregão.
+        \item Cotações do Yahoo Finance (ajustadas por desdobramentos), notícias e
+          demonstrativos da API Alpha Vantage (sentimento por FinBERT) e o calendário
+          de pregão.
         \item 55 indicadores em quatro famílias: preço (17), técnico (17),
           sentimento (11) e fundamento (10).
         \item Nenhum indicador usa dados de datas posteriores à decisão,
@@ -276,6 +248,51 @@
       \end{itemize}
     \end{column}
   \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------------
+% 7b. O modelo --- tempo: 1,2 min (entrou no lugar do piloto, revisão do orientador, #272)
+% Fontes: Cap. 3, Temporal Fusion Transformer (estágios: VSN, LSTM no codificador e no
+% decodificador, atenção multi-head interpretável, saída quantílica; entradas observadas
+% até t e conhecidas até t+h; VSN do codificador sem eixo de horizonte); Cap. 4,
+% Engenharia de features (55 features observadas; dia da semana e mês conhecidos);
+% Cap. 4, Configuração do modelo TFT (janela de 60 sessões, 4 cabeças, decodificador de
+% h_max = 7 passos, pinball sobre a grade).
+\begin{frame}{O modelo: \textit{Temporal Fusion Transformer}}
+  \centering
+  \begin{tikzpicture}[font=\scriptsize,
+      tftin/.style={draw,rounded corners,fill=black!6,align=center,text width=2.5cm,minimum height=0.95cm},
+      tftblk/.style={draw,rounded corners,fill=mDarkTeal!12,align=center,text width=2.0cm,minimum height=0.95cm},
+      tftout/.style={draw,rounded corners,fill=mLightGreen!35,align=center,text width=2.3cm,minimum height=2.4cm},
+      arr/.style={-{Latex},thick}]
+    \node[tftin] (obs) at (0,0.75) {\textbf{Observadas}\\ 55 indicadores,\\ 60 pregões até \(t\)};
+    \node[tftin] (kno) at (0,-0.75) {\textbf{Conhecidas}\\ dia da semana e mês,\\ até \(t+7\)};
+    \node[tftblk] (vsn1) at (3.1,0.75) {Seleção de variáveis (VSN)};
+    \node[tftblk] (vsn2) at (3.1,-0.75) {Seleção de variáveis (VSN)};
+    \node[tftblk] (enc) at (5.75,0.75) {LSTM\\ codificador};
+    \node[tftblk] (dec) at (5.75,-0.75) {LSTM\\ decodificador, 7 passos};
+    \node[tftblk,minimum height=2.4cm] (att) at (8.4,0) {Atenção\\ multi-cabeça\\ (4 cabeças)};
+    \node[tftout] (q) at (11.15,0) {\textbf{7 quantis}\\ por passo\\[2pt] lidos em \(h+1\)\\ e \(h+7\)};
+    \draw[arr] (obs) -- (vsn1);
+    \draw[arr] (kno) -- (vsn2);
+    \draw[arr] (vsn1) -- (enc);
+    \draw[arr] (vsn2) -- (dec);
+    \draw[arr] (enc) -- (dec) node[midway,right,font=\tiny] {estado};
+    \draw[arr] (enc.east) -- (att.west |- enc.east);
+    \draw[arr] (dec.east) -- (att.west |- dec.east);
+    \draw[arr] (att) -- (q);
+  \end{tikzpicture}
+
+  \vspace{8pt}
+  \raggedright\small
+  \begin{itemize}
+    \item Um único modelo para todos os horizontes, treinado com a \textit{pinball loss}
+      sobre os sete quantis.
+    \item Preço, indicadores, sentimento e fundamentos só entram até a decisão \(t\);
+      apenas o calendário é conhecido de antemão. É isso que impede o vazamento.
+    \item Os pesos da VSN dizem quanto o modelo usa cada variável, mas não mudam com o
+      horizonte; por isso H3 usa permutação e ablação.
+  \end{itemize}
 \end{frame}
 
 % ---------------------------------------------------------------------------
@@ -351,7 +368,7 @@
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
       \centering
-      \includegraphics[height=0.55\textheight,trim=0 70bp 226bp 0,clip]{reliability_diagram.pdf}
+      \includegraphics[height=0.55\textheight]{slides/reliability_diagram.png}
 
       \raggedright
       {\small Frequência observada abaixo de cada quantil, em \hum; diagonal: calibração
@@ -436,21 +453,23 @@
   \end{itemize}
   \vspace{2pt}
   \centering
-  \begin{tabular}{l c l l}
+  \begin{tabular}{l c >{\raggedright\arraybackslash}p{3.3cm} >{\raggedright\arraybackslash}p{5.6cm}}
     \toprule
-    Horizonte & H1 & H2 & Vencedor primário \\
+    Horizonte & H1 & H2 & Vencedor primário (pré-registrado) \\
     \midrule
     \hum & não rejeitada & supera só os ingênuos & não \\
-    \hsete & não rejeitada & supera os ingênuos e empata com os fortes & sim \\
+    \addlinespace
+    \hsete & não rejeitada & supera os ingênuos e empata com os fortes
+      & sim, por \alert{empate estatístico}: a menor perda é do EWMA-vol, e o empate
+        é sensível ao bloco do \textit{bootstrap} \\
     \bottomrule
   \end{tabular}
 
-  \vspace{6pt}
+  \vspace{2pt}
   \raggedright
-  \begin{alertblock}{Como ler o ``sim'' em \hsete}
-    É um \textbf{empate estatístico}: a menor perda continua sendo a do EWMA-vol. E o
-    empate está perto da fronteira: com blocos de \(h\) pregões no \textit{bootstrap},
-    o TFT seria eliminado (\(p = 0{,}061\)).
+  \begin{alertblock}{Perto da fronteira}
+    Com blocos de \(h\) pregões, o TFT sairia do MCS em \hsete{} (\(p = 0{,}061\));
+    vale a especificação fixada antes da rodada.
   \end{alertblock}
 \end{frame}
 
@@ -496,7 +515,8 @@
 % 14. Por que o EWMA-vol venceu --- tempo: 1,1 min
 % Fontes: Cap. 5, Discussão, Por que o EWMA-vol teve a menor perda (GBM 3,980 contra
 % 3,920; cerca de 0,5%; sementes de 3,987 a 4,117, cerca de 3%); Relação com a
-% literatura (regime de uso do TFT). A média das sementes está na Reserva 10.
+% literatura (regime de uso do TFT); largura: Spearman 0,93 e 0,50 e o pico do início de
+% 2020 (Seção 4.7.1, medida D4). A média das sementes está na reserva R11.
 \begin{frame}{Por que o EWMA-vol teve a menor perda}
   \small
   Leitura: quase toda a informação aproveitável está no \alert{tamanho recente dos
@@ -508,48 +528,63 @@
       cerca de 0,5\%.
     \item \textbf{Sementes}: a perda do TFT vai de 3,987 a 4,117 entre sementes
       (cerca de 3\%), a mesma ordem da distância até o EWMA-vol.
+    \item \textbf{Largura}: a do EWMA-vol acompanha a volatilidade (Spearman de 0,93);
+      a do TFT, menos (0,50 em \hum). A maior desvantagem do TFT aparece no salto de
+      volatilidade do início de 2020.
   \end{enumerate}
-  \vspace{4pt}
   Combinar as sementes não muda o quadro (análise exploratória, na reserva).
 
-  \vspace{4pt}
+  \vspace{2pt}
   Hipótese não testada: o TFT foi concebido para muitas séries, com a volatilidade
   como alvo; aqui, um único ativo, com o retorno como alvo.
 \end{frame}
 
 % ---------------------------------------------------------------------------
-% 15. Reprodutibilidade e limitações --- tempo: 1,2 min
+% 15. Reprodutibilidade, delimitações e limitações --- tempo: 1,2 min
+% Delimitações e limitações separadas como na Seção 5.4 (revisão do orientador, #272).
 % Fontes: 1.173.254 valores, 19 tabelas, bit a bit, outro ambiente não realizado
 % (Cap. 5, Cenários experimentais; Apêndice C.4); validação contra referências
 % (Cap. 4, Métricas de avaliação, último parágrafo); limitações (Cap. 6, Limitações:
 % um ativo; simplificações temporais; notícias 143 a 378 por ano de 2010 a 2024 e
 % 3.440 em 2025); MCS sensível ao bloco e subpotência (Cap. 5, Ameaças à validade).
-\begin{frame}{Reprodutibilidade e limitações}
+\begin{frame}{Reprodutibilidade, delimitações e limitações}
   \begin{columns}[T]
-    \begin{column}{0.47\textwidth}
-      \small
+    \begin{column}{0.36\textwidth}
+      \footnotesize
       \textbf{Reprodutibilidade}
       \begin{itemize}
         \item Veredito refeito bit a bit a partir das previsões salvas, sem novo
           treino: 1.173.254 valores de 19 tabelas, nenhuma diferença.
-        \item Reprodução em outro ambiente de execução: não realizada.
-        \item Métricas e testes conferidos contra implementações de referência
-          (R, \texttt{scikit-learn}, \texttt{arch}, \texttt{statsmodels}).
+        \item Outro ambiente de execução: não testado.
+        \item Métricas e testes conferidos contra implementações de referência,
+          inclusive do R.
       \end{itemize}
     \end{column}
-    \begin{column}{0.5\textwidth}
-      \small
-      \textbf{Limitações}
+    \begin{column}{0.3\textwidth}
+      \footnotesize
+      \textbf{Delimitações} (escolhas de escopo)
       \begin{itemize}
         \item Um ativo e um período: as conclusões não se estendem a outros.
-        \item Poder baixo contra diferenças de poucos por cento entre os fortes; o empate
-          em \hsete{} depende do bloco do \textit{bootstrap}.
+        \item Horizontes \hum{} e \hsete.
+        \item Sem estratégia de negociação.
+        \item Leitura das famílias preditiva, não causal.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.32\textwidth}
+      \footnotesize
+      \textbf{Limitações} (do que foi medido)
+      \begin{itemize}
+        \item Poder baixo contra diferenças de poucos por cento entre os fortes.
+        \item O empate em \hsete{} depende do bloco do \textit{bootstrap}.
         \item Simplificações temporais nas notícias e nos fundamentos, com efeito não medido.
-        \item Notícias heterogêneas: de 143 a 378 por ano de 2010 a 2024 e 3.440 em 2025.
-        \item Importância das famílias é preditiva, não causal.
+        \item Cobertura das notícias muda em outubro de 2025: 3.440 notícias em 2025, contra
+          143 a 378 por ano antes.
       \end{itemize}
     \end{column}
   \end{columns}
+  \vspace{4pt}
+  \centering\footnotesize Código, pré-registro e documentação de decisões:
+  \texttt{github.com/MarceloSanC/financial-forecasting}
 \end{frame}
 
 % ---------------------------------------------------------------------------
@@ -587,6 +622,40 @@
 % Slides de reserva (para a arguição). Não contam no tempo da apresentação.
 % ===========================================================================
 \appendix
+% Reservas numeradas à parte (R1, R2, ...), para serem chamadas pelo número na arguição.
+\setcounter{framenumber}{0}
+\setbeamertemplate{frame numbering}{R\insertframenumber}
+
+% Reserva 0 --- Estudo piloto (saiu da apresentação na revisão do orientador, #272).
+% Fontes: Cap. 4, Estudo piloto e decisões de desenho (Tabela de lições do piloto):
+% 685 linhas, 91,25%, três níveis, limiar de 1%, sete níveis, MCS com erro.
+% O piloto não é evidência (mesma seção).
+\begin{frame}{Reserva --- Estudo piloto: o que motivou o desenho}
+  \small
+  \begin{tabular}{>{\raggedright\arraybackslash}p{0.46\textwidth}
+                  >{\raggedright\arraybackslash}p{0.46\textwidth}}
+    \toprule
+    \textbf{O piloto revelou} & \textbf{Decisão do desenho final} \\
+    \midrule
+    Previsões e valores realizados desalinhados no tempo: em \hum, nenhuma
+    de 685 linhas tinha o mesmo valor realizado nas duas séries
+    & Data de decisão única, contada em pregões; comparação só sobre datas comuns \\
+    \addlinespace
+    91,25\% das execuções avulsas com a grade colapsada em um ponto (\(p10 = p90\))
+    & Teste de degeneração, com limiar de 1\% fixado antes \\
+    \addlinespace
+    Só três níveis de quantil
+    & Grade comum de sete níveis para todos os modelos \\
+    \addlinespace
+    Teste estatístico feito à mão, com um erro no procedimento do MCS
+    & Cada métrica e teste conferidos contra implementações de referência \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{2pt}
+  \alert{O piloto foi exploratório e não é evidência}: seus números descrevem falhas de
+  procedimento, não desempenho.
+\end{frame}
 
 % Reserva 1 --- Fonte: Cap. 5, Análise estatística pareada, Tabela de DM.
 \begin{frame}{Reserva --- Diebold-Mariano do TFT contra cada comparador}
@@ -672,7 +741,7 @@
   \begin{columns}[T]
     \begin{column}{0.58\textwidth}
       \centering
-      \includegraphics[height=0.68\textheight,trim=0 80bp 226bp 0,clip]{picp_mpiw_plot.pdf}
+      \includegraphics[height=0.68\textheight]{slides/picp_mpiw_plot.png}
     \end{column}
     \begin{column}{0.4\textwidth}
       \small
@@ -696,12 +765,12 @@
   \begin{columns}[T]
     \begin{column}{0.6\textwidth}
       \centering
-      \includegraphics[height=0.62\textheight,trim=0 114bp 226bp 0,clip]{quantile_score_plot.pdf}
+      \includegraphics[height=0.58\textheight]{slides/quantile_score_plot.png}
 
       \raggedright
-      {\small \hum. TFT em azul; ingênuos tracejados (retorno nulo em laranja, média
-      histórica em verde); os demais quase se sobrepõem ao TFT. O painel de \hsete{}
-      é praticamente igual.}
+      {\small \hum. TFT em azul (as dez sementes e a média delas); ingênuos tracejados
+      (retorno nulo em laranja, média histórica em verde); os demais quase se sobrepõem
+      ao TFT. O painel de \hsete{} é praticamente igual.}
     \end{column}
     \begin{column}{0.38\textwidth}
       \small
