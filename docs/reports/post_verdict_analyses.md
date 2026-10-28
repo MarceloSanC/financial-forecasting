@@ -1,4 +1,4 @@
-# Análises pós-veredito — perfil pontual (D1) e média das sementes (D3) — AAPL
+# Análises pós-veredito — perfil pontual (D1), média das sementes (D3) e resposta da largura (D4) — AAPL
 
 > **Calculado depois do veredito; não altera o veredito.** Nada aqui entra no scorecard
 > confirmatório nem nas famílias de Holm. D1 é descritivo; D3 é uma análise exploratória
@@ -9,6 +9,13 @@ D3); issue #243. A especificação da D3 foi fixada no commit `cdf434bf` (2026-1
 de qualquer cálculo, e é seguida sem desvio: um único *ensemble* (média aritmética de
 `value_guardrail` das dez sementes, por ponto e nível, sem rearranjo), as medidas listadas
 lá e nenhuma outra combinação de sementes.
+
+A D4 (issue #272) entrou depois, a pedido do orientador, para dar número à leitura das
+figuras de nitidez e de diferencial de perda do TCC, na Seção 4.7.1 (a largura do EWMA-vol acompanha a volatilidade; a do TFT, menos).
+**Não teve especificação prévia:** uma sonda exploratória sobre as mesmas previsões veio
+antes deste código, e a medida foi escolhida sabendo o que ela mostrava. É descritiva,
+não tem teste nem p-valor e não altera o veredito. A volatilidade de referência é a
+`volatility_20d` do registro, na sessão de decisão (a mesma informação que os modelos têm).
 
 ## 1. Proveniência
 
@@ -95,6 +102,23 @@ DM unilateral (H1: o *ensemble* tem perda esperada menor), variância retangular
 | 7 | EWMA-vol | 0.795 | 0.173 | 0.5685 | não |
 | 7 | GBM quantílico | -1.734 | -0.973 | 0.1654 | não |
 
+### D4 — resposta da largura do par de 80 % à volatilidade (issue #272)
+
+Largura q₀,₉ - q₀,₁ por ponto (TFT: média das larguras das 10 sementes). Spearman: correlação de postos entre a largura e `volatility_20d` na sessão de decisão. Dispersão: quantil de 95 % ÷ quantil de 5 % da largura (tipo 7). Mediana em 10⁻².
+
+| modelo | h | n | Spearman | mediana | dispersão |
+|---|---|---|---|---|---|
+| AR(1) | 1 | 1511 | -0.229 | 4.192 | 1.15 |
+| EWMA-vol | 1 | 1511 | 0.929 | 4.264 | 3.17 |
+| Quantis empíricos | 1 | 1511 | 0.361 | 4.162 | 2.17 |
+| GBM quantílico | 1 | 1511 | 0.458 | 3.869 | 2.06 |
+| TFT | 1 | 1511 | 0.496 | 4.404 | 1.68 |
+| AR(1) | 7 | 1505 | -0.221 | 4.192 | 1.15 |
+| EWMA-vol | 7 | 1505 | 0.928 | 4.273 | 3.16 |
+| Quantis empíricos | 7 | 1505 | 0.359 | 4.162 | 2.17 |
+| GBM quantílico | 7 | 1505 | 0.494 | 3.858 | 1.61 |
+| TFT | 7 | 1505 | 0.444 | 4.405 | 1.58 |
+
 <!-- END: post-verdict-numbers -->
 
 ## 3. Leitura
@@ -119,3 +143,14 @@ o resultado **reforça que o limite está na informação das *features***, não
 entre sementes. A média também aumenta a sobrecobertura do par de 80 % (PICP 0,832 e
 0,830 contra 0,818 da média por semente; nominal 0,80). O custo do *ensemble* são dez
 treinos do TFT contra um modelo de um parâmetro (o EWMA-vol).
+
+**D4 (descritivo, sem especificação prévia).** A largura do par de 80 % do EWMA-vol segue a
+volatilidade quase em postos (Spearman 0,93 nos dois horizontes), e é a que mais varia ao
+longo da série (o quantil de 95 % da largura é 3,2 vezes o de 5 %). O TFT, com as larguras
+médias das dez sementes, tem correlação 0,50 (h+1) e 0,44 (h+7) e varia bem menos (1,7 e 1,6
+vezes), com a maior largura mediana dos modelos (4,40 × 10⁻² contra 4,26–4,27 × 10⁻² do
+EWMA-vol). O GBM e os quantis empíricos ficam entre os dois; o AR(1), de variância fixa por
+*fold*, tem correlação negativa (−0,23). A leitura é coerente com a figura do diferencial de perda: o TFT perde mais
+para o EWMA-vol quando a volatilidade sobe de repente (início de 2020), justamente quando a
+largura dele reage pouco. É uma descrição do comportamento dos intervalos, e não a causa
+demonstrada da diferença de perda.

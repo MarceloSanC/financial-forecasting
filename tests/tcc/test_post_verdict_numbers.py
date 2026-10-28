@@ -1,4 +1,4 @@
-"""Teste opt-in: os números do relatório pós-veredito (D1 e D3) conferem com a geração julgada.
+"""Teste opt-in: os números do relatório pós-veredito (D1, D3 e D4) conferem com a geração julgada.
 
 Fora do CI por construção, como a conferência C1 (`test_results_numbers.py`): lê a raiz de
 dados do cohort confirmatório de `TCC_DATA_ROOT` (a pasta com `silver/`, `processed/` e
@@ -24,6 +24,7 @@ from tests.tcc.post_verdict_report import (
     check_sanity,
     d1_rows,
     d3_rows,
+    d4_rows,
     read_judged_inputs,
     render,
     sanity_checks,
@@ -47,5 +48,5 @@ def test_report_block_matches_the_judged_generation() -> None:
     for row in d3:
         shown = f"{row.seed_mean_pinball * 1e3:.3f}"
         assert shown == _SEED_MEAN_PINBALL_E3[row.horizon], f"h+{row.horizon}: {shown}"
-    rendered = render(inputs, d1_rows(inputs), d3, n_checks=len(checks))
+    rendered = render(inputs, d1_rows(inputs), d3, d4_rows(inputs), n_checks=len(checks))
     assert block_of(_REPORT.read_text(encoding="utf-8")) == rendered
