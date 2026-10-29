@@ -154,8 +154,11 @@ ORMANIEC2022, HERRIG2023, AMJAD2026, MORAIS2023, EUZEBIO2025, WAGENMAKERS2012 e 
    traz doze índices, GARCH(1,1)-t com FHS, Kupiec, Christoffersen e QLIKE; o DM com
    Holm–Bonferroni favorece o GARCH em nove de doze mercados; o LSTM "is not significantly more
    accurate than GARCH in any market, before or after correction"; e "These results are reported
-   for a specific neural implementation". **Sustenta.** O texto sinaliza que a linha vem só do
-   resumo.
+   for a specific neural implementation". **Sustenta.** Depois, na #272, o texto integral (PDF obtido pelo autor) foi lido:
+   teste de jul/2022 a jul/2026 na maioria dos mercados, divisão 70/15/15, GJR-GARCH na
+   robustez, cobertura conjunta 8/12 (GARCH-FHS) contra 2/12 (LSTM) e 6/12 (LSTM com
+   perda pinball), e nenhuma menção a pré-registro. A linha do quadro e a frase passaram a
+   vir do texto integral, e a nota "a partir do resumo" saiu.
 3. **HANSEN2005** (Crossref, 10.1002/jae.800). O resumo traz 330 modelos ARCH; para o câmbio
    DM–US$, nenhuma evidência de que o GARCH(1,1) seja superado; para a IBM, o GARCH(1,1) é
    claramente inferior a modelos com efeito alavancagem. **Sustenta** a frase da `sec:discussao`
@@ -290,8 +293,9 @@ Nenhum achado fora das entregas do plano.
   faixa de 0,075 a 0,119 das subséries de h+7 e parte das linhas da `tab:pontual`. Desta tabela
   conferi contra o relatório todas as linhas de h+1, exceto a do GBM, e as linhas dos quantis
   empíricos, do GBM e do TFT em h+7.
-- **Fontes com acesso bloqueado.** O MDPI e a Wiley recusaram o acesso automático (403). Amjad et
-  al. e Hansen e Lunde foram conferidos pelo resumo do Crossref, não pelo texto integral. O "um
+- **Fontes com acesso bloqueado.** O MDPI e a Wiley recusaram o acesso automático (403). Hansen e
+  Lunde foi conferido pelo resumo do Crossref, não pelo texto integral; Amjad et al. foi lido
+  depois no texto integral (#272). O "um
   dia à frente" de Hansen e Lunde não está no resumo.
 - **C4 e C8 dependem de julgamento.** Não há banca simulada humana nem ensaio cronometrado.
 - **Leitura parcial.** Li por inteiro o Resumo e os Caps. 5 e 6. Do Cap. 4 li o §piloto e os
