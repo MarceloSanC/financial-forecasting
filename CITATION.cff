@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "Se usar este código ou as previsões depositadas, cite o trabalho como abaixo."
+type: software
+title: "Previsão probabilística de retornos diários com Temporal Fusion Transformer: calibração e comparação pré-registrada no caso da AAPL"
+version: 1.0.0
+date-released: 2026-10-31
+license: MIT
+repository-code: "https://github.com/MarceloSanC/financial-forecasting"
+authors:
+  - family-names: "Carmo"
+    given-names: "Marcelo Santos do"
+    affiliation: "Universidade Federal de Santa Catarina"
+keywords:
+  - probabilistic forecasting
+  - Temporal Fusion Transformer
+  - quantile regression
+  - calibration
+  - pre-registration
+  - AAPL

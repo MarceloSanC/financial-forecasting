@@ -142,6 +142,15 @@ src/financial_forecasting/
 
 ---
 
+## Citação e licença
+
+Como citar: [CITATION.cff](CITATION.cff). O código está sob a licença MIT ([LICENSE](LICENSE)).
+O pré-registro (`config/preregistration/`), o texto do TCC (`text/`) e as previsões depositadas
+no Zenodo estão sob [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Os dados brutos
+não são redistribuídos, por causa dos termos de uso das fontes (Yahoo Finance e Alpha Vantage).
+
+---
+
 ## CI e gate de qualidade
 
 O CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) roda um **único job de gate**
