@@ -11,6 +11,7 @@ authors:
   - family-names: "Carmo"
     given-names: "Marcelo Santos do"
     affiliation: "Universidade Federal de Santa Catarina"
+    orcid: "https://orcid.org/0009-0007-2006-6559"
 keywords:
   - probabilistic forecasting
   - Temporal Fusion Transformer
