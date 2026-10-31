@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "Se usar este código ou as previsões depositadas, cite o trabalho como abaixo."
 type: software
-title: "Previsão probabilística de retornos diários com Temporal Fusion Transformer: calibração e comparação pré-registrada no caso da AAPL"
+title: "Avaliação probabilística pré-registrada do Temporal Fusion Transformer na previsão de retornos diários da AAPL"
 version: 1.0.0
 date-released: 2026-10-31
 license: MIT
