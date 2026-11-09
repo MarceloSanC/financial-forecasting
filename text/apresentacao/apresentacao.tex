@@ -389,7 +389,7 @@
       \vspace{4pt}
       \begin{itemize}
         \item Cobertura média do intervalo de 80\%: 0,818.
-        \item Poder contra desvios de 5 pontos: de 0,974 a 0,987 (otimista em \hsete).
+        \item Poder contra desvios de 5 pontos: de 0,974 a 0,987 (otimista nos dois horizontes).
         \item[\alert{!}] As violações se agrupam no tempo: a calibração é marginal, não
           condicional.
         \item[\alert{!}] Em \hum, a cobertura de uma semente isolada foi de 0,772 a 0,872.
@@ -524,7 +524,7 @@
   \begin{enumerate}
     \item \textbf{Não é só o TFT}: o GBM, com os mesmos 55 indicadores, também perdeu
       (3,980 contra 3,920 em \hum).
-    \item \textbf{As famílias acrescentam pouco}: a técnica domina e muda a perda em
+    \item \textbf{As famílias acrescentam pouco}: a técnica vem à frente, mas muda a perda em
       cerca de 0,5\%.
     \item \textbf{Sementes}: a perda do TFT vai de 3,987 a 4,117 entre sementes
       (cerca de 3\%), a mesma ordem da distância até o EWMA-vol.
@@ -595,7 +595,7 @@
   \small
   \begin{itemize}
     \item \textbf{H1}: calibração não rejeitada nos dois horizontes, com poder acima
-      de 0,97 (otimista em \hsete); ela é marginal (violações agrupadas no tempo) e vale na média das sementes.
+      de 0,97 (otimista nos dois horizontes); ela é marginal (violações agrupadas no tempo) e vale na média das sementes.
     \item \textbf{H2}: supera os ingênuos, não os fortes; empata em \hsete; menor perda: EWMA-vol.
     \item \textbf{H3}: não sustentada; a família técnica vem à frente.
   \end{itemize}
@@ -719,7 +719,7 @@
   \centering
   \begin{tabular}{l l c c}
     \toprule
-    Papel & Desvio & \hum & \hsete\textsuperscript{a} \\
+    Papel & Desvio & \hum\textsuperscript{a} & \hsete\textsuperscript{a} \\
     \midrule
     Primário & cobertura do par \(-5\) p.p. (intervalo estreito) & 0,974 & 0,976 \\
     Primário & cobertura do par \(+5\) p.p. (intervalo largo) & 0,985 & 0,987 \\
@@ -733,7 +733,7 @@
   \vspace{6pt}
   \raggedright\small
   Probabilidade exata de o teste reprovar o TFT sob cada desvio, no \(n\) medido.
-  \textsuperscript{a} Supõe violações independentes; otimista para \(h > 1\).
+  \textsuperscript{a} Supõe violações independentes; otimista nos dois horizontes.
   Contra 3 pontos percentuais, o erro passaria despercebido em cerca de uma a cada três vezes.
 \end{frame}
 
@@ -807,7 +807,7 @@
   \vspace{6pt}
   \raggedright
   Nominal de 2\%. Para o TFT, média das sementes e número de sementes em que Kupiec
-  rejeita. A menor perda média do EWMA-vol não se estende à cauda extrema: a forma
+  rejeita. A menor perda média do EWMA-vol não se estende à cauda inferior extrema: a forma
   gaussiana subestima caudas pesadas.
 \end{frame}
 
