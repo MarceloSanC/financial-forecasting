@@ -11,15 +11,15 @@ Cada execução é identificada de forma determinística por um \texttt{run\_id}
 
 Impressões digitais complementares: a impressão do conjunto de dados resume ativo, intervalo temporal, número de linhas, somas de fechamento e de volume e o \textit{hash} do arquivo; a impressão das partições resume as listas ordenadas de sessões de \texttt{train}, \texttt{early\_stop}, \texttt{calib} e \texttt{test}; a assinatura de configuração resume hiperparâmetros, \textit{features}, tipagem, grade de quantis, horizonte máximo e id de coorte, excluindo campos voláteis como datas de execução. Comparações pareadas usam execuções da mesma coorte, cujas partições derivam da mesma geometria, e exigem interseção exata dos pontos alinhados. A especificação da coorte registra ainda uma impressão do conteúdo do conjunto de dados de treino, independente da representação em arquivo, e o \textit{hash} da própria especificação compõe o id de coorte gravado em toda execução.
 
-\section*{A.2 Previsões persistidas}
+\section*{A.2 Previsões armazenadas}
 
-As previsões fora da amostra são persistidas em formato longo, com uma linha por (execução, partição, horizonte, sessão de decisão, sessão-alvo, nível de quantil). Cada linha carrega o valor bruto do modelo, o valor após o rearranjo monotônico e um indicador de que o rearranjo alterou a ordem dos níveis. A grade de níveis é dado, e não estrutura: alterar a grade acrescenta linhas, sem mudar o esquema. Candidato e comparadores usam o mesmo formato e a mesma coorte.
+As previsões fora da amostra são armazenadas em formato longo, com uma linha por (execução, partição, horizonte, sessão de decisão, sessão-alvo, nível de quantil). Cada linha carrega o valor bruto do modelo, o valor após o rearranjo monotônico e um indicador de que o rearranjo alterou a ordem dos valores previstos. A grade de níveis é tratada como dado (valores na chave), e não como estrutura do esquema: alterar a grade acrescenta linhas, sem mudar o esquema. Candidato e comparadores usam o mesmo formato e a mesma coorte.
 
 Os dados brutos e os fatos de execução são imutáveis; toda tabela de métricas, testes e decisão é derivada deles e pode ser reconstruída sem retreinar os modelos --- inclusive para reanálises com outra variante quantílica ou outro parâmetro de teste.
 
 \section*{A.3 Rearranjo monotônico e filtro de degeneração}
 
-O rearranjo ordena os \(K\) valores brutos da grade de cada previsão, produzindo quantis não decrescentes ao longo dos níveis; o indicador de rearranjo registra se a ordem mudou. Se algum valor bruto não é finito, a grade é preservada sem reordenação, e a decisão sobre sua validade fica com os critérios de qualidade. O rearranjo não altera grades colapsadas (\(\hat{q}_{\tau_1} = \hat{q}_{\tau_K}\)); estas são identificadas por um filtro de degeneração, que retira a linha das métricas de calibração e de nitidez --- as regras de pontuação próprias e a inferência pareada usam todas as linhas --- e reporta a taxa por execução. Todas as métricas, inclusive as de risco, usam a variante rearranjada; a bruta é persistida apenas para auditar o efeito do rearranjo.
+O rearranjo ordena os \(K\) valores brutos da grade de cada previsão, produzindo quantis não decrescentes ao longo dos níveis; o indicador de rearranjo registra se a ordem mudou. Se algum valor bruto não for finito, a grade é preservada sem reordenação, e a decisão sobre sua validade fica com os critérios de qualidade. O rearranjo não altera grades colapsadas (\(\hat{q}_{\tau_1} = \hat{q}_{\tau_K}\), a menos de uma tolerância de \(10^{-12}\)); estas são identificadas por um filtro de degeneração, que retira a linha das métricas de calibração e de nitidez --- as regras de pontuação próprias e a inferência pareada usam todas as linhas --- e reporta a taxa por execução. Todas as métricas, inclusive as de risco, usam a variante rearranjada; a bruta é armazenada apenas para auditar o efeito do rearranjo.
 
 \section*{A.4 Quadro de decisão}
 
@@ -27,7 +27,7 @@ A versão completa do quadro de decisão está na Seção~\ref{sec:scorecard}. E
 
 \section*{A.5 Protocolo estatístico}
 
-A comparação fora da amostra exige interseção exata por (ativo, partição de teste, horizonte, sessão-alvo, nível de quantil), com uma única observação por ponto alinhado: como os blocos de teste são disjuntos, essa unicidade é verificada, e uma previsão duplicada interrompe a execução, sem desempate. O teste primário é o de \citeonline{DIEBOLDMARIANO1995}, unilateral, sobre a \textit{pinball loss}, com variância de janela retangular até a defasagem \(h-1\), recalculada com \(h = 1\) quando não positiva, como na implementação de referência \cite{RFORECAST}, e correção HLN \cite{HARVEY1997}; o estimador de Bartlett \cite{NEWEYWEST1987}, com as mesmas defasagens, é sensibilidade e, em \(h+1\), coincide com o primário. O ajuste de múltiplas comparações é o de \citeonline{HOLM1979}, a \(\alpha = 0{,}05\), sobre os seis comparadores. O \textit{Model Confidence Set} \cite{HANSEN2011MCS} usa a estatística \(T_R\), \(\alpha = 0{,}10\) e 1.000 réplicas de \textit{bootstrap} estacionário \cite{POLITISROMANO1994}, com bloco \(l = \max(h, \lceil \max \hat{b} \rceil)\) \cite{POLITISWHITE2004,PATTON2009}; o esquema de blocos móveis e os blocos \(l = h\) e \(l = \lceil\sqrt{T}\rceil\) são sensibilidades. Todos os procedimentos são conferidos contra implementações de referência. Toda comparação confirmatória é restrita a execuções da mesma coorte.
+A comparação fora da amostra exige interseção exata por (ativo, partição de teste, horizonte, sessão-alvo, nível de quantil), com uma única observação por ponto alinhado: como os blocos de teste são disjuntos, essa unicidade é verificada, e uma previsão duplicada interrompe a execução, sem desempate. O teste primário é o de \citeonline{DIEBOLDMARIANO1995}, unilateral, sobre a \textit{pinball loss} média da grade, por horizonte, com variância de janela retangular até a defasagem \(h-1\), recalculada com \(h = 1\) quando não positiva, como na implementação de referência \cite{RFORECAST}, e correção HLN \cite{HARVEY1997}; o estimador de Bartlett \cite{NEWEYWEST1987}, com as mesmas defasagens, é sensibilidade e, em \(h+1\), coincide com o primário. O ajuste de múltiplas comparações é o de \citeonline{HOLM1979}, a \(\alpha = 0{,}05\), sobre os seis comparadores. O \textit{Model Confidence Set} \cite{HANSEN2011MCS} usa a estatística \(T_R\), \(\alpha = 0{,}10\) e 1.000 réplicas de \textit{bootstrap} estacionário \cite{POLITISROMANO1994}, com bloco \(l = \max(h, \lceil \max \hat{b} \rceil)\) \cite{POLITISWHITE2004,PATTON2009}; o esquema de blocos móveis e os blocos \(l = h\) e \(l = \lceil\sqrt{T}\rceil\) são sensibilidades. Todos os procedimentos são conferidos contra implementações de referência. Toda comparação confirmatória é restrita a execuções da mesma coorte.
 
 \section*{A.6 Pré-registro}
 
@@ -83,7 +83,7 @@ Este apêndice reúne, em formato sintético, os termos técnicos recorrentes ao
 
 \phantomsection\label{gl:nitidez}\textbf{Nitidez (\textit{sharpness})}: concentração da distribuição preditiva; intervalos mais estreitos são mais nítidos. Só é desejável sujeita à calibração.
 
-\phantomsection\label{gl:grade}\textbf{Grade de quantis}: conjunto comum de níveis \(\{\tau_1 < \dots < \tau_K\}\), aqui com \(K = 7\): \(\{0{,}02;\,0{,}1;\,0{,}25;\,0{,}5;\,0{,}75;\,0{,}9;\,0{,}98\}\), emitido por todos os modelos.
+\phantomsection\label{gl:grade}\textbf{Grade de quantis}: conjunto comum de níveis \(\{\tau_1 < \dots < \tau_K\}\), aqui com \(K = 7\): \(\{0{,}02;\,0{,}10;\,0{,}25;\,0{,}50;\,0{,}75;\,0{,}90;\,0{,}98\}\), emitido por todos os modelos.
 
 \phantomsection\label{gl:pinball}\textbf{\textit{Pinball loss}}: perda assimétrica da regressão quantílica, definida na Equação~\ref{eq:pinball}; estritamente consistente para o quantil do nível correspondente e métrica primária deste trabalho.
 
@@ -97,7 +97,7 @@ Este apêndice reúne, em formato sintético, os termos técnicos recorrentes ao
 
 \phantomsection\label{gl:rearranjo}\textbf{Rearranjo monotônico}: ordenação dos valores da grade de cada previsão, que restaura a monotonicidade sem aumentar a distância \(L^p\) agregada entre a previsão e a curva quantílica verdadeira \cite{CHERNOZHUKOV2010REARRANGEMENT}; corrige ordem, não calibração.
 
-\phantomsection\label{gl:degeneracao}\textbf{Degeneração da grade}: previsão cujos níveis extremos coincidem, sem informação distribucional; tratada por filtro próprio, separado do rearranjo, que a retira apenas das métricas de calibração e de nitidez.
+\phantomsection\label{gl:degeneracao}\textbf{Degeneração da grade}: previsão cujos níveis extremos coincidem, a menos de uma tolerância de \(10^{-12}\), sem informação distribucional; tratada por filtro próprio, separado do rearranjo, que a retira apenas das métricas de calibração e de nitidez.
 
 \phantomsection\label{gl:wilson}\textbf{Banda de Wilson}: intervalo de confiança para uma proporção binomial \cite{WILSON1927,BROWN2001}; no critério de calibração (H1), a calibração de uma cauda não é rejeitada se a banda da sua taxa de violações contém a taxa nominal.
 
@@ -111,7 +111,7 @@ Este apêndice reúne, em formato sintético, os termos técnicos recorrentes ao
 
 \phantomsection\label{gl:walkforward}\textbf{\textit{Walk-forward} com purga e embargo}: validação temporal com origens sucessivas, em que o treino cresce a cada \textit{fold} e partições consecutivas são separadas por sessões excluídas: a purga, de \(h_{\max}\) sessões, impede que o alvo de uma decisão alcance o bloco seguinte, e o embargo acrescenta uma margem contra a dependência serial (7 sessões cada, na coorte).
 
-\phantomsection\label{gl:split}\textbf{Partições do \textit{fold}}: \texttt{train} (ajuste), \texttt{early\_stop} (parada antecipada e avaliação da busca exploratória), \texttt{calib} (calibração conformal, nunca usada para seleção) e \texttt{test} (avaliação fora da amostra), disjuntas e nessa ordem temporal.
+\phantomsection\label{gl:split}\textbf{Partições do \textit{fold}}: bloco de treino (\texttt{train}, ajuste), bloco de parada antecipada (\texttt{early\_stop}, parada antecipada e avaliação da busca exploratória), bloco de calibração (\texttt{calib}, calibração conformal, nunca usado para seleção) e bloco de teste (\texttt{test}, avaliação fora da amostra), disjuntos e nessa ordem temporal; no corpo do texto usam-se os nomes em português e, no código, os identificadores entre parênteses.
 
 \phantomsection\label{gl:known}\textbf{Entradas conhecidas e observadas}: no TFT, conhecidas são as predeterminadas até o horizonte (calendário); observadas são as medidas apenas até a decisão (preço, indicadores, sentimento, fundamentos).
 
@@ -149,9 +149,9 @@ Este apêndice reúne, em formato sintético, os termos técnicos recorrentes ao
 
 \phantomsection\label{gl:hln}\textbf{HLN (Harvey-Leybourne-Newbold)}: correção do DM para amostras pequenas, com distribuição \(t\) de Student com \(T-1\) graus de liberdade.
 
-\phantomsection\label{gl:holm}\textbf{Holm}: ajuste sequencial de múltiplas comparações que controla a \textit{Family-Wise Error Rate}.
+\phantomsection\label{gl:holm}\textbf{Holm}: ajuste sequencial de múltiplas comparações que controla a taxa de erro por família (FWER, \textit{Family-Wise Error Rate}) no sentido forte.
 
-\phantomsection\label{gl:mcs}\textbf{MCS (\textit{Model Confidence Set})}: procedimento de \citeonline{HANSEN2011MCS} que elimina sequencialmente modelos rejeitados como inferiores e retorna um conjunto que contém os modelos superiores com probabilidade assintótica de ao menos \(1-\alpha\).
+\phantomsection\label{gl:mcs}\textbf{MCS (\textit{Model Confidence Set})}: procedimento de \citeonline{HANSEN2011MCS} que elimina sequencialmente modelos rejeitados como inferiores e retorna um conjunto que contém o conjunto dos melhores modelos com probabilidade assintótica de ao menos \(1-\alpha\).
 
 \phantomsection\label{gl:christoffersen}\textbf{Christoffersen e Kupiec}: testes de razão de verossimilhança para a cobertura de intervalos e VaR; Kupiec avalia a proporção de violações e Christoffersen acrescenta a independência entre elas.
 
@@ -164,11 +164,11 @@ Este apêndice indica como reproduzir o \textit{pipeline}. O código, a configur
 
 O ambiente é definido por uma imagem Docker com Python 3.12 e dependências fixadas em arquivo de travamento. Os alvos principais são \texttt{make setup} (configuração inicial), \texttt{make check} (verificações estáticas e testes) e \texttt{make test-cov} (testes com relatório de cobertura); \texttt{make docker-build}, \texttt{make docker-up} e \texttt{make docker-shell} constroem e acessam o ambiente em contêiner. A coorte confirmatória é treinada em CPU; a coorte de ablação de H3, em GPU (ROCm, em Linux), com o dispositivo e a versão do PyTorch declarados na sua especificação. O ambiente de cada execução --- identidade do código (conteúdo do código-fonte, do arquivo de travamento e da especificação da coorte), plataforma e número de \textit{threads} do PyTorch --- é registrado, e o mesmo número de \textit{threads} é reaplicado na reprodução.
 
-A reprodução das previsões a partir dos modelos salvos tem dois modos. No mesmo ambiente de execução, a exigência é de igualdade exata com as previsões persistidas. Entre ambientes distintos, em que a aritmética de ponto flutuante pode diferir, aplica-se uma tolerância declarada, com as tolerâncias padrão de precisão simples do PyTorch na escala normalizada do alvo. Uma divergência no mesmo ambiente interrompe o processo e é diagnosticada antes de qualquer uso das previsões.
+A reprodução das previsões a partir dos modelos salvos tem dois modos. No mesmo ambiente de execução, a exigência é de igualdade exata com as previsões armazenadas. Entre ambientes distintos, em que a aritmética de ponto flutuante pode diferir, aplica-se uma tolerância declarada, com as tolerâncias padrão de precisão simples do PyTorch (absoluta de \(10^{-5}\) e relativa de \(1{,}3 \times 10^{-6}\)) na escala normalizada do alvo. Uma divergência no mesmo ambiente interrompe o processo e é diagnosticada antes de qualquer uso das previsões.
 
 \section*{C.2 Dados e \textit{features}}
 
-As fontes são o Yahoo Finance, pela biblioteca \texttt{yfinance} (cotações diárias, com o ajuste automático desligado), a API Alpha Vantage (notícias, pelo \textit{endpoint} \texttt{NEWS\_SENTIMENT}, e demonstrativos e datas de divulgação), que exige uma chave gratuita, e o modelo FinBERT com revisão de pesos fixada. Os adaptadores de coleta fazem parte do código do trabalho; a impressão digital do conjunto de dados registrada na especificação da coorte confirma se uma nova coleta reproduz a base usada. A sequência é: ingestão de cotações, notícias e fundamentos; pontuação e agregação de sentimento por sessão; e construção do conjunto de dados com as 55 \textit{features}, o alvo e a verificação de qualidade.
+As fontes de dados são o Yahoo Finance, pela biblioteca \texttt{yfinance} (cotações diárias, com o ajuste automático desligado), a API Alpha Vantage (notícias, pelo \textit{endpoint} \texttt{NEWS\_SENTIMENT}, e demonstrativos e datas de divulgação), que exige uma chave gratuita, e o modelo FinBERT com revisão de pesos fixada. Os adaptadores de coleta fazem parte do código do trabalho; a impressão digital do conjunto de dados registrada na especificação da coorte confirma se uma nova coleta reproduz a base usada. A sequência é: ingestão de cotações, notícias e fundamentos; pontuação e agregação de sentimento por sessão; e construção do conjunto de dados com as 55 \textit{features}, o alvo e a verificação de qualidade.
 
 \section*{C.3 Treinamento e avaliação}
 
@@ -176,7 +176,7 @@ Sobre o conjunto de dados, executam-se: as buscas exploratórias de hiperparâme
 
 \section*{C.4 Reprodução da geração julgada}
 
-A geração julgada, isto é, as tabelas e o quadro de decisão a partir dos quais o veredito foi emitido, foi preservada numa cópia imutável, com o \textit{hash} do conteúdo registrado antes de qualquer outra atualização. A cadeia que a produz foi executada de novo a partir dos dados persistidos, num destino separado, sem retreino e no mesmo ambiente da rodada (mesma imagem e mesmo código). O resultado foi idêntico bit a bit: as 19 tabelas, inclusive as colunas das etapas com sorteio (\textit{bootstrap} e Monte Carlo), num total de 1.173.254 valores comparados, e os 66.117 valores do quadro de decisão (excluídos os dois carimbos de horário de início e fim da leitura, que mudam a cada execução), sem nenhuma diferença, e com o mesmo \textit{digest} do resultado. As previsões de teste também se reproduzem bit a bit a partir dos modelos salvos, no ambiente da coorte. A reprodução em outro ambiente, em que a aritmética de ponto flutuante pode diferir e se aplicaria a tolerância descrita em C.1, não foi realizada.
+A geração julgada, isto é, as tabelas e o quadro de decisão a partir dos quais o veredito foi emitido, foi preservada numa cópia imutável, com o \textit{hash} do conteúdo registrado antes de qualquer outra atualização. A cadeia que a produz foi executada de novo a partir dos dados armazenados, num destino separado, sem retreino e no mesmo ambiente da rodada (mesma imagem e mesmo código). O resultado foi idêntico bit a bit: as 19 tabelas, inclusive as colunas das etapas com sorteio (\textit{bootstrap} e Monte Carlo), num total de 1.173.254 valores comparados, e os 66.117 valores do quadro de decisão (excluídos os dois carimbos de horário de início e fim da leitura, que mudam a cada execução), sem nenhuma diferença, e com o mesmo \textit{digest} do resultado. As previsões de teste também se reproduzem bit a bit a partir dos modelos salvos, no ambiente da coorte. A reprodução em outro ambiente, em que a aritmética de ponto flutuante pode diferir e se aplicaria a tolerância descrita em C.1, não foi realizada.
 
 \chapter*{APÊNDICE D --- Notas de implementação}
 \addcontentsline{toc}{chapter}{APÊNDICE D --- Notas de implementação}
@@ -189,11 +189,11 @@ O código é organizado por etapa do estudo (dados, \textit{features}, modelagem
 
 \section*{D.2 Validação das estatísticas}
 
-As métricas e os testes são implementados como funções puras sobre objetos de valor com invariantes (grade de quantis, séries de perdas pareadas, séries de cobertura) e validados por testes de contrato contra casos analíticos e contra implementações de referência (R, \texttt{scikit-learn}, \texttt{scoringrules}, \texttt{arch}, \texttt{statsmodels}). Onde há biblioteca Python consolidada, ela é usada por trás de uma interface e conferida contra a fórmula de registro; os testes sem biblioteca Python canônica (Diebold-Mariano, Christoffersen, Kupiec) têm implementação própria, apenas com a biblioteca padrão, conferida contra respostas do R gravadas em \textit{fixtures} versionadas, com a versão do R e dos pacotes registrada. Cada indicador técnico é conferido contra sua fórmula canônica e contra um teste de ausência de vazamento de informação.
+As métricas e os testes são implementados como funções puras sobre objetos de valor com invariantes (grade de quantis, séries de perdas pareadas, séries de cobertura) e validados por testes de contrato contra casos analíticos e contra implementações de referência (R, \texttt{scikit-learn}, \texttt{scoringrules}, \texttt{arch}, \texttt{statsmodels}). Onde há biblioteca Python consolidada, ela é usada por trás de uma interface e conferida contra a fórmula de referência; os testes sem biblioteca Python canônica (Diebold-Mariano, Christoffersen, Kupiec) têm implementação própria, apenas com a biblioteca padrão, conferida contra respostas do R gravadas em arquivos de referência versionados (\textit{fixtures}), com a versão do R e dos pacotes registrada. Cada indicador técnico é conferido contra sua fórmula canônica e contra um teste de ausência de vazamento de informação.
 
 \section*{D.3 Armazenamento}
 
-Os dados seguem a organização em camadas \textit{bronze} (dados brutos imutáveis), \textit{silver} (fatos de execução, fonte da verdade) e \textit{gold} (tabelas analíticas derivadas e reconstruíveis), em arquivos Parquet consultados com DuckDB. A camada \textit{silver} contém a dimensão de execuções e as previsões fora da amostra (formato longo, com nível de quantil na chave); fatos são apenas acrescentados, nunca sobrescritos. O rastreamento de experimentos usa MLflow com armazenamento local em SQLite.
+Os dados seguem a organização em camadas \textit{bronze} (dados brutos imutáveis), \textit{silver} (fatos de execução, registro primário) e \textit{gold} (tabelas analíticas derivadas e reconstruíveis), em arquivos Parquet consultados com DuckDB. A camada \textit{silver} contém a dimensão de execuções e as previsões fora da amostra (formato longo, com nível de quantil na chave); fatos são apenas acrescentados, nunca sobrescritos. O rastreamento de experimentos usa MLflow com armazenamento local em SQLite.
 
 \section*{D.4 Registro de decisões}
 
@@ -205,13 +205,13 @@ As decisões de desenho são registradas em documentos de decisão arquitetural 
 
 As figuras deste apêndice completam o perfil descritivo do Capítulo~\ref{chap:resultados} e não têm papel no veredito. Todas são reconstruídas a partir das tabelas da geração julgada, sem retreino.
 
-A Figura~\ref{fig:conformal} compara os intervalos nativos do TFT com os corrigidos pela predição conformal. Na escala da figura, as coberturas nativas e corrigidas quase se sobrepõem em todos os níveis e pares, o que corresponde às diferenças de até dois pontos percentuais relatadas no Capítulo~\ref{chap:resultados}. A diferença visível está na largura do par de 96\%: a NexCP produz intervalos mais largos que os nativos e os da CQR.
+A Figura~\ref{fig:conformal} compara os intervalos nativos do TFT com os corrigidos pela predição conformal. Na escala da figura, as coberturas nativas e corrigidas quase se sobrepõem em todos os níveis e pares, o que corresponde às diferenças de até dois pontos percentuais relatadas no Capítulo~\ref{chap:resultados}. A diferença visível está na largura do par de 96\%: como se vê na figura, a NexCP produz intervalos mais largos que os nativos e os da CQR.
 \begin{figure}[htbp]
 \centering
-\caption[Cobertura e largura dos intervalos do TFT, nativos e conformais]{Cobertura empírica (não garantida) e largura média dos intervalos do TFT, nativos e corrigidos pela CQR (variante principal) e pela NexCP (sensibilidade), por nível, par e horizonte; a banda de Wilson do nativo existe só por semente, e a referência de dispersão Beta não é desenhada}
+\caption[Cobertura e largura dos intervalos do TFT, nativos e conformais]{Cobertura empírica (não garantida) e largura média dos intervalos do TFT, nativos e corrigidos pela CQR (variante principal) e pela NexCP (sensibilidade), por nível, par e horizonte; a banda de Wilson do nativo só é calculada por semente, não na média entre sementes, e a referência de dispersão Beta não é desenhada}
 \label{fig:conformal}
 \includegraphics[width=\textwidth]{figuras/native_vs_conformal.pdf}
-\fonte{Elaborado pelo autor (2026), a partir das previsões persistidas da rodada confirmatória.}
+\fonte{Elaborado pelo autor (2026), a partir das previsões armazenadas da rodada confirmatória.}
 \end{figure}
 
 A Figura~\ref{fig:vsn} mostra os pesos da VSN por família. A família técnica tem o maior peso mediano, e sua faixa entre os percentis 10 e 90 não se sobrepõe à das demais; preço vem em seguida, e sentimento e fundamentos têm pesos menores, com faixas que se sobrepõem. Os pesos descrevem o uso das famílias pelo modelo, e não sua contribuição para a perda, que é medida pela permutação e pela ablação no Capítulo~\ref{chap:resultados}.
@@ -221,5 +221,5 @@ A Figura~\ref{fig:vsn} mostra os pesos da VSN por família. A família técnica 
 \caption[Pesos da \textit{Variable Selection Network} por família de \textit{features}]{Pesos da \textit{Variable Selection Network} por família de \textit{features}, sobre as decisões de teste (descrição do uso pelo modelo, sem eixo de horizonte)}
 \label{fig:vsn}
 \includegraphics[width=\textwidth]{figuras/vsn_weights.pdf}
-\fonte{Elaborado pelo autor (2026), a partir dos pesos da VSN persistidos da rodada confirmatória.}
+\fonte{Elaborado pelo autor (2026), a partir dos pesos da VSN armazenados da rodada confirmatória.}
 \end{figure}
