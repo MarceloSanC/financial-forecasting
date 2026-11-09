@@ -29,13 +29,8 @@ _MARKERS: Final = (
     "Texto da Epígrafe",
     "Dedico este trabalho a ....",
 )
-_PENDING_AUTHOR_DATA: Final[dict[str, str]] = {
-    "Nome do Membro": "#263 — banca a definir pelo autor",
-    "Universidade do Membro": "#263 — banca a definir pelo autor",
-    r"\newcommand{\diaAprovacao}{00}": "#263 — data de aprovação",
-    r"\newcommand{\mesAprovacao}{mês}": "#263 — data de aprovação",
-    "Dr(a).": "#263 — tratamento do orientador e do coorientador",
-}
+# Banca, data de aprovação e tratamento preenchidos na revisão do orientador (#272).
+_PENDING_AUTHOR_DATA: Final[dict[str, str]] = {}
 
 
 def _active_sources() -> dict[str, str]:
