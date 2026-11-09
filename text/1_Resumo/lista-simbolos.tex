@@ -27,12 +27,13 @@
     \item[$d_t$] Diferencial de perdas entre dois modelos na observação $t$
     \item[$\bar{d}$] Média amostral do diferencial de perdas $d_t$
     \item[$\widehat{\mathrm{Var}}(\bar{d})$] Variância estimada da média $\bar{d}$, igual a $\hat{\sigma}^2_{LR}/T$
-    \item[$\hat{\sigma}^2_{LR}$] Estimador HAC da variância de longo prazo de $d_t$
+    \item[$\hat{\sigma}^2_{LR}$] Estimador da variância de longo prazo de $d_t$ (no teste primário, janela retangular até a defasagem $h-1$)
     \item[$l$] Comprimento de bloco do \textit{bootstrap}; na predição conformal, posto $\lfloor (n+1)\alpha \rfloor$
     \item[$\hat{b}$] Comprimento de bloco estimado pela regra automática de Politis e White
     \item[$n$] Tamanho do bloco de calibração da predição conformal
     \item[$\alpha$] Nível de significância estatística; na predição conformal, taxa nominal de não cobertura
     \item[$\phi$, $c$, $\mu$] Coeficiente, intercepto e média de longo prazo do modelo AR(1)
+    \item[$\varepsilon_t$] Inovação de média zero do passeio aleatório e do AR(1)
     \item[$\sigma$] Desvio-padrão da inovação do AR(1); no cálculo de poder, desvio-padrão da distribuição preditiva gaussiana
     \item[$\lambda$] Fator de decaimento do EWMA
     \item[$\rho$] Fator de decaimento dos pesos da variante conformal ponderada (NexCP)
