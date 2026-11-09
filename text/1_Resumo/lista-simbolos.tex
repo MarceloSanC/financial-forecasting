@@ -4,12 +4,13 @@
 
 \begin{simbolos}
     \item[$y$] Valor observado do alvo (retorno logarítmico realizado)
+    \item[$P_t$] Preço de fechamento na sessão $t$
     \item[$r_t$] Retorno logarítmico de um dia na sessão $t$, $\log(P_t/P_{t-1})$
     \item[$\tau$] Nível de quantil (\textit{quantile level}), $\tau \in (0,1)$
     \item[$\mathcal{T}$] Grade de níveis de quantil $\{\tau_1 < \dots < \tau_K\}$ emitida por todos os modelos
     \item[$K$] Número de níveis da grade de quantis ($K = 7$)
     \item[$\hat{q}_\tau$] Quantil condicional estimado pelo modelo no nível $\tau$
-    \item[$(\tau_l, \tau_h)$] Par de níveis que delimita um intervalo de predição, com cobertura nominal $\tau_h - \tau_l$
+    \item[$(\tau_l, \tau_u)$] Par de níveis (inferior e superior) que delimita um intervalo de predição, com cobertura nominal $\tau_u - \tau_l$
     \item[$L_\tau(y, \hat{q})$] \textit{Pinball loss} no nível $\tau$ avaliada no par $(y, \hat{q})$
     \item[$\mathrm{CRPS}$] \textit{Continuous Ranked Probability Score}
     \item[{$\mathbb{1}[\cdot]$}] Função indicadora: vale 1 se a condição entre colchetes for verdadeira e 0 caso contrário
@@ -25,13 +26,21 @@
     \item[$L_t^{(k)}$] Perda do modelo $k$ na observação alinhada $t$
     \item[$d_t$] Diferencial de perdas entre dois modelos na observação $t$
     \item[$\bar{d}$] Média amostral do diferencial de perdas $d_t$
-    \item[$\widehat{\mathrm{Var}}(\cdot)$] Estimador de variância de longo prazo (HAC)
-    \item[$\alpha$] Nível de significância estatística
+    \item[$\widehat{\mathrm{Var}}(\bar{d})$] Variância estimada da média $\bar{d}$, igual a $\hat{\sigma}^2_{LR}/T$
+    \item[$\hat{\sigma}^2_{LR}$] Estimador HAC da variância de longo prazo de $d_t$
+    \item[$l$] Comprimento de bloco do \textit{bootstrap}; na predição conformal, posto $\lfloor (n+1)\alpha \rfloor$
+    \item[$\hat{b}$] Comprimento de bloco estimado pela regra automática de Politis e White
+    \item[$n$] Tamanho do bloco de calibração da predição conformal
+    \item[$\alpha$] Nível de significância estatística; na predição conformal, taxa nominal de não cobertura
+    \item[$\phi$, $c$, $\mu$] Coeficiente, intercepto e média de longo prazo do modelo AR(1)
+    \item[$\sigma$] Desvio-padrão da inovação do AR(1); no cálculo de poder, desvio-padrão da distribuição preditiva gaussiana
     \item[$\lambda$] Fator de decaimento do EWMA
     \item[$\rho$] Fator de decaimento dos pesos da variante conformal ponderada (NexCP)
+    \item[$w_i$] Peso do escore $i$ na variante NexCP, $w_i = \rho^{\,n+1-i}$
+    \item[$I_f(h)$] Importância da família $f$ no horizonte $h$ (aumento da perda ao permutar ou retirar a família)
+    \item[$K_p$] Número de permutações na importância por permutação
     \item[$s_f(h)$] Participação normalizada da família $f$ na importância total no horizonte $h$
     \item[$\Delta_f$] Variação da participação da família $f$ entre horizontes, $s_f(h+7) - s_f(h+1)$
     \item[$R^2$] Coeficiente de determinação fora da amostra (\textit{out-of-sample})
-    \item[$H_0$] Hipótese nula em teste estatístico
-    \item[$H_1$, $H_2$, $H_3$] Hipóteses de pesquisa (calibração, \textit{skill} relativo e contribuição de famílias)
+    \item[H1, H2, H3] Hipóteses de pesquisa (calibração, \textit{skill} relativo e contribuição de famílias)
 \end{simbolos}
