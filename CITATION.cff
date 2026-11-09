@@ -1,11 +1,10 @@
 cff-version: 1.2.0
-message: "Se usar este código ou as previsões depositadas, cite o trabalho como abaixo."
+message: "Se usar este código, cite o trabalho como abaixo."
 type: software
 title: "Avaliação pré-registrada do Temporal Fusion Transformer na previsão probabilística de retornos diários das ações da Apple"
 version: 1.0.0
 date-released: 2026-10-31
 license: MIT
-doi: 10.5281/zenodo.23843137
 repository-code: "https://github.com/MarceloSanC/financial-forecasting"
 authors:
   - family-names: "Carmo"
