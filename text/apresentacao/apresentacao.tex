@@ -155,17 +155,23 @@
         L_\tau(y,\hat q) = \max\bigl(\tau\,(y-\hat q),\ (\tau-1)\,(y-\hat q)\bigr)
       \]
       \centering
-      \begin{tikzpicture}[x=1.5cm,y=1.3cm,font=\footnotesize]
-        \draw[->] (-1.3,0) -- (1.4,0) node[below left] {\(y-\hat q\)};
+      \begin{tikzpicture}[x=1.5cm,y=1.1cm,font=\footnotesize]
+        \draw[->] (-1.3,0) -- (1.4,0) node[right] {\(y-\hat q\)};
         \draw[->] (0,-0.1) -- (0,1.1) node[above] {perda};
+        \draw[thick,cTFT,dashed] (-1.0,0.9) -- (0,0) -- (1.2,0.12);
+        \draw[thick,cEmp,dash dot] (-1.1,0.55) -- (0,0) -- (1.1,0.55);
         \draw[very thick,mLightBrown] (-1.2,0.12) -- (0,0) -- (1.0,0.9);
-        \node[anchor=west,align=left] at (0.75,0.3) {acima do quantil:\\ inclinação \(0{,}9\)};
-        \node[anchor=south,align=center] at (-0.7,0.2) {abaixo do quantil:\\ inclinação \(0{,}1\)};
+        \node[left,text=cTFT] at (-1.0,0.9) {\(\tau = 0{,}1\)};
+        \node[left,text=cEmp] at (-1.1,0.55) {\(\tau = 0{,}5\)};
+        \node[right,text=mLightBrown!70!black] at (1.0,0.9) {\(\tau = 0{,}9\)};
+        \node[below,font=\scriptsize] at (-0.75,0) {abaixo do quantil};
+        \node[below,font=\scriptsize] at (0.75,0) {acima do quantil};
       \end{tikzpicture}
 
       \raggedright
       {\footnotesize Eixo x: erro \(y-\hat q\) (retorno observado menos quantil
-      previsto); eixo y: perda; linha: \textit{pinball} para \(\tau = 0{,}9\).\par}
+      previsto); eixo y: perda. Em destaque, \(\tau = 0{,}9\): inclinação 0,1 abaixo
+      do quantil e 0,9 acima.\par}
       \par
       \raggedright
       \small Penaliza os erros de forma assimétrica. O valor esperado é mínimo
