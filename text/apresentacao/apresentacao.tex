@@ -2,9 +2,17 @@
 % Compilar com pdflatex (latexmk -pdf) a partir de text/apresentacao/.
 % Regra: todo número dos slides aparece igual no texto do TCC. Cada frame anota,
 % em comentário, a seção do texto de onde vem cada número e o tempo estimado.
+% Exceções, todas identificadas no próprio slide: as figuras ilustrativas (dados
+% simulados: "Um dia: os sete quantis" e as reservas de quantis por modelo e de um dia
+% contra todos os dias) e as duas reservas com dados do repositório que não estão
+% publicados no texto (matriz completa do MCS e hiperparâmetros finais).
+% O fan chart do slide tem as faixas recoloridas (recolore_fan_chart.py); os dados e
+% os traços são os da figura do texto.
+% As chaves de cor dos slides usam as cores reais das figuras (MODEL_STYLES em
+% matplotlib_figure_renderer.py; faixas do fan chart em recolore_fan_chart.py).
 % Tempo-alvo: até 20 min (Art. 16 do regulamento de TCC do Campus Joinville).
-% Estimativa: abertura 0,3 min + 16 slides de conteúdo (de 0,9 a 1,3 min cada,
-% somando 18,2 min) = 18,5 min; encerramento e reservas ficam fora do tempo.
+% Estimativa: abertura 0,3 min + 17 slides de conteúdo (de 0,5 a 1,3 min cada,
+% somando 18,7 min) = 19,0 min; encerramento e reservas ficam fora do tempo.
 % Revisão do orientador (#272): o piloto foi para a reserva e entrou o slide do TFT.
 % As figuras recortadas vêm de ../figuras/slides/ (PNG gerado por recortes.sh), e não
 % de trim + clip, que deixava a parte cortada escondida dentro do PDF.
@@ -33,6 +41,24 @@
 
 \newcommand{\hum}{\(h{+}1\)}
 \newcommand{\hsete}{\(h{+}7\)}
+
+% Cores reais das figuras, para as chaves de cor (ver cabeçalho).
+\definecolor{cTFT}{HTML}{2A78D6}
+\definecolor{cNulo}{HTML}{EB6834}
+\definecolor{cMedia}{HTML}{1BAF7A}
+\definecolor{cAR}{HTML}{EDA100}
+\definecolor{cEWMA}{HTML}{E87BA4}
+\definecolor{cEmp}{HTML}{008300}
+\definecolor{cGBM}{HTML}{6250D6}
+\definecolor{cObs}{HTML}{4D4D4D}
+\definecolor{cFold}{HTML}{999999}
+\definecolor{cF50}{HTML}{EF9A48}
+\definecolor{cF80}{HTML}{8CCAEE}
+\definecolor{cF96}{HTML}{F6E49A}
+% Amostras da chave: quadrado (faixa), linha (opção: estilo) e ponto (marcador).
+\newcommand{\chsq}[1]{\tikz[baseline=-0.55ex]\fill[#1,draw=black!40,line width=0.2pt] (0,-0.1) rectangle (0.26,0.12);}
+\newcommand{\chln}[2][]{\tikz[baseline=-0.55ex]\draw[#2,line width=1.4pt,#1] (0,0) -- (0.5,0);}
+\newcommand{\chpt}[1]{\tikz[baseline=-0.55ex]\fill[#1] (0,0) circle (0.08);}
 
 \title{Avaliação pré-registrada do\\ \textit{Temporal Fusion Transformer}}
 \subtitle{Na previsão probabilística de retornos diários das ações da Apple}
@@ -78,7 +104,11 @@
 % semente ilustrativa (Cap. 5, Cenários experimentais, parágrafo da Figura do fan chart).
 \begin{frame}{O que é uma previsão quantílica}
   \centering
-  \includegraphics[width=0.9\textwidth]{slides/oos_fan_chart.png}
+  \includegraphics[width=0.82\textwidth]{slides/oos_fan_chart.png}
+
+  {\footnotesize \chsq{cF50} faixa de 50\% \quad \chsq{cF80} 80\% \quad \chsq{cF96} 96\%
+    \quad \chln{cTFT} mediana \quad \chln[line width=0.6pt]{cObs} retorno realizado
+    \quad \chln[dotted,line width=0.8pt]{cFold} troca de \textit{fold}\par}
 
   \vspace{-2pt}
   \begin{columns}[T]
@@ -97,6 +127,18 @@
       \end{itemize}
     \end{column}
   \end{columns}
+\end{frame}
+
+% ---------------------------------------------------------------------------
+% 2b. Um dia: os sete quantis --- tempo: 0,5 min (acréscimo para a defesa)
+% Figura ilustrativa, dados simulados (TCC-imagens/34); nenhum número do texto.
+\begin{frame}{Um dia: os sete quantis}
+  \centering
+  \includegraphics[width=\textwidth,height=0.68\textheight,keepaspectratio]{slides/extra/34_TFT_um_dia_7quantis.png}
+
+  De cada dia saem 7 quantis; a sequência dos dias forma as faixas.
+
+  {\footnotesize\color{black!60} Ilustrativo, dados simulados.}
 \end{frame}
 
 % ---------------------------------------------------------------------------
@@ -121,7 +163,9 @@
         \node[anchor=south,align=center] at (-0.7,0.2) {abaixo do quantil:\\ inclinação \(0{,}1\)};
       \end{tikzpicture}
 
-      {\small Exemplo: quantil \(\tau = 0{,}9\).}
+      \raggedright
+      {\footnotesize Eixo x: erro \(y-\hat q\) (retorno observado menos quantil
+      previsto); eixo y: perda; linha: \textit{pinball} para \(\tau = 0{,}9\).\par}
       \par
       \raggedright
       \small Penaliza os erros de forma assimétrica. O valor esperado é mínimo
@@ -368,12 +412,15 @@
   \begin{columns}[T]
     \begin{column}{0.5\textwidth}
       \centering
-      \includegraphics[height=0.55\textheight]{slides/reliability_diagram.png}
+      \includegraphics[height=0.5\textheight]{slides/reliability_diagram.png}
+
+      {\scriptsize \chpt{cTFT} TFT \enspace \chpt{cAR} AR(1) \enspace \chpt{cEWMA} EWMA-vol
+        \enspace \chpt{cEmp} quantis empíricos \enspace \chpt{cGBM} GBM
+        \enspace \chln[dashed,line width=0.6pt]{cObs} diagonal\par}
 
       \raggedright
       {\small Frequência observada abaixo de cada quantil, em \hum; diagonal: calibração
-      perfeita. TFT em azul; comparadores, em outras cores, quase sobrepostos.
-      Em \hsete, o quadro é o mesmo.}
+      perfeita. Os modelos ficam quase sobrepostos. Em \hsete, o quadro é o mesmo.}
     \end{column}
     \begin{column}{0.48\textwidth}
       \small
@@ -744,7 +791,14 @@
   \begin{columns}[T]
     \begin{column}{0.58\textwidth}
       \centering
-      \includegraphics[height=0.68\textheight]{slides/picp_mpiw_plot.png}
+      \includegraphics[height=0.6\textheight]{slides/picp_mpiw_plot.png}
+
+      {\scriptsize \chpt{cTFT} TFT \enspace \chpt{cGBM} GBM \enspace \chpt{cEWMA} EWMA-vol
+        \enspace \chpt{cAR} AR(1) \enspace \mbox{\chpt{cEmp} quantis empíricos}\\
+        TFT com barra: média das sementes (mín--máx)\\
+        \mbox{nominal: \chln[dashed,line width=0.6pt]{cObs} 96\%
+        \enspace \chln[dotted,line width=0.8pt]{cObs} 80\%
+        \enspace \chln[dash dot,line width=0.6pt]{cObs} 50\%}\par}
     \end{column}
     \begin{column}{0.4\textwidth}
       \small
@@ -770,10 +824,15 @@
       \centering
       \includegraphics[height=0.58\textheight]{slides/quantile_score_plot.png}
 
+      {\scriptsize \mbox{\chpt{cTFT} TFT (sementes)} \enspace \mbox{\chln{cTFT} TFT (média)}
+        \enspace \mbox{\chln[dashed]{cNulo} retorno nulo}\\
+        \mbox{\chln[dash dot]{cMedia} média histórica} \enspace \mbox{\chln[dotted]{cAR} AR(1)}
+        \enspace \mbox{\chln[dashed]{cEWMA} EWMA-vol}\\
+        \mbox{\chln[dash dot]{cEmp} quantis empíricos} \enspace \mbox{\chln[dotted]{cGBM} GBM}\par}
+
       \raggedright
-      {\small \hum. TFT em azul (as dez sementes e a média delas); ingênuos tracejados
-      (retorno nulo em laranja, média histórica em verde); os demais quase se sobrepõem
-      ao TFT. O painel de \hsete{} é praticamente igual.}
+      {\small \hum. Os fortes quase se sobrepõem ao TFT. O painel de \hsete{} é
+      praticamente igual.}
     \end{column}
     \begin{column}{0.38\textwidth}
       \small
@@ -893,6 +952,39 @@
     \item Cegamento declarado: as tabelas rodaram uma vez antes do pré-registro, numa
       verificação técnica; nenhum valor de desempenho foi lido.
   \end{itemize}
+\end{frame}
+
+% Reservas 12 a 15 --- imagens de TCC-imagens (32, 33, 26 e 27), as mesmas de
+% ../figuras/apoio/. As duas primeiras são ilustrativas (dados simulados); as duas
+% últimas usam dados do repositório que não estão publicados no texto do TCC.
+\begin{frame}{Reserva --- Como cada modelo produz os quantis}
+  \centering
+  \includegraphics[width=\textwidth,height=0.76\textheight,keepaspectratio]{apoio/32_quantis_sino_por_familia.png}
+
+  {\footnotesize\color{black!60} Ilustrativo, dados simulados.}
+\end{frame}
+
+\begin{frame}{Reserva --- Um dia e todos os dias: TFT e EWMA-vol}
+  \centering
+  \includegraphics[width=\textwidth,height=0.76\textheight,keepaspectratio]{apoio/33_previsao_dia_vs_total.png}
+
+  {\footnotesize\color{black!60} Ilustrativo, dados simulados.}
+\end{frame}
+
+\begin{frame}{Reserva --- MCS: comparação de todos os pares}
+  \centering
+  \includegraphics[width=\textwidth,height=0.76\textheight,keepaspectratio]{apoio/26_MCS_matriz_pares_completa.png}
+
+  {\footnotesize\color{black!60} Calculada de \textit{gold\_loss\_differentials} da rodada
+  confirmatória; não publicada no texto do TCC.}
+\end{frame}
+
+\begin{frame}{Reserva --- Hiperparâmetros finais}
+  \centering
+  \includegraphics[width=\textwidth,height=0.76\textheight,keepaspectratio]{apoio/27_hiperparametros_TFT_GBM.png}
+
+  {\footnotesize\color{black!60} Fonte: \textit{config/cohorts/aapl\_confirmatory.toml};
+  esses valores não estão no texto do TCC.}
 \end{frame}
 
 % ===========================================================================

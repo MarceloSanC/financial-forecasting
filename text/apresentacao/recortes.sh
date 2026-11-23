@@ -7,6 +7,8 @@
 #
 # Rodar a partir de text/apresentacao/, numa imagem com Ghostscript, por exemplo:
 #   docker run --rm -v "$PWD/..:/w" -w /w/apresentacao texlive/texlive:latest sh recortes.sh
+# Depois, rodar recolore_fan_chart.py: ele regrava oos_fan_chart.png com as faixas
+# em cores distintas (este script gera a versão em tons de azul).
 #
 # Cada linha: figura, largura e altura do recorte (pt) e o canto inferior esquerdo
 # (x, y) do recorte na página original, em pt. No PageOffset do Ghostscript, y
