@@ -3,8 +3,8 @@
 % Regra: todo número dos slides aparece igual no texto do TCC. Cada frame anota,
 % em comentário, a seção do texto de onde vem cada número e o tempo estimado.
 % Exceções, todas identificadas no próprio slide: as figuras ilustrativas (dados
-% simulados: "Um dia: os sete quantis" e as reservas de quantis por modelo e de um dia
-% contra todos os dias) e as duas reservas com dados do repositório que não estão
+% simulados: "Um dia: os sete quantis", as reservas de quantis por modelo e de um dia
+% contra todos os dias e o Apoio 35, gerado por gera_comparadores.py) e as duas reservas com dados do repositório que não estão
 % publicados no texto (matriz completa do MCS e hiperparâmetros finais).
 % O fan chart do slide tem as faixas recoloridas (recolore_fan_chart.py); os dados e
 % os traços são os da figura do texto.
@@ -1160,5 +1160,11 @@
 \begin{frame}{Apoio 33 --- Previsão do dia e total}
   \centering
   \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{apoio/33_previsao_dia_vs_total.png}
+\end{frame}
+
+% Gerada por gera_comparadores.py (ilustrativa, dados simulados; receitas iguais às do código).
+\begin{frame}{Apoio 35 --- Como cada comparador produz os quantis}
+  \centering
+  \includegraphics[width=\textwidth,height=0.82\textheight,keepaspectratio]{apoio/35_comparadores_como_funcionam.png}
 \end{frame}
 \end{document}
