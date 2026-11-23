@@ -38,7 +38,7 @@
 \subtitle{Na previsão probabilística de retornos diários das ações da Apple}
 \author{Marcelo Santos do Carmo}
 \institute{Engenharia Mecatrônica --- UFSC, Centro Tecnológico de Joinville\\[2pt]
-  Orientador: Dr. Pedro Paulo de Andrade Júnior \quad Coorientador: Dr. Benjamin Grando Moreira}
+  Orientador: Prof. Dr. Pedro Paulo de Andrade Júnior \quad Coorientador: Prof. Dr. Benjamin Grando Moreira}
 \date{Defesa de Trabalho de Conclusão de Curso --- 2026}
 
 \begin{document}
@@ -68,7 +68,7 @@
     que modelos simples?
   \end{block}
   \vspace{2pt}
-  {\small Piloto: ação da Apple (AAPL), horizontes de 1 e 7 pregões à frente (\hum{} e \hsete).}
+  {\small Caso estudado: ação da Apple (AAPL), horizontes de 1 e 7 pregões à frente (\hum{} e \hsete).}
 \end{frame}
 
 % ---------------------------------------------------------------------------
@@ -116,7 +116,7 @@
       \begin{tikzpicture}[x=1.5cm,y=1.3cm,font=\footnotesize]
         \draw[->] (-1.3,0) -- (1.4,0) node[below left] {\(y-\hat q\)};
         \draw[->] (0,-0.1) -- (0,1.1) node[above] {perda};
-        \draw[very thick,mLightBrown] (-1.2,0.12) -- (0,0) -- (1.2,0.9);
+        \draw[very thick,mLightBrown] (-1.2,0.12) -- (0,0) -- (1.0,0.9);
         \node[anchor=west,align=left] at (0.75,0.3) {acima do quantil:\\ inclinação \(0{,}9\)};
         \node[anchor=south,align=center] at (-0.7,0.2) {abaixo do quantil:\\ inclinação \(0{,}1\)};
       \end{tikzpicture}
@@ -181,7 +181,7 @@
       \hum{} e \hsete{} (descritiva, sem leitura causal).
   \end{description}
   \vspace{4pt}
-  \begin{block}{Critério de sucesso, fixado antes da execução}
+  \begin{block}{Critério de sucesso, fixado antes das tabelas}
     H1 não rejeitada em ao menos um horizonte, independentemente de H2.
   \end{block}
 \end{frame}
@@ -204,21 +204,21 @@
           de pregão.
         \item 55 indicadores em quatro famílias: preço (17), técnico (17),
           sentimento (11) e fundamento (10).
-        \item Nenhum indicador usa dados de datas posteriores à decisão,
-          verificado por teste.
+        \item Defasagem de cada indicador declarada e verificada por teste; duas
+          simplificações podem antecipar algumas horas (Limitações).
       \end{itemize}
     \end{column}
     \begin{column}{0.58\textwidth}
       \centering
       \begin{tikzpicture}[x=0.52cm,y=0.5cm,font=\scriptsize]
-        \foreach \r/\tr/\lab in {0/3/janela 1, 1/4.4/janela 2, 2.6/7.2/janela 6} {
+        \foreach \r/\tr/\lab in {0/3/\textit{fold} 1, 1/3.9/\textit{fold} 2, 2.6/7.5/\textit{fold} 6} {
           \pgfmathsetmacro{\a}{\tr}
           \pgfmathsetmacro{\b}{\a+0.3}
-          \pgfmathsetmacro{\c}{\b+1.4}
+          \pgfmathsetmacro{\c}{\b+0.9}
           \pgfmathsetmacro{\d}{\c+0.3}
-          \pgfmathsetmacro{\e}{\d+1.4}
+          \pgfmathsetmacro{\e}{\d+0.9}
           \pgfmathsetmacro{\f}{\e+0.3}
-          \pgfmathsetmacro{\g}{\f+1.4}
+          \pgfmathsetmacro{\g}{\f+0.9}
           \draw[fill=mDarkTeal!25] (0,-\r) rectangle (\a,-\r-0.8);
           \draw[fill=black!60] (\a,-\r) rectangle (\b,-\r-0.8);
           \draw[fill=mDarkTeal!10] (\b,-\r) rectangle (\c,-\r-0.8);
@@ -241,9 +241,9 @@
       \vspace{4pt}
       \raggedright\small
       \begin{itemize}
-        \item Treino que cresce a cada janela; seis blocos de teste de 252 pregões,
+        \item Treino que cresce a cada \textit{fold}; seis blocos de teste de 252 pregões,
           de 27 de dezembro de 2019 a 31 de dezembro de 2025.
-        \item TFT treinado com dez sementes em cada janela.
+        \item TFT treinado com dez sementes em cada \textit{fold}.
         \item Datas comuns a todos os modelos: \(n = 1.511\) (\hum) e \(n = 1.505\) (\hsete).
       \end{itemize}
     \end{column}
@@ -271,7 +271,7 @@
     \node[tftblk] (vsn2) at (3.1,-0.75) {Seleção de variáveis (VSN)};
     \node[tftblk] (enc) at (5.75,0.75) {LSTM\\ codificador};
     \node[tftblk] (dec) at (5.75,-0.75) {LSTM\\ decodificador, 7 passos};
-    \node[tftblk,minimum height=2.4cm] (att) at (8.4,0) {Atenção\\ multi-cabeça\\ (4 cabeças)};
+    \node[tftblk,minimum height=2.4cm] (att) at (8.4,0) {Atenção com\\ múltiplas\\ cabeças (4)};
     \node[tftout] (q) at (11.15,0) {\textbf{7 quantis}\\ por passo\\[2pt] lidos em \(h+1\)\\ e \(h+7\)};
     \draw[arr] (obs) -- (vsn1);
     \draw[arr] (kno) -- (vsn2);
@@ -289,7 +289,7 @@
     \item Um único modelo para todos os horizontes, treinado com a \textit{pinball loss}
       sobre os sete quantis.
     \item Preço, indicadores, sentimento e fundamentos só entram até a decisão \(t\);
-      apenas o calendário é conhecido de antemão. É isso que impede o vazamento.
+      apenas o calendário é conhecido de antemão. É isso que controla o vazamento.
     \item Os pesos da VSN dizem quanto o modelo usa cada variável, mas não mudam com o
       horizonte; por isso H3 usa permutação e ablação.
   \end{itemize}
@@ -321,7 +321,7 @@
   \end{tabular}
 
   \vspace{8pt}
-  Todos emitem a mesma grade de quantis, nas mesmas janelas e com a mesma
+  Todos emitem a mesma grade de quantis, nos mesmos \textit{folds} e com a mesma
   informação disponível em cada data.
 \end{frame}
 
@@ -352,9 +352,9 @@
     \item \textbf{H2}: teste de Diebold-Mariano unilateral contra os seis comparadores,
       com correção de Holm (\(\alpha = 0{,}05\)), e \textit{Model Confidence Set}
       (MCS, \(\alpha = 0{,}10\), 1.000 réplicas de \textit{bootstrap}).
-    \item \textbf{``Vencedor primário''}: calibrado, supera os ingênuos e está no MCS
+    \item \textbf{``Vencedor primário''}: calibração não rejeitada, supera os ingênuos e está no MCS
       (ou supera todos os fortes). Ter a menor perda não é condição.
-    \item Três revisões das regras, todas antes da execução e sem acesso a resultados.
+    \item Três revisões das regras, depois do treino e antes das tabelas, sem acesso a resultados.
   \end{itemize}
 \end{frame}
 
@@ -389,7 +389,7 @@
       \vspace{4pt}
       \begin{itemize}
         \item Cobertura média do intervalo de 80\%: 0,818.
-        \item Poder contra desvios de 5 pontos: de 0,974 a 0,987.
+        \item Poder contra desvios de 5 pontos: de 0,974 a 0,987 (otimista nos dois horizontes).
         \item[\alert{!}] As violações se agrupam no tempo: a calibração é marginal, não
           condicional.
         \item[\alert{!}] Em \hum, a cobertura de uma semente isolada foi de 0,772 a 0,872.
@@ -469,7 +469,7 @@
   \raggedright
   \begin{alertblock}{Perto da fronteira}
     Com blocos de \(h\) pregões, o TFT sairia do MCS em \hsete{} (\(p = 0{,}061\));
-    vale a especificação fixada antes da rodada.
+    vale a especificação fixada no pré-registro.
   \end{alertblock}
 \end{frame}
 
@@ -519,16 +519,16 @@
 % 2020 (Seção 4.7.1, medida D4). A média das sementes está na reserva R11.
 \begin{frame}{Por que o EWMA-vol teve a menor perda}
   \small
-  Leitura: quase toda a informação aproveitável está no \alert{tamanho recente dos
+  Leitura: quase toda a informação que os modelos aproveitaram está no \alert{tamanho recente dos
   retornos}, que é o que a recursão do EWMA acompanha.
   \begin{enumerate}
     \item \textbf{Não é só o TFT}: o GBM, com os mesmos 55 indicadores, também perdeu
       (3,980 contra 3,920 em \hum).
-    \item \textbf{As famílias acrescentam pouco}: a técnica domina e muda a perda em
+    \item \textbf{As famílias acrescentam pouco}: a técnica vem à frente, mas muda a perda em
       cerca de 0,5\%.
     \item \textbf{Sementes}: a perda do TFT vai de 3,987 a 4,117 entre sementes
       (cerca de 3\%), a mesma ordem da distância até o EWMA-vol.
-    \item \textbf{Largura}: a do EWMA-vol acompanha a volatilidade (Spearman de 0,93);
+    \item \textbf{Largura}: a do EWMA-vol acompanha a volatilidade (Spearman de 0,93; descritivo, pós-veredito);
       a do TFT, menos (0,50 em \hum). A maior desvantagem do TFT aparece no salto de
       volatilidade do início de 2020.
   \end{enumerate}
@@ -583,41 +583,43 @@
     \end{column}
   \end{columns}
   \vspace{4pt}
-  \centering\footnotesize Código, pré-registro e documentação de decisões:
-  \texttt{github.com/MarceloSanC/financial-forecasting}\\
-  Código e previsões da rodada no Zenodo: DOI \texttt{10.5281/zenodo.23843137}
+  \centering\footnotesize Código disponível mediante solicitação ao autor.
 \end{frame}
 
 % ---------------------------------------------------------------------------
 % 16. Conclusão e trabalhos futuros --- tempo: 1,2 min
 % Fontes: Cap. 6, Síntese dos achados (poder acima de 0,97); Cap. 6, Contribuições
 % empíricas (modelos de volatilidade simples como barra mínima); Cap. 6, Trabalhos
-% futuros (h+30; caudas t-Student; TFT global; volatilidade assimétrica).
+% futuros (h+30; caudas t de Student; TFT global; volatilidade assimétrica).
 \begin{frame}{Conclusão e trabalhos futuros}
   \small
   \begin{itemize}
     \item \textbf{H1}: calibração não rejeitada nos dois horizontes, com poder acima
-      de 0,97; ela é marginal (violações agrupadas no tempo) e vale na média das sementes.
+      de 0,97 (otimista nos dois horizontes); ela é marginal (violações agrupadas no tempo) e vale na média das sementes.
     \item \textbf{H2}: supera os ingênuos, não os fortes; empata em \hsete; menor perda: EWMA-vol.
     \item \textbf{H3}: não sustentada; a família técnica vem à frente.
   \end{itemize}
   \begin{block}{Mensagem}
     O valor está em descrever a \alert{escala} da distribuição, não em prever a média.
     Sugere-se um modelo de volatilidade simples como barra mínima na previsão
-    probabilística de retornos diários.
+    probabilística de retornos diários (por ora, um único ativo).
   \end{block}
   \textbf{Trabalhos futuros}
   \begin{itemize}
     \item TFT global, treinado sobre muitos ativos, no regime para o qual foi concebido.
-    \item Comparador de volatilidade assimétrico e caudas t-Student para o EWMA.
+    \item Comparador de volatilidade assimétrico e caudas \(t\) de Student para o EWMA.
     \item Horizontes mais longos (\(h{+}30\)) e outros ativos, com novo pré-registro.
   \end{itemize}
 \end{frame}
 
+% Sem número: o slide de destaque não avança o contador e repetiria o da Conclusão.
+{
+\setbeamertemplate{frame numbering}[none]
 \begin{frame}[standout]
   Obrigado!\\[6pt]
   {\normalsize Perguntas?}
 \end{frame}
+}
 
 % ===========================================================================
 % Slides de reserva (para a arguição). Não contam no tempo da apresentação.
@@ -670,9 +672,9 @@
     Retorno nulo & \(-286{,}4\) & \(-34{,}74\) & \(<10^{-15}\) & \(-286{,}1\) & \(-22{,}70\) & \(<10^{-15}\) \\
     Média histórica & \(-284{,}7\) & \(-34{,}62\) & \(<10^{-15}\) & \(-284{,}4\) & \(-22{,}50\) & \(<10^{-15}\) \\
     AR(1) & \(-3{,}5\) & \(-2{,}00\) & 0,091 & \(-1{,}6\) & \(-0{,}80\) & 0,852 \\
-    EWMA-vol & \(+13{,}1\) & 4,05 & 1 & \(+6{,}3\) & 1,36 & 1 \\
-    Quantis empíricos & \(+1{,}3\) & 0,69 & 1 & \(+0{,}5\) & 0,21 & 1 \\
-    GBM quantílico & \(+7{,}0\) & 4,08 & 1 & \(+3{,}8\) & 2,37 & 1 \\
+    EWMA-vol & \(+13{,}1\) & 4,05 & 1,000 & \(+6{,}3\) & 1,36 & 1,000 \\
+    Quantis empíricos & \(+1{,}3\) & 0,69 & 1,000 & \(+0{,}5\) & 0,21 & 1,000 \\
+    GBM quantílico & \(+7{,}0\) & 4,08 & 1,000 & \(+3{,}8\) & 2,37 & 1,000 \\
     \bottomrule
   \end{tabular}
 
@@ -717,13 +719,13 @@
   \centering
   \begin{tabular}{l l c c}
     \toprule
-    Papel & Desvio & \hum & \hsete\textsuperscript{a} \\
+    Papel & Desvio & \hum\textsuperscript{a} & \hsete\textsuperscript{a} \\
     \midrule
-    Primário & cobertura do par \(+5\) p.p. (intervalo largo) & 0,974 & 0,976 \\
-    Primário & cobertura do par \(-5\) p.p. (intervalo estreito) & 0,985 & 0,987 \\
+    Primário & cobertura do par \(-5\) p.p. (intervalo estreito) & 0,974 & 0,976 \\
+    Primário & cobertura do par \(+5\) p.p. (intervalo largo) & 0,985 & 0,987 \\
     Primário & locação \(0{,}2\sigma\) & 0,9997 & 0,9998 \\
-    Secundário & cobertura do par \(+3\) p.p. & 0,632 & 0,644 \\
-    Secundário & cobertura do par \(-3\) p.p. & 0,606 & 0,629 \\
+    Secundário & cobertura do par \(-3\) p.p. & 0,632 & 0,644 \\
+    Secundário & cobertura do par \(+3\) p.p. & 0,606 & 0,629 \\
     Secundário & locação \(0{,}1\sigma\) & 0,733 & 0,746 \\
     \bottomrule
   \end{tabular}
@@ -731,7 +733,7 @@
   \vspace{6pt}
   \raggedright\small
   Probabilidade exata de o teste reprovar o TFT sob cada desvio, no \(n\) medido.
-  \textsuperscript{a} Supõe violações independentes; otimista para \(h > 1\).
+  \textsuperscript{a} Supõe violações independentes; otimista nos dois horizontes.
   Contra 3 pontos percentuais, o erro passaria despercebido em cerca de uma a cada três vezes.
 \end{frame}
 
@@ -805,7 +807,7 @@
   \vspace{6pt}
   \raggedright
   Nominal de 2\%. Para o TFT, média das sementes e número de sementes em que Kupiec
-  rejeita. A menor perda média do EWMA-vol não se estende à cauda extrema: a forma
+  rejeita. A menor perda média do EWMA-vol não se estende à cauda inferior extrema: a forma
   gaussiana subestima caudas pesadas.
 \end{frame}
 
@@ -813,7 +815,7 @@
 % 0,109; NexCP 0,801 e 0,799; 96%: 0,947 contra 0,953 e 0,956).
 \begin{frame}{Reserva --- Referência conformal (CQR)}
   \begin{itemize}
-    \item A CQR assimétrica, calibrada no bloco de calibração de cada janela, levou a
+    \item A CQR assimétrica, calibrada no bloco de calibração de cada \textit{fold}, levou a
       cobertura do intervalo de 80\% para 0,798 (\hum) e 0,800 (\hsete).
     \item Corrigiu sobretudo a cauda inferior: de 0,089 para 0,109 em \hum.
     \item A variante ponderada (NexCP) deu 0,801 e 0,799.
@@ -850,7 +852,7 @@
   \begin{itemize}
     \item Hansen e Lunde (2005): comparando 330 modelos da família ARCH, sem evidência
       de que o GARCH(1,1) seja superado no câmbio; nos retornos da IBM, modelos com efeito
-      alavancagem foram melhores. Próximo comparador natural: volatilidade assimétrica.
+      de alavancagem foram melhores. Próximo comparador natural: volatilidade assimétrica.
     \item Makridakis et al.\ (2018): em 1.045 séries mensais da M3, oito métodos
       estatísticos superaram os de aprendizado de máquina avaliados.
     \item Zeng et al.\ (2023): modelos lineares superaram \textit{Transformers} em nove
@@ -881,15 +883,15 @@
   \begin{itemize}
     \item As regras ficam num arquivo congelado, com \textit{hash} registrado antes de
       gerar as tabelas; uma correção vira nova revisão, nunca uma edição.
-    \item Três revisões, todas antes da rodada confirmatória e sem acesso a resultados,
+    \item Três revisões, depois do treino e antes das tabelas, sem acesso a resultados,
       sem mudar nada do que julga H1 e H2:
       \begin{enumerate}
         \item regras dos perfis descritivos;
         \item regras da referência conformal;
         \item regras de H3.
       \end{enumerate}
-    \item Cegamento declarado: as tabelas rodaram uma vez antes do pré-registro, num
-      teste de software; nenhum valor de desempenho foi lido.
+    \item Cegamento declarado: as tabelas rodaram uma vez antes do pré-registro, numa
+      verificação técnica; nenhum valor de desempenho foi lido.
   \end{itemize}
 \end{frame}
 
