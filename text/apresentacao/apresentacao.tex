@@ -50,6 +50,9 @@
 \definecolor{cEWMA}{HTML}{E87BA4}
 \definecolor{cEmp}{HTML}{008300}
 \definecolor{cGBM}{HTML}{6250D6}
+% GBM em vermelho só no recorte do PICP x MPIW (recolore_picp_mpiw.py), para não se
+% confundir com o TFT no projetor.
+\definecolor{cGBMred}{HTML}{D62728}
 \definecolor{cObs}{HTML}{4D4D4D}
 \definecolor{cFold}{HTML}{999999}
 \definecolor{cF50}{HTML}{EF9A48}
@@ -799,7 +802,7 @@
       \centering
       \includegraphics[height=0.6\textheight]{slides/picp_mpiw_plot.png}
 
-      {\scriptsize \chpt{cTFT} TFT \enspace \chpt{cGBM} GBM \enspace \chpt{cEWMA} EWMA-vol
+      {\scriptsize \chpt{cTFT} TFT \enspace \chpt{cGBMred} GBM \enspace \chpt{cEWMA} EWMA-vol
         \enspace \chpt{cAR} AR(1) \enspace \mbox{\chpt{cEmp} quantis empíricos}\\
         TFT com barra: média das sementes (mín--máx)\\
         \mbox{nominal: \chln[dashed,line width=0.6pt]{cObs} 96\%
@@ -810,7 +813,7 @@
       \small
       \begin{itemize}
         \item Cada ponto: um modelo, um intervalo (50\%, 80\% ou 96\%).
-          TFT em azul, GBM em roxo, EWMA-vol em rosa, AR(1) em laranja,
+          TFT em azul, GBM em vermelho, EWMA-vol em rosa, AR(1) em laranja,
           quantis empíricos em verde.
         \item Linhas horizontais: as coberturas nominais.
         \item Intervalo de 80\%: GBM mais estreito (largura 0,0396) com cobertura
